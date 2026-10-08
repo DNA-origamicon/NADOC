@@ -64,7 +64,12 @@ def safe_scaffold_route(result_type):
                 problems = domain_order_errors(design) or occupancy_errors(design)
                 if problems:
                     raise RoutingIntegrityError(problems[0])
-                out, result = fn(design.model_copy(deep=True), *args, **kwargs)
+                from backend.core.scaffold_continuations import route_continuations
+
+                candidate = design.model_copy(deep=True)
+                continued = route_continuations(candidate, lambda d: fn(d, *args, **kwargs),
+                                                close_cycle=kwargs.get("close_cycle", True))
+                out, result = continued if continued is not None else fn(candidate, *args, **kwargs)
                 if not result.valid:
                     raise RoutingIntegrityError("; ".join(result.errors))
                 problems = domain_order_errors(out) or occupancy_errors(out)

@@ -150,7 +150,12 @@ def sweep_preview(design, body, *, include_geometry=False):
 
 
 def _join_sources(design, bundle, sources, body):
-    """Extend only strand terminals at the selected end, retaining traversal order."""
+    """Extend only strand terminals at the selected end, retaining traversal order.
+
+    These domain boundaries are ordinary backbone continuations. The sweep's
+    attachment metadata and the authored domain adjacency identify them across
+    helix/frame records; creating ForcedLigation records would change their meaning.
+    """
     by_new = {h.id: sources.get(tuple(cell)) for h, cell in zip(bundle.helices, body.cells)}
     additions = {}
     remaining = []

@@ -4,6 +4,16 @@ description: backend/core/seamless_router.py — zig-zag end crossovers, closing
 type: project
 originSessionId: 4a5f87b3-ab49-4bcb-84bb-6252b80892b0
 ---
+**2026-10-08 continued tracks:** Sweep attachment joins are internal backbone,
+including when explicitly recorded as forced ligations. The shared
+`scaffold_continuations.py` adapter preserves them through routing and reset.
+For unequal single-interval tracks, `scaffold_face_paths.seamless_face_path`
+searches a directed cycle using actual common free faces before coverage-length
+grouping. The 6→10 Sweep case uses ten end turns, no interior bridge HJs, and one
+buried nick. Uniform routes and explicit open section-window paths keep their
+existing path selection. See `docs/scaffold_routing.md` and
+`tests/test_scaffold_continuations.py`.
+
 **2026-09-19 sequence/fixture maintenance:** scaffold extension now inserts unknown
 bases at newly created sites while preserving the original assigned bases and their
 loop/skip-aware sequence offsets. Eight focused extension tests pass. The saved-cube

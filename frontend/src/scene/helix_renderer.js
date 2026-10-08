@@ -49,6 +49,7 @@ import {
 } from './helix_renderer/palette.js'
 import { installInstanceAlpha, installInstanceAlphaGeometry } from './instance_alpha.js'
 import { clusterAlphaForNuc } from './cluster_entries.js'
+import { ordinaryBackboneContinuations, isOrdinaryBackboneContinuation } from './backbone_continuations.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -554,6 +555,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   }
 
   for (const [, nucs] of byStrand) orderStrandNucleotides(nucs)
+  const _ordinaryContinuations = ordinaryBackboneContinuations(design)
 
   // ── Periodic-seam connectors ───────────────────────────────────────────────
   // A forced ligation with is_periodic_seam merges a far 3' end into a near 5'
@@ -1117,11 +1119,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const midPos = from.clone().addScaledVector(dir.clone().normalize(), dist / 2)
         const quat   = new THREE.Quaternion().setFromUnitVectors(Y_HAT, dir.clone().normalize())
 
-        // Cross-helix connections — and periodic-seam far↔near connectors — are
-        // rendered as arcs; hide the cone. (Treating the periodic seam as
-        // cross-helix suppresses the giant cone via the existing radius logic.)
+        // Sweep continuations are ordinary backbone bonds across helix records.
+        // Other cross-helix junctions and periodic seams remain arc connections.
         const isPeriodicSeam = _isPeriodicSeamPair(nucs[i], nucs[i + 1])
-        const isCrossHelix = (nucs[i].helix_id !== nucs[i + 1].helix_id) || isPeriodicSeam
+        const isCrossHelix = isPeriodicSeam || (nucs[i].helix_id !== nucs[i + 1].helix_id &&
+          !isOrdinaryBackboneContinuation(_ordinaryContinuations, nucs[i], nucs[i + 1]))
         const r = isCrossHelix ? 0 : CONE_RADIUS
         _tMatrix.compose(midPos, quat, _tScale.set(r, coneHeight, r))
         iCones.setMatrixAt(coneId, _tMatrix)
@@ -2567,7 +2569,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       const te = _nucToEntry.get(cone.toNuc)
       if (!fe || !te) continue
 
-      const isCrossHelix = cone.fromNuc.helix_id !== cone.toNuc.helix_id
+      const isCrossHelix = cone.isCrossHelix
 
       _physDir.copy(te.pos).sub(fe.pos)
       const dist = _physDir.length()
@@ -4022,7 +4024,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         const te = _nucToEntry.get(cone.toNuc)
         if (!fe || !te) continue
 
-        const isCrossHelix = cone.fromNuc.helix_id !== cone.toNuc.helix_id
+        const isCrossHelix = cone.isCrossHelix
         _physDir.copy(te.pos).sub(fe.pos)
         const dist = _physDir.length()
         const h    = Math.max(0.001, dist)

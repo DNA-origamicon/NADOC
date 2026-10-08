@@ -267,6 +267,30 @@ def auto_scaffold_seamless(
             )
             continue
 
+        # A stepped bundle can still have one seamless cycle: long and short
+        # tracks may turn together at their common high face, while their low
+        # turns must remain at their respective free ends. Splitting by length
+        # first needlessly inserts interior bridge junctions and can fragment
+        # that cycle. Keep uniform bundles and the section router's explicit
+        # open-path mode unchanged.
+        if close_cycle and all(len(coverage[hid]) == 1 for hid in comp) and len({
+            (coverage[hid][0]["lo"], coverage[hid][0]["hi"]) for hid in comp
+        }) > 1:
+            from backend.core.scaffold_face_paths import seamless_face_path
+
+            face_path = seamless_face_path(
+                comp,
+                adj,
+                coverage,
+                {hid: _is_forward(*helix_by_id[hid].grid_pos) for hid in comp},
+                close_cycle=close_cycle,
+            )
+            if face_path is not None:
+                zig_pairs.extend(zip(face_path, face_path[1:]))
+                if close_cycle:
+                    zig_pairs.append((face_path[-1], face_path[0]))
+                continue
+
         def cov_sig(hid: str) -> str:
             # Single-interval helices: sub-group by bucketed total length so that
             # dumbbell arm helices (short) separate from core helices (long).

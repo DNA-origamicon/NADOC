@@ -581,7 +581,8 @@ class SeamedResult:
 
 
 def _auto_scaffold_seamed_impl(
-    design: Design, *, matched_ends: bool = False, bounded_ends: bool = False
+    design: Design, *, matched_ends: bool = False, bounded_ends: bool = False,
+    close_ends: bool = False,
 ) -> tuple[Design, SeamedResult]:
     """Shared seamed pipeline body (Seam → Near Ends → Far Ends).
 
@@ -673,7 +674,17 @@ def _auto_scaffold_seamed_impl(
             sig_map.setdefault(cov_sig(hid), []).append(hid)
         groups = list(sig_map.values())
 
-        if len(groups) == 1 or bounded_ends:
+        from backend.core.scaffold_face_paths import seamed_face_path
+
+        face_path = (seamed_face_path(comp, adj, coverage)
+                     if close_ends and len(groups) > 1 else None)
+        if face_path is not None:
+            path = face_path
+        elif close_ends and len(groups) > 1:
+            result.valid = False
+            result.errors.append("No seamed path preserving the existing track ends was found.")
+            return design, result
+        elif len(groups) == 1 or bounded_ends:
             # Bounded mode routes one WINDOW sub-bundle whose ragged faces give each
             # helix a distinct coverage signature; its grid adjacency is still full
             # (the helices overlap heavily), so route it as a single Hamiltonian
@@ -936,7 +947,7 @@ def _auto_scaffold_seamed_impl(
     # closes into a cycle for the 2-opt splice — like matched mode, but the cap
     # sits at the nearest valid site (bounded_ends) instead of a one-period translate.
     skip_id: str | None = None
-    if not matched_ends and not bounded_ends:
+    if not matched_ends and not bounded_ends and not close_ends:
         helix_array_idx = {h.id: i for i, h in enumerate(current.helices)}
         lowest = float("inf")
         for ha_id, hb_id in far_end_pairs:
@@ -1315,6 +1326,11 @@ def seamed_routability_errors(design: Design) -> list[str]:
     if design.forced_ligations:
         return []  # hinge router path — out of scope for this guard
 
+    from backend.core.backbone_continuations import backbone_continuation_edges
+
+    if backbone_continuation_edges(design):
+        return []  # continuous-track routing validates its contracted problem atomically
+
     coverage = _scaffold_coverage(design)
     if not coverage:
         return []  # nothing to route; the router reports its own "no scaffold" warning
@@ -1418,6 +1434,19 @@ def auto_scaffold_seamed(design: Design) -> tuple[Design, SeamedResult]:
             if sectioned is not None:
                 sectioned[1].warnings.extend(reset_warnings)
                 return sectioned
+
+    # Different track lengths need local end turns. A global matched translation
+    # would extend a short track by the length of the missing section as well.
+    coverage = _scaffold_coverage(design)
+    if (coverage and all(len(ivs) == 1 for ivs in coverage.values())
+            and len({(ivs[0]["lo"], ivs[0]["hi"]) for ivs in coverage.values()}) > 1
+            and not design.forced_ligations):
+        local_design, local_result = _auto_scaffold_seamed_impl(
+            design.model_copy(deep=True), close_ends=True
+        )
+        if local_result.valid:
+            local_result.warnings.extend(reset_warnings)
+            return local_design, local_result
 
     matched_design, matched_result = _auto_scaffold_seamed_impl(
         design.model_copy(deep=True), matched_ends=True

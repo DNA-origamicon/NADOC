@@ -3,8 +3,9 @@ import path from 'node:path'
 
 // Persistent inventory: __e2e__Sweep parts + their hidden revision stores are
 // removed by global-teardown.js, including on failure. Smoke servers disable
-// session caching. Three screenshots are retained as review evidence in
-// .development-artifacts/sweep-popup.png, sweep-gizmo.png and sweep-reloaded.png.
+// session caching. Four screenshots are retained as review evidence in
+// .development-artifacts/sweep-popup.png, sweep-gizmo.png, sweep-reloaded.png
+// and sweep-continuation.png.
 test('Sweep creates one editable spline feature with nm point controls and undo/redo', async ({ page }) => {
   test.setTimeout(90_000)
   const errors = []
@@ -95,6 +96,9 @@ test('Sweep creates one editable spline feature with nm point controls and undo/
 
 test('Sweep continues from a selected existing end', async ({ page }) => {
   test.setTimeout(90_000)
+  const errors = []
+  page.on('pageerror', e => errors.push(e.message))
+  page.on('response', r => { if (r.status() >= 500) errors.push(`${r.status()} ${r.url()}`) })
   await page.goto('/?test=1&doc=__e2e__sweep-continuation')
   await expect(page.locator('#canvas')).toBeVisible()
   await page.locator('.menu-item').filter({ hasText: 'File' }).first().hover()
@@ -134,4 +138,28 @@ test('Sweep continues from a selected existing end', async ({ page }) => {
   expect(result.count).toBe(4)
   expect(result.domains.every(n => n === 2)).toBe(true)
   expect(result.feature).toBe('sweep')
+  const continuationRender = () => page.evaluate(async () => {
+    const d = (await import('/src/state/store.js')).store.getState().currentDesign
+    const renderer = window.__nadocDR
+    const bonds = renderer.getHelixCtrl().coneEntries.filter(c => c.fromNuc.helix_id !== c.toNuc.helix_id)
+    return {
+      forcedLigations: d.forced_ligations.length,
+      ordinaryBonds: bonds.filter(c => !c.isCrossHelix && c.coneRadius > 0).length,
+      arcs: renderer.getCrossHelixConnections().length,
+    }
+  })
+  await expect.poll(continuationRender).toEqual({ forcedLigations: 0, ordinaryBonds: 4, arcs: 0 })
+  // Loading must not invent forced-ligation records for these ordinary joins.
+  await page.evaluate(async () => {
+    const api = await import('/src/api/client.js')
+    const response = await fetch('/api/design/export', {
+      headers: { 'X-NADOC-Doc': new URLSearchParams(location.search).get('doc') },
+    })
+    if (!response.ok || !await api.importDesign(await response.text())) throw new Error('Sweep continuation reload failed')
+  })
+  await expect.poll(continuationRender).toEqual({ forcedLigations: 0, ordinaryBonds: 4, arcs: 0 })
+  await page.locator('#canvas').focus()
+  await page.keyboard.press('f')
+  await page.screenshot({ path: path.resolve(import.meta.dirname, '../../.development-artifacts/sweep-continuation.png') })
+  expect(errors).toEqual([])
 })

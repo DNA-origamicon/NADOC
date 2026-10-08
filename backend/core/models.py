@@ -2620,7 +2620,8 @@ def _backfill_dropped_junctions(design: "Design") -> None:
     junction with the SAME rule as :func:`extract_crossovers_from_strands`: a
     same-bp transition between valid lattice neighbours becomes a **Crossover**;
     everything else (mismatched-bp loopouts, non-neighbour junctions) becomes a
-    **ForcedLigation**.
+    **ForcedLigation**. Authored sweep continuations at a segment boundary
+    remain ordinary backbone and do not acquire a junction record.
 
     Because it reuses that classifier, a crossover-valid junction can never be
     minted as a forced ligation here (the previous version emitted a ForcedLigation
@@ -2632,6 +2633,9 @@ def _backfill_dropped_junctions(design: "Design") -> None:
     Mutates *design* in place.
     """
     from backend.core.crossover_positions import extract_crossovers_from_strands  # noqa: PLC0415
+    from backend.core.backbone_continuations import backbone_continuation_edges
+
+    continuations = backbone_continuation_edges(design)
 
     # Junctions (unordered {helix,bp} endpoint pair) already annotated by a record.
     def _junction(a_hid: str, a_bp: int, b_hid: str, b_bp: int) -> frozenset:
@@ -2697,6 +2701,8 @@ def _backfill_dropped_junctions(design: "Design") -> None:
             fl.five_prime_bp,
             fl.five_prime_direction.value,
         )
+        if (key[:3], key[3:]) in continuations:
+            continue  # A swept segment boundary is ordinary backbone, not a new ligation.
         junc = _junction(
             fl.three_prime_helix_id,
             fl.three_prime_bp,
@@ -3565,6 +3571,9 @@ class Design(BaseModel):
         This keeps old .nadoc files working correctly without a migration step.
         """
         design = cls.model_validate(json.loads(text))
+        from backend.core.backbone_continuations import backbone_continuation_edges
+
+        continuations = backbone_continuation_edges(design)
         if not design.crossovers:
             # Lazy import avoids a circular dependency with crossover_positions.py.
             from backend.core.crossover_positions import extract_crossovers_from_strands  # noqa: PLC0415
@@ -3578,7 +3587,10 @@ class Design(BaseModel):
             # Only seed forced_ligations if the file didn't already record any —
             # otherwise we'd duplicate user-created records on re-load.
             if not design.forced_ligations:
-                design.forced_ligations = fls
+                design.forced_ligations = [fl for fl in fls if (
+                    (fl.three_prime_helix_id, fl.three_prime_bp, fl.three_prime_direction.value),
+                    (fl.five_prime_helix_id, fl.five_prime_bp, fl.five_prime_direction.value),
+                ) not in continuations]
 
         # Reclassify Crossover records that fail the lattice-neighbour test
         # (older cadnano imports kept them as Crossovers even when same-bp
