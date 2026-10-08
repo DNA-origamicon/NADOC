@@ -14,7 +14,7 @@ export function initDesignReadinessHost({ store, mode = '3d', onSimulate, api, o
   const actions = createDesignReadinessActions({
     store, mode, document, window, onSimulate, getDocId, broadcast: nadocBroadcast,
   })
-  const widget = initDesignReadiness({ host, onAction: (action, step) => actions.run(action, step) })
+  const widget = initDesignReadiness({ host, onAction: (action, step) => actions.run(action, step), onDismiss: dismiss })
   const visibility = initDesignReadinessVisibility({ widget })
   const fitPanel = () => {
     if (host.clientHeight > 0) host.style.setProperty('--design-readiness-max-height', `${Math.max(0, host.clientHeight - 72)}px`)
@@ -27,6 +27,7 @@ export function initDesignReadinessHost({ store, mode = '3d', onSimulate, api, o
   let restoring = !!readinessBootDocument(location.href, mode)
     && !store.getState().currentDesign && !store.getState().assemblyActive
   let navigationRunning = false
+  let generation = 0
 
   async function showRequestedAction(action) {
     if (action === 'simulation') await actions.run('simulation')
@@ -40,10 +41,11 @@ export function initDesignReadinessHost({ store, mode = '3d', onSimulate, api, o
   async function applyPendingAction(report) {
     if (disposed || restoring || navigationRunning || !pendingAction || !report?.available) return
     const action = pendingAction
+    const version = generation
     navigationRunning = true
     try {
       await showRequestedAction(action)
-      if (disposed) return
+      if (disposed || version !== generation || controller.getReport() !== report) return
       widget.setReport(actions.decorate(report))
       if (pendingAction === action) pendingAction = null
       const url = new URL(location.href)
@@ -52,9 +54,9 @@ export function initDesignReadinessHost({ store, mode = '3d', onSimulate, api, o
     } catch (error) {
       // A sibling edit can invalidate the report during navigation. Retain the
       // request for the next fresh report; never leak a rejected event promise.
-      if (!disposed) widget.setError(error?.message || 'Wait for the current design to finish loading.')
+      if (!disposed && version === generation && controller.getReport() === report) widget.setError(error?.message || 'Wait for the current design to finish loading.')
     } finally {
-      navigationRunning = false
+      if (version === generation) navigationRunning = false
     }
   }
 
@@ -69,7 +71,30 @@ export function initDesignReadinessHost({ store, mode = '3d', onSimulate, api, o
     },
     onReport: report => { void applyPendingAction(report) },
   })
+  function dismiss() {
+    generation++
+    pendingAction = null
+    navigationRunning = false
+    controller.dismiss()
+  }
+  function show() {
+    if (disposed) return
+    widget.show()
+    controller.show()
+  }
+  const showButton = document.getElementById('menu-view-design-readiness')
+  showButton?.addEventListener('click', show)
+  function onReset() {
+    generation++
+    pendingAction = null
+    navigationRunning = false
+    restoring = false
+    widget.resetVisibility()
+    controller.reset()
+  }
+  window.addEventListener('nadoc:document-reset', onReset)
   const unsubscribeBroadcast = nadocBroadcast.onMessage(message => {
+    if (message.type === 'session-closed') { onReset(); return }
     if (!nadocBroadcast.isSameDoc(message)) return
     if (mode === '3d' && message.type === 'readiness-action' && message.action === 'simulation') {
       pendingAction = 'simulation'
@@ -78,15 +103,17 @@ export function initDesignReadinessHost({ store, mode = '3d', onSimulate, api, o
   })
 
   if (restoring) {
-    void restoreReadinessDocument({ api, store, href: location.href, mode, onRestored, isDisposed: () => disposed })
+    const version = generation
+    void restoreReadinessDocument({ api, store, href: location.href, mode, onRestored, isDisposed: () => disposed || version !== generation })
       .then(() => {
+        if (disposed || version !== generation) return
         restoring = false
         if (!disposed) controller.refresh()
       })
       .catch(error => {
         // Keep the restoration gate closed: a topology-only partial load must
         // not open locked controls or consume the query on a later poll.
-        if (!disposed) widget.setError(error?.message || 'Could not load this design in 3D.')
+        if (!disposed && version === generation) widget.setError(error?.message || 'Could not load this design in 3D.')
       })
   }
 
@@ -100,6 +127,8 @@ export function initDesignReadinessHost({ store, mode = '3d', onSimulate, api, o
     resizeObserver?.disconnect()
     host.style.removeProperty('--design-readiness-max-height')
     unsubscribeBroadcast()
+    showButton?.removeEventListener('click', show)
+    window.removeEventListener('nadoc:document-reset', onReset)
     window.removeEventListener('pagehide', onPageHide)
     window.removeEventListener('pageshow', onPageShow)
   }
@@ -107,5 +136,5 @@ export function initDesignReadinessHost({ store, mode = '3d', onSimulate, api, o
   function onPageShow(event) { if (event.persisted) controller.refresh() }
   window.addEventListener('pagehide', onPageHide)
   window.addEventListener('pageshow', onPageShow)
-  return { refresh: controller.refresh, dispose }
+  return { refresh: controller.refresh, show, dispose }
 }

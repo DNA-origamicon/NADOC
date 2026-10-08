@@ -11,7 +11,7 @@ import { nanoparticleRenderInputsChanged } from './nanoparticle_render_dependenc
 import { createStreptavidinAtomicRenderer } from './streptavidin_atomic_renderer.js'
 import { openStreptavidinDialog } from '../ui/streptavidin_dialog.js'
 
-const GOLD = 0xd4af37
+const GOLD = 0xeac13b
 
 function poseMatrix(particle) {
   const values = particle?.pose?.values ?? particle?.pose
@@ -36,12 +36,16 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
   let livePivot = null
   let movementConstraints = new Map()
 
+  // The editor has no studio environment: diffuse colour and a small emissive
+  // fill keep gold readable, while broad highlights retain the sphere's shape.
+  // Photo mode supplies its own physically metallic material and studio lighting.
   const material = new THREE.MeshPhysicalMaterial({
-    color: GOLD, metalness: 1, roughness: 0.18, clearcoat: 0.45,
-    clearcoatRoughness: 0.12, envMapIntensity: 1.35,
+    color: GOLD, metalness: 0.575, roughness: 0.34, clearcoat: 0.265,
+    clearcoatRoughness: 0.26, envMapIntensity: 0.975,
+    emissive: GOLD, emissiveIntensity: 0.15,
   })
   const selectedMaterial = material.clone()
-  selectedMaterial.emissive.setHex(0x5b4300)
+  selectedMaterial.emissiveIntensity = 0.35
   const dotMaterials = new Map()
   const dotGlows = new Map()
   let fluorescenceOn = false

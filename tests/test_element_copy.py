@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 from backend.core.element_copy import paste_elements
 from backend.core.models import (
@@ -197,3 +198,79 @@ def test_free_conjugate_move_composes_saved_dna_poses():
         )
     finally:
         state.close_session()
+
+
+@pytest.mark.parametrize(
+    "kind,prefix", [("nanoparticle", "NP"), ("protein", "Protein")]
+)
+def test_pasted_group_names_increment_past_existing_numbers(kind, prefix):
+    from backend.core.models import ProteinAsset, ProteinTargetFree, StapleGroup
+
+    particle = Nanoparticle(diameter_nm=10)
+    conjugation, helices, strands = build_thiol_conjugation(
+        particle,
+        scheme="direct_thiol",
+        sequence="ACGT",
+        count=1,
+    )
+    strands[0].name = f"{prefix}-1:S1"
+    group = StapleGroup(id="group-1", name=f"{prefix}-1", strand_ids=[strands[0].id])
+    source = Design(helices=helices, strands=strands, staple_groups=[group])
+    protein_ids, nanoparticle_ids = [], []
+    if kind == "nanoparticle":
+        source.nanoparticles = [particle]
+        source.nanoparticle_conjugations = [conjugation]
+        nanoparticle_ids = [particle.id]
+    else:
+        asset = ProteinAsset()
+        protein = ProteinAttachment(
+            asset_id=asset.id,
+            target=ProteinTargetFree(),
+            binder_strand_id=strands[0].id,
+        )
+        source.protein_assets = [asset]
+        source.protein_attachments = [protein]
+        protein_ids = [protein.id]
+    destination = source.model_copy(
+        update={
+            "staple_groups": [
+                group,
+                StapleGroup(id="group-3", name=f"{prefix.lower()}-3"),
+            ]
+        }
+    )
+    out, _ = paste_elements(destination, source, protein_ids, nanoparticle_ids)
+    assert out.staple_groups[-1].name == f"{prefix}-4"
+    assert out.strands[-1].name == f"{prefix}-4:S1"
+    again, _ = paste_elements(out, source, protein_ids, nanoparticle_ids, 2)
+    assert again.staple_groups[-1].name == f"{prefix}-5"
+    assert again.strands[-1].name == f"{prefix}-5:S1"
+    assert source.staple_groups[0].name == f"{prefix}-1"
+    assert source.strands[0].name == f"{prefix}-1:S1"
+
+
+def test_paste_allocates_distinct_names_within_batch_and_preserves_custom_oligo_names():
+    from backend.core.models import StapleGroup
+
+    particle = Nanoparticle(diameter_nm=10)
+    conjugation, helices, strands = build_thiol_conjugation(
+        particle,
+        scheme="direct_thiol",
+        sequence="ACGT",
+        count=2,
+    )
+    strands[0].name = "Custom oligo"
+    groups = [
+        StapleGroup(id=f"group-{i}", name=f"NP-{i + 1}", strand_ids=[s.id])
+        for i, s in enumerate(strands)
+    ]
+    source = Design(
+        nanoparticles=[particle],
+        nanoparticle_conjugations=[conjugation],
+        helices=helices,
+        strands=strands,
+        staple_groups=groups,
+    )
+    out, _ = paste_elements(source, source, [], [particle.id])
+    assert [g.name for g in out.staple_groups] == ["NP-1", "NP-2", "NP-3", "NP-4"]
+    assert out.strands[2].name == "Custom oligo"

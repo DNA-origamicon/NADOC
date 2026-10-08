@@ -22,7 +22,13 @@ export function initDesignReadinessController({
   let request = null
   let debounce = null
   let poll = null
-  let target = readinessTarget(store.getState(), mode)
+  let resetDocument = null
+  let dismissed = false
+  function currentTarget(state = store.getState()) {
+    const next = readinessTarget(state, mode)
+    return dismissed || next?.document === resetDocument ? null : next
+  }
+  let target = currentTarget()
   let report = null
   let renderedSignature = null
 
@@ -53,7 +59,7 @@ export function initDesignReadinessController({
     request = abort
     try {
       const next = await fetchReport(requestedTarget, { signal: abort.signal })
-      if (disposed || version !== generation || !sameTarget(requestedTarget, readinessTarget(store.getState(), mode))) return
+      if (disposed || version !== generation || !sameTarget(requestedTarget, currentTarget())) return
       report = next
       const decorated = decorate(next)
       const signature = JSON.stringify(decorated)
@@ -80,7 +86,7 @@ export function initDesignReadinessController({
     cancelRequest()
     report = null
     renderedSignature = null
-    target = readinessTarget(store.getState(), mode)
+    target = currentTarget()
     if (!target) {
       widget.setReport(null)
       return
@@ -90,9 +96,18 @@ export function initDesignReadinessController({
     if (!document.hidden) debounce = setTimeout(() => refresh(), debounceMs)
   }
 
+  function reset() {
+    if (disposed) return
+    // Reset fires before the store is cleared. Do not let focus/poll events
+    // revive this document while scene teardown is still running.
+    dismissed = false
+    resetDocument = readinessTarget(store.getState(), mode)?.document ?? null
+    invalidate()
+  }
+
   function wake() {
     if (disposed) return
-    const next = readinessTarget(store.getState(), mode)
+    const next = currentTarget()
     if (!sameTarget(target, next)) {
       invalidate()
     } else if (!document.hidden && target) {
@@ -111,8 +126,9 @@ export function initDesignReadinessController({
   }
 
   const unsubscribe = store.subscribe(state => {
-    if (!sameTarget(target, readinessTarget(state, mode))) invalidate()
+    if (!sameTarget(target, currentTarget(state))) invalidate()
   })
+  window.addEventListener('nadoc:document-reset', reset)
   window.addEventListener('focus', wake)
   window.addEventListener('nadoc:sim-jobs-changed', wake)
   document.addEventListener('visibilitychange', visibilityChanged)
@@ -120,12 +136,17 @@ export function initDesignReadinessController({
 
   return {
     refresh: wake,
+    dismiss() { dismissed = true; invalidate() },
+    show() { dismissed = false; invalidate() },
+    reset,
     getReport: () => report,
     dispose() {
       disposed = true
       clearTimers()
       cancelRequest()
       unsubscribe?.()
+      widget.setReport(null)
+      window.removeEventListener('nadoc:document-reset', reset)
       window.removeEventListener('focus', wake)
       window.removeEventListener('nadoc:sim-jobs-changed', wake)
       document.removeEventListener('visibilitychange', visibilityChanged)

@@ -1,5 +1,6 @@
 """Independent copies of rigid elements and their owned conjugate oligos."""
 
+import re
 import uuid
 
 import numpy as np
@@ -188,8 +189,36 @@ def paste_elements(design, source, protein_ids, nanoparticle_ids, paste_index=1)
         for r in c.surface_strands:
             r.bound_overhang_id = None
     copied_groups = [clone(g) for g in groups]
+    used_names = {g.name.casefold() for g in design.staple_groups}
+    copied_strands_by_id = {s.id: s for s in copied_strands}
     for old, new in zip(groups, copied_groups):
         new.strand_ids = [ids[s] for s in old.strand_ids if s in sids]
+        # Continue the numeric suffix, including names allocated earlier in this paste.
+        match = re.fullmatch(r"(.*?)([0-9]+)", old.name)
+        prefix, number = (match[1], int(match[2])) if match else (f"{old.name}-", 1)
+        pattern = re.compile(rf"{re.escape(prefix.casefold())}([0-9]+)")
+        number = (
+            max(
+                [
+                    number,
+                    *(
+                        int(found[1])
+                        for name in used_names
+                        if (found := pattern.fullmatch(name))
+                    ),
+                ]
+            )
+            + 1
+        )
+        new.name = f"{prefix}{number}"
+        used_names.add(new.name.casefold())
+        # Keep generated oligo labels aligned with the group; preserve custom names.
+        for strand_id in new.strand_ids:
+            strand = copied_strands_by_id[strand_id]
+            if strand.name and re.fullmatch(
+                rf"{re.escape(old.name)}:S[0-9]+", strand.name
+            ):
+                strand.name = new.name + strand.name[len(old.name) :]
     # Assets are immutable, but a clipboard also survives deletion of its source.
     existing_assets = {a.id for a in design.protein_assets}
     additions = dict(

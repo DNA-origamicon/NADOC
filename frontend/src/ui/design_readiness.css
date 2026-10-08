@@ -108,3 +108,20 @@
 @media (prefers-reduced-motion: reduce) {
   .design-readiness__progress { transition: none; }
 }
+
+.design-readiness .design-readiness__dismiss {
+  align-self: flex-start;
+  width: 24px;
+  height: 24px;
+  margin: 8px 0 0 4px;
+  padding: 0;
+  border: 1px solid #414956b3;
+  border-radius: 50%;
+  background: #20262feb;
+  color: #aab5c5;
+  font: 18px/1 system-ui, sans-serif;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.design-readiness .design-readiness__dismiss:hover { background: #38303a; color: #fff; }
+.design-readiness .design-readiness__dismiss:focus-visible { outline: 2px solid #70b6ff; outline-offset: 2px; }

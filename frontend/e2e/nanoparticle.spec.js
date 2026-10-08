@@ -17,7 +17,7 @@ test('gold nanosphere is scriptable through create, resize, move, and delete', a
   await expect.poll(() => page.evaluate(() => window.__nadocTest.nanoparticles.rendered().length)).toBe(1)
 
   const initial = await page.evaluate(() => window.__nadocTest.nanoparticles.rendered()[0])
-  expect(initial).toMatchObject({ diameterNm: 10, metalness: 1, color: 0xd4af37 })
+  expect(initial).toMatchObject({ diameterNm: 10, metalness: 0.575, color: 0xeac13b })
   await page.evaluate(() => window.__nadocTest.applyCameraPoseForTest({
     position: [15, 10, 15], target: [0, 0, 0],
   }))

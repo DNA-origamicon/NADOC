@@ -231,6 +231,7 @@ export async function listPrimitives() {
 
 /** Erase the active design on the server and clear all local persistence. */
 export async function closeSession() {
+  window.dispatchEvent(new Event('nadoc:document-reset'))
   try { await fetch(`${BASE}/design`, { method: 'DELETE' }) } catch { /* ignore if unreachable */ }
   clearPersistedDesign()
 }

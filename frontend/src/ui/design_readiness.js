@@ -28,7 +28,7 @@ export function designReadinessSummary(report) {
  * The supplied host must be positioned. CSS offsets are --design-readiness-top,
  * --design-readiness-right and --design-readiness-left (all default to 12px).
  */
-export function initDesignReadiness({ host, onAction } = {}) {
+export function initDesignReadiness({ host, onAction, onDismiss } = {}) {
   if (!host) throw new TypeError('Design readiness needs a viewport host.')
   const doc = host.ownerDocument
   const win = doc.defaultView
@@ -36,6 +36,8 @@ export function initDesignReadiness({ host, onAction } = {}) {
   const listeners = []
   let disposed = false
   let suppressed = false
+  let userDismissed = false
+  let explicitlyShown = false
   let contentVisible = false
   let isOpen = false
   let pinned = false
@@ -99,7 +101,18 @@ export function initDesignReadiness({ host, onAction } = {}) {
   actionError.setAttribute('role', 'status')
   panel.append(heading, summaryText, rows, simulationHost, limitationsHost, actionError)
   popover.append(panel)
-  root.append(trigger, popover)
+  const dismissButton = element('button', 'design-readiness__dismiss', '×')
+  dismissButton.type = 'button'
+  dismissButton.setAttribute('aria-label', 'Dismiss design readiness')
+  dismissButton.title = 'Dismiss design readiness'
+  listen(dismissButton, 'click', event => {
+    event.stopPropagation()
+    userDismissed = true
+    explicitlyShown = false
+    applyVisibility()
+    onDismiss?.()
+  })
+  root.append(trigger, dismissButton, popover)
   host.append(root)
 
   function cancelClose() {
@@ -158,7 +171,7 @@ export function initDesignReadiness({ host, onAction } = {}) {
   })
 
   function setBadge(state, label, sublabel, fraction) {
-    contentVisible = state !== 'ready'
+    contentVisible = state !== 'ready' || explicitlyShown
     applyVisibility()
     root.dataset.state = state
     count.textContent = label
@@ -170,7 +183,7 @@ export function initDesignReadiness({ host, onAction } = {}) {
   }
 
   function applyVisibility() {
-    root.hidden = suppressed || !contentVisible
+    root.hidden = suppressed || userDismissed || !contentVisible
     if (root.hidden) close()
   }
 
@@ -317,5 +330,16 @@ export function initDesignReadiness({ host, onAction } = {}) {
     item?.scrollIntoView?.({ block: 'nearest' })
   }
 
-  return { setReport, setLoading, setError, setSuppressed, open: reveal, focusStep, dispose }
+  function show() {
+    userDismissed = false
+    explicitlyShown = true
+    applyVisibility()
+  }
+
+  function resetVisibility() {
+    userDismissed = false
+    explicitlyShown = false
+  }
+
+  return { show, resetVisibility, setReport, setLoading, setError, setSuppressed, open: reveal, focusStep, dispose }
 }

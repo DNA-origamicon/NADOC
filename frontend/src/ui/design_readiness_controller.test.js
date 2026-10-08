@@ -128,3 +128,31 @@ describe('readiness document and job refresh', () => {
     expect(fetchReport).toHaveBeenCalledTimes(2)
   })
 })
+
+it('clears readiness synchronously on reset and ignores stale requests and wake events until a new design loads', async () => {
+  vi.useFakeTimers()
+  const pending = deferred()
+  const store = createMockStore({ currentDesign: design('old') })
+  const widget = { setReport: vi.fn(), setLoading: vi.fn(), setError: vi.fn() }
+  const fetchReport = vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue(ready)
+  const ctrl = initDesignReadinessController({ store, widget, fetchReport, debounceMs: 1, pollMs: 10 })
+  try {
+    await vi.advanceTimersByTimeAsync(1)
+    const signal = fetchReport.mock.calls[0][1].signal
+    window.dispatchEvent(new Event('nadoc:document-reset'))
+    expect(signal.aborted).toBe(true)
+    expect(widget.setReport).toHaveBeenLastCalledWith(null)
+    window.dispatchEvent(new Event('focus'))
+    window.dispatchEvent(new Event('nadoc:sim-jobs-changed'))
+    store.setState({ selection: {} })
+    pending.resolve(ready)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(fetchReport).toHaveBeenCalledTimes(1)
+    expect(widget.setReport).toHaveBeenLastCalledWith(null)
+    store.setState({ currentDesign: null })
+    store.setState({ currentDesign: design('new') })
+    await vi.advanceTimersByTimeAsync(1)
+    expect(fetchReport).toHaveBeenCalledTimes(2)
+    expect(widget.setReport).toHaveBeenLastCalledWith(ready)
+  } finally { ctrl.dispose(); vi.useRealTimers() }
+})
