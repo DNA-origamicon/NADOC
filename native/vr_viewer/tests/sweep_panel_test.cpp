@@ -5,6 +5,10 @@
 
 using namespace nadoc_vr;
 int main() {
+    assert(sweepPositionNumber(1.239F)=="1.23");
+    assert(sweepPositionNumber(-1.239F)=="-1.23");
+    assert(sweepPositionNumber(15.12F)=="15.12");
+    assert(sweepPositionNumber(-.001F)=="0.00");
     std::array<SidebarMenu,2> menus{SidebarMenu(0),SidebarMenu(1)};
     auto& menu=menus[1];menu.offsets[menu.selected]=8;
     SweepPanel panel;SweepDraft draft;panel.enter(menus);
@@ -33,15 +37,20 @@ int main() {
     draft.next();refresh();assert(menu.offset()==0 && menu.total()==2 && menu.pageRows()==2);
     assert(control("sweep:confirm").label=="CONFIRM");
     assert(control("sweep:free-draw").label=="FREE DRAW");
+    assert(control("sweep:bp-info").label=="NEW BP: CALCULATING");
+    assert(!control("sweep:bp-info").enabled);
     assert(!control("sweep:axis:0:0:1").enabled && control("sweep:axis:1:0:1").enabled);
-    assert(control("sweep:axis:1:2:value").label=="Z 10.0");audit();
+    assert(control("sweep:axis:1:2:value").label=="Z 10.00");audit();
     for(int i=0;i<9;++i)draft.addPoint();
     refresh();
     assert(menu.offset()==draft.selected-1);control("sweep:point:"+std::to_string(draft.selected));audit();
     menu.scroll(-1);const auto manualOffset=menu.offset();refresh();assert(menu.offset()==manualOffset);
     draft.select(0);refresh();assert(menu.offset()==0);audit();
     draft.movePoint(1,{-10000,9999,10000});refresh();audit();
-    assert(control("sweep:axis:1:0:value").label=="X -10000.0");
+    assert(control("sweep:axis:1:0:value").label=="X -10000.00");
+    assert(std::any_of(menu.audit.texts().begin(),menu.audit.texts().end(),[](const auto& t){return t.text=="-10000.00";}));
+    draft.movePoint(1,{-16.818F,33.167F,-.379F});refresh();audit();
+    assert(std::any_of(menu.audit.texts().begin(),menu.audit.texts().end(),[](const auto& t){return t.text=="-16.81";}));
     // Animated scrolling shares a clipped drawing and hit viewport; partial
     // rows must not overlap the pinned Free Draw or smoothing controls.
     double clock=100;menu.animationClock=[&]{return clock;};

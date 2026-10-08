@@ -164,6 +164,7 @@ def test_tool_rejects_stale_computation(monkeypatch):
     original = module.sweep_loop_skips
     with hb.scratch_session():
         routed_sweep()
+        before_marks = [h.loop_skips for h in state.get_or_404().helices]
         def concurrent_change(*args, **kwargs):
             result = original(*args, **kwargs)
             state.set_design(state.get_or_404().copy_with(name='Changed during calculation'))
@@ -173,4 +174,62 @@ def test_tool_rejects_stale_computation(monkeypatch):
         response = client.post('/api/design/loop-skip/apply-deformations')
         assert response.status_code == 409
         assert state.get_or_404().name == 'Changed during calculation'
-        assert not any(h.loop_skips for h in state.get_or_404().helices)
+        assert [h.loop_skips for h in state.get_or_404().helices] == before_marks
+
+
+@pytest.mark.parametrize('lattice', list(LatticeType))
+def test_creation_generates_safe_marks_and_menu_is_idempotent_without_crossovers(lattice):
+    with hb.scratch_session(lattice):
+        hb.sweep(CELLS, arc_points(), ligate_adjacent=False)
+        created = state.get_or_404()
+        marks = {h.id: h.loop_skips for h in created.helices}
+        assert any(marks.values())
+        assert created.deformations[-1].params.auto_loop_skips
+        for _ in range(2):
+            after = hb.apply_loop_skip_deformations()
+            assert {h.id: h.loop_skips for h in after.helices} == marks
+        forbidden = forbidden_loop_skip_bps(created)
+        for h in created.helices:
+            assert not {m.bp_index for m in h.loop_skips} & forbidden.get(h.id, set())
+
+
+@pytest.mark.parametrize('end', ['start','end'])
+def test_automatic_corrections_preserve_existing_source_marks(end):
+    source = bundle([(0,0,0),(0,0,30)], lattice=LatticeType.SQUARE)
+    source = source.copy_with(helices=[h.model_copy(update={'loop_skips':[LoopSkip(bp_index=12,delta=1)]}) for h in source.helices])
+    points = arc_points()
+    if end == 'start':
+        points = [(x,y,-z) for x,y,z in points]
+    result = build_sweep(source, SweepRequest(cells=CELLS,points_nm=points,source_helix_id=source.helices[0].id,source_end=end))
+    assert [h.loop_skips for h in result.helices[:len(source.helices)]] == [h.loop_skips for h in source.helices]
+    assert any(h.loop_skips for h in result.helices[len(source.helices):])
+
+
+def test_sharp_sweep_creates_safe_partial_corrections_and_durable_warning_regions():
+    design = bundle(arc_points(radius=5), lattice=LatticeType.SQUARE)
+    op = design.deformations[-1]
+    assert op.params.warning_bps and op.params.loop_skip_warnings
+    assert any(h.loop_skips for h in design.helices)
+    forbidden = forbidden_loop_skip_bps(design)
+    for h in design.helices:
+        assert not {m.bp_index for m in h.loop_skips} & forbidden.get(h.id, set())
+        assert len({m.bp_index for m in h.loop_skips}) == len(h.loop_skips)
+        cells = {}
+        for mark in h.loop_skips:
+            cell=(mark.bp_index-op.plane_a_bp)//7
+            cells[cell]=cells.get(cell,0)+abs(mark.delta)
+        assert all(n<=3 for n in cells.values())
+    restored=Design.model_validate_json(design.model_dump_json())
+    assert restored.deformations[-1].params.warning_bps==op.params.warning_bps
+
+
+def test_saved_warning_export_anchors_to_actual_dna_positions():
+    from tests.test_vr_routes import _serialize_fixture_scene
+    design=bundle(arc_points(radius=5), lattice=LatticeType.SQUARE)
+    op=design.deformations[-1]
+    assert op.params.warning_bps
+    bp=op.params.warning_bps[0]
+    records=[dict(helix_id=design.helices[0].id,bp_index=bp,strand_id=design.strands[0].id,backbone_position=[2,4,6])]
+    from types import SimpleNamespace
+    scene=_serialize_fixture_scene(design, records, [], representations=["full"], atomistic_model=SimpleNamespace(atoms=[],bonds=[]))
+    assert '# SWEEP_WARNING 2 4 6' in scene

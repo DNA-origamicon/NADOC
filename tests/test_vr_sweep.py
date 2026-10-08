@@ -148,3 +148,24 @@ def test_native_sweep_s_curve_can_be_edited_in_desktop_history_and_undo_redone()
     assert restored.feature_log[0].id == entry.id
     assert restored.feature_log[0].params['points_nm'] == changed_points
     np.testing.assert_allclose(geometry(restored), edited_geometry, atol=1e-10)
+
+
+def test_sweep_orientations_survive_transport_and_warning_preview_is_sequenced(tmp_path):
+    raw = {**draft(), 'orientations_deg': [None, [15,30,45], [0,90,90]]}
+    assert _parse_tool_config(raw, 9)['orientations_deg'] == raw['orientations_deg']
+    path = tmp_path / 'preflight'
+    session = {'preflight_feedback_path': str(path)}
+    body = VRToolPreflightFeedbackRequest(preflight_sequence=4,tool_config_sequence=9,
+        tool_mode='sweep', target_kind='none', status='warn', reason='backend_warning',
+        sweep_preview=dict(path=[[0,0,0],[0,0,10]],cloud=[[1,0,0]],bases=[[1,0,0,0,1,0,0,0,1]],warning_segments=[0]))
+    assert _write_preflight_feedback(session,body) == (True,4)
+    record = path.read_text()
+    assert record.startswith('NADOCVR_PREFLIGHT 3 9 4 warn sweep none - backend_warning 2 1 1 1 ')
+    assert _write_preflight_feedback(session,body.model_copy(update={'preflight_sequence':3})) == (False,4)
+    assert path.read_text() == record
+    counted = body.model_copy(update={'preflight_sequence':5, 'sweep_preview':body.sweep_preview.model_copy(update={'total_new_bp':1234})})
+    assert _write_preflight_feedback(session,counted) == (True,5)
+    assert path.read_text().startswith('NADOCVR_PREFLIGHT 4 ')
+    assert path.read_text().rstrip().endswith(' 1234')
+    with pytest.raises(ValueError):
+        VRToolPreflightFeedbackRequest(**{**body.model_dump(),'sweep_preview':{'path':[],'cloud':[],'bases':[], 'warning_segments':[0]}})

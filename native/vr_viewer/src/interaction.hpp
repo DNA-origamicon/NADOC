@@ -766,6 +766,10 @@ struct ToolPreflightFeedback {
     std::string selectionKind = "none";
     std::string identity;
     std::string reason;
+    std::vector<glm::vec3> sweepPath, sweepCloud;
+    std::vector<glm::mat3> sweepBases;
+    std::vector<size_t> sweepWarnings;
+    std::optional<size_t> sweepTotalBp;
 };
 
 struct ToolExecutionFeedback {
@@ -1800,13 +1804,28 @@ inline std::optional<ToolPreflightFeedback> parseToolPreflightFeedback(
                  >> result.preflightSequence >> result.status
                  >> result.mode >> result.selectionKind >> result.identity
                  >> result.reason) ||
-        magic != "NADOCVR_PREFLIGHT" || version != 2 ||
+        magic != "NADOCVR_PREFLIGHT" || (version != 2 && version != 3 && version != 4) ||
         result.toolConfigSequence != expectedToolConfigSequence ||
         result.preflightSequence <= previousPreflightSequence ||
         result.identity.size() > 2048 || result.reason.empty() ||
-        result.reason.size() > 64 || (fields >> trailing)) {
+        result.reason.size() > 64) {
         return std::nullopt;
     }
+    if(version>=3) {
+        size_t path,cloud,bases,warnings;
+        if(result.mode!="sweep" || (result.status!="ok" && result.status!="warn") ||
+           !(fields>>path>>cloud>>bases>>warnings) || path>1025 || cloud>4096 || bases>256 || warnings>1024)return std::nullopt;
+        result.sweepPath.resize(path);result.sweepCloud.resize(cloud);result.sweepBases.resize(bases);result.sweepWarnings.resize(warnings);
+        for(auto* values:{&result.sweepPath,&result.sweepCloud})for(auto& p:*values)for(int j=0;j<3;++j)
+            if(!(fields>>p[j]) || !std::isfinite(p[j]))return std::nullopt;
+        for(auto& m:result.sweepBases)for(int r=0;r<3;++r)for(int c=0;c<3;++c)
+            if(!(fields>>m[c][r]) || !std::isfinite(m[c][r]))return std::nullopt;
+        for(auto& i:result.sweepWarnings)if(!(fields>>i) || path<2 || i>=path-1)return std::nullopt;
+    }
+    if(version==4) {
+        size_t total;if(!(fields>>total) || total>200000)return std::nullopt;result.sweepTotalBp=total;
+    }
+    if(fields>>trailing)return std::nullopt;
     static constexpr std::array<const char*, 5> statuses = {
         "waiting", "ok", "warn", "block", "error",
     };

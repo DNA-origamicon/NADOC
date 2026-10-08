@@ -18,6 +18,10 @@ def validate_sweep_draft(raw):
                 for p in points)
             or (points and points[0] != [0, 0, 0])):
         raise ValueError('invalid sweep configuration')
-    return {'painted_footprint': footprint, 'points_nm': [list(p) for p in points],
+    orientations = raw.get('orientations_deg')
+    if orientations is not None and (not isinstance(orientations, list) or len(orientations) != len(points)
+            or any(a is not None and (not isinstance(a, list) or len(a) != 3 or any(type(v) not in (int, float) or not math.isfinite(v) or abs(v) > 360 for v in a)) for a in orientations)):
+        raise ValueError('invalid sweep orientations')
+    return {**({'orientations_deg': [None if a is None else list(a) for a in orientations]} if orientations is not None else {}), 'painted_footprint': footprint, 'points_nm': [list(p) for p in points],
             'extrude_from': raw['extrude_from'], 'strand_filter': raw['strand_filter'],
             'ligate_adjacent': raw['ligate_adjacent']}

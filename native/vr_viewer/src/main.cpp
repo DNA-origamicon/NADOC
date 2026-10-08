@@ -270,6 +270,7 @@ struct SceneData {
     nadoc_vr::LatticeContext latticeContext;
     std::array<RepresentationData, kRepresentationCount> representations;
     std::array<bool,kRepresentationCount> available{};
+    std::vector<glm::vec3> sweepWarnings;
     bool emptyAuthoring = false;
     std::optional<bool> preparedAtomisticSharedGeometry;
     Representation initialRepresentation = Representation::full;
@@ -284,7 +285,7 @@ struct SceneData {
     // must not retain pointers into the original; ordinary moves keep them valid.
     SceneData(const SceneData& other):cpuBytes(other.cpuBytes),extrudePlane(other.extrudePlane),latticeContext(other.latticeContext),
         representations(other.representations),
-        available(other.available),emptyAuthoring(other.emptyAuthoring),
+        available(other.available),sweepWarnings(other.sweepWarnings),emptyAuthoring(other.emptyAuthoring),
         initialRepresentation(other.initialRepresentation),initialColoring(other.initialColoring),
         sourceAxes(other.sourceAxes),normalizationCenter(other.normalizationCenter),normalizationScale(other.normalizationScale){}
     SceneData& operator=(const SceneData& other){if(this!=&other)*this=SceneData(other);return *this;}
@@ -1036,7 +1037,10 @@ SceneData loadScene(const std::string& path, std::optional<std::pair<glm::vec3, 
                       << " rss_mib=" << currentResidentMiB() << std::endl;
         }
         if (type == '#') {
-            input.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            std::string comment;std::getline(input,comment);std::istringstream fields(comment);
+            std::string name;glm::vec3 position;
+            if(fields>>name && name=="SWEEP_WARNING" && fields>>position.x>>position.y>>position.z &&
+                std::isfinite(position.x) && std::isfinite(position.y) && std::isfinite(position.z))scene.sweepWarnings.push_back(position);
             continue;
         }
         if (type == 'O' && version >= 16) {
@@ -1838,7 +1842,10 @@ class GlScene {
         if (applyStyle && !updateStaticSnapHighlights(selectionUnchanged, priorSnapTokens, priorSnapIdentities)) setStyle(representation_, coloring_);
     }
 
+    const std::vector<glm::vec3>& sweepWarningPoints() const {return scene_.sweepWarnings;}
+
     void installRepresentation(SceneData incoming) {
+        scene_.sweepWarnings=incoming.sweepWarnings;
         previewGeometry_.clear();
         // Full remains the normalization/presentation anchor. Replace only blocks
         // delivered in this request; retain previously loaded representations.
@@ -5941,10 +5948,11 @@ class Viewer {
         return "EXTRUSION BLOCKED - CHECK DESIGN";
     }
     void refreshExtrudePanel() {
+        sidebarMenus_.menus[1].spinning=[this](const std::string& action){return action=="sweep:confirm" && sweepPanel_.active && sweepDraft_.step==2 && toolShell_.executionPending();};
         radialToolMenu_.setWorkflow(bendPanel_.active,bendHasAngle());
         radialToolMenu_.setSweep(sweepPanel_.active && sweepDraft_.step==2);
         sweepPanel_.refresh(sidebarMenus_.menus,sweepDraft_,extrudeLatticeDraft_.cells().size(),latticeSquare_,
-            nadoc_vr::toolStrandFilterName(toolConfig_.strandFilter()),toolConfig_.ligateAdjacent(),sweepStatus(),extrudePlane_.plane);
+            nadoc_vr::toolStrandFilterName(toolConfig_.strandFilter()),toolConfig_.ligateAdjacent(),sweepStatus(),extrudePlane_.plane,sweepTotalBpText());
         const std::string bendStatus=toolShell_.executionPending()?toolShell_.status()
             :bendPanel_.hand?"PLANE "+std::to_string(2-bendPanel_.grabbed)+" FIXED / RELEASE TO FINISH"
             :bendPanel_.pickSlot?"HOLD TRIGGER CLOSE TO ELEMENT"
@@ -7127,6 +7135,7 @@ class Viewer {
                     normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters},line);
         }
         drawSweep(line);
+        drawSweepWarnings(line);
         drawBend(line);
         if(!bendPanel_.active && !ligation_.active && !ligation_.nickActive) {
             endResize_.draw(manipulator_.transform(),normalizationScale_,line);
@@ -7845,7 +7854,7 @@ class Viewer {
         if (!input) return;
         input.seekg(0, std::ios::end);
         const std::streamoff size = input.tellg();
-        if (size <= 0 || size > 4096) return;
+        if (size <= 0 || size > 1048576) return;
         input.seekg(0);
         std::string record(static_cast<size_t>(size), '\0');
         input.read(record.data(), size);
@@ -8892,6 +8901,7 @@ class Viewer {
             }
         }
         for(size_t h=0;h<2;++h)menuGripTargeted[h]=menuGripTargeted[h]||remoteBlocked[h];
+        processSweepGrip(menuGripTargeted);
         const nadoc_vr::ManipulationMode previous = manipulator_.mode();
         if (suppressManipulationUntilRelease_ &&
             std::none_of(gripPressed_.begin(), gripPressed_.end(), [](bool pressed) {
@@ -8914,7 +8924,7 @@ class Viewer {
             toolShell_.mode() == nadoc_vr::ToolMode::move_rotate &&
             toolShell_.previewRequested() &&
             (!toolShell_.executionPending() || sceneRefresh_.revision()==moveStartRevision_);
-        // Grips retain scene manipulation in every tool; edit grabs use triggers.
+        // Sweep point grips own orientation; unclaimed grips retain scene manipulation.
         glScene_->setMovePointPreview(
             rigidToolPreview ? selectedOwnerTokens_ : std::vector<std::string>{},
             pendingToolTransform_.transform());
@@ -8968,6 +8978,7 @@ class Viewer {
                                         latticeTargeted[hand];
         }
         if (radialToolMenu_.blocksInput()) menuControlTargeted[1] = true;
+        processSweepWarnings(menuControlTargeted);
         processSweepInput(menuControlTargeted,next!=nadoc_vr::ManipulationMode::none);
         frameAudit_.mark("menus_manipulation");
         dimensionPanel_.input(hands_,manipulator_.transform(),next!=nadoc_vr::ManipulationMode::none,
@@ -11048,7 +11059,9 @@ class Viewer {
     nadoc_vr::ExtrudePanel extrudePanel_;
     nadoc_vr::SweepPanel sweepPanel_;
     nadoc_vr::SweepDraft sweepDraft_;
-    std::optional<size_t> sweepHand_;
+    std::optional<size_t> sweepHand_,sweepGripHand_;
+    glm::quat sweepGripStart_{1,0,0,0};
+    glm::mat3 sweepGripFrame_{1};
     std::array<std::optional<size_t>,2> sweepHovered_;
     glm::vec3 sweepDragStart_{},sweepPointStart_{};
     glm::mat4 sweepStartModel_{1};
@@ -11056,7 +11069,10 @@ class Viewer {
     uint64_t sweepPublishedRevision_=0;
     float sweepStrokeMetresPerNm_=.01F;
     uint64_t sweepGeometryRevision_=std::numeric_limits<uint64_t>::max();
+    std::optional<glm::vec3> sweepWarningTooltip_;
+    double sweepWarningTooltipUntil_=0;
     std::vector<glm::vec3> sweepCurve_,sweepCloud_;
+    std::vector<glm::vec2> sweepSectionOutline_,sweepSectionCells_;
     struct ExtrudeConfirmation { size_t settingsOffset; bool painterOpen; };
     std::optional<ExtrudeConfirmation> extrudeConfirmation_;
     nadoc_vr::BendPanel bendPanel_;

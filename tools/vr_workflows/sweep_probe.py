@@ -199,7 +199,8 @@ def run(socket, output):
         live.button('menu', hand=1)
         target = np.asarray(live.state['sweep']['points_world'][1])
         toward_head = head-target
-        origin = target+.25*toward_head/np.linalg.norm(toward_head)
+        # Offset the inspection ray sideways so it is not hidden end-on by the point glyph.
+        origin = target+.25*toward_head/np.linalg.norm(toward_head)+rotate(q, [.08,0,0])
         direction = aim_orientation(origin.tolist(), target.tolist())
         pose(origin, direction)
         wait(lambda state: state['sweep']['hover_point'] == 1)
@@ -237,10 +238,12 @@ def run(socket, output):
         sequence_before = live.state['config_sequence']
         origin_before = np.asarray(live.state['sweep']['origin_world'])
         framed_origin = head+rotate(q, [-.10, -.16, -.8])
-        pose(origin_before, q)
+        framing_grip_offset = rotate(q, [.3, 0, 0])
+        pose(origin_before+framing_grip_offset, q)
+        assert live.state['sweep']['hover_point'] is None
         live.send('button', hand=1, button='grip', pressed=True)
         live.frame()
-        pose(framed_origin, q)
+        pose(framed_origin+framing_grip_offset, q)
         live.send('button', hand=1, button='grip', pressed=False)
         live.frame()
         assert live.state['sweep']['points_nm'] == draft_before
@@ -303,7 +306,7 @@ def run(socket, output):
             selected = 1+int(np.argmax(lateral))
             target = fitted[selected]
             toward_head = head-target
-            origin = target+.25*toward_head/np.linalg.norm(toward_head)
+            origin = target+.25*toward_head/np.linalg.norm(toward_head)+rotate(q, [.08,0,0])
             direction = aim_orientation(origin.tolist(), target.tolist())
             pose(origin, direction)
             wait(lambda state: state['sweep']['hover_point'] == selected)
@@ -337,18 +340,58 @@ def run(socket, output):
             assert live.state['sweep']['points_nm'][0] == [0, 0, 0]
             wait(lambda state: state['sweep']['ready'])
             capture(f'fitted-xyz-after-{preset}')
+            # Grip the fitted point, rotate through normal profile input, and
+            # verify orientation is snapped in the starting frame, with XYZ fixed.
+            if live.state['sidebars'][1]['open']:
+                live.button('menu', hand=1)
+            target = np.asarray(live.state['sweep']['points_world'][selected])
+            origin = target + .25*(head-target)/np.linalg.norm(head-target)
+            direction = aim_orientation(origin.tolist(), target.tolist())
+            pose(origin, direction)
+            wait(lambda state: state['sweep']['hover_point'] == selected)
+            grip_points = np.asarray(live.state['sweep']['points_nm'])
+            grip_origin = np.asarray(live.state['sweep']['origin_world'])
+            live.send('button', hand=1, button='grip', pressed=True); live.frame()
+            assert live.state['sweep']['orienting']
+            grip_before = live.state['sweep']['orientations_deg'][selected]
+            turn = [0, math.sin(math.radians(35)/2), 0, math.cos(math.radians(35)/2)]
+            rotation = reach_target(live, origin.tolist(), preset, 7300,
+                target_position=origin.tolist(), target_orientation=multiply(direction, turn))
+            live.send('button', hand=1, button='grip', pressed=False); live.frame()
+            wait(lambda state: state['sweep']['ready'])
+            grip_after = live.state['sweep']['orientations_deg'][selected]
+            assert grip_after is not None and grip_after != grip_before
+            assert np.allclose(np.asarray(grip_after)/15, np.round(np.asarray(grip_after)/15))
+            assert np.array_equal(live.state['sweep']['points_nm'], grip_points)
+            assert np.allclose(live.state['sweep']['origin_world'], grip_origin, atol=1e-6)
+            capture(f'fitted-point-orientation-{preset}')
+            menu()
             report['point_edits'].append({'preset': preset, 'index': selected,
                 'shape_before_edit': shape, 'points_before_drag_nm': before_drag.tolist(),
                 'points_after_drag_nm': after_drag.tolist(), 'numeric_axis': 'Y',
                 'numeric_before_nm': numeric_before, 'numeric_after_nm': numeric_after,
-                'drag_reach': drag})
+                'drag_reach': drag, 'orientation_before_deg': grip_before, 'orientation_after_deg': grip_after,
+                'orientation_reach': rotation})
             (output/'tour-report.json').write_text(json.dumps(report, indent=2))
         capture('editable-smoothed-stroke')
         save('ready-to-confirm')
         controls.click('sweep:confirm')
+        wait(lambda state: state['sweep'].get('building'), 5)
+        capture('generating-sweep-a')
+        settle(.15)
+        capture('generating-sweep-b')
         wait(lambda state: state['status'] == 'COMMITTED' and bool(state['committed_feature_id']), 45)
         assert not live.state['sweep']['active']
         capture('committed')
+        warning_points = live.state['sweep'].get('warning_points_world', [])
+        if warning_points:
+            target = np.asarray(warning_points[0]); origin = target + np.array([0,0,.35])
+            reach_target(live, target.tolist(), 'steady_fast', 7490, target_position=origin.tolist(),
+                target_orientation=aim_orientation(origin.tolist(), target.tolist()))
+            live.send('button', hand=1, button='trigger', pressed=True); live.frame()
+            live.send('button', hand=1, button='trigger', pressed=False); live.frame()
+            wait(lambda state: state['sweep']['warning_tooltip'])
+            capture('committed-limit-tooltip')
         # Review presentation is outside the measured authoring gestures. The
         # existing grip-based workflow verifies unchanged design/config state
         # and useful authored-pixel coverage in both submitted eyes.

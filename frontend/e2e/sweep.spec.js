@@ -110,6 +110,9 @@ test('Sweep continues from a selected existing end', async ({ page }) => {
     const api = await import('/src/api/client.js')
     await api.createBundle({ cells: [[0,0],[0,1]], lengthBp: 21, name: '__e2e__Sweep continuation' })
   })
+  // Finish fixture autosave before testing continuation; its design refresh
+  // otherwise invalidates preflight between the Next button's down/up events.
+  await expect(page.locator('#sync-status-text')).toContainText('saved')
   await page.evaluate(async () => {
     const { store } = await import('/src/state/store.js')
     store.setState({ toolFilters: { ...store.getState().toolFilters, bluntEnds: true } })

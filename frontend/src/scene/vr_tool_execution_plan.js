@@ -248,13 +248,21 @@ export async function evaluateVRToolPreflight(sequence, draft, {
       plan: null,
     }
   }
-  let result = null
+  let result = null, sweepPreview = null
   try {
     if (described.plan.kind === 'sweep') {
-      const preview = await api?.previewSweep?.(described.plan.preflight.arguments, null, { includeGeometry: false })
+      const preview = await api?.previewSweep?.(described.plan.preflight.arguments, null, { includeGeometry: true })
       result = preview && Number.isFinite(preview.length_nm) && preview.length_nm > 0 &&
         preview.revision === described.plan.preflight.arguments.expected_revision
-        ? { status: 'ok' } : null
+        ? { status: preview.feasibility?.status === 'warning' ? 'warn' : 'ok', message: preview.feasibility?.message } : null
+      if (result) {
+        const cloud = (preview.helix_paths_nm ?? []).flat()
+        const stride = Math.max(1, Math.ceil(cloud.length / 4096))
+        const origin = preview.origin_nm ?? [0,0,0]
+        const relative = p => p.map((v, i) => v - origin[i])
+        sweepPreview = { ...(Number.isSafeInteger(preview.total_new_bp) ? { total_new_bp: preview.total_new_bp } : {}), path: (preview.path_nm ?? []).map(relative), cloud: cloud.filter((_, i) => i % stride === 0).map(relative),
+          bases: (preview.point_bases ?? []).map(b => b.flat()), warning_segments: preview.feasibility?.warning_segments ?? [] }
+      }
     } else result = described.plan.kind === 'extrude_frame'
       ? await api?.validateFrameExtrusion?.(described.plan.preflight.arguments)
       : described.plan.kind === 'extrude_continuation'
@@ -273,7 +281,7 @@ export async function evaluateVRToolPreflight(sequence, draft, {
     : status === 'warn' ? 'backend_warning'
       : status === 'block' ? 'backend_block' : 'request_failed'
   return {
-    feedback: _preflightFeedback(config, sequence, status, reason),
+    feedback: { ..._preflightFeedback(config, sequence, status, reason), ...(sweepPreview ? { sweep_preview: sweepPreview } : {}) },
     message: typeof result?.message === 'string' ? result.message : '',
     plan: described.plan,
   }

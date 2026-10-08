@@ -64,6 +64,7 @@ import { initSelectionManager }      from './scene/selection_manager.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
 import { initElementClipboard } from './scene/element_clipboard.js'
 import { initClusterClipboard }      from './scene/cluster_clipboard.js'
+import { initSavedSweepWarnings } from './scene/sweep_warning_markers.js'
 import { initSweepPanel } from './ui/sweep_panel.js'
 import { initExtrudePanel }          from './ui/extrude_panel.js'
 import { initPrimitiveLibrary }      from './ui/primitive_library.js'
@@ -2476,6 +2477,7 @@ async function main() {
   // the tool lifecycle. Replaces the retired workspace.js plane-picker as the entry
   // to every extrude (new-bundle / segment / blunt-end / deformed continuation).
   _extrudePanel = initExtrudePanel({ store, slicePlane, expandedSpacing })
+  initSavedSweepWarnings(scene,store,{canvas,getCamera:getRenderCamera,addFrameCallback,removeFrameCallback,getHelixCtrl:()=>designRenderer.getHelixCtrl()})
   const sweepPanel = initSweepPanel({ store, api, slicePlane, scene, extrudePanel: _extrudePanel, expandedSpacing, showToast, getDocId, canvas, getCamera: getRenderCamera, getControls: getActiveControls, addFrameCallback, removeFrameCallback })
   initLinearPatternPanel({ store, showToast, selectionManager, scene })
   initCircularPatternPanel({ store, showToast, selectionManager, scene, canvas, getCamera: getRenderCamera, getControls: getActiveControls, addFrameCallback, removeFrameCallback })

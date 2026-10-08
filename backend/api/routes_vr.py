@@ -41,7 +41,7 @@ from urllib.parse import quote, urlparse
 
 import numpy as np
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.api import state as design_state
 from backend.core.constants import STAPLE_PALETTE
@@ -255,7 +255,24 @@ class VRToolFeedbackRequest(BaseModel):
     )
 
 
+class VRSweepPreview(BaseModel):
+    total_new_bp: int | None = Field(default=None, ge=0, le=200000)
+    path: list[tuple[float, float, float]] = Field(max_length=1025)
+    cloud: list[tuple[float, float, float]] = Field(max_length=4096)
+    bases: list[list[float]] = Field(max_length=256)
+    warning_segments: list[int] = Field(max_length=1024)
+
+    @model_validator(mode='after')
+    def validate_geometry(self):
+        if any(not math.isfinite(v) for p in [*self.path, *self.cloud, *self.bases] for v in p):
+            raise ValueError('Sweep preview must be finite')
+        if any(len(b) != 9 for b in self.bases) or any(i < 0 or i + 1 >= len(self.path) for i in self.warning_segments):
+            raise ValueError('Invalid sweep preview indices or frames')
+        return self
+
+
 class VRToolPreflightFeedbackRequest(BaseModel):
+    sweep_preview: VRSweepPreview | None = None
     preflight_sequence: int = Field(ge=1, le=2**53 - 1)
     tool_config_sequence: int = Field(ge=1)
     target_identity: Optional[str] = Field(default=None, max_length=2048)
@@ -1442,6 +1459,28 @@ def _serialize_scene(
     lines.append(extrude_plane_record(design))
     lines.extend(lattice_context_records(design, rotation))
     lines.append("# stable identities, owner aliases, and endpoint-aware tool scopes")
+    # Optional presentation metadata: older readers safely ignore comments.
+    warning_nucleotides = {}
+    for nucleotide in nucleotides:
+        warning_nucleotides.setdefault(nucleotide.get('helix_id'), []).append(nucleotide)
+    for op in design.deformations:
+        if op.type != 'sweep':
+            continue
+        for bp in op.params.warning_bps:
+            nearest, positions = float('inf'), []
+            for hid in op.affected_helix_ids:
+                for nucleotide in warning_nucleotides.get(hid, []):
+                    center = point(nucleotide.get('backbone_position'))
+                    if center is None:
+                        continue
+                    distance = abs(nucleotide.get('bp_index', bp)-bp)
+                    if distance < nearest:
+                        nearest, positions = distance, []
+                    if distance == nearest:
+                        positions.append(center)
+            if positions:
+                lines.append('# SWEEP_WARNING ' + nums(*np.mean(positions, axis=0)))
+
     by_strand: dict[str, list[tuple[dict, np.ndarray, tuple[float, ...], str]]] = {}
     identity_palettes: dict[tuple, tuple[float, ...]] = {}
     lines.append("R full")
@@ -3850,7 +3889,18 @@ def _write_preflight_feedback(
         f"{body.preflight_sequence} {body.status} "
         f"{body.tool_mode} {body.target_kind} {identity} {body.reason}\n"
     )
-    if len(record.encode()) > 4096:
+    if body.sweep_preview is not None:
+        if body.tool_mode != 'sweep' or body.status not in {'ok', 'warn'}:
+            raise HTTPException(422, detail='Unexpected sweep preview')
+        preview = body.sweep_preview
+        fields = [str(len(preview.path)), str(len(preview.cloud)), str(len(preview.bases)), str(len(preview.warning_segments))]
+        fields.extend(format(v, '.9g') for p in [*preview.path, *preview.cloud, *preview.bases] for v in p)
+        fields.extend(str(i) for i in preview.warning_segments)
+        version = 3 if preview.total_new_bp is None else 4
+        if preview.total_new_bp is not None:
+            fields.append(str(preview.total_new_bp))
+        record = record.replace('NADOCVR_PREFLIGHT 2 ', f'NADOCVR_PREFLIGHT {version} ').rstrip() + ' ' + ' '.join(fields) + '\n'
+    if len(record.encode()) > 1048576:
         raise HTTPException(422, detail="Invalid VR tool preflight feedback.")
     path = Path(state["preflight_feedback_path"])
     temporary = path.with_name(f"{path.name}.next")
@@ -3862,9 +3912,9 @@ def _write_preflight_feedback(
                 current = ""
             fields = current.split()
             if (
-                len(fields) == 9
+                len(fields) >= 9
                 and fields[0] == "NADOCVR_PREFLIGHT"
-                and fields[1] == "2"
+                and fields[1] in {"2", "3", "4"}
             ):
                 try:
                     current_tool_config_sequence = int(fields[2])

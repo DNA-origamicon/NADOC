@@ -84,7 +84,7 @@ export function createVRToolPreflightCoordinator({
       if (!result?.feedback) return { sent: false, reason: 'no_feedback' }
       // Native can enable Confirm as soon as the server writes the verdict,
       // before this HTTP response arrives. Install the validated plan first.
-      const candidate = result.feedback.status === 'ok' && result.plan
+      const candidate = (result.feedback.status === 'ok' || (config.mode === 'sweep' && result.feedback.status === 'warn')) && result.plan
         ? { sequence: toolConfigSequence, plan: structuredClone(result.plan) } : null
       validated = candidate
       const delivered = await publish(

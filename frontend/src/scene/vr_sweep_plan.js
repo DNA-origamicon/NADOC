@@ -17,7 +17,7 @@ export function buildVRSweepPlan(config, design, revision) {
   }))
   if (config.painted_footprint.cells.some(cell => occupied.has(JSON.stringify(cell))))
     return refuse('painted_cell_occupied')
-  const args = { expected_design_id: design.id, expected_revision: revision,
+  const args = { ...(config.orientations_deg == null ? {} : { orientations_deg: structuredClone(config.orientations_deg) }), expected_design_id: design.id, expected_revision: revision,
     cells: config.painted_footprint.cells.map(cell => [...cell]),
     points_nm: config.points_nm.map(point => [...point]), plane: config.extrude_from,
     strand_filter: config.strand_filter, ligate_adjacent: config.ligate_adjacent }

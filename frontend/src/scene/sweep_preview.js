@@ -1,11 +1,19 @@
 import * as THREE from 'three'
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
+import { createSweepWarningMarkers, warningSegmentCenters } from './sweep_warning_markers.js'
+import { sweepSectionGeometry } from './sweep_cross_section.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 
 /** Display-only swept helix tubes, point picking and world translation controls. */
-export function createSweepPreview(scene, { canvas, getCamera, getControls, addFrameCallback, removeFrameCallback, onSelect, onMove } = {}) {
+export function createSweepPreview(scene, { canvas, getCamera, getControls, addFrameCallback, removeFrameCallback, onSelect, onMove, onOrient, canOrient = () => true } = {}) {
   const root = new THREE.Group(), geometry = new THREE.Group(), points = new THREE.Group()
   root.name = 'sweep-preview'; points.name = 'sweep-control-points'; geometry.name = 'sweep-geometry'
   root.add(geometry, points); scene.add(root)
+  const warnings = createSweepWarningMarkers(scene,{canvas,getCamera,addFrameCallback,removeFrameCallback})
+  let mode = 'translate', pointBases = [], orientationBasis = new THREE.Matrix4()
+  const arrows = new THREE.Group(); arrows.name = 'sweep-orientation-arrows'; root.add(arrows)
+  const sections = new THREE.Group(); sections.name = 'sweep-cross-sections'; root.add(sections)
+  let sectionShape = null, selectedShape = null
   const target = new THREE.Object3D(), raycaster = new THREE.Raycaster()
   target.name = 'sweep-point-target'
   const origin = new THREE.Vector3(), inverse = new THREE.Matrix3(), rotation = new THREE.Matrix3()
@@ -15,7 +23,26 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
       child.geometry?.dispose(); child.material?.dispose(); group.remove(child)
     }
   }
-  function clearGeometry() { disposeChildren(geometry) }
+  function clearSections() {
+    for (const child of [...sections.children]) { child.material.dispose(); sections.remove(child) }
+    sectionShape?.dispose(); selectedShape?.dispose(); sectionShape = selectedShape = null
+  }
+  function clearGeometry() { disposeChildren(geometry); clearSections(); warnings.set([]) }
+  function frameMatrix(b) { return new THREE.Matrix4().set(...b[0],0,...b[1],0,...b[2],0,0,0,0,1) }
+  function anglesFromFrame(frame) {
+    const e = new THREE.Euler().setFromRotationMatrix(orientationBasis.clone().invert().multiply(frame), 'YXZ')
+    return [e.x,e.y,e.z].map(THREE.MathUtils.radToDeg)
+  }
+  function updateSection(index) {
+    const section = sections.children[index]
+    if (!section || !points.children[index]) return
+    section.position.copy(points.children[index].position)
+    if (pointBases[index]) section.quaternion.setFromRotationMatrix(frameMatrix(pointBases[index]))
+    section.geometry = index === selected ? selectedShape : sectionShape
+    section.material.color.setHex(index === selected ? 0xffdf80 : 0x65dcec)
+    section.material.opacity = index === selected ? 1 : .65
+    section.renderOrder = index === selected ? 103 : 100
+  }
   function endDrag() {
     if (pointerId != null) {
       tc?.pointerUp({ button: 0 })
@@ -26,8 +53,8 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
     orbit = null
   }
   function clear() {
-    hasFrame = false
-    endDrag(); tc?.detach(); clearGeometry(); disposeChildren(points)
+    hasFrame = false; mode = 'translate'; tc?.setMode(mode)
+    endDrag(); tc?.detach(); clearGeometry(); disposeChildren(points); disposeChildren(arrows)
   }
   function ensureControls() {
     if (tc || !canvas || !getCamera?.()) return
@@ -35,22 +62,36 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
     tc = new TransformControls(getCamera(), canvas)
     // Route capture-phase events ourselves so scene selection and OrbitControls
     // cannot consume a point/handle drag before TransformControls receives it.
-    tc.disconnect(); tc.setMode('translate'); tc.setSpace('world'); tc.setSize(.65)
+    tc.disconnect(); tc.setMode(mode); tc.setRotationSnap(null); tc.setSpace('world'); tc.setSize(.65)
     helper = tc.getHelper(); helper.name = 'sweep-point-gizmo'; scene.add(helper)
     tc.addEventListener('objectChange', () => {
       const point = points.children[selected]
-      if (!point || selected === 0) return
+      if (!point) return
+      if (mode === 'rotate') {
+        if (!canOrient(selected)) return
+        const frame = new THREE.Matrix4().makeRotationFromQuaternion(target.quaternion)
+        pointBases[selected] = [0,1,2].map(r => [0,1,2].map(c => frame.elements[c*4+r]))
+        updateSection(selected)
+        onOrient?.(selected, anglesFromFrame(frame))
+        return
+      }
+      if (selected === 0) return
       point.position.copy(target.position)
+      updateSection(selected)
       const offset = target.position.clone().sub(origin).applyMatrix3(inverse)
-      onMove?.(selected, offset.toArray().map(v => Math.round(v * 1000) / 1000))
+      onMove?.(selected, offset.toArray())
     })
   }
   function select(index) {
     selected = index
     for (const [i, point] of points.children.entries()) point.material.color.setHex(i === index ? 0xffffff : i === 0 ? 0x58a6ff : 0xffc857)
-    if (index > 0 && points.children[index]) {
+    sections.children.forEach((_, i) => updateSection(i))
+    if (points.children[index] && (mode === 'translate' ? index > 0 : canOrient(index))) {
       ensureControls()
-      if (!tc?.dragging) target.position.copy(points.children[index].position)
+      if (!tc?.dragging) {
+        target.position.copy(points.children[index].position)
+        if (pointBases[index]) target.quaternion.setFromRotationMatrix(frameMatrix(pointBases[index]))
+      }
       tc?.attach(target)
     } else tc?.detach()
   }
@@ -101,8 +142,22 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
     if (pointerId !== null) { tc.pointerMove(pointer(event)); consume(event) }
     else if (event.target === canvas && tc?.object) { syncCamera(); tc.pointerHover(pointer(event)) }
   }
+  function keydown(event) {
+    const from = event.target
+    const inPointList = from?.closest?.('.sweep-point')
+    if (event.key !== 'Tab' || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey || event.repeat ||
+        !hasFrame || !points.children[selected] || pointerId !== null ||
+        (!inPointList && from !== canvas && from?.tagName !== 'BODY')) return
+    if (mode === 'translate' && !canOrient(selected)) return
+    consume(event); ensureControls(); mode = mode === 'translate' ? 'rotate' : 'translate'
+    tc?.setMode(mode); tc?.setSpace(mode === 'rotate' ? 'local' : 'world'); tc?.setRotationSnap(null)
+    select(selected)
+    if (mode === 'rotate' && pointBases[selected]) onOrient?.(selected, anglesFromFrame(frameMatrix(pointBases[selected])))
+    canvas?.focus({ preventScroll: true })
+  }
   function up(event) { if (pointerId !== null) { endDrag(); consume(event) } }
   if (canvas) {
+    window.addEventListener('keydown', keydown, true)
     window.addEventListener('pointerdown', down, true)
     window.addEventListener('pointermove', move, true)
     window.addEventListener('pointerup', up, true)
@@ -118,6 +173,58 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
       rotation.set(...(data.point_rotation ?? [[1,0,0],[0,1,0],[0,0,1]]).flat())
       inverse.copy(rotation).invert()
       hasFrame = true
+      pointBases = data.point_bases ?? []
+      if (tc?.dragging && mode === 'rotate') {
+        const frame = new THREE.Matrix4().makeRotationFromQuaternion(target.quaternion)
+        pointBases[selected] = [0,1,2].map(r => [0,1,2].map(c => frame.elements[c*4+r]))
+      }
+      const cells = data.cross_section_nm ?? []
+      if (cells.length) {
+        // Keep the outer footprint at every point; bound interior-ring detail
+        // for unusually large drafts, retaining all rings at the selection.
+        sectionShape = sweepSectionGeometry(cells, Math.max(1,Math.ceil(cells.length*pointBases.length/8192)))
+        selectedShape = sweepSectionGeometry(cells)
+        pointBases.forEach((_,i) => {
+          const section = new THREE.LineSegments(sectionShape, new THREE.LineBasicMaterial({color:0x65dcec,transparent:true,opacity:.65,depthTest:false,depthWrite:false}))
+          section.name = `sweep-cross-section-${i}`; sections.add(section)
+        })
+      }
+      orientationBasis.set(...[...(data.orientation_basis?.[0] ?? [1,0,0]),0,...(data.orientation_basis?.[1] ?? [0,1,0]),0,...(data.orientation_basis?.[2] ?? [0,0,1]),0,0,0,0,1])
+      disposeChildren(arrows)
+      pointBases.forEach((basis, i) => {
+        const at = new THREE.Vector3(...data.points_nm[i])
+        for (const [axis, color, length] of [[2, 0x62ed9b, 4], [0, 0xffc857, 2]]) {
+          const end = at.clone().addScaledVector(new THREE.Vector3(basis[0][axis], basis[1][axis], basis[2][axis]), length)
+          const delta = end.clone().sub(at).normalize(), side = new THREE.Vector3().crossVectors(delta, new THREE.Vector3(0,1,0))
+          if (side.lengthSq() < .01) side.crossVectors(delta, new THREE.Vector3(1,0,0))
+          side.normalize().multiplyScalar(.35)
+          const back = end.clone().addScaledVector(delta,-.7)
+          const vertices = [at,end,end,back.clone().add(side),end,back.clone().sub(side)]
+          arrows.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(vertices), new THREE.LineBasicMaterial({ color, depthTest: false })))
+        }
+      })
+      warnings.set(warningSegmentCenters(data.path_nm,data.feasibility?.warning_segments ?? []))
+      const warningVertices = []
+      for (const i of data.feasibility?.warning_segments ?? []) if (data.path_nm[i+1]) warningVertices.push(new THREE.Vector3(...data.path_nm[i]), new THREE.Vector3(...data.path_nm[i+1]))
+      if (warningVertices.length) {
+        const warning = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(warningVertices), new THREE.LineBasicMaterial({ color: 0xff5d3d, depthTest: false }))
+        warning.name = 'sweep-curvature-warning'; warning.renderOrder = 105; geometry.add(warning)
+        // A narrow tube keeps the warning visible on high-DPI displays where
+        // WebGL's one-pixel line width can disappear among the helix ghosts.
+        const pieces = []
+        for (let i = 0; i < warningVertices.length; i += 2) {
+          const a = warningVertices[i], b = warningVertices[i+1]
+          if (a.distanceToSquared(b) > 1e-16) {
+            const piece = new THREE.CylinderGeometry(.10,.10,a.distanceTo(b),6)
+            const turn = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),b.clone().sub(a).normalize())
+            piece.applyQuaternion(turn); piece.translate(...a.clone().add(b).multiplyScalar(.5).toArray()); pieces.push(piece)
+          }
+        }
+        if (pieces.length) {
+          const highlight = new THREE.Mesh(mergeGeometries(pieces), new THREE.MeshBasicMaterial({color:0xff5d3d,depthTest:false,depthWrite:false}))
+          highlight.renderOrder=104; geometry.add(highlight); pieces.forEach(p => p.dispose())
+        }
+      }
       const path = new THREE.BufferGeometry().setFromPoints(data.path_nm.map(p => new THREE.Vector3(...p)))
       geometry.add(new THREE.Line(path, new THREE.LineBasicMaterial({ color: 0x58a6ff, depthTest: false })))
       for (const axis of data.helix_paths_nm ?? []) {
@@ -136,9 +243,14 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
       }
       setPoints(data.points_nm.map(p => new THREE.Vector3(...p).sub(origin).applyMatrix3(inverse).toArray()))
     },
+    getOrientation(index) {
+      const b = pointBases[index]; return b ? anglesFromFrame(frameMatrix(b)) : [0,0,0]
+    },
+    getMode: () => mode,
     select, setPoints, clear, clearGeometry,
     dispose() {
-      clear(); tc?.dispose(); helper?.removeFromParent(); target.removeFromParent(); scene.remove(root)
+      clear(); warnings.dispose(); tc?.dispose(); helper?.removeFromParent(); target.removeFromParent(); scene.remove(root)
+      window.removeEventListener('keydown', keydown, true)
       window.removeEventListener('pointerdown', down, true); window.removeEventListener('pointermove', move, true)
       window.removeEventListener('pointerup', up, true); window.removeEventListener('pointercancel', up, true)
       window.removeEventListener('blur', endDrag); removeFrameCallback?.(syncCamera)

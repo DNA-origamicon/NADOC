@@ -9,6 +9,10 @@ namespace nadoc_vr {
 inline std::string sweepNumber(float value) {
     std::ostringstream out;out<<std::fixed<<std::setprecision(1)<<(std::abs(value)<.05F?0.F:value);return out.str();
 }
+inline std::string sweepPositionNumber(float value) {
+    const auto truncated=std::trunc(value*100.F)/100.F;
+    std::ostringstream out;out<<std::fixed<<std::setprecision(2)<<(truncated==0?0:truncated);return out.str();
+}
 class SweepPanel {
  public:
     bool active=false;
@@ -25,10 +29,10 @@ class SweepPanel {
         m.rowScroll={};m.focus.reset();m.hovered.clear();
     }
     void refresh(std::array<SidebarMenu,2>& menus,const SweepDraft& draft,size_t cells,bool square,
-        const std::string& strands,bool ligate,const std::string& status,const std::string& plane="XY") {
+        const std::string& strands,bool ligate,const std::string& status,const std::string& plane="XY",const std::string& totalBp="CALCULATING") {
         if(!active)return;
         const RefreshState state{draft.revision,draft.selected,cells,draft.step,square,ligate,
-            draft.freeDrawArmed,draft.drawing,draft.smoothingStrength,strands,status,plane};
+            draft.freeDrawArmed,draft.drawing,draft.smoothingStrength,strands,status,plane,totalBp};
         if(refreshState_==state && menus[1].customTab && menus[1].tab().key=="sweep")return;
         refreshState_=state;
         SidebarTab tab{1,"sweep",draft.step==1?"Sweep - Paint lattice":"Sweep - Define path",{}};
@@ -51,12 +55,14 @@ class SweepPanel {
             row("add-point","ADD POINT");row("delete-point","DELETE SELECTED");
             row("smoothing-less","-");row("smoothing","SMOOTH "+sweepNumber(draft.smoothingStrength)+"X");
             row("smoothing-more","+");
+            row("bp-info","NEW BP: "+totalBp);
             for(size_t i=0;i<draft.pointsNm.size();++i) {
                 const auto id=std::to_string(i);
                 row("point:"+id,i==0?"ORIGIN - FIXED":"POINT "+id,i==draft.selected?"SELECTED":"");
+                row("direction:"+id,draft.directionControlled(i)?"DIR ON":"DIR OFF");
                 for(int axis=0;axis<3;++axis) {
                     const auto prefix="axis:"+id+":"+std::to_string(axis);
-                    row(prefix+":value",std::string(1,"XYZ"[axis])+" "+sweepNumber(draft.pointsNm[i][axis]),"","sweep:point:"+id);
+                    row(prefix+":value",(draft.directionControlled(i)?std::string("R")+"XYZ"[axis]:std::string(1,"XYZ"[axis]))+" "+(draft.directionControlled(i)?sweepNumber((*draft.orientations[i])[axis]):sweepPositionNumber(draft.pointsNm[i][axis])),"","sweep:point:"+id);
                     row(prefix+":-1","DOWN");row(prefix+":1","UP");
                 }
             }
@@ -74,7 +80,7 @@ class SweepPanel {
     }
  private:
     using RefreshState=std::tuple<uint64_t,size_t,size_t,int,bool,bool,bool,bool,float,
-        std::string,std::string,std::string>;
+        std::string,std::string,std::string,std::string>;
     std::optional<RefreshState> refreshState_;
 };
 }

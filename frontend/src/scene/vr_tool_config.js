@@ -87,7 +87,10 @@ export function normalizeVRToolConfig(input) {
         input.points_nm.some(point => !Array.isArray(point) || point.length !== 3 ||
           point.some(v => !Number.isFinite(v) || Math.abs(v) > 10000)) ||
         input.points_nm[0]?.some(v => v !== 0)) return null
-    return { mode: input.mode, ...target, painted_footprint: footprint,
+    const orientations = input.orientations_deg
+    if (orientations != null && (!Array.isArray(orientations) || orientations.length !== input.points_nm.length ||
+        orientations.some(a => a != null && (!Array.isArray(a) || a.length !== 3 || a.some(v => !Number.isFinite(v) || Math.abs(v) > 360))))) return null
+    return { ...(orientations == null ? {} : { orientations_deg: orientations.map(a => a && [...a]) }), mode: input.mode, ...target, painted_footprint: footprint,
       extrude_from: input.extrude_from, strand_filter: input.strand_filter,
       ligate_adjacent: input.ligate_adjacent, points_nm: input.points_nm.map(point => [...point]) }
   }

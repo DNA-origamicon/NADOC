@@ -60,7 +60,7 @@ describe('native Sweep transport and canonical desktop plan', () => {
       tool_mode: 'sweep', tool_config_sequence: 9, target_kind: 'none', status: 'ok',
     })
     expect(api.createSweep).not.toHaveBeenCalled()
-    expect(api.previewSweep).toHaveBeenCalledWith(expect.objectContaining({ expected_revision: 4 }), null, { includeGeometry: false })
+    expect(api.previewSweep).toHaveBeenCalledWith(expect.objectContaining({ expected_revision: 4 }), null, { includeGeometry: true })
     api.previewSweep.mockResolvedValue({ length_nm: 21, revision: 5 })
     expect((await evaluateVRToolPreflight(10, draft(), environment)).feedback.status).toBe('error')
     api.previewSweep.mockRejectedValue(new Error('Invalid path'))
@@ -151,4 +151,20 @@ describe('Sweep confirm, cancellation and exact-tail undo', () => {
     await second.controller.handle(second.event)
     expect(second.api.createSweep).toHaveBeenCalledTimes(1)
   })
+})
+
+it('carries full point orientations and advisory geometry through preflight without blocking commit', async () => {
+  const raw = {...draft(), orientations_deg: [null,[15,30,45],[0,90,0]]}
+  const api = { currentRevisionWatermark:()=>4, previewSweep: vi.fn(async()=>({
+    length_nm:21, revision:4, origin_nm:[5,0,0], path_nm:[[5,0,0],[5,0,10]],
+    helix_paths_nm:[[[6,0,0],[6,0,10]]], point_bases:[[[1,0,0],[0,1,0],[0,0,1]]],
+    feasibility:{status:'warning',warning_segments:[0],message:'Bend exceeds limit'},
+  })) }
+  const sendFeedback = vi.fn(async()=>({published:true}))
+  const coordinator = createVRToolPreflightCoordinator({sendFeedback})
+  await coordinator.request(9,raw,{design:design(),api})
+  expect(sendFeedback.mock.lastCall[0]).toMatchObject({status:'warn',sweep_preview:{path:[[0,0,0],[0,0,10]],warning_segments:[0]}})
+  expect(coordinator.takeValidatedPlan(9).commit.arguments.orientations_deg).toEqual(raw.orientations_deg)
+  expect(normalizeVRToolConfig({...raw,orientations_deg:[null]})).toBeNull()
+  expect(normalizeVRToolConfig({...raw,orientations_deg:[null,[0,NaN,0],null]})).toBeNull()
 })

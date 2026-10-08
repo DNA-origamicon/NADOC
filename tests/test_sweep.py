@@ -29,6 +29,9 @@ def test_straight_sweep_is_canonical_extrusion(plane, lattice):
     body = SweepRequest(cells=[(0,0),(0,1)], points_nm=points, plane=plane, ligate_adjacent=False)
     design = build_sweep(Design(lattice_type=lattice), body)
     straight = make_bundle_design(body.cells, 21, plane=plane, lattice_type=lattice)
+    # Straight sweeps now include canonical square-lattice periodic correction.
+    from backend.core.loop_skip_calculator import sq_lattice_periodic_skips, relocate_marks_off_forbidden, apply_loop_skips
+    straight = apply_loop_skips(straight, relocate_marks_off_forbidden(sq_lattice_periodic_skips(straight), straight))
     for h, original in zip(design.helices, straight.helices):
         actual = deformed_nucleotide_arrays(h, design)
         expected = deformed_nucleotide_arrays(original, straight)

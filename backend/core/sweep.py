@@ -7,7 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 from backend.core.constants import BDNA_RISE_PER_BP as RISE
 from backend.core.models import DeformationOp, Direction, ClusterRigidTransform
 from backend.core.sweep_model import SweepParams
-from backend.core.sweep_path import path_table, sample_path, rotation_between
+from backend.core.sweep_path import path_table, sample_path, oriented_sample, canonical_basis, frame_key
+from scipy.spatial.transform import Rotation
 
 
 class SweepRequest(BaseModel):
@@ -15,6 +16,7 @@ class SweepRequest(BaseModel):
     sweep_id: uuid.UUID = Field(default_factory=uuid.uuid4)
     cells: list[tuple[StrictInt, StrictInt]] = Field(min_length=1, max_length=16641)
     points_nm: list[tuple[float, float, float]] = Field(min_length=2, max_length=256)
+    orientations_deg: list[tuple[float, float, float] | None] | None = None
     plane: Literal['XY', 'XZ', 'YZ'] = 'XY'
     strand_filter: Literal['both', 'scaffold', 'staples'] = 'both'
     ligate_adjacent: bool = True
@@ -35,6 +37,13 @@ class SweepRequest(BaseModel):
             raise ValueError('The first sweep point is the fixed origin (0, 0, 0)')
         if self.expected_revision is not None and self.expected_design_id is None:
             raise ValueError('A revision guard requires a design ID')
+        if self.orientations_deg is not None:
+            if len(self.orientations_deg) != len(self.points_nm):
+                raise ValueError('Sweep orientations must match the point count')
+            if any(not math.isfinite(v) or abs(v) > 360 for angles in self.orientations_deg if angles is not None for v in angles):
+                raise ValueError('Sweep angles must be finite and within ±360 degrees')
+            if self.source_helix_id and self.orientations_deg[0] is not None and any(abs(v) > 1e-8 for v in self.orientations_deg[0]):
+                raise ValueError('The attached origin orientation is fixed to its source end')
         return self
 
 
@@ -120,14 +129,18 @@ def sweep_preview(design, body, *, include_geometry=False):
     source = sweep_source(design, body)
     initial = source['rotation'] @ source['normal'] * source['direction'] if body.source_helix_id else None
     points = tuple(body.points_nm)
-    table = path_table(points, None if initial is None else tuple(initial))
+    basis = source['rotation'] @ canonical_basis(source['normal'] * source['direction'])
+    frames = frame_key([None if a is None else (basis @ Rotation.from_euler('YXZ', [a[1], a[0], a[2]], degrees=True).as_matrix()).ravel().tolist()
+                        for a in body.orientations_deg]) if body.orientations_deg is not None else None
+    source['point_frames'] = frames
+    table = path_table(points, None if initial is None else tuple(initial), frames)
     length = float(table[2][-1])
     steps = max(1, round(length / RISE))
     count = steps if body.source_helix_id else steps + 1
     if count * len(body.cells) > 200_000:
         raise ValueError('Sweep exceeds 200000 base-pair cells')
-    positions, _, _ = sample_path(points, np.linspace(0, length, min(1025, max(65, steps + 1))),
-                                  None if initial is None else tuple(initial))
+    path_distances = np.linspace(0, length, min(1025, max(65, steps + 1)))
+    positions, _, _ = sample_path(points, path_distances, None if initial is None else tuple(initial), frames)
     right, up = {'XY': ([1, 0, 0], [0, 1, 0]), 'XZ': ([1, 0, 0], [0, 0, 1]), 'YZ': ([0, 1, 0], [0, 0, 1])}[body.plane]
     from backend.core.lattice import _lattice_position
     xy = np.mean([_lattice_position(r, c, design.lattice_type) for r, c in body.cells], axis=0)
@@ -140,15 +153,23 @@ def sweep_preview(design, body, *, include_geometry=False):
         # Bound the ghost mesh payload independently of the persisted DNA size.
         samples = min(513, max(2, 20000 // len(body.cells)), max(65, steps + 1))
         distances = np.linspace(length / steps if body.source_helix_id else 0, length, samples)
-        centers, transported, _ = sample_path(points, distances, None if initial is None else tuple(initial))
-        align = rotation_between(source['rotation'] @ source['normal'] * source['direction'], table[3][0])
+        centers, matrices, _ = oriented_sample(points, distances, initial, source['rotation'], source['normal'] * source['direction'], frames)
         offsets = np.asarray([right * (c[0] - xy[0]) + up * (c[1] - xy[1])
                               for c in [_lattice_position(r, c, design.lattice_type) for r, c in body.cells]])
-        axes = centers[None, :, :] + source['origin'] + np.einsum('nij,kj->kni', transported @ align, offsets)
+        axes = centers[None, :, :] + source['origin'] + np.einsum('nij,kj->kni', matrices @ source['rotation'].T, offsets)
         geometry = dict(helix_paths_nm=axes.tolist(), point_rotation=np.eye(3).tolist())
-    return dict(**geometry, source_frame=frame, origin_nm=source['origin'].tolist(), path_nm=(positions + source['origin']).tolist(),
+    from backend.core.sweep_feasibility import sweep_feasibility
+    offsets = np.asarray([source['rotation'].T @ (right * (c[0] - xy[0]) + up * (c[1] - xy[1]))
+                          for c in [_lattice_position(r, c, design.lattice_type) for r, c in body.cells]])
+    feasibility = sweep_feasibility(points, initial, source['rotation'], source['normal'] * source['direction'], frames, offsets, steps, path_distances)
+    knots = np.r_[0, np.cumsum(np.linalg.norm(np.diff(points, axis=0), axis=1))]
+    _, point_matrices, _ = oriented_sample(points, np.interp(knots, table[1], table[2]), initial,
+        source['rotation'], source['normal'] * source['direction'], frames)
+    point_bases = point_matrices @ canonical_basis(source['normal'] * source['direction'])
+    return dict(**geometry, feasibility=feasibility, point_bases=point_bases.tolist(), orientation_basis=basis.tolist(), source_frame=frame, origin_nm=source['origin'].tolist(), path_nm=(positions + source['origin']).tolist(),
                 points_nm=(np.asarray(points) + source['origin']).tolist(), length_nm=length,
-                length_bp=count, direction=source['direction']), source
+                length_bp=count, total_new_bp=count * len(body.cells),
+                cross_section_nm=(offsets @ canonical_basis(source['normal'] * source['direction']))[:, :2].tolist(), direction=source['direction']), source
 
 
 def _join_sources(design, bundle, sources, body):
@@ -219,6 +240,7 @@ def build_sweep(design, body):
     strands = _join_sources(design, bundle, source['sources'], body) if body.source_helix_id else [*design.strands, *bundle.strands]
     origin, rotation = source['origin'], source['rotation']
     points = np.asarray(body.points_nm)
+    point_frames = source['point_frames']
     clusters = list(design.cluster_transforms)
     new_ids = [h.id for h in helices]
     if source['clusters']:
@@ -231,6 +253,8 @@ def build_sweep(design, body):
         origin = rigid.T @ (origin - offset)
         rotation = rigid.T @ rotation
         points = points @ rigid
+        if point_frames is not None:
+            point_frames = [None if f is None else (rigid.T @ np.asarray(f).reshape(3, 3)).ravel().tolist() for f in point_frames]
         owners = {c.id for c in source['clusters']}
         clusters = [c.model_copy(update={'helix_ids': [*c.helix_ids, *new_ids]}) if c.id in owners else c for c in clusters]
     else:
@@ -238,11 +262,26 @@ def build_sweep(design, body):
     params = SweepParams(points_nm=points.tolist(), origin_nm=origin.tolist(),
         initial_rotation=rotation.ravel().tolist(),
         initial_tangent=(rotation @ source['normal'] * direction).tolist() if body.source_helix_id else None,
+        point_frames=point_frames, auto_loop_skips=True,
         preceding_op_ids=[o.id for o in design.deformations],
         direction=direction, start_step=1 if body.source_helix_id else 0,
         steps=count if body.source_helix_id else count-1, path_length_nm=preview['length_nm'])
     op = DeformationOp(id='sweep_'+token, type='sweep', params=params, plane_a_bp=start_bp,
         plane_b_bp=start_bp + count-1, affected_helix_ids=new_ids)
+    # One durable marker per contiguous affected curve region, anchored to DNA
+    # bp coordinates so subsequent geometry/cluster transforms move it as well.
+    segments = preview['feasibility']['warning_segments']
+    runs = []
+    for i in segments:
+        if not runs or i != runs[-1][-1]+1:
+            runs.append([])
+        runs[-1].append(i)
+    for run in runs:
+        fraction = ((run[0]+run[-1]+1)/2)/(len(preview['path_nm'])-1)
+        step = min(count-1, max(0, round(fraction*params.steps)-params.start_step))
+        bp = start_bp + (step if direction == 1 else count-1-step)
+        if bp not in op.params.warning_bps:
+            op.params.warning_bps.append(bp)
     # Legacy unscoped overlays must not silently deform freshly authored material.
     old_ids = [h.id for h in design.helices]
     ops = [o if o.affected_helix_ids else o.model_copy(update={'affected_helix_ids': old_ids}) for o in design.deformations]
@@ -256,6 +295,13 @@ def build_sweep(design, body):
     if body.ligate_adjacent:
         old_strands = {s.id for s in design.strands}
         result = ligate_new_strands(result, {s.id for s in result.strands if s.id not in old_strands})
+    from backend.core.sweep_loop_skips import generated_sweep_loop_skips
+    from backend.core.loop_skip_calculator import apply_loop_skips
+    warning_sites = []
+    marks, warnings = generated_sweep_loop_skips(result, op, warning_sites=warning_sites)
+    op.params.warning_bps = sorted(set(op.params.warning_bps + warning_sites))
+    result = apply_loop_skips(result, marks)
+    op.params.loop_skip_warnings = warnings
     from backend.core.cluster_reconcile import reconcile_cluster_membership
     return reconcile_cluster_membership(design, result, sweep_mutation_report(design, result, body))
 

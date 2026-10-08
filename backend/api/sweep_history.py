@@ -39,6 +39,8 @@ def preview_sweep_edit(design, body, index):
     for key in ('origin_nm', 'path_nm', 'points_nm', 'helix_paths_nm'):
         result[key] = (np.asarray(result[key]) @ rotation.T + offset).tolist()
     result['point_rotation'] = rotation.tolist()
+    result['orientation_basis'] = (rotation @ np.asarray(result['orientation_basis'])).tolist()
+    result['point_bases'] = (rotation @ np.asarray(result['point_bases'])).tolist()
     frame = result['source_frame']
     frame['grid_origin'] = (rotation @ frame['grid_origin'] + offset).tolist()
     for key in ('frame_right', 'frame_up', 'axis_dir'):

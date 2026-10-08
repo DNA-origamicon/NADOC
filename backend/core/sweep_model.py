@@ -9,6 +9,10 @@ class SweepParams(BaseModel):
     origin_nm: tuple[float, float, float]
     initial_rotation: list[float] = Field(min_length=9, max_length=9)
     initial_tangent: tuple[float, float, float] | None = None
+    point_frames: list[list[float] | None] | None = None
+    warning_bps: list[int] = Field(default_factory=list)
+    auto_loop_skips: bool = False
+    loop_skip_warnings: list[str] = Field(default_factory=list)
     preceding_op_ids: list[str] = Field(default_factory=list)
     direction: Literal[-1, 1] = 1
     start_step: int = 0

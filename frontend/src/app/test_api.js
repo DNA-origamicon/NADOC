@@ -586,7 +586,7 @@ export function installTestApi({
     getVRToolEndTable: () => bluntEnds.getVRToolEndTable?.() ?? [],
     getDomainEndScreenPositions: () =>
       bluntEnds.getEndScreenInfo?.(camera, canvas.getBoundingClientRect()) ?? [],
-    /** Read-only locations for real Sweep point and translation-handle gestures. */
+    /** Read-only locations for real Sweep point and gizmo gestures. */
     getSweepScreenPositions() {
       scene.updateMatrixWorld(true)
       const rect = canvas.getBoundingClientRect()
@@ -597,13 +597,20 @@ export function installTestApi({
       }
       const points = (scene.getObjectByName('sweep-control-points')?.children ?? [])
         .map(o => project(o, new THREE.Vector3()))
-      const handles = []
-      scene.getObjectByName('sweep-point-gizmo')?.traverseVisible(o => {
+      const handles = [], rings = []
+      const helper = scene.getObjectByName('sweep-point-gizmo')
+      helper?.traverseVisible(o => {
         if (!o.isMesh || !['X', 'Y', 'Z'].includes(o.name)) return
         o.geometry.computeBoundingBox()
         handles.push(project(o, o.geometry.boundingBox.getCenter(new THREE.Vector3())))
+        if (helper.controls.mode === 'rotate' && o.parent === helper.controls._gizmo.gizmo.rotate) {
+          const vertices = o.geometry.attributes.position
+          for(let i=0;i<vertices.count;i+=Math.max(1,Math.floor(vertices.count/32)))
+            rings.push(project(o, new THREE.Vector3().fromBufferAttribute(vertices,i)))
+        }
       })
-      return { points, handles }
+      return { points, handles, rings, warnings: ['preview','saved'].flatMap(name=>(scene.getObjectByName(`sweep-warning-icons-${name}`)?.children ?? []).map(o=>project(o,new THREE.Vector3()))), mode: helper?.controls.mode,
+        sections: (scene.getObjectByName('sweep-cross-sections')?.children ?? []).length }
     },
     /** Slice-plane mode snapshot (visible / placement / continuation). */
     getSliceState: () => ({

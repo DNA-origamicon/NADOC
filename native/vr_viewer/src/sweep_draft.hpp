@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
+#include <glm/gtx/euler_angles.hpp>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -112,10 +113,52 @@ inline std::vector<glm::vec3> smoothSweepStroke(const std::vector<glm::vec3>& sa
     result.front()=glm::vec3(0);return result;
 }
 
+// Octagonal helix envelopes give a stable outer outline, including thin footprints.
+inline std::vector<glm::vec2> sweepSectionHull(const std::vector<glm::vec2>& cells) {
+    std::vector<glm::vec2> points;points.reserve(cells.size()*8);
+    for(const auto c:cells)for(int i=0;i<8;++i) {
+        const float a=glm::two_pi<float>()*i/8;points.push_back(c+glm::vec2(std::cos(a),std::sin(a)));
+    }
+    std::sort(points.begin(),points.end(),[](auto a,auto b){return a.x<b.x || (a.x==b.x && a.y<b.y);});
+    auto half=[](const auto& sorted) {
+        std::vector<glm::vec2> result;
+        auto cross=[](auto a,auto b,auto c){const auto u=b-a,v=c-a;return u.x*v.y-u.y*v.x;};
+        for(const auto p:sorted){while(result.size()>1 && cross(result[result.size()-2],result.back(),p)<=0)result.pop_back();result.push_back(p);}
+        if(!result.empty())result.pop_back();
+        return result;
+    };
+    auto result=half(points);std::reverse(points.begin(),points.end());const auto upper=half(points);
+    result.insert(result.end(),upper.begin(),upper.end());return result;
+}
+inline glm::mat3 sweepBasis(glm::vec3 normal) {
+    normal=glm::normalize(normal);
+    const auto right=std::abs(normal.x)>.9F?glm::vec3(0,1,0):glm::vec3(1,0,0);
+    return {right,glm::cross(normal,right),normal};
+}
+inline glm::mat3 sweepOrientation(glm::vec3 degrees,glm::vec3 normal={0,0,1}) {
+    const auto r=glm::radians(degrees);
+    return sweepBasis(normal)*glm::mat3(glm::eulerAngleYXZ(r.y,r.x,r.z));
+}
+inline glm::vec3 sweepAngles(glm::mat3 frame,glm::vec3 normal={0,0,1}) {
+    float y,x,z;glm::extractEulerAngleYXZ(glm::mat4(glm::transpose(sweepBasis(normal))*frame),y,x,z);
+    return glm::degrees(glm::vec3(x,y,z));
+}
+inline glm::vec3 snapSweepAngles(glm::vec3 angles) {
+    return glm::round(angles/15.F)*15.F;
+}
 struct SweepDraft {
     int step=1;
     std::vector<glm::vec3> pointsNm{{0,0,0},{0,0,10}};
+    std::vector<std::optional<glm::vec3>> orientations{std::nullopt,std::nullopt};
     size_t selected=1;
+    bool directionControlled(size_t i) const { return i<orientations.size() && orientations[i].has_value(); }
+    bool orient(size_t i,std::optional<glm::vec3> value) {
+        if(i>=pointsNm.size() || drawing || freeDrawArmed || (value && !finiteSweepPoint(*value)))return false;
+        orientations.resize(pointsNm.size());
+        if(value)value=snapSweepAngles(*value);
+        if(orientations[i]==value)return false;
+        orientations[i]=value;strokeNm.clear();++revision;return true;
+    }
     FreeDrawSettings smoothing;
     float smoothingStrength=1.F;
     bool freeDrawArmed=false,drawing=false,strokeInvalid=false;
@@ -124,6 +167,7 @@ struct SweepDraft {
     glm::vec3 strokeStartNm{};
     void reset(glm::vec3 direction={0,0,10}) {
         step=1;pointsNm={{0,0,0},boundedSweepPoint(direction)&&glm::length(direction)>1e-6F?direction:glm::vec3(0,0,10)};
+        orientations.assign(2,std::nullopt);
         selected=1;freeDrawArmed=drawing=strokeInvalid=false;strokeNm.clear();++revision;
     }
     bool next(){if(step!=1)return false;step=2;++revision;return true;}
@@ -144,15 +188,16 @@ struct SweepDraft {
         auto delta=pointsNm.size()>1?pointsNm.back()-pointsNm[pointsNm.size()-2]:glm::vec3(0,0,10);
         if(glm::length(delta)<1e-6F)delta={0,0,10};
         if(!boundedSweepPoint(pointsNm.back()+delta))return false;
-        pointsNm.push_back(pointsNm.back()+delta);selected=pointsNm.size()-1;strokeInvalid=false;++revision;return true;
+        pointsNm.push_back(pointsNm.back()+delta);orientations.resize(pointsNm.size());selected=pointsNm.size()-1;strokeInvalid=false;++revision;return true;
     }
     bool deleteSelectedPoint() {
         if(drawing || freeDrawArmed || pointsNm.size()<=1 || selected==0 || selected>=pointsNm.size())return false;
+        orientations.resize(pointsNm.size());orientations.erase(orientations.begin()+std::ptrdiff_t(selected));
         pointsNm.erase(pointsNm.begin()+std::ptrdiff_t(selected));selected=std::min(selected,pointsNm.size()-1);strokeInvalid=false;++revision;return true;
     }
     bool deleteLastPoint() {
         if(drawing || freeDrawArmed || pointsNm.size()<=1)return false;
-        pointsNm.pop_back();selected=std::min(selected,pointsNm.size()-1);strokeInvalid=false;++revision;return true;
+        pointsNm.pop_back();orientations.resize(pointsNm.size());selected=std::min(selected,pointsNm.size()-1);strokeInvalid=false;++revision;return true;
     }
     bool validPath() const {
         if(pointsNm.size()<2 || pointsNm.size()>256 || freeDrawArmed || drawing)return false;
@@ -162,7 +207,7 @@ struct SweepDraft {
     }
     void armFreeDraw() {
         if(step!=2)return;
-        pointsNm={glm::vec3(0)};selected=0;strokeNm.clear();freeDrawArmed=true;drawing=strokeInvalid=false;++revision;
+        pointsNm={glm::vec3(0)};orientations.assign(1,std::nullopt);selected=0;strokeNm.clear();freeDrawArmed=true;drawing=strokeInvalid=false;++revision;
     }
     bool beginStroke(glm::vec3 controllerNm) {
         if(!freeDrawArmed || drawing || !finiteSweepPoint(controllerNm))return false;
@@ -187,7 +232,7 @@ struct SweepDraft {
         drawing=freeDrawArmed=false;
         auto result=strokeInvalid?std::vector<glm::vec3>{}:smoothSweepStroke(strokeNm,smoothing);
         if(result.size()<2){pointsNm={glm::vec3(0)};selected=0;++revision;return false;}
-        pointsNm=std::move(result);selected=pointsNm.size()-1;++revision;return true;
+        pointsNm=std::move(result);orientations.assign(pointsNm.size(),std::nullopt);selected=pointsNm.size()-1;++revision;return true;
     }
     void cancelStroke(){drawing=freeDrawArmed=strokeInvalid=false;strokeNm.clear();++revision;}
 };
@@ -195,7 +240,8 @@ struct SweepDraft {
 struct SweepPathSample {glm::vec3 position{},tangent{0,0,1};};
 // Chord-length parameterization and natural boundary conditions match
 // backend/core/sweep_path.py. Preview samples are bounded and display-only.
-inline std::vector<SweepPathSample> sampleSweepPathDetailed(const std::vector<glm::vec3>& points,size_t count=128) {
+inline std::vector<SweepPathSample> sampleSweepPathDetailed(const std::vector<glm::vec3>& points,size_t count=128,
+    const std::vector<std::optional<glm::vec3>>& orientations={},glm::vec3 normal={0,0,1}) {
     const size_t n=points.size();if(n<2 || n>256)return {};
     std::vector<float> knots(n),lower(n),diagonal(n),upper(n);
     std::vector<glm::vec3> second(n),rhs(n);
@@ -212,14 +258,26 @@ inline std::vector<SweepPathSample> sampleSweepPathDetailed(const std::vector<gl
     for(size_t i=1;i<n;++i){const float factor=lower[i]/diagonal[i-1];diagonal[i]-=factor*upper[i-1];rhs[i]-=factor*rhs[i-1];}
     second.back()=rhs.back()/diagonal.back();
     for(size_t i=n-1;i-->0;)second[i]=(rhs[i]-upper[i]*second[i+1])/diagonal[i];
+    std::vector<glm::vec3> derivatives(n);
+    const bool controlled=std::any_of(orientations.begin(),orientations.end(),[](const auto& a){return a.has_value();});
+    for(size_t i=0;i<n;++i) {
+        const size_t j=std::min(i,n-2);const float h=knots[j+1]-knots[j];
+        derivatives[i]=(points[j+1]-points[j])/h+(i==n-1?(second[j]+2.F*second[j+1]):(-2.F*second[j]-second[j+1]))*(h/6.F);
+        if(i<orientations.size() && orientations[i])derivatives[i]=sweepOrientation(*orientations[i],normal)[2]*std::max(1.F,glm::length(derivatives[i]));
+    }
     count=std::clamp(count,size_t(2),size_t(4096));
     std::vector<SweepPathSample> result;result.reserve(count);size_t span=0;
     for(size_t i=0;i<count;++i) {
         const float t=knots.back()*float(i)/float(count-1);
         while(span+2<n && knots[span+1]<t)++span;
         const float h=knots[span+1]-knots[span],a=(knots[span+1]-t)/h,b=(t-knots[span])/h;
-        const auto p=a*points[span]+b*points[span+1]+((a*a*a-a)*second[span]+(b*b*b-b)*second[span+1])*(h*h/6.F);
-        const auto derivative=(points[span+1]-points[span])/h+((1-3*a*a)*second[span]+(3*b*b-1)*second[span+1])*(h/6.F);
+        auto p=a*points[span]+b*points[span+1]+((a*a*a-a)*second[span]+(b*b*b-b)*second[span+1])*(h*h/6.F);
+        auto derivative=(points[span+1]-points[span])/h+((1-3*a*a)*second[span]+(3*b*b-1)*second[span+1])*(h/6.F);
+        if(controlled) {
+            const float t=b,t2=t*t,t3=t2*t;
+            p=(2*t3-3*t2+1)*points[span]+(t3-2*t2+t)*h*derivatives[span]+(-2*t3+3*t2)*points[span+1]+(t3-t2)*h*derivatives[span+1];
+            derivative=((6*t2-6*t)*points[span]+(3*t2-4*t+1)*h*derivatives[span]+(-6*t2+6*t)*points[span+1]+(3*t2-2*t)*h*derivatives[span+1])/h;
+        }
         if(glm::length(derivative)<1e-8F)return {};
         result.push_back({p,glm::normalize(derivative)});
     }

@@ -19,20 +19,21 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
       <label><input id="sweep-ligate" type="checkbox" checked> Ligate adjacent</label>
     </fieldset>
     </div><fieldset id="sweep-path" class="tool-section" hidden><legend>Path</legend><div id="sweep-point-editor"></div></fieldset>
+    <div class="sweep-info" id="sweep-info" role="status" hidden>New BP: <strong id="sweep-total-bp">—</strong></div>
     <p class="tool-help" id="sweep-status" role="status"></p>
     <div class="def-btn-row"><button class="def-btn" id="sweep-cancel">Cancel</button><button class="def-btn primary" id="sweep-apply">Next</button></div>`
   const el = id => panel.querySelector(`#sweep-${id}`)
   const sourceSelect = el('source'), planeSelect = el('plane'), status = el('status'), apply = el('apply')
   const popup = createToolPopup({ panel, title: 'Sweep', onClose: hide })
   const preview = createSweepPreview(scene, { canvas, getCamera, getControls, addFrameCallback, removeFrameCallback,
-    onSelect: index => editor.select(index), onMove: (index, value) => editor.move(index, value) })
-  const editor = initSweepPoints(el('point-editor'), () => { resetPathDirection = false; schedulePreview() }, index => preview.select(index))
+    onSelect: index => editor.select(index), onOrient: (index, value) => editor.orient(index, value), canOrient: index => editor.canOrient(index), onMove: (index, value) => editor.move(index, value) })
+  const editor = initSweepPoints(el('point-editor'), () => { resetPathDirection = false; schedulePreview() }, index => preview.select(index), index => preview.getOrientation(index))
   let active = false, busy = false, editing = null, cells = [], source = null, sources = []
   let epoch = 0, timer = null, pin = {}, sweepId = null, updatingPicker = false, needsSourceFrame = false
   let previousPreview = true, resetPathDirection = false, step = 1, sourceFrame = null
 
   function body() {
-    return { ...(sweepId ? { sweep_id: sweepId } : {}), cells, points_nm: editor.getPoints(), plane: planeSelect.value,
+    return { ...(sweepId ? { sweep_id: sweepId } : {}), cells, points_nm: editor.getPoints(), orientations_deg: editor.getOrientations(), plane: planeSelect.value,
       strand_filter: el('strands').value, ligate_adjacent: el('ligate').checked,
       source_helix_id: source?.id ?? null, source_end: source?.end ?? 'end', ...pin }
   }
@@ -47,6 +48,7 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
   function schedulePreview() {
     if (!active || updatingPicker || busy) return
     clearTimeout(timer); epoch++; apply.disabled = true
+    el('total-bp').textContent = '…'
     status.textContent = cells.length ? 'Updating path…' : 'Select at least one lattice cell.'
     if (step === 2) preview.setPoints(editor.getPoints(), editor.getSelected())
     if (!cells.length) preview.clearGeometry()
@@ -55,7 +57,7 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
   async function refreshPreview() {
     const version = epoch
     const request = body()
-    if (step === 1) request.points_nm = [[0, 0, 0], defaultDirection()]
+    if (step === 1) { request.points_nm = [[0, 0, 0], defaultDirection()]; request.orientations_deg = null }
     delete request.expected_revision // Preview resolves the latest source without mutating it.
     if (request.points_nm.some(p => p.some(v => !Number.isFinite(v)))) { preview.clearGeometry(); status.textContent = 'Enter a finite number for X, Y and Z.'; return }
     if (request.points_nm.length < 2) { preview.clearGeometry(); status.textContent = 'Add a second point to define the path.'; return }
@@ -71,6 +73,7 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
         schedulePreview(); return
       }
       if (step === 2) { preview.update(response); preview.select(editor.getSelected()) }
+      el('total-bp').textContent = (response.total_new_bp ?? response.length_bp * cells.length).toLocaleString()
       status.textContent = step === 1 ? `${cells.length} lattice cells selected.` : `${response.length_nm.toFixed(2)} nm · ${response.length_bp} bp per helix`
       if (step === 1 && source && needsSourceFrame && response.source_frame) {
         updatingPicker = true
@@ -78,6 +81,7 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
         slicePlane.setSelectedCells(cells)
         updatingPicker = false; needsSourceFrame = false
       }
+      if (step === 2 && response.feasibility?.status === 'warning') status.textContent += ` · Warning: ${response.feasibility.message}`
       apply.disabled = false
     } catch (error) {
       if (active && version === epoch) { preview.clearGeometry(); status.textContent = error.message; apply.disabled = true }
@@ -98,11 +102,12 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
   }
   function setStep(value) {
     step = value; epoch++; clearTimeout(timer); preview.clear()
-    el('footprint').hidden = step !== 1; el('path').hidden = step !== 2
+    el('footprint').hidden = step !== 1; el('path').hidden = step !== 2; el('info').hidden = step !== 2
     el('step').textContent = step === 1 ? 'Step 1/2 · Select lattice cells' : 'Step 2/2 · Define sweep path'
     el('cancel').textContent = step === 1 ? 'Cancel' : 'Previous'
     apply.textContent = step === 1 ? 'Next' : 'Confirm'
     if (step === 2) {
+      editor.setOrientations(editor.getOrientations(), !!source)
       updatingPicker = true; slicePlane.hide(); updatingPicker = false
     } else {
       showPicker(cells); needsSourceFrame = !!source
@@ -159,6 +164,7 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
     sourceSelect.value = source ? String(sources.indexOf(source)) : ''
     needsSourceFrame = !!source
     editor.setPoints(p.points_nm)
+    editor.setOrientations(p.orientations_deg, !!p.source_helix_id)
     el('strands').value = p.strand_filter ?? 'both'; el('ligate').checked = p.ligate_adjacent ?? true
     popup.setTitle('Edit Sweep'); cells = p.cells.map(c => [...c]); setStep(2)
   }
@@ -193,6 +199,16 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
     busy = true; apply.disabled = true; status.textContent = 'Building sweep…'
     try {
       const request = body()
+      // Saving workspace metadata can advance the revision without replacing
+      // the design object. Refresh the guarded preview before using that draft.
+      const revision = api.currentRevisionWatermark?.()
+      if (Number.isSafeInteger(revision) && revision !== request.expected_revision) {
+        const fresh = { ...request }; delete fresh.expected_revision
+        const evaluated = editing == null ? await api.previewSweep(fresh) : await api.previewSweep(fresh, editing)
+        if (!evaluated || !Number.isSafeInteger(evaluated.revision)) throw new Error('Refresh the sweep preview before confirming.')
+        if (!active) return
+        request.expected_revision = pin.expected_revision = evaluated.revision
+      }
       const result = editing == null ? await api.createSweep(request) : await api.editFeature(editing, request)
       if (!result) throw new Error(store.getState().lastError?.message ?? 'Sweep failed')
       hide()

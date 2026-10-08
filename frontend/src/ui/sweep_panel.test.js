@@ -31,6 +31,8 @@ it('previews without mutation, commits one path, and disposes the scene preview'
   await vi.advanceTimersByTimeAsync(130)
   expect(document.getElementById('sweep-step').textContent).toContain('2/2')
   expect(document.getElementById('sweep-footprint').hidden).toBe(true)
+  expect(document.getElementById('sweep-info').hidden).toBe(false)
+  expect(document.getElementById('sweep-total-bp').textContent).toBe('62')
   expect(scene.getObjectByName('sweep-control-points').children.length).toBe(2)
   expect(api.createSweep).not.toHaveBeenCalled()
   document.getElementById('sweep-apply').click()
@@ -122,4 +124,18 @@ it('keeps the last valid bundle preview while a changed point awaits the server'
   expect(geometry.children.length).toBeGreaterThan(0)
   expect(scene.getObjectByName('sweep-point-1').position.x).toBe(4)
   expect(document.getElementById('sweep-apply').disabled).toBe(true)
+})
+
+it('refreshes the guarded preview when workspace metadata advances the revision', async () => {
+  const { api, selection } = setup()
+  panel.activate(); selection([[0,0]])
+  await vi.advanceTimersByTimeAsync(130)
+  document.getElementById('sweep-apply').click()
+  await vi.advanceTimersByTimeAsync(130)
+  api.currentRevisionWatermark = () => 8
+  api.previewSweep.mockResolvedValue({revision:8,length_nm:10,length_bp:31})
+  document.getElementById('sweep-apply').click()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(api.createSweep).toHaveBeenCalledWith(expect.objectContaining({expected_revision:8}))
+  expect(api.previewSweep.mock.lastCall[0]).not.toHaveProperty('expected_revision')
 })

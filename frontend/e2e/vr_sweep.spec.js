@@ -18,6 +18,12 @@ test.afterEach(async ({ request }) => {
 })
 
 test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes desktop history', async ({ page, request }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 })
+  // Observation hold outside measured controller motion: retain the real pending UI.
+  await page.route('**/api/design/sweep', async route => {
+    await new Promise(resolve => setTimeout(resolve, 10_000))
+    await route.continue()
+  })
   const errors = []
   const responses = []
   page.on('pageerror', error => errors.push(error.message))
@@ -32,7 +38,7 @@ test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes d
   await page.fill('#new-design-name', '__e2e__VR Sweep')
   await page.getByRole('button', { name: 'Create', exact: true }).click()
   await expect(page.locator('#welcome-screen')).not.toBeVisible()
-  await page.locator('.menu-item').filter({ hasText: 'Help' }).first().hover()
+  await page.getByRole('button', { name: 'Help', exact: true }).click()
   const launch = page.waitForResponse(response => response.url().endsWith('/api/vr/launch')
     && response.request().method() === 'POST', { timeout: 100_000 })
   await page.click('#menu-help-view-vr')
@@ -77,7 +83,7 @@ test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes d
 
   // Exit through the normal UI before desktop editing so background rendering
   // resumes and the saved images show the actual editable curve and preview.
-  await page.locator('.menu-item').filter({ hasText: 'Help' }).first().hover()
+  await page.getByRole('button', { name: 'Help', exact: true }).click()
   await expect(page.locator('#menu-help-view-vr')).toHaveAttribute('aria-pressed', 'true')
   const stopped = page.waitForResponse(response => response.url().endsWith('/api/vr/stop')
     && response.request().method() === 'POST')
@@ -115,7 +121,7 @@ test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes d
   const pointIndex = Math.max(1, Math.floor(finalDraft.points_nm.length / 2))
   await page.getByRole('option', { name: new RegExp(`^Point ${pointIndex} `) }).click()
   const xInput = page.getByRole('spinbutton', { name: 'Point X (nm)' })
-  expect(Number(await xInput.inputValue())).toBeCloseTo(finalDraft.points_nm[pointIndex][0], 3)
+  expect(Number(await xInput.inputValue())).toBe(Math.trunc(finalDraft.points_nm[pointIndex][0]*100)/100)
   const editedX = Number((Number(await xInput.inputValue()) + 3).toFixed(4))
   await xInput.fill(String(editedX))
   await expect(page.locator('#sweep-apply')).toBeEnabled()

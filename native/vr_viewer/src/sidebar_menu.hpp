@@ -66,6 +66,7 @@ class SidebarMenu {
     std::function<std::string(const std::string&,const std::string&)> label = [](const auto&,const auto& fallback){return fallback;};
     std::function<bool(const std::string&)> available = [](const auto&){return true;};
     std::function<std::optional<std::pair<float,std::string>>(const std::string&)> loadingProgress=[](const auto&){return std::optional<std::pair<float,std::string>>{};};
+    std::function<bool(const std::string&)> spinning=[](const auto&){return false;};
     std::function<bool(const std::string&)> isActive = [](const auto&){return false;};
     const SidebarTab& tab() const { return customTab ? *customTab : kSidebarTabs.at(tabs.at(selected)); }
     size_t offset() const { return dynamicActive()?dynamicOffset():offsets.at(selected); }
@@ -88,7 +89,7 @@ class SidebarMenu {
         return toolFooter() && (c.id==tab().key+":back" || c.id==tab().key+":confirm" || c.id=="move:apply");
     }
     float footerY() const {
-        return tab().key=="extrude" || tab().key=="sweep"?-.425F:tab().key=="move"?.045F:tab().key=="bend"?-.54F:-.51F;
+        return sweepPath()?-.52F:tab().key=="extrude" || tab().key=="sweep"?-.425F:tab().key=="move"?.045F:tab().key=="bend"?-.54F:-.51F;
     }
     std::vector<const SidebarRow*> contentRows() const {
         auto rows=visibleRows();
@@ -276,8 +277,8 @@ class SidebarMenu {
             auto add=[&](const std::string& id,MenuPanelBounds box,const std::string& icon="",bool selected=false) {
                 const auto r=std::find_if(tab().rows.begin(),tab().rows.end(),[&](const auto& row){return row.id=="sweep:"+id;});
                 if(r==tab().rows.end())return;
-                const bool value=id.ends_with(":value") || id=="smoothing";
-                const bool originAxis=id.starts_with("axis:0:") && !value;
+                const bool value=id.ends_with(":value") || id=="smoothing" || id=="bp-info";
+                const bool originAxis=id.starts_with("axis:0:") && !value && std::none_of(tab().rows.begin(),tab().rows.end(),[](const auto& row){return row.id=="sweep:direction:0" && row.label=="DIR ON";});
                 out.push_back({r->id,r->label,r->section,r->action,box,!originAxis && !value && available(r->action),selected || isActive(r->action),false,icon});
             };
             if(path) {
@@ -287,6 +288,7 @@ class SidebarMenu {
                 add("smoothing-less",{{left,-.341F},{-.207F,-.263F}});
                 add("smoothing",{{-.195F,-.341F},{.195F,-.263F}});
                 add("smoothing-more",{{.207F,-.341F},{ui_style::toolHalfWidth,-.263F}});
+                add("bp-info",{{left,-.437F},{ui_style::toolHalfWidth,-.359F}});
             }
             const auto rows=contentRows();
             const float position=animated?rowScroll.value(float(offset()),animationClock()):float(offset());
@@ -298,8 +300,9 @@ class SidebarMenu {
                     const auto id=row.id.substr(12);
                     const float top=.282F-(float(index)-position)*.258F;
                     const bool selected=row.section=="SELECTED";
-                    add("point:"+id,{{left,top-.065F},{right,top}},"",selected);
+                    add("point:"+id,{{left,top-.065F},{right-.21F,top}},"",selected);
                     out.back().section.clear();
+                    add("direction:"+id,{{right-.198F,top-.065F},{right,top}});
                     const float width=(right-left-.024F)/3.F;
                     for(int axis=0;axis<3;++axis) {
                         const float x=left+float(axis)*(width+.012F),y=top-.077F;
@@ -658,7 +661,9 @@ class SidebarMenu {
                 text(c.id,fitted.text,{(b.minimum.x+b.maximum.x)*.5F+(hand==0?-3:3)*s,(b.minimum.y+b.maximum.y+(hand==0?-1:1)*strokeTextWidth(fitted.text.size(),s))*.5F},s,fg,
                     {b.minimum+glm::vec2(.005F),b.maximum-glm::vec2(.005F)},true);
             } else {
-                const MenuPanelBounds content{b.minimum+glm::vec2(.012F),b.maximum-glm::vec2(.012F)};
+                const bool sweepValue=c.id.starts_with("sweep:axis:") && c.id.ends_with(":value");
+                const float padding=sweepValue?.010F:.012F;
+                const MenuPanelBounds content{b.minimum+glm::vec2(padding),b.maximum-glm::vec2(padding)};
                 if(const auto progress=loadingProgress(c.action)) {
                     textBlock(c.id+":label",c.label,{{content.minimum.x,content.minimum.y+.040F},content.maximum},fg,.0028F);
                     boundedText(c.id+":progress",progress->second,{content.minimum.x,content.minimum.y+.032F},.0022F,{.55F,.85F,.75F},content);
@@ -673,7 +678,14 @@ class SidebarMenu {
                     boundedText(c.id+":section",c.section,{content.minimum.x,content.maximum.y},.0022F,{.55F,.60F,.66F},content);
                     body.maximum.y-=.022F;
                 }
-                textBlock(c.id+":label",c.label,body,fg);
+                float maximumScale=.0032F;
+                if(sweepValue) {
+                    // Keep the number intact on one line below its axis label.
+                    const auto separator=c.label.find(' ');
+                    const auto digits=separator==std::string::npos?c.label.size():c.label.size()-separator-1;
+                    maximumScale=std::clamp((body.maximum.x-body.minimum.x)/strokeTextWidth(digits,1.F),kMinimumMenuTextScale,maximumScale);
+                }
+                textBlock(c.id+":label",c.label,body,fg,maximumScale);
             }
         }
         audit.finish();

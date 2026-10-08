@@ -9,3 +9,13 @@
 #sweep-status { min-height: 2em; }
 #sweep-panel [hidden] { display: none !important; }
 #sweep-step { color: var(--color-text-muted); margin-bottom: var(--space-3); }
+
+.sweep-orientation { display: flex; gap: 8px; margin: 8px 0; }
+.sweep-orientation label { flex: 1; min-width: 0; }
+.sweep-orientation input { width: 100%; box-sizing: border-box; }
+
+#sweep-panel .sweep-point, #sweep-panel .sweep-coordinates input {
+  font-family: var(--font-data); font-size: var(--text-sm); font-weight: 400; letter-spacing: normal;
+}
+.sweep-info { margin: var(--space-2) 0; padding: var(--space-3); border: 1px solid var(--color-border-muted); border-radius: 4px; background: var(--color-bg-inset); }
+.sweep-info strong { font-family: var(--font-data); }

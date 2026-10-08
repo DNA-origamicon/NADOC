@@ -10,13 +10,14 @@ struct LiveViewerTest {
     static std::vector<Vertex> guides(Viewer& v) {
         std::vector<Vertex> lines;
         v.drawSweep([&](glm::vec3 a,glm::vec3 b,glm::vec3 c){lines.push_back({a,c,1});lines.push_back({b,c,1});});
+        v.drawSweepWarnings([&](glm::vec3 a,glm::vec3 b,glm::vec3 c){lines.push_back({a,c,1});lines.push_back({b,c,1});});
         return lines;
     }
     static void save(const std::string& path,const std::vector<unsigned char>& rgb,int width,int height) {
         std::ofstream image(path,std::ios::binary);image<<"P6\n"<<width<<' '<<height<<"\n255\n";
         for(int y=height-1;y>=0;--y)image.write(reinterpret_cast<const char*>(rgb.data()+y*width*3),width*3);
     }
-    static void renderPath(Viewer& v,const std::string& path) {
+    static void renderPath(Viewer& v,const std::string& path,bool warning=false) {
         // Diagnostic camera faces the path from its side; the model/inputs stay fixed.
         auto lines=guides(v);assert(lines.size()>20);
         glm::vec3 low(1e6F),high(-1e6F);
@@ -50,7 +51,12 @@ struct LiveViewerTest {
             for(int x=std::max(0,point.x-8);x<std::min(600,point.x+9);++x) {
                 const auto i=(y*600+x)*3;if(pixels[i+1]>120 && pixels[i+1]>pixels[i]*1.25F)++localGreen;
             }
-        assert(localGreen>0);save(path,pixels,600,600);
+        if(warning) {
+            size_t orange=0;
+            for(size_t i=0;i<pixels.size();i+=3)if(pixels[i]>180 && pixels[i+1]<140 && pixels[i+2]<110)++orange;
+            assert(orange>25);
+        }else assert(localGreen>0);
+        save(path,pixels,600,600);
         const bool active=v.sweepPanel_.active;v.sweepPanel_.active=false;
         assert(guides(v).empty());const auto hidden=render(guides(v));v.sweepPanel_.active=active;
         assert(hidden!=pixels);
@@ -134,6 +140,45 @@ struct LiveViewerTest {
             }
         }
         v.sourceAxes_=originalAxes;
+        // Grips rotate the point frame without moving it or granting scene grip ownership.
+        v.hands_[1].valid=true;v.hands_[1].orientation=glm::quat(1,0,0,0);
+        v.hands_[1].position=v.sweepWorldPoint(v.sweepDraft_.pointsNm[1])+glm::vec3(0,0,.25F);
+        const auto fixedPoints=v.sweepDraft_.pointsNm;
+        v.gripClicked_[1]=v.gripPressed_[1]=true;blocked.fill(false);v.processSweepGrip(blocked);
+        assert(blocked[1] && v.sweepGripHand_==1 && v.suppressManipulationUntilRelease_);
+        assert(v.sweepDraft_.directionControlled(1));
+        const auto oldAngles=*v.sweepDraft_.orientations[1];
+        v.gripClicked_[1]=false;
+        v.hands_[1].orientation=glm::angleAxis(glm::radians(20.F),glm::vec3(0,1,0));
+        blocked.fill(false);v.processSweepGrip(blocked);
+        assert(v.sweepDraft_.pointsNm==fixedPoints);
+        const auto angles=*v.sweepDraft_.orientations[1];
+        assert(glm::length(angles-oldAngles)>10.F);
+        for(int axis=0;axis<3;++axis)assert(std::abs(std::remainder(angles[axis],15.F))<1e-5F);
+        v.gripPressed_[1]=false;v.processSweepGrip(blocked);assert(!v.sweepGripHand_);
+        renderPath(v,directory+"/sweep-point-orientation.ppm");
+        v.activateSidebarAction("sweep:direction:1",1);assert(!v.sweepDraft_.directionControlled(1));
+        // The fixed origin permits orientation control, but remains position-fixed.
+        v.activateSidebarAction("sweep:direction:0",1);assert(v.sweepDraft_.directionControlled(0));
+        v.activateSidebarAction("sweep:axis:0:2:1",1);assert(v.sweepDraft_.pointsNm[0]==glm::vec3(0));
+        v.activateSidebarAction("sweep:direction:0",1);
+        const std::string record="NADOCVR_PREFLIGHT 3 "+std::to_string(v.toolConfigSequence_)+
+            " 100 warn sweep none - backend_warning 2 1 1 1 0 0 0 0 0 10 1 0 0 1 0 0 0 1 0 0 0 1 0";
+        auto advisory=nadoc_vr::parseToolPreflightFeedback(record,v.toolConfigSequence_);
+        assert(advisory && advisory->sweepWarnings==std::vector<size_t>{0});
+        auto countedRecord=record;countedRecord.replace(18,1,"4");
+        auto counted=nadoc_vr::parseToolPreflightFeedback(countedRecord+" 1234",v.toolConfigSequence_);
+        assert(counted && counted->sweepTotalBp==1234);
+        v.toolPreflightFeedback_=advisory;assert(v.sweepReady());
+        auto warningPoints=v.sweepWarningWorldPoints();assert(warningPoints.size()==1);
+        v.hands_[1]={true,false,warningPoints[0]+glm::vec3(0,0,.4F),glm::quat(1,0,0,0)};
+        v.triggerClicked_[1]=true;blocked.fill(false);v.processSweepWarnings(blocked);
+        assert(blocked[1] && v.sweepWarningTooltip_ && v.sweepWarningTooltipUntil_>glfwGetTime());
+        v.triggerClicked_[1]=false;
+        const auto warningGuides=guides(v);
+        assert(std::any_of(warningGuides.begin(),warningGuides.end(),[](const auto& vertex){return glm::distance(vertex.color,glm::vec3(1,.25F,.12F))<1e-6F;}));
+        renderPath(v,directory+"/sweep-curvature-warning.ppm",true);
+        v.toolPreflightFeedback_.reset();
         // An invalid tracking sample cannot become valid again through refitting.
         v.activateSidebarAction("sweep:free-draw",1);
         v.hands_[1].position=v.sweepWorldPoint({})+glm::vec3(0,0,.12F);
@@ -192,6 +237,18 @@ struct LiveViewerTest {
         };
         validate();v.activateSidebarAction("sweep:confirm",1);
         assert(v.toolShell_.executionPending() && v.lastToolTargetKind_=="none" && v.lastToolTargetIdentity_.empty());
+        v.refreshExtrudePanel();assert(panel.spinning("sweep:confirm"));
+        panel.available=[&](const auto& action){return v.sweepActionAvailable(action);};
+        double clock=1.;panel.animationClock=[&]{return clock;};
+        auto pendingPixels=[&](const std::string& filename) {
+            v.sidebarMenus_.draw();glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);v.renderMenuSurface(vp);
+            std::vector<unsigned char> image(900*900*3);glReadPixels(0,0,900,900,GL_RGB,GL_UNSIGNED_BYTE,image.data());
+            save(directory+"/"+filename,image,900,900);return image;
+        };
+        const auto spinnerA=pendingPixels("sweep-generating-a.ppm");clock+=.23;
+        const auto spinnerB=pendingPixels("sweep-generating-b.ppm");assert(spinnerA!=spinnerB);
+        size_t greenPixels=0;for(size_t i=0;i<spinnerA.size();i+=3)if(spinnerA[i+1]>90 && spinnerA[i+1]>spinnerA[i]*1.4)++greenPixels;
+        assert(greenPixels>100);
         const auto submittedSequence=v.toolSequence_,submittedConfig=v.toolConfigSequence_;
         v.activateSidebarAction("sweep:cancel",1);assert(v.toolSequence_==submittedSequence && v.sweepPanel_.active);
         v.toolExecutionFeedbackPath_=directory+"/execution-feedback.txt";
@@ -202,6 +259,7 @@ struct LiveViewerTest {
         };
         acknowledge("confirm","failed");
         assert(!v.toolShell_.executionPending() && v.sweepPanel_.active && v.sweepDraft_.pointsNm==points);
+        assert(!panel.spinning("sweep:confirm"));
         assert(v.toolConfigSequence_>submittedConfig && !v.sweepReady());
         validate();v.activateSidebarAction("sweep:confirm",1);acknowledge("confirm","succeeded","sweep-feature");
         assert(!v.sweepPanel_.active && !v.toolConfig_.active() && guides(v).empty());
@@ -211,6 +269,13 @@ struct LiveViewerTest {
         assert(!v.toolShell_.undoAvailable() && v.committedFeatureLogEntryId_.empty());
         v.activateSidebarAction("sweep:cancel",1);
         assert(!v.sweepPanel_.active && !v.toolConfig_.active() && v.extrudeLatticeDraft_.cells().empty());
+        std::ofstream(directory+"/warning.scene")<<"NADOCVR 16 full strand\nQ empty_authoring\n# SWEEP_WARNING 2 4 6\n";
+        auto savedWarning=loadScene(directory+"/warning.scene");assert(savedWarning.sweepWarnings.size()==1);
+        v.glScene_=std::make_unique<GlScene>(std::move(savedWarning));
+        const auto savedPoints=v.sweepWarningWorldPoints();assert(savedPoints.size()==1);
+        v.hands_[1]={true,false,savedPoints[0]+glm::vec3(0,0,.4F),glm::quat(1,0,0,0)};
+        v.triggerClicked_[1]=true;blocked.fill(false);v.processSweepWarnings(blocked);
+        assert(blocked[1] && v.sweepWarningTooltip_==savedPoints[0]);
         assert(glGetError()==GL_NO_ERROR);
         std::filesystem::remove_all(socketDirectory);
         std::cout<<"Sweep paint/path, radial, point ray/drag, free draw, panel, preview and transaction lifecycle passed\n";

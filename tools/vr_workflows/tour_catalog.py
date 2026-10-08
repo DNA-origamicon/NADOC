@@ -86,7 +86,7 @@ def catalog():
     add('sweep', 'authoring', 'Sweep an S shape · Free Draw and point editing',
         'Isolated part: paint a footprint, draw a glowing S-shaped stroke, edit its fitted points by trigger dragging and XYZ arrows, and check radial Delete Last. Confirm, edit through the desktop feature log, then Undo and Redo both edits and creation. Demo pauses for review; validation uses all four controller profiles and retained stereo evidence.', module='sweep_tour')
     add('extrude-slice', 'authoring', 'Extrude beside an existing 1x8 platform',
-        'Isolated square part: display the existing 1x8 cross-section, paint one and two lattice rows beside it, use coarse/fine wheels, and verify preview, committed 3D spacing, refreshed occupied cells and both menus closing on Confirm. Native checks preserve drafts for retry after failure. Motion validation uses all four profiles.',
+        'Isolated square part: display the existing 1x8 cross-section, paint one and two lattice rows beside it, use coarse/fine wheels, and verify preview, committed 3D spacing, refreshed occupied cells, independent clustering of the fresh footprint, and both menus closing on Confirm. Native checks preserve drafts for retry after failure. Motion validation uses all four profiles.',
         ['--slice-reference'], module='extrude_tour')
     add('lattice-compatibility', 'authoring', 'Extrude · older part compatibility',
         'No headset required: repairs uniquely matching old lattice addresses, preserves clusters, validates VR extrusion, Undo and save/reopen.', module='lattice_compatibility_check')

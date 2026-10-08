@@ -9782,7 +9782,7 @@ def apply_loop_skips_from_deformations() -> dict:
         for strand in design.active_strands()
         for d0, d1 in zip(strand.domains, strand.domains[1:])
     )
-    if not has_crossovers:
+    if not has_crossovers and not any(op.type == "sweep" and op.params.auto_loop_skips for op in design.deformations):
         raise HTTPException(
             400,
             detail="No crossovers placed. Add crossovers before applying staple routing.",
@@ -9812,9 +9812,10 @@ def apply_loop_skips_from_deformations() -> dict:
     # SQ periodic skips go first so deformation mods win at any conflicting position.
     all_mods: dict[str, list] = {}
 
+    generated_sweep_ids = {hid for op in design.deformations if op.type == "sweep" and op.params.auto_loop_skips for hid in op.affected_helix_ids}
     if design.lattice_type == LatticeType.SQUARE:
         for hid, ls_list in sq_lattice_periodic_skips(design).items():
-            if hid in ignored_helix_ids:
+            if hid in ignored_helix_ids or hid in generated_sweep_ids:
                 continue
             all_mods.setdefault(hid, []).extend(ls_list)
 
@@ -9863,7 +9864,7 @@ def apply_loop_skips_from_deformations() -> dict:
     from backend.core.sweep_loop_skips import sweep_loop_skips
     has_sweep = any(op.type == "sweep" for op in design.deformations)
     try:
-        for hid, marks in sweep_loop_skips(design, existing=all_mods, ignored_helix_ids=ignored_helix_ids).items():
+        for hid, marks in sweep_loop_skips(design, existing=all_mods, ignored_helix_ids=ignored_helix_ids, include_generated=True).items():
             all_mods.setdefault(hid, []).extend(marks)
     except ValueError as exc:
         raise HTTPException(422, detail=str(exc)) from exc
