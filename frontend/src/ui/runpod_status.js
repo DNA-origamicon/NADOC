@@ -198,6 +198,29 @@ export function initRunpodStatus({
   let _job = null
   let _busy = false
   let _killing = null
+  let _sessionState = 'unknown'
+  let _sessionRefresh = null
+
+  // Monitoring an existing pod depends on the API session, not launch readiness.
+  // This check must also work before the RunPod pane has ever been opened.
+  function refreshSession() {
+    if (_sessionRefresh) return _sessionRefresh
+    _sessionRefresh = Promise.resolve().then(async () => {
+      try {
+        const res = await fetchImpl('/api/runpod/status')
+        const status = res.ok ? await res.json() : null
+        _sessionState = status?.connected === true ? 'connected'
+          : status?.connected === false ? 'disconnected' : 'unknown'
+      } catch {
+        _sessionState = 'unknown'
+      } finally {
+        _sessionRefresh = null
+        onChange(_preflight)
+      }
+      return _sessionState
+    })
+    return _sessionRefresh
+  }
 
   function _render() {
     if (!mount) return
@@ -253,7 +276,7 @@ export function initRunpodStatus({
    *  cannot succeed must not be attempted. Nothing is lost: with no session there is no
    *  client to list pods with, and the reconnect nudge is what covers an orphaned pod. */
   async function _refreshPods() {
-    if (runpodChipState(_preflight).state !== 'connected') { _pods = []; return }
+    if (!runpodConnected(_preflight)) { _pods = []; return }
     try {
       const res = await fetchImpl('/api/runpod/pods')
       if (!res.ok) { _pods = []; return }
@@ -336,6 +359,8 @@ export function initRunpodStatus({
 
   return {
     refresh,
+    refreshSession,
+    get sessionState() { return _sessionState },
     setJob(job) { _job = job || null; _render() },
     async refreshBilling() { await Promise.all([_refreshPods(), _refreshBalance()]); _render() },
     get preflight() {

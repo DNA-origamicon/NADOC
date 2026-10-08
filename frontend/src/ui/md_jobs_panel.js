@@ -651,13 +651,9 @@ export function mdWatchdogDecision({ job = null, wsOpen = false, msSinceMsg = 0,
  *  In-flight = a job handed to its scheduler (slurm_job_id / runpod_pod_id) and still
  *  queued/running/preparing.
  *
- *  BOTH targets, not just Alpine.  RunPod is the one that matters most and was the one
- *  missing: the API key is held in MEMORY ONLY (routes_runpod.connect), so a backend
- *  restart silently drops the session, the poll loop dies with it, and the job record
- *  freezes at `running` — while the pod goes on billing by the second with nothing
- *  watching it.  Reconnecting is what reaps orphans and re-attaches the supervisor, so
- *  the whole safety net depends on the user knowing to do it.  Hence the sharper wording:
- *  an idle Alpine allocation wastes SU, an unwatched pod spends money. */
+ *  RunPod state must come from /runpod/status, independently of the selected target
+ *  and the launch preflight. Unknown status is not evidence of a lost session.
+ *  The backend can auto-connect and supervise pods even before the RunPod pane opens. */
 export function mdRemoteReconnectPrompt(jobs, clusterState, runpodState = 'connected') {
   const down = (s) => s !== 'connected' && s !== 'connecting'
   const inFlight = (target, idKey, state) => down(state)
@@ -668,8 +664,10 @@ export function mdRemoteReconnectPrompt(jobs, clusterState, runpodState = 'conne
   const nPod = inFlight('runpod', 'runpod_pod_id', runpodState)
   const parts = []
   if (nPod) {
-    parts.push(`${nPod} RunPod pod${nPod === 1 ? '' : 's'} still billing with no session `
-      + 'watching — reconnect to monitor, fetch results and be able to terminate.')
+    const pods = `${nPod} RunPod pod${nPod === 1 ? '' : 's'}`
+    parts.push(runpodState === 'disconnected'
+      ? `${pods} may still be billing — reconnect to monitor, fetch results and be able to terminate.`
+      : `RunPod connection status unavailable — ${pods} may still be billing. Check the RunPod connection.`)
   }
   if (nAlpine) {
     parts.push(`${nAlpine} Alpine run${nAlpine === 1 ? '' : 's'} in flight — reconnect to `
@@ -1564,12 +1562,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // + the current job set.  Called on cluster-state changes and after every list refresh.
   function _renderReconnectPrompt() {
     if (!clusterReconnectEl) return
-    // RunPod has its OWN session, independent of the Alpine one — a pod outliving its
-    // supervisor is invisible unless we ask the RunPod chip, not the cluster state.
+    // Session state is independent of both the Alpine connection and launch readiness.
     const msg = mdRemoteReconnectPrompt(
       _jobs,
       getClusterState?.() ?? 'disconnected',
-      _runpod?.chip?.()?.state ?? 'unknown',
+      _runpod.sessionState,
     )
     clusterReconnectEl.textContent = msg
     clusterReconnectEl.style.display = msg ? '' : 'none'
@@ -1603,14 +1600,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   // cannot run the job.
   const _runpod = initRunpodStatus({
     mount: runpodStatusEl,
-    onChange: () => _paintRunpodGate(),
+    onChange: () => { _paintRunpodGate(); _renderReconnectPrompt() },
   })
 
   // First-time setup wizard (API key → SSH key → volume → pre-flight). A successful setup
   // re-runs the pre-flight so the gate above turns green without the user hunting for it.
   initRunpodSetup({
     mount: runpodSetupEl,
-    onConnected: () => _runpod.refresh(),
+    onConnected: () => { void _runpod.refreshSession(); void _runpod.refresh() },
   })
 
   // GPU picker: "Check RunPod GPUs" → scrollable list of available cards with live price,
@@ -1900,6 +1897,10 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       if (selected) surfaceCard.select(selected, mdInheritedPrepParams(selected, _jobs))
       _notifyIfJobsChanged()
       _renderReconnectPrompt()   // in-flight Alpine runs + a down session → nudge to reconnect
+      if (_jobs.some(j => j.execution_target === 'runpod' && j.runpod_pod_id
+          && ['queued', 'running', 'preparing'].includes(j.status))) {
+        void _runpod.refreshSession()
+      }
       void _fetchQueue()         // who's waiting, and is the machine busy (▶ Run vs ＋ Queue)
       if (displayToggle?.checked) _refreshMdDisplay()
       else _refreshMdPrewarm()

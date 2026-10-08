@@ -929,25 +929,25 @@ describe('mdRemoteReconnectPrompt (reconnect nudge for in-flight Alpine runs)', 
     expect(mdRemoteReconnectPrompt(null, 'disconnected')).toBe('')
   })
 
-  // RunPod was missing entirely, and it is the target where a dropped session costs money:
-  // the API key is in memory only, so a backend restart orphans a pod that goes on billing.
+  // A dropped RunPod session needs attention even when Alpine is connected.
   const pod = { execution_target: 'runpod', runpod_pod_id: 'pod1', status: 'running' }
 
-  it('prompts for an orphaned RunPod pod, and says it is still billing', () => {
+  it('prompts for a disconnected RunPod session without claiming confirmed billing', () => {
     const msg = mdRemoteReconnectPrompt([pod], 'connected', 'disconnected')
-    expect(msg).toMatch(/1 RunPod pod still billing/)
+    expect(msg).toMatch(/1 RunPod pod may still be billing/)
     expect(msg).toMatch(/terminate/)
-    expect(mdRemoteReconnectPrompt([pod], 'connected', 'unknown')).toMatch(/still billing/)
+    expect(mdRemoteReconnectPrompt([pod], 'connected', 'unknown')).toMatch(/connection status unavailable/)
+    expect(mdRemoteReconnectPrompt([pod], 'connected', 'unknown')).not.toMatch(/no session watching|reconnect to monitor/)
     expect(mdRemoteReconnectPrompt([pod, { ...pod, runpod_pod_id: 'pod2' }], 'connected', 'disconnected'))
-      .toMatch(/2 RunPod pods/)
+      .toMatch(/2 RunPod pods may still be billing/)
   })
   it('the two sessions are independent — a live Alpine session does not silence RunPod', () => {
     expect(mdRemoteReconnectPrompt([pod, running], 'connected', 'disconnected'))
-      .toMatch(/RunPod pod still billing/)
+      .toMatch(/RunPod pod may still be billing/)
     expect(mdRemoteReconnectPrompt([pod, running], 'connected', 'disconnected'))
       .not.toMatch(/Alpine/)
     const both = mdRemoteReconnectPrompt([pod, running], 'disconnected', 'disconnected')
-    expect(both).toMatch(/RunPod pod still billing/)
+    expect(both).toMatch(/RunPod pod may still be billing/)
     expect(both).toMatch(/1 Alpine run in flight/)
   })
   it('silent when the RunPod session is up, or the pod was never rented', () => {
@@ -1593,6 +1593,45 @@ describe('initMdJobsPanel — shared jobs-panel base parity (U3 slice 2c-3b)', (
         expect($(`md-jobs-${other}-pane`).hidden).toBe(true)
       }
     }
+  })
+
+  it('checks RunPod while viewing Alpine and clears a reconnect warning after recovery', async () => {
+    mountIds({
+      'md-jobs-panel': 'div', 'md-jobs-panel-body': 'div',
+      'md-run-target-alpine': 'input', 'md-jobs-alpine-pane': 'div',
+      'md-jobs-cluster-reconnect-note': 'div',
+    })
+    $('md-run-target-alpine').type = 'radio'
+    $('md-run-target-alpine').checked = true
+    const jobs = [
+      { job_id: 'A', execution_target: 'alpine', status: 'running', slurm_job_id: '9', created_at: 2 },
+      { job_id: 'R', execution_target: 'runpod', status: 'running', runpod_pod_id: 'p', created_at: 1 },
+    ]
+    mdApi.listMdJobs.mockResolvedValue(jobs)
+    let connected = true
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async url => ({
+      ok: true,
+      json: async () => String(url).endsWith('/runpod/status') ? { connected } : {},
+    }))
+    try {
+      const panel = initMdJobsPanel({ getClusterState: () => 'connected' })
+      await flushMicro(30)
+      const warning = $('md-jobs-cluster-reconnect-note')
+      expect(fetchSpy).toHaveBeenCalledWith('/api/runpod/status')
+      expect(fetchSpy.mock.calls.some(([url]) => String(url).includes('/preflight'))).toBe(false)
+      expect(warning.style.display).toBe('none')
+
+      connected = false
+      await panel.refresh()
+      await flushMicro(30)
+      expect(warning.style.display).not.toBe('none')
+      expect(warning.textContent).toContain('reconnect to monitor')
+
+      connected = true
+      await panel.refresh()
+      await flushMicro(30)
+      expect(warning.style.display).toBe('none')
+    } finally { fetchSpy.mockRestore() }
   })
 
   it('_onOpen fires on init (fetches the job list) and the remote SLURM poll runs while open', async () => {

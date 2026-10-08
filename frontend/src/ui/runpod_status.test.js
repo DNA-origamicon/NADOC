@@ -237,6 +237,19 @@ describe('initRunpodStatus — live pods and terminate', () => {
     expect(el.innerHTML).not.toContain('billing')
   })
 
+  it('still lists and allows managing existing pods when launch preflight fails', async () => {
+    const el = mount()
+    const fetchImpl = vi.fn(async url => ({
+      ok: true,
+      json: async () => url.endsWith('/pods') ? { pods: [POD] } : NO_GPU,
+    }))
+    const panel = initRunpodStatus({ mount: el, fetchImpl })
+    await panel.refresh()
+    expect(panel.canLaunch()).toBe(false)
+    expect(panel.billing()).toMatchObject({ count: 1 })
+    expect(el.querySelector('[data-terminate="pod1"]')).toBeTruthy()
+  })
+
   it('does not ask for pods with no session — that 400s, and the commit gate is zero console errors', async () => {
     const fetchImpl = vi.fn(async (url) => {
       if (String(url).includes('/pods')) return { ok: true, json: async () => ({ pods: [POD] }) }
@@ -303,6 +316,39 @@ describe('initRunpodStatus — live pods and terminate', () => {
 
 describe('initRunpodStatus', () => {
   const mount = () => document.createElement('div')
+
+  it('checks the backend session before preflight and tracks disconnect/reconnect', async () => {
+    let connected = true
+    const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => ({ connected }) }))
+    const onChange = vi.fn()
+    const panel = initRunpodStatus({ mount: mount(), fetchImpl, onChange })
+    expect(panel.sessionState).toBe('unknown')
+    await panel.refreshSession()
+    expect(fetchImpl).toHaveBeenCalledWith('/api/runpod/status')
+    expect(panel.preflight).toBeNull()
+    expect(panel.sessionState).toBe('connected')
+    connected = false
+    await panel.refreshSession()
+    expect(panel.sessionState).toBe('disconnected')
+    connected = true
+    await panel.refreshSession()
+    expect(panel.sessionState).toBe('connected')
+    expect(onChange).toHaveBeenCalledTimes(3)
+  })
+
+  it('reports unknown when the session check fails, without claiming disconnected', async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ connected: true }) })
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) })
+    const panel = initRunpodStatus({ mount: mount(), fetchImpl })
+    await panel.refreshSession()
+    expect(panel.sessionState).toBe('connected')
+    for (let i = 0; i < 3; i++) {
+      await panel.refreshSession()
+      expect(panel.sessionState).toBe('unknown')
+    }
+  })
 
   it('renders the checks and reports canLaunch', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({ json: async () => GREEN })
