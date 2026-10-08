@@ -511,7 +511,7 @@ def loop_skip(helix_id: str, bp_index: int, delta: int) -> Design:
 def apply_loop_skip_deformations() -> Design:
     """Bake every DeformationOp into concrete loop/skip marks (POST /design/loop-skip/apply-deformations).
 
-    Wipes existing marks, then for each bend/twist op (and, on SQUARE lattices, the
+    Wipes existing marks, then for each bend/twist/sweep op (and, on SQUARE lattices, the
     periodic skips) computes the per-helix loop/skip pattern and applies it
     atomically — the topological realisation of a geometric deformation.  Requires
     crossovers placed (cells are 7 bp) and at least one deformation op (or a SQUARE

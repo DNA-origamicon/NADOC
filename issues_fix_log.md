@@ -20,6 +20,7 @@ regress anything).
 
 | # | Date | Issue / phase | What changed (module) | Repro pinned by | Wall-clock | main.js LOC Δ | tests added | edits-to-green | app-validated | regression caught |
 |---|------|---------------|------------------------|-----------------|-----------|---------------|-------------|----------------|---------------|-------------------|
+| 28 | 2026-10-08 | ISSUE-66 — obsolete loop/skip marks survived recomputation | `crud.py` clears active marks inside the revision-checked commit; new sweep strain synthesis uses stored spline intent | HC/SQ API tests seed obsolete end marks, recompute twice, undo/redo and revert | one sweep follow-up | 0 | 14 backend + 1 browser for sweep support and regression | focused suites green; browser reload fixture corrected to use complete export | yes — real Add Loops/Skips menu, undo/redo, full export/reload, screenshot inspected | yes — clearing only the calculation copy left old marks in the committed design |
 | 27 | 2026-10-08 | ISSUE-65 — native cluster history ownership | Optional creation snapshot and extracted replay helper; restore original v2 snapshot cluster baseline | Cluster replay regressions and all 98 saved-design history boundaries | focused generator refactor | 0 | 2 backend | boundary audit caught both ownership loss and missing original group | covered by generator app exercise | root cause: creation entries stored membership without parent/duplex ownership; restoring only generated groups also lost original snapshot membership |
 | 26 | 2026-10-07 | ISSUE-61 — pending-review regression failed on WSL and opened a durable incident | One test in `test_native_placement_vr_failure.py` stubs `_native_platform_reason`; runtime checks and placement code unchanged | Existing pending-review regression failed before / passed after; 18 VR-failure assertions and four platform cases passed | short focused follow-up | 0 | 0; existing regression corrected | first focused assertion run passed; retained gate required separate review | n/a, test-only; explicit review audit clear after recorded acknowledgement | yes — platform rejection occurred before the review check; original report and review retained |
 | 25 | 2026-08-10 | Alpine completion feedback — verified multi-GB downloads looked frozen/failed during synchronous health and metrics extraction | `md_executor.py`: persist `download_status.state=processing` around final bookkeeping, then restore `verified`; `routes_md.py`: offline verification preserves the active phase; `simulate_jobs.js`: explicit processing message, striped 100% bar and locked **Processing…** action | Backend reconciliation test reloads the persisted job from inside final bookkeeping; frontend unified-card test asserts message + disabled action | ~1 short session after live diagnosis | **0** | 1 backend + 1 frontend | one Python local-import scoping failure caught by focused test, fixed by using the existing module import | live root cause observed on Alpine job `029a76c6a59f`; UI behavior test-pinned | yes — byte verification completed correctly, but the old synthetic `running`/retry message remained throughout a CPU-bound DCD pass and made successful work look stalled |
@@ -72,6 +73,7 @@ multi-factor (CLAUDE.md's own warning). If the bug is a *class*, add a `LESSONS.
 
 | Issue | Root cause (5-Whys, one line) | Failed hypothesis (the "obvious fix" that was wrong, if any) | → LESSONS.md |
 |-------|-------------------------------|-------------------------------------------------------------|--------------|
+| ISSUE-66 | Recomputed marks were merged into the original design → its obsolete marks had never been cleared → clearing happened only on the temporary calculation copy; commit now replaces active marks atomically and rejects stale revisions | None; integration assertions exposed the calculation/commit mismatch | — |
 | ISSUE-61 | Gate test depended on the host platform → WSL returned plain-string 503 before the intended review check → structured-detail assertion failed → marked parent failure correctly latched the durable journal; isolate only the test's platform prerequisite and explicitly review the retained incident | Temporary incident-store leakage was considered, but source inspection showed intentional recording of the outer test failure in the runner's durable ledger | n/a; bounded test precondition fix, no placement change |
 | Alpine post-download feedback | Reconciliation saved `verified` and then synchronously scanned a 19.7 GB DCD before saving terminal job state → the UI continued showing the prior synthetic `running`/retry error for minutes → users had no evidence that local CPU-bound bookkeeping was active | Treating byte verification as the terminal UX state; the download was complete, but the job was not yet usable as fully finalized | `memory/project_alpine_cluster_submission.md` |
 | NAMD sequence gate | Sequence validation lived at Create → planning was rejected before a job record existed and the wizard's async boundary hid the reason → moving only the check would still leave a stale/poly-T package → unsequenced jobs now defer atomization, Run owns the hard refusal, and sequence-change prepares from the live topology before atom-count consumers or dynamics | Treating the missing notification as only a toast bug; the lifecycle boundary was wrong and a toast alone would still forbid creation or preserve stale atom counts | — |
@@ -387,3 +389,19 @@ right-wheel mode and rejects the invalid release, then its stretched-preview
 pixel gate fails (3/7 left, 2/7 right/mirror). Production preview code and the 0.7
 coverage threshold are unchanged. Evidence is retained under
 `.development-artifacts/vr-edit-wheel-20261005/ligate/`; commit/save was not reached.
+
+2026-10-08 — ISSUE-66 fixed during sweep loop/skip support. Root cause: marks were
+cleared on the calculation copy but merged onto the uncleared committed design.
+The commit now clears active bundle marks before replacement and rejects stale
+revisions. Repro/regression: HC/SQ seed an illegal old end mark, realize, repeat,
+undo/redo and revert; reference/overhang/linker preservation stays covered by the
+existing suite. 14 focused sweep-realization tests + 75 existing loop/skip tests
+pass. No discarded hypothesis; no production molecular-placement changes.
+`main.js` delta 0. Reopen count: 0.
+App validation: Add Loops/Skips menu, undo/redo, complete `.nadoc` export/reload
+passed (1 browser test); screenshot inspected and test workspace artifacts removed.
+`just test-smart` selected FAST: 10129 passed, 19 skipped, 21 failed, 4 errors;
+failure signatures exactly match the preceding sweep-wizard run. Timing guard
+reports 20 unrelated existing tests over 5 s, none from the new sweep suite.
+Full suite deferred by the session gate. Lint retains the existing unused `Path`
+import in `tests/test_cpd_cube_validation_v6.py`; `git diff --check` passes.

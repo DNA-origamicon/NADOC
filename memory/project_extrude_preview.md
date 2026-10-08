@@ -37,7 +37,17 @@ the same transported frames as committed geometry and do not mutate topology.
 
 Assembly launch opens the selected instance's existing part editor, where the
 part owns the new topology and the ordinary save-back workflow applies. Curvature
-feasibility and sweep-specific loop/skip realization remain explicitly deferred.
+constraints during sweep authoring remain deferred.
+
+Add Loops/Skips now realizes sweeps through `core/sweep_loop_skips.py`: integrate
+signed curvature against the transported footprint, quantize each contiguous
+signed duplex region separately, and place inside that region away from crossovers,
+domain endpoints and end margins. S-bend lobes do not cancel. Existing SQ periodic
+and bend/twist marks reserve sites, so sweep marks do not overwrite them. The
+existing per-cell density limit and safe-site capacity are enforced at realization;
+failure is atomic. Recompute replaces old active marks, preserves ignored geometry,
+and commits with a revision guard through the existing undoable feature-log route.
+Tests: `tests/test_sweep_loop_skips.py` and `frontend/e2e/sweep_loop_skips.spec.js`.
 Tests: `tests/test_sweep.py`, `sweep_panel.test.js`, `sweep_points.test.js`, and
 `sweep_preview.test.js`; `frontend/e2e/sweep.spec.js` drives actual point raycasts,
 translation handles and the blunt-end context-menu entry as well as history/reload.

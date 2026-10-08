@@ -1374,3 +1374,11 @@ so the panel retains its inputs and preview for correction. Covered by
   does not establish observed instability. No active job or production code changed.
 - **Follow-up:** Derive cadence from timestep consistently, pin actual generated
   4 fs configs against manifest, and review active prepared inputs before dynamics.
+
+## ISSUE-66 — Add Loops/Skips recomputation retains obsolete marks (2026-10-08, FIXED)
+
+- **Status:** `[x]` Fixed while extending realization to sweeps.
+- **Repro:** Seed a routed bundle with a loop at a helix end, then run Add Loops/Skips. The recomputed pattern excludes that end, but the old mark survives.
+- **Root cause:** Calculation cleared a local design copy; commit merged the new marks into the original, uncleared design.
+- **Fix:** Clear the active bundle helices inside the commit before applying the new pattern. Reference, overhang and linker marks remain preserved. A revision guard rejects a calculation made stale by another edit.
+- **Evidence:** `tests/test_sweep_loop_skips.py::test_tool_api_recomputes_atomically_and_supports_history` covers HC/SQ, forbidden sites, repeat application, undo/redo, feature revert and JSON persistence; stale-computation and atomic-failure tests cover transaction boundaries. Existing 75 loop/skip tests pass.
