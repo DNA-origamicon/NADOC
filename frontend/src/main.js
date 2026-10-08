@@ -286,6 +286,7 @@ import { initSimulateJobs } from './ui/simulate_jobs.js'
 import { buildCreatePayload as buildLammpsPayload } from './ui/lammps_jobs_logic.js'
 import { initCandoJobsPanel } from './ui/cando_jobs_panel.js'
 import { initSnupiJobsPanel } from './ui/snupi_jobs_panel.js'
+import { initExpPanel } from './ui/exp_panel.js'
 import { initBladeJobsPanel } from './ui/blade_jobs_panel.js'
 import { initEngineSelector, reconcileSelectedEngine, bindEngineSelectorToSimulationTab } from './ui/engine_selector.js'
 import { initSimulateLaunch } from './ui/simulate_launch.js'
@@ -1878,10 +1879,8 @@ async function main() {
     }
   }
 
-  // Simulate section: one engine selector (segmented tabs) fronts the stacked engine
-  // panels — shows the selected engine's panel + run-control cluster, hides the rest —
-  // plus a capability strip (unsupported cards greyed-with-tooltip). (U4)  LAMMPS is NOT
-  // a tab: it's the auto-policy CPU fallback and its runs appear in the unified list.
+  initExpPanel({ designRenderer, getCurrentRepr: () => _currentRepr, store, api, setVisible: _setSimulationVisualizationVisible, restoreNative: _restoreNativeAfterSimulation })
+  // One selector fronts simulation panels; LAMMPS remains the oxDNA CPU fallback.
   engineSelector = initEngineSelector({
     selectorMount: document.getElementById('engine-selector-mount'),
     stripMount:    document.getElementById('engine-capability-strip'),
@@ -1892,6 +1891,7 @@ async function main() {
       blade:  document.getElementById('blade-jobs-panel'),
       snupi:  document.getElementById('snupi-jobs-panel'),
       namd:   document.getElementById('md-jobs-panel'),
+      exp:    document.getElementById('exp-jobs-panel'),
     },
     runControlEls,
     // Tabs read fast→accurate (CanDo·mrDNA·oxDNA·NAMD), but oxDNA stays the default

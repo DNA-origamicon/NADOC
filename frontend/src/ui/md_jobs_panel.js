@@ -331,6 +331,10 @@ export function mdRunpodStartable(job) {
 export function mdRunpodPhase(job) {
   if (job?.execution_target !== 'runpod') return null
   if (job.status === 'preparing') return 'preparing'
+  // The supervisor waits briefly between infrastructure retries. This is still
+  // unattended submission, not a request for the user to resume a simulation.
+  if (job.status === 'paused' && job.resumable && !job.user_stopped
+      && job.error?.includes('automatically retrying.')) return 'retrying'
   if (job.status !== 'running' || job.runpod_pid) return null
   return job.runpod_pod_id ? 'uploading' : 'renting'
 }
@@ -403,9 +407,11 @@ export function mdQueueable(job) {
  *  no point offering an upload with no session behind it. */
 const RUNPOD_PHASE_LABEL = Object.freeze({
   preparing: 'Preparing…', renting: 'Renting a GPU…', uploading: 'Uploading…',
+  retrying: 'Retrying RunPod…',
 })
 
 const RUNPOD_PHASE_TITLE = Object.freeze({
+  retrying: 'RunPod startup was interrupted. NADOC will retry automatically; no click is needed.',
   preparing: 'Solvating and building the package on this computer. Nothing is rented yet — '
     + 'attach anchors or an electric field meanwhile.',
   renting: 'Asking RunPod for the GPU you chose. Billing starts the moment a pod exists.',

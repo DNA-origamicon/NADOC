@@ -113,21 +113,27 @@ def parse_snupi_pdb(path: str | Path) -> List[SnupiNode]:
         if not line.startswith(("ATOM", "HETATM")):
             continue
         tok = line.split()
-        # ATOM serial name chain resseq x y z [occ] ...
-        if len(tok) < 8:
-            continue
+        # Legacy examples are whitespace-delimited. Actual SNUPI output places
+        # xyz in PDB-width fields; adjacent negative values can have no separator.
+        occ: Optional[float] = None
         try:
             chain = tok[3]
             resseq = int(tok[4])
             x, y, z = float(tok[5]), float(tok[6]), float(tok[7])
+            occupancy = tok[8:9]
         except (ValueError, IndexError):
-            continue
-        occ: Optional[float] = None
-        if len(tok) >= 9:
             try:
-                occ = float(tok[8])
+                header = line[:30].split()
+                chain, resseq = header[3], int(header[4])
+                x, y, z = (float(line[i : i + 8]) for i in (30, 38, 46))
+                occupancy = line[54:].split()[:1]
+            except (ValueError, IndexError):
+                continue
+        if occupancy:
+            try:
+                occ = float(occupancy[0])
             except ValueError:
-                occ = None
+                pass
         nodes.append(
             SnupiNode(
                 chain=chain,

@@ -1279,7 +1279,7 @@ class IonCounts:
     n_mg: int
     n_cl: int
     #: "mg" — the origami is neutralised by Mg(H₂O)₆²⁺ (the Aksimentiev recipe);
-    #: "na" — neutralised by Na⁺ (only when no magnesium was requested).
+    #: "na" — neutralised by Na⁺ (zero Mg or bare-ion placement).
     counterion: str
     #: Magnesium needed purely to neutralise the backbone.
     n_mg_neutralising: int
@@ -1306,18 +1306,16 @@ def ion_counts(
 ) -> IonCounts:
     """The canonical ion recipe.  ONE implementation, every caller.
 
-    Follows the Aksimentiev origami protocol (Yoo, Li, Slone, Maffeo & Aksimentiev,
-    Methods Mol Biol 1811, §3.3): the origami is neutralised by **Mg(H₂O)₆²⁺**, and
-    Cl⁻ is then added to neutralise the *system* — which implies Mg in excess of the
-    DNA charge whenever the requested bulk concentration exceeds what neutralisation
-    alone needs.  **No Na⁺ is involved at all.**  That is the whole point of the
-    published protocol: the standard monovalent parameterisation gets DNA-DNA forces
-    in dense origami wrong, and MGHH²⁺ is what brings them back in line with
-    experiment (Yoo & Aksimentiev, JPCL 3:45, JPCB 116:12946, NAR 44:2036).
+    Uses Mg(H₂O)₆²⁺ counterions as in the Aksimentiev origami tutorial
+    (Yoo et al., Methods Mol Biol 1811, §3.3). Requested MgCl₂ is additional
+    salt: ceil(|q_DNA|/2) neutralising Mg plus round(c_MgCl2 * N_A * V)
+    MgCl₂ formula units. Chloride balances excess Mg and any requested NaCl.
+    The tutorial's example contains 516 Mg, DNA charge -865 e and 167 Cl;
+    it does not prescribe a universal MgCl₂ concentration.
 
-    NADOC neutralised with Na⁺ until 2026-07-30 and treated Mg purely as a bulk
-    bath, so the preset labelled "Standard (Aksimentiev)" was running a
-    monovalent-screened system with a trace of magnesium.
+    Before 2026-10-07 the magnesium path used max(counterions, bulk Mg),
+    which suppressed added salt whenever neutralisation dominated. Existing
+    packages retain that composition; new charge audits identify this convention.
 
     ``counterion`` is derived, not passed: magnesium neutralises whenever
     hexahydrate placement is on AND a nonzero Mg concentration was asked for.
@@ -1326,9 +1324,9 @@ def ion_counts(
     works.
 
     ``volume_nm3`` overrides the solvent volume used for the bulk-concentration
-    terms.  The default is derived from the actual water count rather than the box:
-    a rotation-sized (cubic) cell around an anisotropic origami is mostly empty
-    corner, and charging bulk salt for that volume inflates the ion count.
+    terms. The default estimates solvent volume from the pre-ionization water
+    count, excluding solute and any unfilled space. This nominal added-salt
+    concentration is not a measurement of equilibrated free Mg concentration.
     """
     # 1 nm³ = 1e-27 m³ = 1e-24 L  (since 1 m³ = 1000 L)
     if volume_nm3 is not None:
@@ -1347,9 +1345,9 @@ def ion_counts(
     use_mg = bool(mg_hexahydrate and mgcl2_mM > 0)
     if use_mg:
         # ceil(|q|/2): an odd backbone charge leaves one unit over, which the Cl⁻
-        # term below absorbs (2*n_mg - |q| == 1).
+        # term below absorbs (2*n_mg_neutralising - |q| == 1).
         n_mg_neutralising = -(-dna_neg_charge // 2)
-        n_mg = max(n_mg_neutralising, n_mg_bulk)
+        n_mg = n_mg_neutralising + n_mg_bulk
         n_na = n_nacl
         # 2*n_mg >= |q| by construction, so this can never go negative.
         n_cl = 2 * n_mg - dna_neg_charge + n_nacl
@@ -3075,6 +3073,7 @@ def build_namd_solvated_package(
             "n_cl": n_cl,
             "n_mg_neutralising": ions.n_mg_neutralising,
             "n_mg_bulk": ions.n_mg_bulk,
+            "concentration_convention": "added_salt_after_neutralization",
             "net_ion_charge_e": 2 * n_mg + n_na - n_cl,
             "neutral": abs(2 * n_mg + n_na - n_cl + dna_charge + (wall_charge or {}).get("total_charge_e", 0)) < 1e-6,
             "surface_charge": wall_charge,

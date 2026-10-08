@@ -12,6 +12,7 @@ const SIMULATION_PREFIXES = [
   '/mrdna',
   '/cando',
   '/snupi',
+  '/exp',
   '/blade',
   '/md',
   '/shape-metrics',
@@ -33,6 +34,7 @@ export function needsAssemblySimulation(path, method = 'GET') {
   const route = path.split('?')[0]
   if (!isSimulationApiPath(route)) return false
   if (route.startsWith('/simulate/')) return false
+  if (route.startsWith('/exp/')) return method === 'POST' && route === '/exp/jobs'
   // FEM result/lifecycle endpoints use the immutable job snapshot.
   if (/^\/(cando|snupi)\/jobs\//.test(route)) return false
   if (route.startsWith('/runpod/') && !['/runpod/gpu-options', '/runpod/job-preview'].includes(route)) return false
@@ -47,7 +49,7 @@ export function needsAssemblySimulation(path, method = 'GET') {
 }
 
 export function usesCompactSimulationProjection(path, method = 'GET') {
-  return method === 'POST' && /^\/(cando|snupi)\/jobs$/.test(path.split('?')[0])
+  return method === 'POST' && /^\/(cando|snupi|exp)\/jobs$/.test(path.split('?')[0])
 }
 
 export function createAssemblySimulationContext() {

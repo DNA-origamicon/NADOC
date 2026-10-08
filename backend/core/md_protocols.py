@@ -581,11 +581,16 @@ def _salt_note(charge_audit: dict) -> str:
     n_mg, n_na, n_cl = ion.get("n_mg", 0), ion.get("n_na", 0), ion.get("n_cl", 0)
     if ion.get("counterion") == "mg":
         head = (
-            f"Aksimentiev recipe: {n_mg:,} Mg(H2O)6(2+) neutralise the "
+            f"Mg counterion recipe: {n_mg:,} Mg(H2O)6(2+) for the "
             f"{ion.get('dna_charge_used_e', 0):.0f} e backbone"
         )
-        if ion.get("n_mg_bulk", 0) > ion.get("n_mg_neutralising", 0):
-            head += f" ({ion['n_mg_bulk']:,} of them set by the bulk concentration)"
+        if ion.get("concentration_convention") == "added_salt_after_neutralization":
+            head += (
+                f" ({ion.get('n_mg_neutralising', 0):,} neutralising + "
+                f"{ion.get('n_mg_bulk', 0):,} added MgCl2)"
+            )
+        else:
+            head += " (legacy total-Mg convention; requested salt may be absorbed by neutralisation)"
         tail = f", balanced by {n_cl:,} Cl-"
         if n_na:
             tail += f" with {n_na:,} Na+ from an explicitly requested NaCl bath"

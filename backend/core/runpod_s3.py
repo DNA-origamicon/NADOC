@@ -116,33 +116,60 @@ class RunpodS3Connection:
     ) -> None:
         """Multipart, parallel upload directly to the volume—no pod required."""
         import asyncio
-        from boto3.s3.transfer import TransferConfig
+        import contextlib
+        import threading
+        from boto3.s3.transfer import TransferConfig, create_transfer_manager
+        from s3transfer.subscribers import BaseSubscriber
 
         source = Path(local_path)
         total = source.stat().st_size
         key = self._key(remote_path)
         loop = asyncio.get_running_loop()
 
-        def upload() -> None:
-            transferred = 0
+        cancelled = threading.Event()
+        progress_lock = threading.Lock()
+        transferred = 0
 
-            def callback(amount: int) -> None:
+        def report(done: int) -> None:
+            # Already queued loop callbacks must also become inert on cancellation.
+            if not cancelled.is_set() and on_progress:
+                on_progress(done, total)
+
+        class Progress(BaseSubscriber):
+            def on_progress(self, bytes_transferred: int, **_kwargs) -> None:
                 nonlocal transferred
-                transferred += int(amount)
-                if on_progress:
-                    loop.call_soon_threadsafe(on_progress, min(transferred, total), total)
+                with progress_lock:
+                    transferred += int(bytes_transferred)
+                    done = min(transferred, total)
+                if not cancelled.is_set():
+                    loop.call_soon_threadsafe(report, done)
 
-            self._client.upload_file(
-                str(source), self.volume_id, key, Callback=callback,
-                Config=TransferConfig(
-                    multipart_threshold=8 * 1024 * 1024,
-                    multipart_chunksize=16 * 1024 * 1024,
-                    max_concurrency=10,
-                    use_threads=True,
-                ),
-            )
+        manager = create_transfer_manager(self._client, TransferConfig(
+            multipart_threshold=8 * 1024 * 1024,
+            multipart_chunksize=16 * 1024 * 1024,
+            max_concurrency=10,
+            use_threads=True,
+        ))
+        transfer = manager.upload(str(source), self.volume_id, key, subscribers=[Progress()])
 
-        await asyncio.to_thread(upload)
+        def finish() -> None:
+            try:
+                transfer.result()
+            finally:
+                # Includes multipart abort and outstanding request/file-handle cleanup.
+                manager.shutdown()
+
+        worker = asyncio.create_task(asyncio.to_thread(finish))
+        try:
+            await asyncio.shield(worker)
+        except asyncio.CancelledError:
+            cancelled.set()
+            transfer.cancel()
+            # Cancelling to_thread alone leaves the upload running, and its callbacks
+            # can recreate a deleted job. Stop must wait until the transfer is drained.
+            with contextlib.suppress(Exception):
+                await asyncio.shield(worker)
+            raise
 
     async def mirror(self, _src: str, _dst: str) -> RunResult:
         return RunResult(rc=0, stdout="", stderr="")

@@ -1,0 +1,70 @@
+{
+  "feature_schema": "allatom-bundle-strain-v1",
+  "features": [
+    "radial",
+    "radial_end",
+    "axial",
+    "axial_end",
+    "twist",
+    "twist_end"
+  ],
+  "coefficients": [
+    0.12479297031591761,
+    -0.05500723429492467,
+    0.012586229355279395,
+    -0.007126218050993304,
+    0.36740702749256454,
+    -0.3817030640845777
+  ],
+  "model_card": {
+    "id": "exp-0xT-atoms-v1",
+    "trained_designs": [
+      "24hb_0xT",
+      "6hb_0xT"
+    ],
+    "trained_extra_base_counts": [
+      0
+    ],
+    "conditions": {
+      "temperature_K": 300,
+      "ions": "Na-neutralized DNA plus hydrated Mg and Cl; historical screening recipe, not newer Mg-counterion recipe",
+      "ion_counts_psf": {
+        "24hb_0xT": {
+          "Na": 6644,
+          "Mg": 103,
+          "Cl": 206
+        },
+        "6hb_0xT": {
+          "Na": 1307,
+          "Mg": 24,
+          "Cl": 48
+        }
+      },
+      "production_timestep_fs": 4,
+      "HMR": true,
+      "langevin_damping_per_ps": {
+        "24hb_0xT": 1,
+        "6hb_0xT": 5
+      },
+      "DNA_restraints": false
+    },
+    "limits": "All DNA atoms including H; six global modes only. Historical Na-neutralized Mg runs. No equilibrium/seed validation.",
+    "validation": [
+      {
+        "design": "24hb_0xT",
+        "native_all_atom_rms_nm": 1.0759904301769665,
+        "predicted_all_atom_rms_nm": 0.8603569145459211,
+        "native_heavy_atom_rms_nm": 1.074393931380923,
+        "predicted_heavy_atom_rms_nm": 0.8584402143621526
+      },
+      {
+        "design": "6hb_0xT",
+        "native_all_atom_rms_nm": 0.6819485546141097,
+        "predicted_all_atom_rms_nm": 0.5905842112767739,
+        "native_heavy_atom_rms_nm": 0.6803770734022255,
+        "predicted_heavy_atom_rms_nm": 0.5888914632601647
+      }
+    ]
+  },
+  "manifest_sha256": "686413b8c67a1fe314b749ef3f5609bc31a2543443bfaeb43b521446c07347ae"
+}

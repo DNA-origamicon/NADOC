@@ -110,12 +110,14 @@ def test_s3_stage_extract_does_not_restore_desktop_ownership():
     seen = {}
 
     class Conn:
-        async def run(self, command):
+        async def run(self, command, *, timeout):
             seen["command"] = command
+            seen["timeout"] = timeout
             return type("Result", (), {"rc": 0, "stderr": ""})()
 
     _run(rx._extract_s3_stage(Conn(), "/workspace/job", "/workspace/job/pkg.tgz"))
     assert "tar --no-same-owner -xzf" in seen["command"]
+    assert seen["timeout"] == 600.0
 
 
 def test_equal_size_namd_conf_is_always_refreshed():
@@ -566,12 +568,14 @@ class TestRunJobOnPodAlwaysTerminates:
         monkeypatch.setattr(RunpodConnection, "connect", boom)
         deleted: list[str] = []
         job = _job(tmp_path)
+        client = _client_recording(deleted)
+        client._audit_path = tmp_path / '.runpod_lifecycle.jsonl'
         with pytest.raises(RuntimeError, match="ssh exploded"):
             _run(
                 rx.run_job_on_pod(
                     job,
                     tmp_path,
-                    client=_client_recording(deleted),
+                    client=client,
                     network_volume_id=VOLUME,
                     min_name="m",
                     n_atoms=225_504,
@@ -580,6 +584,10 @@ class TestRunJobOnPodAlwaysTerminates:
                 )
             )
         assert deleted == ["/v1/pods/pod1"], "a crash must not leak a billing GPU"
+        failures = [e for e in client.lifecycle_events('pod1') if e['event'] == 'startup_failed']
+        assert len(failures) == 1
+        assert failures[0]['error'] == 'ssh exploded'
+        assert failures[0]['job_id'] == job.job_id
 
     def test_controller_failure_after_submit_preserves_the_running_pod(
         self, tmp_path, monkeypatch

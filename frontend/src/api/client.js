@@ -2866,6 +2866,7 @@ async function _oxdnaBinRequest(method, path, body = undefined, { signal, onProg
 
 /** Last API error message (e.g. the 400 detail from a rejected create). */
 export const lastErrorMessage    = ()            => store.getState().lastError?.message ?? null
+export const prepareExpPrediction = () => _ensureAssemblySimulation('/exp/jobs', { method: 'POST' })
 
 export const oxdnaAvailable      = ()            => _oxdnaJSON('GET',  '/oxdna/available')
 /** Ranked available RunPod GPUs for the active design's relaxation — each with live price,

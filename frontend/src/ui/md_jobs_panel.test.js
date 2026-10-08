@@ -596,6 +596,8 @@ describe('mdRunControl (ONE control for the selected job: Run / Stop / Resume)',
       [{ status: 'preparing' }, 'Preparing…'],
       [{ status: 'running' }, 'Renting a GPU…'],
       [{ status: 'running', runpod_pod_id: 'p1' }, 'Uploading…'],
+      [{ status: 'paused', resumable: true,
+        error: 'RunPod infrastructure interruption (timeout); automatically retrying.' }, 'Retrying RunPod…'],
     ]
     for (const [extra, label] of cases) {
       const rc = mdRunControl({ execution_target: 'runpod', ...extra })
@@ -2727,6 +2729,9 @@ describe('mdRunpodPhase (which unattended wait a rented run is in)', () => {
     expect(rp({ status: 'running', runpod_pod_id: 'p1', runpod_pid: 7 })).toBeNull()
     expect(rp({ status: 'queued' })).toBeNull()
     expect(rp({ status: 'completed' })).toBeNull()
+    expect(rp({ status: 'paused', resumable: true, error: 'Resume manually.' })).toBeNull()
+    expect(rp({ status: 'paused', resumable: true, user_stopped: true,
+      error: 'RunPod infrastructure interruption (timeout); automatically retrying.' })).toBeNull()
   })
 
   it('never claims a phase for a job that is not on RunPod', () => {

@@ -88,6 +88,7 @@ from backend.core.md_prep_progress import (
     PrepTracker,
     build_prep_phases,
     clear_prep_progress,
+    is_active_preparation,
     design_size_factor,
     read_prep_progress,
     register_active_preparation,
@@ -3567,10 +3568,10 @@ def _spawn_prep_job(
     ion_conc_mM = body.ion_conc_mM
     mg_conc_mM = body.mg_conc_mM
     if body.salt_mode == "screening":
-        # The published origami recipe: the backbone is neutralised by Mg(H2O)6(2+) and
-        # Cl- balances the excess — no Na+ at all (Methods Mol Biol 1811 §3.3).  The Mg
-        # figure is a BULK FLOOR above neutralisation, not the whole magnesium content;
-        # the counts come from namd_solvate.ion_counts against the audited charge.
+        # Mg(H2O)6(2+) neutralises the backbone, as in the origami tutorial (§3.3).
+        # NADOC's 12.5 mM setting adds MgCl2 AFTER neutralisation; it is not total
+        # magnesium concentration or a universal concentration specified by the guide.
+        # namd_solvate.ion_counts supplies counterions + salt and balancing chloride.
         ion_conc_mM = 0.0
         mg_conc_mM = 12.5
 
@@ -4053,7 +4054,7 @@ async def _prepare_job_bg(
     # large box it runs for tens of minutes — record it so the timeline shows it running
     # rather than looking idle, and confirms it finished.
     job.minimization = _minimization_from_package(job.package_dir(ws))
-    job.status = MdStatus.queued
+    job.status = MdStatus.stopped if job.user_stopped else MdStatus.queued
     # Reconciliation may have observed an old heartbeat during final package
     # assembly.  Successful preparation is authoritative and must not retain a
     # transient interruption verdict that blocks remote submission.
@@ -4061,6 +4062,9 @@ async def _prepare_job_bg(
     job.failure_kind = None
     job.save(ws)
     clear_prep_progress(job_dir)
+
+    if job.user_stopped:
+        return
 
     if body.autostart and job.execution_target == "local":
         logger.info("prep %s: autostart=True, launching", job_id)
@@ -4899,7 +4903,11 @@ async def delete_md_job(job_id: str) -> dict:
     # background thread then hitting a spurious FileNotFoundError on a file the
     # race had just removed out from under it. Same in-flight check the other
     # job-mutating routes in this file already use (e.g. the production-spawn gate).
-    if is_running(job_id) or job.status in (MdStatus.running, MdStatus.preparing):
+    if (
+        is_running(job_id)
+        or is_active_preparation(job_id)
+        or job.status in (MdStatus.running, MdStatus.preparing)
+    ):
         raise HTTPException(
             400,
             "Wait for preparation to finish (or stop the run) before deleting this job",
@@ -6910,6 +6918,8 @@ async def start_md_job(job_id: str) -> dict:
     # sm_89 build on the network volume), so requiring a LOCAL NAMD would refuse to
     # start a perfectly valid remote job on a machine that has no GPU at all.
     if job.execution_target == "runpod":
+        job.user_stopped = False  # explicit Start authorizes a new attempt
+        job.save(_workspace())
         return await _start_runpod_job(job)
 
     # Re-check NAMD available (local execution only)
@@ -7038,6 +7048,15 @@ async def _start_runpod_job(job: MdJob) -> dict:
     )
     if not pre.ok:
         raise HTTPException(400, runpod_preflight.blocking_reason(pre))
+
+    # Stop/Delete may arrive during the awaited stock lookup, before the supervisor
+    # has a task to cancel. Never launch from the stale preflight snapshot.
+    try:
+        latest = MdJob.load(job.job_id, _workspace())
+    except FileNotFoundError:
+        raise HTTPException(409, "Job was deleted while checking RunPod availability")
+    if latest.user_stopped:
+        return {"ok": True, "job_id": job.job_id, "status": "stopped"}
 
     try:
         runpod_supervisor.start_job(

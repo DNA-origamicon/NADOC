@@ -5613,6 +5613,13 @@
 
           <!-- ── SNUPI FEM panel — same in-process FEM as CanDo, run with the anisotropic
                SNUPI material law (material="snupi"; validated ≥ CanDo vs MD at $0). ───── -->
+          <div class="panel-section" id="exp-jobs-panel" style="display:none">
+            <button id="exp-run" type="button">Run</button>
+            <progress id="exp-progress" max="1" value="0" aria-label="Experimental prediction progress" style="width:100%;margin:8px 0"></progress>
+            <div id="exp-status" role="status" style="font-size:12px;margin-bottom:8px">Experimental CPU screening. Model status is checked on Run.</div>
+            <label><input id="exp-viz" type="checkbox" disabled> Display prediction (Full)</label>
+            <p style="font-size:11px;opacity:.75">Experimental shape screening. Any design may be attempted; accuracy outside the model’s tested range is unknown.</p>
+          </div>
           <div class="panel-section" id="snupi-jobs-panel">
             <div id="snupi-jobs-body" style="margin-top:2px">
 
