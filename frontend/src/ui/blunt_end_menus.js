@@ -11,7 +11,7 @@ import { helixDisplayLabel } from './design_display_labels.js'
 // to keep the moved handler bodies byte-identical). `extrudePanel` opens the
 // right-sidebar Extrude panel (which hosts the slice-extrude controls) for the
 // blunt-end continuation / deformed-continuation flows.
-export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, deformView, clusterDeformGuard: _clusterDeformGuard, extrudePanel }) {
+export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, deformView, clusterDeformGuard: _clusterDeformGuard, extrudePanel, sweepPanel }) {
   // ── Blunt end sidebar panel ──────────────────────────────────────────────────
   const _bluntPanel        = document.getElementById('blunt-panel-actions')
   const _bluntPanelEmpty   = document.getElementById('blunt-panel-empty')
@@ -144,6 +144,11 @@ export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, def
   })
 
   // ── Context menu button wiring (right-click blunt end) ────────────────────
+  document.getElementById('blunt-sweep-btn-ctx')?.addEventListener('click', () => {
+    const info = _domainEndCtxInfo
+    _hideBluntCtx(); _hideBluntPanel()
+    if (info) sweepPanel?.activateFromEnd(info)
+  })
   document.getElementById('blunt-extrude-btn-ctx')?.addEventListener('click', async () => {
     const info = _domainEndCtxInfo
     _hideBluntCtx()

@@ -442,6 +442,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   let _labelEntries     = []       // { spr, cv, ctx, tex, row, col } — canvas reused on selection change; parallel to _circleMeshes
   // helix_id → display index (design.helices position — user-determined creation order)
   let _sortedHelixIndexMap = new Map()
+  const _selectionListeners = new Set()
   let _selected         = new Set()
   let _selectionOrder   = []       // 'row,col' keys in click/lasso order — determines provisional helix numbers
   let _hoverCell        = null
@@ -1802,6 +1803,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   // scaffold-length recommendations) from the current selection. The panel's
   // visibility is owned by the extrude_panel module (via setExtrudeUiOpen), not here.
   function _refreshExtrudeUi() {
+    for (const listener of _selectionListeners) listener(_selectionOrder.map(k => k.split(',').map(Number)))
     if (!_ctxEl || !_extrudeUiOpen) return
     const cnt = _ctxEl.querySelector('.ctx-count')
     if (cnt) cnt.textContent = `${_selected.size} helix${_selected.size > 1 ? 'es' : ''}`
@@ -2020,6 +2022,14 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       }
     },
 
+    getSelectedCells() { return _selectionOrder.map(k => k.split(',').map(Number)) },
+    setSelectedCells(cells) {
+      _selected.clear(); _selectionOrder = []
+      for (const [row, col] of cells) _selectCell(`${row},${col}`)
+      _updateCircleColors(); _updateLabels(); _refreshExtrudeUi()
+    },
+    subscribeSelection(listener) { _selectionListeners.add(listener); return () => _selectionListeners.delete(listener) },
+
     /** Deterministic lattice selection for the browser e2e harness. */
     selectCellForTest(row, col) {
       _selectCell(`${row},${col}`)
@@ -2153,7 +2163,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
      * @param {object} frame  - { grid_origin, axis_dir, frame_right, frame_up }
      * @param {object} [opts] - { plane, continuation }
      */
-    showDeformed(frame, { plane = 'XY', continuation = false, refHelixId = null, defaultDirSign = 1, sourceBp = null } = {}) {
+    showDeformed(frame, { plane = 'XY', continuation = false, refHelixId = null, defaultDirSign = 1, sourceBp = null, allowOrbit = false } = {}) {
       _dynBounds        = null
       _baseBounds       = null
       _deformedFrame    = frame
@@ -2164,7 +2174,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _latticeMode      = true
       _visible          = true
       _root.visible     = true
-      controls.enableRotate = false
+      controls.enableRotate = allowOrbit
       _updatePosition()
       _buildLattice()
       _setDirSign(defaultDirSign)

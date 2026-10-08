@@ -5493,3 +5493,9 @@ export async function pasteElements(snapshot) {
   await _syncFromDesignResponse(json)
   return json
 }
+
+/** Spline preview is read-only; commit uses the ordinary geometry/history sync. */
+export const previewSweep = (body, index = null) => _request('POST', `/design/sweep/preview${index == null ? '' : `?feature_index=${index}`}`, body, { suppressBusy: true })
+export async function createSweep(body) {
+  return _syncFromDesignResponse(await _request('POST', '/design/sweep', body))
+}

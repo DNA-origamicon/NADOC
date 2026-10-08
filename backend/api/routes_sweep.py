@@ -1,0 +1,46 @@
+"""Headless and UI sweep transactions share the same builder and preview."""
+from fastapi import APIRouter, HTTPException
+from backend.api import state
+from backend.core.sweep import SweepRequest, build_sweep, sweep_preview, sweep_mutation_report
+
+router = APIRouter()
+
+
+def _guard(design, body):
+    if body.expected_design_id is not None and design.id != body.expected_design_id:
+        raise HTTPException(409, detail='Active design changed')
+
+
+@router.post('/design/sweep/preview')
+def preview_sweep(body: SweepRequest, feature_index: int | None = None):
+    design, revision = state.copy_for_persist()
+    if design is None:
+        raise HTTPException(404, detail='No active design')
+    _guard(design, body)
+    if body.expected_revision is not None and body.expected_revision != revision:
+        raise HTTPException(409, detail='Design revision changed')
+    try:
+        if feature_index is None:
+            result, _ = sweep_preview(design, body, include_geometry=True)
+        else:
+            from backend.api.sweep_history import preview_sweep_edit
+            result = preview_sweep_edit(design, body, feature_index)
+        return {**result, 'revision': revision}
+    except ValueError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
+
+
+@router.post('/design/sweep', status_code=201)
+def create_sweep(body: SweepRequest):
+    from backend.api.crud import _design_response_with_geometry
+    def build(design):
+        _guard(design, body)
+        try:
+            result = build_sweep(design, body)
+            return result, sweep_mutation_report(design, result, body)
+        except ValueError as exc:
+            raise HTTPException(422, detail=str(exc)) from exc
+    updated, report, entry = state.mutate_with_feature_log(
+        op_kind='sweep', label=f'Sweep: {len(body.cells)} cells · {len(body.points_nm)} points',
+        params=body.model_dump(mode='json'), fn=build, expected_revision=body.expected_revision)
+    return _design_response_with_geometry(updated, report, preserve_feature_log_id=entry.id)

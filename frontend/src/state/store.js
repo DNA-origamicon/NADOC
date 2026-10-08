@@ -59,6 +59,7 @@ const _initialState = {
 
   /** True while the Translate/Rotate tool is active. */
   translateRotateActive: false,
+  sweepActive: false,
 
   /** True while the 3D Force-Crossover (forced-ligation) tool is active. Disables
    *  the selection manager (lasso/multi-select/click) so the tool owns the gesture. */
@@ -376,7 +377,7 @@ const _SLICES = {
   /** Selection, multi-select, active tools, crossover placement */
   selection: new Set(['selection',
                       'selectableTypes', 'crossoverPlacement', 'deformToolActive',
-                      'activeClusterId', 'translateRotateActive', 'debugOverlayActive',
+                      'activeClusterId', 'translateRotateActive', 'sweepActive', 'debugOverlayActive',
                       'domainDesigner']),
 
   /** Design topology + derived geometry */

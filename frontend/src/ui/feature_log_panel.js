@@ -47,7 +47,7 @@ const REPLAYABLE_SUBTYPES = new Set([
   'joint-place', 'joint-update', 'joint-delete',
 ])
 
-export function initFeatureLogPanel(store, { api, onEditFeature, onEditNanoparticle, onAnimateConfiguration, onOpenOverhangsManager }) {
+export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, onEditNanoparticle, onAnimateConfiguration, onOpenOverhangsManager }) {
   const panelBody = document.getElementById('feature-log-panel-body')
   const heading   = document.getElementById('feature-log-panel-heading')
   const arrow     = document.getElementById('feature-log-panel-arrow')
@@ -1399,7 +1399,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditNanoparti
         // the Overhangs Manager modal locally instead, so it doesn't share
         // that constraint — the user can adjust a linker any time.
         const _EDIT_REPLAY_KINDS = new Set([
-          'bundle-create', 'extrude-segment', 'extrude-continuation',
+          'sweep', 'bundle-create', 'extrude-segment', 'extrude-continuation',
           'extrude-deformed-continuation', 'overhang-extrude',
         ])
         const isPattern = isPatternFeature(entry.op_kind)
@@ -1425,6 +1425,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditNanoparti
                 : isNanoparticle
                   ? `Edit scene diameter (currently ${particle.diameter_nm} nm)`
                   : isPattern ? `Edit ${entry.label} parameters`
+                  : entry.op_kind === 'sweep' ? `Edit sweep path (${entry.params?.points_nm?.length ?? 0} points)`
                   : `Edit ${entry.label} parameters (currently length_bp=${entry.params?.length_bp ?? '?'})`)
             : isNanoparticle ? 'Cannot edit: this nanoparticle has been deleted.'
               : 'Cannot edit: a later snapshot exists. Revert to this point first.'
@@ -1476,6 +1477,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditNanoparti
                 }
                 return
               }
+              if (entry.op_kind === 'sweep') { onEditSweep?.(entry, i); return }
               const current = entry.params?.length_bp
               if (current == null) {
                 showPersistentToast(`This op has no length_bp parameter to edit.`)

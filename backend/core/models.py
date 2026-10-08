@@ -13,6 +13,8 @@ Rules:
 
 from __future__ import annotations
 
+from backend.core.sweep_model import SweepParams
+
 import json
 import math
 import time
@@ -1417,10 +1419,10 @@ class DeformationRange(BaseModel):
 
 
 class DeformationOp(BaseModel):
-    """One twist or bend applied to a segment of the bundle."""
+    """One twist, bend, or authored sweep applied to a bundle segment."""
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    type: Literal["twist", "bend"]
+    type: Literal["twist", "bend", "sweep"]
     targets: Optional[List[dict]] = None
     target_ranges: Optional[List[DeformationRange]] = None
     plane_a_bp: int  # fixed plane (5′ side); must be < plane_b_bp
@@ -1431,7 +1433,7 @@ class DeformationOp(BaseModel):
     # at creation/edit time, so multiple clusters within a part can be bent or twisted
     # independently — even when their bp ranges overlap.
     cluster_ids: List[str] = Field(default_factory=list)
-    params: Annotated[Union[TwistParams, BendParams], Field(discriminator="kind")]
+    params: Annotated[Union[TwistParams, BendParams, SweepParams], Field(discriminator="kind")]
 
 
 class DomainRef(BaseModel):
@@ -1883,6 +1885,7 @@ class OverhangRotationLogEntry(BaseModel):
 # `extrude-*` are continuation/segment ops that grow an existing design.
 # `overhang-extrude` adds a single-helix overhang stub from a nick.
 SnapshotOpKind = Literal[
+    "sweep",
     "curve-path",
     "generate-design",
     "nick",

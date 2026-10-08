@@ -8232,6 +8232,9 @@ def _edit_dispatch_run(op_kind: str, pre_state: Design, params: dict) -> Design:
     """Validate ``params`` against the schema for ``op_kind`` and return the
     new design produced by replaying the op on ``pre_state``. Raises HTTP 400
     on schema mismatch, HTTP 422 on op-runtime errors."""
+    if op_kind == "sweep":
+        from backend.core.sweep import SweepRequest, build_sweep
+        return build_sweep(pre_state, SweepRequest.model_validate(params))
     if op_kind == "bundle-create":
         body = BundleRequest.model_validate(params)
         cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
@@ -8411,6 +8414,8 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
         )
 
     pre_state = design_state.decode_design_snapshot(entry.design_snapshot_gz_b64)
+    if entry.op_kind == "sweep":
+        body.params = {**body.params, "sweep_id": entry.params["sweep_id"]}
 
     try:
         new_post = _edit_dispatch_run(entry.op_kind, pre_state, body.params)
@@ -8446,7 +8451,15 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
     from backend.core.validator import validate_design as _validate_design
 
     final = new_post.copy_with(feature_log=new_log, feature_log_cursor=-1)
-    design_state.set_design(final)
+    if entry.op_kind == "sweep":
+        from backend.api.routes_sweep import _guard
+        from backend.core.sweep import SweepRequest
+        sweep_body = SweepRequest.model_validate(body.params)
+        _guard(design, sweep_body)
+        final = _seek_feature_log(final, -1)
+        design_state.set_design(final, expected_revision=sweep_body.expected_revision)
+    else:
+        design_state.set_design(final)
     report = _validate_design(final)
     # Snapshot edits typically change topology (extrusion params), so the
     # response usually lands in the embedded full-geometry path. Cluster_only
@@ -8902,6 +8915,8 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
                 + [c for c in snap_design.cluster_transforms if c.id in touched_clusters]),
         )
     return design.copy_with(
+        deformations=[d for d in design.deformations if d.type != "sweep"]
+            + [d for d in snap_design.deformations if d.type == "sweep"],
         helices=snap_design.helices,
         lattice_frames=snap_design.lattice_frames,
         strands=snap_design.strands,
@@ -8952,7 +8967,8 @@ def _rebuild_deformed_continuations(design: Design) -> Design:
         i
         for i, e in enumerate(log)
         if isinstance(e, _SnapshotLogEntry)
-        and e.op_kind == "extrude-deformed-continuation"
+        and (e.op_kind == "extrude-deformed-continuation"
+             or (e.op_kind == "sweep" and e.params.get("source_helix_id")))
         and not e.evicted
         and e.design_snapshot_gz_b64
     ]
@@ -8970,7 +8986,7 @@ def _rebuild_deformed_continuations(design: Design) -> Design:
         for e in log[:first]
         if e.feature_type == "deformation" and e.op_snapshot is not None
     ]
-    state = state.copy_with(deformations=defs_before)
+    state = state.copy_with(deformations=defs_before + [op for op in state.deformations if op.type == "sweep"])
 
     new_log = list(log)
     for i in range(first, len(log)):
@@ -9397,7 +9413,7 @@ def _seek_feature_log(
         new_overhangs.append(ovhg)
 
     native_deformation_ids = {e.deformation_id for e in log if e.feature_type == "deformation"}
-    generated_ops = [d for d in design.deformations if d.id.startswith("gen_")
+    generated_ops = [d for d in design.deformations if (d.id.startswith("gen_") or d.type == "sweep")
                      and d.id not in native_deformation_ids
                      and d.id not in {op.id for op in new_deformations + pattern_ops}]
     return design.copy_with(
@@ -9796,6 +9812,8 @@ def apply_loop_skips_from_deformations() -> dict:
             all_mods.setdefault(hid, []).extend(ls_list)
 
     for op in design.deformations:
+        if op.type == "sweep":
+            continue  # Sweep loop/skip realization is a separate future feature.
         affected = [
             helix_map[hid]
             for hid in op.affected_helix_ids

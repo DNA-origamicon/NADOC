@@ -3950,6 +3950,7 @@
     <div class="ctx-header">Blunt end</div>
     <div class="ctx-btns" style="flex-direction:column;gap:6px">
       <button id="blunt-extrude-btn-ctx" class="primary">Extrude</button>
+      <button id="blunt-sweep-btn-ctx">Sweep</button>
       <button id="blunt-bend-btn-ctx">Bend</button>
       <button id="blunt-twist-btn-ctx">Twist</button>
     </div>
@@ -4091,6 +4092,7 @@
           </div>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
           <button class="dropdown-item" id="menu-tools-extrude">Extrude…</button>
+          <button class="dropdown-item" id="menu-tools-sweep">Sweep…</button>
           <button class="dropdown-item" id="menu-tools-translate-rotate">Move/Rotate</button>
           <button class="dropdown-item" id="menu-tools-linear-pattern">Linear Pattern…</button>
           <button class="dropdown-item" id="menu-tools-circular-pattern">Circular Pattern…</button>
@@ -4459,7 +4461,7 @@
                 <label style="display:flex;align-items:center;gap:5px;font-size:var(--text-xs);color:#8b949e;margin-bottom:5px;cursor:pointer">
                   <input id="simulate-jobs-show-all-types" type="checkbox"> Show all job types
                 </label>
-                <div id="simulate-jobs-list" style="max-height:150px;overflow-y:auto;background:#010409;border:1px solid #21262d;border-radius:3px;padding:3px"></div>
+                <div id="simulate-jobs-list" style="max-height:150px;overflow-y:auto;background:var(--color-bg-inset);border:1px solid var(--color-border-muted);border-radius:3px;padding:3px"></div>
                 <div id="simulate-jobs-progress" style="margin-top:6px">
                   <div style="height:5px;background:#161b22;border-radius:2px;overflow:hidden">
                     <div class="bar" style="height:100%;width:0%;background:#4a9eff;transition:width .3s"></div>

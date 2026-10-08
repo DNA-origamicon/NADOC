@@ -31,6 +31,7 @@ const DOM = {
   'blunt-bend-btn': 'button',
   'blunt-twist-btn': 'button',
   'blunt-extrude-btn-ctx': 'button',
+  'blunt-sweep-btn-ctx': 'button',
   'blunt-bend-btn-ctx': 'button',
   'blunt-twist-btn-ctx': 'button',
 }
@@ -216,4 +217,15 @@ describe('blunt-end right-click context menu', () => {
     click('blunt-bend-btn-ctx')
     expect(startToolAtBp).toHaveBeenCalledWith('bend', 9, 2, -1)
   })
+})
+
+it('opens Sweep from the right-click end and dismisses both end menus', () => {
+  const sweepPanel = { activateFromEnd: vi.fn() }
+  const menus = initBluntEndMenus({ ...makeDeps(), sweepPanel })
+  const info = { helixId: 'h_XY_0_0', bp: 20, openSide: 1 }
+  menus.showPanel(info); menus.showCtx(20, 30, info)
+  click('blunt-sweep-btn-ctx')
+  expect(sweepPanel.activateFromEnd).toHaveBeenCalledWith(info)
+  expect(document.getElementById('blunt-end-ctx-menu').style.display).toBe('none')
+  expect(document.getElementById('blunt-panel-actions').style.display).toBe('none')
 })

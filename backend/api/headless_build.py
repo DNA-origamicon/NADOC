@@ -1763,3 +1763,18 @@ def place_primitive(
     design_state.snapshot()
     design_state.set_design_silent(placed)
     return placed
+
+
+def sweep(cells, points_nm, *, plane="XY", source_helix_id=None, source_end="end",
+          strand_filter="both", ligate_adjacent=True):
+    """Create one editable/revertible sweep; XYZ points are offsets in world nm.
+
+    The first point is (0,0,0). A source helix anchors and ligates continuation
+    at its selected end. The footprint can include coplanar existing ends and
+    vacant cells; occupied cells that cross the source plane are rejected.
+    """
+    from backend.api.routes_sweep import create_sweep
+    from backend.core.sweep import SweepRequest
+    return create_sweep(SweepRequest(cells=cells, points_nm=points_nm, plane=plane,
+        source_helix_id=source_helix_id, source_end=source_end,
+        strand_filter=strand_filter, ligate_adjacent=ligate_adjacent))
