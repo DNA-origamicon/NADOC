@@ -32,7 +32,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel
 
@@ -70,6 +70,50 @@ class SeekFeaturesBody(BaseModel):
     """Mid-cluster sub-position. None → cluster's post-state (all children active).
     -2 → cluster's pre-state (no children active). 0..M-1 → first sub_position+1
     children active. Honored only when ``position`` indexes a RoutingClusterLogEntry."""
+    preview_token: str | None = None
+    known_revision: int | None = None
+
+
+@router.post("/design/features/preview")
+def preview_features(body: SeekFeaturesBody):
+    """Quick helix-path preview; no nucleotide generation, validation, or commit."""
+    from backend.api.feature_seek_preview import remember
+
+    trace = _TimingTrace()
+    source, revision = design_state.get_design_with_revision()
+    if source is None:
+        raise HTTPException(404, detail="No design loaded")
+    with trace.step("seek_log"):
+        target = _seek_feature_log(source, body.position, body.sub_position)
+    with trace.step("preview_axes"):
+        axes = deformed_helix_axes(target)
+    current, current_revision = design_state.get_design_with_revision()
+    if current is not source or current_revision != revision:
+        raise HTTPException(409, detail="Design changed while preparing preview.")
+    token = remember(source, revision, target, body.position, body.sub_position)
+    return trace.attach(ORJSONResponse({
+        "preview_token": token, "revision": revision, "design_id": source.id,
+        "helix_axes": axes,
+    }))
+
+
+@router.post("/assembly/instances/{instance_id}/features/preview")
+def preview_instance_features(instance_id: str, body: SeekFeaturesBody):
+    """The same read-only preview for an assembly's selected source part.
+
+    The regular instance commit retains shared-source persistence and mate
+    resolution. It re-evaluates against the current source instead of holding a
+    document token across external file changes.
+    """
+    from backend.api import assembly_state
+    from backend.api.assembly import _find_instance, _load_design_from_source, _assembly_source_path
+
+    assembly = assembly_state.get_or_404()
+    instance = _find_instance(assembly, instance_id)
+    source = _load_design_from_source(instance.source, _assembly_source_path(assembly))
+    target = _seek_feature_log(source, body.position, body.sub_position)
+    return {"helix_axes": deformed_helix_axes(target),
+            "transform": instance.transform.values}
 
 
 @router.get("/design/features/evaluation-plan")
@@ -108,15 +152,24 @@ def seek_features(body: SeekFeaturesBody):
     # a full deep copy of every helix, strand, snapshot and loadout on each slider
     # notch — a major cost on large designs.
     with trace.step("get_prev"):
-        prev = design_state.get_or_404()
+        prev, revision = design_state.get_design_with_revision()
+        if prev is None:
+            raise HTTPException(404, detail="No design loaded")
     with trace.step("seek_log"):
-        updated = _seek_feature_log(prev, body.position, body.sub_position)
+        if body.preview_token:
+            from backend.api.feature_seek_preview import consume
+            updated = consume(body.preview_token, prev, revision, body.position, body.sub_position)
+        else:
+            updated = _seek_feature_log(prev, body.position, body.sub_position)
     with trace.step("commit_state"):
-        design_state.set_design(updated)
+        design_state.set_design(updated, expected_revision=revision)
     with trace.step("validate"):
         report = validate_design(updated)
     with trace.step("response"):
-        payload = _design_replace_response(prev, updated, report, trace=trace)
+        # Seeking preserves every history body. A client holding this exact
+        # revision can merge them safely; cold/legacy callers still get all bodies.
+        payload = _design_replace_response(prev, updated, report, trace=trace,
+            full_feature_log=body.known_revision != revision)
     return trace.attach(ORJSONResponse(payload))
 
 

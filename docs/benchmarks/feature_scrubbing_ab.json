@@ -1,0 +1,249 @@
+{
+  "design": "VoltronCoreArmV2.nadoc",
+  "helices": 71,
+  "strands": 449,
+  "features": 109,
+  "warmup_repeat": 0,
+  "rows": [
+    {
+      "mode": "baseline",
+      "repeat": 0,
+      "position": 54,
+      "sub_position": null,
+      "preview_s": null,
+      "ready_s": 0.42514635203406215,
+      "bytes": 43086038,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=11.5, commit_state;dur=26.1, validate;dur=18.3, path:full_geometry_helices;dur=0.0, path:partial_geometry;dur=0.0, response;dur=353.3"
+    },
+    {
+      "mode": "optimized",
+      "repeat": 0,
+      "position": 54,
+      "sub_position": null,
+      "preview_s": 0.04196934401988983,
+      "ready_s": 0.331357515999116,
+      "bytes": 3612280,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=0.0, commit_state;dur=22.2, validate;dur=14.5, path:full_geometry_helices;dur=0.0, path:partial_geometry;dur=0.0, response;dur=244.8"
+    },
+    {
+      "mode": "optimized",
+      "repeat": 1,
+      "position": 54,
+      "sub_position": null,
+      "preview_s": 0.045608518994413316,
+      "ready_s": 0.3360056009842083,
+      "bytes": 3612280,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=0.0, commit_state;dur=20.8, validate;dur=16.1, path:full_geometry_helices;dur=0.0, path:partial_geometry;dur=0.0, response;dur=246.9"
+    },
+    {
+      "mode": "baseline",
+      "repeat": 1,
+      "position": 54,
+      "sub_position": null,
+      "preview_s": null,
+      "ready_s": 0.39851013489533216,
+      "bytes": 43086039,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=10.9, commit_state;dur=20.3, validate;dur=15.7, path:full_geometry_helices;dur=0.0, path:partial_geometry;dur=0.0, response;dur=334.9"
+    },
+    {
+      "mode": "baseline",
+      "repeat": 2,
+      "position": 54,
+      "sub_position": null,
+      "preview_s": null,
+      "ready_s": 0.4026059260359034,
+      "bytes": 43086039,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=13.1, commit_state;dur=24.2, validate;dur=16.0, path:full_geometry_helices;dur=0.0, path:partial_geometry;dur=0.0, response;dur=332.5"
+    },
+    {
+      "mode": "optimized",
+      "repeat": 2,
+      "position": 54,
+      "sub_position": null,
+      "preview_s": 0.04446962696965784,
+      "ready_s": 0.34022828994784504,
+      "bytes": 3612281,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=0.0, commit_state;dur=21.2, validate;dur=15.5, path:full_geometry_helices;dur=0.0, path:partial_geometry;dur=0.0, response;dur=250.7"
+    },
+    {
+      "mode": "optimized",
+      "repeat": 3,
+      "position": 54,
+      "sub_position": null,
+      "preview_s": 0.04637209000065923,
+      "ready_s": 0.3416399339912459,
+      "bytes": 3612281,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=0.0, commit_state;dur=21.7, validate;dur=17.7, path:full_geometry_helices;dur=0.0, path:partial_geometry;dur=0.0, response;dur=247.5"
+    },
+    {
+      "mode": "baseline",
+      "repeat": 3,
+      "position": 54,
+      "sub_position": null,
+      "preview_s": null,
+      "ready_s": 0.4100298900157213,
+      "bytes": 43086039,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=12.4, commit_state;dur=19.8, validate;dur=15.8, path:full_geometry_helices;dur=0.0, path:partial_geometry;dur=0.0, response;dur=343.9"
+    },
+    {
+      "mode": "baseline",
+      "repeat": 0,
+      "position": -1,
+      "sub_position": null,
+      "preview_s": null,
+      "ready_s": 2.22489866707474,
+      "bytes": 53614985,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=41.1, commit_state;dur=24.5, validate;dur=21.5, path:positions_only;dur=0.0, response;dur=2094.0"
+    },
+    {
+      "mode": "optimized",
+      "repeat": 0,
+      "position": -1,
+      "sub_position": null,
+      "preview_s": 0.06877501797862351,
+      "ready_s": 1.5355857099639252,
+      "bytes": 14141227,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=0.0, commit_state;dur=22.1, validate;dur=22.7, path:positions_only;dur=0.0, response;dur=1392.7"
+    },
+    {
+      "mode": "optimized",
+      "repeat": 1,
+      "position": -1,
+      "sub_position": null,
+      "preview_s": 0.07455223798751831,
+      "ready_s": 1.5261186880525202,
+      "bytes": 14141227,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=0.0, commit_state;dur=23.3, validate;dur=22.0, path:positions_only;dur=0.0, response;dur=1376.3"
+    },
+    {
+      "mode": "baseline",
+      "repeat": 1,
+      "position": -1,
+      "sub_position": null,
+      "preview_s": null,
+      "ready_s": 2.186840064940043,
+      "bytes": 53614985,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=37.0, commit_state;dur=22.8, validate;dur=22.4, path:positions_only;dur=0.0, response;dur=2061.5"
+    },
+    {
+      "mode": "baseline",
+      "repeat": 2,
+      "position": -1,
+      "sub_position": null,
+      "preview_s": null,
+      "ready_s": 2.1713787750341,
+      "bytes": 53614985,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=40.0, commit_state;dur=26.3, validate;dur=22.3, path:positions_only;dur=0.0, response;dur=2038.1"
+    },
+    {
+      "mode": "optimized",
+      "repeat": 2,
+      "position": -1,
+      "sub_position": null,
+      "preview_s": 0.07340184296481311,
+      "ready_s": 1.5460065429797396,
+      "bytes": 14141227,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=0.0, commit_state;dur=23.0, validate;dur=22.4, path:positions_only;dur=0.0, response;dur=1397.1"
+    },
+    {
+      "mode": "optimized",
+      "repeat": 3,
+      "position": -1,
+      "sub_position": null,
+      "preview_s": 0.07778300903737545,
+      "ready_s": 1.52966494706925,
+      "bytes": 14141227,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=0.0, commit_state;dur=21.8, validate;dur=23.0, path:positions_only;dur=0.0, response;dur=1378.4"
+    },
+    {
+      "mode": "baseline",
+      "repeat": 3,
+      "position": -1,
+      "sub_position": null,
+      "preview_s": null,
+      "ready_s": 2.173198922071606,
+      "bytes": 53614985,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=34.8, commit_state;dur=22.6, validate;dur=20.7, path:positions_only;dur=0.0, response;dur=2055.1"
+    },
+    {
+      "mode": "baseline",
+      "repeat": 0,
+      "position": 1,
+      "sub_position": 1,
+      "preview_s": null,
+      "ready_s": 2.0642922800034285,
+      "bytes": 52941848,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=10.4, commit_state;dur=24.1, validate;dur=11.2, path:full_geometry_helices;dur=0.0, response;dur=1976.1"
+    },
+    {
+      "mode": "optimized",
+      "repeat": 0,
+      "position": 1,
+      "sub_position": 1,
+      "preview_s": 0.01920876605436206,
+      "ready_s": 1.4116078070364892,
+      "bytes": 13468090,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=0.0, commit_state;dur=21.4, validate;dur=7.6, path:full_geometry_helices;dur=0.0, response;dur=1334.3"
+    },
+    {
+      "mode": "optimized",
+      "repeat": 1,
+      "position": 1,
+      "sub_position": 1,
+      "preview_s": 0.01786085101775825,
+      "ready_s": 1.4054984849644825,
+      "bytes": 13468090,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=0.0, commit_state;dur=22.2, validate;dur=7.7, path:full_geometry_helices;dur=0.0, response;dur=1327.4"
+    },
+    {
+      "mode": "baseline",
+      "repeat": 1,
+      "position": 1,
+      "sub_position": 1,
+      "preview_s": null,
+      "ready_s": 2.0484707460273057,
+      "bytes": 52941848,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=8.2, commit_state;dur=21.6, validate;dur=10.2, path:full_geometry_helices;dur=0.0, response;dur=1962.2"
+    },
+    {
+      "mode": "baseline",
+      "repeat": 2,
+      "position": 1,
+      "sub_position": 1,
+      "preview_s": null,
+      "ready_s": 2.0678379570599645,
+      "bytes": 52941848,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=7.6, commit_state;dur=21.0, validate;dur=10.0, path:full_geometry_helices;dur=0.0, response;dur=1982.2"
+    },
+    {
+      "mode": "optimized",
+      "repeat": 2,
+      "position": 1,
+      "sub_position": 1,
+      "preview_s": 0.018217758974060416,
+      "ready_s": 1.4026452379766852,
+      "bytes": 13468090,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=0.0, commit_state;dur=21.3, validate;dur=7.7, path:full_geometry_helices;dur=0.0, response;dur=1323.8"
+    },
+    {
+      "mode": "optimized",
+      "repeat": 3,
+      "position": 1,
+      "sub_position": 1,
+      "preview_s": 0.018987711984664202,
+      "ready_s": 1.3954772530123591,
+      "bytes": 13468090,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=0.0, commit_state;dur=22.4, validate;dur=7.8, path:full_geometry_helices;dur=0.0, response;dur=1316.6"
+    },
+    {
+      "mode": "baseline",
+      "repeat": 3,
+      "position": 1,
+      "sub_position": 1,
+      "preview_s": null,
+      "ready_s": 2.0799141209572554,
+      "bytes": 52941848,
+      "server_timing": "get_prev;dur=0.0, seek_log;dur=7.1, commit_state;dur=22.3, validate;dur=10.6, path:full_geometry_helices;dur=0.0, response;dur=1992.5"
+    }
+  ]
+}

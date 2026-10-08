@@ -211,6 +211,7 @@ import { initCameraPanel }                        from './ui/camera_panel.js'
 import { initAnimationPanel }                     from './ui/animation_panel.js'
 // initAssemblyConfigPanel removed 2026-05-17: configurations consolidated into
 // the Feature Log panel (target dropdown → "Configurations").
+import { createFeatureSeekPreview } from './scene/feature_seek_preview.js'
 import { initFeatureLogPanel }                    from './ui/feature_log_panel.js'
 import { initAnimationPlayer }                    from './scene/animation_player.js'
 import { initTrajectoryKeyframes }                from './scene/trajectory_keyframes.js'
@@ -4933,8 +4934,8 @@ async function main() {
   // (e.g. the slider toast lifecycle waits for the full chain). Since the
   // delta is now applied inside the client.js _sync* helpers, these are
   // thin pass-throughs.
-  async function _seekFeaturesWithDelta(position, subPosition = null) {
-    return api.seekFeatures(position, subPosition)
+  async function _seekFeaturesWithDelta(position, subPosition = null, options = {}) {
+    return api.seekFeatures(position, subPosition, options)
   }
 
   async function _deleteFeatureWithDelta(index) {
@@ -5765,6 +5766,7 @@ async function main() {
 
   // ── Feature Log panel ────────────────────────────────────────────────────────
   _partFeatureLogPanel = initFeatureLogPanel(store, {
+    showSeekPreview: createFeatureSeekPreview(scene),
     onEditSweep: (entry, index) => sweepPanel.edit(entry, index),
     api: {
       ...api,

@@ -16,7 +16,8 @@ import { editPatternFeature, isPatternFeature } from './pattern_feature_editor.j
  * @param {object} opts.api — API module (seekFeatures)
  */
 
-import { showPersistentToast, dismissToast } from './toast.js'
+import { createFeatureSeekFeedback, seekWithPreview } from './feature_seek.js'
+import { showPersistentToast, dismissToast, showToast } from './toast.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { showConfirm } from './primitives/confirm.js'
 import { showDependentsDecision } from './primitives/dependents_dialog.js'
@@ -47,7 +48,7 @@ const REPLAYABLE_SUBTYPES = new Set([
   'joint-place', 'joint-update', 'joint-delete',
 ])
 
-export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, onEditNanoparticle, onAnimateConfiguration, onOpenOverhangsManager }) {
+export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, onEditNanoparticle, onAnimateConfiguration, onOpenOverhangsManager, showSeekPreview }) {
   const panelBody = document.getElementById('feature-log-panel-body')
   const heading   = document.getElementById('feature-log-panel-heading')
   const arrow     = document.getElementById('feature-log-panel-arrow')
@@ -211,6 +212,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
     'box-shadow:0 0 0 2px #1f6feb',
   ].join(';')
   rail.appendChild(thumb)
+  const seekFeedback = createFeatureSeekFeedback(thumb, panelBody, store)
 
   // List column
   const list = document.createElement('div')
@@ -524,7 +526,8 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
     _log('seek START pos=', position, 'sub=', subPosition)
     // Seeking is direct manipulation of the timeline, so a global toast obscures
     // the very control the user is scrubbing. Keep the indication local/non-modal.
-    panelBody.setAttribute('aria-busy', 'true')
+    seekFeedback.setBusy(true)
+    let seekError = null
     try {
       if (_isAssemblyFeatureMode() && api.seekAssemblyFeatures) {
         const result = await api.seekAssemblyFeatures(position)
@@ -533,7 +536,14 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
           _rebuildAssemblyFeatureLog(_latestAssembly)
         }
       } else if (_isAssemblyPartMode() && api.seekInstanceFeatures) {
-        const result = await api.seekInstanceFeatures(_assemblyPartInstanceId, position, subPosition)
+        const instanceId = _assemblyPartInstanceId
+        const result = await seekWithPreview({
+          api: {
+            previewFeatures: (p, s) => api.previewInstanceFeatures?.(instanceId, p, s),
+            seekFeatures: (p, s) => api.seekInstanceFeatures(instanceId, p, s),
+          }, position, subPosition, showPreview: showSeekPreview,
+          isSuperseded: () => _pendingSeekPos !== null || _assemblyPartInstanceId !== instanceId,
+        })
         if (result?.design) {
           _latestDesign = result.design
           _rebuild(_latestDesign)
@@ -541,16 +551,19 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
       } else if (_partInstanceId && _partPatchFn) {
         await _partPatchFn(d => { d.feature_log_cursor = position })
       } else {
-        const result = await api.seekFeatures(position, subPosition)
+        const result = await seekWithPreview({ api, position, subPosition,
+          showPreview: showSeekPreview, isSuperseded: () => _pendingSeekPos !== null })
         const d = result?.design
         _log('seek DONE pos=', position, 'sub=', subPosition,
              '→ cursor=', d?.feature_log_cursor, 'deforms=', d?.deformations?.length)
       }
     } catch (err) {
+      if (err.editingUnavailable) seekError = err
+      showToast(err.message || 'Could not load the selected stage')
       _log('seek ERROR pos=', position, 'sub=', subPosition, err)
     } finally {
       _isSeeking = false
-      panelBody.removeAttribute('aria-busy')
+      seekFeedback.setBusy(_pendingSeekPos !== null || !!seekError, seekError)
       // Flush any position requested while this seek was in-flight.
       if (_pendingSeekPos !== null) {
         const next = _pendingSeekPos

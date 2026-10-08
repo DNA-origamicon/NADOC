@@ -6,6 +6,91 @@ Native file loading already restores the saved Design rather than replaying the
 log, so these changes target seeking, fine-routing boundary reconstruction, and
 animation geometry. They make no claim of accelerating native file parsing.
 
+## Interactive scrubbing (2026-10-08)
+
+The Feature Log scrubber now requests a read-only helix-path preview before
+loading editable nucleotide detail. A small rotating ring surrounds the thumb;
+editing is blocked until the response is applied. Queued obsolete previews are
+not committed. A failed commit response triggers authoritative state recovery;
+if recovery also fails, the ring indicates an error and the rail remains usable
+for another attempt. Preview geometry is disposable display state and never
+replaces topology or enters undo, persistence, export, or simulation.
+
+`POST /design/features/preview` evaluates a stage and returns sampled helix axes
+plus a short-lived token. The normal seek consumes that prepared Design only
+against the same document, source object, revision, and cursor/subcursor. This
+avoids evaluating twice. Pending targets are bounded to eight documents, one
+per document, with a 60-second token lifetime. This is not a historical-state
+cache. Selected assembly parts use the same visual preview controller; their
+commit retains the existing shared-source update and mate-resolution pipeline.
+
+Seeks can omit unchanged snapshot bodies when the client acknowledges the exact
+source revision and holds complete, verified seek history. The first seek is
+conservative and sends full history; partial GETs cannot falsely acknowledge
+newer history bodies. Cold/incomplete/stale clients retain
+the full response. Both position-only and cluster-only client paths now merge
+these bodies before storing or persisting a response. Other replace/edit/undo
+callers retain their full-history default.
+
+The other optimization batches SciPy's matrix-to-quaternion conversion across
+native slab frames. The scalar pose authority, chemical registration, integrity
+checks, dimensions, and geometric formulas remain unchanged. This benefits
+ordinary geometry-producing edits and assembly rendering as well as scrubbing.
+
+The paired offline benchmark is `scripts/benchmark_feature_scrubbing.py`. It
+compares the original scalar conversion/full-history seek against preview plus
+commit, checks complete state and rehydrated response equality, alternates order,
+and excludes the first pair from reported medians. Timings exclude HTTP transfer
+and browser application. Run it under `just validate-safe` with `--design`,
+`--repeats`, and `--output`; it reads the source file without changing it.
+
+Measured on `VoltronCoreArmV2.nadoc` (71 helices, 449 strands, 109 features),
+three warmed alternating pairs per cursor; raw results are in
+[benchmarks/feature_scrubbing_ab.json](benchmarks/feature_scrubbing_ab.json):
+
+| Stage | Original server time | Preview + editable server time | Preview alone | Response bytes, original → optimized |
+|---|---:|---:|---:|---:|
+| Snapshot 54 | 403 ms | 340 ms | 46 ms | 43.09 → 3.61 MB |
+| Final state | 2,173 ms | 1,530 ms | 75 ms | 53.61 → 14.14 MB |
+| Routing cluster 1, child 1 | 2,068 ms | 1,403 ms | 18 ms | 52.94 → 13.47 MB |
+
+These optimized wire sizes require an acknowledged history cache. The first
+interactive seek deliberately retains full bodies. A headed browser run through
+normal file-open and scrubber input showed the first preview in 293 ms and
+editable readiness in 2.89 s (the subsequent final-stage seek took 2.04 s), including browser/network work. These are measured
+examples, not latency guarantees; detailed render modes and history contents vary.
+
+The browser regression uses a disposable copy of `VoltronCoreArmV2.nadoc` through
+the normal file-open flow and real scrubber events. It checks visible preview
+pixels, editing exclusion, readiness, and return to the final state. Test copies,
+autosaves, project stores, and session artifacts have failure-safe cleanup.
+
+Validation for this change: 7,640 frontend tests passed (one skipped), 23 browser
+smoke tests passed, the headed Voltron scrub regression passed, and 69 focused
+backend tests passed (10 seek, 17 evaluator, 42 native placement).
+
+`just test-smart` reported `decision: FAST  (fast suite only)`: 10,212 passed,
+90 skipped, four failures. Three reproduce with the original slab producer: the
+mutable `Manual_Benchy.nadoc` fixture now has 5,078 nucleotides against a hardcoded
+2,526; a native VR IPC binary crashes; and the disk-space test assumes more free
+space than this machine has. A Tcl subprocess timeout passed in isolation.
+The aggregate guard took 93 s against 90 s, with zero per-test violators; triage
+found spread over existing disk-backed fixtures, subprocesses and geometry tests.
+No test was reclassified and no budget changed. Placement incidents were reviewed
+with exact per-site A/B evidence (zero differences); no golden or test oracle was
+changed. Broad lint has an existing unused import in `test_cpd_cube_validation_v6.py`;
+changed Python files pass lint. Main composition-root growth is two lines.
+
+The guard's deferred decision remains:
+
+```text
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+```
+
+Detailed logs, paired failure reproductions, placement review/evidence, and the
+cleanup manifest are retained under `.development-artifacts/feature-scrub/`.
+
 ## Implemented stages
 
 1. **Read-only evaluation plan.** `GET /api/design/features/evaluation-plan`
@@ -45,7 +130,8 @@ contract.
 ## Invariants and scope
 
 - No log rows, IDs, snapshots, or animation frames are removed or rewritten.
-- No plan or decoded state is cached across requests. In-place edits, undo,
+- The evaluator itself does not cache plans or decoded state across requests.
+  Interactive preview/commit has the separately bounded preparation token above. In-place edits, undo,
   imports, and sub-cursor changes cannot reuse stale plans. Batch alias reuse
   lasts only for the current request; it does not hash the whole design.
 - Small logs (under 32 entries) keep the existing overlay/search path. Short

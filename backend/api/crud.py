@@ -951,6 +951,7 @@ def _design_replace_response(
     design: "Design",
     report: "ValidationReport",
     trace: "_TimingTrace | None" = None,
+    *, full_feature_log: bool = True,
 ) -> dict:
     """Build the response for any endpoint that REPLACES the active design
     (undo, redo, feature-log slider seek). Picks one of three shapes,
@@ -972,7 +973,7 @@ def _design_replace_response(
     When *trace* is given, the chosen path is appended as a 0-duration step
     so the frontend's API perf log shows which fast path fired.
 
-    Every branch below passes full_feature_log=True: undo/redo/seek can move
+    By default every branch sends full feature-log bodies: undo/redo/seek can move
     the design to a point where a feature-log entry's BODY differs from what
     the client has cached under the same id (e.g. edit_feature regenerates an
     entry's snapshot in place), not just add/remove entries wholesale. The
@@ -991,13 +992,13 @@ def _design_replace_response(
             changed_helix_ids=protein_move_helices,
             compact_deformed=True,
             partial_axes=True,
-            full_feature_log=True,
+            full_feature_log=full_feature_log,
         )
     if _diff_is_cluster_only(prev_design, design):
         if trace is not None:
             trace._steps.append(("path:cluster_only", 0.0))
         return {
-            **_design_response(design, report, full_feature_log=True),
+            **_design_response(design, report, full_feature_log=full_feature_log),
             "diff_kind": "cluster_only",
             "cluster_diffs": _cluster_diff_payload(prev_design, design),
         }
@@ -1012,7 +1013,7 @@ def _design_replace_response(
         # geometry response, including slab poses and placement provenance.
         positions, axes = _positions_for_design(design)
         return {
-            **_design_response(design, report, full_feature_log=True),
+            **_design_response(design, report, full_feature_log=full_feature_log),
             "diff_kind": "positions_only",
             "positions_by_helix": positions,
             "helix_axes": axes,
@@ -1035,7 +1036,7 @@ def _design_replace_response(
             report,
             embed_straight=None,
             compact_deformed=False,
-            full_feature_log=True,
+            full_feature_log=full_feature_log,
         )
     # Undo/redo used to send every nucleotide for every topology change. For a
     # local identity-pose edit we can derive the same affected-helix footprint
@@ -1055,7 +1056,7 @@ def _design_replace_response(
                 changed_helix_ids=changed,
                 compact_deformed=True,
                 partial_axes=True,
-                full_feature_log=True,
+                full_feature_log=full_feature_log,
             )
     # Auto-embedding bundles straight geometry when the design has a real
     # deformation/non-identity cluster pose. Identity-only designs reuse current
@@ -1068,7 +1069,7 @@ def _design_replace_response(
         report,
         embed_straight=None,
         compact_deformed=True,
-        full_feature_log=True,
+        full_feature_log=full_feature_log,
     )
 
 

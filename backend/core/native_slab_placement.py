@@ -132,6 +132,11 @@ def _expected_slab_pose(record):
 
 def attach_native_slab_poses(records):
     """Attach the only slab pose to final authoritative bead/base records."""
+    # scipy validates orthogonality and converts rotations in one vectorized
+    # call. Keep the scalar authority (including all integrity checks) exactly
+    # unchanged; only batch the conversion of its already computed frames.
+    posed_records = []
+    frames = []
     for record in records:
         pose = _expected_slab_pose(record)
         if pose is None:
@@ -140,7 +145,12 @@ def attach_native_slab_poses(records):
             continue
         center, frame = pose
         record["slab_position"] = center.tolist()
-        record["slab_quaternion"] = Rotation.from_matrix(frame).as_quat().tolist()
+        posed_records.append(record)
+        frames.append(frame)
+    if frames:
+        quaternions = Rotation.from_matrix(np.asarray(frames)).as_quat().tolist()
+        for record, quaternion in zip(posed_records, quaternions):
+            record["slab_quaternion"] = quaternion
     return records
 
 

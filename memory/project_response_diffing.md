@@ -163,3 +163,15 @@ fresh scoping:
 
 Start a fresh session on whichever of 1–5 matches available context (live app access
 → #1; a few hours of focused kinematics reading → #5; otherwise #3 or #4).
+
+
+## Seek-only FL-06 progress (2026-10-08)
+
+The seek endpoint now accepts `known_revision`. Unlike editing, seek preserves
+history bodies, so an exact source-revision acknowledgement plus a complete
+client cache safely enables the existing partial-history merge. The frontend
+uses only the revision of verified seek history (a partial GET or metadata
+response cannot acknowledge newer bodies), and
+position-only/cluster-only response handlers now merge bodies as well. Cold or
+stale acknowledgements get full history. General undo/redo/edit/delete stripping
+remains deferred; this does not claim those operations preserve history bodies.

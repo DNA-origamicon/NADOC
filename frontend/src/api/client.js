@@ -1,4 +1,5 @@
 import { nativeRepresentation } from '../scene/vr_representations.js'
+import { createSeekHistoryAcknowledgement } from './feature_seek_history.js'
 import { withSurfaceProgress, isSurfaceComputation } from './surface_progress_request.js'
 import { expandCompactNucleotides as _expandCompactNucleotides, decodeAssemblyGeometry, positionUpdateLookup } from '../viewer/geometry_codec.js'
 import { replaceNativePlacement, placementIntegrityFailure } from '../viewer/native_placement.js'
@@ -10,6 +11,7 @@ import { createDocumentRequestScope } from './document_request_scope.js'
 import { welcomeVisible } from '../shared/welcome_visibility.js'
 
 const _documentRequests = createDocumentRequestScope()
+const _seekHistory = createSeekHistoryAcknowledgement()
 if (import.meta.hot) import.meta.hot.dispose(() => _documentRequests.dispose())
 /**
  * API client — typed fetch wrappers for all CRUD endpoints.
@@ -106,6 +108,7 @@ function _isStaleDesignResponse(json) {
 
 /** Reset both design and field revisions after a backend restart. */
 export function resetRevisionWatermark() {
+  _seekHistory.reset()
   _designRevisions.reset()
   _assemblyRevisions.reset()
   _assemblyRevisionId = null
@@ -390,6 +393,13 @@ async function _ensureAssemblySimulation(path, { method = 'GET', timeoutMs = _RE
 }
 
 export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true, skipSimulationPrepare = false, excludeFromTiming = false } = {}) {
+  if (store.getState().featureSeekPending && method !== 'GET'
+      && /^\/(design|assembly)(?:\/|$)/.test(path)
+      && path !== '/design/loadouts/activate-editable'
+      && !/\/features\/(seek|preview)$/.test(path)) {
+    showToast('The selected stage is loading. Editing will be ready when the scrubber ring clears.')
+    return null
+  }
   const version = _documentRequests.capture()
   const scoped = docId === undefined && /^\/design(?:\/|\?|$)/.test(path)
   const retired = () => scoped && !_documentRequests.isCurrent(version)
@@ -564,7 +574,9 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
         'POST', '/design/loadouts/activate-editable', undefined,
         { suppressBusy: true, docId, protectedRetry: false })
       if (activated) {
-        return _request(method, path, body, {
+        const retryBody = path === '/design/features/seek'
+          ? { ...body, preview_token: null, known_revision: null } : body
+        return _request(method, path, retryBody, {
           signal, suppressBusy, docId, timeoutMs, protectedRetry: false,
         })
       }
@@ -1247,6 +1259,9 @@ export function skipNextResponseDelta() {
  * state in-place. */
 async function _syncClusterOnlyDiff(json) {
   if (_isStaleDesignResponse(json)) return json   // superseded by a newer response → skip (rapid-edit race)
+  if (json.feature_log_payloads_partial && json.design) {
+    json.design = _mergeFeatureLogPayloads(json.design, store.getState().currentDesign)
+  }
   const updates = {}
   if (json.design)     updates.currentDesign     = json.design
   if (json.validation) updates.validationReport  = json.validation
@@ -1274,6 +1289,9 @@ async function _syncClusterOnlyDiff(json) {
  *  to push the new positions into the rendered meshes. */
 async function _syncPositionsOnlyDiff(json) {
   if (_isStaleDesignResponse(json)) return json   // superseded by a newer response → skip (rapid-edit race)
+  if (json.feature_log_payloads_partial && json.design) {
+    json.design = _mergeFeatureLogPayloads(json.design, store.getState().currentDesign)
+  }
   const state = store.getState()
   const positionsByHelix = json.positions_by_helix
   const helixAxesArr     = json.helix_axes
@@ -4111,14 +4129,27 @@ export async function editFeature(index, params) {
  * ``diff_kind: 'cluster_only'`` response and the caller is expected to apply
  * the delta via the same renderer fast path used for undo/redo.
  */
-export async function seekFeatures(position, subPosition = null) {
+export const currentDesignId = () => store.getState().currentDesign?.id
+
+export function previewFeatures(position, subPosition = null) {
+  return _request('POST', '/design/features/preview', { position, sub_position: subPosition }, { suppressBusy: true })
+}
+
+export async function seekFeatures(position, subPosition = null, options = {}) {
+  const scope = _documentRequests.capture()
   const json = await _request('POST', '/design/features/seek', {
     position,
     sub_position: subPosition,
+    known_revision: _seekHistory.knownRevision(store.getState().currentDesign, scope),
+    ...options,
   }, { suppressBusy: true })
-  if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
-  if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
-  return _syncFromDesignResponse(json)
+  const result = json?.diff_kind === 'cluster_only' ? await _syncClusterOnlyDiff(json)
+    : json?.diff_kind === 'positions_only' ? await _syncPositionsOnlyDiff(json)
+    : await _syncFromDesignResponse(json)
+  if (json?.design && store.getState().currentDesign === json.design) {
+    _seekHistory.acknowledge(json.design, json.revision, scope)
+  }
+  return result
 }
 
 /**
@@ -4462,9 +4493,15 @@ export async function seekInstanceFeatures(id, position, subPosition = null) {
   const json = await _request('POST', `/assembly/instances/${id}/features/seek`, {
     position,
     sub_position: subPosition,
-  })
+  }, { suppressBusy: true })
   _syncFromAssemblyResponse(json)
   return json
+}
+
+export function previewInstanceFeatures(id, position, subPosition = null) {
+  return _request('POST', `/assembly/instances/${id}/features/preview`, {
+    position, sub_position: subPosition,
+  }, { suppressBusy: true })
 }
 
 export async function createAssemblyOverhangBinding(body) {

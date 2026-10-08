@@ -6,6 +6,21 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 ---
 # Feature Log Overhaul + Tabbed Sidebar (commit 873f3e6, branch feature-log-update, 2026-05-02)
 
+## Scrubber preview and readiness (2026-10-08)
+
+Interactive design seeks now use `routes_feature_log.preview_features` followed
+by the normal seek with a revision-bound preparation token. `feature_seek.js`
+controls the thumb ring and edit lock; `feature_seek_preview.js` displays sampled
+helix paths until the editable response is applied. Queued obsolete previews
+never commit. Selected assembly parts use a read-only local-axis preview plus
+the existing shared-source commit/inline geometry path. Preview is display-only.
+
+Revision-acknowledged seeks omit history bodies only when the client has complete
+history; the position/cluster fast paths merge those bodies. Cold/stale requests
+and other replace-response callers still receive full bodies. Geometry generation
+batches native slab quaternion conversion without changing the pose authority.
+Details and benchmark entry point: `docs/feature_evaluation.md`.
+
 ## Generated designs use ordinary operations (2026-10-08)
 
 New generator runs use additive **Extrude segment** (the ordinary slice-plane
