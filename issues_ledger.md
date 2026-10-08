@@ -1324,7 +1324,7 @@ so the panel retains its inputs and preview for correction. Covered by
 - **Evidence:** `.development-artifacts/vr-edit-wheel-20261005/ligate/`. Coverage is 3/7 left-eye samples and 2/7 right-eye/mirror samples, below the unchanged 0.7 requirement. Captured state, images and input reaches are retained.
 - **Scope / follow-up:** No Ligate geometry or preview renderer was changed by the wheel conversion. Diagnose projected-line occlusion and observation setup before assigning a production root cause or altering the oracle. This failure does not establish whether later commit/save/Undo steps pass; they were not reached.
 
-## ISSUE-62 — Native cluster creation loses attachment ownership during history replay (2026-10-08, FIXED)
+## ISSUE-65 — Native cluster creation loses attachment ownership during history replay (2026-10-08, FIXED)
 
 - **Status:** `[x]` FIXED during generator conversion to ordinary operations.
 - **Repro / cause:** Seeking to an attachment's native Create cluster entry could omit its parent and duplex driver, because the entry only retained helix/domain membership. Snapshot substitution also omitted original groups when seeking before generation.
