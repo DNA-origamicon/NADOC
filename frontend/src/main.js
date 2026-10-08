@@ -61,6 +61,7 @@ import { initDesignRenderer }        from './scene/design_renderer.js'
 import { deferrableContextMenu }      from './scene/right_click_menu.js'
 import { initSelectionManager }      from './scene/selection_manager.js'
 import { initSlicePlane }            from './scene/slice_plane.js'
+import { initElementClipboard } from './scene/element_clipboard.js'
 import { initClusterClipboard }      from './scene/cluster_clipboard.js'
 import { initExtrudePanel }          from './ui/extrude_panel.js'
 import { initPrimitiveLibrary }      from './ui/primitive_library.js'
@@ -4261,6 +4262,7 @@ async function main() {
     store, api,
     slicePlane, expandedSpacing, debugOverlay, dimensionsTool, selectionManager,
     clusterClipboard: _clusterClipboard,
+    elementClipboard: initElementClipboard({ store, api, selectionController, showToast }),
     extrudePanel: _extrudePanel, deformView, crossSectionMinimap, sliceHighlighter,
     primitiveLibrary: _primitiveLibrary,
     viewCube, camera, controls,

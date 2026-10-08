@@ -87,3 +87,29 @@ describe('selection_controller — canonical sole writer', () => {
     expect(() => createSelectionController({ store: {} })).toThrow(/requires a store/)
   })
 })
+
+it('selects conjugates with their owner, keeps owner primary, and removes both on re-click', () => {
+  const store = fakeStore({ currentDesign: {
+    protein_attachments: [{ id: 'p', binder_strand_id: 's' }], strands: [{ id: 's' }],
+  } })
+  const controller = createSelectionController({ store })
+  controller.select({ kind: 'protein', id: 'p' })
+  expect(controller.getState().items).toEqual([{ kind: 'protein', id: 'p' }, { kind: 'strand', id: 's' }])
+  expect(controller.getState().primary).toEqual({ kind: 'protein', id: 'p' })
+  controller.select({ kind: 'protein', id: 'p' })
+  expect(controller.getState().items).toEqual([])
+})
+
+it('toggles nanoparticle surface and biotin DNA together', () => {
+  const store = fakeStore({ currentDesign: {
+    nanoparticles: [{ id: 'n', biotin_dna: [{ strand_id: 'b' }] }],
+    nanoparticle_conjugations: [{ nanoparticle_id: 'n', surface_strands: [{ strand_id: 's' }] }],
+    strands: [{ id: 's' }, { id: 'b' }],
+  } })
+  const controller = createSelectionController({ store })
+  controller.replace([{ kind: 'protein', id: 'p' }])
+  controller.toggle({ kind: 'nanoparticle', id: 'n' })
+  expect(controller.getState().items.map(r => r.id)).toEqual(['p', 'n', 's', 'b'])
+  controller.toggle({ kind: 'nanoparticle', id: 'n' })
+  expect(controller.getState().items).toEqual([{ kind: 'protein', id: 'p' }])
+})

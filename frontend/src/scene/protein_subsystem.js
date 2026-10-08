@@ -123,6 +123,8 @@ export function initProteinSubsystem({
     proteinRenderer.centroidOf(a => a.helix_id === `__protein__${id}`)
   let _constraints = new Map()
   let _moveRotatePanel = null
+  let freeConjugateHelices = []
+  let freeConjugatePivot = null
 
   function _captureConstraintGeometry(constraint) {
     const hid = constraint?.helix_id
@@ -169,15 +171,38 @@ export function initProteinSubsystem({
   // captured live preview until Apply commits one gizmo_move; Cancel/Reset use
   // the same snapshots so preview and saved coordinates share an exact basis.
   const proteinGizmo = initProteinGizmo(store, controls, {
-    onCommitted: () => _refreshProteins(),
-    onCancelled: () => _refreshProteins(),
+    onCommitted: () => {
+      freeConjugateHelices = []; freeConjugatePivot = null
+      return _refreshProteins()
+    },
+    onCancelled: () => {
+      if (freeConjugateHelices.length && freeConjugatePivot) {
+        designRenderer?.applyClusterTransform?.(freeConjugateHelices,
+          freeConjugatePivot, freeConjugatePivot, new THREE.Quaternion())
+      }
+      freeConjugateHelices = []; freeConjugatePivot = null
+      return _refreshProteins()
+    },
     onLiveStart: (id) => {
       proteinRenderer.beginLiveTransform(a => a.helix_id === `__protein__${id}`)
       _captureConstraintGeometry(_constraints.get(id))
+      const design = store.getState().currentDesign
+      const attachment = design?.protein_attachments?.find(a => a.id === id)
+      const strand = attachment?.target?.kind === 'free'
+        ? design?.strands?.find(s => s.id === attachment.binder_strand_id) : null
+      freeConjugateHelices = [...new Set((strand?.domains ?? []).map(d => d.helix_id))]
+      const center = _proteinCentroid(id)
+      freeConjugatePivot = center ? new THREE.Vector3(center.x, center.y, center.z) : null
+      if (freeConjugateHelices.length) designRenderer?.captureClusterBase?.(freeConjugateHelices)
     },
     onLive:      (m, meta)  => {
       proteinRenderer.applyLiveTransform(m)
       _applyConstraintGeometry(meta)
+      if (freeConjugateHelices.length && freeConjugatePivot) {
+        const rotation = new THREE.Quaternion().setFromRotationMatrix(m)
+        designRenderer?.applyClusterTransform?.(freeConjugateHelices,
+          freeConjugatePivot, freeConjugatePivot.clone().applyMatrix4(m), rotation)
+      }
     },
     onLiveEnd:   ()   => proteinRenderer.endLiveTransform(),
     onTransform: (translation, rotation) => {

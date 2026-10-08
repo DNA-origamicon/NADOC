@@ -762,7 +762,8 @@ def patch_protein_attachment(
     constraint_result = None
     constrained_pose = None
     constrained_rotation = None
-    if body.gizmo_move is not None and current_attachment.binder_strand_id:
+    if (body.gizmo_move is not None and current_attachment.binder_strand_id
+            and current_attachment.target.kind == "overhang"):
         from backend.core.protein import constrained_conjugate_move
 
         asset = _resolve_protein_asset(current_attachment.asset_id)
@@ -835,6 +836,10 @@ def patch_protein_attachment(
                 upd["handle_spacer_nt"] = body.handle_spacer_nt
             if body.visible is not None:
                 upd["visible"] = body.visible
+            if att.target.kind == "free" and att.binder_strand_id and "pose" in upd:
+                from backend.core.element_copy import move_free_conjugate
+                move_free_conjugate(d, att.binder_strand_id,
+                    upd["pose"].to_array() @ np.linalg.inv(att.pose.to_array()))
             out.append(att.model_copy(update=upd))
         d.protein_attachments = out
 
