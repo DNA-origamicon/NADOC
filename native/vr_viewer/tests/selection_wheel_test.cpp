@@ -35,6 +35,39 @@ int main() {
         assert(edit.filter(std::array<bool,2>{true,true})[0] && !edit.filter(std::array<bool,2>{true,true})[1]);
         assert(!edit.update(false,editAxes[i],hand).commit && !edit.blocksInput());
     }
+    // Pending history retains only its wedge, follows the hand, and cannot recommit.
+    for(size_t item:{2U,3U}) {
+        edit.update(true,editAxes[item],hand);
+        assert(edit.update(false,{0,0},hand).commit==item);
+        edit.setPending(item);
+        assert(edit.open() && edit.blocksInput());
+        auto moved=hand;moved.position.x+=.3F;
+        assert(!edit.update(true,editAxes[0],moved,false).commit);
+        assert(!edit.update(false,{0,0},moved).commit);
+        assert(edit.pending()==item && edit.open());
+        std::vector<glm::vec3> first,second;
+        auto collect=[&](auto& points,double time) {
+            edit.draw([&](auto a,auto b,auto) {
+                points.push_back(a);points.push_back(b);
+                for(auto p:{a,b}) {
+                    const auto local=glm::inverse(nadoc_vr::MenuPlacement::controllerOrientation(moved.orientation))*(p-edit.worldPoint({0,0,0}));
+                    // Every visible stroke belongs to the chosen compass wedge.
+                    assert(nadoc_vr::EditWheel::sector(glm::vec2(local)*10.F)==item);
+                }
+            },"",time);
+        };
+        collect(first,0);collect(second,.2);
+        assert(!first.empty() && first.size()==second.size() && first!=second);
+        edit.close(); // Unrelated menu dismissal must not hide an in-flight operation.
+        assert(edit.open() && edit.blocksInput());
+        edit.update(true,editAxes[0],hand);
+        edit.setPending(std::nullopt);
+        assert(!edit.open() && !edit.blocksInput());
+        int lines=0;edit.draw([&](auto,auto,auto){++lines;},"",1);
+        assert(lines==0);
+        assert(!edit.update(true,editAxes[0],hand).commit && !edit.open());
+        assert(!edit.update(false,{0,0},hand).commit);
+    }
     edit.update(true,editAxes[2],hand);edit.update(true,{0,0},hand);
     assert(!edit.update(false,editAxes[2],hand).commit);
     edit.update(true,editAxes[1],hand);edit.update(true,editAxes[1],hand,false);

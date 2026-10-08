@@ -43,7 +43,7 @@ class ComponentGallery {
         else {reset();demo=true;}
     }
     void show(glm::vec3 head,glm::quat orientation) {
-        placement.openDocked(head+orientation*glm::vec3(0,-.06F,-1.30F),orientation);posed=true;
+        placement.openDocked(head+orientation*glm::vec3(0,-.06F,-1.30F),nadoc_vr::MenuPlacement::uprightOrientation(orientation));posed=true;
     }
     static bool inside(glm::vec3 p,float x,float y,float w,float h) {
         return p.x>=x && p.x<=x+w && p.y>=y && p.y<=y+h;

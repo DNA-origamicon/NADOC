@@ -6484,7 +6484,7 @@ class Viewer {
     }
 
     void appendRadialToolGuides() {
-        radialToolMenu_.draw([&](auto a,auto b,auto color){controllerGuides_.push_back({a,color,1});controllerGuides_.push_back({b,color,1});},"");
+        radialToolMenu_.draw([&](auto a,auto b,auto color){controllerGuides_.push_back({a,color,1});controllerGuides_.push_back({b,color,1});},"",glfwGetTime());
     }
 
     [[nodiscard]] bool thumbwheelAvailable() const {
@@ -6628,6 +6628,7 @@ class Viewer {
         if(item>=2) {
             if(!ligation_.version)return;
             if(movePanel_.active)cancelMove();
+            radialToolMenu_.setPending(item);
             ligation_.request(item==2?"undo":"redo",0,[&]{publishEventState();});
             pulse(1U,0.62F);
             return;
@@ -8199,6 +8200,7 @@ class Viewer {
             << ",\"request_sequence\":" << trajectoryRequestSequence_ << '}';
         selectionWheel_.writeJson(out,selectionLevel_);
         out << ",\"radial_edit\":{\"open\":" << (radialToolMenu_.open()?"true":"false")
+            << ",\"pending\":" << (radialToolMenu_.pending()?std::to_string(*radialToolMenu_.pending()):"null")
             << ",\"hovered\":" << (radialToolMenu_.hovered()?std::to_string(*radialToolMenu_.hovered()):"null") << ",\"items\":[";
         for(size_t i=0;i<radialToolMenu_.itemCount();++i) {
             if(i)out<<',';
@@ -9004,6 +9006,7 @@ class Viewer {
         if(viewTools_.inspectionLayout()) menuControlTargeted.fill(true);
         frameAudit_.mark("feeds_view_tools");
         ligation_.poll(eventPath_,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters});
+        if(!ligation_.waiting)radialToolMenu_.setPending(std::nullopt);
         ligation_.input(hands_,{selectionVolumeCenter(0),selectionVolumeCenter(1)},
             {selectionVolumes_[0].radius(),selectionVolumes_[1].radius()},triggerClicked_,triggerPressed_,
             menuControlTargeted,manipulator_.transform(),

@@ -239,6 +239,32 @@ void menuFollowsItsControllerAndDockingFreezesItsWorldPose() {
     require(std::abs(menu.position().x - followed.x - 0.2F) < 1e-5F);
 }
 
+void spawnedMenusHaveHorizontalBottomEdgesAndRetainPitch() {
+    const auto tabletTilt=glm::angleAxis(glm::radians(-30.F),glm::vec3(1,0,0));
+    for(float yaw:{-2.F,0.F,1.3F})for(float pitch:{-1.2F,0.F,.8F})for(float roll:{-2.5F,-.7F,0.F,1.7F}) {
+        HandPose hand{true,false,{.2F,1.1F,-.5F},
+            glm::angleAxis(yaw,glm::vec3(0,1,0))*glm::angleAxis(pitch,glm::vec3(1,0,0))*glm::angleAxis(roll,glm::vec3(0,0,1))};
+        MenuPlacement menu;menu.openFromController(hand);
+        const auto left=menu.worldPoint({-.33F,-.545F,0});
+        const auto right=menu.worldPoint({.33F,-.545F,0});
+        require(std::abs(left.y-right.y)<1.e-5F);
+        require((menu.orientation()*glm::vec3(0,1,0)).y>=-1.e-6F);
+        require(glm::distance(menu.orientation()*glm::vec3(0,0,1),hand.orientation*tabletTilt*glm::vec3(0,0,1))<1.e-5F);
+        require(glm::distance(menu.position(),hand.position+hand.orientation*glm::vec3(0,0,-.4F))<1.e-5F);
+        const auto pose=menu.orientation();
+        std::array<HandPose,2> hands{hand,hand};hands[0].orientation={1,0,0,0};
+        menu.update(hands);
+        require(std::abs(glm::dot(pose,menu.orientation()))>1.F-1.e-5F);
+    }
+    for(float pitch:{-glm::half_pi<float>(),glm::half_pi<float>()}) {
+        const auto q=glm::angleAxis(pitch,glm::vec3(1,0,0))*glm::angleAxis(.8F,glm::vec3(0,0,1));
+        const auto upright=MenuPlacement::uprightOrientation(q);
+        require(std::isfinite(upright.w) && std::abs(glm::length(upright)-1.F)<1.e-5F);
+        require(std::abs((upright*glm::vec3(1,0,0)).y)<1.e-5F);
+        require(glm::distance(upright*glm::vec3(0,0,1),q*glm::vec3(0,0,1))<1.e-5F);
+    }
+}
+
 void extrudeLatticeDraftTogglesParityCodedCells() {
     nadoc_vr::ExtrudeLatticeDraft draft;
     const nadoc_vr::LatticeCell forward{0, 0};
@@ -1495,6 +1521,7 @@ int main() {
     namedPlacementPresetsAndOverridesAreDeterministic();
     closeInspectionAllowsTheModelToPassThroughTheHead();
     menuFollowsItsControllerAndDockingFreezesItsWorldPose();
+    spawnedMenusHaveHorizontalBottomEdgesAndRetainPitch();
     extrudeLatticeDraftTogglesParityCodedCells();
     partiallyVisibleLatticeCirclesRemainVisibleAndPaintable();
     thumbwheelDragAndMomentumProduceSignedNotches();

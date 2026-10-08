@@ -58,12 +58,26 @@ class MenuPlacement {
         remoteMode_=0;
         resizeActive_ = false;
         position_ = fallbackPosition;
-        orientation_ = glm::normalize(fallbackOrientation);
+        orientation_ = uprightOrientation(fallbackOrientation);
         update(hands);
     }
 
+    // Keep the panel normal (yaw/pitch), but make its bottom edge horizontal.
+    static glm::quat uprightOrientation(const glm::quat& orientation) {
+        const auto q=glm::normalize(orientation);
+        const auto normal=q*glm::vec3(0,0,1);
+        auto right=glm::cross(glm::vec3(0,1,0),normal);
+        if(glm::dot(right,right)<1.e-12F) {
+            // A face-up/down panel has no unique heading; retain its horizontal edge.
+            right=q*glm::vec3(1,0,0);right.y=0;
+        }
+        right=glm::normalize(right);
+        const auto up=glm::normalize(glm::cross(normal,right));
+        return glm::normalize(glm::quat_cast(glm::mat3(right,up,glm::cross(right,up))));
+    }
+
     static glm::quat controllerOrientation(const glm::quat& orientation) {
-        return glm::normalize(orientation * kTabletTilt);
+        return uprightOrientation(orientation * kTabletTilt);
     }
 
     void openFromController(const HandPose& hand, float distance = .40F) {
@@ -126,7 +140,7 @@ class MenuPlacement {
         }
         if (!hands[anchorHand_].valid) return;
         const HandPose& hand = hands[anchorHand_];
-        orientation_ = glm::normalize(hand.orientation * kTabletTilt);
+        orientation_ = controllerOrientation(hand.orientation);
         const float centerDirection = anchorHand_ == 0U ? 1.0F : -1.0F;
         position_ = hand.position + orientation_ * (
             kControllerOffset

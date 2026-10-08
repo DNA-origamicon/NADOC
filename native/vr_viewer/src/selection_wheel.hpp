@@ -52,7 +52,15 @@ template<class Spec> class TouchpadWheel {
     }
     Result update(bool pressed,glm::vec2 axis,const HandPose& hand,bool enabled=true) {
         Result result;
-        consumed_=open_ || pressed;
+        consumed_=open_ || pressed || pending_.has_value();
+        if(pending_) {
+            wasPressed_=pressed;
+            if(hand.valid) {
+                position_=hand.position+hand.orientation*glm::vec3(0,.04F,-.06F);
+                orientation_=MenuPlacement::controllerOrientation(hand.orientation);
+            }
+            return result;
+        }
         if(!enabled || !hand.valid) { cancel(); wasPressed_=pressed; return result; }
         const bool clicked=pressed&&!wasPressed_;
         wasPressed_=pressed;
@@ -76,14 +84,21 @@ template<class Spec> class TouchpadWheel {
         if(result.hoverChanged)pulse(.14F);
         if(result.commit) {select(levels[*result.commit]);pulse(.32F);}
     }
+    // Dismissing a gesture does not dismiss an operation awaiting acknowledgement.
     void cancel() {open_=false;hovered_.reset();consumed_=false;axis_={};}
+    void setPending(std::optional<size_t> item) {
+        if(item==pending_)return;
+        cancel();pending_=item;
+        consumed_=pending_.has_value();
+    }
+    auto pending() const {return pending_;}
     void close() {cancel();}
-    bool open() const {return open_;}
-    bool blocksInput() const {return consumed_;}
+    bool open() const {return open_ || pending_.has_value();}
+    bool blocksInput() const {return consumed_ || pending_.has_value();}
     auto hovered() const {return hovered_;}
     glm::vec3 worldPoint(glm::vec3 p) const {return position_+orientation_*p;}
     template<class T> std::array<T,2> filter(std::array<T,2> values) const {
-        if(consumed_)values[Spec::hand]={};
+        if(blocksInput())values[Spec::hand]={};
         return values;
     }
     void writeJson(std::ostream& out,const std::string& selected) const {
@@ -98,13 +113,14 @@ template<class Spec> class TouchpadWheel {
         }
         out<<"]}";
     }
-    template<class Line> void draw(Line line,const std::string& selected) const {
-        if(!open_)return;
+    template<class Line> void draw(Line line,const std::string& selected,double time=0) const {
+        if(!open())return;
         auto segment=[&](glm::vec2 a,glm::vec2 b,glm::vec3 color) {
             line(worldPoint({a.x,a.y,0}),worldPoint({b.x,b.y,0}),color);
         };
         for(size_t item=0;item<itemCount();++item) {
-            const bool hover=hovered_==item;
+            if(pending_ && pending_!=item)continue;
+            const bool hover=pending_==item || hovered_==item;
             const glm::vec3 color=hover?glm::vec3(1,.78F,.20F):(!workflow_ && !sweep_ && selected==levels[item])?glm::vec3(.4F,1,.62F):glm::vec3(.3F,.7F,.96F);
             const float center=itemAngle(item);
             auto polar=[](float a,float r){return glm::vec2(std::sin(a),std::cos(a))*r;};
@@ -116,6 +132,14 @@ template<class Spec> class TouchpadWheel {
                 segment(polar(glm::mix(lo,hi,float(j)/16),r),polar(glm::mix(lo,hi,float(j+1)/16),r),color);
             const std::string label=itemLabel(item);const float scale=.00165F;
             const auto p=itemDirection(item)*labelRadius;
+            if(pending_) {
+                const auto spinner=p+glm::vec2(0,.026F);
+                for(int j=0;j<24;++j) {
+                    const float a=float(time*5)+float(j)*glm::two_pi<float>()/32;
+                    const float b=a+glm::two_pi<float>()/32;
+                    segment(spinner+polar(a,.011F),spinner+polar(b,.011F),color);
+                }
+            }
             for(size_t c=0;c<label.size();++c) {
                 const auto rows=glyph(label[c]);
                 for(size_t row=0;row<rows.size();++row)for(int col=0;col<5;++col)if(rows[row]&(1U<<(4-col))) {
@@ -124,6 +148,7 @@ template<class Spec> class TouchpadWheel {
                 }
             }
         }
+        if(pending_)return;
         const auto p=axis_*(outer-.025F);
         segment({0,0},p,{1,.9F,.7F});
         segment(p-glm::vec2(.004F,0),p+glm::vec2(.004F,0),{1,1,1});
@@ -132,7 +157,7 @@ template<class Spec> class TouchpadWheel {
  private:
     bool workflow_=false,confirm_=false,sweep_=false;
     bool open_=false,wasPressed_=false,consumed_=false;
-    std::optional<size_t> hovered_;
+    std::optional<size_t> hovered_,pending_;
     glm::vec2 axis_{};
     glm::vec3 position_{};
     glm::quat orientation_{1,0,0,0};
