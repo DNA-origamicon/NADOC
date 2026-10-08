@@ -1772,6 +1772,8 @@ class ClusterCreateLogEntry(BaseModel):
 
     feature_type: Literal["cluster_create"] = "cluster_create"
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    # Preserve parent/domain ownership for automatically grouped duplexes too.
+    cluster_snapshot: Optional[ClusterRigidTransform] = None
     cluster_id: str
     name: str
     helix_ids: List[str]
@@ -1881,6 +1883,7 @@ class OverhangRotationLogEntry(BaseModel):
 # `extrude-*` are continuation/segment ops that grow an existing design.
 # `overhang-extrude` adds a single-helix overhang stub from a nick.
 SnapshotOpKind = Literal[
+    "curve-path",
     "generate-design",
     "nick",
     "cluster-pose",

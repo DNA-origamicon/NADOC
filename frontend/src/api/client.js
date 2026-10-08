@@ -5,6 +5,12 @@ import { replaceNativePlacement, placementIntegrityFailure } from '../viewer/nat
 import { assertPlacementExportSafe } from '../viewer/placement_scene_guard.js'
 import { recordPanelRequest } from '../ui/panel_loading.js'
 import { recordRequestDiagnostic } from '../perf/process_log.js'
+import { withGenerationProgress } from './generation_progress.js'
+import { createDocumentRequestScope } from './document_request_scope.js'
+import { welcomeVisible } from '../shared/welcome_visibility.js'
+
+const _documentRequests = createDocumentRequestScope()
+if (import.meta.hot) import.meta.hot.dispose(() => _documentRequests.dispose())
 /**
  * API client — typed fetch wrappers for all CRUD endpoints.
  *
@@ -232,7 +238,7 @@ export async function listPrimitives() {
 /** Erase the active design on the server and clear all local persistence. */
 export async function closeSession() {
   window.dispatchEvent(new Event('nadoc:document-reset'))
-  try { await fetch(`${BASE}/design`, { method: 'DELETE' }) } catch { /* ignore if unreachable */ }
+  try { await fetch(`${BASE}/design`, { method: 'DELETE', headers: docHeaders() }) } catch { /* ignore if unreachable */ }
   clearPersistedDesign()
 }
 
@@ -384,9 +390,13 @@ async function _ensureAssemblySimulation(path, { method = 'GET', timeoutMs = _RE
 }
 
 export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true, skipSimulationPrepare = false, excludeFromTiming = false } = {}) {
+  const version = _documentRequests.capture()
+  const scoped = docId === undefined && /^\/design(?:\/|\?|$)/.test(path)
+  const retired = () => scoped && !_documentRequests.isCurrent(version)
   if (!skipSimulationPrepare && docId === undefined) {
     await _ensureAssemblySimulation(path, { method, timeoutMs, protectedRetry })
   }
+  if (retired()) return null
   const diagnosticId = ++_diagnosticRequestSeq
   _emitRequestDiagnostic({ phase: 'start', id: diagnosticId, method, path, suppressBusy })
   const isTimedOperation = !excludeFromTiming && (
@@ -421,6 +431,7 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
   // default so it never aborts a legitimately long op; the fast "is the server
   // actually wedged?" signal comes from pokeProbe() below, not from this ceiling.
   const _timeoutCtrl = new AbortController()
+  const untrack = scoped && method === 'GET' ? _documentRequests.track(_timeoutCtrl) : () => {}
   const _timeoutTimer = setTimeout(
     () => _timeoutCtrl.abort(new DOMException('Request timed out', 'TimeoutError')), timeoutMs)
   if (signal) {
@@ -460,6 +471,21 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     // "reconnecting…" in seconds instead of waiting out the request ceiling.
     pokeProbe()
   }, _BUSY_POPUP_DELAY_MS)
+  let retirementReported = false
+  const retireDisplay = () => {
+    if (!retired() || retirementReported) return
+    retirementReported = true
+    clearTimeout(_busyTimer)
+    if (_busyShown) {
+      hideOpProgress(_busyToken)
+      _busyShown = false
+      _emitRequestDiagnostic({ phase: 'busy-hide', id: diagnosticId, method, path })
+    }
+    _emitRequestDiagnostic({ phase: 'aborted', id: diagnosticId, method, path,
+      durationMs: performance.now() - t0, message: 'Document closed or replaced' })
+    finishOperationTiming(operationTrace, { status: 'Superseded', phase: 'document-reset' })
+  }
+  _timeoutCtrl.signal.addEventListener('abort', retireDisplay, { once: true })
   let r, json, tNetwork = 0
   try {
     r = await fetch(`${BASE}${path}`, opts)
@@ -471,8 +497,11 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     }, operationTrace)
     notifyRequestSuccess()   // any HTTP response means the backend is reachable
     json = await r.json().catch(() => null)
+    // Transport cancellation can race a completed response/body parse.
+    if (retired()) { retireDisplay(); return null }
     markOperationTiming('response-parsed', undefined, operationTrace)
   } catch (err) {
+    if (retired()) { retireDisplay(); return null }
     _emitRequestDiagnostic({
       phase: 'error', id: diagnosticId, method, path,
       durationMs: performance.now() - t0, message: err?.message ?? String(err),
@@ -482,6 +511,8 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     notifyRequestFailure()   // network-level failure → flag the connection as down
     throw err
   } finally {
+    untrack()
+    _timeoutCtrl.signal.removeEventListener('abort', retireDisplay)
     clearTimeout(_busyTimer)
     clearTimeout(_timeoutTimer)
     if (_busyShown) {
@@ -1865,6 +1896,7 @@ export async function updateMetadata(fields, { skipGeometry = false } = {}) {
  *   Pass null (default) for a full fetch that replaces the whole geometry.
  */
 export async function getGeometry(helixIds = null) {
+  if (welcomeVisible() && !store.getState().currentDesign) return null
   const base = helixIds?.length
     ? `/design/geometry?helix_ids=${helixIds.join(',')}`
     : '/design/geometry'
@@ -1954,6 +1986,7 @@ export async function getDeformDebug() {
  * straightHelixAxes without touching currentGeometry.
  */
 export async function getStraightGeometry() {
+  if (welcomeVisible() && !store.getState().currentDesign) return null
   const base = '/design/geometry?apply_deformations=false'
   const json = await _request('GET', base, undefined, { excludeFromTiming: true })
   if (!json) return null
@@ -3975,12 +4008,14 @@ export async function planGeneratedDesign(settings) {
   return json ? { ...json, doc_id: docId } : null
 }
 
-export async function generateDesign(settings, expectedRevision, docId = docHeaders()['X-NADOC-Doc']) {
-  const json = await _request('POST', '/design/generate-design', {
-    ...settings, expected_revision: expectedRevision,
-  }, { docId })
-  if (json && docHeaders()['X-NADOC-Doc'] === docId) await _syncFromDesignResponse(json)
-  return json
+export async function generateDesign(settings, expectedRevision, docId = docHeaders()['X-NADOC-Doc'], onProgress) {
+  return withGenerationProgress(docHeadersFor(docId), async progressId => {
+    const json = await _request('POST', '/design/generate-design', {
+      ...settings, expected_revision: expectedRevision, ...(progressId ? { progress_id: progressId } : {}),
+    }, { docId, suppressBusy: !!onProgress })
+    if (json && docHeaders()['X-NADOC-Doc'] === docId) await _syncFromDesignResponse(json)
+    return json
+  }, onProgress)
 }
 
 export async function selectLoadout(loadoutId, { saveCurrent = true } = {}) {

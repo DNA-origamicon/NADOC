@@ -12,6 +12,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from functools import lru_cache
 import math
+from typing import Literal
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
@@ -28,6 +29,9 @@ class GeneratorSettings(BaseModel):
     roll_deg: float = Field(default=0.0, ge=-180, le=180)
     duplex_bp: int = Field(default=18, ge=12, le=60)
     extend_rod: bool = True
+    shape: Literal["auto", "platform", "curved-rod"] = "auto"
+    particle_order: list[str] | None = None
+    pathing: Literal["colocalized", "interior", "exterior"] = "colocalized"
 
 
 @dataclass
@@ -161,6 +165,16 @@ def cross_sections(lattice: LatticeType) -> tuple[dict, ...]:
         (1, 5),
         (1, 4),
     ]
+    # Complete fused honeycomb faces fill the 6→18 gap. These have twofold
+    # rotational symmetry and no dangling helices; no partial face is trimmed.
+    for count, cols in ((10, 5), (14, 7)):
+        sections.append(
+            _section(
+                [(r, c) for r in range(2) for c in range(1, cols + 1)],
+                lattice,
+                f"{count}-helix double-layer",
+            )
+        )
     sections.append(_section(eighteen, lattice, "18-helix radial"))
     return tuple(sections)
 

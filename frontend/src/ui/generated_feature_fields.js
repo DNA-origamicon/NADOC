@@ -1,5 +1,8 @@
 /** Editable command parameters for recorded solid-rod construction. */
 const fields = {
+  pathing: { label: 'Pathing', type: 'select', options: ['colocalized', 'interior', 'exterior'] },
+  bend_scale: { label: 'Curvature scale', type: 'number', min: 0.5, max: 1.5, step: 0.01 },
+  path_order: { label: 'Particle visit order (e.g. 1, 3, 2, 4)', type: 'text' },
   length_bp: { label: 'Length (bp)', type: 'number', integer: true, min: 1 },
   bp_index: { label: 'Attachment position (bp)', type: 'number', integer: true, min: 0 },
   scaffold_name: { label: 'Scaffold', type: 'select', options: ['M13mp18', 'p8064'] },

@@ -126,6 +126,7 @@ def add_cluster(body: AddClusterBody) -> dict:
         if design.feature_log_cursor >= 0:
             log = log[: design.feature_log_cursor + 1]
         log_entry = ClusterCreateLogEntry(
+            cluster_snapshot=ct,
             cluster_id=ct.id,
             name=ct.name,
             helix_ids=list(ct.helix_ids),

@@ -6,9 +6,9 @@ const plan = {
   alternatives: [{ scaffold_size: 7249, section: '4 × 6', helix_count: 24, length_nm: 90, scaffold_used_nt: 7200 }],
   selected: { unused_scaffold_nt: 49 }, reason: '7249 is sufficient.', attachment_status: 'Reach checked during generation.',
 }
-function setup(overrides = {}) {
+function setup(overrides = {}, planOverrides = {}) {
   const store = { getState: () => ({ currentDesign: { nanoparticles: [{ kind: 'gold_nanosphere' }, { kind: 'gold_nanosphere' }] }, ...overrides }) }
-  const api = { planGeneratedDesign: vi.fn(async () => plan), generateDesign: vi.fn(async () => ({ generation: { connections: [{ reused: true }, { reused: false }] } })), lastErrorMessage: () => 'Centers are unreachable.' }
+  const api = { planGeneratedDesign: vi.fn(async () => ({ ...plan, ...planOverrides })), generateDesign: vi.fn(async () => ({ generation: { connections: [{ reused: true }, { reused: false }] } })), lastErrorMessage: () => 'Centers are unreachable.' }
   const modal = showGenerateDesign({ api, store })
   return { api, modal }
 }
@@ -20,11 +20,11 @@ describe('Generate design', () => {
   it('shows budgets and commits the exact reviewed revision and document', async () => {
     const { api, modal } = setup()
     await flush()
-    expect(document.body.textContent).toContain('49 scaffold bases remain unrouted')
+    expect(document.querySelector('[role="status"]').title).toContain('49 scaffold bases remain unrouted')
     button('Generate in current loadout').click()
     await flush()
-    expect(api.generateDesign).toHaveBeenCalledWith({ roll_deg: 0, duplex_bp: 18, extend_rod: true }, 17, 'part-a')
-    expect(document.body.textContent).toContain('Both particle centers are unchanged')
+    expect(api.generateDesign).toHaveBeenCalledWith({ roll_deg: 0, duplex_bp: 18, extend_rod: true }, 17, 'part-a', expect.any(Function))
+    expect(document.body.textContent).toContain('Particle centers preserved')
     expect(button('Generate in current loadout').disabled).toBe(true)
     modal.close()
   })
@@ -59,16 +59,19 @@ describe('Generate design', () => {
     modal.close()
   })
   it.each([3, 4])('offers a platform for %i particles in the current loadout', async count => {
-    const { api, modal } = setup({ currentDesign: { nanoparticles: Array.from({ length: count }, () => ({ kind: 'gold_nanosphere' })) } })
+    const { api, modal } = setup({ currentDesign: { nanoparticles: Array.from({ length: count }, () => ({ kind: 'gold_nanosphere' })) } }, {
+      perimeter_alignment: { aligned_edges: count, edges: Array(count).fill({}), tolerance_deg: 5, target_edges: count === 3 ? 1 : 2 },
+    })
     api.generateDesign.mockResolvedValue({ generation: { connections: Array.from({ length: count }, () => ({ reused: false })) } })
     await flush()
-    expect(document.body.textContent).toContain(`solid platform for the ${count} gold nanoparticles`)
+    expect(document.body.textContent).toContain(`${count} gold nanoparticles`)
     expect(document.querySelector('[aria-label="Platform rotation within fitted plane (degrees)"]')).not.toBeNull()
-    expect(document.body.textContent).toContain('Maximum distance from fitted plane')
+    expect(document.querySelector('[role="status"]').title).toContain(`Perimeter alignment: ${count} edges within 5°`)
+    expect(document.querySelector('[aria-label="Platform rotation within fitted plane (degrees)"]').title).toContain('perimeter edge')
     button('Generate in current loadout').click()
     await flush()
-    expect(document.body.textContent).toContain(`Added ${count} connections to the current loadout`)
-    expect(document.body.textContent).toContain('All particle centers are unchanged')
+    expect(document.body.textContent).toContain(`Added ${count} connections`)
+    expect(document.body.textContent).toContain('Particle centers preserved')
     modal.close()
   })
   it.each([1, 5])('rejects unsupported particle count %i', async count => {
@@ -78,4 +81,99 @@ describe('Generate design', () => {
     expect(button('Calculate design').disabled).toBe(true)
     modal.close()
   })
+})
+
+describe('Curved rod generation', () => {
+  const particles = Array.from({ length: 4 }, (_, i) => ({ id: `np-${i}`, kind: 'gold_nanosphere', name: `Gold ${i + 1}` }))
+  function chooseCurve() {
+    const shape = document.querySelector('[aria-label="Design shape"]')
+    shape.value = 'curved-rod'
+    shape.dispatchEvent(new Event('change'))
+  }
+  it('shows the automatic order and submits an editable order with planar settings', async () => {
+    const { api } = setup({ currentDesign: { nanoparticles: particles } })
+    await flush()
+    chooseCurve()
+    expect(button('Generate in current loadout').disabled).toBe(true)
+    expect(document.querySelector('[aria-label="Platform rotation within fitted plane (degrees)"]').disabled).toBe(true)
+    api.planGeneratedDesign.mockResolvedValue({ ...plan, shape: 'curved-rod', path_particle_ids: ['np-0', 'np-2', 'np-1', 'np-3'], path_length_nm: 104 })
+    button('Calculate design').click()
+    await flush()
+    expect(api.planGeneratedDesign).toHaveBeenLastCalledWith({ shape: 'curved-rod', pathing: 'colocalized', roll_deg: 0, duplex_bp: 18, extend_rod: true })
+    const order = document.querySelector('[aria-label="Particle visit order"]')
+    expect(order.value).toBe('1, 3, 2, 4')
+    expect(document.querySelector('[role="status"]').title).toContain('Planar path: 104.0 nm')
+    // A displayed automatic order must not constrain subsequent searches.
+    button('Calculate design').click()
+    await flush()
+    expect(api.planGeneratedDesign.mock.calls.at(-1)[0].particle_order).toBeUndefined()
+    button('Generate in current loadout').click()
+    await flush()
+    expect(api.generateDesign).toHaveBeenLastCalledWith({ shape: 'curved-rod', pathing: 'colocalized', particle_order: ['np-0', 'np-2', 'np-1', 'np-3'], roll_deg: 0, duplex_bp: 18, extend_rod: true }, 17, 'part-a', expect.any(Function))
+  })
+  it('rejects repeated particle numbers and invalidates a reviewed path after reordering', async () => {
+    const { api } = setup({ currentDesign: { nanoparticles: particles } })
+    await flush()
+    chooseCurve()
+    const order = document.querySelector('[aria-label="Particle visit order"]')
+    order.value = '1, 1, 3, 4'
+    order.dispatchEvent(new Event('input'))
+    button('Calculate design').click()
+    await flush()
+    expect(api.planGeneratedDesign).toHaveBeenCalledTimes(1)
+    expect(document.body.textContent).toContain('exactly once')
+    order.value = '4, 3, 2, 1'
+    order.dispatchEvent(new Event('input'))
+    button('Calculate design').click()
+    await flush()
+    expect(api.planGeneratedDesign).toHaveBeenLastCalledWith({ shape: 'curved-rod', pathing: 'colocalized', particle_order: ['np-3', 'np-2', 'np-1', 'np-0'], roll_deg: 0, duplex_bp: 18, extend_rod: true })
+    order.dispatchEvent(new Event('input'))
+    expect(button('Generate in current loadout').disabled).toBe(true)
+  })
+})
+
+
+it('uses standard controls, exposes pathing, and moves explanatory text into tooltips', async () => {
+  const { api } = setup({ currentDesign: { nanoparticles: Array.from({ length: 4 }, (_, i) => ({ id: String(i), kind: 'gold_nanosphere' })) } })
+  await flush()
+  const shape = document.querySelector('[aria-label="Design shape"]')
+  expect(shape.classList.contains('select')).toBe(true)
+  shape.value = 'curved-rod'
+  shape.dispatchEvent(new Event('change'))
+  const pathing = document.querySelector('[aria-label="Pathing"]')
+  expect([...pathing.options].map(o => o.textContent)).toEqual(['Colocalized', 'Interior', 'Exterior'])
+  expect(pathing.title).toContain('equators')
+  pathing.value = 'interior'
+  pathing.dispatchEvent(new Event('change'))
+  expect(button('Generate in current loadout').disabled).toBe(true)
+  button('Calculate design').click()
+  await flush()
+  expect(api.planGeneratedDesign).toHaveBeenLastCalledWith({ shape: 'curved-rod', pathing: 'interior', roll_deg: 0, duplex_bp: 18, extend_rod: true })
+  expect(document.querySelectorAll('.modal__body p')).toHaveLength(0)
+  expect([...document.querySelectorAll('.modal__body input')].every(i => i.classList.contains('input'))).toBe(true)
+  expect(document.body.textContent).not.toContain('RMSF')
+  expect(document.querySelector('[title*="RMSF"]')).not.toBeNull()
+})
+
+it('shows actual subprocess progress and retains error details without claiming completion', async () => {
+  const { api, modal } = setup()
+  await flush()
+  let finish
+  api.generateDesign.mockImplementation((settings, revision, doc, update) => {
+    update({ stage: 'Route staple crossovers', detail: 'Pass 2; 48 crossovers placed', fraction: .37, steps: ['Create bundle', 'Route scaffold'] })
+    return new Promise(resolve => { finish = resolve })
+  })
+  button('Generate in current loadout').click()
+  expect(document.querySelector('progress').value).toBe(.37)
+  expect(document.body.textContent).toContain('Pass 2; 48 crossovers placed')
+  expect(document.body.textContent).toContain('✓ Create bundle')
+  expect(button('Calculate design').disabled).toBe(true)
+  modal.close()
+  expect(modal.isOpen()).toBe(true)
+  finish(null)
+  await flush()
+  expect(document.body.textContent).toContain('Generation failed')
+  expect(document.body.textContent).toContain('Centers are unreachable')
+  expect(document.querySelector('progress').value).toBe(.37)
+  modal.close()
 })

@@ -17,6 +17,12 @@ describe('generated feature editing', () => {
       { key: 'spacer_nm', label: 'Thiol spacer (nm)', type: 'number', min: 0, max: 100, step: 0.1 },
     ])
     expect(generatedFeatureSchema(command('g', ['length_bp']))[0].integer).toBe(true)
+    expect(generatedFeatureSchema(command('g', ['bend_scale', 'path_order'])).map(f => [f.key, f.type])).toEqual([
+      ['bend_scale', 'number'], ['path_order', 'text'],
+    ])
+    expect(generatedFeatureSchema(command('g', ['pathing']))[0]).toEqual({
+      key: 'pathing', label: 'Pathing', type: 'select', options: ['colocalized', 'interior', 'exterior'],
+    })
     expect(generatedFeatureSchema(command('g'))).toEqual([])
   })
 })

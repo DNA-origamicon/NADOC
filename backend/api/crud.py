@@ -5107,6 +5107,7 @@ def add_nick_batch(body: NickBatchRequest) -> dict:
 
 
 class OverhangExtrudeRequest(BaseModel):
+    reuse_existing_helix: bool = True
     helix_id: str
     bp_index: int
     direction: Direction
@@ -5161,6 +5162,7 @@ def _build_overhang_extrude(
         body.neighbor_row,
         body.neighbor_col,
         body.length_bp,
+        reuse_existing_helix=body.reuse_existing_helix,
     )
     after_helix_ids = {h.id for h in out.helices}
     new_helix_ids = after_helix_ids - before_helix_ids
@@ -8867,7 +8869,7 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
     seek position.
     """
     generated = any(
-        getattr(e, "params", {}).get("_generator", {}).get("version") == 1
+        getattr(e, "params", {}).get("_generator", {}).get("version") in (1, 2)
         for e in design.feature_log
     )
     if generated:
@@ -8885,15 +8887,19 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
             if c.id.startswith("gen_")
         )
         design = design.copy_with(
+            deformations=[d for d in design.deformations if not d.id.startswith("gen_")]
+                + [d for d in snap_design.deformations if d.id.startswith("gen_")],
             nanoparticles=snap_design.nanoparticles,
             nanoparticle_conjugations=snap_design.nanoparticle_conjugations,
             nanoparticle_connection_versions=snap_design.nanoparticle_connection_versions,
             duplexes=snap_design.duplexes,
             overhang_bindings=snap_design.overhang_bindings,
             staple_groups=snap_design.staple_groups,
-            cluster_transforms=[
-                c for c in design.cluster_transforms if c.id not in touched_clusters
-            ] + [c for c in snap_design.cluster_transforms if c.id in touched_clusters],
+            cluster_transforms=(snap_design.cluster_transforms if any(
+                getattr(e, "params", {}).get("_generator", {}).get("version") == 2
+                for e in design.feature_log
+            ) else [c for c in design.cluster_transforms if c.id not in touched_clusters]
+                + [c for c in snap_design.cluster_transforms if c.id in touched_clusters]),
         )
     return design.copy_with(
         helices=snap_design.helices,
@@ -9181,6 +9187,8 @@ def _seek_feature_log(
     # logic operates on this topology-corrected base, so the existing
     # rebuild-from-log logic Just Works for snapshot-bearing histories.
     design = _seek_snapshot_base(design, position, sub_position, optimized=optimized)
+    from backend.core.feature_history_clusters import restore_cluster_creations
+    design = restore_cluster_creations(design, position)
     log = list(design.feature_log)
     from backend.core.circular_pattern import pattern_history_overlays
     pattern_clusters, pattern_ops, pattern_baselines = pattern_history_overlays(
@@ -9388,8 +9396,12 @@ def _seek_feature_log(
 
         new_overhangs.append(ovhg)
 
+    native_deformation_ids = {e.deformation_id for e in log if e.feature_type == "deformation"}
+    generated_ops = [d for d in design.deformations if d.id.startswith("gen_")
+                     and d.id not in native_deformation_ids
+                     and d.id not in {op.id for op in new_deformations + pattern_ops}]
     return design.copy_with(
-        deformations=new_deformations + pattern_ops,
+        deformations=new_deformations + pattern_ops + generated_ops,
         cluster_transforms=new_cts,
         cluster_joints=new_joints,
         overhangs=new_overhangs,
