@@ -11,7 +11,7 @@ export function showGenerateDesign({ api, store }) {
   const enabled = !state.assemblyActive && !!state.currentDesign && [2, 3, 4].includes(particles.length)
   const body = el('div', { attrs: { style: 'display:grid;gap:var(--space-3,12px)' } })
   const summary = el('div', { text: enabled ? `${particles.length} gold nanoparticles · ${state.currentDesign.lattice_type ?? ''}` : 'Open a part with 2–4 gold nanoparticles.', attrs: {
-    title: 'Preserve particle centers and existing geometry. Add individual editable construction steps to the current loadout. Prefer greater weakest-axis bending rigidity within scaffold, bend, and clearance limits. Rigidity is a geometric proxy; stiffness, RMSF, and sequence thermodynamics are not simulated.',
+    title: 'Preserve particle centers and existing geometry. Add individual editable construction steps to the current loadout. Choose geometric sizing or mechanical reinforcement for curved rods within scaffold, bend, and clearance limits. Mechanical predictions are uncalibrated; optional simulation jobs provide additional validation.',
   } })
   body.append(summary)
   function field(label, control, tooltip, ariaLabel = label) {
@@ -25,8 +25,19 @@ export function showGenerateDesign({ api, store }) {
     { value: 'auto', label: platform ? 'Platform' : 'Straight rod' },
     ...(platform ? [{ value: 'curved-rod', label: 'Curved rod' }] : []),
   ] })
-  field('Design shape', shape, 'Platforms prefer alignment with nanoparticle perimeter edges. Curved rods follow a planar path through the attachment sites. Complete lattice cross-sections are compared for greater rigidity.')
+  field('Design shape', shape, 'Platforms prefer alignment with nanoparticle perimeter edges. Curved rods follow a planar path through the attachment sites, using an editable sweep when more bends than particles are needed. Complete lattice cross-sections are compared for greater rigidity.')
   const curved = () => shape.value === 'curved-rod'
+  const mechanics = createSelect({ options: [
+    { value: 'legacy', label: 'Original geometric sizing' },
+    { value: 'beam', label: '1 · Fast beam: uniform reinforcement' },
+    { value: 'variable', label: '2 · Fast beam: variable reinforcement' },
+    { value: 'robust', label: '3 · Variable + uncertainty scenarios' },
+    { value: 'fem-linear', label: '4 · Uncertainty + linear FEM validation' },
+    { value: 'fem-nonlinear', label: '5 · Uncertainty + nonlinear FEM validation' },
+    { value: 'oxdna', label: '6 · Uncertainty + oxDNA pilot validation' },
+  ] })
+  const mechanicsRow = field('Mechanical optimization', mechanics, 'Curved rods: allocate scaffold to reduce predicted pair-distance and aligned 3D motion. Each level is independently selectable. FEM and oxDNA start snapshot jobs after generation; view progress/results in Simulations. These validation jobs do not automatically optimize again. oxDNA uses local GPU relaxation, equilibration and 5 million production steps at 0.5 M salt. Experimental calibration is pending matching literature data.')
+  mechanicsRow.hidden = true
   const pathing = createSelect({ options: ['Colocalized', 'Interior', 'Exterior'].map(label => ({ value: label.toLowerCase(), label })) })
   const pathRow = field('Pathing', pathing, 'Colocalized: beneath the projected particle positions. Interior: beside the particles toward the center of their arrangement. Exterior: beside the particles away from that center. Interior/exterior paths run near the equators in the fitted plane; attachments accommodate reachable height differences.')
   const rotationLabel = platform ? 'Platform rotation within fitted plane (degrees)' : 'Rotation around particle axis (degrees)'
@@ -62,6 +73,7 @@ export function showGenerateDesign({ api, store }) {
     const values = { roll_deg: curved() ? 0 : Number(roll.value), duplex_bp: Number(length.value), extend_rod: true }
     if (curved()) {
       values.shape = 'curved-rod'
+      if (mechanics.value !== 'legacy') values.mechanics = mechanics.value
       values.pathing = pathing.value
       if (order.value.trim() && (orderEdited || useReviewedOrder)) {
         const indices = order.value.split(',').map(v => Number(v.trim()) - 1)
@@ -78,7 +90,7 @@ export function showGenerateDesign({ api, store }) {
     busy = value
     calculate.disabled = value || !enabled
     generate.disabled = value || !plan
-    for (const input of [shape, pathing, length, order]) input.disabled = value || !enabled
+    for (const input of [shape, pathing, length, order, mechanics]) input.disabled = value || !enabled
     roll.disabled = value || !enabled || curved()
   }
   function invalidate() {
@@ -104,11 +116,19 @@ export function showGenerateDesign({ api, store }) {
       status.textContent = plan.alternatives.map(c => c.feasible === false
         ? `${c.scaffold_size}: unavailable`
         : `${c.scaffold_size}: ${c.section} · ${c.length_nm.toFixed(1)} nm${c.scaffold_size === plan.selected.scaffold_size ? ' · selected' : ''}`).join('\n')
+      if (curved() && plan.selected.path_feature) status.textContent += `\nPath feature: ${plan.selected.path_feature === 'sweep' ? 'Sweep' : 'Bends'}`
+      if (plan.mechanics) {
+        const m = plan.mechanics
+        status.textContent += `\nPredicted motion objective: ${(100 * m.improvement_fraction).toFixed(1)}% lower than the unreinforced core.\n${plan.selected.scaffold_used_nt} / ${plan.selected.scaffold_size} scaffold bases · ${m.candidates_evaluated} candidates compared.\nModel estimate; not experimentally calibrated.`
+        if (!m.layers.length) status.textContent += '\nNo feasible reinforcement improvement was found in this search.'
+        status.textContent += `\nPredicted aligned motion: ${m.predicted.aligned_rms_nm.toFixed(2)} nm RMS · worst pair distance: ${m.predicted.worst_pair_std_nm.toFixed(2)} nm SD.`
+        if (['fem-linear', 'fem-nonlinear', 'oxdna'].includes(mechanics.value)) status.textContent += '\nValidation will start after generation; results appear in Simulations.'
+      }
       status.title = [plan.reason,
         ...(curved() && plan.path_length_nm != null ? [`Planar path: ${plan.path_length_nm.toFixed(1)} nm · visit order: ${order.value}`] : []),
         `Maximum particle separation: ${plan.center_distance_nm.toFixed(2)} nm`,
         ...(plan.perimeter_alignment ? [`Perimeter alignment: ${plan.perimeter_alignment.aligned_edges} edges within ${plan.perimeter_alignment.tolerance_deg}°.`] : []),
-        `${plan.selected.unused_scaffold_nt} scaffold bases remain unrouted. Extend beyond attachment sites to use most of the scaffold.`,
+        `${plan.selected.unused_scaffold_nt} scaffold bases remain unrouted. ${plan.mechanics ? 'Unused bases are not padded into end extensions.' : 'Extend beyond attachment sites to use most of the scaffold.'}`,
         plan.attachment_status,
       ].filter(Boolean).join('\n')
     } catch (e) { status.textContent = e.message; plan = null }
@@ -127,18 +147,23 @@ export function showGenerateDesign({ api, store }) {
       if (result) {
         const items = result.generation.connections
         status.textContent = `Added ${items.length} connections. Particle centers preserved.`
+        if (result.generation.validation_job) {
+          const j = result.generation.validation_job
+          status.textContent += `\n${j.engine} job ${j.job_id}: ${j.status}. See Simulations.\n${j.error || j.qualification}`
+        }
         status.title = `${items.filter(c => c.reused).length} reused handles. Edit, scrub, or revert individual construction steps in the current loadout.`
       } else { status.textContent = error(); stage.textContent = 'Generation failed' }
     } catch (e) { status.textContent = e.message; stage.textContent = 'Generation failed'; plan = null }
     finally { setBusy(false) }
   } })
   shape.addEventListener('change', () => {
-    pathRow.hidden = orderRow.hidden = !curved()
+    pathRow.hidden = orderRow.hidden = mechanicsRow.hidden = !curved()
     rollRow.hidden = curved()
     invalidate()
     setBusy(false)
   })
   pathing.addEventListener('change', invalidate)
+  mechanics.addEventListener('change', invalidate)
   order.addEventListener('input', () => { orderEdited = !!order.value.trim() })
   for (const input of [roll, length, order]) input.addEventListener('input', invalidate)
   const modal = createModal({ title: 'Generate design', size: 'md', body, actions: [calculate, generate], onClose: () => !busy })

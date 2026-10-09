@@ -148,6 +148,7 @@ import { initBeltPathPanel }       from './ui/belt_path_panel.js'
 import { initStrandAnimPanel }     from './ui/strand_anim_panel.js'
 import { openProteinAttachModal }  from './ui/protein_attach_modal.js'
 import { initProteinSubsystem }    from './scene/protein_subsystem.js'
+import { initNanoparticleAttach } from './ui/nanoparticle_attach.js'
 import { initNanoparticleSubsystem } from './scene/nanoparticle_subsystem.js'
 import { promptGoldNanosphereDiameter } from './ui/nanoparticle_dialog.js'
 import { openGoldCreationDialog } from './ui/gold_creation_dialog.js'
@@ -1235,9 +1236,11 @@ async function main() {
   const proteinAttachmentGizmo = proteinSubsystem.gizmo
   const _refreshProteins = proteinSubsystem.refresh
   const nanoparticleConjugateManager = initNanoparticleConjugateManager({ api, store })
+  const nanoparticleAttach = initNanoparticleAttach({ store, api, selectionController, notify: showToast })
   const nanoparticleSubsystem = initNanoparticleSubsystem({
     scene, store, controls, camera, canvas, selectionController, designRenderer, rightSidebar,
     openConjugateManager: id => nanoparticleConjugateManager.open(id),
+    attachToOverhang: id => nanoparticleAttach.begin(id),
   })
   const nanoparticleGizmo = nanoparticleSubsystem.gizmo
   // Entity-neutral adapter keeps the existing Move/Rotate controls shared.

@@ -823,12 +823,26 @@ def _geometry_for_design(
     )
 
 
-def fitting_geometry(design: Design) -> list[dict]:
+def fitting_geometry(
+    design: Design, *, strand_ids: set[str] | None = None,
+    overhang_ids: set[str] | None = None,
+) -> list[dict]:
     """Fit against the same canonical nucleotide geometry the user sees.
 
-    There is no alternate bead/base placement hidden behind the fitting boundary.
+    Anchor readers may request just their strands/overhangs. Keep the complete
+    Design as the deformation/cluster context, but emit only the relevant
+    helices through the existing native Full pipeline. Never cache across edits.
+    Bridge and extension dependencies conservatively use the full pipeline.
+    Unscoped callers (including whole-design clearance checks) remain unchanged.
     """
-    return _geometry_for_design(design)
+    if (strand_ids is None and overhang_ids is None) or design.extensions or design.overhang_connections:
+        return _geometry_for_design(design)
+    strands, overhangs = set(strand_ids or ()), set(overhang_ids or ())
+    helices = frozenset(
+        domain.helix_id for strand in design.strands for domain in strand.domains
+        if strand.id in strands or domain.overhang_id in overhangs
+    )
+    return _geometry_for_helices(design, helix_ids=helices)
 
 
 def _compact_geometry_from_nucleotides(nucleotides: list[dict]) -> dict:

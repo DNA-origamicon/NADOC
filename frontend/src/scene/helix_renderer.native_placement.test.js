@@ -171,3 +171,29 @@ describe('[native-placement] actual Full renderer authority', () => {
     expect(() => ctrl.applyPositionLerp(endpoint, endpoint, .5)).toThrow(/DNA positioning could not be verified/)
   })
 })
+
+it.each(['FORWARD', 'REVERSE'])('[native-placement] insertion history fades only the added copy (%s)', direction => {
+  const a = { ...start(), direction }, b = { ...end(), direction }, extra = { ...end(), direction }
+  for (const field of ['backbone_position', 'base_position', 'slab_position']) extra[field] = extra[field].map((v,i) => v + (i === 2 ? .17 : 0))
+  const before = baked([a]), after = baked([b, extra])
+  before.displayDesign = { helices: [{ id: 'h', loop_skips: [] }] }
+  after.displayDesign = { helices: [{ id: 'h', loop_skips: [{ bp_index: 0, delta: 1 }] }] }
+  const ctrl = build([b, extra]), full = build([b, extra])
+  for (const t of [0, .25, .5, .75, 1]) {
+    ctrl.applyPositionLerp(before, after, t)
+    for (const field of ['backboneEntries', 'slabEntries']) {
+      const actual = matrix(ctrl[field][1]), expected = matrix(full[field][1])
+      const p = new THREE.Vector3(), q = new THREE.Quaternion(), scale = new THREE.Vector3()
+      actual.decompose(p,q,scale)
+      const ep = new THREE.Vector3(), eq = new THREE.Quaternion(), es = new THREE.Vector3()
+      expected.decompose(ep,eq,es)
+      expect(p.distanceTo(ep)).toBeLessThan(1e-6)
+      expect(scale.distanceTo(es.multiplyScalar(t))).toBeLessThan(1e-6)
+    }
+    const forward = ctrl.backboneEntries.map(e => matrix(e).elements.slice())
+    ctrl.applyPositionLerp(after, before, 1-t)
+    ctrl.backboneEntries.forEach((e,i) => matrix(e).elements.forEach((v,j) => expect(v).toBeCloseTo(forward[i][j],6)))
+  }
+  const malformed = { ...before, displayDesign: after.displayDesign }
+  expect(() => ctrl.applyPositionLerp(malformed, after, .5)).toThrow(/DNA positioning could not be verified/)
+})

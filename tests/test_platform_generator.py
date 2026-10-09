@@ -121,8 +121,10 @@ def test_platform_generation_fixed_centers_native_geometry_and_history(
             )
             root, _ = resolve_overhang_anchor(geometry, version.overhang_id, "root")
             assert np.dot(center - root, normal) > 0
-        assert all(e.op_kind != "generate-design" for e in design.feature_log)
+        assert all(getattr(e, "op_kind", None) != "generate-design" for e in design.feature_log)
         for i, entry in enumerate(design.feature_log):
+            if not getattr(entry, "post_state_gz_b64", ""):
+                continue  # Native cluster operations are covered by test_generated_commands.
             expected = state.decode_design_snapshot(entry.post_state_gz_b64)
             scrubbed = _seek_feature_log(design, i)
             for field in (
@@ -139,7 +141,13 @@ def test_platform_generation_fixed_centers_native_geometry_and_history(
 
 
 @pytest.mark.slow
-def test_four_particle_honeycomb_platform_edit_replays_at_fixed_centers():
+def test_four_particle_honeycomb_platform_edit_replays_at_fixed_centers(monkeypatch):
+    # Saved v1 histories retain the dependent generator editor.
+    from functools import partial
+    from backend.api import routes_generate_design
+    from backend.api.generated_history import build_recorded
+
+    monkeypatch.setattr(routes_generate_design, "build_recorded", partial(build_recorded, standard=False))
     from backend.api.crud import edit_feature, EditFeatureBody
 
     original = platform_source(4)

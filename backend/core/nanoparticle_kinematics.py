@@ -109,6 +109,8 @@ def solve_closed_loop_pose(
     clearance_nm: float,
     *,
     max_translation_nm: float = 50.0,
+    fixed_center: bool = False,
+    obstacle_radii: np.ndarray | None = None,
 ) -> tuple[np.ndarray, dict]:
     """Pure geometric kernel used by the API solver and deterministic tests."""
     initial = np.asarray(initial, dtype=float)
@@ -116,17 +118,22 @@ def solve_closed_loop_pose(
     roots = np.asarray(roots, dtype=float)
     link_radii = np.asarray(link_radii, dtype=float)
     obstacles = np.asarray(obstacles, dtype=float).reshape((-1, 3))
+    clearances = clearance_nm + (np.zeros(len(obstacles)) if obstacle_radii is None else np.asarray(obstacle_radii))
+
+    def expanded(params):
+        return np.r_[np.zeros(3), params] if fixed_center else params
 
     def sites_for(pose: np.ndarray) -> np.ndarray:
         return local_joints @ pose[:3, :3].T + pose[:3, 3]
 
     def residual(params: np.ndarray) -> np.ndarray:
+        params = expanded(params)
         pose = _pose_from_delta(initial, params)
         sites = sites_for(pose)
         link_errors = np.linalg.norm(sites - roots, axis=1) - link_radii
         center = pose[:3, 3]
         penetrations = (
-            np.maximum(clearance_nm - np.linalg.norm(obstacles - center, axis=1), 0.0)
+            np.maximum(clearances - np.linalg.norm(obstacles - center, axis=1), 0.0)
             if len(obstacles) else np.empty(0)
         )
         regularization = np.r_[params[:3] * 2e-3, params[3:] * 1e-2]
@@ -137,17 +144,19 @@ def solve_closed_loop_pose(
         np.r_[np.full(3, max_translation_nm), np.full(3, np.pi)],
     )
     solved = least_squares(
-        residual, np.zeros(6), bounds=bounds, method="trf",
+        residual, np.zeros(3 if fixed_center else 6),
+        bounds=(bounds[0][3:], bounds[1][3:]) if fixed_center else bounds, method="trf",
         ftol=1e-11, xtol=1e-11, gtol=1e-11, max_nfev=1200,
     )
-    pose = _pose_from_delta(initial, solved.x)
+    delta = expanded(solved.x)
+    pose = _pose_from_delta(initial, delta)
     joint_errors = np.abs(np.linalg.norm(sites_for(pose) - roots, axis=1) - link_radii)
     center_distances = (
         np.linalg.norm(obstacles - pose[:3, 3], axis=1)
         if len(obstacles) else np.empty(0)
     )
     penetrations = (
-        np.maximum(clearance_nm - center_distances, 0.0)
+        np.maximum(clearances - center_distances, 0.0)
         if len(center_distances) else np.empty(0)
     )
     max_joint = float(np.max(joint_errors))
@@ -166,8 +175,8 @@ def solve_closed_loop_pose(
         ),
         "max_penetration_nm": max_penetration,
         "converged": bool(solved.success and max_joint <= tolerance and max_penetration <= 0.05),
-        "translation_nm": solved.x[:3].tolist(),
-        "rotation_delta_quat": Rotation.from_rotvec(solved.x[3:]).as_quat().tolist(),
+        "translation_nm": delta[:3].tolist(),
+        "rotation_delta_quat": Rotation.from_rotvec(delta[3:]).as_quat().tolist(),
     }
 
 
@@ -219,6 +228,8 @@ def solve_nanoparticle_anchors(
     *,
     clearance_margin_nm: float = 0.75,
     max_translation_nm: float = 50.0,
+    fixed_center: bool = False,
+    include_structure: bool = False,
 ) -> tuple[Design, dict]:
     """Jointly solve every applied anchor and return an updated design + diagnostics.
 
@@ -246,6 +257,15 @@ def solve_nanoparticle_anchors(
     if not obstacles.size:
         obstacles = np.empty((0, 3), dtype=float)
     clearance = particle.diameter_nm / 2.0 + float(clearance_margin_nm)
+    obstacle_radii = np.zeros(len(obstacles))
+    if include_structure:
+        from backend.core.nanoparticle_attachment_obstacles import protein_points
+        proteins = protein_points(design, geometry)
+        others = [p for p in design.nanoparticles if p.id != nanoparticle_id]
+        obstacles = np.concatenate([obstacles, proteins,
+            np.asarray([p.pose.to_array()[:3, 3] for p in others]).reshape((-1, 3))])
+        obstacle_radii = np.r_[obstacle_radii, np.full(len(proteins), 0.2),
+                               [p.diameter_nm / 2 for p in others]]
 
     pose, kernel = solve_closed_loop_pose(
         initial,
@@ -255,6 +275,8 @@ def solve_nanoparticle_anchors(
         obstacles,
         clearance,
         max_translation_nm=max_translation_nm,
+        fixed_center=fixed_center,
+        obstacle_radii=obstacle_radii,
     )
     joint_errors = kernel["joint_errors_nm"]
 

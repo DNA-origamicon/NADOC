@@ -278,12 +278,23 @@ def plan_platforms(source, settings):
     raise failure
 
 
-def plan_generated(source, settings):
+def plan_generated(source, settings, *, use_sweeps=True):
     particles, _, _ = gold_particles(source)
     if settings.shape == "curved-rod":
         from backend.core.curved_rod_generator import plan_curved_rods
 
-        return plan_curved_rods(source, settings)
+        if settings.mechanics != "legacy":
+            from backend.core.generator_reinforcement import optimize_reinforcement
+
+            candidate, report = plan_curved_rods(
+                source,
+                settings.model_copy(update={"extend_rod": False}),
+                use_sweeps=True,
+            )
+            return optimize_reinforcement(source, settings, candidate, report)
+        return plan_curved_rods(source, settings, use_sweeps=use_sweeps)
+    if settings.mechanics != "legacy":
+        raise ValueError("Mechanical sizing currently requires a curved rod.")
     if settings.shape == "platform" and len(particles) < 3:
         raise ValueError("A platform needs three or four nanoparticles.")
     return (

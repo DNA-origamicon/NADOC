@@ -5,6 +5,8 @@ All work is isolated; callers commit recorded commands only after placement succ
 
 from __future__ import annotations
 
+import uuid
+
 import numpy as np
 from scipy.spatial.transform import Rotation
 
@@ -18,7 +20,7 @@ from backend.api.crud import (
     OverhangExtrudeRequest,
 )
 from backend.api.overhang_patch import _build_overhang_patch, OverhangPatchRequest
-from backend.api.routes_nanoparticles import _set_np_version_applied, _surface_owner
+from backend.api.routes_nanoparticles import _set_np_version_applied
 from backend.core.models import (
     Design,
     Direction,
@@ -94,7 +96,17 @@ def _handles(source, rod, particles, settings, history=None):
     # An applied handle's saved unbound helix can predate a particle move.
     # Rebuild its free radial carrier at the current body pose before rebinding.
     for particle in particles:
-        rod = replace_gold_nanosphere(rod, particle.id, pose=particle.pose.values)
+        refreshed = replace_gold_nanosphere(rod, particle.id, pose=particle.pose.values)
+        old_helices = {h.id: h for h in rod.helices}
+        # Rebuilding an already-current radial carrier can differ by floating
+        # point roundoff alone. Keep the exact original in that case.
+        refreshed = refreshed.copy_with(helices=[
+            old_helices[h.id] if h.id in old_helices
+            and h.model_dump(exclude={"axis_start", "axis_end"}) == old_helices[h.id].model_dump(exclude={"axis_start", "axis_end"})
+            and np.allclose(h.axis_start.to_array(), old_helices[h.id].axis_start.to_array(), atol=1e-12, rtol=0)
+            and np.allclose(h.axis_end.to_array(), old_helices[h.id].axis_end.to_array(), atol=1e-12, rtol=0)
+            else h for h in refreshed.helices])
+        rod = refreshed
     if rod != before:
         _record(
             history,
@@ -107,26 +119,10 @@ def _handles(source, rod, particles, settings, history=None):
         )
     selected = []
     for index, particle in enumerate(particles):
-        compatible = []
-        for c in rod.nanoparticle_conjugations:
-            if c.nanoparticle_id != particle.id:
-                continue
-            for record in c.surface_strands:
-                s = rod.find_strand(record.strand_id)
-                if (
-                    s
-                    and s.sequence
-                    and 12 <= len(s.sequence) <= 60
-                    and set(s.sequence.upper()) <= set("ACGT")
-                    and len(s.domains) == 1
-                    and record.overhang_id
-                    and s.domains[0].helix_id == record.helix_id
-                    and abs(s.domains[0].end_bp - s.domains[0].start_bp) + 1
-                    == len(s.sequence)
-                ):
-                    compatible.append((c, record, s))
+        from backend.core.two_np_generator import compatible_particle_handle
+        compatible = compatible_particle_handle(rod, particle.id)
         if compatible:
-            c, record, s = compatible[0]
+            c, record, s = compatible
             selected.append((c, record, s.sequence, True))
             continue
         # Deterministic, mixed-base prototype sequence; not a thermodynamic
@@ -228,8 +224,8 @@ def _add_root(
     for h in hs:
         row, col = h.grid_pos
         center = h.axis_start.to_array()
-        desired = int(round((target_z - center[2]) / BDNA_RISE_PER_BP))
-        for bp in range(max(5, desired - 32), min(h.length_bp - 5, desired + 33)):
+        desired = h.bp_start + int(round((target_z - center[2]) / BDNA_RISE_PER_BP))
+        for bp in range(max(h.bp_start + 5, desired - 32), min(h.bp_start + h.length_bp - 5, desired + 33)):
             if pinned is not None and bp != pinned:
                 continue
             neighbor = crossover_neighbor(design.lattice_type, row, col, bp)
@@ -355,109 +351,7 @@ def _add_root(
     )
 
 
-def _joint(design, version, geometry):
-    owner, record = _surface_owner(design, version.nanoparticle_id, version.strand_id)
-    flag = "is_five_prime" if owner.attach_end == "5p" else "is_three_prime"
-    point = next(
-        n["backbone_position"]
-        for n in geometry
-        if n.get("strand_id") == version.strand_id and n.get(flag)
-    )
-    return np.asarray(point), np.asarray(record.backbone_attachment_local_nm)
-
-
-def _fit_swing(
-    root,
-    joint,
-    center,
-    radius,
-    frame,
-    geometry,
-    version,
-    particles,
-    centers,
-    angles=None,
-):
-    """Search the sphere-intersection circle and duplex axial roll for clearance.
-
-    Both rigid rotations preserve the exact graft joint and crossover bead.
-    Evaluate emitted native DNA landmarks, including bases, before committing
-    a pose; the shortest swing alone can put the opposite strand inside gold.
-    """
-    length = np.linalg.norm(joint - root)
-    delta = center - root
-    distance = np.linalg.norm(delta)
-    if distance > length + radius + 1e-7 or distance < abs(length - radius) - 1e-7:
-        raise ValueError(
-            "The fixed-center attachment spheres do not intersect. Try a longer duplex."
-        )
-    unit = delta / distance
-    a = (length**2 - radius**2 + distance**2) / (2 * distance)
-    perpendicular = frame[:, 2] - unit * np.dot(frame[:, 2], unit)
-    if np.linalg.norm(perpendicular) < 1e-8:
-        reference = np.eye(3)[int(np.argmin(np.abs(unit)))]
-        perpendicular = reference - unit * np.dot(reference, unit)
-    perpendicular /= np.linalg.norm(perpendicular)
-    other = np.cross(unit, perpendicular)
-    circle_radius = np.sqrt(max(0, length**2 - a**2))
-    points = np.array(
-        [
-            n[key]
-            for n in geometry
-            if n.get("strand_id") == version.strand_id
-            or n.get("overhang_id") == version.overhang_id
-            for key in ("backbone_position", "base_position")
-        ]
-    )
-    best = None
-    best_clearance = -float("inf")
-    phases = (
-        [np.radians(angles["phase_deg"])]
-        if angles and "phase_deg" in angles
-        else np.linspace(0, 2 * np.pi, 16, endpoint=False)
-    )
-    rolls = (
-        np.array([np.radians(angles["duplex_roll_deg"])])
-        if angles and "duplex_roll_deg" in angles
-        else np.linspace(0, 2 * np.pi, 24, endpoint=False)
-    )
-    if not np.isfinite(phases).all() or not np.isfinite(rolls).all():
-        raise ValueError("Attachment angles must be finite.")
-    for phase in phases:
-        target = (
-            root
-            + a * unit
-            + circle_radius * (np.cos(phase) * perpendicular + np.sin(phase) * other)
-        )
-        swing = _rotation_between(joint - root, target - root)
-        axis = (target - root) / length
-        rotations = Rotation.from_rotvec(rolls[:, None] * axis).as_matrix() @ swing
-        transformed = np.einsum("kij,nj->kni", rotations, points - root) + root
-        clearance = np.min(
-            np.stack(
-                [
-                    np.linalg.norm(transformed - c, axis=2) - p.diameter_nm / 2
-                    for p, c in zip(particles, centers)
-                ]
-            ),
-            axis=(0, 2),
-        )
-        index = int(np.argmax(clearance))
-        if clearance[index] > best_clearance:
-            best_clearance = clearance[index]
-            best = (
-                target,
-                rotations[index],
-                {
-                    "phase_deg": float(np.degrees(phase)),
-                    "duplex_roll_deg": float(np.degrees(rolls[index])),
-                },
-            )
-    if best_clearance < 0:
-        raise ValueError(
-            "No sampled fixed-center duplex orientation clears all gold cores. Try a longer duplex or a different particle arrangement."
-        )
-    return best
+from backend.core.nanoparticle_attachment_fit import attachment_joint as _joint, fit_swing as _fit_swing
 
 
 def materialize(
@@ -514,7 +408,12 @@ def materialize(
     progress("Create bundle", f"{len(candidate.summary['cells'])} helices × {bp['length_bp']} bp", .10)
     before = Design(lattice_type=source.lattice_type, nanoparticles=particles)
     standard = history is not None and history.standard
-    if standard:
+    swept = curved and candidate.summary.get("path_feature") == "sweep" and (history is None or standard)
+    if swept:
+        from backend.core.sweep import SweepRequest, build_sweep
+        request = SweepRequest.model_validate({**candidate.summary["sweep_request"], "sweep_id": uuid.uuid4()})
+        rod = build_sweep(before, request)
+    elif standard:
         from backend.api.crud import _build_extrude_segment, BundleSegmentRequest
         # The slice-plane extrude adds DNA to the current part. Create Bundle
         # is a fresh-document command and would discard the nanoparticles.
@@ -529,17 +428,23 @@ def materialize(
         history,
         before,
         rod,
-        "extrude-segment" if standard else "bundle-create",
-        "Extrude segment" if standard else f"Create {shape} bundle",
-        {
+        "sweep" if swept else "extrude-segment" if standard else "bundle-create",
+        "Sweep nanoparticle path" if swept else "Extrude segment" if standard else f"Create {shape} bundle",
+        request.model_dump(mode="json") if swept else {
             **bp,
             "cells": candidate.summary["cells"],
             "lattice_type": source.lattice_type.value,
         },
-        "bundle",
-        ("length_bp",),
+        "sweep" if swept else "bundle",
+        () if swept else ("length_bp",),
     )
     before = rod
+    if candidate.summary.get("section_profile"):
+        from backend.core.generator_reinforcement import resize_profile
+        rod, entries = resize_profile(rod, candidate.summary["section_profile"])
+        _record(history, before, rod, "generate-design", "Size reinforcement spans",
+                {"entries": entries}, "section-profile", ())
+        before = rod
     progress("Route scaffold", "Seamed scaffold routing", .15)
     rod, routing = auto_scaffold_seamed(rod)
     if not routing.valid:
@@ -553,7 +458,9 @@ def materialize(
         {},
         "scaffold",
     )
-    if curved:
+    if swept:
+        curve_start_bp = candidate.summary["path_start_bp"]
+    if curved and not swept:
         progress("Apply bends", "Resolve the path into ordinary bend windows", .22)
         from backend.core.curved_rod_generator import (
             bend_operations,
@@ -638,7 +545,7 @@ def materialize(
     with scratch_session(source.lattice_type):
         state.set_design(rod)
         rod = full_autostaple(sequence_params["scaffold_name"]).model_copy(deep=True)
-    rod = rod.copy_with(feature_log=[], cluster_transforms=[])
+    rod = rod.copy_with(feature_log=[], cluster_transforms=rod.cluster_transforms if swept else [])
     _record(
         history,
         before,
@@ -658,7 +565,11 @@ def materialize(
 
         before = rod
         progress("Insert loops/skips", "Apply the selected manual insertion/deletion positions", .50)
-        rod = encode_curvature(rod, rod.deformations)
+        if swept:
+            from backend.core.generated_sweep import encode_sweep
+            rod = encode_sweep(rod)
+        else:
+            rod = encode_curvature(rod, rod.deformations)
         if physical_scaffold_nt(rod) > budget:
             raise ValueError(
                 "The curved rod's insertions exceed the scaffold budget. Shorten the bundle."
@@ -677,7 +588,7 @@ def materialize(
             state.set_design(rod)
             rod = full_sequence(sequence_params["scaffold_name"]).model_copy(deep=True)
             sequenced_entries = rod.feature_log[-2:]
-        rod = rod.copy_with(feature_log=[], cluster_transforms=[])
+        rod = rod.copy_with(feature_log=[], cluster_transforms=rod.cluster_transforms if swept else [])
         if history and history.standard:
             # full_sequence is two existing commands: scaffold sequence, then
             # staple complements. Retain both original command boundaries.
@@ -747,7 +658,7 @@ def materialize(
             )
 
             before = rod
-            canonical = fitting_geometry(rod.copy_with(deformations=[]))
+            canonical = fitting_geometry(rod.copy_with(deformations=[]), overhang_ids={oid})
             root, _ = resolve_overhang_anchor(canonical, oid, "root")
             arm = [h for h in rod.helices if h.id in rod_ids]
             centroid, tangent = _bundle_centroid_and_tangent(arm)
@@ -841,7 +752,7 @@ def materialize(
         translation=(origin - frame @ center_local).tolist(),
     )
     before = rod
-    rod = rod.copy_with(cluster_transforms=[*placed_carriers, cluster])
+    rod = rod.copy_with(cluster_transforms=[*placed_carriers, *([cluster] if cluster.helix_ids else [])])
     _record(
         history,
         before,
@@ -853,7 +764,12 @@ def materialize(
         () if curved else ("roll_deg",),
     )
     progress("Align and connect", "Apply cluster poses and pair complementary handles", .76)
+    unpaired = rod
     for index, item in enumerate(connections):
+        if standard and lateral:
+            # Interior/exterior paths already fix the rod offset. No temporary
+            # applied duplexes are needed to calculate a common-side offset.
+            break
         progress(f"Pair attachment {index + 1}/{len(connections)}", "Resolve the deformed strand ends and materialize the complementary duplex", .76 + .02 * index / len(connections))
         before = rod
         v = NanoparticleConnectionVersion(
@@ -867,19 +783,25 @@ def materialize(
             nanoparticle_connection_versions=[*rod.nanoparticle_connection_versions, v]
         )
         rod = _set_np_version_applied(rod, v.id, True)
-        _record(
-            history,
-            before,
-            rod,
-            "nanoparticle-connection-version-create",
-            f"Pair nanoparticle {index + 1} handle and overhang",
-            item,
-            f"connect:{index}",
-        )
+        if not standard:
+            _record(
+                history,
+                before,
+                rod,
+                "nanoparticle-connection-version-create",
+                f"Pair nanoparticle {index + 1} handle and overhang",
+                item,
+                f"connect:{index}",
+            )
     # One common offset must be reachable by every actual duplex, including
     # unequal core sizes and particle centers displaced from the fitted plane.
     progress("Calculate attachment reach", "Evaluate deformed geometry and the common reachable rod offset", .78)
-    geometry = fitting_geometry(rod)
+    def attachment_geometry(current):
+        return fitting_geometry(current,
+            strand_ids={v.strand_id for v in current.nanoparticle_connection_versions},
+            overhang_ids={v.overhang_id for v in current.nanoparticle_connection_versions})
+
+    geometry = attachment_geometry(rod)
     upper = float("inf")
     lower = (
         float(np.max(starts[:, 1]) - center_local[1])
@@ -947,58 +869,74 @@ def materialize(
         ("offset_nm",),
     )
     progress("Calculate placed attachment geometry", "Resolve the displaced rod and duplex anchors before fixed-center fitting", .79)
-    geometry = fitting_geometry(rod)
-    for i, v in enumerate(rod.nanoparticle_connection_versions):
-        progress(f"Fit attachment {i + 1}/{len(connections)}", "Find overhang and nanoparticle rotations while holding the center fixed", .80 + .10 * i / len(connections))
-        root, _ = resolve_overhang_anchor(geometry, v.overhang_id, "root")
-        joint, local = _joint(rod, v, geometry)
-        before = rod
-        angles = _params(history, f"fit:{i}", {}, ("phase_deg", "duplex_roll_deg"))
-        target, rotation, fit_params = _fit_swing(
-            root,
-            joint,
-            centers[i],
-            np.linalg.norm(local),
-            frame,
-            geometry,
-            v,
-            particles,
-            centers,
-            angles,
-        )
-        rod = dematerialize_duplex_cluster(rod, v.overhang_id)
-        rod, _, _ = _build_overhang_patch(
-            rod,
-            v.overhang_id,
-            OverhangPatchRequest(
-                rotation=Rotation.from_matrix(rotation).as_quat().tolist()
-            ),
-        )
-        if history and history.standard:
-            rod, _ = materialize_duplex_cluster(rod, v.overhang_id)
-            _record(history, before, rod, "overhang-sequence", "Rotate overhang",
-                {"overhang_id": v.overhang_id, "rotation": Rotation.from_matrix(rotation).as_quat().tolist()}, f"fit-overhang:{i}")
+    geometry = attachment_geometry(rod)
+    if standard:
+        from backend.api.nanoparticle_attachment import attach_nanoparticle
+        # Reach planning used temporary duplexes. Commit only complete fitted
+        # attachments, starting from the already-created, world-placed overhangs.
+        poses = {c.id: c for c in rod.cluster_transforms}
+        rod = unpaired.copy_with(cluster_transforms=[poses[c.id] for c in unpaired.cluster_transforms])
+        for i, item in enumerate(connections):
+            progress(f"Attach nanoparticle {i + 1}/{len(connections)}", "Fit and bind at fixed center", .80 + .10 * i / len(connections))
             before = rod
-        pose = particles[i].pose.to_array().copy()
-        pose[:3, :3] = (
-            _rotation_between(pose[:3, :3] @ local, target - centers[i]) @ pose[:3, :3]
-        )
-        rod = replace_gold_nanosphere(
-            rod, particles[i].id, pose=pose.flatten().tolist()
-        )
-        rod, _ = materialize_duplex_cluster(rod, v.overhang_id)
-        _record(
-            history,
-            before,
-            rod,
-            "nanoparticle-patch" if history and history.standard else "nanoparticle-connection-relax",
-            f"Fit nanoparticle {i + 1} duplex at fixed center",
-            {"nanoparticle_id": particles[i].id, "pose": pose.flatten().tolist()} if history and history.standard else fit_params,
-            f"fit:{i}",
-            ("phase_deg", "duplex_roll_deg"),
-        )
-        geometry = fitting_geometry(rod)
+            rod, diagnostics = attach_nanoparticle(rod, item["particle_id"], item["overhang_id"],
+                strand_id=item["strand_id"], fixed_center=True, frame=frame)
+            _record(history, before, rod, "nanoparticle-attach-overhang", "Attach nanoparticle to overhang",
+                {**item, "nanoparticle_id": item["particle_id"], **diagnostics}, f"attach:{i}")
+    else:
+        for i, v in enumerate(rod.nanoparticle_connection_versions):
+            progress(f"Fit attachment {i + 1}/{len(connections)}", "Find overhang and nanoparticle rotations while holding the center fixed", .80 + .10 * i / len(connections))
+            root, _ = resolve_overhang_anchor(geometry, v.overhang_id, "root")
+            joint, local = _joint(rod, v, geometry)
+            before = rod
+            angles = _params(history, f"fit:{i}", {}, ("phase_deg", "duplex_roll_deg"))
+            target, rotation, fit_params = _fit_swing(
+                root,
+                joint,
+                centers[i],
+                np.linalg.norm(local),
+                frame,
+                geometry,
+                v,
+                particles,
+                centers,
+                angles,
+            )
+            rod = dematerialize_duplex_cluster(rod, v.overhang_id)
+            rod, _, _ = _build_overhang_patch(
+                rod,
+                v.overhang_id,
+                OverhangPatchRequest(
+                    rotation=Rotation.from_matrix(rotation).as_quat().tolist()
+                ),
+            )
+            if history and history.standard:
+                rod, _ = materialize_duplex_cluster(rod, v.overhang_id)
+                _record(history, before, rod, "overhang-sequence", "Rotate overhang",
+                    {"overhang_id": v.overhang_id, "rotation": Rotation.from_matrix(rotation).as_quat().tolist()}, f"fit-overhang:{i}")
+                before = rod
+            pose = particles[i].pose.to_array().copy()
+            pose[:3, :3] = (
+                _rotation_between(pose[:3, :3] @ local, target - centers[i]) @ pose[:3, :3]
+            )
+            rod = replace_gold_nanosphere(
+                rod, particles[i].id, pose=pose.flatten().tolist()
+            )
+            rod, _ = materialize_duplex_cluster(rod, v.overhang_id)
+            _record(
+                history,
+                before,
+                rod,
+                "nanoparticle-patch" if history and history.standard else "nanoparticle-connection-relax",
+                f"Fit nanoparticle {i + 1} duplex at fixed center",
+                {"nanoparticle_id": particles[i].id, "pose": pose.flatten().tolist()} if history and history.standard else fit_params,
+                f"fit:{i}",
+                ("phase_deg", "duplex_roll_deg"),
+            )
+            geometry = attachment_geometry(rod)
     progress("Check reach and clearance", "Measure attachment residuals and check DNA against every gold core", .91)
+    # The final check must include all DNA, not just the attachment helices.
+    geometry = fitting_geometry(rod)
     # Verify actual emitted coordinates, never just the nominal helix axes.
     residuals = []
     for i, v in enumerate(rod.nanoparticle_connection_versions):

@@ -13,7 +13,8 @@ and place the particle in the 3D workspace. A gold nanosphere:
 - remains selected until empty space is clicked or Escape is pressed;
 - uses the protein-style move/rotate gizmo and remains selected while orbiting;
 - has a metallic gold Photo Mode material; and
-- has right-click actions for diameter editing, conjugation, and deletion.
+- has right-click actions for attachment to overhangs, diameter editing,
+  conjugation, and deletion.
 
 Create, resize/move, and delete are snapshot-bearing Feature Log operations and
 can therefore be edited, reverted, or deleted through the normal history tools.
@@ -41,6 +42,29 @@ attachment residues; users should still validate force-field compatibility and
 simulation conditions for their intended gold-interface model.
 
 ## Connecting handles to origami overhangs
+
+Right-click an uncoated gold nanoparticle and choose **Attach to overhang**.
+The next overhang selection reuses a free complementary thiol handle, selects
+an antiparallel connection variant, fits the particle/duplex poses, and commits
+one undoable attachment feature. Escape cancels picking; prior selection filters
+are restored after picking or cancellation. Create a compatible handle in
+Conjugate Manager first if none exists. Existing applied attachments remain
+constraints. Infeasible or occupied targets do not change the design.
+
+The shared command is `POST /api/design/nanoparticles/{id}/attach-overhang`.
+It requires `overhang_id`, `expected_design_id`, and `expected_revision`; optional
+`strand_id` selects a specific handle and `fixed_center` locks particle translation.
+Generate Design creates and sequences overhangs before calling this command's
+shared builder with fixed centers. The Conjugate Manager's selected-overhang Apply
+also uses this builder after creating the requested corona.
+
+Clearance is a geometric screen, not a molecular simulation: rigid duplex search
+checks native backbone/base landmarks against DNA and protein atoms (0.5 nm
+landmark separation, excluding the covalently adjacent 2 nm root neighbourhood),
+and gold cores against DNA, protein atoms and other particle cores. Hidden objects
+remain obstacles. The finite search can reject a feasible arrangement it did not
+find; it never guarantees a global optimum. Coated particles require their separate
+attachment chemistry and do not use this shortcut.
 
 Open the right-sidebar **Overhang Connections** card and choose
 **Nanoparticle ↔ Overhang**. Select a nanoparticle ssDNA handle and a target
