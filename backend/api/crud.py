@@ -8423,6 +8423,10 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
         design_state.set_design(updated)
         return _design_replace_response(design, updated, validate_design(updated))
 
+    if entry.op_kind == "sweep":
+        from backend.api.sweep_history import commit_sweep_edit
+        return commit_sweep_edit(design, index, body.params)
+
     later_snapshots = [
         i
         for i, e in enumerate(log[index + 1 :], start=index + 1)
@@ -8439,13 +8443,8 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
         )
 
     pre_state = design_state.decode_design_snapshot(entry.design_snapshot_gz_b64)
-    if entry.op_kind == "sweep":
-        body.params = {**body.params, "sweep_id": entry.params["sweep_id"]}
-
-    params = dict(body.params)
-    if entry.op_kind != "sweep":
-        params = {"separate_fresh_extrusions": entry.params.get("separate_fresh_extrusions", False),
-                  **params}
+    params = {"separate_fresh_extrusions": entry.params.get("separate_fresh_extrusions", False),
+              **body.params}
     try:
         new_post = _edit_dispatch_run(entry.op_kind, pre_state, params)
     except HTTPException:
@@ -8480,15 +8479,7 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
     from backend.core.validator import validate_design as _validate_design
 
     final = new_post.copy_with(feature_log=new_log, feature_log_cursor=-1)
-    if entry.op_kind == "sweep":
-        from backend.api.routes_sweep import _guard
-        from backend.core.sweep import SweepRequest
-        sweep_body = SweepRequest.model_validate(body.params)
-        _guard(design, sweep_body)
-        final = _seek_feature_log(final, -1)
-        design_state.set_design(final, expected_revision=sweep_body.expected_revision)
-    else:
-        design_state.set_design(final)
+    design_state.set_design(final)
     report = _validate_design(final)
     # Snapshot edits typically change topology (extrusion params), so the
     # response usually lands in the embedded full-geometry path. Cluster_only
@@ -8943,7 +8934,9 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
             ) else [c for c in design.cluster_transforms if c.id not in touched_clusters]
                 + [c for c in snap_design.cluster_transforms if c.id in touched_clusters]),
         )
+    from backend.core.sweep_edit import restore_follow_poses
     return design.copy_with(
+        cluster_transforms=restore_follow_poses(design, snap_design),
         deformations=[d for d in design.deformations if d.type != "sweep"]
             + [d for d in snap_design.deformations if d.type == "sweep"],
         helices=snap_design.helices,

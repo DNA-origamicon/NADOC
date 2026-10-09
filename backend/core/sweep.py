@@ -47,13 +47,14 @@ class SweepRequest(BaseModel):
         return self
 
 
-def _site_frame(design, helix, end):
+def _site_frame(design, helix, end, *, bp=None):
     from backend.core.deformation import deformed_nucleotide_arrays, effective_helix_for_geometry
     from backend.core.geometry import nucleotide_positions_arrays
     effective = effective_helix_for_geometry(helix, design)
     rest = nucleotide_positions_arrays(effective)
     world = deformed_nucleotide_arrays(helix, design)
-    bp = helix.bp_start + (helix.length_bp - 1 if end == 'end' else 0)
+    if bp is None:
+        bp = helix.bp_start + (helix.length_bp - 1 if end == 'end' else 0)
     candidates = np.flatnonzero((world['bp_indices'] == bp) & (world['directions'] == 1))
     # Array directions are 0 (forward) and 1 (reverse).
     if not len(candidates):

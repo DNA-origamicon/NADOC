@@ -109,7 +109,7 @@ it('opens the blunt-end source in step one and rejects interior ends', async () 
   expect(document.getElementById('sweep-step').textContent).toContain('1/2')
 })
 
-it('keeps the last valid bundle preview while a changed point awaits the server', async () => {
+it('updates the local path immediately while a changed point awaits the server', async () => {
   const { api, scene, selection } = setup()
   panel.activate(); selection([[0,0]])
   await vi.advanceTimersByTimeAsync(130)
@@ -123,6 +123,10 @@ it('keeps the last valid bundle preview while a changed point awaits the server'
   await vi.advanceTimersByTimeAsync(130)
   expect(geometry.children.length).toBeGreaterThan(0)
   expect(scene.getObjectByName('sweep-point-1').position.x).toBe(4)
+  const path = scene.getObjectByName('sweep-live-path')
+  expect(scene.getObjectByName('sweep-live-preview').visible).toBe(true)
+  expect(path.geometry.attributes.position.getX(path.geometry.drawRange.count-1)).toBeCloseTo(4)
+  expect(geometry.visible).toBe(false)
   expect(document.getElementById('sweep-apply').disabled).toBe(true)
 })
 
@@ -138,4 +142,41 @@ it('refreshes the guarded preview when workspace metadata advances the revision'
   await vi.advanceTimersByTimeAsync(0)
   expect(api.createSweep).toHaveBeenCalledWith(expect.objectContaining({expected_revision:8}))
   expect(api.previewSweep.mock.lastCall[0]).not.toHaveProperty('expected_revision')
+})
+
+it('shows downstream conflicts in the live edit preview without disabling Apply', async () => {
+  const { api } = setup()
+  const response = await api.previewSweep()
+  api.previewSweep.mockResolvedValue({...response, edit_warnings:['Review crossover register.']})
+  panel.edit({ params: { cells:[[0,0]], plane:'XY', points_nm:[[0,0,0],[0,0,10]], ligate_adjacent:false } }, 0)
+  await vi.advanceTimersByTimeAsync(130)
+  expect(document.getElementById('sweep-conflicts').textContent).toContain('Review crossover register.')
+  expect(document.getElementById('sweep-apply').disabled).toBe(false)
+})
+
+it('coalesces input into one local frame and rejects out-of-order server previews', async () => {
+  const {api,scene,selection}=setup()
+  panel.activate();selection([[0,0]])
+  await vi.advanceTimersByTimeAsync(130)
+  document.getElementById('sweep-apply').click()
+  await vi.advanceTimersByTimeAsync(130)
+  const resolved=await api.previewSweep(), pending=[]
+  api.previewSweep.mockImplementation(()=>new Promise(resolve=>pending.push(resolve)))
+  const x=document.querySelector('[aria-label="Point X (nm)"]')
+  const change=value=>{x.value=String(value);x.dispatchEvent(new Event('input'))}
+  change(2);await vi.advanceTimersByTimeAsync(130)
+  change(3);change(8);await vi.advanceTimersByTimeAsync(20)
+  const live=scene.getObjectByName('sweep-live-path'),attribute=live.geometry.attributes.position
+  expect(attribute.getX(live.geometry.drawRange.count-1)).toBeCloseTo(8)
+  pending[0]({...resolved,points_nm:[[0,0,0],[2,0,10]]})
+  await vi.advanceTimersByTimeAsync(0)
+  expect(scene.getObjectByName('sweep-live-preview').visible).toBe(true)
+  expect(document.getElementById('sweep-apply').disabled).toBe(true)
+  await vi.advanceTimersByTimeAsync(120)
+  pending[1]({...resolved,points_nm:[[0,0,0],[8,0,10]]})
+  await vi.advanceTimersByTimeAsync(0)
+  expect(scene.getObjectByName('sweep-live-preview').visible).toBe(false)
+  expect(document.getElementById('sweep-apply').disabled).toBe(false)
+  change(9);panel.hide();await vi.advanceTimersByTimeAsync(20)
+  expect(scene.getObjectByName('sweep-live-preview').visible).toBe(false)
 })

@@ -36,6 +36,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 # _reconcile_cluster_joints_between a no-op on the diff path).
 _DIFF_FIELDS: tuple[str, ...] = (
     "helices",
+    "overhangs",
     "strands",
     "crossovers",
     "forced_ligations",
@@ -55,6 +56,7 @@ def _model_classes() -> dict[str, type]:
         ForcedLigation,
         Helix,
         OverhangConnection,
+        OverhangSpec,
         PhotoproductJunction,
         Strand,
         StrandExtension,
@@ -62,6 +64,7 @@ def _model_classes() -> dict[str, type]:
 
     return {
         "helices": Helix,
+        "overhangs": OverhangSpec,
         "strands": Strand,
         "crossovers": Crossover,
         "forced_ligations": ForcedLigation,

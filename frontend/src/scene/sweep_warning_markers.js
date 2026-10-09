@@ -49,7 +49,7 @@ export function createSweepWarningMarkers(scene, {canvas,getCamera,addFrameCallb
   canvas?.addEventListener('pointerleave',hide);addFrameCallback?.(sync)
   return {
     set(values){anchors=values.map(v=>Array.isArray(v)?{position:v}:v);group.clear();hide()
-      anchors.forEach(()=>{const icon=new THREE.Mesh(triangle,amber);icon.renderOrder=1100
+      anchors.forEach(anchor=>{const icon=new THREE.Mesh(triangle,amber);icon.renderOrder=1100;icon.userData.helixIds=anchor.keys?.map(key=>key.split(':')[0]) ?? []
         const bar=new THREE.Mesh(stem,ink),point=new THREE.Mesh(dot,ink);bar.position.set(0,.15,.01);point.position.set(0,-.43,.01)
         bar.renderOrder=point.renderOrder=1101;icon.add(bar,point);group.add(icon)
       });sync()

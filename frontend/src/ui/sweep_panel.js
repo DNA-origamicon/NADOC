@@ -4,7 +4,7 @@ import { createSweepPreview } from '../scene/sweep_preview.js'
 import { resolveExtrudeSourcePlane } from './extrude_source_plane.js'
 import './sweep_panel.css'
 
-export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, expandedSpacing, showToast, getDocId = () => null, canvas, getCamera, getControls, addFrameCallback, removeFrameCallback }) {
+export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, expandedSpacing, showToast, getDocId = () => null, setPreviewHelices, canvas, getCamera, getControls, addFrameCallback, removeFrameCallback }) {
   const panel = document.createElement('div')
   panel.id = 'sweep-panel'; panel.className = 'panel-section'; panel.style.display = 'none'
   panel.innerHTML = `<h2>Sweep</h2>
@@ -21,11 +21,12 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
     </div><fieldset id="sweep-path" class="tool-section" hidden><legend>Path</legend><div id="sweep-point-editor"></div></fieldset>
     <div class="sweep-info" id="sweep-info" role="status" hidden>New BP: <strong id="sweep-total-bp">—</strong></div>
     <p class="tool-help" id="sweep-status" role="status"></p>
+    <details id="sweep-conflicts" hidden><summary></summary><ul></ul></details>
     <div class="def-btn-row"><button class="def-btn" id="sweep-cancel">Cancel</button><button class="def-btn primary" id="sweep-apply">Next</button></div>`
   const el = id => panel.querySelector(`#sweep-${id}`)
   const sourceSelect = el('source'), planeSelect = el('plane'), status = el('status'), apply = el('apply')
   const popup = createToolPopup({ panel, title: 'Sweep', onClose: hide })
-  const preview = createSweepPreview(scene, { canvas, getCamera, getControls, addFrameCallback, removeFrameCallback,
+  const preview = createSweepPreview(scene, { setPreviewHelices, canvas, getCamera, getControls, addFrameCallback, removeFrameCallback,
     onSelect: index => editor.select(index), onOrient: (index, value) => editor.orient(index, value), canOrient: index => editor.canOrient(index), onMove: (index, value) => editor.move(index, value) })
   const editor = initSweepPoints(el('point-editor'), () => { resetPathDirection = false; schedulePreview() }, index => preview.select(index), index => preview.getOrientation(index))
   let active = false, busy = false, editing = null, cells = [], source = null, sources = []
@@ -40,6 +41,7 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
   function hide() {
     if (!active) return
     active = false; epoch++; clearTimeout(timer)
+    el('conflicts').hidden = true; el('conflicts').open = false
     store.setState({ sweepActive: false })
     preview.clear(); popup.hide(); slicePlane.hide()
     slicePlane.setPreviewEnabled(previousPreview)
@@ -50,7 +52,7 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
     clearTimeout(timer); epoch++; apply.disabled = true
     el('total-bp').textContent = '…'
     status.textContent = cells.length ? 'Updating path…' : 'Select at least one lattice cell.'
-    if (step === 2) preview.setPoints(editor.getPoints(), editor.getSelected())
+    if (step === 2) preview.updateDraft(editor.getPoints(), editor.getOrientations(), editor.getSelected())
     if (!cells.length) preview.clearGeometry()
     if (cells.length) timer = setTimeout(refreshPreview, 120)
   }
@@ -72,7 +74,7 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
         editor.setPoints([[0, 0, 0], response.source_frame.axis_dir.map(v => v * (source.end === 'start' ? -10 : 10))])
         schedulePreview(); return
       }
-      if (step === 2) { preview.update(response); preview.select(editor.getSelected()) }
+      if (step === 2) { preview.update(response, request); preview.select(editor.getSelected()) }
       el('total-bp').textContent = (response.total_new_bp ?? response.length_bp * cells.length).toLocaleString()
       status.textContent = step === 1 ? `${cells.length} lattice cells selected.` : `${response.length_nm.toFixed(2)} nm · ${response.length_bp} bp per helix`
       if (step === 1 && source && needsSourceFrame && response.source_frame) {
@@ -82,6 +84,10 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
         updatingPicker = false; needsSourceFrame = false
       }
       if (step === 2 && response.feasibility?.status === 'warning') status.textContent += ` · Warning: ${response.feasibility.message}`
+      const conflicts = response.edit_warnings ?? []
+      el('conflicts').hidden = !conflicts.length
+      el('conflicts').querySelector('summary').textContent = `${conflicts.length} item(s) need review`
+      el('conflicts').querySelector('ul').replaceChildren(...conflicts.map(text => { const li = document.createElement('li'); li.textContent = text; return li }))
       apply.disabled = false
     } catch (error) {
       if (active && version === epoch) { preview.clearGeometry(); status.textContent = error.message; apply.disabled = true }

@@ -131,6 +131,7 @@ export function initDesignRenderer(scene, storeRef) {
   // Fluorescence-mode: per-fluorophore emission color glow
   const _fluoroGlowLayer = createMultiColorGlowLayer(scene)
 
+  let _previewHelices = new Set()
   let _hiddenNucKeys      = new Set()  // persists across rebuilds; set by cluster visibility toggle
   let _hiddenCrossoverIds = new Set()  // extra-base bead/slab instances to suppress
   // Per-cluster opacity — same nucKey format as _hiddenNucKeys, and the same
@@ -381,7 +382,7 @@ export function initDesignRenderer(scene, storeRef) {
     const refIds = new Set((design?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
     const state = storeRef.getState()
     const refHidden = state.showReferenceGeometry === false || state.simulationTabActive === true
-    const hasHidden = _hiddenCrossoverIds.size > 0 || (refHidden && refIds.size > 0)
+    const hasHidden = _previewHelices.size > 0 || _hiddenCrossoverIds.size > 0 || (refHidden && refIds.size > 0)
     const repVisible = ad => _helixCtrl?.columnRepAt?.(ad.nucA?.helix_id, ad.nucA?.bp_index) === 'full' &&
       _helixCtrl?.columnRepAt?.(ad.nucB?.helix_id, ad.nucB?.bp_index) === 'full'
     const hasRepHidden = _xoverArcData.some(ad => !repVisible(ad))
@@ -391,7 +392,7 @@ export function initDesignRenderer(scene, storeRef) {
     if (_xoverConnMesh) installInstanceAlpha(_xoverConnMesh)
     if (_xoverSlabConnMesh) installInstanceAlpha(_xoverSlabConnMesh)
     for (const ad of _xoverArcData) {
-      const hidden = _hiddenCrossoverIds.has(ad.xoId) ||
+      const hidden = _previewHelices.has(ad.nucA?.helix_id) || _previewHelices.has(ad.nucB?.helix_id) || _hiddenCrossoverIds.has(ad.xoId) ||
         (refHidden && (refIds.has(ad.nucA?.strand_id) || refIds.has(ad.nucB?.strand_id)))
       const a = hidden || !repVisible(ad) ? 0 : (_clusterAlphaKeys.size
         ? Math.min(clusterAlphaForNuc(_clusterAlphaKeys, ad.nucA),
@@ -654,7 +655,7 @@ export function initDesignRenderer(scene, storeRef) {
     if (_slabThickness !== 0.06) _helixCtrl.setSlabThickness(_slabThickness)
     if (staplesHidden) _helixCtrl.setStapleVisibility(false)
     if (isolatedStrandId) _helixCtrl.setIsolatedStrand(isolatedStrandId)
-    if (_hiddenNucKeys.size) _helixCtrl.setHiddenNucs(_hiddenNucKeys)
+    if (_hiddenNucKeys.size || _previewHelices.size) _helixCtrl.setHiddenNucs(new Set([..._hiddenNucKeys, ...[..._previewHelices].map(id => `h:${id}`)]))
     if (_clusterAlphaKeys.size) {
       _helixCtrl.setClusterAlphas(_clusterAlphaKeys)
       _applyXoverClusterAlpha()
@@ -670,6 +671,7 @@ export function initDesignRenderer(scene, storeRef) {
     // Mixed representation: pin per-region reps (must run after reference alpha,
     // since override visibility multiplies over reference alpha).
     _applyRepresentationOverrides(design)
+    if (_previewHelices.size) _helixCtrl.setStructuralHelicesSuppressed(_previewHelices)
     _applyXoverVisibility()
     _applyReferenceXoverVisibility()   // hide reference crossover extra-bases when ref toggle off
     _applyXoverExtrasLod()             // hide extra-base beads/slabs in coarse rep (survives rebuild)
@@ -1875,6 +1877,15 @@ export function initDesignRenderer(scene, storeRef) {
       _helixCtrl?.setExtensionsVisible(visible)
     },
 
+    /** Temporarily replace only the helices belonging to a live sweep preview. */
+    setPreviewHelices(ids) {
+      _previewHelices = new Set(ids)
+      _helixCtrl?.setStructuralHelicesSuppressed(new Set())
+      _helixCtrl?.setHiddenNucs(new Set([..._hiddenNucKeys, ...ids.map(id => `h:${id}`)]))
+      _helixCtrl?.setStructuralHelicesSuppressed(_previewHelices)
+      _applyXoverVisibility()
+    },
+
     /**
      * Hide/show nucleotides by domain-aware key set.  Keys are either:
      *   'h:<helix_id>'                 — hide whole helix (helix-level cluster)
@@ -1884,7 +1895,7 @@ export function initDesignRenderer(scene, storeRef) {
      */
     setHiddenNucs(keys) {
       _hiddenNucKeys = keys instanceof Set ? keys : new Set(keys)
-      _helixCtrl?.setHiddenNucs(_hiddenNucKeys)
+      _helixCtrl?.setHiddenNucs(new Set([..._hiddenNucKeys, ...[..._previewHelices].map(id => `h:${id}`)]))
     },
 
     /**

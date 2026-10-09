@@ -143,6 +143,12 @@ def _helix_preserves_stored_pose(helix: "Helix", design: "Design") -> bool:
     """
     if helix.id.startswith("__lnk__"):
         return True
+    # Sweep attachment edits retain the previously evaluated local pose while
+    # shifting topology indices. Re-normalizing phase from those new indices
+    # would rotate an otherwise rigid downstream extrusion around its axis.
+    if any(c.id.startswith("sweep-follow:") and helix.id in c.helix_ids
+           for c in design.cluster_transforms):
+        return True
 
     # Inline overhangs are unpaired tails of otherwise ordinary lattice strands.
     # Tagging one must never change the phase policy of its backing helix: doing so

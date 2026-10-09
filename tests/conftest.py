@@ -568,6 +568,13 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # October 9 sweep-edit validation: these compile native C++ adapters
+    # (33.6 s module fixture / 8.6 s standalone) or build a complete electrode
+    # qualification package (8.5 s). Keep lightweight sibling oracles fast.
+    "test_unstable_profiles_remove_wandering_and_preserve_curve",
+    "test_physical_smoothing_is_consistent_across_zoom",
+    "test_native_headset_quarantine_latch_is_irreversible_within_one_session",
+    "test_electrode_stage_writer_preserves_forces_and_disables_pressure",
     # October 9 fast-suite triage: real mesh generation (7.3 s), large fixture
     # geometry/seed/clash evaluation (6.4–6.7 s), and complete routing builds
     # (5.8–6.4 s). Smaller unit oracles remain in the fast suite.

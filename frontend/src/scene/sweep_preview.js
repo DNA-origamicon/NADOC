@@ -2,14 +2,19 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { createSweepWarningMarkers, warningSegmentCenters } from './sweep_warning_markers.js'
 import { sweepSectionGeometry } from './sweep_cross_section.js'
+import { createSweepLivePreview } from './sweep_live_preview.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 
 /** Display-only swept helix tubes, point picking and world translation controls. */
-export function createSweepPreview(scene, { canvas, getCamera, getControls, addFrameCallback, removeFrameCallback, onSelect, onMove, onOrient, canOrient = () => true } = {}) {
+export function createSweepPreview(scene, { canvas, getCamera, getControls, addFrameCallback, removeFrameCallback, onSelect, onMove, onOrient, canOrient = () => true, setPreviewHelices = () => {} } = {}) {
   const root = new THREE.Group(), geometry = new THREE.Group(), points = new THREE.Group()
   root.name = 'sweep-preview'; points.name = 'sweep-control-points'; geometry.name = 'sweep-geometry'
   root.add(geometry, points); scene.add(root)
+  const live = createSweepLivePreview(root)
+  let liveFrame = null, pendingDraft = null
   const warnings = createSweepWarningMarkers(scene,{canvas,getCamera,addFrameCallback,removeFrameCallback})
+  const hidden = new Map()
+  function restoreScene() { setPreviewHelices([]); for (const [node, visible] of hidden) node.visible = visible; hidden.clear() }
   let mode = 'translate', pointBases = [], orientationBasis = new THREE.Matrix4()
   const arrows = new THREE.Group(); arrows.name = 'sweep-orientation-arrows'; root.add(arrows)
   const sections = new THREE.Group(); sections.name = 'sweep-cross-sections'; root.add(sections)
@@ -27,7 +32,7 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
     for (const child of [...sections.children]) { child.material.dispose(); sections.remove(child) }
     sectionShape?.dispose(); selectedShape?.dispose(); sectionShape = selectedShape = null
   }
-  function clearGeometry() { disposeChildren(geometry); clearSections(); warnings.set([]) }
+  function clearGeometry() { if (liveFrame != null) cancelAnimationFrame(liveFrame); liveFrame = pendingDraft = null; live.reset(); geometry.visible = true; restoreScene(); disposeChildren(geometry); clearSections(); warnings.set([]) }
   function frameMatrix(b) { return new THREE.Matrix4().set(...b[0],0,...b[1],0,...b[2],0,0,0,0,1) }
   function anglesFromFrame(frame) {
     const e = new THREE.Euler().setFromRotationMatrix(orientationBasis.clone().invert().multiply(frame), 'YXZ')
@@ -39,8 +44,8 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
     section.position.copy(points.children[index].position)
     if (pointBases[index]) section.quaternion.setFromRotationMatrix(frameMatrix(pointBases[index]))
     section.geometry = index === selected ? selectedShape : sectionShape
-    section.material.color.setHex(index === selected ? 0xffdf80 : 0x65dcec)
-    section.material.opacity = index === selected ? 1 : .65
+    section.material.color.setRGB(...(index === selected ? [1,.87,.50] : [.25,.7,.78]))
+    section.material.opacity = 1
     section.renderOrder = index === selected ? 103 : 100
   }
   function endDrag() {
@@ -166,17 +171,32 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
     addFrameCallback?.(syncCamera)
   }
   return {
-    update(data) {
+    update(data, draft) {
       clearGeometry()
       if (!data) { clear(); return }
       origin.fromArray(data.origin_nm ?? data.points_nm[0])
       rotation.set(...(data.point_rotation ?? [[1,0,0],[0,1,0],[0,0,1]]).flat())
       inverse.copy(rotation).invert()
       hasFrame = true
+      live.setBaseline(data, draft)
       pointBases = data.point_bases ?? []
       if (tc?.dragging && mode === 'rotate') {
         const frame = new THREE.Matrix4().makeRotationFromQuaternion(target.quaternion)
         pointBases[selected] = [0,1,2].map(r => [0,1,2].map(c => frame.elements[c*4+r]))
+      }
+      if (data.edit_backbones_nm) {
+        const affected = new Set(data.edit_helix_ids ?? [])
+        setPreviewHelices([...affected])
+        scene.getObjectByName('sweep-warning-icons-saved')?.children.forEach(icon => {
+          if (icon.userData.helixIds?.some(id => affected.has(id))) {
+            hidden.set(icon, icon.visible); icon.visible = false
+          }
+        })
+        for (const path of data.edit_backbones_nm) {
+          const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(path.map(p => new THREE.Vector3(...p))),
+            new THREE.LineBasicMaterial({ color: 0x80d9b0 }))
+          line.name = 'sweep-edited-backbone'; geometry.add(line)
+        }
       }
       const cells = data.cross_section_nm ?? []
       if (cells.length) {
@@ -185,7 +205,7 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
         sectionShape = sweepSectionGeometry(cells, Math.max(1,Math.ceil(cells.length*pointBases.length/8192)))
         selectedShape = sweepSectionGeometry(cells)
         pointBases.forEach((_,i) => {
-          const section = new THREE.LineSegments(sectionShape, new THREE.LineBasicMaterial({color:0x65dcec,transparent:true,opacity:.65,depthTest:false,depthWrite:false}))
+          const section = new THREE.LineSegments(sectionShape, new THREE.LineBasicMaterial({color:new THREE.Color().setRGB(.25,.7,.78),depthTest:false,depthWrite:false}))
           section.name = `sweep-cross-section-${i}`; sections.add(section)
         })
       }
@@ -227,7 +247,8 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
       }
       const path = new THREE.BufferGeometry().setFromPoints(data.path_nm.map(p => new THREE.Vector3(...p)))
       geometry.add(new THREE.Line(path, new THREE.LineBasicMaterial({ color: 0x58a6ff, depthTest: false })))
-      for (const axis of data.helix_paths_nm ?? []) {
+      for (const [i, axis] of (data.helix_paths_nm ?? []).entries()) {
+        if (data.edit_helix_ids && !data.edit_helix_ids.includes(data.helix_path_ids?.[i])) continue
         // A piecewise-linear curve preserves the exact server samples; do not
         // interpolate a second spline with a different shape for the ghost.
         const curve = new THREE.CurvePath()
@@ -243,13 +264,48 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
       }
       setPoints(data.points_nm.map(p => new THREE.Vector3(...p).sub(origin).applyMatrix3(inverse).toArray()))
     },
+    updateDraft(values, angles, index = selected) {
+      if (!hasFrame) return
+      setPoints(values, index)
+      pendingDraft = {values, angles}
+      if (liveFrame != null) return
+      liveFrame = requestAnimationFrame(() => {
+        liveFrame = null
+        const draft = pendingDraft; pendingDraft = null
+        const sampled = live.update(draft.values, draft.angles)
+        if (!sampled) return
+        geometry.visible = false; warnings.set([])
+        pointBases = sampled.pointFrames.map(q => {
+          const m = new THREE.Matrix4().makeRotationFromQuaternion(q)
+          return [0,1,2].map(r => [0,1,2].map(c => m.elements[c*4+r]))
+        })
+        // Refresh existing section and arrow buffers; no tube tessellation per drag.
+        sections.children.forEach((_,i) => updateSection(i))
+        pointBases.forEach((basis,i) => {
+          const at = points.children[i]?.position
+          if (!at) return
+          for (const [slot,axis,length] of [[0,2,4],[1,0,2]]) {
+            const arrow = arrows.children[i*2+slot]; if (!arrow) continue
+            const direction = new THREE.Vector3(...basis.map(r=>r[axis]))
+            const end = at.clone().addScaledVector(direction,length)
+            const side = new THREE.Vector3().crossVectors(direction,new THREE.Vector3(0,1,0))
+            if (side.lengthSq()<.01) side.crossVectors(direction,new THREE.Vector3(1,0,0))
+            side.normalize().multiplyScalar(.35)
+            const back = end.clone().addScaledVector(direction,-.7)
+            const positions = arrow.geometry.attributes.position
+            ;[at,end,end,back.clone().add(side),end,back.clone().sub(side)].forEach((p,k)=>positions.setXYZ(k,p.x,p.y,p.z))
+            positions.needsUpdate = true; arrow.frustumCulled = false
+          }
+        })
+      })
+    },
     getOrientation(index) {
       const b = pointBases[index]; return b ? anglesFromFrame(frameMatrix(b)) : [0,0,0]
     },
     getMode: () => mode,
     select, setPoints, clear, clearGeometry,
     dispose() {
-      clear(); warnings.dispose(); tc?.dispose(); helper?.removeFromParent(); target.removeFromParent(); scene.remove(root)
+      clear(); live.dispose(); warnings.dispose(); tc?.dispose(); helper?.removeFromParent(); target.removeFromParent(); scene.remove(root)
       window.removeEventListener('keydown', keydown, true)
       window.removeEventListener('pointerdown', down, true); window.removeEventListener('pointermove', move, true)
       window.removeEventListener('pointerup', up, true); window.removeEventListener('pointercancel', up, true)

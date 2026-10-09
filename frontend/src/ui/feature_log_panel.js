@@ -1437,7 +1437,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         const particle = isNanoparticle
           ? store.getState().currentDesign?.nanoparticles?.find(p => p.id === entry.params?.nanoparticle_id)
           : null
-        const editAllowed = isEditable && (isGenerated ? canReplayGenerated(log, i) : isNanoparticle ? !!particle : (isLinkerAdd || isPattern || !hasLaterSnapshot))
+        const editAllowed = isEditable && (isGenerated ? canReplayGenerated(log, i) : isNanoparticle ? !!particle : (isLinkerAdd || isPattern || entry.op_kind === 'sweep' || !hasLaterSnapshot))
 
         let editBtn = null
         if (isEditable) {

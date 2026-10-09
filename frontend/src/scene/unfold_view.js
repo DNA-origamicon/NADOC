@@ -57,8 +57,10 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
 
   // ── Cluster visibility ───────────────────────────────────────────────────────
   // Keys mirror helix_renderer: 'h:<helix_id>' or 'd:<strand_id>:<domain_index>'
+  let _previewHelices = new Set()
   let _hiddenNucKeys = new Set()
   const _isNucHidden = nuc =>
+    _previewHelices.has(nuc?.helix_id) ||
     _hiddenNucKeys.has('h:' + nuc?.helix_id) ||
     (nuc?.domain_index != null && _hiddenNucKeys.has('d:' + nuc?.strand_id + ':' + nuc?.domain_index)) ||
     _hiddenNucKeys.has(baseKey(nuc, nuc?.copy_k ?? 0))
@@ -1694,6 +1696,12 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
           vertIdx:     e.vertIdx,
         }}),
       }
+    },
+
+    /** Mask connections touching the live preview without altering cluster visibility. */
+    setPreviewHelices(ids) {
+      _previewHelices = new Set(ids)
+      this.setHiddenNucs(_hiddenNucKeys)
     },
 
     /**

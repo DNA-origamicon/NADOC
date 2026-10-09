@@ -19,3 +19,7 @@
 }
 .sweep-info { margin: var(--space-2) 0; padding: var(--space-3); border: 1px solid var(--color-border-muted); border-radius: 4px; background: var(--color-bg-inset); }
 .sweep-info strong { font-family: var(--font-data); }
+
+#sweep-conflicts { color: #f5c46b; font-size: var(--text-xs); margin: 8px 0; }
+#sweep-conflicts ul { max-height: 140px; overflow: auto; overflow-wrap: anywhere; padding-left: 18px; }
+#sweep-conflicts li { margin-bottom: 6px; }

@@ -2487,7 +2487,7 @@ async function main() {
   // to every extrude (new-bundle / segment / blunt-end / deformed continuation).
   _extrudePanel = initExtrudePanel({ store, slicePlane, expandedSpacing })
   initSavedSweepWarnings(scene,store,{canvas,getCamera:getRenderCamera,addFrameCallback,removeFrameCallback,getHelixCtrl:()=>designRenderer.getHelixCtrl()})
-  const sweepPanel = initSweepPanel({ store, api, slicePlane, scene, extrudePanel: _extrudePanel, expandedSpacing, showToast, getDocId, canvas, getCamera: getRenderCamera, getControls: getActiveControls, addFrameCallback, removeFrameCallback })
+  const sweepPanel = initSweepPanel({ setPreviewHelices: ids => { designRenderer.setPreviewHelices(ids); unfoldView.setPreviewHelices(ids) }, store, api, slicePlane, scene, extrudePanel: _extrudePanel, expandedSpacing, showToast, getDocId, canvas, getCamera: getRenderCamera, getControls: getActiveControls, addFrameCallback, removeFrameCallback })
   initLinearPatternPanel({ store, showToast, selectionManager, scene })
   initCircularPatternPanel({ store, showToast, selectionManager, scene, canvas, getCamera: getRenderCamera, getControls: getActiveControls, addFrameCallback, removeFrameCallback })
 
