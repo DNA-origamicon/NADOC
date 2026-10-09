@@ -29,6 +29,7 @@
 #include "shadow_light.hpp"
 #include "desktop_panel.hpp"
 #include "remote_panel.hpp"
+#include "reference_models.hpp"
 #include "representation_buffers.hpp"
 #include "async_trace.hpp"
 #include "loading_frame_trace.hpp"
@@ -5261,6 +5262,7 @@ class Viewer {
     ~Viewer() {
         gpuFrameTimer_.shutdown();
         qrCalibration_.shutdown();
+        referenceModels_.shutdown();
         roomFloor_.shutdown();
         menuGlass_.shutdown();
         startup_.surface.shutdown();
@@ -6495,6 +6497,7 @@ class Viewer {
     }
 
     void appendRadialToolGuides() {
+        referenceModels_.wheel.draw([&](auto a,auto b,auto color){controllerGuides_.push_back({a,color,1});controllerGuides_.push_back({b,color,1});},"",glfwGetTime());
         radialToolMenu_.draw([&](auto a,auto b,auto color){controllerGuides_.push_back({a,color,1});controllerGuides_.push_back({b,color,1});},"",glfwGetTime());
     }
 
@@ -8869,7 +8872,12 @@ class Viewer {
                 if (!trackpadPressed) trackpadScrolled_[hand] = false;
             }
 
-            if(hand==1) {
+            if(hand==1 && referenceModels_.hasSelection()) {
+                radialToolMenu_.close();
+                referenceModels_.radial(trackpadPressed,navigationAxis,hands_[hand],
+                    sessionState_==XR_SESSION_STATE_FOCUSED && !navigationMenuOpen);
+            } else if(hand==1) {
+                referenceModels_.wheel.close();
                 radialToolMenu_.setWorkflow(bendPanel_.active,bendHasAngle());
                 const bool sweepWheel=sweepPanel_.active && sweepDraft_.step==2;
                 radialToolMenu_.setSweep(sweepWheel);
@@ -8891,7 +8899,7 @@ class Viewer {
         auto remoteBlocked=remotePanels_.update(remotePanelTargets(),hands_,routingPopup_.anyOpen()?std::array<bool,2>{}:radialToolMenu_.filter(selectionWheel_.filter(triggerClicked_)),routingPopup_.anyOpen()?std::array<bool,2>{}:radialToolMenu_.filter(selectionWheel_.filter(triggerPressed_)),witnessObserverPosition_,glfwGetTime());
         if(routingPopup_.anyOpen())remoteBlocked.fill(true);
         remoteBlocked[0]=remoteBlocked[0]||selectionWheel_.blocksInput();
-        remoteBlocked[1]=remoteBlocked[1]||radialToolMenu_.blocksInput();
+        remoteBlocked[1]=remoteBlocked[1]||radialToolMenu_.blocksInput()||referenceModels_.wheel.blocksInput();
         viewTools_.syncPose();
         const auto gripContacts=menuGripContacts();
         const bool latticeOwnsGrip=latticeOpen_ && (latticePlacement_.dragHand() ||
@@ -8951,7 +8959,7 @@ class Viewer {
         auto manipulationHands = hands_;
         if(routingPopup_.anyOpen())for(auto& hand:manipulationHands)hand.pressed=false;
         if(selectionWheel_.blocksInput())manipulationHands[0].pressed=false;
-        if(radialToolMenu_.blocksInput())manipulationHands[1].pressed=false;
+        if(radialToolMenu_.blocksInput() || referenceModels_.wheel.blocksInput())manipulationHands[1].pressed=false;
         const bool menuGripActive = std::any_of(
             menuGripTargeted.begin(), menuGripTargeted.end(),
             [](bool targeted) { return targeted; });
@@ -9019,6 +9027,8 @@ class Viewer {
                                         latticeTargeted[hand];
         }
         if (radialToolMenu_.blocksInput()) menuControlTargeted[1] = true;
+        referenceModels_.poll(eventPath_,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters},glfwGetTime());
+        referenceModels_.input(hands_,triggerClicked_,triggerPressed_,menuControlTargeted,manipulator_.transform(),glfwGetTime());
         processSweepWarnings(menuControlTargeted);
         processSweepInput(menuControlTargeted,next!=nadoc_vr::ManipulationMode::none);
         frameAudit_.mark("menus_manipulation");
@@ -9704,6 +9714,7 @@ class Viewer {
         glScene_->setBendPointArc(bendPointPreviewActive()?std::optional{arc}:std::nullopt,bendPanel_.twist);
         if(viewTools_.overrideScene()) {viewTools_.renderScene(vp,model,witnessObserverOrientation_);if(!guides.empty())glScene_->renderGuides(vp,guides);}
         else glScene_->renderVolumes(vp,model,guides,ids,volumePanel_.entries,representationLoading_.pending && representationLoading_.lightweight);
+        referenceModels_.render(vp,model);
     }
 
     bool renderView(uint32_t index, const XrView& view,
@@ -11056,6 +11067,7 @@ class Viewer {
     bool witnessFailureReported_ = false;
     bool witnessCompletionReported_ = false;
     std::optional<nadoc_vr::PickHit> sceneHover_;
+    nadoc_vr::ReferenceModels referenceModels_;
     nadoc_vr::EditWheel radialToolMenu_;
     nadoc_vr::SelectionWheel selectionWheel_;
     bool latticeOpen_ = false;

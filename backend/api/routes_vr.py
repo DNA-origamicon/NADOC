@@ -2955,6 +2955,8 @@ def _cleanup_after_process(
     Path(str(event_path) + ".ligation").unlink(missing_ok=True)
     Path(str(event_path) + ".avatar").unlink(missing_ok=True)
     Path(str(event_path) + ".avatar.next").unlink(missing_ok=True)
+    for suffix in (".references", ".references.next", ".references-event", ".references-event.next"):
+        Path(str(event_path) + suffix).unlink(missing_ok=True)
     Path(str(event_path) + ".share").unlink(missing_ok=True)
     Path(str(event_path) + ".share.next").unlink(missing_ok=True)
     Path(str(event_path) + ".viewtools").unlink(missing_ok=True)

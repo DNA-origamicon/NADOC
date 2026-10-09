@@ -39,6 +39,11 @@ install(TARGETS nadoc-vr-viewer nadoc-vr-scrywrite nadoc-vr-scrywrite-export
 
 include(CTest)
 if(BUILD_TESTING)
+  add_executable(nadoc-vr-reference-models-test tests/reference_models_test.cpp)
+  target_include_directories(nadoc-vr-reference-models-test PRIVATE src)
+  target_link_libraries(nadoc-vr-reference-models-test PRIVATE OpenGL::GL)
+  target_compile_options(nadoc-vr-reference-models-test PRIVATE -Wall -Wextra -Wpedantic -UNDEBUG)
+  add_test(NAME nadoc-vr-reference-models COMMAND nadoc-vr-reference-models-test)
   find_package(Python3 COMPONENTS Interpreter REQUIRED)
   add_executable(nadoc-vr-sweep-draft-test tests/sweep_draft_test.cpp)
   target_include_directories(nadoc-vr-sweep-draft-test PRIVATE src)
