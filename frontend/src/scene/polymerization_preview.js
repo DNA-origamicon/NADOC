@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { installInstanceAlpha } from './instance_alpha.js'
+import { selfClosingPolymerSeam } from './polymer_seams.js'
 
 export const POLYMER_PREVIEW_ALPHA = [0.55, 0.3, 0.1]
 const key = n => `${n.helix_id}:${n.bp_index}:${n.direction}`
@@ -22,7 +23,7 @@ export function polymerizationPreviewEnds(design, entries, slabs = []) {
         .find(e => e && e.nuc.strand_id === n.strand_id && e.nuc.domain_index === n.domain_index)
       if (!inner) continue
       seen.add(id)
-      ends.push({ end, inner, slab: plates.get(id), innerSlab: plates.get(key(inner.nuc)) })
+      ends.push({ seam, end, inner, slab: plates.get(id), innerSlab: plates.get(key(inner.nuc)) })
     }
   }
   return ends
@@ -59,6 +60,7 @@ export function createPolymerizationPreview(root, design, entries, slabs, beadRa
   const color = new THREE.Color(), unit = new THREE.Vector3(1, 1, 1), yAxis = new THREE.Vector3(0, 1, 0)
   const sources = [...new Set(ends.flatMap(e => [e.end, e.inner, e.slab, e.innerSlab].filter(Boolean).map(e => e.instMesh)))]
   let previous = ''
+  let currentDesign = design
   const alpha = e => e?.instMesh.visible === false ? 0 : (e?.instMesh.geometry.getAttribute('instanceAlpha')?.getX(e.id) ?? 1) * (e?.instMesh.material.opacity ?? 1)
   function frame(entry, slab, output) {
     entry.instMesh.getMatrixAt(entry.id, matrix)
@@ -75,12 +77,14 @@ export function createPolymerizationPreview(root, design, entries, slabs, beadRa
     if (signature === previous) return
     previous = signature
     let i = 0
+    group.visible = ends.some(e => !selfClosingPolymerSeam(currentDesign, e.seam))
     for (const e of ends) {
       frame(e.end, e.slab, endFrame); frame(e.inner, e.innerSlab, innerFrame)
       const step = continuationStep(endFrame, innerFrame)
       e.end.instMesh.getMatrixAt(e.end.id, endMatrix)
       e.inner.instMesh.getMatrixAt(e.inner.id, innerMatrix)
-      const visible = endMatrix.determinant() !== 0 && innerMatrix.determinant() !== 0
+      const visible = !selfClosingPolymerSeam(currentDesign, e.seam) &&
+        endMatrix.determinant() !== 0 && innerMatrix.determinant() !== 0
       if (e.slab) e.slab.instMesh.getMatrixAt(e.slab.id, slabMatrix)
       prior.setFromMatrixPosition(endMatrix)
       for (let k = 0; k < 3; k++, i++) {
@@ -114,5 +118,10 @@ export function createPolymerizationPreview(root, design, entries, slabs, beadRa
   const updateWorld = group.updateMatrixWorld
   group.updateMatrixWorld = function (force) { refresh(); updateWorld.call(this, force) }
   refresh()
-  return { group, refresh }
+  return { group, refresh, setDesign(nextDesign) {
+    if (currentDesign === nextDesign) return
+    currentDesign = nextDesign
+    previous = ''
+    refresh()
+  } }
 }

@@ -62,6 +62,15 @@ only needs the bp duplexed — so a STAPLE seam works for geometry once connecto
   (toast bridge count + first warning). No new closure logic.
 
 ## Tests
+Size-one polymer-circle bends keep the existing bridging staple topology. The
+desktop renderer now treats their seams as ordinary selectable backbone bonds,
+not hidden periodic arcs; circle edits and history transitions invalidate the
+connection classification. The shared frontend classifier lives in
+`frontend/src/scene/polymer_seams.js` and also suppresses next-copy ghosts.
+Export and VR regressions verify reciprocal neighbour indices and visible,
+selectable native backbone bonds after save/reload. No geometry-based ligation
+or extra scaffold circularization is performed.
+
 [tests/test_polymer_router.py](tests/test_polymer_router.py) (7) — connector-per-bare-end,
 ends-fully-duplexed, exactly-one-principal-seam, seam-endpoints-on-caps, **the geometric oracle
 `test_derived_period_is_pure_axial_translation`** (derive_periodic_delta → ≈0° rotation, det +1,

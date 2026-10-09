@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 // Browser transaction tier: genuine desktop preview/commit/undo and throwaway
 // backend. The absent headset feedback transport alone is intercepted. This is
 // deliberately not evidence of controller acquisition or an OpenXR submission.
-test('ScryWrite browser-correlated Cluster Cancel / Confirm / Undo', async ({ page }, testInfo) => {
+test('ScryWrite browser-correlated Cluster Cancel / Confirm / Undo / Redo', async ({ page }, testInfo) => {
   test.setTimeout(90_000)
   const acknowledgements = []
   await page.route('**/api/vr/tool-execution-feedback', async route => {
@@ -75,6 +75,21 @@ test('ScryWrite browser-correlated Cluster Cancel / Confirm / Undo', async ({ pa
   const undone = await persisted()
   expect(undone.cluster_transforms).toEqual(baseline.cluster_transforms)
   expect(undone.feature_log).toEqual(baseline.feature_log)
+  // The panel's history buttons use the same versioned VR history channel as
+  // the right-hand radial menu. Only the absent headset transport is mocked.
+  await page.route('**/api/vr/scene-refresh', route => route.fulfill({ json: { published: true } }))
+  await page.route('**/api/vr/ligation-ends', route => route.fulfill({ json: { published: true } }))
+  const history = async action => {
+    const version = (await snapshot()).ligationVersion
+    await page.evaluate(e => window.__nadocTest.scrywrite.dispatch(e),
+      { type: 'ligation', action, sequence: ++sequence, version, source: 0, target: 0 })
+  }
+  await history('redo')
+  await expect.poll(async () => (await persisted()).feature_log).toEqual(committed.feature_log)
+  expect((await persisted()).cluster_transforms).toEqual(committed.cluster_transforms)
+  await history('undo')
+  await expect.poll(async () => (await persisted()).feature_log).toEqual(baseline.feature_log)
+  expect((await persisted()).cluster_transforms).toEqual(baseline.cluster_transforms)
   await testInfo.attach('scrywrite-browser-transaction.json', {
     body: Buffer.from(JSON.stringify({ fixture, baseline, committed, undone, acknowledgements, browser: await snapshot() }, null, 2)),
     contentType: 'application/json',

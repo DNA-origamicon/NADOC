@@ -75,6 +75,16 @@ describe('[native-placement] actual Full renderer authority', () => {
     expectSameRendered(ctrl, build([a]))
   })
 
+  it('preserves authoritative slab poses when patching partial geometry after a cluster edit', () => {
+    const a = start(), b = end(), ctrl = build([a])
+    b.placement_source = 'authored-residue-c1-v1'
+    b.slab_position[0] += .041
+    ctrl.patchNucleotides([b], {}, new Set())
+    expectSameRendered(ctrl, build([b]))
+    ctrl.patchNucleotides([a], {}, new Set())
+    expectSameRendered(ctrl, build([a]))
+  })
+
   it('updates bridge poses with the same authority as a fresh build', () => {
     const ctrl = build([start()]), target = end()
     target.placement_source = 'authored-residue-c1-v1'

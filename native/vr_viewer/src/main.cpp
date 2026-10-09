@@ -5670,8 +5670,10 @@ class Viewer {
                 if(action=="tool:move_rotate")return !toolShell_.executionPending();
                 if(action.starts_with("move:")) {
                     if(toolShell_.executionPending() || moveAwaitRefresh_)return false;
-                    if(action=="move:apply")return toolShell_.previewRequested()&&!pendingToolTransform_.isIdentity();
-                    if(action=="move:undo")return toolShell_.undoAvailable();
+                    if(action=="move:apply")return !movePanel_.moving() && toolShell_.previewRequested()&&!pendingToolTransform_.isIdentity();
+                    if(action=="move:undo" || action=="move:redo")return !ligation_.waiting && ligation_.version>0;
+                    if(action.size()>5 && std::isdigit(action[5]))return moveAvailable() && !movePanel_.hand;
+                    if(action=="move:snap")return !movePanel_.moving();
                     return true;
                 }
                 if(action.starts_with("extrude:")) {
@@ -5966,7 +5968,7 @@ class Viewer {
 
     void cancelMove() {
         if(toolShell_.executionPending())return;
-        movePanel_.hand.reset();pendingToolTransform_.cancel();publishToolTransform();
+        movePanel_.reset();pendingToolTransform_.cancel();publishToolTransform();
         glScene_->setMovePointPreview({},glm::mat4(1));
         toolShell_.apply(nadoc_vr::ToolAction::cancel,selectedSelectionKind_);
         publishToolIntent(nadoc_vr::ToolAction::cancel);
@@ -5981,7 +5983,7 @@ class Viewer {
     }
 
     void confirmMove() {
-        if(toolShell_.executionPending() || !toolShell_.previewRequested() || pendingToolTransform_.isIdentity())return;
+        if(toolShell_.executionPending() || movePanel_.moving() || !toolShell_.previewRequested() || pendingToolTransform_.isIdentity())return;
         movePanel_.hand.reset();publishToolTransform();
         toolShell_.apply(nadoc_vr::ToolAction::confirm,selectedSelectionKind_);
         publishToolIntent(nadoc_vr::ToolAction::confirm);
@@ -6167,10 +6169,18 @@ class Viewer {
         if(action.starts_with("move:")) {
             if(toolShell_.executionPending() || moveAwaitRefresh_)return;
             if(action=="move:apply")confirmMove();
-            else if(action=="move:undo") {
-                if(!toolShell_.undoAvailable())return;
+            else if(action=="move:undo" || action=="move:redo") {
+                if(ligation_.waiting || !ligation_.version)return;
                 cancelMove();
-                undoAuthoringTool(hand);
+                ligation_.request(action=="move:undo"?"undo":"redo",0,[&]{publishEventState();});
+            } else if(action=="move:selection") {
+                cancelMove();movePanel_.selecting=true;
+            } else if(action=="move:snap") {
+                if(!movePanel_.moving())movePanel_.snap=!movePanel_.snap;
+            } else if(action.size()>5 && action[5]>='0' && action[5]<='5') {
+                if((action.ends_with(":less") || action.ends_with(":more")) && prepareMove()) {
+                    movePanel_.adjust(size_t(action[5]-'0'),action.ends_with(":more")?1:-1);updateMovePreview();
+                }
             } else if(action=="move:recenter") {recenterRequested_=true;recenterHand_=hand;}
             else if(action=="move:back" || action=="move:cancel") {
                 cancelMove();
@@ -6185,6 +6195,7 @@ class Viewer {
             if(dimensionPanel_.tool.active)dimensionPanel_.exit(sidebarMenus_.menus);
             activateAuthoringTool(3);radialToolMenu_.close();
             movePanel_.enter(sidebarMenus_.menus);
+            movePanel_.selecting=selectedSelectionKind_=="none";
             movePanel_.refresh(sidebarMenus_.menus,selectedSelectionKind_,toolShell_.status());return;
         }
         if(action.starts_with("extrude:")) {
@@ -6724,6 +6735,7 @@ class Viewer {
                 toggleSidebar(1);
             radialToolMenu_.close();
             movePanel_.enter(sidebarMenus_.menus);
+            movePanel_.selecting=selectedSelectionKind_=="none";
             movePanel_.refresh(sidebarMenus_.menus,selectedSelectionKind_,toolShell_.status());
         }
     }
@@ -7138,6 +7150,7 @@ class Viewer {
         drawSweep(line);
         drawSweepWarnings(line);
         drawBend(line);
+        drawMoveWheels();
         if(!bendPanel_.active && !ligation_.active && !ligation_.nickActive) {
             endResize_.draw(manipulator_.transform(),normalizationScale_,line);
             endResize_.drawPointer(witnessObserverOrientation_,line,
@@ -7688,6 +7701,7 @@ class Viewer {
         const bool targetChanged = selectedIdentity_ != previousIdentity ||
             selectedOwnerTokens_ != previousOwnerTokens ||
             selectedSelectionKind_ != previousSelectionKind;
+        if(targetChanged && movePanel_.active && toolShell_.previewRequested())cancelMove();
         if(toolShell_.mode()!=nadoc_vr::ToolMode::sweep)toolShell_.syncSelection(selectedSelectionKind_, targetChanged);
         if (targetChanged && toolConfig_.mode()!=nadoc_vr::ToolMode::sweep && !extrudeConfirmation_ && toolConfig_.active() &&
             toolConfig_.bind(
@@ -7704,7 +7718,10 @@ class Viewer {
             clearPlanePick();clearPlaneGuides();bendPickPosition_.reset();
             requestBendDefaultPlane("a");
         }
-        if(targetChanged)movePanel_.hand.reset();
+        if(targetChanged) {
+            movePanel_.reset();
+            if(movePanel_.active)movePanel_.selecting=selectedSelectionKind_=="none";
+        }
         if (targetChanged ||
             !toolShell_.previewRequested()) {
             pendingToolTransform_.cancel();
@@ -7750,6 +7767,7 @@ class Viewer {
                     (void)glScene_->acceptToolCommit(); // A refreshed scene already contains the saved pose.
                 committedFeatureLogEntryId_ = feedback->featureLogEntryId;
                 if (feedback->mode == "move_rotate") {
+                    movePanel_.reset();
                     pendingToolTransform_.activate();
                     publishToolTransform();
                 }
@@ -8300,6 +8318,10 @@ class Viewer {
             << ",\"move_beam_end\":" << (movePanel_.beamEnd?point(*movePanel_.beamEnd):"null")
             << ",\"move_point_preview_count\":" << (glScene_?glScene_->movePointCount():0)
             << ",\"move_grabbing\":" << (movePanel_.hand?"true":"false")
+            << ",\"move_rotating\":" << (movePanel_.hand && movePanel_.rotating?"true":"false")
+            << ",\"move_snap\":" << (movePanel_.snap?"true":"false")
+            << ",\"move_position_nm\":" << point(movePanel_.positionNm)
+            << ",\"move_rotation_degrees\":" << point(movePanel_.rotationDegrees)
             << ",\"move_nearby\":" << ((movePanel_.nearby[0]||movePanel_.nearby[1])?"true":"false")
             << ",\"tool_sequence\":" << toolSequence_
             << ",\"extrude_status\":" << quote(extrudeStatus())
@@ -8904,6 +8926,7 @@ class Viewer {
         }
         for(size_t h=0;h<2;++h)menuGripTargeted[h]=menuGripTargeted[h]||remoteBlocked[h];
         processSweepGrip(menuGripTargeted);
+        processMoveGrip(menuGripTargeted);
         const nadoc_vr::ManipulationMode previous = manipulator_.mode();
         if (suppressManipulationUntilRelease_ &&
             std::none_of(gripPressed_.begin(), gripPressed_.end(), [](bool pressed) {
@@ -8949,6 +8972,7 @@ class Viewer {
         auto wheelTargeted = processThumbwheelInput(remoteBlocked);
         for(size_t h=0;h<2;++h)wheelTargeted[h]=wheelTargeted[h]||remoteBlocked[h];
         processBendWheel(wheelTargeted);
+        processMoveWheels(wheelTargeted);
         std::array<float,2> foregroundDistance{1e9F,1e9F};
         if(viewTools_.open)for(size_t h=0;h<2;++h)if(auto uv=viewTools_.hit(hands_[h]))
             foregroundDistance[h]=std::min(foregroundDistance[h],glm::length(viewTools_.world(*uv)-hands_[h].position));
@@ -8957,6 +8981,7 @@ class Viewer {
         auto sidebarBlocked=wheelTargeted;
         // A held point/stroke keeps trigger ownership while crossing a menu.
         if(sweepHand_)sidebarBlocked[*sweepHand_]=true;
+        if(movePanel_.hand)sidebarBlocked[*movePanel_.hand]=true;
         for(size_t h=0;h<2;++h)sidebarBlocked[h]=sidebarBlocked[h]||volumeTargeted[h];
         sidebarBlocked=processTrajectoryInput(sidebarBlocked,foregroundDistance);
         if(routingPopup_.anyOpen()) {
@@ -9505,48 +9530,7 @@ class Viewer {
         }
     }
 
-    void processMoveInput(std::array<bool,2>& blocked,bool sceneMoving) {
-        nadoc_vr::CalculationScope auditScope("processMoveInput");
-        if(!movePanel_.active)return;
-        if(moveAwaitRefresh_ && !toolShell_.executionPending() &&
-           (sceneRefresh_.revision()>moveStartRevision_ || toolShell_.status()=="COMMIT FAILED" || toolShell_.status()=="COMMIT REFUSED"))moveAwaitRefresh_=false;
-        movePanel_.refresh(sidebarMenus_.menus,selectedSelectionKind_,toolShell_.status());
-        movePanel_.nearby.fill(false);movePanel_.beamEnd.reset();
-        const auto center=glScene_->ownerHandle(selectedOwnerTokens_,manipulator_.transform());
-        const bool available=center && !toolShell_.executionPending() && !moveAwaitRefresh_ &&
-            nadoc_vr::ToolShell::selectionCapability(nadoc_vr::ToolMode::move_rotate,selectedSelectionKind_)==nadoc_vr::ToolCapability::direct_preview;
-        if(movePanel_.hand) {
-            const size_t h=*movePanel_.hand;blocked[h]=true;liveInputOwner_[h]="move-rotate";
-            if(h!=nadoc_vr::MovePanel::moveHand || !hands_[h].valid || sessionState_!=XR_SESSION_STATE_FOCUSED || sceneMoving || !available || sceneRefresh_.revision()!=moveStartRevision_) {cancelMove();return;}
-            const auto delta=movePanel_.delta(hands_[h]);
-            if(delta!=pendingToolTransform_.transform()) {
-                pendingToolTransform_.setTransform(delta);publishToolTransform();
-            }
-            movePanel_.beamEnd=glm::vec3(movePanel_.startModel*delta*glm::inverse(movePanel_.startModel)*glm::vec4(movePanel_.grabPoint,1));
-            if(!triggerPressed_[h]) {
-                const auto delta=poseMatrix(hands_[h])*glm::inverse(movePanel_.startHand);
-                const float angle=glm::angle(glm::quat_cast(glm::mat3(delta)));
-                if(glm::distance(hands_[h].position,glm::vec3(movePanel_.startHand[3]))<.004F && angle<glm::radians(1.5F))cancelMove();
-                else confirmMove();
-            }
-        } else if(available && !sceneMoving) {
-            constexpr size_t h=nadoc_vr::MovePanel::moveHand;
-            if(hands_[h].valid && !blocked[h])
-                movePanel_.beamEnd=glScene_->pickSelected({hands_[h].position,hands_[h].orientation*glm::vec3(0,0,-1)},manipulator_.transform(),selectedOwnerTokens_);
-            movePanel_.nearby[h]=movePanel_.beamEnd.has_value();
-            if(movePanel_.nearby[h] && triggerClicked_[h]) {
-                pendingToolTransform_.activate();moveStartRevision_=sceneRefresh_.revision();
-                toolShell_.apply(nadoc_vr::ToolAction::preview,selectedSelectionKind_);
-                publishToolIntent(nadoc_vr::ToolAction::preview);
-                movePanel_.grabPoint=*movePanel_.beamEnd;
-                movePanel_.begin(h,hands_[h],manipulator_.transform(),*center);
-                blocked[h]=true;liveInputOwner_[h]="move-rotate";pulse(h,.35F);
-            }
-        }
-        const bool preview=toolShell_.previewRequested() &&
-            (!toolShell_.executionPending() || sceneRefresh_.revision()==moveStartRevision_);
-        glScene_->setMovePointPreview(preview?selectedOwnerTokens_:std::vector<std::string>{},pendingToolTransform_.transform());
-    }
+#include "move_runtime.inc"
 
     void applyPendingRecenter(uint32_t viewCount) {
         if (!recenterRequested_ || viewCount == 0) return;

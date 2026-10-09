@@ -69,7 +69,9 @@ try:
  assert all(h['valid'] for h in live.state['hands']), 'Synthetic hand poses were not applied'
  if mode=='undo':
   if not live.state['sidebars'][1]['open']:live.button('menu',hand=1);live.frame()
-  controls.click('move:undo');wait(lambda s:s['status']=='UNDONE')
+  version=live.state['ligation']['version']
+  controls.click('move:undo');wait(lambda s:s['ligation']['version']>version and not s['ligation']['waiting'])
+  assert live.state['ligation']['status']=='created'
   park();live.capture_to(out/'undone',discard_source=True)
  else:
   if not live.state['sidebars'][1]['open']:live.button('menu',hand=1);live.frame()
@@ -175,7 +177,7 @@ try:
   preview_first_frame=live.state['frame']
   preview_completed=False
   try:
-   reach((start+shift).tolist(),multiply(rotation,q))
+   reach((start+shift).tolist(),q)
    preview_completed=True
   finally:
    (out/'preview-interval.json').write_text(json.dumps({'start_ms':preview_start,'end_ms':time.time()*1000,
@@ -186,15 +188,23 @@ try:
    settled_drag(live,out,preset,start,q,shift,rotation)
   end=np.array(live.state['hands'][1]['position'])
   expected_center=np.array(center)+end-start
+  live.send('button',hand=1,button='trigger',pressed=False);live.frame()
+  assert not live.state['move_grabbing'] and live.state['status']=='PREVIEW ONLY'
+  live.send('button',hand=1,button='grip',pressed=True);live.frame()
+  assert live.state['move_rotating'],'grip did not acquire preview orientation'
+  reach(end.tolist(),multiply(rotation,q))
+  live.send('button',hand=1,button='grip',pressed=False);live.frame()
+  assert not live.state['move_grabbing']
   assert live.state['move_point_preview_count'] > 0
   live.capture_to(out/'preview',discard_source=True)
   commit_revision=live.state['scene_revision']
   commit_started=time.monotonic()
   with operation(live,'move-commit'):
-   live.send('button',hand=1,button='trigger',pressed=False)
+   if not live.state['sidebars'][1]['open']:live.button('menu',hand=1);live.frame()
+   controls.click('move:apply')
    wait(lambda s:s['status']=='COMMITTED')
   commit_seconds=time.monotonic()-commit_started
-  (out/'commit-timing.json').write_text(json.dumps({'release_to_ack_seconds':commit_seconds,'scene_rebuilt':live.state['scene_revision']!=commit_revision,'maximum_seconds':5}))
+  (out/'commit-timing.json').write_text(json.dumps({'apply_to_ack_seconds':commit_seconds,'scene_rebuilt':live.state['scene_revision']!=commit_revision,'maximum_seconds':5}))
   assert live.state['scene_revision']==commit_revision,'rigid edit rebuilt all representations'
   assert commit_seconds<5,'rigid edit acknowledgment too slow'
   center_error=float(np.linalg.norm(np.array(live.state['move_handle'])-expected_center))

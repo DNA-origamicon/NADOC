@@ -181,13 +181,13 @@ class SidebarRuntime {
                 const float z=menu.controlDepth(c);
                 const bool back=c.id.ends_with(":back");
                 const bool spinning=menu.spinning(c.action);
-                const bool green=c.id=="sweep:confirm";
+                const bool green=c.id=="sweep:confirm" || c.id=="move:apply";
                 const auto face=(c.enabled || green)?(back?glm::vec3(.64F,.16F,.18F):glm::vec3(.12F,.49F,.37F))+(hover?glm::vec3(.10F):glm::vec3(0)):glm::vec3(.12F,.15F,.19F);
                 const auto border=(c.enabled || green)?(hover?glm::vec3(1,.74F,.30F):(back?glm::vec3(1.F,.43F,.43F):glm::vec3(.35F,.90F,.65F))):glm::vec3(.22F,.26F,.31F);
                 ui.raisedSlate(b.minimum.x,b.minimum.y,size.x,size.y,z,face,border);
                 const auto ink=c.enabled?glm::vec3(.89F,.93F,.98F):glm::vec3(.53F,.64F,.75F);
                 ui.text(c.label,(b.minimum.x+b.maximum.x-nadoc_vr::strokeTextWidth(c.label.size(),.0045F))*.5F,(b.minimum.y+b.maximum.y)*.5F+.0135F,.0045F,ink,z+.002F);
-                ui.text(c.section,b.minimum.x+.025F,b.minimum.y+.027F,.0028F,ink,z+.002F);
+                if(c.id!="move:back")ui.text(c.section,b.minimum.x+.025F,b.minimum.y+.027F,.0028F,ink,z+.002F);
                 if(spinning) {
                     // An animated ring overlays Confirm while the acknowledged
                     // generation request is pending; input remains disabled.

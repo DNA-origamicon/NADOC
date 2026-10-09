@@ -7081,6 +7081,7 @@ async function main() {
         snapshot: () => structuredClone({
           shell: _vrToolShellState,
           transaction: _vrToolTransaction.snapshot(),
+          ligationVersion: vrLigation.catalog().version,
           trace: _scrywriteBrowserTrace,
           selection: store.getState().selection,
           clusterTransforms: store.getState().currentDesign?.cluster_transforms ?? [],

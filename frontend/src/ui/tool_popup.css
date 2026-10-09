@@ -83,3 +83,20 @@
 .tool-popup #slice-total-bp, .tool-popup #def-bend-hint, .tool-popup #def-cluster-empty-msg { color: var(--color-text-muted); font-size: var(--text-xs); }
 .tool-popup .cp-totals, .tool-popup .cp-readout { background: color-mix(in srgb, var(--color-bg-canvas) 50%, transparent); border-radius: var(--radius-md); }
 .tool-popup .cp-actions, .tool-popup .def-btn-row { padding-top: var(--space-3); border-top: 1px solid var(--color-border-default); }
+
+/* Bend/Twist: scroll the fields only; the actions always stay in view. */
+.tool-popup[data-tool-panel="deform-panel"] .tool-popup__content { display: flex; overflow: hidden; }
+.tool-popup__content > #deform-panel { flex: 1; flex-direction: column; min-height: 0; min-width: 0; padding: 0; }
+#deform-panel .def-fields { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 10px 12px 0; }
+#deform-panel > .def-btn-row { flex-shrink: 0; padding: 10px 12px; }
+#deform-panel .tool-section { margin-bottom: 8px; padding: 8px; }
+#deform-panel .def-row { gap: 6px; margin-bottom: 6px; }
+#deform-panel .def-preview-row { margin: 4px 0; }
+#deform-panel #def-compass-container { align-items: center; margin-bottom: 6px; }
+#deform-panel #def-compass { width: 44px; height: 44px; }
+#deform-panel #def-compass-container .def-row { flex-wrap: nowrap; margin-bottom: 0; }
+#deform-panel #def-compass-container .def-row label { flex-basis: auto; }
+#deform-panel .def-bend-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+#deform-panel .def-bend-pair .def-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px; }
+#deform-panel .def-bend-pair label { grid-column: 1 / -1; }
+#deform-panel .def-bend-pair input { width: 100%; }

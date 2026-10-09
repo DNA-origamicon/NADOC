@@ -89,7 +89,7 @@ class SidebarMenu {
         return toolFooter() && (c.id==tab().key+":back" || c.id==tab().key+":confirm" || c.id=="move:apply");
     }
     float footerY() const {
-        return sweepPath()?-.52F:tab().key=="extrude" || tab().key=="sweep"?-.425F:tab().key=="move"?.045F:tab().key=="bend"?-.54F:-.51F;
+        return sweepPath()?-.52F:tab().key=="extrude" || tab().key=="sweep"?-.425F:tab().key=="move"?-.54F:tab().key=="bend"?-.54F:-.51F;
     }
     std::vector<const SidebarRow*> contentRows() const {
         auto rows=visibleRows();
@@ -232,7 +232,7 @@ class SidebarMenu {
     }
     std::vector<SidebarControl> controls(bool animated=true) const {
         auto out=layoutControls(animated);
-        if(toolFooter()) {
+        if(toolFooter() && tab().key!="move") {
             std::erase_if(out,[&](const auto& c){return raisedAction(c);});
             const float left=-ui_style::toolHalfWidth,right=ui_style::toolHalfWidth,middle=0;
             const float gap=ui_style::raisedColumnGap*.5F;
@@ -327,8 +327,22 @@ class SidebarMenu {
                 out.push_back({r->id,r->label,r->section,r->action,{{left,y-height*.5F},{right,y+height*.5F}},available(r->action),isActive(r->action),false,icon});
             };
             const float left=-ui_style::toolHalfWidth,right=ui_style::toolHalfWidth;
-            add("back",.463F,left,right);add("apply",.35F,left,cx-.006F);add("cancel",.35F,cx+.006F,right);
-            add("undo",.20F,left,cx-.006F);add("recenter",.20F,cx+.006F,right);
+            add("back",.463F,left,right);
+            add("selection",.333F,left,right,.12F);
+            add("snap",.197F,left,right,.12F);
+            for(int i=0;i<6;++i) {
+                const float x=i<3?left:.012F,y=.060F-float(i%3)*.16F;
+                const auto id=std::to_string(i);
+                add((id+"-wheel").c_str(),y,x,x+.102F,.11F);
+                add((id+":value").c_str(),y+.028F,x+.114F,x+.363F,.066F);
+                add((id+":less").c_str(),y-.05F,x+.114F,x+.232F,.065F,"down");
+                add((id+":more").c_str(),y-.05F,x+.244F,x+.363F,.065F,"up");
+            }
+            add("undo",-.405F,left,-.135F,.075F);
+            add("redo",-.405F,-.12F,.12F,.075F);
+            add("recenter",-.405F,.135F,right,.075F);
+            add("cancel",-.54F,left,-.018F,.108F);
+            add("apply",-.54F,.018F,right,.108F);
             return out;
         }
         if(customTab && (tab().key=="bend" || tab().key=="twist")) {

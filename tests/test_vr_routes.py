@@ -3399,3 +3399,30 @@ def test_deformation_selection_transport_preserves_target_through_all_feedback(t
         preflight_sequence=1, tool_config_sequence=4, target_identity=identity,
         target_kind=kind, tool_mode='bend', status='ok', reason='validated'))
     assert f'ok bend {kind} {identity} validated' in feedback.read_text()
+
+
+def test_self_closing_polymer_seams_are_selectable_backbone_bonds_in_vr():
+    from backend.core.models import BendParams, DeformationOp, Design
+    from backend.core.polymer_router import route_for_polymerization
+    from backend.core.design_geometry import _geometry_for_design
+    from tests.test_polymer_router import _bundle_with_bare_ends
+
+    design, _ = route_for_polymerization(_bundle_with_bare_ends(length_bp=84))
+    design = design.copy_with(deformations=[DeformationOp(
+        type="bend", plane_a_bp=0, plane_b_bp=83,
+        params=BendParams(curvature_deg_per_bp=360 / 84, polymer_circle_count=1),
+    )])
+    design = Design.model_validate_json(design.model_dump_json())
+    text = _serialize_authoritative_scene(
+        design, _geometry_for_design(design), [],
+        atomistic_model=SimpleNamespace(atoms=[], bonds=[]),
+    )
+    bonds = [p for p in parse_scene_contract(text)["full"].values()
+             if p.identity.startswith("backbone:")]
+    for seam in design.forced_ligations:
+        three = f"{seam.three_prime_helix_id}:{seam.three_prime_bp}:{seam.three_prime_direction.value}"
+        five = f"{seam.five_prime_helix_id}:{seam.five_prime_bp}:{seam.five_prime_direction.value}"
+        matches = [p for p in bonds if _owner_token("base", three) in p.owner_aliases
+                   and _owner_token("base", five) in p.owner_aliases]
+        assert len(matches) == 1
+        assert matches[0].values[6] == pytest.approx(0.075)

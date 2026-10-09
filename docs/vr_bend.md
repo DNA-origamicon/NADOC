@@ -56,7 +56,24 @@ Overlapping selected refs do not apply a deformation twice; selecting a domain
 never expands to its partner strand or containing cluster. A changed selection
 invalidates the entire queued draft, including changes outside the primary ref.
 The native centerline is a shape guide; backend feasibility runs before Confirm.
-Polymer-circle automation remains a desktop control.
+Polymer-circle automation remains a desktop control. Its count accepts **1**: the
+part loops back onto itself, with the last occupied base one bp step before the
+first. The closing seam supplies the remaining step: curvature is
+`360 / (bent seam span + 1)` degrees per bp for count 1. Reopening a saved count-1
+bend previews this correction; Apply commits it through normal Undo/Redo.
+Connector seam spacing is included in the curvature calculation,
+and the count persists with the bend parameters. The fading, unselectable
+next-copy continuation preview is hidden at those self-closing seams; unrelated
+open polymer seams retain their previews, including after count edits and Undo/Redo.
+Self-closing seams display their existing ligated backbone bond as an ordinary,
+selectable strand connection. They are not hidden by the periodic-seam arc toggle.
+The connector domains already form one strand; saved and exported topology keeps
+the reciprocal 3′/5′ neighbours across each seam. VR snapshots retain those bonds.
+
+The desktop Bend/Twist popup scrolls only its fields; Cancel and Apply stay in a
+fixed footer. Angle and Curvature share a row (Curvature retains the radius value
+in nm), and the Info section keeps Preview and feasibility feedback without the
+extra plane-explanation paragraph.
 
 Implementation uses canonical curvature (degrees per bp), with optional world
 endpoint and midpoint constraints recording the controller pose. Both scalar and

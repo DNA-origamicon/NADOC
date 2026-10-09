@@ -1403,7 +1403,7 @@ class BendParams(BaseModel):
     # Geometry remains canonical in curvature_deg_per_bp so legacy consumers
     # and files continue to work unchanged.
     polymer_circle_count: Optional[int] = Field(
-        default=None, ge=2, exclude_if=lambda value: value is None
+        default=None, ge=1, exclude_if=lambda value: value is None
     )
 
 

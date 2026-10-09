@@ -89,3 +89,104 @@ it('is installed by the real helix renderer without adding selectable nucleotide
   expect(ctrl.root.getObjectByName('polymerizationPreviewBeads').count).toBe(6)
   expect(ctrl.backboneEntries).toHaveLength(10)
 })
+
+const circle = (count = 1, overrides = {}) => ({
+  type: 'bend', plane_a_bp: 0, plane_b_bp: 9, affected_helix_ids: ['h'],
+  params: { curvature_deg_per_bp: 360 / (9 * count), polymer_circle_count: count },
+  ...overrides,
+})
+
+it('hides continuation ghosts for a self-closing size-one circle while retaining real selectable entries', () => {
+  const f = fixture()
+  f.design.deformations = [circle()]
+  const before = JSON.stringify(f.design)
+  const matrices = f.beads.instanceMatrix.array.slice()
+  const preview = createPolymerizationPreview(f.root, f.design, f.entries, f.plates)
+  expect(preview.group.visible).toBe(false)
+  for (const mesh of preview.group.children) expect([...mesh._instanceAlpha.array]).toEqual([0,0,0,0,0,0])
+  expect(f.beads.instanceMatrix.array).toEqual(matrices)
+  expect(f.entries).toHaveLength(10)
+  expect(f.beads.visible).toBe(true)
+  expect(JSON.stringify(f.design)).toBe(before)
+})
+
+it.each([
+  circle(2),
+  circle(1, { type: 'twist' }),
+  circle(1, { affected_helix_ids: ['another-cluster-helix'] }),
+  circle(1, { target_ranges: [] }),
+  circle(1, { target_ranges: [{ helix_id: 'h', direction: 'REVERSE', start_bp: 0, end_bp: 9 }] }),
+  circle(1, { target_ranges: [{ helix_id: 'h', direction: 'FORWARD', start_bp: 0, end_bp: 8 }] }),
+  circle(1, { plane_a_bp: 20, plane_b_bp: 30 }),
+  circle(1, { params: { polymer_circle_count: 1, curvature_deg_per_bp: 0 } }),
+])('retains previews when the seam is not in a size-one circular bend (%j)', op => {
+  const f = fixture()
+  f.design.deformations = [op]
+  const preview = createPolymerizationPreview(f.root, f.design, f.entries, f.plates)
+  expect(preview.group.visible).toBe(true)
+  expect(preview.group.children[0]._instanceAlpha.getX(0)).toBeCloseTo(.55)
+})
+
+it('uses both frozen endpoints and leaves an unrelated seam visible', () => {
+  const f = fixture()
+  // A second independent periodic seam uses the other strand direction.
+  const other = fixture()
+  for (const e of other.entries) e.nuc.direction = 'REVERSE'
+  const seam = { ...f.seam, three_prime_direction: 'REVERSE', five_prime_direction: 'REVERSE' }
+  f.design.forced_ligations.push(seam)
+  f.design.deformations = [circle(1, { target_ranges: [
+    { helix_id: 'h', direction: 'FORWARD', start_bp: 0, end_bp: 9 },
+  ] })]
+  const preview = createPolymerizationPreview(f.root, f.design,
+    [...f.entries, ...other.entries], [...f.plates, ...other.plates])
+  expect(preview.group.visible).toBe(true)
+  const alpha = [...preview.group.children[0]._instanceAlpha.array]
+  expect(alpha.slice(0, 6)).toEqual([0,0,0,0,0,0])
+  expect(alpha.slice(6)).toEqual(expect.arrayContaining([expect.closeTo(.55), expect.closeTo(.3), expect.closeTo(.1)]))
+})
+
+it('updates size-one visibility on the real controller without rebuilding, including Undo/Redo', async () => {
+  const { buildHelixObjects } = await import('./helix_renderer.js')
+  const f = fixture()
+  const geometry = f.entries.map(e => {
+    const m = new THREE.Matrix4(); e.instMesh.getMatrixAt(e.id, m)
+    const p = new THREE.Vector3().setFromMatrixPosition(m).toArray()
+    return { ...e.nuc, strand_type: 'staple', backbone_position: p, base_position: p,
+      slab_position: p, placement_source: 'native-full-o5-v1', base_normal: [1,0,0], axis_tangent: [0,0,1] }
+  })
+  const closed = { ...f.design, helices: [], strands: [], deformations: [circle()] }
+  const ctrl = buildHelixObjects(geometry, closed, new THREE.Scene())
+  const group = ctrl.root.getObjectByName('polymerizationContinuation')
+  expect(group.visible).toBe(false)
+  const entry = ctrl.backboneEntries[0]
+  ctrl.setPolymerizationDesign({ ...closed, deformations: [circle(2)] })
+  expect(group.visible).toBe(true)
+  ctrl.setPolymerizationDesign(closed)
+  expect(group.visible).toBe(false)
+  ctrl.setPolymerizationDesign({ ...closed, deformations: [] })
+  expect(group.visible).toBe(true)
+  expect(ctrl.backboneEntries[0]).toBe(entry)
+})
+
+it.each([1, 2])('renders the joined seam as a selectable backbone bond only for a self-closing circle (count %i)', async count => {
+  const { buildHelixObjects } = await import('./helix_renderer.js')
+  const f = fixture(), matrix = new THREE.Matrix4(), p = new THREE.Vector3()
+  const geometry = [8, 9, 0, 1].map(bp => {
+    const e = f.entries[bp]
+    e.instMesh.getMatrixAt(e.id, matrix); p.setFromMatrixPosition(matrix)
+    return { ...e.nuc, domain_index: bp >= 8 ? 0 : 1, strand_type: 'staple',
+      backbone_position: p.toArray(), base_position: p.toArray(), slab_position: p.toArray(),
+      placement_source: 'native-full-o5-v1', base_normal: [1,0,0], axis_tangent: [0,0,1] }
+  })
+  const design = { ...f.design, forced_ligations: [{ ...f.seam, id: 'seam' }],
+    deformations: [circle(count)], helices: [],
+    strands: [{ id: 's', strand_type: 'staple', domains: [] }] }
+  const ctrl = buildHelixObjects(geometry, design, new THREE.Scene())
+  const bond = ctrl.coneEntries.find(e => e.fromNuc.bp_index === 9 && e.toNuc.bp_index === 0)
+  expect(bond).toBeDefined()
+  expect(bond.strandId).toBe('s')
+  expect(bond.isCrossHelix).toBe(count !== 1)
+  bond.instMesh.getMatrixAt(bond.id, matrix)
+  expect(matrix.determinant() > 0).toBe(count === 1)
+  expect(ctrl.getCrossHelixConnections()).toHaveLength(count === 1 ? 0 : 1)
+})

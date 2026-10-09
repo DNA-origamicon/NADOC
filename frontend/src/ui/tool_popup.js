@@ -3,7 +3,7 @@ import './tool_popup.css'
 import './tool_sections.css'
 
 /** Non-modal CAD tool window. Reparents the actual controls, preserving handlers. */
-export function createToolPopup({ panel, title, onClose }) {
+export function createToolPopup({ panel, title, onClose, panelDisplay = 'block' }) {
   if (!panel) return null
   const heading = panel.querySelector(':scope > h2') ?? el('h2', { text: title })
   heading.id ||= `${panel.id}-title`
@@ -63,7 +63,7 @@ export function createToolPopup({ panel, title, onClose }) {
   sync()
   return {
     root,
-    show() { panel.style.display = 'block'; sync() },
+    show() { panel.style.display = panelDisplay; sync() },
     hide() { panel.style.display = 'none'; sync() },
     setTitle(value) { heading.textContent = value; close.setAttribute('aria-label', `Close ${value}`) },
     dispose() { observer.disconnect(); resize?.disconnect(); window.removeEventListener('resize', layout); root.remove() },

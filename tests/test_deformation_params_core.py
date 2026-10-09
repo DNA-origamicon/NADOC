@@ -25,24 +25,25 @@ def test_parse_bend_params():
     assert isinstance(p, BendParams)
 
 
-def test_parse_bend_params_preserves_polymer_circle_intent():
+@pytest.mark.parametrize("count", [1, 3])
+def test_parse_bend_params_preserves_polymer_circle_intent(count):
     p = parse_deformation_params(
         "bend",
         {
             "curvature_deg_per_bp": 0.5,
             "direction_deg": 270.0,
-            "polymer_circle_count": 3,
+            "polymer_circle_count": count,
         },
     )
     assert isinstance(p, BendParams)
-    assert p.polymer_circle_count == 3
-    assert p.model_dump()["polymer_circle_count"] == 3
+    assert p.polymer_circle_count == count
+    assert p.model_dump()["polymer_circle_count"] == count
 
 
 def test_parse_bend_params_rejects_invalid_polymer_circle_count():
     with pytest.raises(ValueError):
         parse_deformation_params(
-            "bend", {"curvature_deg_per_bp": 0.5, "polymer_circle_count": 1}
+            "bend", {"curvature_deg_per_bp": 0.5, "polymer_circle_count": 0}
         )
 
 
@@ -118,3 +119,39 @@ def test_partial_helix_list_intersected_with_cluster(_two_cluster_design):
     # Pass only helices 2..4; cluster A owns helices 0..2 → intersection = {h_ids[2]}.
     out = resolve_cluster_scope(design, [cluster_a.id], h_ids[2:5])
     assert out["helix_ids"] == [h_ids[2]]
+
+
+@pytest.mark.parametrize("start_bp,length_bp", [(0, 101), (-9, 420), (-5, 420), (-2, 420)])
+def test_one_copy_polymer_bend_leaves_one_seam_step_after_reload(start_bp, length_bp):
+    import numpy as np
+    from backend.core.deformation import _frame_at_bp
+    from backend.core.models import DeformationOp
+
+    from backend.core.constants import BDNA_RISE_PER_BP
+
+    design = make_bundle_design([(0, 0)], length_bp=length_bp)
+    for helix in design.helices:
+        helix.bp_start = start_bp
+        helix.axis_start.z += start_bp * BDNA_RISE_PER_BP
+        helix.axis_end.z += start_bp * BDNA_RISE_PER_BP
+    end_bp = start_bp + length_bp - 1
+    curvature = 360 / length_bp
+    bend = DeformationOp(
+        type="bend", plane_a_bp=min(-9, start_bp), plane_b_bp=max(417, end_bp),
+        params=BendParams(curvature_deg_per_bp=curvature, polymer_circle_count=1),
+    )
+    bent = design.copy_with(deformations=[bend])
+    restored = type(bent).model_validate_json(bent.model_dump_json())
+    start, start_rotation, start_tangent = _frame_at_bp(restored, 0)
+    end, end_rotation, end_tangent = _frame_at_bp(restored, length_bp - 1)
+    previous, previous_rotation, _ = _frame_at_bp(restored, length_bp - 2)
+    step_rotation = end_rotation @ previous_rotation.T
+    # The virtual next site closes the circle, not the last occupied site.
+    assert np.allclose(end + step_rotation @ (end - previous), start, atol=1e-8)
+    assert np.allclose(step_rotation @ end_rotation, start_rotation, atol=1e-8)
+    assert np.allclose(step_rotation @ end_tangent, start_tangent, atol=1e-8)
+    angle = np.deg2rad(curvature)
+    chord = 2 * BDNA_RISE_PER_BP / angle * np.sin(angle / 2)
+    assert np.linalg.norm(end - start) == pytest.approx(chord, abs=1e-8)
+    assert np.linalg.norm(_frame_at_bp(restored, length_bp // 2)[0] - start) > 1
+    assert restored.deformations[0].params.polymer_circle_count == 1

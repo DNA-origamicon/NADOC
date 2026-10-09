@@ -27,6 +27,7 @@ import { nativeCorePaired } from '../shared/aptamer.js'
 import * as THREE from 'three'
 import { baseKey } from './base_ref.js'
 import { createPolymerizationPreview } from './polymerization_preview.js'
+import { selfClosingPolymerSeam } from './polymer_seams.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import {
   impostorsEnabled,
@@ -567,10 +568,11 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   // cone is suppressed (radius 0 at every site that keys off isCrossHelix) and
   // the connector flows into the arc pipeline tagged isPeriodicSeam, where the
   // View-menu toggle hides it by default. Empty map ⇒ zero behaviour change for
-  // designs without periodic seams.
+  // designs without periodic seams. A self-closing circle's seam is an ordinary
+  // backbone bond, so it must remain visible and selectable in the cone mesh.
   const _periodicSeamSiteToFl = new Map()
   for (const fl of (design?.forced_ligations ?? [])) {
-    if (!fl.is_periodic_seam) continue
+    if (!fl.is_periodic_seam || selfClosingPolymerSeam(design, fl)) continue
     _periodicSeamSiteToFl.set(`${fl.three_prime_helix_id}:${fl.three_prime_bp}:${fl.three_prime_direction}`, fl.id)
     _periodicSeamSiteToFl.set(`${fl.five_prime_helix_id}:${fl.five_prime_bp}:${fl.five_prime_direction}`, fl.id)
   }
@@ -3167,12 +3169,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     if (_axisArrowsVisible) _applyShaftModeVisibility(_currentShaftMode)
   }
 
-  createPolymerizationPreview(root, design, backboneEntries, slabEntries, BEAD_RADIUS)
+  const polymerizationPreview = createPolymerizationPreview(root, design, backboneEntries, slabEntries, BEAD_RADIUS)
 
   // ── Public interface ───────────────────────────────────────────────────────
 
   return {
     root,
+    setPolymerizationDesign(nextDesign) { polymerizationPreview?.setDesign(nextDesign) },
     backboneEntries,
     coneEntries,
     slabEntries,
@@ -3485,12 +3488,19 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           if (nuc[field] != null) entry.nuc[field] = [...nuc[field]]
         }
         const byDir = (positionsByHelix[nuc.helix_id] ??= {})
-        const data = (byDir[nuc.direction] ??= { bp: [], bb: [], bs: [], bn: [], at: [] })
+        const data = (byDir[nuc.direction] ??= { bp: [], bb: [], bs: [], bn: [], at: [], sp: [], sq: [], pv: [], sid: [], extid: [], ismod: [], mod: [] })
         data.bp.push(nuc.bp_index)
         data.bb.push(nuc.backbone_position)
         data.bs.push(nuc.base_position)
         data.bn.push(nuc.base_normal)
         data.at.push(nuc.axis_tangent)
+        data.sp.push(nuc.slab_position)
+        data.sq.push(nuc.slab_quaternion)
+        data.pv.push(nuc.placement_source)
+        data.sid.push(nuc.strand_id)
+        data.extid.push(nuc.extension_id)
+        data.ismod.push(nuc.is_modification)
+        data.mod.push(nuc.modification)
         const color = nucColor(nuc, stapleColorMap, customColors, loopSet)
         entry.defaultColor = color
         _setInstColor(entry, color)

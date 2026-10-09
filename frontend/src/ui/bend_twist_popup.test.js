@@ -146,16 +146,29 @@ describe('bend radius field', () => {
     expect(Number(radius.value)).toBeCloseTo(bendRadiusNm(expectedAngle, 100), 4)
     expect(onPreview.mock.lastCall[0].curvature_deg_per_bp).toBeCloseTo(120 / 90, 7)
     expect(onPreview.mock.lastCall[0].polymer_circle_count).toBe(3)
+    const count = document.getElementById('def-polymer-count')
+    count.value = '1'
+    count.dispatchEvent(new Event('input'))
+    expect(onPreview.mock.lastCall[0].polymer_circle_count).toBe(1)
+    expect(onPreview.mock.lastCall[0].curvature_deg_per_bp).toBeCloseTo(360 / 91, 7)
+    expect(Number(angle.value)).toBeCloseTo(360 / 91 * 100, 5)
+    expect(Number(radius.value)).toBeCloseTo(bendRadiusNm(360 / 91 * 100, 100), 4)
   })
 
 
-  it('restores persisted circle mode and count from bend parameters', () => {
+  it.each([
+    [1, 0, 100, 100],
+    [5, 0, 100, 100],
+    [1, -9, 417, 419], // Circle_spiral: 420 occupied sites, staggered endpoints.
+  ])('restores circle count %i across planes %i..%i (seam span %i)', (count, planeA, planeB, seamSpan) => {
     store.setState({
       currentDesign: {
         strands: [{ notes: 'polymerization connector' }],
-        forced_ligations: [{
-          is_periodic_seam: true, three_prime_bp: 0, five_prime_bp: 100,
-        }],
+        forced_ligations: (seamSpan === 419 ? [0, 4, 7] : [0]).map(offset => ({
+          is_periodic_seam: true,
+          three_prime_bp: planeA + offset,
+          five_prime_bp: planeA + offset + seamSpan,
+        })),
       },
     })
     document.body.innerHTML = `
@@ -174,15 +187,25 @@ describe('bend radius field', () => {
         <button id="def-cluster-all-btn"></button><button id="def-cluster-none-btn"></button>
         <div id="def-bend-hint"></div><div id="def-feasibility"></div>
       </div>`
-    initBendTwistPopup({ onPreview: vi.fn(), onConfirm: vi.fn(), onCancel: vi.fn() })
-    openPopup('bend', 0, 100, {
+    const onPreview = vi.fn()
+    const onConfirm = vi.fn()
+    initBendTwistPopup({ onPreview, onConfirm, onCancel: vi.fn() })
+    openPopup('bend', planeA, planeB, {
       kind: 'bend', curvature_deg_per_bp: 0.6, direction_deg: 0,
-      polymer_circle_count: 5,
+      polymer_circle_count: count,
     }, [], true)
 
     expect(document.getElementById('def-polymer-circle').checked).toBe(true)
-    expect(document.getElementById('def-polymer-count').value).toBe('5')
+    expect(document.getElementById('def-polymer-count').value).toBe(String(count))
     expect(document.getElementById('def-polymer-count-row').style.display).toBe('')
     expect(document.getElementById('def-bend-angle').readOnly).toBe(true)
+    if (count === 1) {
+      expect(onPreview.mock.lastCall[0].curvature_deg_per_bp).toBeCloseTo(360 / (seamSpan + 1), 7)
+      document.getElementById('def-apply-btn').click()
+      expect(onConfirm.mock.lastCall[0].curvature_deg_per_bp).toBeCloseTo(360 / (seamSpan + 1), 7)
+    } else {
+      expect(onPreview).not.toHaveBeenCalled()
+      expect(Number(document.getElementById('def-bend-angle').value)).toBe(60)
+    }
   })
 })

@@ -81,6 +81,25 @@ test('design tools use grouped controls and preserve their selection and cancel 
     await expect(popup.locator('#def-apply-btn')).toBeEnabled()
     await checkPopupSurface(popup)
     await checkSections(popup, ['Clusters', 'Planes', tool === 'bend' ? 'Bend' : 'Twist', 'Info'])
+    if (tool === 'bend') {
+      for (const height of [720, 480]) {
+        await page.setViewportSize({ width: 1280, height })
+        await expect(popup.locator('#def-cancel-btn')).toBeInViewport({ ratio: 1 })
+        await expect(popup.locator('#def-apply-btn')).toBeInViewport({ ratio: 1 })
+        const fields = popup.locator('.def-fields')
+        await fields.evaluate(node => { node.scrollTop = node.scrollHeight })
+        await expect(popup.locator('#def-apply-btn')).toBeInViewport({ ratio: 1 })
+        await fields.evaluate(node => { node.scrollTop = 0 })
+      }
+      const angle = await popup.locator('#def-bend-angle').boundingBox()
+      const curvature = await popup.locator('#def-bend-radius').boundingBox()
+      expect(Math.abs(angle.y - curvature.y)).toBeLessThan(1)
+      expect(curvature.x).toBeGreaterThan(angle.x)
+      await expect(popup.getByLabel('Curvature (nm)', { exact: true })).toBeVisible()
+      await expect(popup.getByText('Plane 1 stays fixed; the deformation spans the two planes.')).toHaveCount(0)
+      await capturePopup(page, testInfo, 'bend-compact')
+      await page.setViewportSize({ width: 2400, height: 1200 })
+    }
     await expect(popup.locator('#def-cluster-list')).toHaveCSS('overflow-y', 'auto')
     expect(await popup.locator('#def-cluster-list').evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true)
     await expect(popup.locator(`#def-${tool === 'bend' ? 'twist' : 'bend'}-controls`)).toBeHidden()

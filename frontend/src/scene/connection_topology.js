@@ -1,5 +1,6 @@
 // Pure signatures used by renderer rebuild guards. Every rendered connection
 // field belongs here; omitting one can misclassify a topology edit as display-only.
+import { selfClosingPolymerSeam } from './polymer_seams.js'
 
 const crossoverSignature = crossover => [
   crossover.id,
@@ -22,7 +23,9 @@ export const sameCrossoverTopology = (leftDesign, rightDesign) =>
   sameSignatures(leftDesign?.crossovers, rightDesign?.crossovers, crossoverSignature)
 
 export const sameForcedLigationTopology = (leftDesign, rightDesign) =>
-  sameSignatures(leftDesign?.forced_ligations, rightDesign?.forced_ligations, forcedLigationSignature)
+  sameSignatures(leftDesign?.forced_ligations, rightDesign?.forced_ligations, forcedLigationSignature) &&
+  JSON.stringify((leftDesign?.forced_ligations ?? []).map(s => selfClosingPolymerSeam(leftDesign, s))) ===
+  JSON.stringify((rightDesign?.forced_ligations ?? []).map(s => selfClosingPolymerSeam(rightDesign, s)))
 
 export const sameConnectionTopology = (leftDesign, rightDesign) =>
   sameCrossoverTopology(leftDesign, rightDesign) &&

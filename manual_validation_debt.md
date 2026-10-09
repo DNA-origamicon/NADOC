@@ -795,3 +795,17 @@ legible. On an assembly, open a missing step and check navigation to its owning
 part. Automated unit/API and browser checks cover behavior; hands-on visual
 preference and touch interaction remain for user review. Simulation completion
 is a workflow signal and does not certify scientific convergence or folding yield.
+
+## MV-VR-MOVE-DRAFT — PENDING (2026-10-08)
+
+In a tracked headset, use Move / Rotate's Selection field with cluster, base and
+overhang filters. Point at the selected geometry, trigger-drag to translate,
+release, grip-drag to orient, toggle 15-degree snapping, and regrab the cyan
+preview. Check all six 20%-exposed thumbwheels and one-unit arrows, three-decimal
+position readouts, Cancel left/green Apply right, one history entry per Apply,
+Undo/Redo and save/reopen. Verify panel-border/scene grips remain accessible.
+Run the updated move tour first with steady_fast, then all four unchanged motion
+presets. SteamVR was not running during implementation. Native production-handler,
+GL panel/layout and actual browser/backend history checks passed; they do not
+establish through-lens legibility or physical controller comfort. Evidence:
+`.development-artifacts/vr-move-20261008/`.

@@ -142,11 +142,12 @@ export function initBendTwistPopup(callbacks) {
 
   _popup      = document.getElementById('deform-panel')
   _title      = document.getElementById('def-panel-title')
-  _floating = createToolPopup({ panel: _popup, title: 'Twist', onClose: () => { if (_selectionUI) _selectionUI.onCancel(); else { _hide(); _callbacks?.onCancel() } } })
+  _floating = createToolPopup({ panel: _popup, title: 'Twist', panelDisplay: 'flex', onClose: () => { if (_selectionUI) _selectionUI.onCancel(); else { _hide(); _callbacks?.onCancel() } } })
   _pickingHint = el('p', { className: 'tool-picking-hint', attrs: { 'aria-live': 'polite', hidden: true } })
-  _popup.prepend(_pickingHint)
+  const fields = _popup.querySelector('.def-fields') ?? _popup
+  fields.prepend(_pickingHint)
   _selectionSection = el('div', { id: 'def-current-selection' })
-  _popup.prepend(_selectionSection)
+  fields.prepend(_selectionSection)
   _twistCtrl  = document.getElementById('def-twist-controls')
   _bendCtrl   = document.getElementById('def-bend-controls')
   _twistValue = document.getElementById('def-twist-value')
@@ -232,7 +233,7 @@ export function initBendTwistPopup(callbacks) {
     if (_validPolymerCount() != null) _driveBendFromPolymerCount()
   })
   _polymerCount.addEventListener('change', () => {
-    const count = _validPolymerCount() ?? 2
+    const count = _validPolymerCount() ?? 1
     _polymerCount.value = String(count)
     _driveBendFromPolymerCount()
   })
@@ -352,10 +353,17 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
       _updateCompassFromInput()
       _updateBendHint()
       const savedCircleCount = Number(params.polymer_circle_count)
-      if (!_polymerCircle.disabled && Number.isInteger(savedCircleCount) && savedCircleCount >= 2) {
+      if (!_polymerCircle.disabled && Number.isInteger(savedCircleCount) && savedCircleCount >= 1) {
         _polymerCount.value = String(savedCircleCount)
         _polymerCircle.checked = true
         _setPolymerCircleMode(true)
+        if (savedCircleCount === 1) {
+          // Reapplying a saved one-copy circle repairs the legacy endpoint
+          // overlap through the normal preview/Apply/Undo transaction.
+          _updateBendFromPolymerCount()
+          _updateBendHint()
+          skipInitialPreview = false
+        }
       }
     }
   } else {
@@ -569,7 +577,7 @@ function _setPolymerCircleMode(enabled) {
 
 function _validPolymerCount() {
   const raw = Number(_polymerCount?.value)
-  if (!Number.isFinite(raw) || raw < 2) return null
+  if (!Number.isFinite(raw) || raw < 1) return null
   return Math.round(raw)
 }
 
@@ -592,7 +600,12 @@ function _updateBendFromPolymerCount() {
   const typedSpan = _typedBendSpanBp()
   // Fall back to the typed span only for malformed legacy routing. Normal
   // routed designs always have at least one resolvable periodic seam.
-  const effectiveSpan = seamBendSpan > 0 ? seamBendSpan : typedSpan
+  const bentSpan = seamBendSpan > 0 ? seamBendSpan : typedSpan
+  // A single copy joins its own terminal bases: reserve one more bp step for
+  // that bond, rather than rotating the last occupied site onto the first.
+  // Multiple copies use the periodic repeat transform, which already appends
+  // the next-base step when placing each copy.
+  const effectiveSpan = bentSpan + (count === 1 ? 1 : 0)
   const curvature = (360 / count) / effectiveSpan
   _bendAngle.value = Number((curvature * typedSpan).toPrecision(8)).toString()
   _syncRadiusFromAngle()

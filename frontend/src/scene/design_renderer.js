@@ -981,6 +981,11 @@ export function initDesignRenderer(scene, storeRef) {
                           newState.currentHelixAxes !== prevState.currentHelixAxes
     const designChanged = newState.currentDesign    !== prevState.currentDesign
     const loopChanged   = newState.loopStrandIds    !== prevState.loopStrandIds
+    // Circle intent can change without rebuilding geometry (preview/history).
+    if (designChanged) {
+      _helixCtrl?.setPolymerizationDesign(newState.currentDesign)
+      _structuralOverlay?.ctrl.setPolymerizationDesign(newState.currentDesign)
+    }
 
     // Detect modal-active transitions FIRST so the True→False flush still
     // honours pending deferred rebuilds.
@@ -1119,7 +1124,9 @@ export function initDesignRenderer(scene, storeRef) {
       if (_coverageChanged) {
         markOperationTiming('partial-patch-rejected', { reason: 'scaffold-coverage-changed' })
       }
-      if (!_coverageChanged && _tryPatchInPlace(
+      // Seam closure changes bond/arc membership even if all nucleotide IDs
+      // remain the same; a geometry-only patch cannot update that membership.
+      if (!_coverageChanged && sameForcedLigationTopology(prevState.currentDesign, newState.currentDesign) && _tryPatchInPlace(
         newState.lastPartialChangedHelixIds,
         newState.currentGeometry,
         prevState.currentGeometry,

@@ -8081,6 +8081,7 @@
         <!-- Deformation parameters (shown when both planes placed) -->
         <div class="panel-section" id="deform-panel" style="display:none">
           <h2 id="def-panel-title">Twist</h2>
+          <div class="def-fields">
 
           <!-- Cluster scope (shared for bend and twist) -->
           <fieldset id="def-cluster-section" class="tool-section" style="display:none"><legend>Clusters</legend>
@@ -8152,17 +8153,21 @@
                   <input type="number" id="def-bend-dir" aria-label="Bend direction (degrees)" value="0" min="0" max="360" step="5">
                   <span class="unit">°</span>
                 </div>
-                <div class="def-row">
-                  <label>Angle:</label>
-                  <input type="number" id="def-bend-angle" aria-label="Bend angle (degrees)" value="0" min="0" step="1">
-                  <span class="unit">°</span>
-                </div>
-                <div class="def-row">
-                  <label>Radius of curvature:</label>
-                  <input type="number" id="def-bend-radius" aria-label="Bend radius (nm)" min="0" step="0.1"
-                         placeholder="∞" aria-describedby="def-bend-hint">
-                  <span class="unit">nm</span>
-                </div>
+              </div>
+            </div>
+            <div class="def-bend-pair">
+              <div class="def-row">
+                <label for="def-bend-angle">Angle:</label>
+                <input type="number" id="def-bend-angle" aria-label="Bend angle (degrees)" value="0" min="0" step="1">
+                <span class="unit">°</span>
+              </div>
+              <div class="def-row">
+                <label for="def-bend-radius">Curvature:</label>
+                <input type="number" id="def-bend-radius" aria-label="Curvature (nm)" min="0" step="0.1"
+                       placeholder="∞" aria-describedby="def-bend-hint">
+                <span class="unit">nm</span>
+              </div>
+            </div>
                 <label class="def-preview-row" id="def-polymer-circle-label"
                        style="margin:4px 0 8px"
                        title="Available after Route for Polymerization creates polymerization connector strands.">
@@ -8171,18 +8176,15 @@
                 </label>
                 <div class="def-row" id="def-polymer-count-row" style="display:none">
                   <label>Polymers in circle:</label>
-                  <input type="number" id="def-polymer-count" aria-label="Polymers in circle" value="3" min="2" step="1" inputmode="numeric">
+                  <input type="number" id="def-polymer-count" aria-label="Polymers in circle" value="3" min="1" step="1" inputmode="numeric">
                   <span class="unit">units</span>
                 </div>
                 <div id="def-bend-hint" style="margin-top:4px;line-height:1.4">
                   κ = 0.000°/bp
                 </div>
-              </div>
-            </div>
           </fieldset>
 
           <fieldset class="tool-section"><legend>Info</legend>
-          <p class="tool-help">Plane 1 stays fixed; the deformation spans the two planes.</p>
           <label class="def-preview-row">
             <input type="checkbox" id="def-preview-check" checked>
             Preview (live)
@@ -8191,6 +8193,7 @@
           <div id="def-feasibility" style="display:none;margin:4px 0;line-height:1.4"></div>
 
           </fieldset>
+          </div>
           <div class="def-btn-row">
             <button class="def-btn btn btn--sm" id="def-cancel-btn">Cancel</button>
             <button class="def-btn btn btn--sm btn--primary primary" id="def-apply-btn">Apply</button>

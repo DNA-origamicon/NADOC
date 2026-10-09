@@ -164,3 +164,25 @@ def test_errors_when_nothing_to_route():
     assert res.errors
     # design unchanged (no connectors added)
     assert routed is d or len(routed.strands) == len(d.strands)
+
+
+def test_self_closing_connectors_remain_joined_in_export_after_reload():
+    from backend.core.models import BendParams, DeformationOp
+    from backend.physics.oxdna_interface import _strand_nucleotide_order, topology_rows
+
+    routed, _ = route_for_polymerization(_bundle_with_bare_ends(length_bp=84))
+    bend = DeformationOp(type="bend", plane_a_bp=0, plane_b_bp=83,
+                         params=BendParams(curvature_deg_per_bp=360 / 84,
+                                           polymer_circle_count=1))
+    closed = routed.copy_with(deformations=[bend])
+    restored = Design.model_validate_json(closed.model_dump_json())
+    rows, _ = topology_rows(restored)
+    indices = {key: i for i, key in enumerate(_strand_nucleotide_order(restored))}
+    for seam in restored.forced_ligations:
+        three = indices[(seam.three_prime_helix_id, seam.three_prime_bp,
+                         seam.three_prime_direction.value)]
+        five = indices[(seam.five_prime_helix_id, seam.five_prime_bp,
+                        seam.five_prime_direction.value)]
+        assert rows[three][0] == rows[five][0]
+        assert rows[three][2] == five
+        assert rows[five][3] == three
