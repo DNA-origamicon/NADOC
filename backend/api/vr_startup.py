@@ -33,6 +33,9 @@ def prepare_scene(body, scene_path, progress_path, process, event_path=None):
         require_native_placement_review_clear(event_path=event_path)
         candidate.replace(scene_path)
         publish(progress_path, 'ready', 85, 'Reading and validating scene')
+        if event_path is not None:
+            from backend.api.vr_scene_export import warm
+            warm()
         with vr._STATE_LOCK:
             state = vr._read_state()
             if state and state['pid'] == process.pid:

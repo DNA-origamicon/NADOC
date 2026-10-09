@@ -16,7 +16,7 @@ from tools.vr_workflows.demo_view import reveal, hold
 from tools.vr_workflows.ligation_pixels import preview, committed
 
 
-def run(socket, output, role):
+def run(socket, output, role, expected_revision=None):
     role = int(role)
     out = Path(output); out.mkdir(parents=True, exist_ok=True)
     bridge = Bridge(socket)
@@ -34,6 +34,14 @@ def run(socket, output, role):
         time.sleep(.1)
     (out/'startup.json').write_text(json.dumps(readiness,indent=2))
     live = LiveSession(bridge, physical=True, allow_transactions=True)
+    # Publication acknowledges the manifest, not completion of native loading.
+    # A preceding desktop Undo must be visible before the next negative trial.
+    if expected_revision is not None:
+        deadline = time.monotonic() + 30
+        while live.state['scene_revision'] < int(expected_revision):
+            if time.monotonic() > deadline:
+                raise RuntimeError('Previous Undo scene did not finish loading')
+            live.frame(); time.sleep(.05)
     from tools.vr_workflows.audit_representation import prepare as prepare_audit_representation
     prepare_audit_representation(live)
     preset = os.environ.get('NADOC_VR_PROFILE', 'steady_fast')
@@ -93,25 +101,40 @@ def run(socket, output, role):
         source=next(i for i,e in enumerate(ends) if e['role']==role)
         target=next(i for i,e in enumerate(ends) if e['role']!=role and e['strand']!=ends[source]['strand'])
         invalid=next(i for i,e in enumerate(ends) if i!=source and e['role']==role)
+        invalid_point=np.array(ends[invalid]['world'])
         if os.environ.get('NADOC_VR_AUDIT_DESIGN'):
             # Dense origami can put a compatible end inside the selection sphere
             # around the old fixture's first same-polarity end. Choose the most
             # isolated same-polarity end from live geometry; retain the original
             # no-target/no-edit assertions and normal controller motion.
-            compatible=[e for e in ends if e['role']!=role and e['strand']!=ends[source]['strand']]
-            def clearance(index):
-                return min(float(np.linalg.norm(np.array(ends[index]['world'])-e['world'])) for e in compatible)
+            compatible=np.asarray([e['world'] for e in ends if e['role']!=role and e['strand']!=ends[source]['strand']])
+            def clearance(point):
+                return float(np.min(np.linalg.norm(compatible-point,axis=1)))
             original=invalid
-            invalid=max((i for i,e in enumerate(ends) if i!=source and e['role']==role),key=clearance)
+            candidates=[]
+            for i,end in enumerate(ends):
+                if i==source or end['role']!=role:continue
+                point=np.asarray(end['world'])
+                away=point-compatible[np.argmin(np.linalg.norm(compatible-point,axis=1))]
+                # Stay 12 mm from the same-polarity end (inside the unchanged
+                # 25 mm sphere) while clearing nearby compatible ends. Targeting
+                # the endpoint center itself had only 24 mm clearance in the
+                # straight bundle and therefore was not a valid negative case.
+                if np.linalg.norm(away)>1e-8:
+                    point=point+away/np.linalg.norm(away)*.012
+                candidates.append((clearance(point),i,point))
+            margin,invalid,invalid_point=max(candidates,key=lambda item:item[0])
+            if margin<.032:raise RuntimeError('No isolated same-polarity negative-control pose')
             (out/'negative-target-setup.json').write_text(json.dumps({'source':source,'original_invalid':original,
-                'chosen_invalid':invalid,'original_clearance_m':clearance(original),'chosen_clearance_m':clearance(invalid),
-                'policy':'Most isolated same-polarity live endpoint; unchanged selection radius, geometry and no-edit assertions'},indent=2))
+                'chosen_invalid':invalid,'original_clearance_m':clearance(np.array(ends[original]['world'])),'chosen_clearance_m':margin,
+                'tip':invalid_point.tolist(),'same_polarity_distance_m':float(np.linalg.norm(invalid_point-ends[invalid]['world'])),
+                'policy':'Same-polarity end inside unchanged selection sphere; compatible ends outside with motion margin; unchanged geometry and no-edit assertions'},indent=2))
         # A same-polarity release must not create an edit or leave a held source.
         revision=live.state['scene_revision']
         endpoint(source,lambda s:s['ligation']['hover'][1]==source)
         live.send('button',hand=1,button='trigger',pressed=True);live.frame()
         assert live.state['ligation']['grabbing']
-        endpoint(invalid)
+        reach((invalid_point+[0,0,.12]).tolist())
         assert live.state['ligation']['target'] is None
         live.capture_to(out/'invalid-preview',discard_source=True)
         live.send('button',hand=1,button='trigger',pressed=False);live.frame()
@@ -120,6 +143,34 @@ def run(socket, output, role):
         live.send('button',hand=1,button='trigger',pressed=True);live.frame()
         assert live.state['ligation']['grabbing']
         loose=np.array(ends[source]['world'])+[0,.15,.12]
+        if os.environ.get('NADOC_VR_AUDIT_DESIGN'):
+            # Dense origami has legitimate neighboring targets at the small
+            # fixture's empty-space point. Choose a truly empty preview point.
+            positions=np.asarray([end['world'] for end in ends])
+            source_position=np.array(ends[source]['world'])
+            toward_eye=np.array(eye['position'])-source_position
+            toward_eye/=np.linalg.norm(toward_eye)
+            from tools.vr_motion.visual_checks import project
+            chosen=None
+            for distance in (.12,.18,.24,.3):
+                for side in (-.08,.08,-.12,.12):
+                    # Pull across the eye plane as well as out of the model.
+                    # A pull straight toward the eye collapses to a few mirror
+                    # pixels, making its visibility depend on motion jitter.
+                    tip=source_position+toward_eye*distance+rotate(eye['orientation_xyzw'],[side,0,0])
+                    if np.min(np.linalg.norm(positions-tip,axis=1))<=.06:continue
+                    framed=True
+                    for view in evidence['eyes']:
+                        a,b=project(source_position,view),project(tip,view)
+                        if (a is None or b is None or np.linalg.norm(np.array(a)-b)<80
+                                or not (.1*view['width']<b[0]<.9*view['width'] and .1*view['height']<b[1]<.9*view['height'])):
+                            framed=False;break
+                    if framed:chosen=tip;break
+                if chosen is not None:break
+            if chosen is None:raise RuntimeError('No empty stereo-framed Ligate preview point')
+            loose=chosen+[0,0,.12]
+            (out/'loose-point.json').write_text(json.dumps({'position':loose.tolist(),
+                'reason':'empty-space preview clear of all imported strand ends, with transverse stereo span for mirror visibility'}))
         reach(loose.tolist());assert live.state['ligation']['target'] is None
         live.capture_to(out/'stretched',discard_source=True)
         assert preview(out/'stretched')['passed'], 'Stretched bond pixels missing'

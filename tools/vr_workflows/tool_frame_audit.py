@@ -23,7 +23,7 @@ from tools.vr_workflows.frame_audit_tour import compositor_report
 
 TOOLS={'move':['move_tour','--target','base','--direct-activation'],
        'move_cluster':['move_tour','--target','cluster','--direct-activation'],
-       'bend':['bend_tour'],'twist':['twist_tour'],'extrude':['extrude_tour','--lattice','honeycomb'],
+       'bend':['bend_tour'],'twist':['twist_tour'],'sweep':['sweep_tour'],'extrude':['extrude_tour','--lattice','honeycomb'],
        'nick':['nick_tour'],'ligation':['ligation_tour'],'end_resize':['end_resize_tour'],
        'view_tools':['view_tools_tour'],'simulation':['simulation_tour'],
        'dimensions':['dimensions_persistence_check'],'view_volumes':['view_volumes_check']}
@@ -37,6 +37,31 @@ def stop(process):
             os.killpg(process.pid,signal.SIGTERM)
             try: process.wait(timeout=10)
             except subprocess.TimeoutExpired: os.killpg(process.pid,signal.SIGKILL);process.wait()
+
+
+def retain_owned_volume_journals(case):
+    """Retain journals named by this stopped private backend, then clean /tmp.
+
+    Changing/reopening the fixture can leave its volume binding behind. Never
+    glob shared runtime files: only exact paths reported by this case are owned.
+    The caller must have stopped the tour and verified that its viewer exited.
+    """
+    log=case/'tour.log'
+    manifest=case/'volume-journal-cleanup.json'
+    records=json.loads(manifest.read_text()) if manifest.exists() else []
+    if log.exists():
+        paths=set(re.findall(r'Retaining unsaved view-volume journal at (/tmp/nadoc-vr-event-[a-zA-Z0-9_-]+\.json)',log.read_text(errors='replace')))
+        for base in sorted(paths):
+            for suffix in ('state','state.tmp','pending','pending.tmp'):
+                path=Path(base+'.volumes-'+suffix)
+                if not path.is_file() or path.is_symlink():continue
+                retained=case/'retained-volume-journals'/path.name
+                retained.parent.mkdir(exist_ok=True)
+                data=path.read_bytes();retained.write_bytes(data)
+                if retained.read_bytes()!=data:raise RuntimeError('Journal evidence copy failed')
+                path.unlink()
+                records.append(dict(path=str(path),retained=str(retained),sha256=hashlib.sha256(data).hexdigest(),removed=not path.exists()))
+    manifest.write_text(json.dumps(records,indent=2))
 
 
 def main():
@@ -116,6 +141,7 @@ def main():
             cleanup_deadline=time.monotonic()+20
             while _viewer_active() and time.monotonic()<cleanup_deadline:time.sleep(.2)
             stop(sampler)
+            if not _viewer_active():retain_owned_volume_journals(case)
             host_after=resources()
             (case/'host-resources.json').write_text(json.dumps({'before':host_before,'after':host_after,
                 'delta':pressure(host_before,host_after),'limits':'Boundary host-wide counters include setup and cleanup; not per-frame or process-specific CPU/memory attribution.'},indent=2))

@@ -812,6 +812,7 @@ export function initDomainDesignerPanel(rootEl, { store, api, pathview }) {
       delBtn.addEventListener('click', async ev => {
         ev.stopPropagation()
         const ok = await showConfirm({
+          vr: true,
           title: 'Delete binding',
           message: `Delete binding ${b.name ?? b.id.slice(0, 6)}?`,
           danger: true,

@@ -11,11 +11,13 @@ data.
 from __future__ import annotations
 
 from backend.core.display_placement import measured_display_placement
-from backend.core.native_slab_placement import authoritative_slab_pose
+from backend.core.native_slab_placement import authoritative_slab_poses
 from backend.core.deformation import _rot_from_quaternion
 from backend.api.vr_ligation import parse_event as parse_ligation_event
 from backend.api.vr_view_tools import parse_event as parse_view_tool_event
+from backend.api.vr_feature_log import parse_event as parse_feature_log_event
 from backend.api.vr_simulations import parse_event as parse_simulation_event
+from backend.api.vr_prompts import parse_event as parse_prompt_event
 from backend.api.vr_routing import parse_event as parse_routing_event
 from backend.api.vr_share import parse_share_event
 
@@ -778,6 +780,11 @@ def _serialize_scene(
     def nums(*values: float) -> str:
         return " ".join(f"{float(value):.7g}" for value in values)
 
+    @lru_cache(maxsize=8192)
+    def palette_text(values: tuple) -> str:
+        return nums(*values)
+
+    @lru_cache(maxsize=32768)
     def palette_for_index(index: int) -> tuple[float, ...]:
         return tuple(
             channel
@@ -795,14 +802,22 @@ def _serialize_scene(
 
     # Repeated base/domain/strand owners dominate atomistic export metadata.
     # Bound memory and keep tokens local to this immutable export.
-    @lru_cache(maxsize=8192)
+    @lru_cache(maxsize=32768)
     def selection_token(*values) -> str:
         payload = json.dumps(values, ensure_ascii=False, separators=(",", ":"))
         # Match JavaScript encodeURIComponent, which produces the feedback tokens.
         return quote(payload, safe="-_.!~*'()")
 
+    @lru_cache(maxsize=32768)
     def owner_tokens(*refs: tuple) -> tuple[str, ...]:
         return tuple(dict.fromkeys(selection_token(*ref) for ref in refs if ref))
+
+    @lru_cache(maxsize=8192)
+    def selection_clusters(strand_id, domain_index, helix_id):
+        # Membership depends on the domain/helix, not on its sampled base or
+        # each backbone/slab/bond that reuses that base's owner metadata.
+        return _selection_clusters(design, {"strand_id": strand_id,
+            "domain_index": domain_index, "helix_id": helix_id})
 
     def base_key(nucleotide: dict) -> str | None:
         if (
@@ -830,7 +845,12 @@ def _serialize_scene(
         key = f"{helix_id}:{bp_index}:{direction}"
         return f"{key}:{copy_k}" if copy_k else key
 
+    nucleotide_owner_cache = {}
+
     def nucleotide_owner_tokens(nucleotide: dict) -> tuple[str, ...]:
+        cached = nucleotide_owner_cache.get(id(nucleotide))
+        if cached is not None:
+            return cached
         refs: list[tuple] = []
         key = base_key(nucleotide)
         if key:
@@ -862,12 +882,19 @@ def _serialize_scene(
                     str(crossover_id),
                 )
             )
-        for cluster in _selection_clusters(design, nucleotide):
+        for cluster in selection_clusters(nucleotide.get("strand_id"),
+                int(nucleotide.get("domain_index") or 0), nucleotide.get("helix_id")):
             if len(refs) >= 8:
                 break
             refs.append(("cluster", str(cluster.id)))
         return owner_tokens(*refs)
 
+    # Keep only the export's live canonical records in this identity cache.
+    # Transient projection dictionaries take the uncached path (their Python
+    # IDs may be reused), and no cache can outlive this immutable export.
+    nucleotide_owner_cache = {id(n): nucleotide_owner_tokens(n) for n in nucleotides}
+
+    @lru_cache(maxsize=8192)
     def domain_owner_tokens(
         strand_id: str | None,
         domain_index: int,
@@ -890,7 +917,8 @@ def _serialize_scene(
                 ("strand", str(strand_id)),
             ]
         )
-        for cluster in _selection_clusters(design, nucleotide):
+        for cluster in selection_clusters(nucleotide.get("strand_id"),
+                int(nucleotide.get("domain_index") or 0), nucleotide.get("helix_id")):
             if len(refs) >= 8:
                 break
             refs.append(("cluster", str(cluster.id)))
@@ -992,9 +1020,9 @@ def _serialize_scene(
         register_owner_token(token)
 
     def declare_owner_tokens(tokens) -> None:
-        for token in dict.fromkeys(tokens):
-            owner_id = register_owner_token(token)
+        for token in tokens:
             if token not in declared_owner_tokens:
+                owner_id = register_owner_token(token)
                 lines.append(f"D {owner_id} {token}")
                 declared_owner_tokens.add(token)
 
@@ -1042,7 +1070,9 @@ def _serialize_scene(
                 ),
             )
         primitive_ids[active_representation].add(encoded_identity)
-        lines.append(f"{record_type} {encoded_identity} {nums(*values)}")
+        # Every primitive ends with the same four RGB palettes. Format those
+        # twelve repeated numbers once instead of once per bead/slab/edge.
+        lines.append(f"{record_type} {encoded_identity} {nums(*values[:-12])} {palette_text(values[-12:])}")
         if aliases:
             if len(aliases) > 8 or any(
                 not token or len(token) > 2048 for token in aliases
@@ -1067,7 +1097,7 @@ def _serialize_scene(
         if transform_owners:
             if len(transform_owners) > 8 or any(
                 token not in cluster_transform_tokens
-                or not np.all(np.isfinite([start_weight, end_weight]))
+                or not (math.isfinite(start_weight) and math.isfinite(end_weight))
                 or not 0.0 <= start_weight <= 1.0
                 or not 0.0 <= end_weight <= 1.0
                 for token, start_weight, end_weight in transform_owners
@@ -1080,6 +1110,14 @@ def _serialize_scene(
             )
             lines.append(f"T {encoded_identity} {len(transform_owners)} {values}")
         scope_endpoints = tool_endpoint_tokens or endpoint_aliases or (aliases, aliases)
+        if (scope_endpoints == (aliases, aliases) and all(
+            token in aliases and start_weight == 1.0 and end_weight == 1.0
+            for token, start_weight, end_weight in transform_owners or ()
+        )):
+            # Rigid aliases already encode these exact 1/1 tool scopes. There
+            # is no W record to compute; asymmetric/fractional scopes continue
+            # through the full endpoint-aware path below.
+            return
         scope_owners = {
             token: (
                 float(token in scope_endpoints[0]),
@@ -1463,7 +1501,7 @@ def _serialize_scene(
     warning_nucleotides = {}
     for nucleotide in nucleotides:
         warning_nucleotides.setdefault(nucleotide.get('helix_id'), []).append(nucleotide)
-    for op in design.deformations:
+    for op in getattr(design, "deformations", ()):
         if op.type != 'sweep':
             continue
         for bp in op.params.warning_bps:
@@ -1611,8 +1649,7 @@ def _serialize_scene(
 
     # Desktop and VR consume the same authoritative pose. No local solver,
     # re-pairing, inferred frame, or fallback placement exists at this boundary.
-    for index, nucleotide in assigned:
-        pose = authoritative_slab_pose(nucleotide)
+    for (index, nucleotide), pose in zip(assigned, authoritative_slab_poses([n for _, n in assigned])):
         if pose is None:
             continue
         center, frame = pose
@@ -2041,7 +2078,9 @@ def _serialize_scene(
 
     append_axes(0.05)
 
-    if extra_geometry is None or "cylinders" not in extra_geometry:
+    if (representations is None or "cylinders" in representations) and (
+        extra_geometry is None or "cylinders" not in extra_geometry
+    ):
         lines.append("R cylinders")
         active_representation = "cylinders"
         declared_owner_tokens.clear()
@@ -2073,7 +2112,12 @@ def _serialize_scene(
                     direct_overhang_ids.add(str(value))
 
         first_palette_by_helix = {}
+        first_index_by_domain = {}
         for index, nucleotide in enumerate(nucleotides):
+            first_index_by_domain.setdefault(
+                (nucleotide.get("strand_id"), int(nucleotide.get("domain_index") or 0)),
+                index,
+            )
             first_palette_by_helix.setdefault(
                 nucleotide.get("helix_id"), palette_for_index(index)
             )
@@ -2086,15 +2130,8 @@ def _serialize_scene(
             for first, second, segment, edge_identity in axis_edges(axis):
                 palette = fallback_palette
                 if segment is not None and segment.get("strand_id"):
-                    match = next(
-                        (
-                            index
-                            for index, nucleotide in enumerate(nucleotides)
-                            if nucleotide.get("strand_id") == segment.get("strand_id")
-                            and int(nucleotide.get("domain_index") or 0)
-                            == int(segment.get("domain_index") or 0)
-                        ),
-                        None,
+                    match = first_index_by_domain.get(
+                        (segment.get("strand_id"), int(segment.get("domain_index") or 0))
                     )
                     if match is not None:
                         palette = palette_for_index(match)
@@ -2926,6 +2963,8 @@ def _cleanup_after_process(
     Path(str(event_path) + ".share.next").unlink(missing_ok=True)
     Path(str(event_path) + ".viewtools").unlink(missing_ok=True)
     Path(str(event_path) + ".viewtools.next").unlink(missing_ok=True)
+    Path(str(event_path) + ".feature-log").unlink(missing_ok=True)
+    Path(str(event_path) + ".feature-log.next").unlink(missing_ok=True)
     Path(str(event_path) + ".simulations").unlink(missing_ok=True)
     Path(str(event_path) + ".simulations.next").unlink(missing_ok=True)
     Path(str(event_path) + ".routing").unlink(missing_ok=True)
@@ -3442,7 +3481,9 @@ def _event_payload(state: dict | None) -> dict:
         return {
             "sequence": sequence,
             **({"share_control": value} if (value := parse_share_event(event.get("share_control"))) else {}),
+            **({"feature_log": value} if (value := parse_feature_log_event(event.get("feature_log"))) else {}),
             **({"simulation": value} if (value := parse_simulation_event(event.get("simulation"))) else {}),
+            **({"prompt": value} if (value := parse_prompt_event(event.get("prompt"))) else {}),
             **({"routing": value} if (value := parse_routing_event(event.get("routing"))) else {}),
             **({"view_tool": view_tool} if (view_tool := parse_view_tool_event(event.get("view_tool"))) else {}),
             **({"ligation": ligation} if (ligation := parse_ligation_event(event.get("ligation"))) else {}),

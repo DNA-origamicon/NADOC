@@ -71,6 +71,40 @@ int main(int argc,char** argv) {
         aim(0);frame(true,true);frame(false,false);checkGallery(!gallery.cardStyles.cards[i].open,"card did not collapse");
         aim(1);frame(false,false);checkGallery(gallery.cardStyles.cards[i].hover==-1,"collapsed child accepts input");
     }
+    gallery.cardMode=false;gallery.buttonMode=false;gallery.listMode=true;gallery.reset();
+    for(size_t i=0;i<6;++i){
+        auto& sample=gallery.listStyles.samples[i];hands={};
+        const auto aim=[&](int control){hands[1]={true,false,gallery.placement.worldPoint(ListGallery::target(i,control))+normal*.3F,gallery.placement.orientation()};};
+        const auto frame=[&](bool click,bool held){gallery.update(hands,{false,click},{false,held},.02F,{},{});};
+        const auto click=[&](int control){aim(control);frame(true,true);frame(false,false);};
+        aim(0);frame(true,true);checkGallery(sample.list.selected==-1,"list selected on press");frame(false,false);
+        checkGallery(sample.list.selected==0,"list selection missed");
+        const int value=sample.list.items[0].value;click(2);
+        checkGallery(i==1||i==3?sample.list.items[0].value==value+1:sample.list.items[0].pinned,"row action missed");
+        checkGallery(sample.list.selected==0,"row action changed selection");
+        for(int j=0;j<15;++j)click(10);
+        checkGallery(sample.list.offset==9 && sample.list.selected==0,"list overflow or lost selection");
+        click(6);checkGallery(sample.list.selected==11,"last item unreachable");
+        for(int j=0;j<15;++j)click(9);
+        checkGallery(sample.list.offset==0,"list underflow");
+        checkGallery(i==1||i==3?sample.list.items[0].value==value+1:sample.list.items[0].pinned,"row action lost after scroll");
+        aim(0);frame(true,true);hands[1].position+=up*.3F;frame(false,false);
+        checkGallery(sample.list.selected==11,"outside release activated row");
+        aim(0);frame(true,true);hands[1].valid=false;frame(false,false);hands[1].valid=true;frame(false,false);
+        checkGallery(sample.list.selected==11,"tracking loss activated row");
+        aim(11);frame(true,true);hands[1].position-=up*.5F;frame(false,true);frame(false,false);
+        checkGallery(sample.list.offset==9,"drag rail cannot reach end");
+        gallery.listStyles.disabled=true;const int clicks=sample.clicks;click(9);click(0);
+        checkGallery(sample.clicks==clicks && sample.list.offset==9,"disabled list accepts input");
+        gallery.listStyles.disabled=false;
+        const auto c=ListGallery::center(i);checkGallery(gallery.listStyles.hit(i,c+glm::vec3(-.1F,-.145F,0))==-1,"offscreen row has hit target");
+    }
+    // The model also handles empty and shorter-than-viewport sets.
+    nadoc_vr::ScrollableSet empty;empty.scroll(100);empty.seek(1);
+    checkGallery(empty.offset==0 && empty.index(0)==-1,"empty list bounds");
+    empty.items.push_back({"one","",1});empty.scroll(100);
+    checkGallery(empty.offset==0 && empty.index(0)==0 && empty.index(1)==-1,"short list bounds");
+    gallery.listMode=false;
     gallery.cardMode=false;
     gallery.buttonMode=false;
     // Render exact native meshes and retain front/oblique plus offscreen negative.
@@ -82,8 +116,8 @@ int main(int argc,char** argv) {
     gallery.reset();gallery.demo=false;gallery.placement.openDocked({0,0,0},{1,0,0,0});
     const std::filesystem::path output=argc>1?argv[1]:"gallery-evidence";
     std::filesystem::create_directories(output);
-    for(int mode=0;mode<3;++mode)for(int view=0;view<3;++view) {
-        gallery.buttonMode=mode==1;gallery.cardMode=mode==2;
+    for(int mode=0;mode<4;++mode)for(int view=0;view<3;++view) {
+        gallery.buttonMode=mode==1;gallery.cardMode=mode==2;gallery.listMode=mode==3;
         if(mode==2)for(auto& card:gallery.cardStyles.cards){card.open=true;card.reveal=1;}gallery.placement.openDocked({0,0,0},{1,0,0,0});
         const glm::vec3 eye=view==1?glm::vec3(.6F,.22F,1.1F):glm::vec3(0,0,1.25F);
         const auto vp=glm::perspective(glm::radians(52.F),1.28F,.01F,20.F)*glm::lookAt(eye,glm::vec3(0),glm::vec3(0,1,0));
@@ -94,9 +128,9 @@ int main(int argc,char** argv) {
         int bright=0;for(size_t p=0;p<rgb.size();p+=3)if(rgb[p]>60 && rgb[p+1]>80 && rgb[p+2]>100)++bright;
         checkGallery(view==2?bright==0:bright>18000,"gallery pixel coverage/negative control failed");
         auto png=nadoc_vr::scrywrite::encodeActorEyePng(rgb,1280,1000);
-        std::ofstream file(output/(std::string(mode==2?"cards-":mode==1?"buttons-":"")+(view==0?"front.png":view==1?"oblique.png":"offscreen.png")),std::ios::binary);
+        std::ofstream file(output/(std::string(mode==3?"lists-":mode==2?"cards-":mode==1?"buttons-":"")+(view==0?"front.png":view==1?"oblique.png":"offscreen.png")),std::ios::binary);
         file.write(reinterpret_cast<const char*>(png.data()),png.size());
     }
     gallery.ui.shutdown();glfwDestroyWindow(window);glfwTerminate();
-    std::cout<<"Nine wheel grabs, inertia, limits, tour and rendered pixels passed\n";
+    std::cout<<"Wheel, button, card and six scrollable set interactions and rendered pixels passed\n";
 }

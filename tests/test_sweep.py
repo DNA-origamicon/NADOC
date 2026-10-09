@@ -256,3 +256,52 @@ def test_swept_helix_preview_matches_committed_axis_endpoints(plane, end):
             actual = axes['axis_points'][np.flatnonzero(axes['bp_indices'] == bp)[0]]
             expected = path[-1 if i == 0 else 0] if direction == -1 else path[i]
             np.testing.assert_allclose(actual, expected, atol=1e-6)
+
+@pytest.mark.parametrize('deformed', [False, True])
+def test_detached_sweep_partial_geometry_merges_to_full_reference(deformed):
+    """The desktop merge must preserve old poses, IDs and authoritative frames."""
+    from backend.api import state
+    from backend.api.crud import _design_response_with_geometry
+    from backend.core.validator import validate_design
+    original = make_bundle_design([(0, 0), (0, 1)], 42)
+    if deformed:
+        original = original.copy_with(deformations=[DeformationOp(type='bend', plane_a_bp=0,
+            plane_b_bp=41, affected_helix_ids=[h.id for h in original.helices],
+            params=BendParams(curvature_deg_per_bp=.2))])
+    state.set_design(original)
+    before = _design_response_with_geometry(original, validate_design(original))
+    response = TestClient(app).post('/api/design/sweep', json={
+        'cells': [[3, 3], [3, 4]], 'points_nm': [[0, 0, 0], [0, 0, 5], [2, 0, 10]],
+        'ligate_adjacent': True,
+    })
+    assert response.status_code == 201, response.text
+    partial = response.json()
+    assert partial['partial_geometry'] is True
+    updated = state.get_or_404()
+    reference = _design_response_with_geometry(updated, validate_design(updated))
+    new_ids = {h.id for h in updated.helices} - {h.id for h in original.helices}
+    assert set(partial['changed_helix_ids']) == new_ids
+    assert {n['helix_id'] for n in partial['nucleotides']} == new_ids
+    key = lambda n: (n['helix_id'], n['direction'], n['bp_index'], n.get('copy_k', 0))
+    merged = {key(n): n for n in before['nucleotides'] + partial['nucleotides']}
+    expected = {key(n): n for n in reference['nucleotides']}
+    assert merged.keys() == expected.keys()
+    for site in expected:
+        assert merged[site] == expected[site]
+    axes = {a['helix_id']: a for a in before['helix_axes'] + partial['helix_axes']}
+    assert axes == {a['helix_id']: a for a in reference['helix_axes']}
+    assert partial['vr_transaction']['feature_log_entry_id'] == updated.feature_log[-1].id
+
+
+def test_sweep_continuation_retains_complete_geometry_response():
+    from backend.api import state
+    original = make_bundle_design([(0, 0)], 42)
+    state.set_design(original)
+    response = TestClient(app).post('/api/design/sweep', json={
+        'cells': [[0, 0]], 'points_nm': [[0, 0, 0], [0, 0, 5]],
+        'source_helix_id': original.helices[0].id,
+    })
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert not body.get('partial_geometry')
+    assert {n['helix_id'] for n in body['nucleotides']} == {h.id for h in state.get_or_404().helices}

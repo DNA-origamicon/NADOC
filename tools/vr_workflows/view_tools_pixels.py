@@ -1,9 +1,18 @@
 """Check actual tablet tile pixels in both eyes and the delivered mirror."""
 import json
+import re
 from pathlib import Path
 import numpy as np
 from PIL import Image
 from tools.vr_motion.visual_checks import project, coverage
+
+
+def active_icon_colors(keys):
+    # Glyphs using currentColor inherit the desktop button's actual active tint.
+    # Keep the UI stylesheet authoritative (not a generic bright-color mask).
+    html=(Path(__file__).resolve().parents[2]/'frontend/index.html').read_text()
+    colors=re.findall(r'\.vt-btn\.active\[data-vt="([^"]+)"\]\s*\{\s*color:\s*#([0-9a-fA-F]{6})',html)
+    return [[int(rgb[i:i+2],16) for i in (0,2,4)] for key,rgb in colors if key in keys]
 
 
 def check(directory, *, offscreen=False):
@@ -19,7 +28,8 @@ def check(directory, *, offscreen=False):
         # Neutral light strokes and explicit heatmap/loop-skip RGB values count;
         # the white veil and cyan floor cannot satisfy this mask.
         mask=(rgb.min(axis=2)>100)&(np.ptp(rgb,axis=2)<80)
-        for color in ([59,130,246],[168,85,247],[239,68,68],[255,136,0],[255,34,34]):
+        for color in [[59,130,246],[168,85,247],[239,68,68],[255,136,0],[255,34,34],
+                      *active_icon_colors({item['key'] for item in items if item['active']})]:
             mask |= np.max(abs(rgb-color),axis=2)<15
         projected=[project(p,eye) for p in points]
         if name=='mirror':

@@ -42,7 +42,7 @@ template<class Scene> class SceneRefreshInbox {
             }
             return;
         }
-        if (eventPath.empty() || (++frames_ % 15) != 0) return;
+        if (eventPath.empty() || (++frames_ % 3) != 0) return;
         std::ifstream input(eventPath + ".scene");
         std::string record; std::getline(input, record);
         if (record.size() > 4096) return;

@@ -1,3 +1,4 @@
+import { createVRCommitRefresh } from './vr_commit_refresh.js'
 /** Native Sweep intents execute through the same feature log as desktop Sweep. */
 export function createVRSweepCommit({ preflight, transaction, api, getState, sendFeedback, onOutcome = () => {} }) {
   let sequence = 0
@@ -16,11 +17,12 @@ export function createVRSweepCommit({ preflight, transaction, api, getState, sen
     }
     if (event.action === 'preview') return { accepted: true, reason: 'native_preview' }
     busy = true
+    const sceneRefresh = createVRCommitRefresh({ api, getState })
     let outcome
     try {
       if (event.action === 'undo') {
         await acknowledge(event, 'pending', 'undoing')
-        outcome = await transaction.undo({ tool: 'sweep' })
+        outcome = await transaction.undo({ tool: 'sweep', onCommitted: sceneRefresh.onCommitted })
       } else {
         const plan = preflight.takeValidatedPlan(event.configSequence)
         const args = plan?.commit?.arguments
@@ -33,7 +35,7 @@ export function createVRSweepCommit({ preflight, transaction, api, getState, sen
           await acknowledge(event, 'pending', 'committing')
           outcome = await transaction.commit({ tool: 'sweep', targetKey: plan.targetIdentity,
             targetIdentity: null, targetKind: 'none', execute: async () => {
-              const result = await api.createSweep(args)
+              const result = await api.createSweep(args, { onCommitted: sceneRefresh.onCommitted })
               return { accepted: !!result, reason: result ? 'committed' : 'commit_failed', result }
             } })
         }
@@ -43,10 +45,7 @@ export function createVRSweepCommit({ preflight, transaction, api, getState, sen
       let refreshFailed = false
       if (outcome.accepted) {
         try {
-          const response = await api.refreshNativeVRScene({
-            expected_design_id: getState().currentDesign.id,
-            expected_revision: api.currentRevisionWatermark(),
-          })
+          const response = await sceneRefresh.complete()
           refreshFailed = response?.published !== true
         } catch { refreshFailed = true }
       }

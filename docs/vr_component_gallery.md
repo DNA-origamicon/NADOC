@@ -230,3 +230,62 @@ first child selected, verified through actual X11 mouse input. `desktop-expanded
 records the delivered desktop; `desktop-review/desktop-1.json` records its state.
 Use Esc to close it. Browser-test processes, owned evidence and workspace test
 parts were cleaned. Only this intentional review window remains from validation.
+
+## Scrollable sets (2026-10-08)
+
+Choose **Scrollable sets desktop demo** or **Scrollable sets VR demo** under
+**Debug → VR Component Gallery → Component evaluations** (also in VR Tours & Tests).
+These are six interactive studies for future feature integration, using isolated
+sample data; they do not change saved dimensions, sweep points, or simulation jobs.
+
+| Study | Intended use | Grouping and row controls |
+| --- | --- | --- |
+| Inset tray | Dimensions and visibility lists | Recessed shared well; visibility and pin buttons |
+| Outlined table | Numeric dimensions | Thin enclosing border, aligned values, decrement/increment |
+| Job cards | Simulation queues | Individually raised rows inside one queue; pause/resume and pin |
+| Sweep rail | Ordered sweep points | Connected point markers; position decrement/increment |
+| Grouped set | Related simulation stages | Sticky group context and per-row group stripe; pause/resume and pin |
+| Pinned inspector | Select and inspect long sets | Selected item's summary stays below the scrolling rows; visibility and pin |
+
+Each set contains twelve items, with three complete rows visible at once. Drag its
+right-hand rail or use **UP/DN**. A persistent range/count shows where you are.
+The viewport moves by whole rows, so clipped labels and partially active controls
+cannot occur. Selection and per-item changes persist outside the viewport. Actions
+have separate targets from selection, activate on release, and cancel on release
+outside or tracking loss. Either controller works. **Disable** blocks the six
+sets; **Reset** restores sample data; **Play demo** cycles scroll positions and
+selection; manual interaction stops it. Mouse wheel remains gallery zoom.
+
+The reusable `ScrollableSet` model owns items, bounded viewport and selection;
+`ListGallery` owns the six presentation studies and their example actions.
+Adopting a study in a production feature still requires binding its items/actions
+to that feature's existing state and persistence.
+
+```bash
+uv run python -m tools.vr_workflows.component_gallery_tour --component lists --desktop
+uv run python -m tools.vr_workflows.component_gallery_tour --component lists --validate
+just validate-safe native/vr_viewer/build/nadoc-vr-component-gallery-test .development-artifacts/vr-list-gallery/render
+```
+
+The native check exercises ray selection, independent actions, endpoint bounds,
+state retention, outside release, tracking loss, scrollbar drag, disabled input,
+and empty/short model bounds. It renders front, oblique and offscreen controls.
+Through-lens readability and controller comfort remain in `MV-VR-GALLERY`.
+
+Validation for scrollable sets: native build and interaction/render checks passed;
+all six samples passed real X11 desktop selection, independent row action, scroll
+and retained-selection checks. Tour catalog tests: **44 passed**. Evidence is in
+`.development-artifacts/vr-list-gallery/`, with final front/angled captures in
+`desktop-verified/desktop-3.png` and `desktop-verified/desktop-4.png`. Earlier desktop
+attempts targeted the window-manager decoration rather than the PID-owned client;
+those failed attempts are retained. No saved designs or simulation jobs were
+created. Test viewer processes were closed. This run did not exercise OpenXR or
+claim headset comfort. `frontend/src/main.js` gained **0 lines**.
+
+Repository lint remains blocked by the existing unused `pathlib.Path` import in
+`tests/test_cpd_cube_validation_v6.py:1`; the changed tour test passes scoped lint.
+
+The final desktop review window is intentionally left open; **Esc** closes it.
+Its launch record and initial capture are under `vr-list-gallery/review/`.
+The extended menu-render-audit target also builds successfully. Retained evidence
+is about 2.8 MB; no disposable designs were created in `workspace/`.

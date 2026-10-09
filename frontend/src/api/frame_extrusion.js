@@ -4,7 +4,10 @@ export function createFrameExtrusionAPI({ request, sync }) {
     refreshNativeVRScene: async body => {
       let pinned = { ...body }
       for (let attempt = 0; attempt < 3; attempt++) {
-        const result = await request('POST', '/vr/scene-refresh', pinned)
+        // A VR publication never materializes a simulation projection. Avoid
+        // yielding through that unrelated async preparation before fetch: the
+        // caller starts export ahead of synchronous desktop scene rebuilding.
+        const result = await request('POST', '/vr/scene-refresh', pinned, { skipSimulationPrepare: true })
         if (result?.published) return result
         const current = await request('GET', '/design')
         if (current?.design?.id !== body.expected_design_id ||

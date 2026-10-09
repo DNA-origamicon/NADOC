@@ -12,6 +12,11 @@ const viewBit = i => 1 << (i < 7 ? i : i + 1)
 const MAX_VERTICES = 4000000
 const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve))
 
+function displayFlags(doc) {
+  const desktopOnlyLayout=['expanded','unfold','cadnano2d'].some(key=>doc.querySelector(`[data-vt="${key}"]`)?.classList.contains('active'))
+  return desktopOnlyLayout ? 256 : VR_VIEW_KEYS.reduce((v,k,i)=>v|(doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?viewBit(i):0),0) | (simulationViewActive(doc)?2048:0)
+}
+
 // Snapshot the actual displayed Three.js geometry, including instance colours,
 // alpha, posed meshes and canvas labels. Native VR retains its own stereo camera.
 export async function captureVRView(scene, doc = document, message = '', panelOnly = false) {
@@ -30,7 +35,7 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
   const c=panel.getContext('2d');c.fillStyle='#111111';c.fillRect(0,0,768,768)
   c.fillStyle='#e0eaff';c.font='bold 28px sans-serif';c.fillText('VIEW TOOLS',24,40)
   const desktopOnlyLayout=['expanded','unfold','cadnano2d'].some(key=>doc.querySelector(`[data-vt="${key}"]`)?.classList.contains('active'))
-  const flags=desktopOnlyLayout ? 256 : VR_VIEW_KEYS.reduce((v,k,i)=>v|(doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?viewBit(i):0),0) | (simulationViewActive(doc)?2048:0)
+  const flags=displayFlags(doc)
   for(let i=0;i<VR_VIEW_KEYS.length;i++) {
     const b=doc.querySelector(`[data-vt="${VR_VIEW_KEYS[i]}"]`),px=16+(i%2)*376,py=62+Math.floor(i/2)*112
     // Read the desktop's actual computed colors, including its active tint.
@@ -151,9 +156,16 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
   let geometry,design
   async function publish() {
     const s=getState(),now=performance.now()
-    if(now-lastStampAt>700){stamp=broadcastFingerprint({scene});lastStampAt=now}
+    // The canonical scene already handles edits in normal Deform mode. Its
+    // view-tools stream contains only an unchanged tablet atlas (16 MiB), so
+    // geometry changes must not rebuild, transfer and upload that atlas again.
+    // Actual overlay/layout streams still follow every geometry/design change.
+    const carriesScene=displayFlags(doc)!==256
+    if(!carriesScene)stamp=''
+    else if(now-lastStampAt>700){stamp=broadcastFingerprint({scene});lastStampAt=now}
     const key=fingerprint()+simulationViewActive(doc)+stamp
-    if(key!==last || geometry!==s.currentGeometry || design!==s.currentDesign){if(!dirty||!last)settle=now+1200;last=key;geometry=s.currentGeometry;design=s.currentDesign;dirty=true}
+    if(key!==last || (carriesScene&&(geometry!==s.currentGeometry || design!==s.currentDesign))){if(!dirty||!last)settle=now+1200;last=key;dirty=true}
+    geometry=s.currentGeometry;design=s.currentDesign
     if(busy||!dirty||performance.now()<settle)return
     busy=true;dirty=false;const generation=epoch,requestSequence=appliedSequence
     try {

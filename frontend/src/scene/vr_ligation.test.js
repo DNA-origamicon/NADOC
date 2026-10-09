@@ -20,7 +20,7 @@ describe('VR forced ligation', () => {
     for (const [source, target] of [[0,1],[1,0]]) {
       const h = fixture(), version = h.tool.catalog().version
       expect(await h.tool.commit({ version, source, target })).toBe(true)
-      expect(h.api.forcedLigation).toHaveBeenCalledExactlyOnceWith('a', 'b')
+      expect(h.api.forcedLigation).toHaveBeenCalledExactlyOnceWith('a', 'b', false, { onCommitted: expect.any(Function), deferGeometry: true })
       expect(h.api.refreshNativeVRScene).toHaveBeenCalledExactlyOnceWith({ expected_design_id: 'd', expected_revision: 8 })
       expect(await h.tool.commit({ version, source, target })).toBe(false)
       expect(h.api.forcedLigation).toHaveBeenCalledTimes(1)
@@ -60,7 +60,7 @@ describe('wheel nick and history', () => {
     const c=h.tool.catalog()
     expect(c.bonds).toHaveLength(2)
     expect(await h.tool.commit({action:'nick',version:c.version,source:0,target:0})).toBe(true)
-    expect(h.api.addNick).toHaveBeenCalledExactlyOnceWith({helixId:'h',bpIndex:3,direction:'FORWARD'})
+    expect(h.api.addNick).toHaveBeenCalledExactlyOnceWith({helixId:'h',bpIndex:3,direction:'FORWARD'}, { onCommitted: expect.any(Function), deferGeometry: true })
     expect(await h.tool.commit({action:'nick',version:c.version,source:0,target:0})).toBe(false)
   })
   it('orders reverse bonds toward decreasing bp and excludes loop-copy and ambiguous coordinates', () => {
@@ -86,4 +86,19 @@ describe('wheel nick and history', () => {
     expect(h.api.undo).toHaveBeenCalledTimes(1)
     expect(h.api.refreshNativeVRScene).toHaveBeenCalledTimes(2)
   })
+})
+
+it('exports the committed revision while desktop synchronization is still pending', async () => {
+  const h = fixture()
+  let finishSync
+  h.api.forcedLigation.mockImplementation(async (a, b, seam, { onCommitted }) => {
+    onCommitted({ design: { id: 'committed' }, revision: 9 })
+    return new Promise(resolve => { finishSync = resolve })
+  })
+  const done = h.tool.commit({ version: h.tool.catalog().version, source: 0, target: 1 })
+  expect(h.api.refreshNativeVRScene).toHaveBeenCalledExactlyOnceWith({ expected_design_id: 'committed', expected_revision: 9 })
+  expect(h.tool.busy).toBe(true)
+  finishSync({})
+  expect(await done).toBe(true)
+  expect(h.api.refreshNativeVRScene).toHaveBeenCalledOnce()
 })

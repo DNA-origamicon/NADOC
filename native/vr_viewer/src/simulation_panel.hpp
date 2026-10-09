@@ -60,7 +60,7 @@ class SimulationPanel {
         std::vector<SidebarControl> out;
         const bool ready=sequence<=acknowledged;
         for(size_t i=0;i<engines.size();++i){const auto& r=engines[i];const float x=-.269F+i*.202F;out.push_back({"sim:"+r.id,r.label,"","simulation:"+r.id,{{x,.55F},{x+.19F,.65F}},r.enabled&&ready,r.active});}
-        out.push_back({"sim:jobs",version?"Jobs":"Waiting for desktop...","","",{{-.19F,.39F},{.73F,.49F}},false});
+        out.push_back({"sim:jobs",version?"Jobs "+std::to_string(jobs.empty()?0:jobOffset+1)+"-"+std::to_string(std::min(jobOffset+page,jobs.size()))+" / "+std::to_string(jobs.size()):"Waiting for desktop...","","",{{-.19F,.39F},{.73F,.49F}},false});
         out.push_back({"sim:trajectory","Trajectory","","trajectory",{{-.19F,-.561F},{.385F,-.489F}},true});
         if(selected)out.push_back({"sim:frame","Frame result","","recenter",{{.81F,-.657F},{1.41F,-.585F}},true});
         if(selected)out.push_back({"sim:views","Visualizations","","",{{.81F,.39F},{1.41F,.49F}},false});
@@ -70,7 +70,7 @@ class SimulationPanel {
             const float position=animated?(right?viewScroll:jobScroll).value(float(offset),menu->animationClock()):float(offset);
             for(size_t i=size_t(std::floor(position));i<std::min(size_t(std::ceil(position))+page,rows.size());++i) {
                 const auto& r=rows[i];const float y=.30F-(float(i)-position)*.12F;
-                out.push_back({"sim:"+r.id,r.label,"","simulation:"+r.id,{{right?.81F:-.19F,y-.054F},{right?1.41F:.73F,y+.054F}},r.enabled&&ready,r.active});
+                out.push_back({"sim:"+r.id,r.label,right?"":r.detail,"simulation:"+r.id,{{right?.81F:-.19F,y-.054F},{right?1.41F:.73F,y+.054F}},r.enabled&&ready,r.active});
                 out.back().viewport=MenuPanelBounds{{right?.81F:-.19F,-.474F},{right?1.41F:.73F,.354F}};
             }
             const auto id=right?"sim:scroll:views":"sim:scroll:jobs";

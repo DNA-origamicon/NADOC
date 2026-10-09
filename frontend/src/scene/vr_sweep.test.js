@@ -168,3 +168,24 @@ it('carries full point orientations and advisory geometry through preflight with
   expect(normalizeVRToolConfig({...raw,orientations_deg:[null]})).toBeNull()
   expect(normalizeVRToolConfig({...raw,orientations_deg:[null,[0,NaN,0],null]})).toBeNull()
 })
+
+it('starts Sweep export before desktop sync and preserves acknowledgement ordering', async () => {
+  const h = await harness()
+  let finishSync, finishExport
+  h.api.refreshNativeVRScene.mockImplementation(() => new Promise(resolve => { finishExport = resolve }))
+  h.api.createSweep.mockImplementation(async (args, { onCommitted }) => {
+    onCommitted({ design: h.state.currentDesign, revision: 5 })
+    await new Promise(resolve => { finishSync = resolve })
+    h.state.currentDesign.feature_log.push({ id: 'sweep-entry' })
+    return { vr_transaction: { feature_log_entry_id: 'sweep-entry', target_count: 2 } }
+  })
+  const done = h.controller.handle(h.event)
+  await vi.waitFor(() => expect(h.api.refreshNativeVRScene).toHaveBeenCalledOnce())
+  expect(h.sendFeedback.mock.calls.map(call => call[1])).toEqual(['pending'])
+  finishSync(); await Promise.resolve()
+  expect(h.sendFeedback.mock.calls.map(call => call[1])).toEqual(['pending'])
+  finishExport({ published: true })
+  expect((await done).accepted).toBe(true)
+  expect(h.sendFeedback.mock.calls.map(call => call[1])).toEqual(['pending', 'succeeded'])
+  expect(h.api.refreshNativeVRScene).toHaveBeenCalledOnce()
+})

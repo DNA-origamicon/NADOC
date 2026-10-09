@@ -56,9 +56,11 @@ def run(socket, output, action):
             head=np.mean([e['position'] for e in evidence['eyes']],axis=0)
             q=evidence['eyes'][0]['orientation_xyzw']
             if action=='equip':
-                wait(lambda s:len(s['ligation']['bonds'])>5)
-                center=np.mean([b[k] for b in live.state['ligation']['bonds'] for k in ('a','b')],axis=0)
-                target=head+rotate(q,[.23,-.05,-.85])
+                wait(lambda s:s['ligation']['version']>0)
+                bonds=bridge.request('observe targets')['ligation']['bonds']
+                center=np.mean([b[k] for b in bonds for k in ('a','b')],axis=0)
+                # Leave the tablet's left foreground clear even when overlay labels extend the model.
+                target=head+rotate(q,[.65,-.05,-1.8])
                 turn=multiply(q,[0,np.sin(np.pi/4),0,np.cos(np.pi/4)])
                 live.send('pose',hand=1,position=center.tolist(),orientation=[0,0,0,1]);live.frame()
                 live.send('button',hand=1,button='grip',pressed=True);live.frame()
@@ -80,6 +82,30 @@ def run(socket, output, action):
             dwell(.6)
             assert live.state['ligation']['quiver']['sequence']==seq+1
             reach(front.tolist(),q)
+            if action=='equip':
+                # Quiver opens at the invoking controller pose, which is behind
+                # the head here. Bring its actual border into the review view
+                # using a normal grip; do not alter head tracking or the panel.
+                from scipy.spatial.transform import Rotation
+                live.capture_to(out/'quiver-open-before-framing',discard_source=True)
+                centers=np.array([item['center'] for item in live.state['view_tools']['items']])
+                across=centers[1]-centers[0];down=centers[2]-centers[0]
+                width=np.linalg.norm(across)/(376/768)
+                right_axis=across/np.linalg.norm(across);up_axis=-down/np.linalg.norm(down)
+                normal=np.cross(right_axis,up_axis)
+                panel_q=Rotation.from_matrix(np.column_stack((right_axis,up_axis,normal))).as_quat().tolist()
+                # The mean tile center is 104/768 above the content center.
+                center=centers.mean(axis=0)-up_axis*width*(104/768)
+                border=center+right_axis*width*.565
+                reach((border+rotate(panel_q,[0,0,.12])).tolist(),panel_q)
+                live.send('button',hand=0,button='grip',pressed=True);live.frame()
+                destination=head+rotate(q,[-.25,.08,-.60])
+                try:
+                    reach((destination+rotate(q,[width*.565,0,.12])).tolist(),q)
+                finally:
+                    live.send('button',hand=0,button='grip',pressed=False);live.frame()
+                (out/'tablet-framing.json').write_text(json.dumps({'initial_center':center.tolist(),
+                    'destination':destination.tolist(),'policy':'ordinary border grip; orientation derived from live tile positions'},indent=2))
         else:
             i=int(action);v=live.state['view_tools'];assert v['open']
             p=np.array(v['items'][i]['center'])

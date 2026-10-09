@@ -576,6 +576,9 @@ _SLOW_TESTS = {
     "test_voltron_protein_overhang_cylinder_matches_bead_orientation",
     "test_full_autostaple_splits_oversize_seam_bridge",
     "test_teeth_spec_matches_hand_calls",
+
+    # Executes the real NAMD engine preflight (11.02 s), not a mock package check.
+    "test_direct_thiol_complete_namd_package_passes_engine_preflight",
     # Full desktop representation export and native scene validation (8.6 s isolated).
     "test_desktop_meshes_previews_and_vdw_round_trip",
     # Executes the real upstream oxDNA engine (8.10 s), not the mock runner.
@@ -981,7 +984,7 @@ def _slow_area_for(module: str) -> str:
     # so its heavy tests belong to the same "cando" heavy group.
     if "cando" in module or "fem" in module or "snupi" in module:
         return "cando"
-    if "namd" in module or module == "test_remote_cutoff_eval":
+    if "namd" in module or module in {"test_remote_cutoff_eval", "test_nanoparticles"}:
         return "namd"
     if "mrdna" in module or module == "test_helical_site":
         return "mrdna"

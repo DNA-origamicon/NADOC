@@ -3,19 +3,32 @@ import crypto from 'node:crypto'
 import http from 'node:http'
 import {expect} from '@playwright/test'
 
+
 // Import only into the caller's isolated document/workspace; preserve geometry.
 export async function importAuditDesign(page, info) {
   const source=process.env.NADOC_VR_AUDIT_DESIGN
   if (!source) return false
   const bytes=fs.readFileSync(source)
   const design=JSON.parse(bytes)
+  // New Part hides its welcome/modal before its initial save finishes. Wait
+  // for that destination before importing, so its late response cannot assign
+  // a different autosave path to the already-imported fixture.
+  let workspacePath
+  await expect.poll(async()=>{
+    workspacePath=await page.evaluate(()=>window.__nadocSyncDebug?.status().workspacePath ?? null)
+    return workspacePath
+  }, {timeout:10000}).toMatch(/^__e2e__/)
   for (const loadout of design.loadouts||[]) {
     loadout.head_revision_id=null
     loadout.base_revision_id=null
   }
   design.metadata.name='__e2e__24HB audit'
-  design.metadata.identity_last_known_path='__e2e__audit-24hb.nadoc'
+  design.metadata.identity_last_known_path=workspacePath
   await page.evaluate(async content => (await import('/src/api/client.js')).importDesign(content), JSON.stringify(design))
+  // Establish the private file's identity before measuring an edit. A synthetic
+  // import path different from the browser's autosave path turns a later save
+  // into Save As, legitimately clearing Undo and invalidating the VR binding.
+  await page.evaluate(async destination => (await import('/src/api/client.js')).saveDesignToWorkspace(destination), design.metadata.identity_last_known_path)
   // Await the public history endpoint rather than comparing lazy UI placeholders.
   await page.evaluate(async()=>{
     const api=await import('/src/api/client.js'),{store}=await import('/src/state/store.js')
@@ -94,6 +107,17 @@ export async function installAuditBrowserTrace(page) {
   if (process.env.NADOC_VR_AUDIT_BROWSER_TRACE !== '1') return
   await page.addInitScript(() => {
     window.__vrAuditBrowserTrace = []
+    window.__vrAuditRequestTrace = []
+    // Measure in Chromium: the worker blocks while the native probe runs, so
+    // Playwright request event delivery times cannot measure network latency.
+    new PerformanceObserver(list => {
+      for (const entry of list.getEntries()) {
+        if (!/\/api\/(design\/[^?]+|vr\/(?:scene-refresh|end-resize-handles|ligation-ends|tool-execution-feedback|view-tools))(\?|$)/.test(entry.name)) continue
+        window.__vrAuditRequestTrace.push({url: entry.name,
+          start_ms: performance.timeOrigin + entry.startTime,
+          end_ms: performance.timeOrigin + entry.responseEnd, duration_ms: entry.duration})
+      }
+    }).observe({type: 'resource', buffered: true})
     setInterval(() => {
       const state = window.__nadocTest?.viewerFrameState?.()
       if (!state) return
@@ -108,7 +132,8 @@ export async function saveAuditBrowserTrace(page, info) {
   if (process.env.NADOC_VR_AUDIT_BROWSER_TRACE !== '1') return
   let evidence
   try {
-    evidence = {samples: await page.evaluate(() => window.__vrAuditBrowserTrace || []),
+    evidence = {requests: await page.evaluate(() => window.__vrAuditRequestTrace || []),
+      samples: await page.evaluate(() => window.__vrAuditBrowserTrace || []),
       condition: '500ms browser frame/focus observations; no focus changes',
       desktop_draw: process.env.NADOC_VR_AUDIT_DESKTOP_DRAW === 'off' ? 'off while native VR active (isolated route)'
         : process.env.NADOC_VR_AUDIT_DESKTOP_DRAW === 'preference-off' ? 'off via Desktop 3D during VR preference' : 'production focus policy'}

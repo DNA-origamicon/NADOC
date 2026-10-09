@@ -285,6 +285,11 @@ The probe checks real controller inputs and stereo handle pixels; the browser
 checks desktop geometry, feature-log identity, saved endpoint constraints, reload,
 and Undo. See [VR Bend](vr_bend.md#scrywrite-test-and-guided-vr-tour).
 
+Use non-circularized inputs for Bend validation. The user explicitly excludes
+`Circle_spiral.nadoc` from test files and fixtures. The five-tool latency audit
+uses an independent straight 24-helix/12,000-nucleotide bundle without existing
+deformations or feature history; see [latency evidence](audits/vr_tools_latency_20261008.md).
+
 ## Twist controller validation
 
 `just vr-twist-demo` runs the guided Twist authoring tour; `just vr-twist-test`
@@ -293,3 +298,11 @@ plane indices/frames, signed amount and units, total angle, wheel/rotation-handl
 ownership, and rendered pick targets. Tests require stereo handle pixels, fixed
 plane positions/normals, desktop feature identity, persistence and exact Undo.
 See [VR Twist](vr_twist.md) for controls, evidence, and validation entry points.
+
+### Large Nick catalogs
+
+Ordinary live observations and controller replies omit `ligation.bonds` to keep
+motion playback responsive on large designs (`bonds_omitted: true`). Request
+`scrywrite_observe` with `include_targets: true` (wire command `observe targets`)
+for the full read-only catalog. Capture evidence includes it automatically.
+Catalog coordinates are cached until the target version or model pose changes.

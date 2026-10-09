@@ -1,3 +1,4 @@
+#include "scrollable_set.hpp"
 #include "placement_integrity.hpp"
 #include <atomic>
 #include <future>
@@ -25,6 +26,8 @@
 
 #include "interaction.hpp"
 #include "selection_wheel.hpp"
+#include "controller_prompt.hpp"
+#include "browser_prompt.hpp"
 #include "selection_owner_index.hpp"
 #include "shadow_light.hpp"
 #include "desktop_panel.hpp"
@@ -53,6 +56,7 @@
 #include "menu_layout.hpp"
 #include "sidebar_menu.hpp"
 #include "simulation_panel.hpp"
+#include "feature_log_panel.hpp"
 #include "routing_panel.hpp"
 #include "trajectory_panel.hpp"
 #include "dimension_panel.hpp"
@@ -5048,7 +5052,7 @@ class Viewer {
     friend struct LiveViewerTest;
 #endif
   public:
-    void enableComponentGallery(bool buttons=false,bool cards=false) { componentGallery_.active=true;componentGallery_.buttonMode=buttons;componentGallery_.cardMode=cards; }
+    void enableComponentGallery(bool buttons=false,bool cards=false,bool lists=false) { componentGallery_.active=true;componentGallery_.buttonMode=buttons;componentGallery_.cardMode=cards;componentGallery_.listMode=lists; }
     void loadControllerPath(const std::string& path) { controllerPaths_.load(path); }
 
     explicit Viewer(SceneData scene, std::string eventPath = {},
@@ -5249,6 +5253,19 @@ class Viewer {
         if(loading.pending && loading.phase=="waiting" && !glScene_->stylePending() && glScene_->representation()==loading.target && glScene_->coloring()==loading.color) {
             loading.percent=100;loading.phase="ready";loading.detail="Representation ready";loading.pending=false;loading.lightweight=false;loading.visibleUntil=glfwGetTime()+1;
         }
+        if(loading.phase=="error" && promptedRepresentationFailure_!=loading.failures) {
+            promptedRepresentationFailure_=loading.failures;
+            const auto sequence=loading.sequence,revision=sceneRefresh_.revision();
+            const auto target=loading.target;const auto color=loading.color;
+            showPrompt({"Representation could not load",loading.detail,
+                {{"ok","OK"},{"retry","Retry"},{"quick","Quick Surface"}},
+                [this,sequence,revision,target,color](const std::string& answer){
+                    if(sequence!=representationLoading_.sequence || revision!=sceneRefresh_.revision())return;
+                    if(answer=="retry")publishStyleRequest(target,color);
+                    if(answer=="quick")publishStyleRequest(Representation::surface,color);
+                }});
+        }
+
     }
 
     int run() {
@@ -5278,6 +5295,7 @@ class Viewer {
         desktopFrameSurface_.shutdown();
         componentGallery_.ui.shutdown();
         solidWheels_.shutdown();
+        promptSurface_.shutdown();
         glScene_.reset();
         for (Swapchain& swapchain : swapchains_) {
             if (swapchain.depth) glDeleteRenderbuffers(1, &swapchain.depth);
@@ -5635,6 +5653,7 @@ class Viewer {
         routingPopup_.menus[1].available=[this](const std::string& action){return routingPanel_.available(action);};
         routingPopup_.menus[1].isActive=[this](const std::string& action){return routingPanel_.active(action);};
         simulationPanel_.bind(sidebarMenus_.menus[0], &sidebarMenus_.menus[1]);
+        featureLogPanel_.bind(sidebarMenus_.menus[0]);
         for(auto& sidebar:sidebarMenus_.menus) {
             sidebar.label=[this](const std::string& action,const std::string& fallback) {
                 if(action=="vr:head-light")return std::string(shadowLight_.headFollowing()?"Head-following lighting: On":"Head-following lighting: Off");
@@ -5687,6 +5706,7 @@ class Viewer {
                     if(action=="extrude:plane") return toolConfig_.targetSelectionKind()=="none";
                     return true;
                 }
+                if(action=="repr:11" && !browserPrompt_.detailAllowed)return false;
                 if(action.starts_with("repr:") && representationLoading_.enabled)return true;
                 if(action.starts_with("repr:")) return glScene_->supportsRepresentation(static_cast<Representation>(std::stoi(action.substr(5))));
                 if(action.starts_with("color:")) return (nadoc_vr::kSidebarColoringMasks.at(static_cast<size_t>(glScene_->representation())) & (1U << std::stoi(action.substr(6)))) != 0;
@@ -5740,6 +5760,17 @@ class Viewer {
             }
             event = {XR_TYPE_EVENT_DATA_BUFFER};
         }
+    }
+
+    void showPrompt(nadoc_vr::ControllerPrompt::Request request) {
+        controllerPrompt_.show(std::move(request));
+        selectionWheel_.cancel();radialToolMenu_.close();
+        remotePanels_.cancel();resetThumbwheels();
+        movePanel_.hand.reset();bendPanel_.hand.reset();bendPanel_.wheelHand.reset();bendPanel_.planeHand.reset();
+        bendPanel_.wheel.reset();for(auto& wheel:bendPanel_.wheels)wheel.reset();
+        trajectoryScrubHand_.reset();dimensionPanel_.tool.freeze();volumePanel_.interaction.cancel();
+        endResize_.hand.reset();endResize_.hoverHand.reset();endResize_.delta=0;
+        suppressManipulationUntilRelease_=true;
     }
 
     void pulse(size_t hand, float amplitude = 0.35F) {
@@ -5971,7 +6002,7 @@ class Viewer {
     void cancelMove() {
         if(toolShell_.executionPending())return;
         movePanel_.reset();pendingToolTransform_.cancel();publishToolTransform();
-        glScene_->setMovePointPreview({},glm::mat4(1));
+        if(glScene_)glScene_->setMovePointPreview({},glm::mat4(1));
         toolShell_.apply(nadoc_vr::ToolAction::cancel,selectedSelectionKind_);
         publishToolIntent(nadoc_vr::ToolAction::cancel);
     }
@@ -6025,7 +6056,7 @@ class Viewer {
             requestedAction=="feedback:activate" || requestedAction=="vr:head-light" || requestedAction=="vr:exit" ||
             requestedAction=="qr:calibrate" || requestedAction=="qr:cube" || requestedAction.starts_with("tool:") ||
             requestedAction.starts_with("twist:") || requestedAction.starts_with("bend:") || requestedAction.starts_with("move:") ||
-            requestedAction.starts_with("extrude:") || requestedAction.starts_with("sweep:") || requestedAction.starts_with("routing:") || requestedAction.starts_with("simulation:") || requestedAction.starts_with("share:") ||
+            requestedAction.starts_with("extrude:") || requestedAction.starts_with("sweep:") || requestedAction.starts_with("routing:") || requestedAction.starts_with("simulation:") || requestedAction.starts_with("history:") || requestedAction.starts_with("share:") ||
             requestedAction.starts_with("volume:") || requestedAction.starts_with("dimension:") || requestedAction.starts_with("repr:") ||
             requestedAction.starts_with("color:") || requestedAction.starts_with("trajectory:");
         if(!known)return;
@@ -6044,7 +6075,9 @@ class Viewer {
             return;
         }
         if(requestedAction=="vr:exit") {
-            exitRequested_=true;
+            showPrompt({"Leave VR?", "Return to the desktop viewer?",
+                {{"cancel","Cancel"},{"continue","Continue"}},
+                [this](const std::string& answer){if(answer=="continue")exitRequested_=true;}});
             return;
         }
         // Plane selection, cancellation and transaction ownership are shared with Bend.
@@ -6159,6 +6192,7 @@ class Viewer {
             activateAuthoringTool(action=="tool:twist"?1:2);return;
         }
         if(action.starts_with("routing:")) {if(routingPanel_.activate(action))publishEventState();return;}
+        if(action.starts_with("history:")) {if(featureLogPanel_.activate(action)){publishEventState();if(action.ends_with(":edit"))desktopPanel_.show(hands_[hand].position,hands_[hand].orientation);}return;}
         if(action.starts_with("simulation:")) {if(simulationPanel_.activate(action))publishEventState();return;}
         if(action=="qr:calibrate") {qrCalibration_.start();return;}
         if(action=="qr:cube") {qrCalibration_.start(true);return;}
@@ -6252,7 +6286,7 @@ class Viewer {
             return;
         }
         if (action.starts_with("repr:")) {
-            publishStyleRequest(static_cast<Representation>(std::stoi(action.substr(5))), glScene_->coloring());
+            requestRepresentation(static_cast<Representation>(std::stoi(action.substr(5))), glScene_->coloring());
         } else if (action.starts_with("color:")) {
             publishStyleRequest(glScene_->representation(), static_cast<Coloring>(std::stoi(action.substr(6))));
         } else if (action == "desktop") {
@@ -7335,7 +7369,27 @@ class Viewer {
         publishEventState();
     }
 
+    void requestRepresentation(Representation representation, Coloring coloring) {
+        if(representation==Representation::surfaceDetail && !browserPrompt_.detailAllowed)return;
+        if(representation==Representation::surfaceDetail && glScene_ &&
+           !glScene_->supportsRepresentation(representation) &&
+           !(representationLoading_.pending && representationLoading_.target==representation)) {
+            const auto revision=sceneRefresh_.revision();
+            showPrompt({"Prepare Detail Surface?",
+                "Computing a detailed molecular surface can take a long time. Use Quick Surface for a faster view, or continue.",
+                {{"cancel","Cancel"},{"quick","Quick Surface"},{"continue","Continue"}},
+                [this,revision,coloring](const std::string& answer){
+                    if(revision!=sceneRefresh_.revision())return;
+                    if(answer=="quick")publishStyleRequest(Representation::surface,coloring);
+                    if(answer=="continue")publishStyleRequest(Representation::surfaceDetail,coloring);
+                }});
+            return;
+        }
+        publishStyleRequest(representation,coloring);
+    }
+
     void publishStyleRequest(Representation representation, Coloring coloring) {
+        if(representation==Representation::surfaceDetail && !browserPrompt_.detailAllowed)return;
         if (glScene_ && !glScene_->supportsRepresentation(representation)) {
             if(representationLoading_.enabled){
                 if(representationLoading_.target!=representation)glScene_->cancelPreparedStyle();
@@ -7509,7 +7563,9 @@ class Viewer {
         output << "{\"sequence\":" << ++eventSequence_ << ",\"hover_identity\":";
         identity(publishedHoverIdentity_);
         output << ",\"share_control\":{\"sequence\":" << shareSequence_ << ",\"action\":\"" << shareAction_ << "\"}";
+        output << ",\"feature_log\":{\"sequence\":" << featureLogPanel_.sequence << ",\"version\":" << featureLogPanel_.requestedVersion << ",\"id\":\"" << featureLogPanel_.requested << "\"}";
         output << ",\"simulation\":{\"sequence\":" << simulationPanel_.sequence << ",\"version\":" << simulationPanel_.requestedVersion << ",\"id\":\"" << simulationPanel_.requested << "\"}";
+        output << ",\"prompt\":{\"sequence\":" << browserPrompt_.sequence << ",\"version\":" << browserPrompt_.answerVersion << ",\"id\":\"" << browserPrompt_.answer << "\"}";
         output << ",\"routing\":{\"sequence\":" << routingPanel_.sequence << ",\"version\":" << routingPanel_.requestedVersion << ",\"id\":\"" << routingPanel_.requested << "\"}";
         output << ",\"view_tool\":{\"sequence\":" << viewTools_.sequence << ",\"index\":" << viewTools_.requested << "}";
         output << ",\"ligation\":{\"sequence\":" << ligation_.sequence
@@ -8058,7 +8114,7 @@ class Viewer {
                 "\"depth_near_m\":" << kNearMeters << ",\"depth_far_m\":" << kFarMeters
                 << ",\"controller_classes\":{\"left\":4,\"right\":5},\"contact_classes\":{\"intended\":6,\"actual\":7}"
                 << ",\"class_format\":\"uint8-bottom-up\",\"capture_command_sequence\":" << sequence
-                << ",\"state\":" << liveState() << ",\"eyes\":[";
+                << ",\"state\":" << liveState(true) << ",\"eyes\":[";
             for (size_t i = 0; i < liveEyes_.size(); ++i) {
                 const auto& eye = liveEyes_[i];
                 const std::string name = i == 0 ? "left" : "right";
@@ -8146,7 +8202,7 @@ class Viewer {
         return entries;
     }
 
-    std::string liveState() const {
+    std::string liveState(bool includeNickTargets=false) const {
         auto quote = [](const std::string& value) {
             return "\"" + nadoc_vr::scrywrite::visualJson(value) + "\"";
         };
@@ -8253,10 +8309,24 @@ class Viewer {
             << ",\"nick_active\":" << (ligation_.nickActive?"true":"false") << ",\"nick_hover\":[";
         for(size_t h=0;h<2;++h){if(h)out<<',';out<<(ligation_.nickHover[h]?std::to_string(*ligation_.nickHover[h]):"null");}
         out << "],\"scissor_angles\":[" << nadoc_vr::Ligation::scissorAngle(triggerValues_[0]) << ',' << nadoc_vr::Ligation::scissorAngle(triggerValues_[1]) << "],\"bonds\":[";
-        // Inactive Nick geometry can dominate live replies on origami-sized parts.
-        // Preserve its full observation contract outside Move/Rotate and Bend.
-        const bool omitNickBonds = (movePanel_.active || bendPanel_.active) && !ligation_.nickActive;
-        for(size_t i=0;!omitNickBonds && i<ligation_.bonds.size();++i){if(i)out<<',';out<<"{\"a\":"<<point(ligation_.bondPoint(i,false,manipulator_.transform()))<<",\"b\":"<<point(ligation_.bondPoint(i,true,manipulator_.transform()))<<'}';}
+        // Explicit inspection and captures need the large bond catalog. Cache
+        // serialized world positions until either targets or model pose change;
+        // controller playback must not repeatedly format thousands of bonds.
+        const bool omitNickBonds = !includeNickTargets;
+        if(!omitNickBonds) {
+            const auto model=manipulator_.transform();
+            if(liveBondVersion_!=ligation_.version || liveBondModel_!=model || liveBondCount_!=ligation_.bonds.size()) {
+                std::ostringstream bonds;
+                for(size_t i=0;i<ligation_.bonds.size();++i) {
+                    if(i)bonds<<',';
+                    bonds<<"{\"a\":"<<point(ligation_.bondPoint(i,false,model))
+                         <<",\"b\":"<<point(ligation_.bondPoint(i,true,model))<<'}';
+                }
+                liveBondCatalog_=bonds.str();liveBondVersion_=ligation_.version;
+                liveBondModel_=model;liveBondCount_=ligation_.bonds.size();
+            }
+            out<<liveBondCatalog_;
+        }
         out << "],\"bonds_omitted\":" << (omitNickBonds?"true":"false") << "}";
         out << ",\"end_resize\":{\"version\":" << endResize_.version
             << ",\"grabbing\":" << (endResize_.hand?"true":"false")
@@ -8337,6 +8407,8 @@ class Viewer {
             << ",\"scene_revision\":" << sceneRefresh_.revision()
             << ",\"visualization_sequence\":" << visualizationSequence_
             << ",\"coordinate_sequence\":" << coordinateSequence_
+            << ",\"controller_prompt_open\":" << (controllerPrompt_.active()?"true":"false")
+            << ",\"controller_prompt_queued\":" << controllerPrompt_.queued()
             << ",\"haptic_requests\":[" << hapticRequests_[0] << ',' << hapticRequests_[1] << ']'
             << ",\"haptic_amplitude\":[" << hapticAmplitude_[0] << ',' << hapticAmplitude_[1] << ']'
             << ",\"menu_input_mode\":" << quote(observedSidebar().focus.active?"trackpad":"pointer")
@@ -8505,7 +8577,7 @@ class Viewer {
     }
 
     std::string liveCommand(const std::string& text) {
-        if (text == "observe") return liveState();
+        if (text == "observe" || text == "observe targets") return liveState(text == "observe targets");
         std::istringstream in(text);
         std::string session, operation, extra;
         uint64_t sequence = 0;
@@ -8540,6 +8612,14 @@ class Viewer {
                 const auto h=hand();const float v=number();end();
                 if(v<0||v>1)throw std::runtime_error("trigger outside [0,1]");
                 liveTriggerValues_[h]=v;
+            }
+            else if (operation == "prompt") {
+                nadoc_vr::ControllerPrompt::Request request;request.options.clear();
+                if(!(in >> std::quoted(request.title) >> std::quoted(request.message)))
+                    throw std::runtime_error("prompt requires quoted title, message, and 1-4 labels");
+                std::string label;
+                while(in >> std::quoted(label))request.options.push_back({std::to_string(request.options.size()),label});
+                showPrompt(std::move(request));
             }
             else if (operation == "pose") {
                 const auto h = hand();
@@ -8621,6 +8701,7 @@ class Viewer {
     }
 
     void suspendControllerInput() {
+        controllerPrompt_.suspend();
         remotePanels_.cancel();
         neutralLiveInput();
         triggerValues_.fill(0);triggerPartial_.fill(false);triggerPressed_.fill(false);triggerClicked_.fill(false);
@@ -8648,6 +8729,7 @@ class Viewer {
         if (liveControlsEnabled() && (sessionState_ != XR_SESSION_STATE_FOCUSED ||
             std::chrono::steady_clock::now() > liveInputDeadline_))
             neutralLiveInput(sessionState_ != XR_SESSION_STATE_FOCUSED);
+        const bool promptOwnsInput=controllerPrompt_.active();
         triggerClicked_.fill(false);
         gripClicked_.fill(false);
         if (sessionState_ != XR_SESSION_STATE_FOCUSED) {
@@ -8766,7 +8848,7 @@ class Viewer {
                 menuClicked = pressed && !liveMenuPressed_[hand];
                 liveMenuPressed_[hand] = pressed;
             }
-            if (menuClicked && !inputResumeBlocked_[hand]) toggleMenu(hand);
+            if (menuClicked && !promptOwnsInput && !inputResumeBlocked_[hand]) toggleMenu(hand);
 
             getInfo.action = gripAction_;
             XrActionStateBoolean grip{XR_TYPE_ACTION_STATE_BOOLEAN};
@@ -8810,6 +8892,11 @@ class Viewer {
                 session_, &getInfo, &trackpadAxis),
                 "xrGetActionStateVector2f(trackpad axis)");
             const glm::vec2 navigationAxis=liveControlsEnabled()?liveTrackpadAxis_[hand]:glm::vec2(trackpadAxis.currentState.x,trackpadAxis.currentState.y);
+            if(promptOwnsInput) {
+                if(hand==0)controllerPrompt_.update(trackpadPressed,navigationAxis,hands_[0],glfwGetTime(),
+                    [&](float strength){pulse(0,strength);});
+                continue;
+            }
             if(hand==0)selectionWheel_.input(trackpadPressed,navigationAxis,hands_[0],
                 !routingPopup_.anyOpen() && !componentGallery_.active && !toolShell_.executionPending() && !moveAwaitRefresh_ && sessionState_==XR_SESSION_STATE_FOCUSED && (liveControlsEnabled() || trackpadAxis.isActive),
                 [&](const char* level){if(movePanel_.active)cancelMove();publishSelectionLevel(level);},[&](float strength){pulse(0,strength);});
@@ -8876,6 +8963,15 @@ class Viewer {
             }
         }
 
+        if(promptOwnsInput) {
+            // Consume the answer frame too; held controls cannot leak into tools.
+            for(auto& hand:hands_)hand.pressed=false;
+            manipulator_.update(hands_);
+            triggerClicked_.fill(false);gripClicked_.fill(false);
+            liveInputOwner_.fill("controller-prompt");
+            if(!controllerPrompt_.active())inputResumeBlocked_.fill(true);
+            updateControllerGuides();return;
+        }
         if(componentGallery_.active) {
             for(auto& menu:sidebarMenus_.menus)menu.open=false;
             componentGallery_.update(hands_,triggerClicked_,triggerPressed_,frameDeltaSeconds_,witnessObserverPosition_,witnessObserverOrientation_);
@@ -9025,6 +9121,7 @@ class Viewer {
         if(volumePanel_.active) menuControlTargeted.fill(true);
         frameAudit_.mark("dimensions");
         simulationPanel_.poll(eventPath_);
+        featureLogPanel_.poll(eventPath_);
         routingPanel_.poll(eventPath_,routingPopup_.menus[1],sidebarMenus_.menus[1]);
         { std::error_code error; const auto path=eventPath_+".share";
           const auto changed=std::filesystem::last_write_time(path,error);
@@ -9671,6 +9768,8 @@ class Viewer {
     void renderMenuSurface(const glm::mat4& viewProjection) {
         componentGallery_.render(viewProjection);
         solidWheels_.render(viewProjection);
+        controllerPrompt_.draw(promptSurface_);
+        promptSurface_.render(viewProjection);
         menuGlass_.capture();
         sidebarMenus_.render(viewProjection);
         routingPopup_.render(viewProjection);
@@ -10795,6 +10894,8 @@ class Viewer {
                 trace("events");
                 pollStartup();trace("startup");
                 pollRepresentationLoading();trace("representation");
+                browserPrompt_.poll(eventPath_,controllerPrompt_,glfwGetTime(),
+                    [this](auto request){showPrompt(std::move(request));},[this]{publishEventState();});
                 pollJobSnapshot();trace("jobs");
                 if(!startup_.active)pollVisualizationSnapshot();
                 trace("visualization");
@@ -10843,6 +10944,10 @@ class Viewer {
     SceneData sceneData_;
     nadoc_vr::SceneRefreshInbox<SceneData> sceneRefresh_;
     nadoc_vr::Ligation ligation_;
+    mutable uint64_t liveBondVersion_=0;
+    mutable size_t liveBondCount_=0;
+    mutable glm::mat4 liveBondModel_{1};
+    mutable std::string liveBondCatalog_;
     nadoc_vr::QuiverGesture quiver_;
     std::string ligationPreviousLevel_="default";
     nadoc_vr::EndResize endResize_;
@@ -11029,6 +11134,10 @@ class Viewer {
     nadoc_vr::SceneManipulator manipulator_;
     ComponentGallery componentGallery_;
     SolidUi solidWheels_;
+    SolidUi promptSurface_;
+    nadoc_vr::ControllerPrompt controllerPrompt_;
+    nadoc_vr::BrowserPrompt browserPrompt_;
+    uint64_t promptedRepresentationFailure_=0;
     std::vector<Vertex> controllerGuides_;
     std::array<size_t, 2> controllerHandEnds_{};
     std::array<std::string,2> liveInputOwner_{"none","none"};
@@ -11131,6 +11240,7 @@ class Viewer {
     int shareSequence_=0,shareAck_=0;
     std::string shareAction_;
     nadoc_vr::SimulationPanel simulationPanel_;
+    nadoc_vr::FeatureLogPanel featureLogPanel_;
     nadoc_vr::TrajectoryPanel trajectoryPanel_;
     std::optional<size_t> trajectoryScrubHand_;
     uint32_t trajectoryScrubFrame_=0;
@@ -11221,7 +11331,7 @@ int main(int argc, char** argv) {
     std::string witnessPath;
     std::string mirrorDiagnosticsPath;
     std::string controllerPath;
-    bool componentGallery=false, galleryDesktop=false, galleryButtons=false, galleryCards=false;
+    bool componentGallery=false, galleryDesktop=false, galleryButtons=false, galleryCards=false,galleryLists=false;
     std::string galleryOutput;
     std::string witnessCaptureDirectory;
     std::string witnessVisualExpectationDirectory;
@@ -11244,8 +11354,8 @@ int main(int argc, char** argv) {
         const std::string option(argv[index]);
         if(option=="--component-gallery") {
             const std::string component=argv[index+1];
-            if(component!="thumbwheel" && component!="buttons" && component!="cards") {std::cerr<<"Unknown gallery component\n";return 2;}
-            galleryButtons=component=="buttons";galleryCards=component=="cards";
+            if(component!="thumbwheel" && component!="buttons" && component!="cards" && component!="lists") {std::cerr<<"Unknown gallery component\n";return 2;}
+            galleryButtons=component=="buttons";galleryCards=component=="cards";galleryLists=component=="lists";
             componentGallery=true;
         }
         else if(option=="--gallery-desktop") {
@@ -11417,7 +11527,7 @@ int main(int argc, char** argv) {
     try {
         if(galleryDesktop) {
             if(!componentGallery)throw std::runtime_error("Desktop gallery requires --component-gallery thumbwheel");
-            return runComponentGalleryDesktop(galleryOutput,galleryButtons,galleryCards);
+            return runComponentGalleryDesktop(galleryOutput,galleryButtons,galleryCards,galleryLists);
         }
         const auto processStarted = std::chrono::steady_clock::now();
         std::cout << "VR_METRIC event=process_start mode=openxr_viewer rss_mib="
@@ -11440,7 +11550,7 @@ int main(int argc, char** argv) {
             mirrorDiagnosticsPath, witnessCaptureDirectory,
             witnessVisualExpectationDirectory, exitOnWitnessComplete, liveSocketPath, liveMode);
         if(!loadingStatusPath.empty())viewer.beginStartup(argv[1],loadingStatusPath,startupOwners,startupKind);
-        if(componentGallery)viewer.enableComponentGallery(galleryButtons,galleryCards);
+        if(componentGallery)viewer.enableComponentGallery(galleryButtons,galleryCards,galleryLists);
         viewer.loadControllerPath(controllerPath);
         const int result = viewer.run();
         const double milliseconds = std::chrono::duration<double, std::milli>(

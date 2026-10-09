@@ -18,13 +18,24 @@ def numbers(path):
     return values
 
 
+def scope_memory():
+    """Read this validation scope's pressure, including retained capture pages."""
+    try:
+        relative=next(line.split('::',1)[1] for line in Path('/proc/self/cgroup').read_text().splitlines() if line.startswith('0::'))
+        root=Path('/sys/fs/cgroup')/relative.lstrip('/')
+        values={name:(root/name).read_text().strip() for name in ('memory.current','memory.peak','memory.high','memory.max')}
+        return {**values,'events':numbers(root/'memory.events')}
+    except (OSError,StopIteration):
+        return None
+
+
 def resources():
     memory=numbers('/proc/meminfo');vm=numbers('/proc/vmstat')
     shared=shutil.disk_usage('/dev/shm')
     return dict(epoch_ms=time.time()*1000,mem_available_kib=memory['MemAvailable'],
                 mem_total_kib=memory['MemTotal'],swap_free_kib=memory['SwapFree'],
                 swap_total_kib=memory['SwapTotal'],shm_used_bytes=shared.used,
-                pswpin_pages=vm['pswpin'],pswpout_pages=vm['pswpout'])
+                pswpin_pages=vm['pswpin'],pswpout_pages=vm['pswpout'],scope_memory=scope_memory())
 
 
 def pressure(before,after):

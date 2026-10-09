@@ -422,3 +422,24 @@ describe('initVRSession', () => {
     vi.useRealTimers()
   })
 })
+
+
+it('delivers a native prompt answer once even while the main event sequence stays unchanged', async () => {
+  vi.useFakeTimers()
+  const onNativeEvent = vi.fn()
+  const native = {
+    status: vi.fn().mockResolvedValue({ available: true, running: false }),
+    launch: vi.fn().mockResolvedValue({ running: true }), stop: vi.fn().mockResolvedValue({ running: false }),
+    event: vi.fn().mockResolvedValue({ sequence: 1, prompt: { sequence: 1, version: 10, id: '1' } }),
+  }
+  const h = makeHarness({ xr: null, native, onNativeEvent, nativeEventPollIntervalMs: 10 })
+  try {
+    await h.controller.enter();await vi.advanceTimersByTimeAsync(40)
+    expect(onNativeEvent.mock.calls.filter(([e]) => e.type === 'prompt').map(([e]) => e)).toEqual([
+      { type: 'prompt', sequence: 1, version: 10, id: '1' },
+    ])
+    native.event.mockResolvedValue({ sequence: 1, prompt: { sequence: 2, version: 11, id: '0' } })
+    await vi.advanceTimersByTimeAsync(20)
+    expect(onNativeEvent.mock.calls.filter(([e]) => e.type === 'prompt')).toHaveLength(2)
+  } finally { h.controller.dispose();vi.useRealTimers() }
+})

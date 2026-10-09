@@ -481,6 +481,19 @@ describe('VR arrow resizing', () => {
     arrows.dispose()
   })
 
+  it('forwards early export only for a validated native resize', async () => {
+    const arrows = fixture()
+    const snapshot = arrows.vrHandles()
+    const onCommitted = vi.fn()
+    await expect(arrows.resizeFromVR(snapshot.version + 1, 7, onCommitted)).rejects.toThrow()
+    expect(resizeStrandEnds).not.toHaveBeenCalled()
+    await arrows.resizeFromVR(snapshot.version, 7, onCommitted)
+    expect(resizeStrandEnds).toHaveBeenCalledWith([
+      { strand_id: 's1', helix_id: 'h_XY_0_0', end: '5p', delta_bp: -7 },
+    ], { onCommitted })
+    arrows.dispose()
+  })
+
   it('resizes both termini by the same outward amount and retains both relocated end refs', async () => {
     const selectionController = { replace: vi.fn() }
     const arrows = initEndExtrudeArrows(scene, camera, canvas, selectionManager, designRenderer, null, { selectionController })

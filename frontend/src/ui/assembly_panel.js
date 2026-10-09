@@ -423,7 +423,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
       const repr = reprSel.value
       if (_ATOMISTIC_REPRS.has(repr)) {
         const ok = await showConfirm({
-          title: 'Apply atomistic representation',
+          title: 'Apply atomistic representation', vr: true,
           message: 'Atomistic rendering computes all-atom geometry for this part and can be slow for large designs or assemblies with many parts.\n\nApply anyway?',
           confirmLabel: 'Apply',
         })

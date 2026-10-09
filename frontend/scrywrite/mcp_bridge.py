@@ -48,7 +48,7 @@ def action(name, description, properties=None):
 
 
 TOOLS = [
-    tool("observe", "Inspect live session, frame, controls, owner identity, browser acknowledgement and Extrude draft. Works after viewer restarts. Offline is an explicit error.", read=True),
+    tool("observe", "Inspect live session, frame, controls, owner identity, browser acknowledgement and Extrude draft. Works after viewer restarts. Offline is an explicit error. Set include_targets to request the full Nick bond catalog (omitted from compact motion observations).", {"include_targets": {"type": "boolean"}}, read=True),
     action("scene_visibility", "Diagnostic rendering only: show or hide design while preserving geometry, scale and input behavior.", {"visibility": {"enum": ["normal", "hidden"]}}),
     action("pose", "Set one test hand pose in OpenXR LOCAL meters, quaternion XYZW. Does not move the physical head. Held buttons expire after two seconds without a control command; neutral poses remain available.",
            {"hand": HAND, "position": VECTOR,
@@ -184,7 +184,7 @@ class Bridge:
         validate(args, BY_NAME[name]["inputSchema"])
         operation = name.removeprefix("scrywrite_")
         if operation == "observe":
-            return self.request("observe")
+            return self.request("observe targets" if args.get("include_targets") else "observe")
         if operation == "wait":
             def matches(state):
                 value = state

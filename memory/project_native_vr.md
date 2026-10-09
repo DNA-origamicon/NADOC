@@ -7,6 +7,56 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Edit latency (2026-10-08)
+
+`Circle_spiral.nadoc` Full resize reproduced ~27 s, dominated by two 12–13 s
+exports: autosave invalidated the first despite unchanged scene inputs. Export
+now compares active source fields, batches spline/slab math with scalar authority
+parity, caches export-local metadata, skips unrequested coarse geometry, and runs
+in one warmed spawned CPU worker. Parent document/revision/integrity gates remain.
+Resize refresh overlaps desktop synchronization; native ligation target parsing
+is asynchronous, manifest polling is three frames, and GPU staging stays 1 ms.
+Four real Vive/OpenXR profiles passed +12/-6, retained selection, stereo/mirror
+pixels and independent Undo: 2.97–3.36 s, 89.5 FPS, no repeated/dropped commit
+frames. Sub-second edits and consistently <3 s remain open; larger gains need
+incremental regeneration/transport. See `docs/audits/vr_edit_latency_20261008.md`.
+
+## Nick / Ligate / Bend / Twist / Sweep latency (2026-10-08)
+
+User fixture policy: do not use `Circle_spiral.nadoc` as a test input or fixture.
+In particular, Bend validation must start from non-circularized designs. The
+current latency campaign uses an independent straight 24-helix, 48-strand,
+12,000-nucleotide bundle with no deformations, forced ligations or feature
+history. Earlier Circle evidence is historical only; its interrupted campaign
+was stopped when the user supplied this correction.
+
+All five VR commit controllers start revision-pinned canonical export immediately
+after the mutation response, overlapping normal desktop synchronization. Nick,
+Ligate and their history use the existing geometry-free response header followed
+by normal desktop geometry fetch. Detached Sweep reuses desktop partial geometry
+only when existing strands survive unchanged; continuations retain full geometry.
+VR scene refresh dispatch skips unrelated async simulation preparation, also
+improving resize. Normal Deform mode retains its unchanged view-tools tablet:
+geometry edits no longer rebuild/transfer/upload its 16 MiB atlas or traverse
+scene fingerprints. Overlay streams and explicit action/reset acknowledgements
+still update. Export remains in the warmed worker; GPU staging stays bounded. The final
+20-case non-circular Full-representation matrix passes: Nick 1.86–1.92 s, Ligate
+1.91–2.02 s, Bend 2.39–2.52 s, Twist 2.03–2.16 s, Sweep 2.14–2.22 s. Native
+submission cadence is ~89.5 FPS; three compositor drops remain across eight
+Ligate commits, with none in the other tools' commit windows. Sub-second edits
+and arbitrary-design guarantees remain open.
+
+Inspector observations are compact even with Nick active; use `observe targets`
+or MCP `include_targets: true` for the full cached bond catalog. Captures retain
+it. The registered Authoring **Tools across representations · frame audit** now
+includes Sweep and input-to-ready commit timing. Circle's fixed-endpoint Bend
+conflict remains correctly rejected; latency uses an independent 24-helix/12k-nt
+straight bundle. All four Bend motion profiles pass on that bundle at
+2.39–2.52 s final-input-to-ready (matched pre-change baseline 3.95 s), ~89.5 FPS
+and zero repeated/dropped commit frames. Save/reopen and Undo pass. See
+`docs/audits/vr_tools_latency_20261008.md` for measured results,
+retained failures, observation adjustments and validation limits.
+
 ## Bend / Twist exact multi-selection (2026-10-06)
 
 Bend and Twist retain clusters, strands, domains, and mixed canonical sets.
@@ -297,6 +347,19 @@ frames, causing recurring p99 wall costs invisible to p95. Neither candidate
 optimization has been implemented by this audit. Preserve readback provenance
 and slab geometry authority when optimizing; do not lower render quality.
 
+## Production scrollable sets and history (2026-10-08)
+
+Sweep points now use a grouped rail; Dimensions uses aligned outlined-table
+columns; simulation jobs use native beveled cards with status detail. Feature
+Log has a versioned desktop-authoritative native rail: preview notch while
+trigger-held, seek on release, independent list scroll, per-row edit/revert/delete,
+F0 and expanded routing children, and desktop assembly/part/configuration targets.
+Specialized editors and confirmations use the interactive in-headset desktop
+surface. Pending seeks/operations/scene exports disable history actions; stale
+versions and duplicate commands are rejected. The reusable review is registered
+under Controls & layout → Feature history and production lists. See
+[production list behavior](../docs/vr_sidebar_menus.md#production-scrollable-sets-and-feature-history-2026-10-08).
+
 ## Component gallery (2026-10-01)
 
 Debug → VR Component Gallery now offers native VR and headset-free desktop
@@ -304,7 +367,7 @@ thumbwheel evaluation demos. Both share solid ridged meshes and inertia, with
 20/35/50% exposure columns and 0–10/100/1000 range rows. Extrude and Bend share
 the new clipped solid rendering. Launch, controls and validation:
 [component gallery](../docs/vr_component_gallery.md). Range-dependent sizing is
-approved by the user: Extrude uses 0–1000 / 35%, and Bend uses 0–100 / 35% with expanded layout and raised-surface hit testing. The gallery also offers six button styles inspired by MRTK, visionOS, Material and Blender, with VR/desktop demos and all-four-profile validation. Cards and lists adds six expandable studies with selectable children and the same launch modes.
+approved by the user: Extrude uses 0–1000 / 35%, and Bend uses 0–100 / 35% with expanded layout and raised-surface hit testing. The gallery also offers six button styles inspired by MRTK, visionOS, Material and Blender, with VR/desktop demos and all-four-profile validation. Cards and lists adds six expandable studies with selectable children and the same launch modes. Scrollable sets (2026-10-08) adds six bounded-list studies: inset tray, outlined table, job cards, sweep rail, grouped set, and pinned inspector. Twelve sample rows per set have independent actions and persistent selection, draggable rails and UP/DN targets. Desktop/VR launch and profile validation are registered; native interaction/render checks cover the new lists. Production feature binding and through-lens comfort remain separate.
 
 ## Resource limits after the October 1 UI evaluation crash
 

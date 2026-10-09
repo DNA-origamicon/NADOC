@@ -97,8 +97,11 @@ def test_batched_quaternions_match_scalar_authority(design):
         expected.append((center, Rotation.from_matrix(frame).as_quat()))
     attach_native_slab_poses(records)
     for record, (center, quaternion) in zip(records, expected):
-        np.testing.assert_array_equal(record['slab_position'], center)
-        np.testing.assert_array_equal(record['slab_quaternion'], quaternion)
+        # Batched reductions may differ from scalar arithmetic by a few ULPs.
+        # Keep zero relative tolerance and compare every component to the
+        # unchanged scalar authority (no geometry golden is regenerated).
+        np.testing.assert_allclose(record['slab_position'], center, rtol=0, atol=2e-14)
+        np.testing.assert_allclose(record['slab_quaternion'], quaternion, rtol=0, atol=2e-14)
 
 
 def test_instance_preview_keeps_source_and_assembly_unchanged(design):

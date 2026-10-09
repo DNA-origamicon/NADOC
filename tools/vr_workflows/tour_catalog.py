@@ -21,6 +21,10 @@ def catalog():
     def add(identifier, group, title, description, args=(), module='menu_tour', runnable=True):
         tours.append(dict(id=identifier, group=group, title=title, description=description,
                           module=module, args=list(args), runnable=runnable))
+    add('production-lists', 'interaction', 'Feature history and production lists',
+        'Review sweep rails, dimension tables, simulation job cards and the feature-history scrub rail. Runs bounded native interaction checks and retains production-rendered state images.', module='list_components_check')
+    add('list-gallery', 'components', 'Scrollable sets',
+        'Six bounded lists with independent row actions, selection, draggable scroll rails and persistent set headers. Dimensions, sweep points and simulation job samples.', ['--component', 'lists'], module='component_gallery_tour')
     add('card-gallery', 'components', 'Cards and lists',
         'Six expandable card and list styles with selectable children.', ['--component', 'cards'], module='component_gallery_tour')
     add('button-gallery', 'components', 'Button styles',
@@ -42,7 +46,7 @@ def catalog():
     add('backend-lifetime', 'interaction', 'Backend shutdown closes VR',
         'Launch an isolated backend and empty VR viewer; terminate only that backend and require viewer exit and sidecar cleanup.', module='backend_lifecycle_check')
     add('tool-frame-audit', 'authoring', 'Tools across representations · frame audit',
-        'Long isolated campaign: existing authoring fixtures in Full, Stick, Ball & Stick and Quick Surface. Records failed cases, CPU calculation counts and compositor timing. Validation uses all four motion profiles. Desktop drawing defaults off with browser trace evidence (--desktop-rendering on overrides it); Move workflows also check the Desktop 3D during VR toggle and automatic desktop restoration.', module='tool_frame_audit')
+        'Long isolated campaign: existing authoring fixtures in Full, Stick, Ball & Stick and Quick Surface. Includes Nick, Ligate, Bend, Twist and Sweep commit latency, CPU calculation counts and compositor timing; retains failures. Input-to-ready timing excludes reaching Confirm when available. Nick frame audits focus on edits while its ordinary tour retains quiver checks. Validation uses all four motion profiles. Desktop drawing defaults off with browser trace evidence (--desktop-rendering on overrides it); Move workflows also check the Desktop 3D during VR toggle and automatic desktop restoration.', module='tool_frame_audit')
     add('frame-audit', 'interaction', 'VR frame calculation audit',
         'Private 24HB: Full, Stick, Ball & Stick and Quick Surface idle/grip CPU phases, submission cadence and compositor timing. Validation uses all four motion profiles; authoring tools are separate.', module='frame_audit_tour')
     add('representation-motion', 'interaction', 'Detailed representations · grip motion',
@@ -111,7 +115,7 @@ def catalog():
     add('deformation-selection', 'authoring', 'Bend / Twist · multi-selection regression',
         'No headset required: real VR selection and confirmation bridge for multiple clusters, strands, domains and mixed sets; exact scope, plane bounds, persistence, stale-target rejection and Undo.', module='deformation_selection_check')
     add('end-resize', 'authoring', 'Resize selected ends',
-        'Trigger grab the selected end arrow, pull to resize, release to save, and verify one-step desktop Undo. Validation uses all four controller profiles.', module='end_resize_tour')
+        'Trigger grab selected end arrows, extend and shorten, retain selection, and verify independent desktop Undo. Validation uses all four controller profiles; the frame audit accepts an imported design and records commit latency and stereo frame timing.', module='end_resize_tour')
     add('move-preview-renderer', 'authoring', 'Move / Rotate · renderer regression',
         'No headset required: compare prepared first grabs and packed previews with the original rebuild, including weighted boundary bonds, resident-cache restoration, Cancel, commit, Undo and style changes. Use --scene-dir and --compare-setup for saved-scene timing and exact pixel comparisons.', module='move_preview_check')
     add('scene-activation', 'authoring', 'Scene activation · renderer regression',
@@ -137,7 +141,7 @@ def arguments(tour, validate=False):
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
     elif tour['module'] == 'view_volumes_check':
         args += ['--validate'] if validate else ['--demo']
-    elif tour['module'] in ('menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'deformation_selection_check', 'lattice_compatibility_check', 'representation_tour', 'extrude_tour', 'sweep_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'edit_wheel_history_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
+    elif tour['module'] in ('list_components_check', 'menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'deformation_selection_check', 'lattice_compatibility_check', 'representation_tour', 'extrude_tour', 'sweep_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'edit_wheel_history_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
         if validate:
             args += ['--validate']
     return args

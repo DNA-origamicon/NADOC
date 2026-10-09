@@ -1,3 +1,4 @@
+import { createVRCommitRefresh } from './vr_commit_refresh.js'
 import { buildVRParameterizedToolPlan } from './vr_tool_execution_plan.js'
 
 /** Serialize native bend and twist commits through the desktop deformation/feature log. */
@@ -10,11 +11,12 @@ export function createVRBend({ api, getState, getConfig, resolveTarget, transact
     if (busy) return
     if (['activate', 'cancel', 'preview'].includes(event.action)) return
     busy = true
+    const sceneRefresh = createVRCommitRefresh({ api, getState })
     let outcome
     try {
       if (event.action === 'undo') {
         await sendFeedback(event, 'pending', 'undoing')
-        outcome = await transaction.undo({ tool: event.mode })
+        outcome = await transaction.undo({ tool: event.mode, onCommitted: sceneRefresh.onCommitted })
       } else {
         const config = getConfig()
         const target = resolveTarget({ identity: event.targetIdentity, selectionKind: event.targetKind, ownerTokens: event.targetOwnerTokens })
@@ -36,7 +38,7 @@ export function createVRBend({ api, getState, getConfig, resolveTarget, transact
               targetIdentity: event.targetIdentity, targetKind: event.targetKind,
               execute: async () => {
                 if (!resolveTarget({ identity: event.targetIdentity, selectionKind: event.targetKind, ownerTokens: event.targetOwnerTokens }) || getConfig().sequence !== config.sequence) return { accepted: false, reason: 'stale_target' }
-                const result = await api.addDeformation(...plan.commit.arguments, { expectedDesignId: state.currentDesign.id, expectedRevision: revision, ...(plan.targets ? { targets: plan.targets } : {}) })
+                const result = await api.addDeformation(...plan.commit.arguments, { expectedDesignId: state.currentDesign.id, expectedRevision: revision, onCommitted: sceneRefresh.onCommitted, ...(plan.targets ? { targets: plan.targets } : {}) })
                 return { accepted: !!result, result }
               },
             })
@@ -45,7 +47,7 @@ export function createVRBend({ api, getState, getConfig, resolveTarget, transact
       }
       if (outcome.accepted) {
         try {
-          const refreshed = await api.refreshNativeVRScene({ expected_design_id: getState().currentDesign.id, expected_revision: api.currentRevisionWatermark() })
+          const refreshed = await sceneRefresh.complete()
           if (!refreshed?.published) onError('Deformation saved; VR scene refresh failed.')
         } catch { onError('Deformation saved; VR scene refresh failed.') }
       }

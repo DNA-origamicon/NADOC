@@ -39,7 +39,8 @@ test('radial Nick previews analog scissors and cuts once with wheel Undo and Red
     const after=await read()
     if(action==='nick') {
       expect(after.strands.length).toBe(before.strands.length+1)
-      expect(after.feature_log.at(-1).children.filter(c=>c.op_subtype==='nick')).toHaveLength(1)
+      const existing = new Set(before.feature_log.flatMap(entry => entry.children ?? []).map(child => child.id))
+      expect(after.feature_log.flatMap(entry => entry.children ?? []).filter(child => child.op_subtype === 'nick' && !existing.has(child.id))).toHaveLength(1)
       nicked=after
     } else if(action==='undo') {
       expect(after.strands).toEqual(before.strands)

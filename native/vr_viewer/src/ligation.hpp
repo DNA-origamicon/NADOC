@@ -2,6 +2,8 @@
 #include "interaction.hpp"
 #include <fstream>
 #include <optional>
+#include <future>
+#include <chrono>
 
 namespace nadoc_vr {
 inline constexpr std::array<const char*,4> kRadialEditLabels{"LIGATE","NICK","UNDO","REDO"};
@@ -33,36 +35,69 @@ class Ligation {
 
     void cancel() {nickHover={};hand.reset();target.reset();hover={};incompatible=false;}
     void setActive(bool value) {cancel();active=value;nickActive=false;}
-    void poll(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin) {
-        if(path.empty())return;
+ private:
+    struct Targets {
+        uint64_t version;
+        std::string status;
+        std::vector<End> ends;
+        std::vector<Bond> bonds;
+    };
+    std::future<std::optional<Targets>> pending_;
+    std::string pendingPath_;
+    glm::vec3 pendingCenter_{}, pendingOrigin_{};
+    float pendingScale_=0;
+    static std::optional<Targets> loadTargets(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin) {
         std::ifstream input(path+".ligation");
         std::string magic,nextStatus;uint64_t next;size_t count;
-        if(!(input>>magic>>next>>nextStatus>>count) || magic!="NADOC_LIGATION_1" || count>32768 || next==version)return;
-        std::vector<End> loaded;
+        if(!(input>>magic>>next>>nextStatus>>count) || magic!="NADOC_LIGATION_1" || count>32768)return std::nullopt;
+        std::vector<End> loaded;loaded.reserve(count);
         for(size_t i=0;i<count;++i) {
             End e;
             if(!(input>>e.role>>e.strand>>e.identity>>e.position.x>>e.position.y>>e.position.z
-                >>e.tangent.x>>e.tangent.y>>e.tangent.z>>e.offset.x>>e.offset.y>>e.offset.z))return;
-            if((e.role!=3 && e.role!=5)||e.strand<0||e.identity.size()>2048)return;
-            for(int j=0;j<3;++j)if(!std::isfinite(e.position[j])||!std::isfinite(e.tangent[j])||!std::isfinite(e.offset[j]))return;
+                >>e.tangent.x>>e.tangent.y>>e.tangent.z>>e.offset.x>>e.offset.y>>e.offset.z))return std::nullopt;
+            if((e.role!=3 && e.role!=5)||e.strand<0||e.identity.size()>2048)return std::nullopt;
+            for(int j=0;j<3;++j)if(!std::isfinite(e.position[j])||!std::isfinite(e.tangent[j])||!std::isfinite(e.offset[j]))return std::nullopt;
             e.position=(e.position-center)*scale+origin;e.offset*=scale;
             loaded.push_back(e);
         }
         std::string bondMagic;size_t bondCount=0;std::vector<Bond> newBonds;
         if(input>>bondMagic>>bondCount) {
-            if(bondMagic!="BONDS" || bondCount>1000000)return;
+            if(bondMagic!="BONDS" || bondCount>1000000)return std::nullopt;
+            newBonds.reserve(bondCount);
             for(size_t i=0;i<bondCount;++i) {
                 Bond b;
                 for(auto* v:{&b.a,&b.b,&b.offsetA,&b.offsetB}) {
-                    if(!(input>>v->x>>v->y>>v->z))return;
-                    for(int j=0;j<3;++j)if(!std::isfinite((*v)[j]))return;
+                    if(!(input>>v->x>>v->y>>v->z))return std::nullopt;
+                    for(int j=0;j<3;++j)if(!std::isfinite((*v)[j]))return std::nullopt;
                 }
                 b.a=(b.a-center)*scale+origin;b.b=(b.b-center)*scale+origin;
                 b.offsetA*=scale;b.offsetB*=scale;newBonds.push_back(b);
             }
         }
-        bonds=std::move(newBonds);
-        cancel();waiting=false;version=next;ends=std::move(loaded);status=nextStatus;
+        return Targets{next,std::move(nextStatus),std::move(loaded),std::move(newBonds)};
+    }
+ public:
+    void poll(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin) {
+        if(pending_.valid()) {
+            if(pending_.wait_for(std::chrono::seconds(0))!=std::future_status::ready)return;
+            try {
+                auto loaded=pending_.get();
+                if(loaded && path==pendingPath_ && center==pendingCenter_ &&
+                    scale==pendingScale_ && origin==pendingOrigin_) {
+                    bonds=std::move(loaded->bonds);ends=std::move(loaded->ends);
+                    cancel();waiting=false;version=loaded->version;status=std::move(loaded->status);
+                }
+            } catch(const std::exception&) { /* Keep the last complete targets. */ }
+        }
+        if(path.empty())return;
+        // Probe only the header on the frame thread. Large bond tables are
+        // parsed into private vectors while the old targets remain usable.
+        std::ifstream input(path+".ligation");
+        std::string magic,nextStatus;uint64_t next;size_t count;
+        if(!(input>>magic>>next>>nextStatus>>count) || magic!="NADOC_LIGATION_1" || count>32768 || next==version)return;
+        pendingPath_=path;pendingCenter_=center;pendingScale_=scale;pendingOrigin_=origin;
+        try {pending_=std::async(std::launch::async,[path,center,scale,origin]{return loadTargets(path,center,scale,origin);});}
+        catch(const std::exception&) { /* Retry on a later frame. */ }
     }
     glm::vec3 point(size_t i,const glm::mat4& model) const {
         const auto& e=ends[i];return glm::vec3(model*glm::vec4(e.position,1));

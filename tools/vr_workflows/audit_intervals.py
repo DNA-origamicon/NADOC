@@ -59,4 +59,6 @@ def operation(live, label):
         with open(path,'a') as output:
             output.write(json.dumps(dict(name=f'{label}-{os.getpid()}-{frame}',kind=label,
                 start_ms=start,end_ms=end,operation_latency_ms=end-start,
+                input_to_ready_ms=(end-live.last_edit_input_ms
+                    if start-1000 <= getattr(live,'last_edit_input_ms',0) <= end else None),
                 representation=live.state.get('representation'),display_start=display_start,display_end=display_state(live),error=error))+'\n')

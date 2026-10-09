@@ -24,7 +24,23 @@ test('selected end arrow trigger pull commits once and desktop Undo restores it'
     const { store } = await import('/src/state/store.js')
     if (!auditImported) await api.createBundle({ cells: [[0,0], [1,0]], lengthBp: 42, plane: 'XY', name: '__e2e__Resize' })
     const state = store.getState()
-    const ends = state.currentGeometry.filter(n => n.is_three_prime && (auditImported || n.bp_index === 41)).slice(0, 2)
+    const ends = state.currentGeometry.filter(n => {
+      if (!n.is_three_prime) return false
+      if (!auditImported) return n.bp_index === 41
+      // A routed imported part contains many ends blocked by the next staple.
+      // Choose real free termini for +12/-6; never change the source topology
+      // or bypass the production collision limits to make the probe pass.
+      const strand = state.currentDesign.strands.find(s => s.id === n.strand_id)
+      const domain = strand?.domains.at(-1)
+      if (!domain || Math.abs(domain.end_bp - domain.start_bp) < 6) return false
+      const sign = n.direction === 'FORWARD' ? 1 : -1
+      return !state.currentDesign.strands.some(s => s.id !== n.strand_id && s.domains.some(d => {
+        if (d.helix_id !== n.helix_id || d.direction !== n.direction) return false
+        const lo = Math.min(d.start_bp, d.end_bp), hi = Math.max(d.start_bp, d.end_bp)
+        return sign > 0 ? lo > n.bp_index && lo <= n.bp_index + 12
+          : hi < n.bp_index && hi >= n.bp_index - 12
+      }))
+    }).slice(0, 2)
     if (ends.length !== 2) throw new Error('Resize fixture needs two terminal ends')
     const refs = ends.map(nuc => ({ kind: 'end', key: `${nuc.helix_id}:${nuc.bp_index}:${nuc.direction}` }))
     store.setState({ selection: { context: 'design', level: 'end', items: refs, primary: refs.at(-1) } })
@@ -43,7 +59,11 @@ test('selected end arrow trigger pull commits once and desktop Undo restores it'
   const report = JSON.parse(fs.readFileSync(info.outputPath('physical/result.json')))
   const read = () => page.evaluate(async () => (await import('/src/state/store.js')).store.getState().currentDesign)
   const after = await read()
-  expect(after.feature_log.length).toBe(before.design.feature_log.length + 1)
+  if (after.feature_log.at(-1).id === before.design.feature_log.at(-1)?.id) {
+    expect(after.feature_log.at(-1).children.length).toBe(before.design.feature_log.at(-1).children.length + 1)
+  } else {
+    expect(after.feature_log.length).toBe(before.design.feature_log.length + 1)
+  }
   const length = s => s.domains.reduce((sum, d) => sum + Math.abs(d.end_bp - d.start_bp) + 1, 0)
   for (const id of before.strandIds) {
     expect(length(after.strands.find(s => s.id === id)) - length(before.design.strands.find(s => s.id === id))).toBe(report.delta)
