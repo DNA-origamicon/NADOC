@@ -32,6 +32,7 @@ class RepresentationLoading {
         std::ostringstream text;text<<std::fixed<<std::setprecision(1)<<percent<<"% "<<detail;
         popup.detail=text.str();popup.render(vp,head,true);
     }
+    uint64_t failures=0;
     uint64_t sequence=0,generation=0,parseSequence=0;
     Representation target=Representation::full;
     Coloring color=Coloring::strand;
@@ -52,7 +53,7 @@ class RepresentationLoading {
         output.close();
         if(!output || std::rename((path+".next").c_str(),path.c_str())!=0)fail("Cannot request representation");
     }
-    void fail(const std::string& message){phase="error";detail=message;pending=false;percent=-1;visibleUntil=glfwGetTime()+30;}
+    void fail(const std::string& message){++failures;phase="error";detail=message;pending=false;percent=-1;visibleUntil=glfwGetTime()+30;}
     void cancel(){
         ++sequence;pending=false;retireCandidate();visibleUntil=0;phase.clear();
         const auto path=eventPath+".repr-request";

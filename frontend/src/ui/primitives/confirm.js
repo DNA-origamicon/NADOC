@@ -26,6 +26,7 @@
  * @returns {Promise<boolean>}
  */
 
+import { nativePrompt } from './native_prompt.js'
 import { createModal } from './modal.js'
 import { createButton } from './button.js'
 import { el } from './dom.js'
@@ -38,6 +39,13 @@ export function showConfirm(opts = {}) {
     confirmLabel = 'Confirm',
     cancelLabel = 'Cancel',
   } = opts
+
+  if (opts.vr) {
+    const pending = nativePrompt({ title, message, choices: [
+      { label: cancelLabel, value: false }, { label: confirmLabel, value: true },
+    ] })
+    if (pending) return pending.then(value => value === true)
+  }
 
   return new Promise((resolve) => {
     let resolved = false
@@ -110,6 +118,10 @@ export function showConfirm(opts = {}) {
  */
 export function showChoice(opts = {}) {
   const { title = 'Choose', message = '', choices = [], size = 'md' } = opts
+  if (opts.vr) {
+    const pending = nativePrompt({ title, message, choices })
+    if (pending) return pending
+  }
 
   return new Promise((resolve) => {
     let resolved = false

@@ -1782,7 +1782,7 @@ export function initOxdnaJobsPanel({ oxdnaDisplay = null, lammpsDisplay = null, 
     if (trajLoaded && _trajJobId && jobId !== _trajJobId) {
       if (confirmTrajUnload) {
         const ok = await showConfirm({
-          title: 'Unload trajectory?',
+          title: 'Unload trajectory?', vr: true,
           message: 'Viewing a different job will unload the trajectory currently on '
             + 'screen. Continue?',
           confirmLabel: 'Continue',

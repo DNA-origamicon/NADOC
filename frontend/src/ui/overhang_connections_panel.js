@@ -1339,6 +1339,7 @@ function _selectVersion(v) {
 
 async function _deleteVersion(v) {
   const ok = await showConfirm({
+    vr: true,
     title: 'Delete version',
     message: `Delete version "${v.name || 'V?'}"${v.applied ? ' (also removes its materialized connection)' : ''}?`,
     danger: true,
@@ -1408,6 +1409,7 @@ function _selectRow(kind, e) {
 async function _deleteEntity(kind, e) {
   const label = kind === 'binding' ? 'binding' : 'linker'
   const ok = await showConfirm({
+    vr: true,
     title: `Delete ${label}`,
     message: `Delete ${label} "${e.name ?? e.id.slice(0, 6)}"?`,
     danger: true,

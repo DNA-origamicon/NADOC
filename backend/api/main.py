@@ -109,6 +109,7 @@ from backend.api.vr_references import router as vr_references_router
 from backend.api.vr_share import router as vr_share_router
 from backend.api.vr_feature_log import router as vr_feature_log_router
 from backend.api.vr_simulations import router as vr_simulations_router
+from backend.api.vr_prompts import router as vr_prompts_router
 from backend.api.vr_routing import router as vr_routing_router
 from backend.api.routes_sweep import router as sweep_router
 from backend.api.routes_frame_extrusion import router as frame_extrusion_router
@@ -446,6 +447,7 @@ app.include_router(vr_references_router, prefix="/api")
 app.include_router(vr_simulations_router, prefix="/api")
 app.include_router(vr_feature_log_router, prefix="/api")
 app.include_router(vr_routing_router, prefix="/api")
+app.include_router(vr_prompts_router, prefix="/api")
 app.include_router(frame_extrusion_router, prefix="/api")
 app.include_router(sweep_router, prefix="/api")
 app.include_router(display_metadata_router, prefix="/api")

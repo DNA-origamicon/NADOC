@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
+import { setNativePromptHandler } from './primitives/native_prompt.js'
 import { initRepresentationSwitcher } from './representation_switcher.js'
 import { getShortcuts, clearShortcuts, dispatchKeyEvent } from '../input/shortcuts.js'
 
@@ -524,4 +525,27 @@ it('a late heavy result cannot replace a newer lightweight representation', asyn
   finish(); await heavy
   expect(deps.setCurrentRepr).toHaveBeenLastCalledWith('full')
   expect(deps.store.getState().surfaceMode).not.toBe('on')
+})
+
+
+it('awaits the controller decision before applying a heavy representation to an assembly', async () => {
+  mountIds(DOM)
+  const deps = makeDeps({ assemblyActive: true, currentAssembly: { instances: [{ id: 'a' }, { id: 'b' }] } })
+  initRepresentationSwitcher(deps)
+  let resolve, prompt
+  setNativePromptHandler(opts => { prompt = opts;return new Promise(done => { resolve = done }) })
+  try {
+    document.getElementById('menu-view-surface').click()
+    await Promise.resolve()
+    expect(prompt.message).toContain('all 2 parts')
+    expect(deps.api.batchPatchInstances).not.toHaveBeenCalled()
+    expect(document.querySelector('.modal__overlay')).toBeNull()
+    resolve(false);await new Promise(r => setTimeout(r, 0))
+    expect(deps.api.batchPatchInstances).not.toHaveBeenCalled()
+    document.getElementById('menu-view-surface').click();resolve(true)
+    await new Promise(r => setTimeout(r, 0))
+    expect(deps.api.batchPatchInstances).toHaveBeenCalledWith([
+      { id: 'a', representation: 'surface' }, { id: 'b', representation: 'surface' },
+    ])
+  } finally { setNativePromptHandler(null) }
 })

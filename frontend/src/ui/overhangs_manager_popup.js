@@ -2144,6 +2144,7 @@ function _renderTable() {
       e.stopPropagation()
       if (isConn) { _onDelete(c); return }
       const ok = await showConfirm({
+        vr: true,
         title: 'Delete binding',
         message: `Delete binding ${c.name ?? c.id.slice(0, 6)}?`,
         danger: true,
@@ -2449,6 +2450,7 @@ function _endOf(ovhgId) {
 
 async function _onDelete(conn) {
   const ok = await showConfirm({
+    vr: true,
     title: 'Delete linker',
     message: `Delete linker "${conn.name ?? conn.id}"?`,
     danger: true,

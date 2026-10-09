@@ -26,6 +26,8 @@
 
 #include "interaction.hpp"
 #include "selection_wheel.hpp"
+#include "controller_prompt.hpp"
+#include "browser_prompt.hpp"
 #include "selection_owner_index.hpp"
 #include "shadow_light.hpp"
 #include "desktop_panel.hpp"
@@ -5251,6 +5253,19 @@ class Viewer {
         if(loading.pending && loading.phase=="waiting" && !glScene_->stylePending() && glScene_->representation()==loading.target && glScene_->coloring()==loading.color) {
             loading.percent=100;loading.phase="ready";loading.detail="Representation ready";loading.pending=false;loading.lightweight=false;loading.visibleUntil=glfwGetTime()+1;
         }
+        if(loading.phase=="error" && promptedRepresentationFailure_!=loading.failures) {
+            promptedRepresentationFailure_=loading.failures;
+            const auto sequence=loading.sequence,revision=sceneRefresh_.revision();
+            const auto target=loading.target;const auto color=loading.color;
+            showPrompt({"Representation could not load",loading.detail,
+                {{"ok","OK"},{"retry","Retry"},{"quick","Quick Surface"}},
+                [this,sequence,revision,target,color](const std::string& answer){
+                    if(sequence!=representationLoading_.sequence || revision!=sceneRefresh_.revision())return;
+                    if(answer=="retry")publishStyleRequest(target,color);
+                    if(answer=="quick")publishStyleRequest(Representation::surface,color);
+                }});
+        }
+
     }
 
     int run() {
@@ -5280,6 +5295,7 @@ class Viewer {
         desktopFrameSurface_.shutdown();
         componentGallery_.ui.shutdown();
         solidWheels_.shutdown();
+        promptSurface_.shutdown();
         glScene_.reset();
         for (Swapchain& swapchain : swapchains_) {
             if (swapchain.depth) glDeleteRenderbuffers(1, &swapchain.depth);
@@ -5690,6 +5706,7 @@ class Viewer {
                     if(action=="extrude:plane") return toolConfig_.targetSelectionKind()=="none";
                     return true;
                 }
+                if(action=="repr:11" && !browserPrompt_.detailAllowed)return false;
                 if(action.starts_with("repr:") && representationLoading_.enabled)return true;
                 if(action.starts_with("repr:")) return glScene_->supportsRepresentation(static_cast<Representation>(std::stoi(action.substr(5))));
                 if(action.starts_with("color:")) return (nadoc_vr::kSidebarColoringMasks.at(static_cast<size_t>(glScene_->representation())) & (1U << std::stoi(action.substr(6)))) != 0;
@@ -5743,6 +5760,17 @@ class Viewer {
             }
             event = {XR_TYPE_EVENT_DATA_BUFFER};
         }
+    }
+
+    void showPrompt(nadoc_vr::ControllerPrompt::Request request) {
+        controllerPrompt_.show(std::move(request));
+        selectionWheel_.cancel();radialToolMenu_.close();
+        remotePanels_.cancel();resetThumbwheels();
+        movePanel_.hand.reset();bendPanel_.hand.reset();bendPanel_.wheelHand.reset();bendPanel_.planeHand.reset();
+        bendPanel_.wheel.reset();for(auto& wheel:bendPanel_.wheels)wheel.reset();
+        trajectoryScrubHand_.reset();dimensionPanel_.tool.freeze();volumePanel_.interaction.cancel();
+        endResize_.hand.reset();endResize_.hoverHand.reset();endResize_.delta=0;
+        suppressManipulationUntilRelease_=true;
     }
 
     void pulse(size_t hand, float amplitude = 0.35F) {
@@ -6047,7 +6075,9 @@ class Viewer {
             return;
         }
         if(requestedAction=="vr:exit") {
-            exitRequested_=true;
+            showPrompt({"Leave VR?", "Return to the desktop viewer?",
+                {{"cancel","Cancel"},{"continue","Continue"}},
+                [this](const std::string& answer){if(answer=="continue")exitRequested_=true;}});
             return;
         }
         // Plane selection, cancellation and transaction ownership are shared with Bend.
@@ -6162,7 +6192,7 @@ class Viewer {
             activateAuthoringTool(action=="tool:twist"?1:2);return;
         }
         if(action.starts_with("routing:")) {if(routingPanel_.activate(action))publishEventState();return;}
-        if(action.starts_with("history:")) {if(featureLogPanel_.activate(action)){publishEventState();if(action.starts_with("history:a:") && !action.ends_with(":expand"))desktopPanel_.show(hands_[hand].position,hands_[hand].orientation);}return;}
+        if(action.starts_with("history:")) {if(featureLogPanel_.activate(action)){publishEventState();if(action.ends_with(":edit"))desktopPanel_.show(hands_[hand].position,hands_[hand].orientation);}return;}
         if(action.starts_with("simulation:")) {if(simulationPanel_.activate(action))publishEventState();return;}
         if(action=="qr:calibrate") {qrCalibration_.start();return;}
         if(action=="qr:cube") {qrCalibration_.start(true);return;}
@@ -6256,7 +6286,7 @@ class Viewer {
             return;
         }
         if (action.starts_with("repr:")) {
-            publishStyleRequest(static_cast<Representation>(std::stoi(action.substr(5))), glScene_->coloring());
+            requestRepresentation(static_cast<Representation>(std::stoi(action.substr(5))), glScene_->coloring());
         } else if (action.starts_with("color:")) {
             publishStyleRequest(glScene_->representation(), static_cast<Coloring>(std::stoi(action.substr(6))));
         } else if (action == "desktop") {
@@ -7339,7 +7369,27 @@ class Viewer {
         publishEventState();
     }
 
+    void requestRepresentation(Representation representation, Coloring coloring) {
+        if(representation==Representation::surfaceDetail && !browserPrompt_.detailAllowed)return;
+        if(representation==Representation::surfaceDetail && glScene_ &&
+           !glScene_->supportsRepresentation(representation) &&
+           !(representationLoading_.pending && representationLoading_.target==representation)) {
+            const auto revision=sceneRefresh_.revision();
+            showPrompt({"Prepare Detail Surface?",
+                "Computing a detailed molecular surface can take a long time. Use Quick Surface for a faster view, or continue.",
+                {{"cancel","Cancel"},{"quick","Quick Surface"},{"continue","Continue"}},
+                [this,revision,coloring](const std::string& answer){
+                    if(revision!=sceneRefresh_.revision())return;
+                    if(answer=="quick")publishStyleRequest(Representation::surface,coloring);
+                    if(answer=="continue")publishStyleRequest(Representation::surfaceDetail,coloring);
+                }});
+            return;
+        }
+        publishStyleRequest(representation,coloring);
+    }
+
     void publishStyleRequest(Representation representation, Coloring coloring) {
+        if(representation==Representation::surfaceDetail && !browserPrompt_.detailAllowed)return;
         if (glScene_ && !glScene_->supportsRepresentation(representation)) {
             if(representationLoading_.enabled){
                 if(representationLoading_.target!=representation)glScene_->cancelPreparedStyle();
@@ -7515,6 +7565,7 @@ class Viewer {
         output << ",\"share_control\":{\"sequence\":" << shareSequence_ << ",\"action\":\"" << shareAction_ << "\"}";
         output << ",\"feature_log\":{\"sequence\":" << featureLogPanel_.sequence << ",\"version\":" << featureLogPanel_.requestedVersion << ",\"id\":\"" << featureLogPanel_.requested << "\"}";
         output << ",\"simulation\":{\"sequence\":" << simulationPanel_.sequence << ",\"version\":" << simulationPanel_.requestedVersion << ",\"id\":\"" << simulationPanel_.requested << "\"}";
+        output << ",\"prompt\":{\"sequence\":" << browserPrompt_.sequence << ",\"version\":" << browserPrompt_.answerVersion << ",\"id\":\"" << browserPrompt_.answer << "\"}";
         output << ",\"routing\":{\"sequence\":" << routingPanel_.sequence << ",\"version\":" << routingPanel_.requestedVersion << ",\"id\":\"" << routingPanel_.requested << "\"}";
         output << ",\"view_tool\":{\"sequence\":" << viewTools_.sequence << ",\"index\":" << viewTools_.requested << "}";
         output << ",\"ligation\":{\"sequence\":" << ligation_.sequence
@@ -8356,6 +8407,8 @@ class Viewer {
             << ",\"scene_revision\":" << sceneRefresh_.revision()
             << ",\"visualization_sequence\":" << visualizationSequence_
             << ",\"coordinate_sequence\":" << coordinateSequence_
+            << ",\"controller_prompt_open\":" << (controllerPrompt_.active()?"true":"false")
+            << ",\"controller_prompt_queued\":" << controllerPrompt_.queued()
             << ",\"haptic_requests\":[" << hapticRequests_[0] << ',' << hapticRequests_[1] << ']'
             << ",\"haptic_amplitude\":[" << hapticAmplitude_[0] << ',' << hapticAmplitude_[1] << ']'
             << ",\"menu_input_mode\":" << quote(observedSidebar().focus.active?"trackpad":"pointer")
@@ -8560,6 +8613,14 @@ class Viewer {
                 if(v<0||v>1)throw std::runtime_error("trigger outside [0,1]");
                 liveTriggerValues_[h]=v;
             }
+            else if (operation == "prompt") {
+                nadoc_vr::ControllerPrompt::Request request;request.options.clear();
+                if(!(in >> std::quoted(request.title) >> std::quoted(request.message)))
+                    throw std::runtime_error("prompt requires quoted title, message, and 1-4 labels");
+                std::string label;
+                while(in >> std::quoted(label))request.options.push_back({std::to_string(request.options.size()),label});
+                showPrompt(std::move(request));
+            }
             else if (operation == "pose") {
                 const auto h = hand();
                 const float x = number(), y = number(), z = number();
@@ -8640,6 +8701,7 @@ class Viewer {
     }
 
     void suspendControllerInput() {
+        controllerPrompt_.suspend();
         remotePanels_.cancel();
         neutralLiveInput();
         triggerValues_.fill(0);triggerPartial_.fill(false);triggerPressed_.fill(false);triggerClicked_.fill(false);
@@ -8667,6 +8729,7 @@ class Viewer {
         if (liveControlsEnabled() && (sessionState_ != XR_SESSION_STATE_FOCUSED ||
             std::chrono::steady_clock::now() > liveInputDeadline_))
             neutralLiveInput(sessionState_ != XR_SESSION_STATE_FOCUSED);
+        const bool promptOwnsInput=controllerPrompt_.active();
         triggerClicked_.fill(false);
         gripClicked_.fill(false);
         if (sessionState_ != XR_SESSION_STATE_FOCUSED) {
@@ -8785,7 +8848,7 @@ class Viewer {
                 menuClicked = pressed && !liveMenuPressed_[hand];
                 liveMenuPressed_[hand] = pressed;
             }
-            if (menuClicked && !inputResumeBlocked_[hand]) toggleMenu(hand);
+            if (menuClicked && !promptOwnsInput && !inputResumeBlocked_[hand]) toggleMenu(hand);
 
             getInfo.action = gripAction_;
             XrActionStateBoolean grip{XR_TYPE_ACTION_STATE_BOOLEAN};
@@ -8829,6 +8892,11 @@ class Viewer {
                 session_, &getInfo, &trackpadAxis),
                 "xrGetActionStateVector2f(trackpad axis)");
             const glm::vec2 navigationAxis=liveControlsEnabled()?liveTrackpadAxis_[hand]:glm::vec2(trackpadAxis.currentState.x,trackpadAxis.currentState.y);
+            if(promptOwnsInput) {
+                if(hand==0)controllerPrompt_.update(trackpadPressed,navigationAxis,hands_[0],glfwGetTime(),
+                    [&](float strength){pulse(0,strength);});
+                continue;
+            }
             if(hand==0)selectionWheel_.input(trackpadPressed,navigationAxis,hands_[0],
                 !routingPopup_.anyOpen() && !componentGallery_.active && !toolShell_.executionPending() && !moveAwaitRefresh_ && sessionState_==XR_SESSION_STATE_FOCUSED && (liveControlsEnabled() || trackpadAxis.isActive),
                 [&](const char* level){if(movePanel_.active)cancelMove();publishSelectionLevel(level);},[&](float strength){pulse(0,strength);});
@@ -8895,6 +8963,15 @@ class Viewer {
             }
         }
 
+        if(promptOwnsInput) {
+            // Consume the answer frame too; held controls cannot leak into tools.
+            for(auto& hand:hands_)hand.pressed=false;
+            manipulator_.update(hands_);
+            triggerClicked_.fill(false);gripClicked_.fill(false);
+            liveInputOwner_.fill("controller-prompt");
+            if(!controllerPrompt_.active())inputResumeBlocked_.fill(true);
+            updateControllerGuides();return;
+        }
         if(componentGallery_.active) {
             for(auto& menu:sidebarMenus_.menus)menu.open=false;
             componentGallery_.update(hands_,triggerClicked_,triggerPressed_,frameDeltaSeconds_,witnessObserverPosition_,witnessObserverOrientation_);
@@ -9691,6 +9768,8 @@ class Viewer {
     void renderMenuSurface(const glm::mat4& viewProjection) {
         componentGallery_.render(viewProjection);
         solidWheels_.render(viewProjection);
+        controllerPrompt_.draw(promptSurface_);
+        promptSurface_.render(viewProjection);
         menuGlass_.capture();
         sidebarMenus_.render(viewProjection);
         routingPopup_.render(viewProjection);
@@ -10815,6 +10894,8 @@ class Viewer {
                 trace("events");
                 pollStartup();trace("startup");
                 pollRepresentationLoading();trace("representation");
+                browserPrompt_.poll(eventPath_,controllerPrompt_,glfwGetTime(),
+                    [this](auto request){showPrompt(std::move(request));},[this]{publishEventState();});
                 pollJobSnapshot();trace("jobs");
                 if(!startup_.active)pollVisualizationSnapshot();
                 trace("visualization");
@@ -11053,6 +11134,10 @@ class Viewer {
     nadoc_vr::SceneManipulator manipulator_;
     ComponentGallery componentGallery_;
     SolidUi solidWheels_;
+    SolidUi promptSurface_;
+    nadoc_vr::ControllerPrompt controllerPrompt_;
+    nadoc_vr::BrowserPrompt browserPrompt_;
+    uint64_t promptedRepresentationFailure_=0;
     std::vector<Vertex> controllerGuides_;
     std::array<size_t, 2> controllerHandEnds_{};
     std::array<std::string,2> liveInputOwner_{"none","none"};

@@ -976,6 +976,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
           const n = entry.children?.length ?? 0
           if (n > 10) {
             const ok = await showConfirm({
+              vr: true,
               title: 'Delete Fine Routing entry',
               message:
                 `This log entry bundles ${n} sub-steps. Delete it?\n\n` +
@@ -1039,6 +1040,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         revertBtn.addEventListener('click', async e => {
           e.stopPropagation()
           const ok = await showConfirm({
+            vr: true,
             title: `Revert to before "${label.textContent}"`,
             message:
               'This restores the design to its state before this deformation ran, ' +
@@ -1143,6 +1145,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
           revertBtn.addEventListener('click', async e => {
             e.stopPropagation()
             const ok = await showConfirm({
+              vr: true,
               title: 'Revert Fine Routing cluster',
               message:
                 `Removes all ${childCount} sub-step${childCount === 1 ? '' : 's'} ` +
@@ -1299,6 +1302,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
                 subRevertBtn.addEventListener('click', async e => {
                   e.stopPropagation()
                   const ok = await showConfirm({
+                    vr: true,
                     title: 'Revert to before this sub-step',
                     message:
                       `Rolls the design back to just before sub-step ${j + 1} of ${childCount}. ` +
@@ -1331,6 +1335,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
                 subDelBtn.addEventListener('click', async e => {
                   e.stopPropagation()
                   const ok = await showConfirm({
+                    vr: true,
                     title: 'Delete this sub-step',
                     message:
                       `Removes sub-step ${j + 1} ("${child.label}") from this Fine Routing cluster. ` +
@@ -1390,6 +1395,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
           revertBtn.addEventListener('click', async e => {
             e.stopPropagation()
             const ok = await showConfirm({
+              vr: true,
               title: `Revert to before "${entry.label}"`,
               message:
                 'This restores the design to its state before this operation ran, ' +
@@ -1547,6 +1553,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         revertBtn.addEventListener('click', async e => {
           e.stopPropagation()
           const ok = await showConfirm({
+            vr: true,
             title: `Revert to before "${label.textContent}"`,
             message:
               'This restores the design to its state before this move/rotate, ' +
@@ -1774,6 +1781,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
       revertBtn.addEventListener('click', async e => {
         e.stopPropagation()
         const ok = await showConfirm({
+          vr: true,
           title: `Revert to before F${i + 1}`,
           message: `This drops every entry from F${i + 1} onward. Ctrl-Z restores them.`,
           danger: true,
@@ -1829,6 +1837,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
             "If any later op isn't replayable, the delete is rejected and the assembly is unchanged."
           : 'Undoes the most recent assembly op (Ctrl-Z restores).'
         const ok = await showConfirm({
+          vr: true,
           title: `Delete F${i + 1}`,
           message: msg,
           danger: true,

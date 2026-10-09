@@ -17,6 +17,7 @@ from backend.api.vr_ligation import parse_event as parse_ligation_event
 from backend.api.vr_view_tools import parse_event as parse_view_tool_event
 from backend.api.vr_feature_log import parse_event as parse_feature_log_event
 from backend.api.vr_simulations import parse_event as parse_simulation_event
+from backend.api.vr_prompts import parse_event as parse_prompt_event
 from backend.api.vr_routing import parse_event as parse_routing_event
 from backend.api.vr_share import parse_share_event
 
@@ -3482,6 +3483,7 @@ def _event_payload(state: dict | None) -> dict:
             **({"share_control": value} if (value := parse_share_event(event.get("share_control"))) else {}),
             **({"feature_log": value} if (value := parse_feature_log_event(event.get("feature_log"))) else {}),
             **({"simulation": value} if (value := parse_simulation_event(event.get("simulation"))) else {}),
+            **({"prompt": value} if (value := parse_prompt_event(event.get("prompt"))) else {}),
             **({"routing": value} if (value := parse_routing_event(event.get("routing"))) else {}),
             **({"view_tool": view_tool} if (view_tool := parse_view_tool_event(event.get("view_tool"))) else {}),
             **({"ligation": ligation} if (ligation := parse_ligation_event(event.get("ligation"))) else {}),

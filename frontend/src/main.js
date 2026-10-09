@@ -2,6 +2,8 @@ import { createVRFeatureLog } from './scene/vr_feature_log.js'
 import { initReferenceModels } from './scene/reference_models.js'
 import { initNativePlacementIntegrityMonitor } from './viewer/native_placement.js'
 import { initDeformationToolLauncher } from './ui/deformation_tool_launcher.js'
+import { createVRPrompts } from './scene/vr_prompts.js'
+import { setNativePromptHandler } from './ui/primitives/native_prompt.js'
 import { createVRRouting } from './scene/vr_routing.js'
 import { createVRSimulations } from './scene/vr_simulations.js'
 import { commitVRMovePose } from './scene/vr_move_pose.js'
@@ -3815,7 +3817,7 @@ async function main() {
   document.getElementById('menu-seq-clear-all-loop-skips')?.addEventListener('click', async () => {
     if (!store.getState().currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
     const ok = await showConfirm({
-      title: 'Clear loops & skips',
+      title: 'Clear loops & skips', vr: true,
       message: 'Remove all loop/skip marks from the design?',
       danger: true,
       confirmLabel: 'Clear all',
@@ -4318,7 +4320,7 @@ async function main() {
       const strandId = canonicalSelectedStrandIds(store.getState())[0]
       if (strandId) {
         const confirmed = await showConfirm({
-          title: 'Delete strand',
+          title: 'Delete strand', vr: true,
           message: `Delete strand "${strandId}"?`,
           danger: true,
           confirmLabel: 'Delete',
@@ -6478,6 +6480,12 @@ async function main() {
 
   let _vrStyleApply = Promise.resolve()
   let _vrTrajectoryPublishCount = 0
+  const vrPrompts = createVRPrompts({
+    detailAllowed: () => !store.getState().presentationActive,
+    context: () => store.getState().assemblyActive ? store.getState().currentAssembly : store.getState().currentDesign,
+    onError: message => showToast(message, { severity: 'error' }),
+  })
+  setNativePromptHandler(opts => vrPrompts.ask(opts))
   const vrRouting = createVRRouting({ onError: message => showToast(message, { severity: 'error' }) })
   const vrFeatureLog = createVRFeatureLog({ panel: () => _partFeatureLogPanel, store, refresh: () => api.refreshNativeVRScene(_vrCompanionState()), onError: message => showToast(message, { severity: 'error' }) })
   const vrSimulations = createVRSimulations({ jobs: simulateJobs, engineSelector, onError: message => showToast(message, { severity: 'error' }) })
@@ -6501,8 +6509,8 @@ async function main() {
     finally { vrEndPublishing = false }
   }
   const vrSession = initVRSession({
-    onNativeActiveChange: vrDesktopDisplay.setActive,
-    onNativePoll: () => { void publishVREnds(); void vrLigation.publish(); void vrViewTools.publish(); void vrShare.publish(); void vrSimulations.publish(); void vrFeatureLog.publish(); void vrRouting.publish() },
+    onNativeActiveChange: active => { vrDesktopDisplay.setActive(active); vrPrompts.setActive(active) },
+    onNativePoll: () => { void vrPrompts.publish(); void publishVREnds(); void vrLigation.publish(); void vrViewTools.publish(); void vrShare.publish(); void vrSimulations.publish(); void vrFeatureLog.publish(); void vrRouting.publish() },
     renderer,
     scene,
     camera,
@@ -6565,7 +6573,8 @@ async function main() {
     },
     onNativeEvent: (_handleNativeVREvent = event => {
       _recordScrywriteBrowser('native_event', event)
-      if (event?.type === 'native_session_end') { vrEndPublished = ''; vrLigation.reset(); vrViewTools.reset(); vrShare.reset(); vrSimulations.reset(); vrFeatureLog.reset(); vrRouting.reset() }
+      if (event?.type === 'prompt') { vrPrompts.activate(event); return }
+      if (event?.type === 'native_session_end') { vrPrompts.reset(); vrEndPublished = ''; vrLigation.reset(); vrViewTools.reset(); vrShare.reset(); vrSimulations.reset(); vrFeatureLog.reset(); vrRouting.reset() }
       const button = document.getElementById('menu-help-view-vr')
       if (event?.type === 'feature_log') { void vrFeatureLog.activate(event); return }
       if (event?.type === 'routing') { void vrRouting.activate(event); return }
@@ -6812,7 +6821,8 @@ async function main() {
         if (!_nucleotideTransformTool.applyVRPreviewMatrix(event.matrix)) {
           _translateRotateTool.applyVRPreviewMatrix(event.matrix)
         }
-      } else if (event?.type === 'native_session_end') {
+      } else if (event?.type === 'prompt') { vrPrompts.activate(event); return }
+      if (event?.type === 'native_session_end') { vrPrompts.reset();
         _translateRotateTool.cancelVRPreview().catch(() => {})
         _nucleotideTransformTool.cancelVRPreview()
         _vrToolPreflight.cancel()

@@ -290,10 +290,11 @@ export function initRepresentationSwitcher({
 
         if (repr === 'vdw' || repr === 'ballstick' || repr === 'stick' || repr === 'surface') {
           const ok = await showConfirm({
+            vr: true,
             title: repr === 'surface' ? 'Apply surface to assembly' : 'Apply atomistic to assembly',
             message: (repr === 'surface'
-              ? 'A molecular surface will be computed for every part'
-              : 'Atomistic rendering will be computed for every part')
+              ? `A molecular surface will be computed for all ${instances.length} parts`
+              : `Atomistic rendering will be computed for all ${instances.length} parts`)
               + ' in the assembly and can be slow for large designs.\n\nApply anyway?',
             confirmLabel: 'Apply',
           })

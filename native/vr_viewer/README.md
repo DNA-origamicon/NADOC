@@ -526,3 +526,70 @@ Drill, Cluster, Strand, Domain, Crossover, Bases. Center release cancels. This
 replaces selection buttons; right-pad menu navigation remains. Run the registered
 **Left touchpad selection wheel** tour or `python -m tools.vr_workflows.menu_tour
 --selection-checks --validate --preset steady_fast --hold 0 --exit`.
+
+### Reusable controller prompts
+
+Use `Viewer::showPrompt` for the VR equivalent of a desktop message or decision
+with **one to four buttons**. The asset in `src/controller_prompt.hpp` queues
+requests, pulses the **left controller three times** (30 ms each, 160 ms between
+pulse starts), and displays a solid text card and radial options docked to that
+controller. It owns controller input until answered. There is no timeout or
+implicit default answer.
+
+```cpp
+showPrompt({"Continue?", "Explain the operation and its consequences here.",
+    {{"cancel", "Cancel"}, {"continue", "Continue"}},
+    [this](const std::string& answer) {
+        if (answer == "continue") performOperation();
+    }});
+
+// An acknowledgement defaults to one OK option.
+showPrompt({"Finished", "The operation completed."});
+```
+
+Press the left pad, slide toward an option, then release to answer. Two options
+are left/right; three and four start at the top and proceed clockwise. The pad's
+center is neutral; releasing there keeps the prompt open. Long messages wrap
+into eight-line pages; a center click cycles pages. Use concise button labels.
+A held pad at arrival, tracking loss, or focus loss requires a fresh gesture.
+Queued prompts each receive their own triple pulse. Callbacks run once on the
+viewer thread and may enqueue another prompt. Keep callbacks short; use the
+existing asynchronous transaction path for work that takes time.
+
+**Leave VR** uses Cancel/Continue. **Detail Surface** asks before starting a
+missing representation, offering Cancel / Quick Surface / Continue; a prepared
+source is reused without that warning. Presentation-mode restrictions still
+apply. Representation preparation failures remain visible until acknowledged,
+with OK / Retry / Quick Surface. Retry callbacks check the originating scene
+revision and request sequence before acting.
+
+The browser's shared `showConfirm({ vr: true, ... })` and
+`showChoice({ vr: true, ... })` adapters send opted-in decisions to the controller
+while a native session is active. The approved integrations cover assembly-wide
+surface/atomistic changes, large trajectory loads, trajectory memory limits,
+unloading a trajectory when switching jobs, clearing routing marks/deleting
+strands or bindings/linkers, and existing history deletion/revert confirmations.
+Desktop mode retains modal dialogs. Large-frame thresholds and existing operation
+callbacks are preserved. Ordinary Undo/Redo remains immediate; history text-edit
+forms still use the desktop panel.
+
+`/api/vr/prompt` publishes a document-bound, atomically replaced `.prompt` file.
+Replies carry the prompt version and option ID in the existing event stream.
+Browser decisions cancel on document/design changes, session end, or transport
+failure. A five-second heartbeat lease withdraws an orphaned native prompt and
+returns cancellation; repeated replies cannot run the callback twice. Progress
+updates stay nonmodal. Raw browser `alert`/`confirm` calls are not globally
+intercepted. Text-entry forms and dialogs with more than four buttons belong in
+full panels.
+
+For a visual preview through the existing ScryWrite live **control** connection:
+
+```text
+<session> <next-sequence> prompt "Example" "Read this explanation." "Cancel" "Continue"
+```
+
+The `prompt` operation accepts one to four quoted labels. Inspect mode remains
+read-only. `observe` exposes `controller_prompt_open` and
+`controller_prompt_queued`. Rendered one-to-four-option fixtures and the Leave
+VR callback check are covered by `nadoc-vr-controller-prompt-viewer`; the gesture,
+queue, tracking, and pulse timing checks are in `nadoc-vr-controller-prompt`.

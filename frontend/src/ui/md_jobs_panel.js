@@ -1,3 +1,4 @@
+import { showConfirm } from './primitives/confirm.js'
 import { gateStorageVisualization, storageUnavailable } from './job_storage.js'
 import {confirmElectrodeProtocol} from './namd_electrode_protocol.js'
 import { initBoxSolvent } from './md_box_solvent.js'
@@ -3268,14 +3269,14 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
   /** Gate a heavy load behind a confirm once the interval asks for a lot of frames.
    *  Warn, never cap — the frames were explicitly requested. */
-  function _confirmTrajLoad(jobId = _selectedId, interval = _trajInterval()) {
+  async function _confirmTrajLoad(jobId = _selectedId, interval = _trajInterval()) {
     const counts = jobId ? _trajRawCounts.get(jobId) : null
     if (!counts || !counts.length) return true
     const frames = stridedFrameCount(counts, interval)
     if (frames < TRAJ_FRAME_CONFIRM) return true
-    return window.confirm(
+    return showConfirm({ vr: true, title: 'Load large trajectory?', confirmLabel: 'Load', message:
       `Frame interval ${interval} loads ${frames.toLocaleString()} frames.\n\n`
-      + 'That can take several minutes and a lot of memory. Continue?')
+      + 'That can take several minutes and a lot of memory. Continue?' })
   }
   /** Build every atomistic/surface frame the trajectory will need, UP FRONT.
    *
@@ -3313,19 +3314,25 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
   }
 
   async function _prebuildTrajHeavyInner(v, baseStatus) {
+    const jobId = _trajJobId, preparationKey = v.trajectoryPreparationKey?.()
+    const stillCurrent = () => jobId === _trajJobId && v === getMdViz?.()
+      && preparationKey === v.trajectoryPreparationKey?.()
     const plan = await _trajMemoryPlan(v)
+    if (!stillCurrent()) return false
     // Warn BEFORE spending minutes rebuilding frames that won't fit. The estimate uses
     // the exact serial span once the topology is known and a per-nucleotide estimate
     // before that, so the first load is priced too rather than silently attempted.
     if (plan?.capped && plan.limitedBy === 'ram') {
       const free = await _freeRamBytes()
-      const ok = window.confirm(
+      if (!stillCurrent()) return false
+      const ok = await showConfirm({ vr: true, title: 'Trajectory memory limit', confirmLabel: 'Fewer frames', message:
         `The full atomistic trajectory needs about ${formatBytes(plan.wantBytes)}, but only `
         + `${formatBytes(free ?? 0)} of memory is free on this machine.\n\n`
         + `Loading all ${_trajTotalFrames(v)} frames could exhaust it. `
-        + `Prepare ${plan.frames} evenly-spaced frames instead?`)
+        + `Prepare ${plan.frames} evenly-spaced frames instead?` })
       if (!ok) { _setTrajStatus(`${baseStatus} · atoms not prepared`, _C.warn); return false }
     }
+    if (!stillCurrent()) return false
     const r = await v.prebuildHeavy((done, total) => {
       _setTrajStatus(`${baseStatus} · preparing atoms ${done}/${total}…`, _C.accent)
       trajPlayer.setPreparing({ done, total })   // same count, on the button's tooltip
@@ -3382,10 +3389,11 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
       const counts = await _loadTrajRawCounts(jobId, { refetch: true })
       if (_trajLoadJobId !== jobId) return
       if (!counts?.some(n => n > 0)) throw new Error('No trajectory frames available yet')
-      if (!_confirmTrajLoad(jobId, interval)) {
+      if (!await _confirmTrajLoad(jobId, interval)) {
         if (!_trajJobId) _setTrajOff()
         return
       }
+      if (_trajLoadJobId !== jobId) return
       await _refreshTrajInner(jobId, interval)
     } catch (err) {
       if (_trajLoadJobId === jobId) {
