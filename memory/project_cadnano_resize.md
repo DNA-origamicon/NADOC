@@ -83,3 +83,20 @@ zero entries → no-op. Fix: `(\d+)` → `(-?\d+)` in both regexes. Greedy `(.+)
 helix-id capture + backtracking still extracts the right helix id; positive bp
 unaffected. (Hit-testing, handle rendering, `_bpToX`/`_xToBp` all already handled
 negative bp — only the key regexes were the gap.)
+
+## FIXED 2026-10-09 — resized inline tails on deformed helices
+
+`Circle_spiral.nadoc` exposed two geometry bugs after an 11-base 5′ extension.
+`_arm_helices_for` excluded the parent helix merely because it carried an inline
+overhang. This shifted the arm centroid and allowed negative local frame indices
+to wrap to the far end of the sweep: the −10→−9 backbone connection became
+31.855 nm. The forced-ligation records were unchanged. Inline-overhang helices
+now remain in their deformation arm; separately extruded overhang helices remain
+excluded. Existing strand coordinates are preserved across the resize.
+
+`_apply_ovhg_rotations_to_axes` now uses the owning domain's deformed segment
+endpoints for curved axes, instead of interpolating the whole helix's endpoint
+chord. It retains the straight caDNAno physical-span mapping and applies overhang
+rotation/translation to each original segment. Regression coverage lives in
+`tests/test_end_resize_deformation.py` (bend/sweep, both ends and polarities,
+long extensions, identity/rotated overhang axes).

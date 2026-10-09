@@ -290,7 +290,13 @@ def _arm_helices_for(design: "Design", ref_helix_id: str) -> list["Helix"]:
         swept = {hid for op in design.deformations if isinstance(op.params, SweepParams)
                  for hid in op.affected_helix_ids}
         candidates = [h for h in candidates if h.id not in swept]
-    overhang_helix_ids = {o.helix_id for o in design.overhangs}
+    # An inline tail shares an ordinary lattice helix. Excluding that helix
+    # changes the arm centroid and can leave its extended bps below arm_min_bp,
+    # where NumPy's negative indexing wraps them to the far end of the arm.
+    overhang_helix_ids = {
+        o.helix_id for o in design.overhangs
+        if not o.id.startswith("ovhg_inline_")
+    }
     ref = design.find_helix(ref_helix_id)
     if ref is None:
         return [h for h in candidates if h.id not in overhang_helix_ids]
@@ -2311,6 +2317,10 @@ def _apply_ovhg_rotations_to_axes(
     # Must be captured before the loop since rotations modify ax["start"]/ax["end"].
     _orig_starts = {ax["helix_id"]: list(ax["start"]) for ax in axes}
     _orig_ends = {ax["helix_id"]: list(ax["end"]) for ax in axes}
+    _orig_segments = {
+        ax["helix_id"]: [dict(seg) for seg in ax.get("segments") or []]
+        for ax in axes
+    }
 
     for ovhg in design.overhangs:
         # Inline overhangs on a helix that also carries scaffold are split-domain
@@ -2404,6 +2414,18 @@ def _apply_ovhg_rotations_to_axes(
             hi_frac = (domain_max - h_obj.bp_start + 1) / denom
             lo_orig = orig_s + lo_frac * (orig_e - orig_s)
             hi_orig = orig_s + hi_frac * (orig_e - orig_s)
+            domain_ref = {"strand_id": ovhg.strand_id, "domain_index": dom_idx}
+            curved_segments = [
+                seg for seg in _orig_segments[ovhg.helix_id]
+                if (seg.get("ovhg_id") == ovhg.id
+                    or domain_ref in (seg.get("domain_ids") or []))
+                and len(seg.get("samples") or ax.get("samples") or []) > 2
+            ]
+            if curved_segments:
+                # These endpoints already follow the deformed centerline and
+                # owning cluster. The full-helix chord is not a local tangent.
+                lo_orig = np.array(min(curved_segments, key=lambda s: s["bp_lo"])["start"])
+                hi_orig = np.array(max(curved_segments, key=lambda s: s["bp_hi"])["end"])
             if "ovhg_axes" not in ax:
                 ax["ovhg_axes"] = {}
             transformed_axis = {
@@ -2418,7 +2440,6 @@ def _apply_ovhg_rotations_to_axes(
             # when it is present.  Keep the owning segment synchronized with
             # ovhg_axes; otherwise protein-constrained moves update beads and
             # atomistic representations but redraw the cylinder at its old pose.
-            domain_ref = {"strand_id": ovhg.strand_id, "domain_index": dom_idx}
             for segment in ax.get("segments") or []:
                 # A paired duplex segment may be represented by its binder
                 # domain, whose ovhg_id is null (VoltronCoreArm OH7). In that
@@ -2428,8 +2449,15 @@ def _apply_ovhg_rotations_to_axes(
                     or domain_ref in (segment.get("domain_ids") or [])
                 )
                 if owns_overhang:
-                    segment["start"] = list(transformed_axis["start"])
-                    segment["end"] = list(transformed_axis["end"])
+                    original = next((s for s in curved_segments
+                                     if s["bp_lo"] == segment["bp_lo"]
+                                     and s["bp_hi"] == segment["bp_hi"]), None)
+                    for endpoint in ("start", "end"):
+                        segment[endpoint] = (
+                            (R @ (np.array(original[endpoint]) - pivot_arr)
+                             + pivot_arr + trans).tolist()
+                            if original else list(transformed_axis[endpoint])
+                        )
 
             # Sub-domain chain check (Phase 4): even when ovhg.rotation is
             # identity we still need to walk sub-domains.
