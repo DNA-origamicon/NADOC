@@ -5969,7 +5969,7 @@ class Viewer {
     void cancelMove() {
         if(toolShell_.executionPending())return;
         movePanel_.reset();pendingToolTransform_.cancel();publishToolTransform();
-        glScene_->setMovePointPreview({},glm::mat4(1));
+        if(glScene_)glScene_->setMovePointPreview({},glm::mat4(1));
         toolShell_.apply(nadoc_vr::ToolAction::cancel,selectedSelectionKind_);
         publishToolIntent(nadoc_vr::ToolAction::cancel);
     }
@@ -8055,7 +8055,7 @@ class Viewer {
                 "\"depth_near_m\":" << kNearMeters << ",\"depth_far_m\":" << kFarMeters
                 << ",\"controller_classes\":{\"left\":4,\"right\":5},\"contact_classes\":{\"intended\":6,\"actual\":7}"
                 << ",\"class_format\":\"uint8-bottom-up\",\"capture_command_sequence\":" << sequence
-                << ",\"state\":" << liveState() << ",\"eyes\":[";
+                << ",\"state\":" << liveState(true) << ",\"eyes\":[";
             for (size_t i = 0; i < liveEyes_.size(); ++i) {
                 const auto& eye = liveEyes_[i];
                 const std::string name = i == 0 ? "left" : "right";
@@ -8143,7 +8143,7 @@ class Viewer {
         return entries;
     }
 
-    std::string liveState() const {
+    std::string liveState(bool includeNickTargets=false) const {
         auto quote = [](const std::string& value) {
             return "\"" + nadoc_vr::scrywrite::visualJson(value) + "\"";
         };
@@ -8250,10 +8250,24 @@ class Viewer {
             << ",\"nick_active\":" << (ligation_.nickActive?"true":"false") << ",\"nick_hover\":[";
         for(size_t h=0;h<2;++h){if(h)out<<',';out<<(ligation_.nickHover[h]?std::to_string(*ligation_.nickHover[h]):"null");}
         out << "],\"scissor_angles\":[" << nadoc_vr::Ligation::scissorAngle(triggerValues_[0]) << ',' << nadoc_vr::Ligation::scissorAngle(triggerValues_[1]) << "],\"bonds\":[";
-        // Inactive Nick geometry can dominate live replies on origami-sized parts.
-        // Preserve its full observation contract outside Move/Rotate and Bend.
-        const bool omitNickBonds = (movePanel_.active || bendPanel_.active) && !ligation_.nickActive;
-        for(size_t i=0;!omitNickBonds && i<ligation_.bonds.size();++i){if(i)out<<',';out<<"{\"a\":"<<point(ligation_.bondPoint(i,false,manipulator_.transform()))<<",\"b\":"<<point(ligation_.bondPoint(i,true,manipulator_.transform()))<<'}';}
+        // Explicit inspection and captures need the large bond catalog. Cache
+        // serialized world positions until either targets or model pose change;
+        // controller playback must not repeatedly format thousands of bonds.
+        const bool omitNickBonds = !includeNickTargets;
+        if(!omitNickBonds) {
+            const auto model=manipulator_.transform();
+            if(liveBondVersion_!=ligation_.version || liveBondModel_!=model || liveBondCount_!=ligation_.bonds.size()) {
+                std::ostringstream bonds;
+                for(size_t i=0;i<ligation_.bonds.size();++i) {
+                    if(i)bonds<<',';
+                    bonds<<"{\"a\":"<<point(ligation_.bondPoint(i,false,model))
+                         <<",\"b\":"<<point(ligation_.bondPoint(i,true,model))<<'}';
+                }
+                liveBondCatalog_=bonds.str();liveBondVersion_=ligation_.version;
+                liveBondModel_=model;liveBondCount_=ligation_.bonds.size();
+            }
+            out<<liveBondCatalog_;
+        }
         out << "],\"bonds_omitted\":" << (omitNickBonds?"true":"false") << "}";
         out << ",\"end_resize\":{\"version\":" << endResize_.version
             << ",\"grabbing\":" << (endResize_.hand?"true":"false")
@@ -8502,7 +8516,7 @@ class Viewer {
     }
 
     std::string liveCommand(const std::string& text) {
-        if (text == "observe") return liveState();
+        if (text == "observe" || text == "observe targets") return liveState(text == "observe targets");
         std::istringstream in(text);
         std::string session, operation, extra;
         uint64_t sequence = 0;
@@ -10832,6 +10846,10 @@ class Viewer {
     SceneData sceneData_;
     nadoc_vr::SceneRefreshInbox<SceneData> sceneRefresh_;
     nadoc_vr::Ligation ligation_;
+    mutable uint64_t liveBondVersion_=0;
+    mutable size_t liveBondCount_=0;
+    mutable glm::mat4 liveBondModel_{1};
+    mutable std::string liveBondCatalog_;
     nadoc_vr::QuiverGesture quiver_;
     std::string ligationPreviousLevel_="default";
     nadoc_vr::EndResize endResize_;

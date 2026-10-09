@@ -1,3 +1,4 @@
+import {installAuditBrowserTrace, saveAuditBrowserTrace, importAuditDesign} from './helpers/vr_audit_design.js'
 import { test, expect } from '@playwright/test'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -17,10 +18,10 @@ test.afterEach(async ({ request }) => {
   }
 })
 
-test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes desktop history', async ({ page, request }) => {
+test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes desktop history', async ({ page, request }, info) => {
   await page.setViewportSize({ width: 1600, height: 1000 })
   // Observation hold outside measured controller motion: retain the real pending UI.
-  await page.route('**/api/design/sweep', async route => {
+  if (process.env.NADOC_VR_FRAME_AUDIT !== '1') await page.route('**/api/design/sweep', async route => {
     await new Promise(resolve => setTimeout(resolve, 10_000))
     await route.continue()
   })
@@ -38,6 +39,10 @@ test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes d
   await page.fill('#new-design-name', '__e2e__VR Sweep')
   await page.getByRole('button', { name: 'Create', exact: true }).click()
   await expect(page.locator('#welcome-screen')).not.toBeVisible()
+  await importAuditDesign(page, info)
+  const original = await page.evaluate(async () => (await import('/src/state/store.js')).store.getState().currentDesign)
+  const featureIndex = original.feature_log.length
+  const deformationIndex = original.deformations.length
   await page.getByRole('button', { name: 'Help', exact: true }).click()
   const launch = page.waitForResponse(response => response.url().endsWith('/api/vr/launch')
     && response.request().method() === 'POST', { timeout: 100_000 })
@@ -69,17 +74,17 @@ test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes d
     return { ...state.currentDesign, feature_log: history.feature_log, axes: state.currentHelixAxes }
   })
   const design = await readDesign()
-  expect(design.helices).toHaveLength(2)
-  expect(design.feature_log).toHaveLength(1)
-  expect(design.feature_log[0]).toMatchObject({ feature_type: 'snapshot', op_kind: 'sweep' })
-  expect(design.feature_log[0].params.points_nm).toHaveLength(finalDraft.points_nm.length)
+  expect(design.helices).toHaveLength(original.helices.length + 2)
+  expect(design.feature_log).toHaveLength(featureIndex + 1)
+  expect(design.feature_log[featureIndex]).toMatchObject({ feature_type: 'snapshot', op_kind: 'sweep' })
+  expect(design.feature_log[featureIndex].params.points_nm).toHaveLength(finalDraft.points_nm.length)
   for (let i = 0; i < finalDraft.points_nm.length; i++)
     for (let axis = 0; axis < 3; axis++)
-      expect(design.feature_log[0].params.points_nm[i][axis]).toBeCloseTo(finalDraft.points_nm[i][axis], 3)
-  expect(design.deformations).toHaveLength(1)
-  expect(design.deformations[0].type).toBe('sweep')
-  expect(design.feature_log[0].design_snapshot_gz_b64).toBeTruthy()
-  expect(design.feature_log[0].post_state_gz_b64).toBeTruthy()
+      expect(design.feature_log[featureIndex].params.points_nm[i][axis]).toBeCloseTo(finalDraft.points_nm[i][axis], 3)
+  expect(design.deformations).toHaveLength(deformationIndex + 1)
+  expect(design.deformations[deformationIndex].type).toBe('sweep')
+  expect(design.feature_log[featureIndex].design_snapshot_gz_b64).toBeTruthy()
+  expect(design.feature_log[featureIndex].post_state_gz_b64).toBeTruthy()
 
   // Exit through the normal UI before desktop editing so background rendering
   // resumes and the saved images show the actual editable curve and preview.
@@ -94,10 +99,10 @@ test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes d
   // Give the floating editor its own space beside the curve. Reframe after
   // opening the feature log so both the entire S and its controls stay visible.
   await page.setViewportSize({ width: 1920, height: 1080 })
-  const featureRow = page.locator('#feature-log-panel-body [data-fl-row="1"]')
+  const featureRow = page.locator(`#feature-log-panel-body [data-fl-row="${featureIndex+1}"]`)
   if (!await featureRow.isVisible()) await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
   await expect(featureRow).toBeVisible()
-  await expect(featureRow).toContainText(design.feature_log[0].label)
+  await expect(featureRow).toContainText(design.feature_log[featureIndex].label)
   await page.locator('#canvas').focus()
   await page.keyboard.press('f')
 
@@ -127,26 +132,26 @@ test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes d
   await expect(page.locator('#sweep-apply')).toBeEnabled()
   await expect(page.locator('#sweep-status')).toContainText('bp per helix')
   await snapshot('desktop-edit-preview')
-  const editResponse = page.waitForResponse(response => response.url().endsWith('/design/features/0/edit')
+  const editResponse = page.waitForResponse(response => response.url().endsWith(`/design/features/${featureIndex}/edit`)
     && response.request().method() === 'POST')
   await page.click('#sweep-apply')
   expect((await editResponse).ok()).toBe(true)
   await expect(page.locator('#sweep-panel')).not.toBeVisible()
   const edited = await readDesign()
-  const featureId = design.feature_log[0].id
+  const featureId = design.feature_log[featureIndex].id
   const assertFeature = (current, points) => {
-    expect(current.feature_log).toHaveLength(1)
-    expect(current.feature_log[0].id).toBe(featureId)
-    expect(current.feature_log[0].params.sweep_id).toBe(design.feature_log[0].params.sweep_id)
-    expect(current.feature_log[0].params.points_nm).toEqual(points)
+    expect(current.feature_log).toHaveLength(featureIndex + 1)
+    expect(current.feature_log[featureIndex].id).toBe(featureId)
+    expect(current.feature_log[featureIndex].params.sweep_id).toBe(design.feature_log[featureIndex].params.sweep_id)
+    expect(current.feature_log[featureIndex].params.points_nm).toEqual(points)
     expect(current.helices.map(h => h.id)).toEqual(design.helices.map(h => h.id))
-    expect(current.deformations).toHaveLength(1)
-    expect(current.deformations[0].params.points_nm).toEqual(points)
+    expect(current.deformations).toHaveLength(deformationIndex + 1)
+    expect(current.deformations[deformationIndex].params.points_nm).toEqual(points)
   }
-  const editedPoints = structuredClone(design.feature_log[0].params.points_nm)
+  const editedPoints = structuredClone(design.feature_log[featureIndex].params.points_nm)
   editedPoints[pointIndex][0] = editedX
   assertFeature(edited, editedPoints)
-  for (const helix of design.helices) {
+  for (const helix of design.helices.filter(h => !original.helices.some(old => old.id === h.id))) {
     expect(design.axes?.[helix.id]?.samples.length).toBeGreaterThan(2)
     expect(edited.axes?.[helix.id]?.samples).not.toEqual(design.axes[helix.id].samples)
   }
@@ -162,26 +167,26 @@ test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes d
     expect((await response).ok()).toBe(true)
   }
   await historyAction('undo')
-  await expect.poll(async () => (await readDesign()).feature_log[0]?.params.points_nm)
-    .toEqual(design.feature_log[0].params.points_nm)
+  await expect.poll(async () => (await readDesign()).feature_log[featureIndex]?.params.points_nm)
+    .toEqual(design.feature_log[featureIndex].params.points_nm)
   const undoEdit = await readDesign()
-  assertFeature(undoEdit, design.feature_log[0].params.points_nm)
+  assertFeature(undoEdit, design.feature_log[featureIndex].params.points_nm)
   expect(axisSamples(undoEdit)).toEqual(axisSamples(design))
   await snapshot('desktop-undo-edit', undoEdit)
   await historyAction('undo')
-  await expect.poll(async () => (await readDesign()).helices.length).toBe(0)
+  await expect.poll(async () => (await readDesign()).helices.length).toBe(original.helices.length)
   const undoCreation = await readDesign()
-  expect(undoCreation.feature_log).toHaveLength(0)
-  expect(undoCreation.deformations).toHaveLength(0)
+  expect(undoCreation.feature_log).toEqual(original.feature_log)
+  expect(undoCreation.deformations).toEqual(original.deformations)
   await snapshot('desktop-undo-creation', undoCreation)
   await historyAction('redo')
-  await expect.poll(async () => (await readDesign()).helices.length).toBe(2)
+  await expect.poll(async () => (await readDesign()).helices.length).toBe(original.helices.length + 2)
   const redoCreation = await readDesign()
-  assertFeature(redoCreation, design.feature_log[0].params.points_nm)
+  assertFeature(redoCreation, design.feature_log[featureIndex].params.points_nm)
   expect(axisSamples(redoCreation)).toEqual(axisSamples(design))
   await snapshot('desktop-redo-creation', redoCreation)
   await historyAction('redo')
-  await expect.poll(async () => (await readDesign()).feature_log[0]?.params.points_nm).toEqual(editedPoints)
+  await expect.poll(async () => (await readDesign()).feature_log[featureIndex]?.params.points_nm).toEqual(editedPoints)
   const redoEdit = await readDesign()
   assertFeature(redoEdit, editedPoints)
   expect(axisSamples(redoEdit)).toEqual(axisSamples(edited))
@@ -189,3 +194,6 @@ test('VR Sweep free-draws an S, edits fitted points, and edits and undo/redoes d
   writeFileSync(path.join(evidence, 'browser-responses.json'), JSON.stringify({ errors, responses }, null, 2))
   expect(errors).toEqual([])
 })
+
+test.beforeEach(async ({page}) => { await installAuditBrowserTrace(page) })
+test.afterEach(async ({page}, info) => { await saveAuditBrowserTrace(page, info) })

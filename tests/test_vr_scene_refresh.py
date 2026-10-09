@@ -8,6 +8,16 @@ from backend.api.routes_vr_scene import VRSceneRefreshRequest, publish_scene, cl
 from backend.core.models import Design
 
 
+@pytest.fixture(autouse=True)
+def inline_export(monkeypatch):
+    # These tests inject edits during export in this process. Worker transport
+    # and exception propagation have separate real-process coverage.
+    def export(body, design, representations=None):
+        return vr._write_scene_snapshot(producer=lambda write: vr._snapshot(
+            body, design_snapshot=design, representations=representations, line_writer=write))
+    monkeypatch.setattr('backend.api.vr_scene_export.export_scene', export)
+
+
 def setup(monkeypatch,tmp_path):
     state.set_design(Design())
     session={'doc_id':get_current_doc(),'event_path':str(tmp_path/'event.json'),'launch_request':{}}
@@ -53,6 +63,52 @@ def test_concurrent_edit_during_snapshot_retains_prior_scene(monkeypatch,tmp_pat
     with pytest.raises(HTTPException):publish_scene(body)
     assert manifest.read_text()==before
     cleanup_scene_refresh(session['event_path'])
+
+
+def test_autosave_during_export_publishes_once_at_acknowledged_revision(monkeypatch, tmp_path):
+    session, body = setup(monkeypatch, tmp_path)
+    snapshot = vr._snapshot
+    calls = []
+    def saved(*args, **kwargs):
+        calls.append(kwargs['design_snapshot'])
+        result = snapshot(*args, **kwargs)
+        design, revision = state.copy_for_persist()
+        saved = design.model_copy(update={'metadata': design.metadata.model_copy(update={
+            'identity_last_known_path': 'saved.nadoc', 'identity_confirmed_at': 'now'})})
+        state.acknowledge_workspace_save(design, saved, revision)
+        return result
+    monkeypatch.setattr(vr, '_snapshot', saved)
+    result = publish_scene(body)
+    assert len(calls) == 1
+    assert result == {'published': True, 'scene_revision': state.revision()}
+    assert result['scene_revision'] > body.expected_revision
+    assert Path(session['event_path'] + '.scene').read_text().split()[2] == str(state.revision())
+
+
+@pytest.mark.parametrize('field, value', [
+    ('annotations_enabled', False), ('lattice_type', 'square'),
+    ('id', 'another-design'),
+])
+def test_source_comparison_rejects_active_content_changes(field, value):
+    from backend.api.routes_vr_scene import _same_scene_source
+    design = Design()
+    assert not _same_scene_source(design, design.model_copy(update={field: value}))
+
+
+def test_concurrent_same_identity_edit_during_export_is_rejected(monkeypatch, tmp_path):
+    session, body = setup(monkeypatch, tmp_path)
+    publish_scene(body)
+    manifest = Path(session['event_path'] + '.scene')
+    previous = manifest.read_bytes()
+    snapshot = vr._snapshot
+    def changed(*args, **kwargs):
+        result = snapshot(*args, **kwargs)
+        state.set_design(state.get_or_404().model_copy(update={'annotations_enabled': False}))
+        return result
+    monkeypatch.setattr(vr, '_snapshot', changed)
+    with pytest.raises(HTTPException, match='Design changed during'):
+        publish_scene(body)
+    assert manifest.read_bytes() == previous
 
 
 @pytest.fixture(autouse=True)

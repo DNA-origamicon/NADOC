@@ -12,6 +12,44 @@ from backend.core.deformation import deformed_helix_axes
 from backend.core.vr_axis_lines import axis_line_paths
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.mark.parametrize('arc_length', [False, True])
+def test_batched_curve_samples_match_threejs_including_degenerate_spans(arc_length):
+    from backend.core.vr_scene_projection import _centripetal_catmull_rom
+    rng = np.random.default_rng(829)
+    curves = [
+        [[0, 0, 0], [1, 2, 3], [2, 4, 6]],
+        [[2, 3, 4]] * 5,
+        [[0, 0, 0], [0, 0, 0], [1, 2, 3], [1, 2, 3], [4, -1, 8]],
+        np.cumsum(rng.normal(size=(37, 3)), axis=0).tolist(),
+    ]
+    program = """
+import fs from 'node:fs';
+import * as THREE from 'three';
+const {curves,arc_length}=JSON.parse(fs.readFileSync(0,'utf8'));
+console.log(JSON.stringify(curves.map(points=>{
+ const curve=new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p)));
+ return (arc_length ? curve.getSpacedPoints(83) : curve.getPoints(83)).map(p=>p.toArray());
+})));
+"""
+    result = subprocess.run(['node', '--input-type=module', '-e', program], cwd=ROOT/'frontend',
+                            input=json.dumps(dict(curves=curves, arc_length=arc_length)),
+                            text=True, capture_output=True, check=True)
+    for points, expected in zip(curves, json.loads(result.stdout), strict=True):
+        actual = _centripetal_catmull_rom(tuple(np.asarray(p) for p in points),
+                                        segments=83, arc_length=arc_length)
+        np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-9)
+
+
+def test_two_point_curve_retains_linear_endpoint_extrapolation():
+    from backend.core.vr_scene_projection import _centripetal_catmull_rom
+    points = (np.array([0., 0., 0.]), np.array([1., 2., 3.]))
+    for arc_length in (False, True):
+        actual = _centripetal_catmull_rom(points, segments=83, arc_length=arc_length)
+        np.testing.assert_allclose(actual, np.linspace(*points, 84), atol=1e-12)
+
+
 DESKTOP = """
 import fs from 'node:fs';
 import * as THREE from 'three';

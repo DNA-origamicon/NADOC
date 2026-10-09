@@ -54,12 +54,21 @@ def run(socket, output, action):
         reveal(live)
         for h in (0,1):
             if live.state['sidebars'][h]['open']:live.button('menu',hand=h);live.frame()
-        wait(lambda s:len(s.get('ligation',{}).get('bonds',[]))>5)
+        wait(lambda s:s.get('ligation',{}).get('version',0)>0)
+        initial_bonds = bridge.request('observe targets')['ligation']['bonds']
+        assert len(initial_bonds)>5
         evidence,_=live.capture_to(out/'before',discard_source=True);eye=evidence['eyes'][0]
         if action=='nick':
-            points=[b[k] for b in live.state['ligation']['bonds'] for k in ('a','b')]
+            points=[b[k] for b in initial_bonds for k in ('a','b')]
             center=np.mean(points,axis=0)
-            target=np.array(eye['position'])+rotate(eye['orientation_xyzw'],[0,0,-.7])
+            # Fit the actual bundle, preserving enough apparent bond width for
+            # the downsampled mirror. A fixed 1.5 m placement made the nearly
+            # closed glow vanish there despite passing both full eye images.
+            radius=max(np.linalg.norm(np.asarray(point)-center) for point in points)
+            distance=max(.9,1.5*radius) if os.environ.get('NADOC_VR_AUDIT_DESIGN') else .7
+            (out/'model-framing.json').write_text(json.dumps({'radius':radius,'distance':distance,
+                'reason':'ordinary model grip; size-derived stereo framing and mirror legibility'},indent=2))
+            target=np.array(eye['position'])+rotate(eye['orientation_xyzw'],[0,0,-distance])
             turn=multiply(eye['orientation_xyzw'],[0,np.sin(np.pi/4),0,np.cos(np.pi/4)])
             live.send('pose',hand=1,position=center.tolist(),orientation=[0,0,0,1]);live.frame()
             live.send('button',hand=1,button='grip',pressed=True);live.frame()
@@ -76,16 +85,22 @@ def run(socket, output, action):
         from .edit_wheel_check import slide
         slide(live,index,preset,trials)
         live.capture_to(out/'wheel',discard_source=True)
+        if os.environ.get('NADOC_VR_FRAME_AUDIT'):
+            # Readback/compositor samples can spill into the next few frames.
+            # Keep this diagnostic hold outside the timed release/commit.
+            until=time.monotonic()+.35
+            while time.monotonic()<until:live.frame();time.sleep(.01)
         history_panels = [(panel['open'], panel['tab']) for panel in live.state['sidebars']]
         haptics_before = live.state['haptic_requests'][1]
         live.send('button',hand=1,button='trackpad',pressed=False);live.frame()
         if action in ('undo', 'redo'):
             assert live.state['haptic_requests'][1] > haptics_before, 'History command omitted controller feedback'
             assert live.state['haptic_amplitude'][1] > 0
-            assert not live.state['radial_edit']['open']
+            assert live.state['radial_edit']['pending'] == index, 'History command omitted its pending indicator'
             assert live.state['menu'] == 'closed', 'History command opened a menu'
             assert history_panels == [(panel['open'], panel['tab']) for panel in live.state['sidebars']]
-            live.capture_to(out/'history-feedback',discard_source=True)
+            if not os.environ.get('NADOC_VR_FRAME_AUDIT'):
+                live.capture_to(out/'history-feedback',discard_source=True)
         if action=='nick':
             assert live.state['ligation']['nick_active']
             # Quiver toggles only after a deliberate front-to-behind reach.
@@ -101,60 +116,64 @@ def run(socket, output, action):
                     pose=live.state['hands'][hand]
                     live.send('pose',hand=hand,position=pose['position'],orientation=pose['orientation_xyzw'])
                     live.frame();time.sleep(.02)
-            for equipped,label in [(False,'quiver-stowed'),(True,'quiver-equipped')]:
-                reach(front.tolist(),q);dwell(.2)
-                assert live.state['ligation']['quiver']['armed'][1]
-                sequence=live.state['ligation']['quiver']['sequence']
-                reach(behind.tolist(),holster)
-                assert live.state['ligation']['quiver']['sequence']==sequence+1
-                assert live.state['ligation']['nick_active']==equipped
-                dwell(.7)
-                assert live.state['ligation']['quiver']['sequence']==sequence+1, 'Held-behind gesture repeated'
-                reach(front.tolist(),q)
-                assert live.state['scene_revision']==revision
-                live.capture_to(out/label,discard_source=True)
-                from tools.vr_workflows.quiver_pixels import check as quiver_pixels
-                checked=out/label
-                if not quiver_pixels(checked)['passed'] and os.environ.get('NADOC_VR_AUDIT_DESIGN'):
-                    from tools.vr_workflows.audit_observation import clear_wrist
-                    observation_position=clear_wrist(checked)
-                    reach(observation_position,q)
-                    checked=out/(label+'-clear')
-                    live.capture_to(checked,discard_source=True)
-                    (checked/'placement.json').write_text(json.dumps({'position':observation_position,'reason':'controller cleared from captured molecular pixels in both eyes; unchanged model, quiver gesture endpoints and pixel oracle'},indent=2))
-                assert quiver_pixels(checked)['passed'], 'Scissors did not visibly equip/stow'
-                assert not quiver_pixels(checked,offscreen=True)['passed']
-            # The left quiver independently opens/stows the tablet while the
-            # right scissors remain equipped throughout.
-            left_front=head-right*.28+forward*.4+[0,-.1,0]
-            left_behind=head-right*.28-forward*.28+[0,.08,0]
-            for opened,label in [(True,'left-menu-open'),(False,'left-menu-closed')]:
-                for point,pause in [(left_front,.25),(left_behind,.6),(left_front,.05)]:
-                    trial=reach_target(live,point.tolist(),preset,9800+len(trials),target_position=point.tolist(),target_orientation=holster if point is left_behind else q,hand=0)
-                    trials.append(trial);dwell(pause,hand=0)
-                (out/'reaches.json').write_text(json.dumps(trials,indent=2))
-                assert live.state['view_tools']['open']==opened
-                assert live.state['ligation']['nick_active']
-                live.capture_to(out/label,discard_source=True)
-                from tools.vr_workflows.view_tools_pixels import check as tablet_pixels
-                assert tablet_pixels(out/label)['passed']==opened
-                assert not tablet_pixels(out/label,offscreen=True)['passed']
-                assert quiver_pixels(out/label)['passed']
+            # The frame audit measures the edit; the ordinary tour retains the
+            # independent quiver/tablet demonstration and its pixel checks.
+            if not os.environ.get('NADOC_VR_FRAME_AUDIT'):
+                for equipped,label in [(False,'quiver-stowed'),(True,'quiver-equipped')]:
+                    reach(front.tolist(),q);dwell(.2)
+                    assert live.state['ligation']['quiver']['armed'][1]
+                    sequence=live.state['ligation']['quiver']['sequence']
+                    reach(behind.tolist(),holster)
+                    assert live.state['ligation']['quiver']['sequence']==sequence+1
+                    assert live.state['ligation']['nick_active']==equipped
+                    dwell(.7)
+                    assert live.state['ligation']['quiver']['sequence']==sequence+1, 'Held-behind gesture repeated'
+                    reach(front.tolist(),q)
+                    assert live.state['scene_revision']==revision
+                    live.capture_to(out/label,discard_source=True)
+                    from tools.vr_workflows.quiver_pixels import check as quiver_pixels
+                    checked=out/label
+                    if not quiver_pixels(checked)['passed'] and os.environ.get('NADOC_VR_AUDIT_DESIGN'):
+                        from tools.vr_workflows.audit_observation import clear_wrist
+                        observation_position=clear_wrist(checked)
+                        reach(observation_position,q)
+                        checked=out/(label+'-clear')
+                        live.capture_to(checked,discard_source=True)
+                        (checked/'placement.json').write_text(json.dumps({'position':observation_position,'reason':'controller cleared from captured molecular pixels in both eyes; unchanged model, quiver gesture endpoints and pixel oracle'},indent=2))
+                    assert quiver_pixels(checked)['passed'], 'Scissors did not visibly equip/stow'
+                    assert not quiver_pixels(checked,offscreen=True)['passed']
+                # The left quiver independently opens/stows the tablet while the
+                # right scissors remain equipped throughout.
+                left_front=head-right*.28+forward*.4+[0,-.1,0]
+                left_behind=head-right*.28-forward*.28+[0,.08,0]
+                for opened,label in [(True,'left-menu-open'),(False,'left-menu-closed')]:
+                    for point,pause in [(left_front,.25),(left_behind,.6),(left_front,.05)]:
+                        trial=reach_target(live,point.tolist(),preset,9800+len(trials),target_position=point.tolist(),target_orientation=holster if point is left_behind else q,hand=0)
+                        trials.append(trial);dwell(pause,hand=0)
+                    (out/'reaches.json').write_text(json.dumps(trials,indent=2))
+                    assert live.state['view_tools']['open']==opened
+                    assert live.state['ligation']['nick_active']
+                    live.capture_to(out/label,discard_source=True)
+                    from tools.vr_workflows.view_tools_pixels import check as tablet_pixels
+                    assert tablet_pixels(out/label)['passed']==opened
+                    assert not tablet_pixels(out/label,offscreen=True)['passed']
+                    assert quiver_pixels(out/label)['passed']
             # Empty-space full click must not edit.
             reach((np.array(eye['position'])+rotate(q,[.4,0,-.5])).tolist(),q)
             live.button('trigger',hand=1);live.frame()
             assert live.state['scene_revision']==revision
-            bonds=live.state['ligation']['bonds'];index=len(bonds)//4
+            bonds=bridge.request('observe targets')['ligation']['bonds'];index=len(bonds)//4
             if os.environ.get('NADOC_VR_AUDIT_DESIGN'):
                 from tools.vr_workflows.audit_observation import front_bond
                 target_evidence,_=live.capture_to(out/'bond-target-setup',discard_source=True)
-                bonds=live.state['ligation']['bonds']
-                masks=[np.fromfile(out/'bond-target-setup'/(eye['eye']+'.ids.u32'),dtype=np.uint32)
-                       .reshape(eye['height'],eye['width'])!=0 for eye in target_evidence['eyes']]
-                index=front_bond(target_evidence,bonds,masks)
+                bonds=bridge.request('observe targets')['ligation']['bonds']
+                # A molecular pixel behind the frontmost blade is not an
+                # occluder. Choose by depth/framing; the unchanged captured
+                # scissors/glow oracle below establishes actual visibility.
+                index=front_bond(target_evidence,bonds)
                 (out/'bond-target-setup'/'target.json').write_text(json.dumps({
                     'original_index':len(bonds)//4,'index':index,'bond':bonds[index],
-                    'reason':'nearest bond with stereo framing and captured molecular-pixel clearance for blades; unchanged motion and pixel oracle'},indent=2))
+                    'reason':'nearest bond with stereo framing; depth-aware targeting, unchanged motion and captured scissors/glow pixel oracle'},indent=2))
             b=bonds[index];mid=(np.array(b['a'])+b['b'])/2
             left_trial=reach_target(live,mid.tolist(),preset,9699,target_position=(mid+rotate(q,[0,0,.12])).tolist(),target_orientation=q,hand=0)
             trials.append(left_trial);(out/'reaches.json').write_text(json.dumps(trials,indent=2))
@@ -162,7 +181,20 @@ def run(socket, output, action):
             assert live.state['scene_revision']==revision and live.state['ligation']['nick_hover'][0] is None, 'Left hand cut a bond'
             # Move the sphere aside before the right scissors acquire the bond.
             reach_target(live,front.tolist(),preset,9700,target_position=(head+rotate(q,[-.3,-.1,-.4])).tolist(),target_orientation=q,hand=0)
-            reach((mid+rotate(q,[0,0,.12])).tolist(),q,lambda s:s['ligation']['nick_hover'][1] is not None)
+            # Face the blade plane toward the observer on imported bundles.
+            # A forward-pointing wrist presents the blades edge-on and extends
+            # them behind the near-side bond into adjacent helices. Rotate the
+            # ordinary controller pose about the same cutting center instead.
+            cut_q=q
+            if os.environ.get('NADOC_VR_AUDIT_DESIGN'):
+                chord=np.asarray(b['b'])-b['a']
+                theta=np.arctan2(np.dot(chord,rotate(q,[0,1,0])),np.dot(chord,rotate(q,[1,0,0])))
+                roll=[0,0,np.sin(theta/2),np.cos(theta/2)]
+                cut_q=multiply(multiply(q,roll),[np.sin(np.pi/4),0,0,np.cos(np.pi/4)])
+            (out/'cut-observation.json').write_text(json.dumps({
+                'cut_center':mid.tolist(),'orientation_xyzw':cut_q,
+                'reason':'face scissors toward eyes and closed blades across projected bond, exposing glow beside them; same bond, native hit geometry and pixel thresholds'},indent=2))
+            reach((mid+rotate(cut_q,[0,0,.12])).tolist(),cut_q,lambda s:s['ligation']['nick_hover'][1] is not None)
             target=live.state['ligation']['nick_hover'][1]
             for label,value in [('open',0),('half',.45),('almost',.8)]:
                 live.send('trigger_value',hand=1,value=value);live.frame()
@@ -175,6 +207,7 @@ def run(socket, output, action):
         with operation(live,'nick-feedback'):
             wait(lambda s:s['scene_revision']>revision and s['ligation']['version']>version and not s['ligation']['waiting'])
         if action in ('undo', 'redo'):
+            assert live.state['radial_edit']['pending'] is None, 'History pending indicator did not clear'
             assert live.state['menu'] == 'closed', 'History acknowledgement opened a menu'
             assert history_panels == [(panel['open'], panel['tab']) for panel in live.state['sidebars']]
         assert live.state['ligation']['status']=='created'

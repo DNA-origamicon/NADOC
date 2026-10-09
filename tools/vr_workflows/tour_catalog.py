@@ -42,7 +42,7 @@ def catalog():
     add('backend-lifetime', 'interaction', 'Backend shutdown closes VR',
         'Launch an isolated backend and empty VR viewer; terminate only that backend and require viewer exit and sidecar cleanup.', module='backend_lifecycle_check')
     add('tool-frame-audit', 'authoring', 'Tools across representations · frame audit',
-        'Long isolated campaign: existing authoring fixtures in Full, Stick, Ball & Stick and Quick Surface. Records failed cases, CPU calculation counts and compositor timing. Validation uses all four motion profiles. Desktop drawing defaults off with browser trace evidence (--desktop-rendering on overrides it); Move workflows also check the Desktop 3D during VR toggle and automatic desktop restoration.', module='tool_frame_audit')
+        'Long isolated campaign: existing authoring fixtures in Full, Stick, Ball & Stick and Quick Surface. Includes Nick, Ligate, Bend, Twist and Sweep commit latency, CPU calculation counts and compositor timing; retains failures. Input-to-ready timing excludes reaching Confirm when available. Nick frame audits focus on edits while its ordinary tour retains quiver checks. Validation uses all four motion profiles. Desktop drawing defaults off with browser trace evidence (--desktop-rendering on overrides it); Move workflows also check the Desktop 3D during VR toggle and automatic desktop restoration.', module='tool_frame_audit')
     add('frame-audit', 'interaction', 'VR frame calculation audit',
         'Private 24HB: Full, Stick, Ball & Stick and Quick Surface idle/grip CPU phases, submission cadence and compositor timing. Validation uses all four motion profiles; authoring tools are separate.', module='frame_audit_tour')
     add('representation-motion', 'interaction', 'Detailed representations · grip motion',
@@ -111,7 +111,7 @@ def catalog():
     add('deformation-selection', 'authoring', 'Bend / Twist · multi-selection regression',
         'No headset required: real VR selection and confirmation bridge for multiple clusters, strands, domains and mixed sets; exact scope, plane bounds, persistence, stale-target rejection and Undo.', module='deformation_selection_check')
     add('end-resize', 'authoring', 'Resize selected ends',
-        'Trigger grab the selected end arrow, pull to resize, release to save, and verify one-step desktop Undo. Validation uses all four controller profiles.', module='end_resize_tour')
+        'Trigger grab selected end arrows, extend and shorten, retain selection, and verify independent desktop Undo. Validation uses all four controller profiles; the frame audit accepts an imported design and records commit latency and stereo frame timing.', module='end_resize_tour')
     add('move-preview-renderer', 'authoring', 'Move / Rotate · renderer regression',
         'No headset required: compare prepared first grabs and packed previews with the original rebuild, including weighted boundary bonds, resident-cache restoration, Cancel, commit, Undo and style changes. Use --scene-dir and --compare-setup for saved-scene timing and exact pixel comparisons.', module='move_preview_check')
     add('scene-activation', 'authoring', 'Scene activation · renderer regression',

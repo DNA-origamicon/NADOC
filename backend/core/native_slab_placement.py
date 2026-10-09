@@ -130,15 +130,56 @@ def _expected_slab_pose(record):
     return center, frame
 
 
+def _expected_slab_poses(records):
+    """Batch the native authority's arithmetic; retain its scalar error oracle.
+
+    Authored chemical conformations and slabless records keep their existing
+    paths. Any invalid native input is rechecked by the scalar authority, so
+    batching cannot weaken registration checks or lose per-site diagnostics.
+    """
+    result = [None] * len(records)
+    indices = [i for i, record in enumerate(records) if record.get("placement_source") == SOURCE]
+    native = [records[i] for i in indices]
+    try:
+        arrays = [np.asarray([r.get(field) for r in native], dtype=float)
+                  for field in ("backbone_position", "base_position", "base_normal", "axis_tangent")]
+        valid = all(a.shape == (len(native), 3) and np.all(np.isfinite(a)) for a in arrays)
+        valid = valid and all(r.get("direction") in _native_registration() for r in native)
+    except (TypeError, ValueError, OverflowError):
+        valid = False
+    if native and valid:
+        beads, bases, normals, tangents = arrays
+        lengths = np.linalg.norm(tangents, axis=1, keepdims=True)
+        valid = bool(np.all(lengths >= 1e-12) and np.all(np.isfinite(lengths)))
+        if valid:
+            tangents = tangents / lengths
+            normals = normals - tangents * np.sum(normals * tangents, axis=1, keepdims=True)
+            lengths = np.linalg.norm(normals, axis=1, keepdims=True)
+            valid = bool(np.all(lengths >= 1e-12) and np.all(np.isfinite(lengths)))
+        if valid:
+            normals = normals / lengths
+            frames = np.stack((np.cross(tangents, normals), tangents, normals), axis=2)
+            slab_offsets, base_offsets = map(np.asarray, zip(*(_native_registration()[r['direction']] for r in native)))
+            actual_offsets = np.einsum('nji,nj->ni', frames, bases - beads)
+            valid = bool(np.allclose(actual_offsets, base_offsets, rtol=0, atol=1e-7))
+        if valid:
+            centers = beads + np.einsum('nij,nj->ni', frames, slab_offsets)
+            for i, center, frame in zip(indices, centers, frames):
+                result[i] = center, frame
+    if not valid:
+        return [_expected_slab_pose(record) for record in records]
+    for i, record in enumerate(records):
+        if record.get("placement_source") != SOURCE:
+            result[i] = _expected_slab_pose(record)
+    return result
+
+
 def attach_native_slab_poses(records):
     """Attach the only slab pose to final authoritative bead/base records."""
-    # scipy validates orthogonality and converts rotations in one vectorized
-    # call. Keep the scalar authority (including all integrity checks) exactly
-    # unchanged; only batch the conversion of its already computed frames.
+    # The same native authority and integrity checks, evaluated in arrays.
     posed_records = []
     frames = []
-    for record in records:
-        pose = _expected_slab_pose(record)
+    for record, pose in zip(records, _expected_slab_poses(records)):
         if pose is None:
             record["slab_position"] = None
             record["slab_quaternion"] = None
@@ -189,3 +230,32 @@ def authoritative_slab_pose(record):
                      "actual_frame": frame.tolist(),
                      "max_component_error": float(np.max(abs(frame - expected_frame)))})
     return center, frame
+
+
+def authoritative_slab_poses(records):
+    """Consume the supplied poses with batched, unchanged authority checks."""
+    expected = _expected_slab_poses(records)
+    indices = [i for i, pose in enumerate(expected) if pose is not None]
+    if not indices:
+        return [authoritative_slab_pose(record) for record in records]
+    try:
+        centers = np.asarray([records[i].get('slab_position') for i in indices], dtype=float)
+        quaternions = np.asarray([records[i].get('slab_quaternion') for i in indices], dtype=float)
+        valid = (centers.shape == (len(indices), 3) and quaternions.shape == (len(indices), 4)
+                 and np.all(np.isfinite(centers)) and np.all(np.isfinite(quaternions))
+                 and np.all(abs(np.linalg.norm(quaternions, axis=1) - 1.) <= 1e-6))
+        if valid:
+            frames = Rotation.from_quat(quaternions).as_matrix()
+            valid = (np.allclose(centers, [expected[i][0] for i in indices], rtol=0, atol=1e-7)
+                     and np.allclose(frames, [expected[i][1] for i in indices], rtol=0, atol=1e-7))
+    except (TypeError, ValueError, OverflowError):
+        valid = False
+    if not valid:
+        return [authoritative_slab_pose(record) for record in records]
+    result = [None] * len(records)
+    for i, center, frame in zip(indices, centers, frames):
+        result[i] = center, frame
+    for i, pose in enumerate(expected):
+        if pose is None:
+            result[i] = authoritative_slab_pose(records[i])
+    return result

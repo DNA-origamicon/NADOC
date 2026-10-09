@@ -280,7 +280,19 @@ def test_manual_benchy_entire_model_has_one_native_placement():
     original = path.read_bytes()
     design = Design.model_validate_json(original)
     full = _geometry_for_design(design)
-    assert len(full) == 2526
+    # This optional input is a user's editable document, not a frozen fixture.
+    # Check its actual topology rather than a count from an older saved version.
+    expected_sites = {
+        (domain.helix_id, bp, domain.direction.value)
+        for strand in design.strands for domain in strand.domains
+        for bp in range(min(domain.start_bp, domain.end_bp), max(domain.start_bp, domain.end_bp) + 1)
+    }
+    copies = {h.id: {ls.bp_index: 1 + ls.delta for ls in h.loop_skips} for h in design.helices}
+    expected = {(hid, bp, direction, copy) for hid, bp, direction in expected_sites
+                for copy in range(copies[hid].get(bp, 1))}
+    actual = {(n['helix_id'], n['bp_index'], n['direction'], n['copy_k']) for n in full}
+    assert actual == expected
+    assert len(full) == len(expected)
     assert {n["placement_source"] for n in full} == {SOURCE}
     compact, _ = _positions_for_design(design)
     assert compact == _positions_by_helix(full)

@@ -32,9 +32,10 @@ test('radial Ligate stretches and saves a compatible forced bond from either pol
     if (status.pid) pid = status.pid
     return status.running && !!status.scrywrite_socket
   }, { timeout: 30000 }).toBe(true)
+  let expectedSceneRevision = 0
   for (const role of [3, 5]) {
     execFileSync('uv', ['run', 'python', '-m', 'tools.vr_workflows.ligation_probe', status.scrywrite_socket,
-      info.outputPath(`from-${role}`), String(role)], {
+      info.outputPath(`from-${role}`), String(role), String(expectedSceneRevision)], {
       cwd: path.resolve(process.cwd(), '..'), env: process.env, timeout: 160000, stdio: 'inherit',
     })
     const result = JSON.parse(fs.readFileSync(info.outputPath(`from-${role}/result.json`)))
@@ -49,13 +50,15 @@ test('radial Ligate stretches and saves a compatible forced bond from either pol
     expect(bond.five_prime_bp).toBe(recipient.domains[0].start_bp)
     expect(after.feature_log.at(-1).children.filter(c => c.op_subtype === 'forced-ligation-create')).toHaveLength(1)
     await page.screenshot({ path: info.outputPath(`desktop-from-${role}.png`) })
-    await page.evaluate(async () => {
+    const refreshed = await page.evaluate(async () => {
       const api = await import('/src/api/client.js')
       await api.undo()
       const { store } = await import('/src/state/store.js')
-      await api.refreshNativeVRScene({ expected_design_id: store.getState().currentDesign.id,
+      return await api.refreshNativeVRScene({ expected_design_id: store.getState().currentDesign.id,
         expected_revision: api.currentRevisionWatermark() })
     })
+    expect(refreshed?.published).toBe(true)
+    expectedSceneRevision = refreshed.scene_revision
     const undone = await read()
     expect(undone.strands).toEqual(before.strands)
     expect(undone.forced_ligations).toEqual(before.forced_ligations)

@@ -30,9 +30,9 @@ it('retries only the snapshot when autosave advances the same design revision', 
   expect(await api.refreshNativeVRScene({ expected_design_id:'part', expected_revision:3 }))
     .toEqual({ published:true, scene_revision:4 })
   expect(request.mock.calls).toEqual([
-    ['POST','/vr/scene-refresh',{ expected_design_id:'part',expected_revision:3 }],
+    ['POST','/vr/scene-refresh',{ expected_design_id:'part',expected_revision:3 },{ skipSimulationPrepare:true }],
     ['GET','/design'],
-    ['POST','/vr/scene-refresh',{ expected_design_id:'part',expected_revision:4 }],
+    ['POST','/vr/scene-refresh',{ expected_design_id:'part',expected_revision:4 },{ skipSimulationPrepare:true }],
   ])
 })
 it.each([{ id:'other', revision:4 }, { id:'part', revision:3 }])('does not retry changed identity or unchanged revision: %o', async current => {

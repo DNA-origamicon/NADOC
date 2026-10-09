@@ -26,7 +26,7 @@ describe('VR bend desktop executor', () => {
   it('commits curvature, mirrors the scene and undoes exactly one feature', async () => {
     const { bend, api, feedback, event, state } = setup()
     expect(bend.handle(event)).toBe(true); await settled()
-    expect(api.addDeformation).toHaveBeenCalledWith('bend', 10, 110, { kind: 'bend', curvature_deg_per_bp: .9, direction_deg: 30 }, ['h'], false, [], { expectedDesignId: 'design', expectedRevision: 4, targets: [{ kind: 'cluster', id: 'c' }] })
+    expect(api.addDeformation).toHaveBeenCalledWith('bend', 10, 110, { kind: 'bend', curvature_deg_per_bp: .9, direction_deg: 30 }, ['h'], false, [], { expectedDesignId: 'design', expectedRevision: 4, onCommitted: expect.any(Function), targets: [{ kind: 'cluster', id: 'c' }] })
     expect(api.refreshNativeVRScene).toHaveBeenCalledOnce()
     expect(feedback.mock.calls.at(-1)[1]).toBe('succeeded')
     bend.handle(event); await settled();expect(api.addDeformation).toHaveBeenCalledOnce()
@@ -88,4 +88,24 @@ for (const phase of ['validation', 'acknowledgement']) it(`refuses a changed sel
   s.bend.handle(s.event); await settled()
   expect(s.api.addDeformation).not.toHaveBeenCalled()
   expect(s.feedback.mock.calls.at(-1)[1]).toBe('refused')
+})
+
+it.each(['bend', 'twist'])('%s starts export before desktop synchronization and waits before success', async mode => {
+  const h = setup(mode)
+  let finishSync, finishExport
+  h.api.refreshNativeVRScene.mockImplementation(() => new Promise(resolve => { finishExport = resolve }))
+  h.api.addDeformation.mockImplementation(async (...args) => {
+    args.at(-1).onCommitted({ design: { id: 'design' }, revision: 5 })
+    await new Promise(resolve => { finishSync = resolve })
+    h.state.currentDesign.feature_log.push({ id: 'entry' })
+    return { vr_transaction: { feature_log_entry_id: 'entry', target_count: 1 } }
+  })
+  h.bend.handle(h.event); await settled()
+  expect(h.api.refreshNativeVRScene).toHaveBeenCalledExactlyOnceWith({ expected_design_id: 'design', expected_revision: 5 })
+  expect(h.feedback.mock.calls.at(-1)[1]).toBe('pending')
+  finishSync(); await settled()
+  expect(h.feedback.mock.calls.at(-1)[1]).toBe('pending')
+  finishExport({ published: true }); await settled()
+  expect(h.feedback.mock.calls.at(-1)[1]).toBe('succeeded')
+  expect(h.api.refreshNativeVRScene).toHaveBeenCalledOnce()
 })

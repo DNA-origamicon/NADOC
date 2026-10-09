@@ -201,3 +201,12 @@ def test_analog_trigger_uses_normal_sequenced_transport(native):
     result=native.call('scrywrite_trigger_value', {'session':state['session'],
         'expected_sequence':state['command_sequence'],'hand':1,'value':.45})
     assert result['command_sequence']==state['command_sequence']+1
+
+
+def test_explicit_target_observation_remains_read_only(monkeypatch):
+    bridge = mcp.Bridge('/unused/socket')
+    commands = []
+    monkeypatch.setattr(bridge, 'request', lambda command: commands.append(command) or {'protocol': 1})
+    assert bridge.call('scrywrite_observe', {'include_targets': True}) == {'protocol': 1}
+    bridge.call('scrywrite_observe', {})
+    assert commands == ['observe targets', 'observe']

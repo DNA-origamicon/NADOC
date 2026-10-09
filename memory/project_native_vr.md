@@ -7,6 +7,56 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Edit latency (2026-10-08)
+
+`Circle_spiral.nadoc` Full resize reproduced ~27 s, dominated by two 12–13 s
+exports: autosave invalidated the first despite unchanged scene inputs. Export
+now compares active source fields, batches spline/slab math with scalar authority
+parity, caches export-local metadata, skips unrequested coarse geometry, and runs
+in one warmed spawned CPU worker. Parent document/revision/integrity gates remain.
+Resize refresh overlaps desktop synchronization; native ligation target parsing
+is asynchronous, manifest polling is three frames, and GPU staging stays 1 ms.
+Four real Vive/OpenXR profiles passed +12/-6, retained selection, stereo/mirror
+pixels and independent Undo: 2.97–3.36 s, 89.5 FPS, no repeated/dropped commit
+frames. Sub-second edits and consistently <3 s remain open; larger gains need
+incremental regeneration/transport. See `docs/audits/vr_edit_latency_20261008.md`.
+
+## Nick / Ligate / Bend / Twist / Sweep latency (2026-10-08)
+
+User fixture policy: do not use `Circle_spiral.nadoc` as a test input or fixture.
+In particular, Bend validation must start from non-circularized designs. The
+current latency campaign uses an independent straight 24-helix, 48-strand,
+12,000-nucleotide bundle with no deformations, forced ligations or feature
+history. Earlier Circle evidence is historical only; its interrupted campaign
+was stopped when the user supplied this correction.
+
+All five VR commit controllers start revision-pinned canonical export immediately
+after the mutation response, overlapping normal desktop synchronization. Nick,
+Ligate and their history use the existing geometry-free response header followed
+by normal desktop geometry fetch. Detached Sweep reuses desktop partial geometry
+only when existing strands survive unchanged; continuations retain full geometry.
+VR scene refresh dispatch skips unrelated async simulation preparation, also
+improving resize. Normal Deform mode retains its unchanged view-tools tablet:
+geometry edits no longer rebuild/transfer/upload its 16 MiB atlas or traverse
+scene fingerprints. Overlay streams and explicit action/reset acknowledgements
+still update. Export remains in the warmed worker; GPU staging stays bounded. The final
+20-case non-circular Full-representation matrix passes: Nick 1.86–1.92 s, Ligate
+1.91–2.02 s, Bend 2.39–2.52 s, Twist 2.03–2.16 s, Sweep 2.14–2.22 s. Native
+submission cadence is ~89.5 FPS; three compositor drops remain across eight
+Ligate commits, with none in the other tools' commit windows. Sub-second edits
+and arbitrary-design guarantees remain open.
+
+Inspector observations are compact even with Nick active; use `observe targets`
+or MCP `include_targets: true` for the full cached bond catalog. Captures retain
+it. The registered Authoring **Tools across representations · frame audit** now
+includes Sweep and input-to-ready commit timing. Circle's fixed-endpoint Bend
+conflict remains correctly rejected; latency uses an independent 24-helix/12k-nt
+straight bundle. All four Bend motion profiles pass on that bundle at
+2.39–2.52 s final-input-to-ready (matched pre-change baseline 3.95 s), ~89.5 FPS
+and zero repeated/dropped commit frames. Save/reopen and Undo pass. See
+`docs/audits/vr_tools_latency_20261008.md` for measured results,
+retained failures, observation adjustments and validation limits.
+
 ## Bend / Twist exact multi-selection (2026-10-06)
 
 Bend and Twist retain clusters, strands, domains, and mixed canonical sets.

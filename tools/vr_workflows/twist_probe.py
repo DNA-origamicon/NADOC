@@ -261,8 +261,9 @@ def run(socket, output, preset, mode):
             click('twist:less');click('twist:less')
             wait(lambda s: s['twist']['ready'])
             (out/'draft.json').write_text(json.dumps(live.state['twist'], indent=2))
+            revision = live.state['scene_revision']
             with operation(live,'twist-commit'):
-                click('twist:confirm'); wait(lambda s: s['status'] == 'COMMITTED')
+                click('twist:confirm'); wait(lambda s: s['status'] == 'COMMITTED' and s['scene_revision'] > revision)
             park(); capture('committed')
         (out/'result.json').write_text(json.dumps(live.state, indent=2))
     except Exception:

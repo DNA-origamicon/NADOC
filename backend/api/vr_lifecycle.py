@@ -37,3 +37,5 @@ def shutdown():
         # Let the existing owner remove snapshots, IPC files and progress state.
         if cleanup.is_alive():
             cleanup.join(timeout=1)
+    from backend.api.vr_scene_export import shutdown as shutdown_export
+    shutdown_export()

@@ -23,6 +23,7 @@ from tools.vr_workflows.menu_tour import click as click_sidebar
 from tools.vr_workflows.sidebar_pointer_scroll import at_fraction
 from tools.vr_workflows.demo_view import reveal
 from tools.vr_workflows.profile_input import reach_target
+from tools.vr_workflows.audit_intervals import operation
 
 
 class SweepControls(SidebarControls):
@@ -111,6 +112,7 @@ def run(socket, output):
     wait_startup(live)
     controls = SweepControls(live, output, 'steady_fast')
     profiles = FINAL_PRESETS if os.environ.get('NADOC_VR_SWEEP_VALIDATE', '1') == '1' else ['steady_fast']
+    if os.environ.get('NADOC_VR_AUDIT_PROFILE'): profiles = [os.environ['NADOC_VR_AUDIT_PROFILE']]
     report = {'profiles': list(profiles), 'shape': 's-curve', 'point_edits': []}
 
     def wait(predicate, timeout=20):
@@ -179,12 +181,19 @@ def run(socket, output):
         assert live.state['sweep']['active'] and live.state['sweep']['step'] == 1
         controls.click('sweep:recenter')
         settle()
-        for row, column in [(0, 0), (0, 1)]:
+        occupied_before = {tuple(cell) for cell in live.state['extrude']['occupied_cells']}
+        footprint = [(0, 0), (0, 1)]
+        if os.environ.get('NADOC_VR_AUDIT_DESIGN'):
+            visible = {(c['row'], c['column']) for c in live.state['extrude']['visible_cells'] if not c['occupied']}
+            footprint = next(([cell, (cell[0], cell[1]+1)] for cell in sorted(visible, key=lambda c: abs(c[0])+abs(c[1]))
+                              if (cell[0], cell[1]+1) in visible), None)
+            assert footprint, 'Two adjacent free footprint cells are required'
+        for row, column in footprint:
             live.send('aim_lattice', hand=1, row=row, column=column)
             live.frame()
             assert live.state['extrude']['hover'] == [row, column]
             live.button('trigger')
-        assert sorted(live.state['extrude']['cells']) == [[0, 0], [0, 1]]
+        assert sorted(map(tuple, live.state['extrude']['cells'])) == sorted(footprint)
         capture('painted-footprint')
         controls.click('sweep:confirm')
         wait(lambda state: state['sweep']['step'] == 2)
@@ -199,8 +208,20 @@ def run(socket, output):
         live.button('menu', hand=1)
         target = np.asarray(live.state['sweep']['points_world'][1])
         toward_head = head-target
-        # Offset the inspection ray sideways so it is not hidden end-on by the point glyph.
-        origin = target+.25*toward_head/np.linalg.norm(toward_head)+rotate(q, [.08,0,0])
+        # Approach across the points rather than through the nearer point's
+        # glyph. The original 8 cm offset could correctly hit point 0 first.
+        other_points=np.asarray([p for i,p in enumerate(live.state['sweep']['points_world']) if i!=1])
+        origin=None
+        for side in (.25,-.25,.35,-.35):
+            candidate=target+.25*toward_head/np.linalg.norm(toward_head)+rotate(q,[side,0,0])
+            ray=target-candidate
+            fractions=np.clip((other_points-candidate)@ray/np.dot(ray,ray),0,1)
+            clearance=float(np.min(np.linalg.norm(other_points-(candidate+fractions[:,None]*ray),axis=1)))
+            if clearance>.03:origin=candidate;break
+        if origin is None:raise RuntimeError('No clear Sweep point inspection ray')
+        (output/'point-ray-placement.json').write_text(json.dumps({'origin':origin.tolist(),
+            'target':target.tolist(),'other_point_clearance_m':clearance,
+            'reason':'ordinary controller pose clears nearer point; unchanged native raycast and pixel thresholds'},indent=2))
         direction = aim_orientation(origin.tolist(), target.tolist())
         pose(origin, direction)
         wait(lambda state: state['sweep']['hover_point'] == 1)
@@ -375,12 +396,19 @@ def run(socket, output):
             (output/'tour-report.json').write_text(json.dumps(report, indent=2))
         capture('editable-smoothed-stroke')
         save('ready-to-confirm')
-        controls.click('sweep:confirm')
-        wait(lambda state: state['sweep'].get('building'), 5)
-        capture('generating-sweep-a')
-        settle(.15)
-        capture('generating-sweep-b')
-        wait(lambda state: state['status'] == 'COMMITTED' and bool(state['committed_feature_id']), 45)
+        if os.environ.get('NADOC_VR_FRAME_AUDIT') == '1':
+            revision = live.state['scene_revision']
+            with operation(live, 'sweep-commit'):
+                controls.click('sweep:confirm')
+                wait(lambda state: state['status'] == 'COMMITTED' and bool(state['committed_feature_id'])
+                     and state['scene_revision'] > revision, 45)
+        else:
+            controls.click('sweep:confirm')
+            wait(lambda state: state['sweep'].get('building'), 5)
+            capture('generating-sweep-a')
+            settle(.15)
+            capture('generating-sweep-b')
+            wait(lambda state: state['status'] == 'COMMITTED' and bool(state['committed_feature_id']), 45)
         assert not live.state['sweep']['active']
         capture('committed')
         warning_points = live.state['sweep'].get('warning_points_world', [])
@@ -401,7 +429,7 @@ def run(socket, output):
         settle()
         live.capture_to(output/'committed-before-review', discard_source=True)
         from tools.vr_workflows.review_view import improve_review
-        improve_review(live, output/'committed-before-review', output/'design-review', expected_groups=1)
+        improve_review(live, output/'committed-before-review', output/'design-review', expected_groups=1 if not os.environ.get('NADOC_VR_AUDIT_DESIGN') else None)
         save('committed')
         # Move the reviewed molecule aside through an ordinary scene grip so
         # it cannot obscure the occupied cells in the painter behind it.
@@ -422,12 +450,12 @@ def run(socket, output):
                 controls.click('tab:tools')
                 controls.click('tool-'+tool)
                 wait(lambda state: state['extrude']['open'])
-                assert sorted(live.state['extrude']['occupied_cells']) == [[0,0],[0,1]]
-                cell = next(c for c in live.state['extrude']['visible_cells'] if (c['row'],c['column'])==(0,0))
+                assert set(map(tuple, live.state['extrude']['occupied_cells'])) == occupied_before | set(footprint)
+                cell = next(c for c in live.state['extrude']['visible_cells'] if (c['row'],c['column'])==footprint[0])
                 assert cell['occupied']
                 trial = reach_target(live, cell['position'], preset, 9300)
                 live.button('trigger');live.frame()
-                assert [0,0] not in live.state['extrude']['cells']
+                assert list(footprint[0]) not in live.state['extrude']['cells']
                 occupancy_trials.append({'tool':tool,'preset':preset,'reach':trial,
                                          'cells_after_click':live.state['extrude']['cells']})
                 capture(f'occupied-{tool}-{preset}')

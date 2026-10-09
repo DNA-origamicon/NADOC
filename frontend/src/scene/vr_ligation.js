@@ -1,3 +1,4 @@
+import { createVRCommitRefresh } from './vr_commit_refresh.js'
 /** Browser-owned wheel catalogs and serialized desktop-authoritative edits. */
 import { endRole, isValidPair, ligationArgs } from './force_ligation.js'
 
@@ -78,19 +79,19 @@ export function createVRLigation({ getState, api, clearSelection = () => {}, onO
       await publish(); return false
     }
     busy = true
+    const sceneRefresh = createVRCommitRefresh({ api, getState })
     try {
       clearSelection()
       let result
-      if (action === 'nick') result = await api.addNick(current.nickArgs[event.source])
-      else if (action === 'undo' || action === 'redo') result = await api[action]()
+      if (action === 'nick') result = await api.addNick(current.nickArgs[event.source], { onCommitted: sceneRefresh.onCommitted, deferGeometry: true })
+      else if (action === 'undo' || action === 'redo') result = await api[action]({ onCommitted: sceneRefresh.onCommitted, deferGeometry: true })
       else {
         const args = ligationArgs(a,b)
-        result = await api.forcedLigation(args.three_prime_strand_id, args.five_prime_strand_id)
+        result = await api.forcedLigation(args.three_prime_strand_id, args.five_prime_strand_id, false, { onCommitted: sceneRefresh.onCommitted, deferGeometry: true })
       }
       if (!result) throw new Error(action === 'undo' || action === 'redo' ? `Nothing to ${action}` : `${action} failed`)
       clearSelection()
-      const refresh = await api.refreshNativeVRScene({ expected_design_id: getState().currentDesign.id,
-        expected_revision: api.currentRevisionWatermark() })
+      const refresh = await sceneRefresh.complete()
       if (!refresh?.published) throw new Error('Edit saved, but VR scene refresh failed')
       status = 'created'
       return true

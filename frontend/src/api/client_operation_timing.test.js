@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { importDesign, getGeometry, getStraightGeometry, listActiveJobs, resetRevisionWatermark } from './client.js'
+import { importDesign, getGeometry, getStraightGeometry, listActiveJobs, resetRevisionWatermark, resizeStrandEnds, addNick, forcedLigation, addDeformation, createSweep, undo, redo, refreshNativeVRScene } from './client.js'
 import { store } from '../state/store.js'
 import { activeOperationTiming, beginOperationTiming, finishOperationTiming, markOperationTiming, finishOperationAfterRender } from '../perf/operation_timing.js'
 import { clearProcessLog, processLogSnapshot } from '../perf/process_log.js'
@@ -8,6 +8,42 @@ let frames
 const design = () => ({ id: 'timing-test', helices: [], strands: [], feature_log: [], deformations: [], extensions: [], overhangs: [] })
 const response = payload => ({ ok: true, status: 200, headers: new Headers(), json: async () => payload })
 const traces = () => processLogSnapshot().entries.filter(e => e.kind === 'Design operation')
+
+const vrMutations = [
+  ['resize', options => resizeStrandEnds([], options)],
+  ['nick', options => addNick({ helixId: 'h', bpIndex: 1, direction: 'FORWARD' }, options)],
+  ['ligate', options => forcedLigation('a', 'b', false, options)],
+  ['bend', options => addDeformation('bend', 0, 10, {}, [], false, [], options)],
+  ['twist', options => addDeformation('twist', 0, 10, {}, [], false, [], options)],
+  ['sweep', options => createSweep({}, options)],
+  ['undo', options => undo(options)], ['redo', options => redo(options)],
+]
+it.each(vrMutations)('%s starts VR export from the committed revision before desktop synchronization', async (_, mutate) => {
+  const payload = { design: design(), revision: 7, nucleotides: [], helix_axes: [] }
+  vi.stubGlobal('fetch', vi.fn(async () => response(payload)))
+  const onCommitted = vi.fn(value => {
+    expect(value).toBe(payload)
+    expect(store.getState().currentDesign).toBeNull()
+    // A pending export must not block synchronization of the desktop response.
+    return new Promise(() => {})
+  })
+  await mutate({ onCommitted })
+  expect(onCommitted).toHaveBeenCalledOnce()
+  expect(store.getState().currentDesign.id).toBe(payload.design.id)
+})
+
+it.each(vrMutations)('%s does not start VR export after a rejected mutation', async (_, mutate) => {
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ...response({ detail: 'stale' }), ok: false, status: 409 })))
+  const onCommitted = vi.fn()
+  expect(await mutate({ onCommitted })).toBeNull()
+  expect(onCommitted).not.toHaveBeenCalled()
+})
+it('never exports a transient deformation preview', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => response({ design: design(), revision: 7, nucleotides: [], helix_axes: [] })))
+  const onCommitted = vi.fn()
+  await addDeformation('bend', 0, 10, {}, [], true, [], { onCommitted })
+  expect(onCommitted).not.toHaveBeenCalled()
+})
 function flushFrames() { while (frames.length) frames.shift()() }
 beforeEach(() => {
   frames = []
@@ -111,4 +147,34 @@ it('does not indefinitely reuse activity status when an operation stays pending'
   await vi.advanceTimersByTimeAsync(2000)
   await refresh
   expect(fetch).toHaveBeenCalledTimes(2)
+})
+
+it('returns a geometry-free Nick commit before fetching complete desktop geometry', async () => {
+  const events = []
+  vi.stubGlobal('fetch', vi.fn(async (url, options) => {
+    if (url.endsWith('/design/nick')) {
+      expect(options.headers['X-NADOC-Skip-Geometry']).toBe('1')
+      return response({ design: design(), revision: 7 })
+    }
+    expect(url).toContain('/design/geometry')
+    expect(options.headers['X-NADOC-Skip-Geometry']).toBeUndefined()
+    events.push('geometry')
+    return response({ nucleotides: [], helix_axes: [] })
+  }))
+  await addNick({ helixId: 'h', bpIndex: 1, direction: 'FORWARD' }, {
+    deferGeometry: true, onCommitted: () => events.push('committed'),
+  })
+  expect(events).toEqual(['committed', 'geometry'])
+  expect(store.getState().currentGeometry).toEqual([])
+})
+
+
+it('dispatches VR export immediately, before synchronous desktop rebuild work can run', async () => {
+  const fetch = vi.fn(async () => response({ published: true }))
+  vi.stubGlobal('fetch', fetch)
+  const result = refreshNativeVRScene({ expected_design_id: 'd', expected_revision: 7 })
+  // No microtask/frame barrier: an unnecessary await here serializes export
+  // behind the caller's synchronous scene/store subscribers.
+  expect(fetch).toHaveBeenCalledOnce()
+  expect(await result).toEqual({ published: true })
 })

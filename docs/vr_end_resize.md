@@ -55,3 +55,13 @@ visibility failures and observation-framing changes are retained alongside the
 passing captures in `.development-artifacts/vr-end-pointer-validation-20261005.json`.
 The inspector exposes `hover_hand`, `hovered_arrow`, `pointer_start`, `pointer_end`,
 `label_position`, `label`, and `cancel_reason` under `end_resize`.
+
+Performance validation (2026-10-08): on the original 11,997-nucleotide
+`Circle_spiral.nadoc`, the real Vive/OpenXR resize pipeline fell from about 27 s
+to 2.97–3.36 s across all four controller profiles. All eight commits maintained
+89.5 FPS with no compositor repeated/dropped frames. Shared export now batches
+spline/slab calculations, avoids redundant work, runs in a CPU worker, and does
+not retry exports for autosave-only revision changes. Native bond feedback is
+parsed off the render thread; staged GPU uploads retain their time budget.
+The sub-second objective remains open. See the [latency audit](audits/vr_edit_latency_20261008.md)
+for reproduction, geometry parity, limitations and evidence.

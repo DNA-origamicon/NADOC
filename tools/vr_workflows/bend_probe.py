@@ -126,7 +126,14 @@ def run(socket, output, preset, mode):
     def pick(slot, bp):
         wait(lambda s: s['bend']['ready'])
         plane = np.array(live.state['bend']['planes'][slot-1]['center'])
-        approach_point(plane)
+        other = np.array(live.state['bend']['planes'][2-slot]['center'])
+        if os.environ.get('NADOC_VR_AUDIT_DESIGN') and 1e-6 < np.linalg.norm(plane-other) < .06:
+            # On a closed curve the endpoint planes nearly overlap. Approach
+            # the requested plane from its exposed side, not through the other.
+            body = plane + .12*(plane-other)/np.linalg.norm(plane-other)
+            reach(body, target_orientation=aim_orientation(body.tolist(),plane.tolist()))
+        else:
+            approach_point(plane)
         wait(lambda s: s['bend']['plane_hover'][1] == slot-1)
         live.send('button', hand=1, button='trigger', pressed=True); live.frame()
         assert live.state['bend']['plane_hand'] == 1 and not live.state['bend']['grabbing']
@@ -299,8 +306,9 @@ def run(socket, output, preset, mode):
             live.send('button', hand=0, button='trigger', pressed=False); live.frame()
             wait(lambda s: s['bend']['ready'])
             (out/'draft.json').write_text(json.dumps(live.state['bend'], indent=2))
+            revision = live.state['scene_revision']
             with operation(live,'bend-commit'):
-                controls.click('bend:confirm'); wait(lambda s: s['status'] == 'COMMITTED')
+                controls.click('bend:confirm'); wait(lambda s: s['status'] == 'COMMITTED' and s['scene_revision'] > revision)
             park(); capture('committed')
         (out/'result.json').write_text(json.dumps(live.state, indent=2))
     except Exception:

@@ -412,7 +412,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     await _commitResize(dragBeads, delta)
   }
 
-  async function _commitResize(dragBeads, delta) {
+  async function _commitResize(dragBeads, delta, onCommitted) {
     const previousSelection = canonicalSelection(store.getState())
     const entries = dragBeads.map(meta => ({
       strand_id: meta.bead.nuc.strand_id,
@@ -422,7 +422,8 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     }))
 
     console.debug(`[EndExtrudeArrows] commit resize — delta: ${delta}, entries:`, entries)
-    const result = await resizeStrandEnds(entries)
+    const result = await (onCommitted
+      ? resizeStrandEnds(entries, { onCommitted }) : resizeStrandEnds(entries))
     if (!result) throw new Error("End resize failed")
 
     // After the API resolves, store has new geometry and all bead positions have
@@ -571,7 +572,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
   return {
     vrHandles,
     invalidateVRHandles() { vrSignature = '' },
-    async resizeFromVR(version, delta) {
+    async resizeFromVR(version, delta, onCommitted) {
       vrHandles()
       if (vrBusy || !vrSnapshot?.handles.length || version !== vrSnapshot.version ||
           !Number.isSafeInteger(delta) || delta < vrSnapshot.minimum || delta > vrSnapshot.maximum) {
@@ -579,7 +580,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
       }
       const metas = vrSnapshot.metas
       vrBusy = true
-      try { if (delta) await _commitResize(metas, delta) }
+      try { if (delta) await _commitResize(metas, delta, onCommitted) }
       finally { vrBusy = false; vrSignature = ''; _rebuild() }
     },
     refresh() { _rebuild() },

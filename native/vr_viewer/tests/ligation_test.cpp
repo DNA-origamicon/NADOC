@@ -2,6 +2,8 @@
 #include "quiver_gesture.hpp"
 #include <cassert>
 #include <iostream>
+#include <filesystem>
+#include <thread>
 using namespace nadoc_vr;
 int main() {
     assert(std::string(kRadialEditLabels[0])=="LIGATE");
@@ -79,5 +81,30 @@ int main() {
         q.reset();pose({side,0,-.25F});step();
         assert(!q.update(qs,head,yaw*glm::angleAxis(glm::pi<float>(),glm::vec3(0,1,0)),0,true));
     }
+    // Reload a realistic bond table asynchronously, preserving normalization
+    // and retaining the prior complete targets if a later file is truncated.
+    const auto dir=std::filesystem::temp_directory_path()/
+        ("nadoc-ligation-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directory(dir);
+    const auto path=(dir/"events").string();
+    {
+        std::ofstream out(path+".ligation");
+        out<<"NADOC_LIGATION_1 2 ready 1\n3 0 identity 1 2 3 0 0 1 .1 .2 .3\nBONDS 12000\n";
+        for(int i=0;i<12000;++i)out<<"1 2 3 4 5 6 .1 .2 .3 .4 .5 .6\n";
+    }
+    auto poll=[&]{l.poll(path,{1,1,1},2,{0,0,-1});};
+    poll();assert(l.version==1); // Submission never synchronously installs data.
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    while(l.version!=2 && std::chrono::steady_clock::now()<deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));poll();
+    }
+    assert(l.version==2 && l.ends.size()==1 && l.bonds.size()==12000 && !l.waiting);
+    assert(l.ends[0].position==glm::vec3(0,2,3));
+    assert(l.bonds[0].b==glm::vec3(6,8,9));
+    assert(glm::distance(l.bonds[0].offsetB,glm::vec3(.8F,1,1.2F))<1e-6F);
+    {std::ofstream out(path+".ligation");out<<"NADOC_LIGATION_1 3 ready 1\n3 0 broken";}
+    for(int i=0;i<20;++i) {poll();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    assert(l.version==2 && l.ends[0].identity=="identity" && l.bonds.size()==12000);
+    std::filesystem::remove_all(dir);
     std::cout<<"Ligation: both polarities, stretch, invalid targets, cancellation, single commit passed\n";
 }

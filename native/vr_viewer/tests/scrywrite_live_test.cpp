@@ -11,6 +11,26 @@ void requireLive(bool condition, const char* detail) {
 }
 #include "representation_shadow_check.hpp"
 struct LiveViewerTest {
+    static void verifyNickCatalog() {
+        Viewer v(SceneData{});
+        v.ligation_.version=7;
+        v.ligation_.bonds={{{1,2,3},{4,5,6},{},{}}};
+        requireLive(v.liveState().find("\"bonds_omitted\":true")!=std::string::npos,"Inactive Nick serialized targets");
+        const auto sequence=v.liveCommandSequence_;
+        const auto full=v.liveCommand("observe targets");
+        requireLive(full.find("\"bonds_omitted\":false")!=std::string::npos &&
+                    full.find("\"a\":[1,2,3]")!=std::string::npos,"Explicit bond catalog unavailable");
+        requireLive(v.liveCommandSequence_==sequence,"Read-only catalog changed command sequence");
+        v.ligation_.nickActive=true;
+        const auto first=v.liveBondCatalog_;
+        requireLive(v.liveState(true).find(first)!=std::string::npos,"Active Nick omitted cached targets");
+        v.ligation_.bonds[0].a.x=9;++v.ligation_.version;
+        requireLive(v.liveState(true).find("\"a\":[9,2,3]")!=std::string::npos,"Changed targets reused old catalog");
+        const auto changed=v.liveBondCatalog_;
+        v.manipulator_.placeInView({0,1,0},glm::quat(1,0,0,0));
+        v.liveState(true);
+        requireLive(v.liveBondCatalog_!=changed,"Model movement reused old world positions");
+    }
     static void verifyViewToolsFrameSeam() {
         Viewer v(SceneData{});
         auto& tools=v.viewTools_;
@@ -142,7 +162,7 @@ struct LiveViewerTest {
                         v.extrudePanel_.active==open && v.latticeOpen_==open &&
                         v.desktopPanel_.open==open && v.viewTools_.open==open &&
                         !v.movePanel_.active && !v.bendPanel_.active && !v.volumePanel_.active &&
-                        !v.dimensionPanel_.tool.active && !v.radialToolMenu_.open(),
+                        !v.dimensionPanel_.tool.active && v.radialToolMenu_.pending()==action,
                         "Radial history opened or replaced an interface");
             requireLive(v.toolShell_.mode()==mode && v.toolConfig_.mode()==configuration &&
                         v.sidebarMenus_.menus[1].tab().key==rightTab,
@@ -922,18 +942,25 @@ int main(int argc, char** argv) {
     try {
         if (argc == 2 && std::string(argv[1]) == "--gl-ids") return objectIdGlChecks();
         if (argc < 2) return 2;
-        LiveViewerTest::verifyDashboardFocusLoss();
-        LiveViewerTest::verifyViewToolsFrameSeam();
-        LiveViewerTest::verifyVRTabActions();
-        LiveViewerTest::verifySidebarSpawnView();
-        LiveViewerTest::verifyRadialHistoryAndCurrentPanels();
-        LiveViewerTest::verifyTrajectoryLauncherWithBothSidebars();
+        // IPC clients exercise production handlers directly. Keep their server
+        // entry point independent of unrelated panel unit assertions below.
         if (argc == 4 && std::string(argv[2]) == "--serve") {
             Viewer viewer(loadScene(argv[1]));
             LiveViewerTest::setup(viewer, argv[3]);
             LiveViewerTest::serve(viewer);
             return 0;
         }
+        if (argc == 2 && std::string(argv[1]) == "--nick-catalog") {
+            LiveViewerTest::verifyNickCatalog();
+            return 0;
+        }
+        LiveViewerTest::verifyNickCatalog();
+        LiveViewerTest::verifyDashboardFocusLoss();
+        LiveViewerTest::verifyViewToolsFrameSeam();
+        LiveViewerTest::verifyVRTabActions();
+        LiveViewerTest::verifySidebarSpawnView();
+        LiveViewerTest::verifyRadialHistoryAndCurrentPanels();
+        LiveViewerTest::verifyTrajectoryLauncherWithBothSidebars();
         char directory[] = "/tmp/nadoc-scry-test-XXXXXX";
         if (!::mkdtemp(directory)) return 2;
         LiveViewerTest::verifyTrajectorySidebar(directory);

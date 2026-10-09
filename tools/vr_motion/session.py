@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import shutil
+import time
 
 
 class LiveSession:
@@ -31,6 +32,10 @@ class LiveSession:
     def send(self, operation, **args):
         if self.cancel and self.cancel.is_set() and operation != 'release':
             raise InterruptedError('profile run cancelled')
+        # Host dispatch timestamp for edit latency; no extra IPC or frame work.
+        if ((operation == 'button' and args.get('button') in ('trigger', 'trackpad'))
+                or (operation == 'trigger_value' and args.get('value') == 1)):
+            self.last_edit_input_ms = time.time()*1000
         sequence = self.state['command_sequence']+1
         self.last_operation={"operation":operation,"sequence":sequence,"frame":self.state.get("frame")}
         return self.checked(self.bridge.call('scrywrite_'+operation, {

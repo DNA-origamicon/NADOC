@@ -73,7 +73,7 @@ export function createVRToolTransactionCoordinator({
     }
   }
 
-  async function undo({ tool } = {}) {
+  async function undo({ tool, onCommitted } = {}) {
     if (inFlight) return { accepted: false, reason: 'transaction_busy' }
     if (!committed || committed.tool !== tool) {
       return { accepted: false, reason: 'no_vr_commit' }
@@ -85,7 +85,7 @@ export function createVRToolTransactionCoordinator({
     inFlight = true
     try {
       const transaction = { ...committed }
-      const result = await undoDesign()
+      const result = await (onCommitted ? undoDesign({ onCommitted }) : undoDesign())
       if (!result) return { accepted: false, reason: 'undo_failed' }
       committed = null
       return { accepted: true, reason: 'undone', transaction }

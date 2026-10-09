@@ -392,7 +392,7 @@ async function _ensureAssemblySimulation(path, { method = 'GET', timeoutMs = _RE
   })
 }
 
-export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true, skipSimulationPrepare = false, excludeFromTiming = false } = {}) {
+export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true, skipSimulationPrepare = false, excludeFromTiming = false, deferGeometry = false } = {}) {
   if (store.getState().featureSeekPending && method !== 'GET'
       && /^\/(design|assembly)(?:\/|$)/.test(path)
       && path !== '/design/loadouts/activate-editable'
@@ -452,6 +452,7 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
     method,
     headers: {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      ...(deferGeometry ? { 'X-NADOC-Skip-Geometry': '1' } : {}),
       // X-NADOC-Doc: route to this tab's backend document, OR to an explicitly
       // named doc (docId) for one-off cross-document calls (e.g. a part editor
       // reaching into the assembly's doc). `undefined` keeps the legacy default.
@@ -577,7 +578,7 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
         const retryBody = path === '/design/features/seek'
           ? { ...body, preview_token: null, known_revision: null } : body
         return _request(method, path, retryBody, {
-          signal, suppressBusy, docId, timeoutMs, protectedRetry: false,
+          signal, suppressBusy, docId, timeoutMs, protectedRetry: false, deferGeometry,
         })
       }
     }
@@ -1099,8 +1100,9 @@ async function _applyGetDesignResponse(json, metadataOnly) {
  * Revert to the previous design state (server-side undo stack, up to 50 steps).
  * Returns null if nothing to undo (404 from server).
  */
-export async function undo() {
-  const json = await _request('POST', '/design/undo')
+export async function undo({ onCommitted, deferGeometry = false } = {}) {
+  const json = await _request('POST', '/design/undo', undefined, { deferGeometry })
+  if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
   if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
   if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
   return _syncFromDesignResponse(json)
@@ -1110,8 +1112,9 @@ export async function undo() {
  * Re-apply the last undone mutation (server-side redo stack, up to 50 steps).
  * Returns null if nothing to redo (404 from server).
  */
-export async function redo() {
-  const json = await _request('POST', '/design/redo')
+export async function redo({ onCommitted, deferGeometry = false } = {}) {
+  const json = await _request('POST', '/design/redo', undefined, { deferGeometry })
+  if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
   if (json?.diff_kind === 'cluster_only')   return _syncClusterOnlyDiff(json)
   if (json?.diff_kind === 'positions_only') return _syncPositionsOnlyDiff(json)
   return _syncFromDesignResponse(json)
@@ -1546,12 +1549,13 @@ export async function patchForcedLigationExtraBases(flId, sequence) {
  * editor's pencil-tool forced ligation uses. Records a ForcedLigation (not a
  * canonical Crossover). `is_periodic_seam` is false for direct 3D edits.
  */
-export async function forcedLigation(threePrimeStrandId, fivePrimeStrandId, isPeriodicSeam = false) {
+export async function forcedLigation(threePrimeStrandId, fivePrimeStrandId, isPeriodicSeam = false, { onCommitted, deferGeometry = false } = {}) {
   const json = await _request('POST', '/design/forced-ligation', {
     three_prime_strand_id: threePrimeStrandId,
     five_prime_strand_id:  fivePrimeStrandId,
     is_periodic_seam:      isPeriodicSeam,
-  })
+  }, { deferGeometry })
+  if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
   return _syncFromDesignResponse(json)
 }
 
@@ -1853,6 +1857,7 @@ export async function addDeformation(type, planeA, planeB, params, helixIds = []
     preview,
   }
   const json = await _request('POST', '/design/deformation', body)
+  if (!preview && json?.design && Number.isSafeInteger(json.revision)) guard.onCommitted?.(json)
   // A preview op is transient (no undo, no commit) → must not auto-save/propagate
   // to the assembly. The non-preview add IS the commit → save normally.
   const synced = _syncFromDesignResponse(json, { transient: preview })
@@ -2344,8 +2349,12 @@ export async function deleteStrandsBatch(strandIds) {
  * Resize one or more strand terminal domains by delta_bp each.
  * entries: Array<{ strand_id, helix_id, end: '5p'|'3p', delta_bp: number }>
  */
-export async function resizeStrandEnds(entries) {
+export async function resizeStrandEnds(entries, { onCommitted } = {}) {
   const json = await _request('POST', '/design/strand-end-resize', { entries })
+  // VR can begin its canonical export while the desktop merges/rebuilds the
+  // same response. Pin the server's committed identity/revision, not UI state
+  // that has yet to synchronize. This callback never replays the mutation.
+  if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
   return _syncFromDesignResponse(json)
 }
 
@@ -2371,12 +2380,13 @@ export async function deleteDomain(strandId, domainIndex) {
  * (helixId, bpIndex, direction).  The strand is split into left (3′ = bpIndex)
  * and right (5′ = next nucleotide) fragments.
  */
-export async function addNick({ helixId, bpIndex, direction }) {
+export async function addNick({ helixId, bpIndex, direction }, { onCommitted, deferGeometry = false } = {}) {
   const json = await _request('POST', '/design/nick', {
     helix_id:  helixId,
     bp_index:  bpIndex,
     direction,
-  })
+  }, { deferGeometry })
+  if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
   return _syncFromDesignResponse(json)
 }
 
@@ -5538,6 +5548,8 @@ export const previewSweep = (body, index = null, { includeGeometry = true } = {}
   if (!includeGeometry) query.set('include_geometry', 'false')
   return _request('POST', `/design/sweep/preview${query.size ? `?${query}` : ''}`, body, { suppressBusy: true })
 }
-export async function createSweep(body) {
-  return _syncFromDesignResponse(await _request('POST', '/design/sweep', body))
+export async function createSweep(body, { onCommitted } = {}) {
+  const json = await _request('POST', '/design/sweep', body)
+  if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
+  return _syncFromDesignResponse(json)
 }

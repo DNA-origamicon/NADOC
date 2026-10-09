@@ -485,54 +485,42 @@ def _centripetal_catmull_rom(
     if len(control_points) < 2:
         return control_points
 
-    def point_at(t: float) -> np.ndarray:
-        point_count = len(control_points)
-        scaled = (point_count - 1) * t
-        index = int(np.floor(scaled))
-        weight = scaled - index
-        if weight == 0 and index == point_count - 1:
-            index = point_count - 2
-            weight = 1.0
-        p1, p2 = control_points[index], control_points[index + 1]
-        p0 = (
-            control_points[index - 1]
-            if index > 0
-            else 2.0 * control_points[0] - control_points[1]
-        )
-        p3 = (
-            control_points[index + 2]
-            if index + 2 < point_count
-            else 2.0 * control_points[-1] - control_points[-2]
-        )
-        dt0 = float(np.linalg.norm(p1 - p0) ** 0.5)
-        dt1 = float(np.linalg.norm(p2 - p1) ** 0.5)
-        dt2 = float(np.linalg.norm(p3 - p2) ** 0.5)
-        if dt1 < 1e-4:
-            dt1 = 1.0
-        if dt0 < 1e-4:
-            dt0 = dt1
-        if dt2 < 1e-4:
-            dt2 = dt1
-        tangent1 = (p1 - p0) / dt0 - (p2 - p0) / (dt0 + dt1) + (p2 - p1) / dt1
-        tangent2 = (p2 - p1) / dt1 - (p3 - p1) / (dt1 + dt2) + (p3 - p2) / dt2
-        tangent1 *= dt1
-        tangent2 *= dt1
-        c0 = p1
-        c1 = tangent1
-        c2 = -3.0 * p1 + 3.0 * p2 - 2.0 * tangent1 - tangent2
-        c3 = 2.0 * p1 - 2.0 * p2 + tangent1 + tangent2
-        return c0 + c1 * weight + c2 * weight**2 + c3 * weight**3
+    # Compute each span's polynomial once, then evaluate all requested samples
+    # together. The desktop's endpoint extrapolation, coincident-point fallback
+    # and 200-step arc-length table remain unchanged.
+    points = np.asarray(control_points, dtype=float)
+    padded = np.concatenate((2 * points[:1] - points[1:2], points,
+                             2 * points[-1:] - points[-2:-1]))
+    p0, p1, p2, p3 = padded[:-3], padded[1:-2], padded[2:-1], padded[3:]
+    dt0 = np.linalg.norm(p1 - p0, axis=1) ** .5
+    dt1 = np.linalg.norm(p2 - p1, axis=1) ** .5
+    dt2 = np.linalg.norm(p3 - p2, axis=1) ** .5
+    dt1 = np.where(dt1 < 1e-4, 1., dt1)
+    dt0 = np.where(dt0 < 1e-4, dt1, dt0)[:, None]
+    dt2 = np.where(dt2 < 1e-4, dt1, dt2)[:, None]
+    dt1 = dt1[:, None]
+    tangent1 = ((p1 - p0) / dt0 - (p2 - p0) / (dt0 + dt1) + (p2 - p1) / dt1) * dt1
+    tangent2 = ((p2 - p1) / dt1 - (p3 - p1) / (dt1 + dt2) + (p3 - p2) / dt2) * dt1
+    c2 = -3.0 * p1 + 3.0 * p2 - 2.0 * tangent1 - tangent2
+    c3 = 2.0 * p1 - 2.0 * p2 + tangent1 + tangent2
+
+    def points_at(parameters):
+        scaled = (len(points) - 1) * parameters
+        indices = np.minimum(np.floor(scaled).astype(int), len(points) - 2)
+        weights = (scaled - indices)[:, None]
+        return (p1[indices] + tangent1[indices] * weights
+                + c2[indices] * weights**2 + c3[indices] * weights**3)
 
     parameters = np.linspace(0, 1, segments + 1)
     if arc_length:
         # Three.js TubeGeometry uses getPointAt, with Curve's default 200-step
         # arc-length lookup, rather than uniformly spaced spline parameters.
         lookup = np.linspace(0, 1, 201)
-        positions = np.asarray([point_at(t) for t in lookup])
+        positions = points_at(lookup)
         lengths = np.r_[0, np.cumsum(np.linalg.norm(np.diff(positions, axis=0), axis=1))]
         if lengths[-1] > 0:
             parameters = np.interp(parameters * lengths[-1], lengths, lookup)
-    return tuple(point_at(t) for t in parameters)
+    return tuple(points_at(parameters))
 
 
 def _flexible_anchor_nucleotide(design, nucleotides: list[dict], anchor):

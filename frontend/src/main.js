@@ -6576,11 +6576,19 @@ async function main() {
         vrEndCommitting = true
         void (async () => {
           try {
-            await endExtrudeArrows.resizeFromVR(event.version, event.delta)
-            const refreshed = await api.refreshNativeVRScene({
-              expected_design_id: store.getState().currentDesign.id,
-              expected_revision: api.currentRevisionWatermark(),
+            let refresh
+            await endExtrudeArrows.resizeFromVR(event.version, event.delta, response => {
+              // Export concurrently with desktop geometry synchronization.
+              // Capture failures immediately so a desktop rebuild error cannot
+              // leave an unhandled background rejection.
+              refresh = api.refreshNativeVRScene({
+                expected_design_id: response.design.id,
+                expected_revision: response.revision,
+              }).then(result => ({ result }), error => ({ error }))
             })
+            const outcome = await refresh
+            if (outcome?.error) throw outcome.error
+            const refreshed = outcome?.result
             if (!refreshed?.published) throw new Error('Resize saved, but VR scene refresh failed')
           } catch (error) { showToast(error.message, { severity: 'error' }) }
           finally {
