@@ -1,3 +1,4 @@
+import { initReferenceModels } from './scene/reference_models.js'
 import { initNativePlacementIntegrityMonitor } from './viewer/native_placement.js'
 import { initDeformationToolLauncher } from './ui/deformation_tool_launcher.js'
 import { createVRRouting } from './scene/vr_routing.js'
@@ -354,6 +355,8 @@ async function main() {
     setRenderFn, resetRenderFn, isStandardRender,
     setNativeVRActive, setNativeVRDesktopEnabled,
   } = initScene(canvas, { placementStore: store })
+  const referenceModels = initReferenceModels({ scene, camera, canvas, controls, onImported: () => _hideWelcome(), onSelected: () => selectionManager?.clearSelection() })
+  if (DEBUG) window.__referenceModels = referenceModels
   const vrDesktopDisplay = initVRDesktopDisplay({ document, setNativeVRActive, setNativeVRDesktopEnabled })
   initNamdPegCoatingPreview({ scene })
   initTwoElectrodePreview({ scene, camera, controls })
