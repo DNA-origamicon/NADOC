@@ -209,14 +209,35 @@ export function availabilityHeader() {
 }
 
 /** Rows as HTML for the table body. */
+export function availabilityResourceRows(rows) {
+  return (rows || []).flatMap(row => {
+    if (!row.gpu_resources?.length) return [row]
+    return row.gpu_resources.map(resource => ({
+      ...row,
+      ...resource,
+      gpu_model: `${resource.label || resource.gres_type}${resource.mig ? ' · MIG' : ' · whole GPU'}`,
+      // Each row is one exact request type. Never inherit another type's forecast.
+      wait_min: resource.wait_min ?? null,
+      wait_basis: resource.wait_basis || '',
+      slurm_start: resource.slurm_start ?? null,
+      job_cost_su: resource.job_cost_su ?? null,
+      job_su_per_ns: resource.job_su_per_ns ?? null,
+      job_ns_per_day: resource.job_ns_per_day ?? null,
+      time_to_result_h: resource.time_to_result_h ?? null,
+      mig_total: 0,
+      mig_free: 0,
+    }))
+  })
+}
+
 export function renderAvailabilityRows(rows) {
   if (!(rows && rows.length)) return ''
-  return rows
+  return availabilityResourceRows(rows)
     .map(row => {
       const v = availabilityView(row)
       const dim = v.requestOnly ? 'opacity:.55;' : ''
       return (
-        `<div class="alpine-avail-row" data-partition="${_esc(v.partition)}" ` +
+        `<div class="alpine-avail-row" data-partition="${_esc(v.partition)}" data-gres-type="${_esc(row.gres_type)}" ` +
         `style="display:grid;grid-template-columns:1.5fr .8fr 1fr .9fr 1fr .8fr;gap:10px;` +
         `align-items:baseline;padding:6px 9px;border-radius:4px;${dim}">` +
         `<span><span style="color:#c9d1d9;font-weight:600">${_esc(v.partition)}</span> ` +
@@ -259,9 +280,10 @@ export function availabilityMessage(resp, { busy = false, error = '' } = {}) {
  * looking like zero.
  */
 export function bestPartitionHint(rows) {
-  const usable = (rows || []).filter(r => !r.request_only && r.time_to_result_h != null)
+  const usable = availabilityResourceRows(rows).filter(r => !r.request_only && r.time_to_result_h != null
+    && (!r.gpu_resources?.length || r.gpus_total > 0))
   if (!usable.length) return ''
   const best = usable.reduce((a, b) => (b.time_to_result_h < a.time_to_result_h ? b : a))
   const v = availabilityView(best)
-  return `Fastest to a finished run: ${best.partition} — starts in ${v.wait}, done in ${v.ttr} (${v.cost})`
+  return `Fastest to a finished run: ${_esc(best.partition)}${best.gpu_resources?.length ? ` (${_esc(best.gpu_model)})` : ''} — starts in ${v.wait}, done in ${v.ttr} (${v.cost})`
 }

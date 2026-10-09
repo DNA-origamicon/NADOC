@@ -109,6 +109,11 @@ export function initClusterAvailability({
           : ''
       }
       <div style="font-size:10px;color:#6e7681;margin-top:6px;line-height:1.5">
+        Whole GPUs and MIG slices are separate choices, as in the NAMD wizard.
+        Queue counts are partition-wide.
+        ${_resp?.job_shape
+          ? 'Wait estimates use the selected prepared job’s resource request; the wizard shows general availability.'
+          : 'General availability: wait estimates are not sized for a specific job.'}
         Wait estimates combine three independent signals — GPUs idle now, SLURM's own
         backfill prediction for this job, and the median of recent jobs. Hover a wait to
         see which one it came from. “unknown” means SLURM could not place the job; it does

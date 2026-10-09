@@ -45,6 +45,22 @@ const connectCluster = () => window.dispatchEvent(
 beforeEach(() => { document.body.innerHTML = '' })
 
 describe('render', () => {
+  it('can re-check stale Alpine availability without changing a valid GPU choice', async () => {
+    const { mount, step, fetchAvailability } = setup()
+    clickTarget(mount, 'alpine')
+    connectCluster()
+    await vi.waitFor(() => expect(step.partition).toBe('ah200'))
+    fetchAvailability.mockResolvedValueOnce({ ...AVAIL, checked_at: '2026-10-09T10:00:00',
+      partitions: AVAIL.partitions.map(r => ({ ...r, gpus_free: 0 })) })
+    mount.querySelector('#wiz-target-alpine-refresh').click()
+    await vi.waitFor(() => expect(mount.textContent).toContain('Checked 2026-10-09 10:00:00'))
+    expect(fetchAvailability).toHaveBeenLastCalledWith({ force: true })
+    expect(mount.querySelector('.wiz-part-row').textContent).toContain('0 / 16 free')
+    expect(step.partition).toBe('ah200')
+    expect(mount.textContent).toContain('General availability')
+    step.dispose()
+  })
+
   it('offers all three targets with local preselected', () => {
     const { mount, step } = setup()
     expect(mount.querySelectorAll('.wiz-target-card')).toHaveLength(3)

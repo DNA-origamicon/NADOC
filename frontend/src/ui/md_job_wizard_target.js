@@ -208,6 +208,19 @@ export function initWizardTargetStep({
   function _paintAlpine() {
     const box = _bodies.alpine
     if (!box) return
+    const refreshButton = box.querySelector('#wiz-target-alpine-refresh')
+    if (refreshButton) {
+      refreshButton.hidden = _ro()
+      refreshButton.disabled = _availBusy || _clusterState !== 'connected'
+      refreshButton.textContent = _availBusy ? 'Checking Alpine…' : 'Re-check GPU availability'
+    }
+    const context = box.querySelector('#wiz-target-alpine-context')
+    if (context) {
+      context.hidden = _ro()
+      context.textContent = 'General availability, not a wait estimate for this job’s CPU, memory and wall time. '
+        + 'Whole GPUs and MIG slices are separate choices.'
+        + (_avail?.checked_at ? ` Checked ${_avail.checked_at.replace('T', ' ')}${_avail.cached ? ' (cached)' : ''}.` : '')
+    }
     const warningEl = box.querySelector('#wiz-target-alpine-scheduler-warning')
     if (warningEl) {
       const warning = !_ro() && _clusterState === 'connected' && _avail
@@ -388,6 +401,16 @@ export function initWizardTargetStep({
       if (t.id === 'alpine') {
         const chip = el('div', { attrs: { style: 'margin-bottom:8px' } })
         body.appendChild(chip)
+        const refreshButton = el('button', {
+          id: 'wiz-target-alpine-refresh', text: 'Re-check GPU availability',
+          attrs: { type: 'button' },
+        })
+        refreshButton.addEventListener('click', () => _loadAvailability({ force: true }))
+        body.appendChild(refreshButton)
+        body.appendChild(el('div', {
+          id: 'wiz-target-alpine-context',
+          attrs: { style: 'font-size:10px;color:#8b949e;margin:6px 0;line-height:1.5' },
+        }))
         body.appendChild(el('div', {
           id: 'wiz-target-alpine-scheduler-warning',
           attrs: { style: 'margin-bottom:8px', hidden: true },

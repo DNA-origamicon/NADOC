@@ -3,6 +3,7 @@ import {
   availabilityBadge,
   availabilityHeader,
   availabilityMessage,
+  availabilityResourceRows,
   availabilityView,
   bestPartitionHint,
   formatHours,
@@ -13,6 +14,7 @@ import {
   renderSchedulerWarning,
   schedulerWarning,
 } from './cluster_availability_rows.js'
+import { partitionChoices } from './md_job_wizard_target_model.js'
 
 const row = (over = {}) => ({
   partition: 'ah200',
@@ -278,6 +280,26 @@ describe('bestPartitionHint', () => {
 })
 
 describe('MIG slices', () => {
+  it('shows the same whole-GPU and MIG counts as the wizard, with independent waits', () => {
+    const partitions = [row({ gpu_resources: [
+      { gres_type: 'h200', label: 'H200', gpus_free: 0, gpus_total: 8,
+        wait_min: 120, wait_basis: 'SLURM backfill estimate' },
+      { gres_type: 'h200_1g.18gb', label: 'H200 18 GB', mig: true,
+        gpus_free: 6, gpus_total: 16, wait_min: 0, wait_basis: 'free now' },
+    ] })]
+    const views = availabilityResourceRows(partitions).map(availabilityView)
+    const choices = partitionChoices({ partitions })
+    expect(views.map(v => v.free)).toEqual(choices.map(c => c.free))
+    expect(views.map(v => v.wait)).toEqual(['2 h', 'now'])
+    expect(views.map(v => v.badge.text)).toEqual(['full', 'contended'])
+    const html = renderAvailabilityRows(partitions)
+    expect(html.match(/class="alpine-avail-row"/g)).toHaveLength(2)
+    expect(html).toContain('H200 18 GB · MIG')
+    expect(html).not.toContain('whole-GPU job cannot use')
+    expect(views[1].cost).toBe('—')
+    expect(bestPartitionHint(partitions)).toBe('')
+  })
+
   it('are reported apart from whole cards, never folded into them', () => {
     // A whole-GPU job cannot use a 35 GB slice, so adding them would advertise
     // capacity the job can never get (live 2026-08-06: 8 nodes read as 56 "GPUs").
