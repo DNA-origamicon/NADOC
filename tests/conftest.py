@@ -568,6 +568,14 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # October 9 fast-suite triage: real mesh generation (7.3 s), large fixture
+    # geometry/seed/clash evaluation (6.4–6.7 s), and complete routing builds
+    # (5.8–6.4 s). Smaller unit oracles remain in the fast suite.
+    "test_clean_18hb_reports_no_clashes",
+    "test_teeth_closing_zig",
+    "test_voltron_protein_overhang_cylinder_matches_bead_orientation",
+    "test_full_autostaple_splits_oversize_seam_bridge",
+    "test_teeth_spec_matches_hand_calls",
     # Full desktop representation export and native scene validation (8.6 s isolated).
     "test_desktop_meshes_previews_and_vdw_round_trip",
     # Executes the real upstream oxDNA engine (8.10 s), not the mock runner.
@@ -937,6 +945,8 @@ _SLOW_TESTS = {
 # whenever only one param of a parametrized test is heavy — relegating the whole test
 # would throw away a fast gate that costs almost nothing.
 _SLOW_PARAMS = {
+    "test_surface_keeps_desktop_strand_ownership_and_motion[surface-detail-chimerax]",
+    "test_the_mrdna_seed_is_the_geometric_layers_site[fixture2]",
     # Builds full representations plus a second detailed molecular surface and
     # invokes the native VR validator: 6.39 s in the isolated FAST run.
     "test_selective_export_matches_same_blocks_in_complete_snapshot[surface-detail]",
@@ -973,11 +983,11 @@ def _slow_area_for(module: str) -> str:
         return "cando"
     if "namd" in module or module == "test_remote_cutoff_eval":
         return "namd"
-    if "mrdna" in module:
+    if "mrdna" in module or module == "test_helical_site":
         return "mrdna"
     # Protein attachment geometry is selected by the protein leaf rule alongside the
     # oxDNA protein-fork integration coverage.
-    if module == "test_protein":
+    if module in {"test_protein", "test_overhang_geometry"}:
         return "oxdna"
     # pdb_export builds a full atomistic model then writes the PDB — same heavy
     # reconstruction stack as the atomistic tests, so its slow tests belong there.
@@ -985,6 +995,7 @@ def _slow_area_for(module: str) -> str:
         "atomistic" in module
         or module == "test_cpd_design"
         or module == "test_vr_representation_loading"
+        or module == "test_vr_extra_representations"
         or "pdb_export" in module
         or "ring_piercing" in module
         or "two_base_default" in module
@@ -998,7 +1009,7 @@ def _slow_area_for(module: str) -> str:
     # cluster autodetect's heavy test is heavy because it builds a fully ROUTED 18hb
     # through the headless build API — so a headless/routing change is what should
     # re-run it.
-    if "cluster_autodetect" in module:
+    if "cluster_autodetect" in module or module in {"test_clash", "test_seamless_router", "test_simple_router"}:
         return "headless"
     # Unclassified slow test: park in "md" (a broad sim area). It still always
     # runs under a FULL selection; this only affects narrow leaf selections.

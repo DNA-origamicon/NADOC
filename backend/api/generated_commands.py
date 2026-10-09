@@ -16,7 +16,7 @@ from backend.core.models import (
     OverhangRotationLogEntry,
 )
 from backend.core.design_diff import encode_child_diff
-from backend.core.loop_skip_calculator import apply_loop_skips
+from backend.core.loop_skip_calculator import apply_loop_skips, clear_loop_skips
 
 
 def fine_routing(before, after, commands):
@@ -52,6 +52,22 @@ def fine_routing(before, after, commands):
 
 def ordinary_entries(before, after, entry, key):
     """Replace compound generator labels with native, fully specified operations."""
+    if key == "section-profile":
+        from backend.core.lattice import resize_strand_ends
+        params = {"entries": entry.params["entries"]}
+        return [fine_routing(before, after, [("strand-end-resize", "Size reinforcement spans", params,
+            lambda d: resize_strand_ends(d, params["entries"]))])]
+    if key == "sweep":
+        # SweepRequest forbids extra keys; this is a native authoring command.
+        return [
+            entry.model_copy(
+                update={
+                    "params": {
+                        k: v for k, v in entry.params.items() if k != "_generator"
+                    }
+                }
+            )
+        ]
     if key == "prepare-handles":
         from backend.core.nanoparticle import replace_gold_nanosphere
 
@@ -164,6 +180,18 @@ def ordinary_entries(before, after, entry, key):
             prior = {
                 m.bp_index: m.delta for m in before.find_helix(helix.id).loop_skips
             }
+            removed = set(prior) - {m.bp_index for m in helix.loop_skips}
+            for bp in sorted(removed):
+                commands.append(
+                    (
+                        "loop-skip-insert",
+                        f"Remove loop/skip · helix {helix.id} bp {bp}",
+                        dict(helix_id=helix.id, bp_index=bp, delta=0),
+                        lambda d, hid=helix.id, bp=bp: clear_loop_skips(
+                            d, [hid], bp, bp + 1
+                        ),
+                    )
+                )
             for mark in helix.loop_skips:
                 if prior.get(mark.bp_index) == mark.delta:
                     continue

@@ -1,3 +1,4 @@
+import { animationNativePosition } from './animation_native_position.js'
 import { revealSweepTube } from './sweep_animation_reveal.js'
 import { positionUpdateLookup } from '../viewer/geometry_codec.js'
 import { validateNativePlacement, placementIntegrityFailure, requireMappedNativePose, replaceNativePlacement, nativeMapPosition, validateNativePoseMap } from '../viewer/native_placement.js'
@@ -4790,8 +4791,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       for (const entry of backboneEntries) {
         const isExcluded = _isExcluded(entry.nuc.helix_id)
         const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
-        const fp  = nativeMapPosition(fromPosMap, entry.nuc, entry._copy ?? 0)
-        const tp  = nativeMapPosition(toPosMap, entry.nuc, entry._copy ?? 0)
+        const fp  = animationNativePosition(fromBaked, entry.nuc, entry._copy ?? 0)
+        const tp  = animationNativePosition(toBaked, entry.nuc, entry._copy ?? 0)
 
         if (!isExcluded) {
           if (fp && tp) {
@@ -4828,12 +4829,13 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // when fade != 1.
       for (const cone of coneEntries) {
         const isExcluded = _isExcluded(cone.fromNuc.helix_id) || _isExcluded(cone.toNuc.helix_id)
-        const fromKey = `${cone.fromNuc.helix_id}:${cone.fromNuc.bp_index}:${cone.fromNuc.direction}`
-        const toKey   = `${cone.toNuc.helix_id}:${cone.toNuc.bp_index}:${cone.toNuc.direction}`
-        const fp_f    = fromPosMap?.get(fromKey)
-        const fp_t    = fromPosMap?.get(toKey)
-        const tp_f    = toPosMap?.get(fromKey)
-        const tp_t    = toPosMap?.get(toKey)
+        const fe = _nucToEntry.get(cone.fromNuc)
+        const te = _nucToEntry.get(cone.toNuc)
+        if (!fe || !te) continue
+        const fp_f = animationNativePosition(fromBaked, cone.fromNuc, fe._copy ?? 0)
+        const fp_t = animationNativePosition(fromBaked, cone.toNuc, te._copy ?? 0)
+        const tp_f = animationNativePosition(toBaked, cone.fromNuc, fe._copy ?? 0)
+        const tp_t = animationNativePosition(toBaked, cone.toNuc, te._copy ?? 0)
         const existedBefore = !!(fp_f && fp_t)
         const existsAfter   = !!(tp_f && tp_t)
         let coneFade
@@ -4845,10 +4847,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
           fadeOpts.sweepReveal.scale(cone.fromNuc, coneFade),
           fadeOpts.sweepReveal.scale(cone.toNuc, coneFade))
         if (isExcluded && coneFade === 1) continue   // cluster transform already wrote the matrix
-
-        const fe = _nucToEntry.get(cone.fromNuc)
-        const te = _nucToEntry.get(cone.toNuc)
-        if (!fe || !te) continue
 
         if (!isExcluded) {
           // Prefer fromPosMap endpoints when both exist (gives a smooth lerp
@@ -4880,8 +4878,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
       // Slab endpoint poses come from the exact same geometry authority as beads.
       for (const slab of slabEntries) {
         const isExcluded = _isExcluded(slab.nuc.helix_id)
-        const fp = nativeMapPosition(fromPosMap, slab.nuc, slab._copy ?? 0)
-        const tp = nativeMapPosition(toPosMap, slab.nuc, slab._copy ?? 0)
+        const fp = animationNativePosition(fromBaked, slab.nuc, slab._copy ?? 0)
+        const tp = animationNativePosition(toBaked, slab.nuc, slab._copy ?? 0)
         const defaultFade = fp && tp ? 1 : tp ? t : fp ? 1 - t : 0
         const fade = fadeOpts?.sweepReveal?.scale(slab.nuc, defaultFade) ?? defaultFade
         if (isExcluded && fade === 1) continue

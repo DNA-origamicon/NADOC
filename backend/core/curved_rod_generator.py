@@ -1,4 +1,4 @@
-"""Planar interpolating paths encoded with NADOC's ordinary bend operations."""
+"""Planar paths encoded with ordinary bends or an editable sweep."""
 
 from copy import deepcopy
 from itertools import permutations
@@ -246,7 +246,7 @@ def check_path_geometry(design, rod_ids, radius):
         )
 
 
-def plan_curved_rods(source, settings):
+def plan_curved_rods(source, settings, *, use_sweeps=True):
     lattice = source.lattice_type
     period = 21 if lattice == LatticeType.HONEYCOMB else 32
     sections = deepcopy(list(cross_sections(lattice)))
@@ -314,7 +314,21 @@ def plan_curved_rods(source, settings):
                         ops = bend_operations(
                             path, start, [h.id for h in routed.helices]
                         )
-                        bent = encode_curvature(routed.copy_with(deformations=ops), ops)
+                        sweep = None
+                        if use_sweeps and len(ops) > len(path["particle_ids"]):
+                            from backend.core.generated_sweep import (
+                                sweep_request,
+                                routed_sweep,
+                            )
+
+                            sweep = sweep_request(
+                                lattice, list(cells), length, path, start, source=source
+                            )
+                            bent = routed_sweep(lattice, sweep)
+                        else:
+                            bent = encode_curvature(
+                                routed.copy_with(deformations=ops), ops
+                            )
                         used = physical_scaffold_nt(bent)
                         if max(used, scaffold_nt(routed)) > size:
                             continue
@@ -326,6 +340,7 @@ def plan_curved_rods(source, settings):
                             continue
                         summary = {
                             **section,
+                            "cells": list(sweep.cells) if sweep else section["cells"],
                             "shape": "curved-rod",
                             "scaffold_name": name,
                             "scaffold_size": size,
@@ -335,6 +350,11 @@ def plan_curved_rods(source, settings):
                             "length_bp": length,
                             "length_nm": length * RISE,
                             "path_start_bp": start,
+                            "path_feature": "sweep" if sweep else "bends",
+                            "bend_count": len(ops),
+                            "sweep_request": sweep.model_dump(mode="json")
+                            if sweep
+                            else None,
                             "path": path,
                         }
                         best[size] = RodCandidate(routed, summary)
@@ -357,7 +377,7 @@ def plan_curved_rods(source, settings):
         chosen = best[8064]
 
     def public(summary):
-        return {k: v for k, v in summary.items() if k != "path"}
+        return {k: v for k, v in summary.items() if k not in ("path", "sweep_request")}
 
     particles, centers, distance = gold_particles(source)
     return RodCandidate(chosen.design, deepcopy(chosen.summary)), {

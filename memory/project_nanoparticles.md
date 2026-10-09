@@ -5,6 +5,19 @@ description: Display-layer nanoparticle authoring and automation.
 
 # Nanoparticles
 
+**Attachment authoring (2026-10-09):** `ui/nanoparticle_attach.js` owns right-click
+Attach to overhang → one-shot overhang selection, Escape, filter restoration and
+error handling. `api/nanoparticle_attachment.py` is the shared atomic builder for
+the new endpoint, Conjugate Manager binding and standard generated designs.
+Reuses thiol handles, existing antiparallel duplex application and closed-loop
+kinematics; generator locks centers and shares the rigid circle/roll fitter.
+Occupied targets and infeasible fits reject before commit. DNA/protein/other-core
+clearance is finite geometric screening, not simulation. Scope: uncoated gold;
+existing coated-particle chemistry remains separate. See docs/nanoparticle_conjugation.md.
+The endpoint checks the submitted revision before fitting, then compares design
+content inside the feature transaction: an intervening autosave may advance the
+active loadout's persistence cursors, but a real design edit rejects the fit.
+
 **Status (2026-09-12): Gold nanospheres and quantum-dot catalog/import are implemented; gold nanorods remain a menu placeholder.**
 
 Gold nanospheres are persisted as `Design.nanoparticles` display records with diameter (nm),

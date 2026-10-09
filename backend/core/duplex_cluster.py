@@ -231,7 +231,7 @@ def materialize_duplex_cluster(
     ]
     cleared = design.model_copy(update={"overhangs": cleared_specs})
     pivot_world = _overhang_root_pivot(
-        cleared, _geometry_for_design(cleared), driver_oh_id
+        cleared, _geometry_for_design(cleared, overhang_ids={driver_oh_id}), driver_oh_id
     )
     if pivot_world is None:
         return design, None
@@ -425,7 +425,7 @@ def dematerialize_duplex_cluster(design: Design, driver_oh_id: str) -> Design:
         driver_oh_id,
         cluster,
         parent,
-        _geometry_for_design,
+        lambda d: _geometry_for_design(d, overhang_ids={driver_oh_id}),
         _overhang_root_pivot,
     )
     new_clusters = [c for c in design.cluster_transforms if c.id != cluster.id]

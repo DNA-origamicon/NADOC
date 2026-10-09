@@ -2240,6 +2240,16 @@ export async function bindNanoparticleStrand(id, strandId, overhangId) {
   return _syncFromDesignResponse(json)
 }
 
+export async function attachNanoparticleToOverhang(id, overhangId, options = {}) {
+  const json = await _request('POST', `/design/nanoparticles/${id}/attach-overhang`, {
+    overhang_id: overhangId, ...options,
+    expected_design_id: store.getState().currentDesign?.id,
+    expected_revision: currentRevisionWatermark(),
+  })
+  if (!json) throw new Error(store.getState().lastError?.message || 'Nanoparticle attachment failed.')
+  return _syncFromDesignResponse(json)
+}
+
 export async function getNanoparticleConnectionVersions(id) {
   return _request('GET', `/design/nanoparticles/${id}/connection-versions`)
 }

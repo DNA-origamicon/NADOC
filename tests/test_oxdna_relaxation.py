@@ -383,10 +383,10 @@ def test_oxdna_native_seed_map_handles_loop_inserts():
     from backend.api.crud import _geometry_for_design
     from tests.conftest import make_18hb_routed_design
 
-    # 168 bp (not the 388 bp default): the loop-copy keying this guards is
+    # 84 bp (not the 388 bp default): the loop-copy keying this guards is
     # length-independent, and the short bundle keeps the routed build off the
     # fast suite's per-test budget.
-    design = make_18hb_routed_design(length_bp=168)
+    design = make_18hb_routed_design(length_bp=84)
     design.helices[1].loop_skips = [LoopSkip(bp_index=50, delta=+2)]
     rmap = resolved_nuc_map(design, _geometry_for_design(design))
     assert any(len(k) == 4 for k in rmap)  # loop copies present

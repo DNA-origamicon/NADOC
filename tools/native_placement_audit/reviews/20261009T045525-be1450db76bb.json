@@ -1,0 +1,28 @@
+{
+  "incident_id": "20261009T045525-be1450db76bb",
+  "reviewer": "Codex",
+  "reviewed_at_utc": "2026-10-09T05:06:07.466760+00:00",
+  "report_sha256": "6459afa5d880ba68e3dc8e71a80975ef93298e9b7a195df4cfb8641e542efe2a",
+  "review": {
+    "root_cause": "History transition 13 to 14 in preserved 4NP_gen_test_aligned adds a +1 insertion at h_XY_0_4_b06b4505-b418-4ca8-9b65-c7dfe02c4f5a:71 in both directions. The renderer uses the larger endpoint topology during the tween, then called strict nativeMapPosition on copy 1 in the earlier endpoint, which correctly contains only copy 0. This is legitimate topology absence, not a geometry producer omission. Previous regressions covered movement of existing inserted copies but not changes to insertion cardinality.",
+    "affected_paths": [
+      "Desktop build-history animation applyPositionLerp beads, slabs and covalent cones; preview and video export share this consumer.",
+      "Historical full/compact geometry producers include endpoint display_design and unchanged canonical native bead/slab frames; inspected geometry_batch and compact expansion.",
+      "Ordinary deform interpolation, compact/partial edits and nativeMapPosition remain strict and unchanged. No independent placement or fallback coordinates introduced.",
+      "History undo/redo and bend/twist endpoint parity covered by backend tests. VR geometry uses unchanged producers, verified by native-placement VR transport tests; no live headset session performed."
+    ],
+    "validation": "69 passed / 1 skipped in test_native_full_placement.py + test_animation.py; 30 passed in test_native_placement_endpoints.py + test_native_placement_history.py + test_native_placement_vr.py. 27 frontend assertions passed across actual renderer placement, slab coordinates and feature animation display. Runs still returned the expected unresolved-incident gate before this explicit review. Actual document endpoint rendering checked offline: final bead/slab matrices exactly equal a fresh canonical build (maximum difference 0); forward/reverse synthetic insertion fades tested at 0, .25, .5, .75, 1 in both directions, with negative missing-copy test. site-review.png inspected: absent inserted copies are hidden and grow at native endpoint positions. This change selects historical visibility and endpoint identities only; it does not modify canonical molecular placement. Full interactive document playback is an additional integration check following this review.",
+    "regression_tests": [
+      "frontend/src/scene/helix_renderer.native_placement.test.js: insertion history fades only the added copy (FORWARD / REVERSE)",
+      "frontend/e2e/animation_generated_insertions.spec.js: optional preserved-document forward/backward integration"
+    ],
+    "evidence": [
+      ".development-artifacts/animation-insertion-review/preserved.nadoc",
+      ".development-artifacts/animation-insertion-review/endpoints.json",
+      ".development-artifacts/animation-insertion-review/numeric.json",
+      ".development-artifacts/animation-insertion-review/site-review.png",
+      ".development-artifacts/animation-insertion-review/check.mjs",
+      "Original document SHA256 8ae0e1014905986aabfa96d1e52b2d14a23d3ce53504c04461c25d9140847296"
+    ]
+  }
+}

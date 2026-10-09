@@ -596,7 +596,7 @@ def _set_np_version_applied(design: Design, version_id: str, applied: bool) -> D
             out, owner, target.overhang_id, target.direct_variant,
         )
         terminal_flag = "is_three_prime" if owner.attach_end == "3p" else "is_five_prime"
-        terminal = next((n for n in fitting_geometry(out)
+        terminal = next((n for n in fitting_geometry(out, strand_ids={target.strand_id})
                          if n.get("strand_id") == target.strand_id and n.get(terminal_flag)), None)
         if terminal is not None:
             local = np.linalg.inv(particle.pose.to_array()) @ np.array(
@@ -646,7 +646,8 @@ def _set_np_version_applied(design: Design, version_id: str, applied: bool) -> D
                 422,
                 detail="Nanoparticle connection could not be materialized as antiparallel DNA.",
             )
-        applied_geometry = fitting_geometry(out)
+        applied_geometry = fitting_geometry(out, strand_ids={target.strand_id},
+                                            overhang_ids={target.overhang_id})
         from backend.core.protein import resolve_overhang_anchor
         constraint_root, _ = resolve_overhang_anchor(
             applied_geometry, target.overhang_id, "root")

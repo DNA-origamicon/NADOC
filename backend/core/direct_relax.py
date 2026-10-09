@@ -216,25 +216,24 @@ def duplex_midpoint_placement(
     """
     from backend.core.design_geometry import fitting_geometry as _geometry_for_design
 
-    nucs = _geometry_for_design(design)
+    # Standalone NP handles have no embedded root to balance. Resolve that
+    # topology before building any geometry, rather than discarding a full
+    # design's coordinates after discovering that midpoint seating cannot apply.
+    try:
+        driver_parts = _find_driven_tip_and_root(design, driver_oh_id)
+        driven_parts = _find_driven_tip_and_root(design, driven_oh_id)
+    except HTTPException:
+        return None
+    nucs = _geometry_for_design(design, strand_ids={driver_parts[0].id, driven_parts[0].id})
 
-    def _connection(oh_id: str) -> Optional[tuple[np.ndarray, np.ndarray]]:
-        # A standalone single-domain overhang has NO embedded-staple (root)
-        # connection — `_find_driven_tip_and_root` raises 422. That side simply
-        # isn't anchored to a bundle, so there is no bond to balance; return None
-        # and let the caller fall back to no re-seating (one-sided placement).
-        try:
-            strand, _bi, tip_dom, root_dom, c_bp, p_bp = _find_driven_tip_and_root(
-                design, oh_id
-            )
-        except HTTPException:
-            return None
+    def _connection(parts) -> Optional[tuple[np.ndarray, np.ndarray]]:
+        strand, _bi, tip_dom, root_dom, c_bp, p_bp = parts
         c = _bead_pos(nucs, strand_id=strand.id, helix_id=tip_dom.helix_id, bp=c_bp)
         p = _bead_pos(nucs, strand_id=strand.id, helix_id=root_dom.helix_id, bp=p_bp)
         return None if (c is None or p is None) else (c, p)
 
-    driver = _connection(driver_oh_id)
-    driven = _connection(driven_oh_id)
+    driver = _connection(driver_parts)
+    driven = _connection(driven_parts)
     if driver is None or driven is None:
         return None
     c_a, p_a = driver

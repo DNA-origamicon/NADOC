@@ -1,0 +1,25 @@
+{
+  "incident_id": "20261009T055149-593bbc3a3d8a",
+  "reviewer": "Codex",
+  "reviewed_at_utc": "2026-10-09T05:57:44.529452+00:00",
+  "report_sha256": "d5b47ec13a08776acc3fd20e21bda4b5c21f932bec3777c343abb90c660e577e",
+  "review": {
+    "root_cause": "Synthetic SimpleNamespace color/identity fixture omitted Design.deformations. New sweep warning metadata iterated this required field before emitting scene geometry, raising AttributeError. Test-only adapter now supplies the empty field; production code and landmarks unchanged.",
+    "affected_paths": [
+      "tests/test_vr_routes.py _serialize_fixture_scene synthetic fixture adapter",
+      "VR _serialize_scene sweep warning metadata access. Actual Design models already supply deformations; desktop/full/compact/partial/preview/export/reload producers unchanged."
+    ],
+    "validation": "62 VR route tests passed in 3.82 s (command remains review-gated pending this explicit acknowledgement). Existing color/identity/pose oracles unchanged. Six authored backbone sites compared to serialized scene: maximum delta exactly 0 nm. Inspected fixture plot; no live headset check or new placement model.",
+    "regression_tests": [
+      "tests/test_vr_routes.py::test_base_coloring_keeps_extensions_and_overhang_fallback_semantic",
+      "tests/test_vr_routes.py::test_full_domain_move_preserves_bead_slab_registration",
+      "tests/test_vr_routes.py"
+    ],
+    "evidence": [
+      ".native-placement-review/incidents/20261009T055149-593bbc3a3d8a/report.json",
+      ".development-artifacts/np-attachment-review/vr-fixture-evidence.json",
+      ".development-artifacts/np-attachment-review/vr-fixture-deltas.json",
+      ".development-artifacts/np-attachment-review/vr-fixture-review.png"
+    ]
+  }
+}

@@ -89,10 +89,28 @@ def _generate_design(body):
                 "validation": str(validation),
             },
         )
+    pending_validation = None
+    if settings.mechanics in ("fem-linear", "fem-nonlinear", "oxdna"):
+        from backend.core.generator_validation import prepare_validation
+        from backend.api.assembly import _WORKSPACE_DIR
+        from backend.api import doc_context
+        progress("Prepare validation", "Snapshot routed design for simulation", .95)
+        try:
+            pending_validation = prepare_validation(generated, settings.mechanics,
+                _WORKSPACE_DIR, doc_id=doc_context.get_current_doc())
+        except ValueError as exc:
+            raise HTTPException(422, detail=str(exc)) from exc
     # Preserve the active loadout and undo stack. No partial history becomes
     # visible unless all commands finish and the live revision still matches.
     progress("Commit construction history", "Preserve the active loadout and check the document revision", .96)
     state.set_design(generated, expected_revision=revision)
+    if pending_validation:
+        info, launch = pending_validation
+        try:
+            launch()
+        except Exception as exc:
+            info.update(status="failed_to_start", error=str(exc))
+        report["validation_job"] = info
     progress("Build display geometry", "Calculate nucleotide positions and helix axes", .98)
     response = _design_response_with_geometry(
         generated, validation, full_feature_log=True

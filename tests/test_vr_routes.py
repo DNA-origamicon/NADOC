@@ -57,8 +57,13 @@ def _serialize_fixture_scene(design, nucleotides, *args, **kwargs):
     Real molecular placement is tested from model generation in the separate
     native-placement suite; production has no such fixture adapter.
     """
-    from copy import deepcopy
+    from copy import copy, deepcopy
     from backend.core.native_slab_placement import attach_native_slab_poses
+    if not hasattr(design, "deformations"):
+        # Synthetic identity/color fixtures predate sweep warning metadata.
+        # Supply the ordinary empty model field without changing any landmarks.
+        design = copy(design)
+        design.deformations = []
     records = deepcopy(nucleotides)
     for record in records:
         if record.get("is_modification"):

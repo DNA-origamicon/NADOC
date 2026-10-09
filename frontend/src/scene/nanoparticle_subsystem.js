@@ -20,7 +20,7 @@ function poseMatrix(particle) {
   return matrix
 }
 
-export function initNanoparticleSubsystem({ scene, store, controls, camera, canvas, selectionController, designRenderer = null, rightSidebar = null, openConjugateManager = null }) {
+export function initNanoparticleSubsystem({ scene, store, controls, camera, canvas, selectionController, designRenderer = null, rightSidebar = null, openConjugateManager = null, attachToOverhang = null }) {
   const root = new THREE.Group()
   root.name = 'nanoparticles'
   scene.add(root)
@@ -365,6 +365,7 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
       if (diameter != null && diameter !== current) await patchNanoparticle(id, { diameter_nm: diameter })
     })
     if (isDot) add('Streptavidin coating…', () => openStreptavidinDialog(particle))
+    if (!isDot) add('Attach to overhang', () => attachToOverhang?.(id), !!particle?.coating)
     if (!isDot) add('Conjugate Manager…', () => openConjugateManager?.(id))
     add('Delete', () => deleteNanoparticle(id))
     document.body.appendChild(menu)

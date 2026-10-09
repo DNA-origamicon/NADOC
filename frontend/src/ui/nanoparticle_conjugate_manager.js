@@ -228,7 +228,7 @@ export function initNanoparticleConjugateManager({ api, store } = {}) {
       const error = right.querySelector('#np-conj-error'); error.textContent = ''; apply.disabled = true
       try {
         const result = await api.putNanoparticleConjugation(nanoparticleId, { scheme: scheme.value, sequence: sequence.value, count: Number(count.value), attach_end: left.querySelector('input[name="np-thiol-end"]:checked')?.value ?? '5p', seed: 1 })
-        if (selectedOverhang && result?.strand_ids?.[0]) await api.bindNanoparticleStrand(nanoparticleId, result.strand_ids[0], selectedOverhang.id)
+        if (selectedOverhang && result?.strand_ids?.[0]) await api.attachNanoparticleToOverhang(nanoparticleId, selectedOverhang.id, { strand_id: result.strand_ids[0] })
         close()
       } catch (e) { error.textContent = e?.message ?? String(e); apply.disabled = !handleReady }
     }
