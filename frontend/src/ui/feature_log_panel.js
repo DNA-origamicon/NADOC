@@ -1,3 +1,4 @@
+import { createFeatureLogVR } from './feature_log_vr.js'
 import { editPatternFeature, isPatternFeature } from './pattern_feature_editor.js'
 /**
  * Feature Log panel — unified timeline of geometry operations with a vertical
@@ -1614,6 +1615,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         'padding:3px 6px;font-size:11px;border-radius:3px',
         cfg.id === assembly.configuration_cursor ? 'background:#161b22' : '',
       ].join(';')
+      row.dataset.flRow = String(i + 1)
       row.title = 'Click to restore this configuration'
       const icon = document.createElement('span')
       icon.textContent = '◆'
@@ -2094,5 +2096,18 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
     panelBody.insertBefore(_pickBannerEl, panelBody.firstChild)
   }
 
-  return { setPartContext, clearPartContext, enterPickMode, exitPickMode }
+  const vr = createFeatureLogVR({ list, target: assemblyTargetSelect,
+    prepare: () => { if (_collapsed) _renderCurrentView() },
+    context: () => {
+      const assembly = _isAssemblyFeatureMode(), configurations = _isAssemblyConfigMode()
+      const source = assembly || configurations ? _latestAssembly : _latestDesign
+      return { title: configurations ? 'Configurations' : 'Feature history',
+        identity: `${assemblyTargetSelect.value}:${source?.id ?? ''}:${JSON.stringify(source?.feature_log?.map(e => e.id) ?? [])}`,
+        revision: api.currentRevisionWatermark?.() ?? source?.revision ?? source?.updated_at ?? '',
+        configurations, cursor: configurations ? (source?.configurations ?? []).findIndex(c => c.id === source.configuration_cursor) : source?.feature_log_cursor ?? -1,
+        subCursor: source?.feature_log_sub_cursor ?? null, busy: _isSeeking || !!store.getState().featureSeekPending,
+        status: thumb.dataset.readiness === 'error' ? thumb.title : '' }
+    }, seek: _seek, seekConfig: _seekAssemblyConfig,
+  })
+  return { setPartContext, clearPartContext, enterPickMode, exitPickMode, vr }
 }

@@ -142,10 +142,13 @@ struct LiveViewerTest {
         resetMenus();
         nadoc_vr::DimensionPanel dimensions;dimensions.action("dimension:toggle",v.sidebarMenus_.menus,.01F);
         for(int count:{0,1,17}) {
-            dimensions.tool.entries.clear();for(int i=0;i<count;++i){dimensions.tool.create();dimensions.tool.entries.back().name="Dimension "+std::to_string(i)+" with a long measurement name";}
+            dimensions.tool.entries.clear();for(int i=0;i<count;++i){dimensions.tool.create();dimensions.tool.entries.back().name="Dimension "+std::to_string(i)+" with a long measurement name";auto& e=dimensions.tool.entries.back();e.valid={true,true};e.points={glm::vec3(0),glm::vec3(.123F+i*.01F,0,0)};}
             dimensions.refresh(v.sidebarMenus_.menus,.01F);pages("tool-dimensions-"+std::to_string(count),1);
         }
         dimensions.exit(v.sidebarMenus_.menus);
+        nadoc_vr::SweepDraft sweepDraft;sweepDraft.reset();sweepDraft.next();for(int i=0;i<10;++i)sweepDraft.addPoint();
+        nadoc_vr::SweepPanel sweep;sweep.enter(v.sidebarMenus_.menus);sweep.refresh(v.sidebarMenus_.menus,sweepDraft,1,true,"Both",false,"Define path","XY","252");
+        pages("tool-sweep-rail",1);sweep.exit(v.sidebarMenus_.menus);
         nadoc_vr::ViewVolumePanel volumes;volumes.active=volumes.connected=true;
         for(int count:{0,1,17}) {
             volumes.entries.clear();for(int i=0;i<count;++i){nadoc_vr::ViewVolumePanel::Entry e;e.id=std::to_string(i);e.name="Saved volume "+std::to_string(i)+" with a long descriptive name";volumes.entries.push_back(e);}
@@ -162,6 +165,32 @@ struct LiveViewerTest {
                 sidebar("simulation-"+std::to_string(count)+(selected?"-selected":"-engines")+(pending?"-pending":"-ready")+"-offset-"+std::to_string(offset),0);
             }
         }
+        resetMenus();
+        nadoc_vr::SimulationPanel historyFallback;historyFallback.bind(v.sidebarMenus_.menus[0]);
+        auto& history=v.featureLogPanel_;history.bind(v.sidebarMenus_.menus[0]);history.version=1;
+        for(int count:{0,1,20})for(bool busy:{false,true}){
+            history.rows.clear();history.busy=busy;history.offset=0;history.status=busy?"Loading editable state":"Drag rail; release to load state";
+            for(int i=0;i<count;++i)history.rows.push_back({"r:"+std::to_string(i),i?"F"+std::to_string(i)+": Sweep with a long descriptive name":"F0 Initial",true,i==2,i>0,i>0,i>0,false});
+            for(size_t offset:count>6?std::vector<size_t>{0,6,14}:std::vector<size_t>{0}){history.offset=offset;sidebar("feature-history-"+std::to_string(count)+(busy?"-busy":"-ready")+"-offset-"+std::to_string(offset),0);}
+        }
+        history.busy=false;history.offset=0;history.preview=4;sidebar("feature-history-scrub-preview",0);
+        v.activateSidebarAction("history:r:2",0);
+        if(history.sequence!=1 || history.requested!="r:2")throw std::runtime_error("production history command was not dispatched");
+        history.acknowledged=history.sequence;
+        auto& historyMenu=v.sidebarMenus_.menus[0];
+        historyMenu.placement.openDocked({0,0,0},{1,0,0,0});historyMenu.placement.setScale(1);historyMenu.focus.reset();
+        auto scrubInput=[&](float y,bool pressed,bool held,bool valid=true){
+            nadoc_vr::HandPose ray;ray.valid=valid;ray.position=historyMenu.placement.worldPoint({-.235F,y,0})+glm::vec3(0,0,.3F);ray.orientation={1,0,0,0};
+            v.sidebarMenus_.input({ray,nadoc_vr::HandPose{}},{pressed,false},{held,false},{false,false},{100,100},0,
+                [&](const std::string& command,size_t hand){v.activateSidebarAction(command,hand);});
+        };
+        scrubInput(.326F,true,true);scrubInput(-.194F,false,true);
+        if(history.sequence!=1 || history.preview!=4)throw std::runtime_error("history drag sought before release or missed preview");
+        scrubInput(-.194F,false,false);
+        if(history.sequence!=2 || history.requested!="r:4")throw std::runtime_error("history release failed to seek");
+        history.acknowledged=history.sequence;
+        scrubInput(.326F,true,true);scrubInput(.066F,false,true,false);scrubInput(.066F,false,false);
+        if(history.sequence!=2 || history.preview!=-1)throw std::runtime_error("tracking loss did not cancel history scrub");
         resetMenus();
         v.normalizationScale_=.026F;
         v.activateAuthoringTool(0);
@@ -221,13 +250,14 @@ struct LiveViewerTest {
 
         v.componentGallery_.active=v.componentGallery_.posed=true;v.componentGallery_.placement.openDocked({0,0,0},{1,0,0,0});
         v.componentGallery_.placement.setScale(1);
-        for(int mode=0;mode<3;++mode)for(int state=0;state<5;++state) {
-            auto& gallery=v.componentGallery_;gallery.reset();gallery.buttonMode=mode==1;gallery.cardMode=mode==2;
+        for(int mode=0;mode<4;++mode)for(int state=0;state<5;++state) {
+            auto& gallery=v.componentGallery_;gallery.reset();gallery.buttonMode=mode==1;gallery.cardMode=mode==2;gallery.listMode=mode==3;
             for(auto& wheel:gallery.wheels){wheel.hovered=state==1;wheel.value=state==2?0:state==3?wheel.maximum:wheel.maximum/2;}
-            gallery.buttonStyles.disabled=gallery.cardStyles.disabled=state==4;
+            gallery.buttonStyles.disabled=gallery.cardStyles.disabled=gallery.listStyles.disabled=state==4;
+            for(auto& sample:gallery.listStyles.samples){sample.list.scroll(state==3?9:state==2?4:0);sample.list.selected=state==2?4:-1;sample.hover=state==1?1:-1;}
             for(auto& button:gallery.buttonStyles.buttons){button.hovered=state==1;button.hand=state==2?0:-1;button.press=state==2?1:0;button.selected=state==3;}
             for(auto& card:gallery.cardStyles.cards){card.open=state!=0;card.reveal=state==0?0:1;card.hover=state==1?0:-1;card.selected=state==3?2:-1;}
-            capture(std::string("gallery-")+(mode==0?"wheels":mode==1?"buttons":"cards")+"-state-"+std::to_string(state),{{-.81F,-.68F},{.81F,.67F}},[&](const auto& vp){gallery.render(vp);});
+            capture(std::string("gallery-")+(mode==0?"wheels":mode==1?"buttons":mode==2?"cards":"lists")+"-state-"+std::to_string(state),{{-.81F,-.68F},{.81F,.67F}},[&](const auto& vp){gallery.render(vp);});
         }
         v.componentGallery_.active=false;
         v.startup_.active=v.startup_.anchored=true;v.startup_.placement.openDocked({0,0,0},{1,0,0,0});

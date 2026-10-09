@@ -15,6 +15,7 @@ from backend.core.native_slab_placement import authoritative_slab_poses
 from backend.core.deformation import _rot_from_quaternion
 from backend.api.vr_ligation import parse_event as parse_ligation_event
 from backend.api.vr_view_tools import parse_event as parse_view_tool_event
+from backend.api.vr_feature_log import parse_event as parse_feature_log_event
 from backend.api.vr_simulations import parse_event as parse_simulation_event
 from backend.api.vr_routing import parse_event as parse_routing_event
 from backend.api.vr_share import parse_share_event
@@ -2961,6 +2962,8 @@ def _cleanup_after_process(
     Path(str(event_path) + ".share.next").unlink(missing_ok=True)
     Path(str(event_path) + ".viewtools").unlink(missing_ok=True)
     Path(str(event_path) + ".viewtools.next").unlink(missing_ok=True)
+    Path(str(event_path) + ".feature-log").unlink(missing_ok=True)
+    Path(str(event_path) + ".feature-log.next").unlink(missing_ok=True)
     Path(str(event_path) + ".simulations").unlink(missing_ok=True)
     Path(str(event_path) + ".simulations.next").unlink(missing_ok=True)
     Path(str(event_path) + ".routing").unlink(missing_ok=True)
@@ -3477,6 +3480,7 @@ def _event_payload(state: dict | None) -> dict:
         return {
             "sequence": sequence,
             **({"share_control": value} if (value := parse_share_event(event.get("share_control"))) else {}),
+            **({"feature_log": value} if (value := parse_feature_log_event(event.get("feature_log"))) else {}),
             **({"simulation": value} if (value := parse_simulation_event(event.get("simulation"))) else {}),
             **({"routing": value} if (value := parse_routing_event(event.get("routing"))) else {}),
             **({"view_tool": view_tool} if (view_tool := parse_view_tool_event(event.get("view_tool"))) else {}),

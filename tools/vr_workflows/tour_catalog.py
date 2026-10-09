@@ -21,6 +21,10 @@ def catalog():
     def add(identifier, group, title, description, args=(), module='menu_tour', runnable=True):
         tours.append(dict(id=identifier, group=group, title=title, description=description,
                           module=module, args=list(args), runnable=runnable))
+    add('production-lists', 'interaction', 'Feature history and production lists',
+        'Review sweep rails, dimension tables, simulation job cards and the feature-history scrub rail. Runs bounded native interaction checks and retains production-rendered state images.', module='list_components_check')
+    add('list-gallery', 'components', 'Scrollable sets',
+        'Six bounded lists with independent row actions, selection, draggable scroll rails and persistent set headers. Dimensions, sweep points and simulation job samples.', ['--component', 'lists'], module='component_gallery_tour')
     add('card-gallery', 'components', 'Cards and lists',
         'Six expandable card and list styles with selectable children.', ['--component', 'cards'], module='component_gallery_tour')
     add('button-gallery', 'components', 'Button styles',
@@ -137,7 +141,7 @@ def arguments(tour, validate=False):
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
     elif tour['module'] == 'view_volumes_check':
         args += ['--validate'] if validate else ['--demo']
-    elif tour['module'] in ('menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'deformation_selection_check', 'lattice_compatibility_check', 'representation_tour', 'extrude_tour', 'sweep_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'edit_wheel_history_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
+    elif tour['module'] in ('list_components_check', 'menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'deformation_selection_check', 'lattice_compatibility_check', 'representation_tour', 'extrude_tour', 'sweep_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'edit_wheel_history_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
         if validate:
             args += ['--validate']
     return args

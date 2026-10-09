@@ -1,7 +1,7 @@
 #pragma once
 #include "component_gallery.hpp"
 
-inline int runComponentGalleryDesktop(const std::string& output,bool buttons=false,bool cards=false) {
+inline int runComponentGalleryDesktop(const std::string& output,bool buttons=false,bool cards=false,bool lists=false) {
     if(!glfwInit())throw std::runtime_error("Could not initialize the desktop display");
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,3);glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,3);
     glfwWindowHint(GLFW_OPENGL_PROFILE,GLFW_OPENGL_CORE_PROFILE);glfwWindowHint(GLFW_SAMPLES,4);
@@ -10,7 +10,8 @@ inline int runComponentGalleryDesktop(const std::string& output,bool buttons=fal
     glfwMakeContextCurrent(window);glfwSwapInterval(1);
     if(buttons)glfwSetWindowTitle(window,"NADOC VR Component Gallery - Buttons | Click: select | F: front | O: angled | Space: demo | R: reset | S: capture | Esc: close");
     if(cards)glfwSetWindowTitle(window,"NADOC VR Component Gallery - Cards and lists | Click: expand/select | F: front | O: angled | Space: demo | R: reset | Esc: close");
-    ComponentGallery gallery;gallery.cardMode=cards;gallery.buttonMode=buttons;gallery.active=true;gallery.posed=true;gallery.desktop=true;
+    if(lists)glfwSetWindowTitle(window,"NADOC VR Component Gallery - Scrollable sets | Click: row/action | Drag rail: scroll | F: front | O: angled | Space: demo | R: reset | Esc: close");
+    ComponentGallery gallery;gallery.listMode=lists;gallery.cardMode=cards;gallery.buttonMode=buttons;gallery.active=true;gallery.posed=true;gallery.desktop=true;
     gallery.placement.openDocked({0,0,0},{1,0,0,0});
     struct View {float yaw=.30F,pitch=.14F,distance=1.25F;};
     View view;glfwSetWindowUserPointer(window,&view);

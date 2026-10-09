@@ -107,6 +107,7 @@ from backend.api.vr_ligation import router as vr_ligation_router
 from backend.api.vr_view_tools import router as vr_view_tools_router
 from backend.api.vr_references import router as vr_references_router
 from backend.api.vr_share import router as vr_share_router
+from backend.api.vr_feature_log import router as vr_feature_log_router
 from backend.api.vr_simulations import router as vr_simulations_router
 from backend.api.vr_routing import router as vr_routing_router
 from backend.api.routes_sweep import router as sweep_router
@@ -443,6 +444,7 @@ app.include_router(vr_view_tools_router, prefix="/api")
 app.include_router(vr_share_router, prefix="/api")
 app.include_router(vr_references_router, prefix="/api")
 app.include_router(vr_simulations_router, prefix="/api")
+app.include_router(vr_feature_log_router, prefix="/api")
 app.include_router(vr_routing_router, prefix="/api")
 app.include_router(frame_extrusion_router, prefix="/api")
 app.include_router(sweep_router, prefix="/api")

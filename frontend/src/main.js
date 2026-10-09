@@ -1,3 +1,4 @@
+import { createVRFeatureLog } from './scene/vr_feature_log.js'
 import { initReferenceModels } from './scene/reference_models.js'
 import { initNativePlacementIntegrityMonitor } from './viewer/native_placement.js'
 import { initDeformationToolLauncher } from './ui/deformation_tool_launcher.js'
@@ -6478,6 +6479,7 @@ async function main() {
   let _vrStyleApply = Promise.resolve()
   let _vrTrajectoryPublishCount = 0
   const vrRouting = createVRRouting({ onError: message => showToast(message, { severity: 'error' }) })
+  const vrFeatureLog = createVRFeatureLog({ panel: () => _partFeatureLogPanel, store, refresh: () => api.refreshNativeVRScene(_vrCompanionState()), onError: message => showToast(message, { severity: 'error' }) })
   const vrSimulations = createVRSimulations({ jobs: simulateJobs, engineSelector, onError: message => showToast(message, { severity: 'error' }) })
   const vrShare = createVRShare({})
   const vrViewTools = createVRViewTools({scene,getState:store.getState,onError:message=>showToast(message,{severity:'error'})})
@@ -6500,7 +6502,7 @@ async function main() {
   }
   const vrSession = initVRSession({
     onNativeActiveChange: vrDesktopDisplay.setActive,
-    onNativePoll: () => { void publishVREnds(); void vrLigation.publish(); void vrViewTools.publish(); void vrShare.publish(); void vrSimulations.publish(); void vrRouting.publish() },
+    onNativePoll: () => { void publishVREnds(); void vrLigation.publish(); void vrViewTools.publish(); void vrShare.publish(); void vrSimulations.publish(); void vrFeatureLog.publish(); void vrRouting.publish() },
     renderer,
     scene,
     camera,
@@ -6563,8 +6565,9 @@ async function main() {
     },
     onNativeEvent: (_handleNativeVREvent = event => {
       _recordScrywriteBrowser('native_event', event)
-      if (event?.type === 'native_session_end') { vrEndPublished = ''; vrLigation.reset(); vrViewTools.reset(); vrShare.reset(); vrSimulations.reset(); vrRouting.reset() }
+      if (event?.type === 'native_session_end') { vrEndPublished = ''; vrLigation.reset(); vrViewTools.reset(); vrShare.reset(); vrSimulations.reset(); vrFeatureLog.reset(); vrRouting.reset() }
       const button = document.getElementById('menu-help-view-vr')
+      if (event?.type === 'feature_log') { void vrFeatureLog.activate(event); return }
       if (event?.type === 'routing') { void vrRouting.activate(event); return }
       if (event?.type === 'simulation') {
         void vrSimulations.activate(event)
@@ -7088,6 +7091,7 @@ async function main() {
       animPlayer,
       scrywrite: new URLSearchParams(window.location.search).has('scrywrite') ? {
         dispatch: event => _handleNativeVREvent(event),
+        publishFeatureHistory: () => vrFeatureLog.publish(),
         select: ref => selectionController.replace([ref]),
         snapshot: () => structuredClone({
           shell: _vrToolShellState,

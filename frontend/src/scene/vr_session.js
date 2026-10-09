@@ -74,6 +74,7 @@ export function initVRSession({
   let lastNativeToolConfigSequence = 0
   let lastNativePlanePickSequence = 0
   let lastNativeRoutingSequence = 0
+  let lastNativeFeatureLogSequence = 0
   let lastNativeSimulationSequence = 0
   let lastNativeShareSequence = 0
   let lastNativeViewToolSequence = 0
@@ -261,6 +262,10 @@ export function initVRSession({
       if (Number.isSafeInteger(routing?.sequence) && routing.sequence > lastNativeRoutingSequence) {
         lastNativeRoutingSequence = routing.sequence; onNativeEvent({ type: 'routing', ...routing })
       }
+      const history = event?.feature_log
+      if (Number.isSafeInteger(history?.sequence) && history.sequence > lastNativeFeatureLogSequence) {
+        lastNativeFeatureLogSequence = history.sequence; onNativeEvent({ type: 'feature_log', ...history })
+      }
       const simulation = event?.simulation
       if (Number.isSafeInteger(simulation?.sequence) && simulation.sequence > lastNativeSimulationSequence) {
         lastNativeSimulationSequence = simulation.sequence; onNativeEvent({ type: 'simulation', ...simulation })
@@ -430,6 +435,7 @@ export function initVRSession({
       lastNativeTransformSequence = 0
       lastNativeResizeSequence = 0
       lastNativeRoutingSequence = 0
+      lastNativeFeatureLogSequence = 0
       lastNativeSimulationSequence = 0
       lastNativeShareSequence = 0
       lastNativeViewToolSequence = 0

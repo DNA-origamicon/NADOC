@@ -346,6 +346,11 @@ if(BUILD_TESTING)
 endif()
 
 if(BUILD_TESTING)
+  add_executable(nadoc-vr-feature-log-panel-test tests/feature_log_panel_test.cpp)
+  target_include_directories(nadoc-vr-feature-log-panel-test PRIVATE src)
+  target_compile_options(nadoc-vr-feature-log-panel-test PRIVATE -Wall -Wextra -Wpedantic -UNDEBUG)
+  add_test(NAME nadoc-vr-feature-log-panel COMMAND nadoc-vr-feature-log-panel-test)
+
   add_executable(nadoc-vr-simulation-panel-test tests/simulation_panel_test.cpp)
   target_include_directories(nadoc-vr-simulation-panel-test PRIVATE src)
   target_compile_options(nadoc-vr-simulation-panel-test PRIVATE -UNDEBUG)

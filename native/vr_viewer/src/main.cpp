@@ -1,3 +1,4 @@
+#include "scrollable_set.hpp"
 #include "placement_integrity.hpp"
 #include <atomic>
 #include <future>
@@ -53,6 +54,7 @@
 #include "menu_layout.hpp"
 #include "sidebar_menu.hpp"
 #include "simulation_panel.hpp"
+#include "feature_log_panel.hpp"
 #include "routing_panel.hpp"
 #include "trajectory_panel.hpp"
 #include "dimension_panel.hpp"
@@ -5048,7 +5050,7 @@ class Viewer {
     friend struct LiveViewerTest;
 #endif
   public:
-    void enableComponentGallery(bool buttons=false,bool cards=false) { componentGallery_.active=true;componentGallery_.buttonMode=buttons;componentGallery_.cardMode=cards; }
+    void enableComponentGallery(bool buttons=false,bool cards=false,bool lists=false) { componentGallery_.active=true;componentGallery_.buttonMode=buttons;componentGallery_.cardMode=cards;componentGallery_.listMode=lists; }
     void loadControllerPath(const std::string& path) { controllerPaths_.load(path); }
 
     explicit Viewer(SceneData scene, std::string eventPath = {},
@@ -5635,6 +5637,7 @@ class Viewer {
         routingPopup_.menus[1].available=[this](const std::string& action){return routingPanel_.available(action);};
         routingPopup_.menus[1].isActive=[this](const std::string& action){return routingPanel_.active(action);};
         simulationPanel_.bind(sidebarMenus_.menus[0], &sidebarMenus_.menus[1]);
+        featureLogPanel_.bind(sidebarMenus_.menus[0]);
         for(auto& sidebar:sidebarMenus_.menus) {
             sidebar.label=[this](const std::string& action,const std::string& fallback) {
                 if(action=="vr:head-light")return std::string(shadowLight_.headFollowing()?"Head-following lighting: On":"Head-following lighting: Off");
@@ -6025,7 +6028,7 @@ class Viewer {
             requestedAction=="feedback:activate" || requestedAction=="vr:head-light" || requestedAction=="vr:exit" ||
             requestedAction=="qr:calibrate" || requestedAction=="qr:cube" || requestedAction.starts_with("tool:") ||
             requestedAction.starts_with("twist:") || requestedAction.starts_with("bend:") || requestedAction.starts_with("move:") ||
-            requestedAction.starts_with("extrude:") || requestedAction.starts_with("sweep:") || requestedAction.starts_with("routing:") || requestedAction.starts_with("simulation:") || requestedAction.starts_with("share:") ||
+            requestedAction.starts_with("extrude:") || requestedAction.starts_with("sweep:") || requestedAction.starts_with("routing:") || requestedAction.starts_with("simulation:") || requestedAction.starts_with("history:") || requestedAction.starts_with("share:") ||
             requestedAction.starts_with("volume:") || requestedAction.starts_with("dimension:") || requestedAction.starts_with("repr:") ||
             requestedAction.starts_with("color:") || requestedAction.starts_with("trajectory:");
         if(!known)return;
@@ -6159,6 +6162,7 @@ class Viewer {
             activateAuthoringTool(action=="tool:twist"?1:2);return;
         }
         if(action.starts_with("routing:")) {if(routingPanel_.activate(action))publishEventState();return;}
+        if(action.starts_with("history:")) {if(featureLogPanel_.activate(action)){publishEventState();if(action.starts_with("history:a:") && !action.ends_with(":expand"))desktopPanel_.show(hands_[hand].position,hands_[hand].orientation);}return;}
         if(action.starts_with("simulation:")) {if(simulationPanel_.activate(action))publishEventState();return;}
         if(action=="qr:calibrate") {qrCalibration_.start();return;}
         if(action=="qr:cube") {qrCalibration_.start(true);return;}
@@ -7509,6 +7513,7 @@ class Viewer {
         output << "{\"sequence\":" << ++eventSequence_ << ",\"hover_identity\":";
         identity(publishedHoverIdentity_);
         output << ",\"share_control\":{\"sequence\":" << shareSequence_ << ",\"action\":\"" << shareAction_ << "\"}";
+        output << ",\"feature_log\":{\"sequence\":" << featureLogPanel_.sequence << ",\"version\":" << featureLogPanel_.requestedVersion << ",\"id\":\"" << featureLogPanel_.requested << "\"}";
         output << ",\"simulation\":{\"sequence\":" << simulationPanel_.sequence << ",\"version\":" << simulationPanel_.requestedVersion << ",\"id\":\"" << simulationPanel_.requested << "\"}";
         output << ",\"routing\":{\"sequence\":" << routingPanel_.sequence << ",\"version\":" << routingPanel_.requestedVersion << ",\"id\":\"" << routingPanel_.requested << "\"}";
         output << ",\"view_tool\":{\"sequence\":" << viewTools_.sequence << ",\"index\":" << viewTools_.requested << "}";
@@ -9039,6 +9044,7 @@ class Viewer {
         if(volumePanel_.active) menuControlTargeted.fill(true);
         frameAudit_.mark("dimensions");
         simulationPanel_.poll(eventPath_);
+        featureLogPanel_.poll(eventPath_);
         routingPanel_.poll(eventPath_,routingPopup_.menus[1],sidebarMenus_.menus[1]);
         { std::error_code error; const auto path=eventPath_+".share";
           const auto changed=std::filesystem::last_write_time(path,error);
@@ -11149,6 +11155,7 @@ class Viewer {
     int shareSequence_=0,shareAck_=0;
     std::string shareAction_;
     nadoc_vr::SimulationPanel simulationPanel_;
+    nadoc_vr::FeatureLogPanel featureLogPanel_;
     nadoc_vr::TrajectoryPanel trajectoryPanel_;
     std::optional<size_t> trajectoryScrubHand_;
     uint32_t trajectoryScrubFrame_=0;
@@ -11239,7 +11246,7 @@ int main(int argc, char** argv) {
     std::string witnessPath;
     std::string mirrorDiagnosticsPath;
     std::string controllerPath;
-    bool componentGallery=false, galleryDesktop=false, galleryButtons=false, galleryCards=false;
+    bool componentGallery=false, galleryDesktop=false, galleryButtons=false, galleryCards=false,galleryLists=false;
     std::string galleryOutput;
     std::string witnessCaptureDirectory;
     std::string witnessVisualExpectationDirectory;
@@ -11262,8 +11269,8 @@ int main(int argc, char** argv) {
         const std::string option(argv[index]);
         if(option=="--component-gallery") {
             const std::string component=argv[index+1];
-            if(component!="thumbwheel" && component!="buttons" && component!="cards") {std::cerr<<"Unknown gallery component\n";return 2;}
-            galleryButtons=component=="buttons";galleryCards=component=="cards";
+            if(component!="thumbwheel" && component!="buttons" && component!="cards" && component!="lists") {std::cerr<<"Unknown gallery component\n";return 2;}
+            galleryButtons=component=="buttons";galleryCards=component=="cards";galleryLists=component=="lists";
             componentGallery=true;
         }
         else if(option=="--gallery-desktop") {
@@ -11435,7 +11442,7 @@ int main(int argc, char** argv) {
     try {
         if(galleryDesktop) {
             if(!componentGallery)throw std::runtime_error("Desktop gallery requires --component-gallery thumbwheel");
-            return runComponentGalleryDesktop(galleryOutput,galleryButtons,galleryCards);
+            return runComponentGalleryDesktop(galleryOutput,galleryButtons,galleryCards,galleryLists);
         }
         const auto processStarted = std::chrono::steady_clock::now();
         std::cout << "VR_METRIC event=process_start mode=openxr_viewer rss_mib="
@@ -11458,7 +11465,7 @@ int main(int argc, char** argv) {
             mirrorDiagnosticsPath, witnessCaptureDirectory,
             witnessVisualExpectationDirectory, exitOnWitnessComplete, liveSocketPath, liveMode);
         if(!loadingStatusPath.empty())viewer.beginStartup(argv[1],loadingStatusPath,startupOwners,startupKind);
-        if(componentGallery)viewer.enableComponentGallery(galleryButtons,galleryCards);
+        if(componentGallery)viewer.enableComponentGallery(galleryButtons,galleryCards,galleryLists);
         viewer.loadControllerPath(controllerPath);
         const int result = viewer.run();
         const double milliseconds = std::chrono::duration<double, std::milli>(

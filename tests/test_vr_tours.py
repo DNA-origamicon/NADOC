@@ -199,12 +199,13 @@ def test_button_gallery_has_both_native_modes_and_validation(client, monkeypatch
     assert '--desktop' in argv
 
 
-def test_card_gallery_registers_desktop_and_vr():
+@pytest.mark.parametrize("component", ["card", "list"])
+def test_card_gallery_registers_desktop_and_vr(component):
     from tools.vr_workflows.tour_catalog import catalog
-    tour = next(t for t in catalog()['tours'] if t['id'] == 'card-gallery')
+    tour = next(t for t in catalog()['tours'] if t['id'] == component + '-gallery')
     assert tour['group'] == 'components'
     assert tour['module'] == 'component_gallery_tour'
-    assert tour['args'] == ['--component', 'cards']
+    assert tour['args'] == ['--component', component + 's']
 
 
 def test_live_menu_tour_respects_assembly_context_without_hiding_missing_tabs():

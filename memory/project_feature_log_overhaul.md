@@ -6,6 +6,16 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 ---
 # Feature Log Overhaul + Tabbed Sidebar (commit 873f3e6, branch feature-log-update, 2026-05-02)
 
+## Native VR history rail (2026-10-08)
+
+`feature_log_vr.js` exposes the actual desktop rows and action buttons to the
+versioned VR bridge. Native uses an independent scroll rail and a state rail
+that seeks only on release. F0, routing sub-positions, selected assembly parts,
+assembly history and configurations route through existing handlers. Edit,
+revert and delete dialogs/editors open on the VR desktop surface; desktop
+availability and dependency checks remain authoritative. History changes refresh
+the native scene. See `docs/vr_sidebar_menus.md` and `MV-42` for physical review.
+
 ## Scrubber preview and readiness (2026-10-08)
 
 Interactive design seeks now use `routes_feature_log.preview_features` followed

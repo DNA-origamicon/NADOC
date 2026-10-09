@@ -37,7 +37,7 @@ def validate(live, output):
             acquire(reset, preset, [p+n for p,n in zip(reset,normal)],
                     lambda s: s['component_gallery']['buttons'][1]['hovered'], 'reset')
             live.button('trigger')
-            if live.state['component_gallery']['component'] in ('buttons','cards'):
+            if live.state['component_gallery']['component'] in ('buttons','cards','lists'):
                 for index in range(6):
                     target=live.state['component_gallery']['samples'][index]['position']
                     acquire(target,preset,[p+n for p,n in zip(target,normal)],
@@ -47,6 +47,20 @@ def validate(live, output):
                     assert live.state['component_gallery']['samples'][index]['state']=='PRESSED'
                     live.send('button',hand=1,button='trigger',pressed=False);live.frame()
                     assert live.state['component_gallery']['samples'][index]['clicks']==before+1
+                    if live.state['component_gallery']['component']=='lists':
+                        sample=live.state['component_gallery']['samples'][index]
+                        assert sample['selected']==0
+                        for control in (2,10):
+                            target=sample['controls'][control]
+                            acquire(target,preset,[p+n for p,n in zip(target,normal)],
+                                    lambda s:s['component_gallery']['samples'][index]['hovered_control']==control,f'list {index} control {control}')
+                            live.button('trigger')
+                        sample=live.state['component_gallery']['samples'][index]
+                        assert sample['offset']==1 and sample['selected']==0
+                        if index in (1,3):
+                            assert sample['items'][0]['value']==21
+                        else:
+                            assert sample['items'][0]['pinned']
                     if live.state['component_gallery']['component']=='cards':
                         assert live.state['component_gallery']['samples'][index]['open']
                         time.sleep(.3);live.frame()
@@ -81,7 +95,7 @@ def validate(live, output):
             pixels = check_pixels(capture, evidence)
             (capture/'pixels.json').write_text(json.dumps(pixels,indent=2))
             assert pixels['passed'], pixels
-            if live.state['component_gallery']['component'] in ('buttons','cards'):
+            if live.state['component_gallery']['component'] in ('buttons','cards','lists'):
                 target=live.state['component_gallery']['buttons'][3]['position']
                 acquire(target,preset,[p+n for p,n in zip(target,normal)],
                         lambda s:s['component_gallery']['buttons'][3]['hovered'],'disable')
@@ -101,7 +115,7 @@ def validate(live, output):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--component',choices=['thumbwheel','buttons','cards'],default='thumbwheel')
+    parser.add_argument('--component',choices=['thumbwheel','buttons','cards','lists'],default='thumbwheel')
     parser.add_argument('--desktop',action='store_true')
     parser.add_argument('--validate',action='store_true')
     parser.add_argument('--output',type=Path)

@@ -592,3 +592,89 @@ checks. Minimum-radius contact at the visible rail’s inner edge is covered by
 native regression tests. Evidence, retained failed attempts and cleanup:
 `.development-artifacts/vr-controller-menus-20261005/validation.json`.
 Physical comfort and haptic feel remain MV-41.
+
+## Production scrollable sets and feature history (2026-10-08)
+
+The approved component-gallery studies now style the production native menus:
+
+- **Sweep, step 2:** connected point markers in an enclosed rail, a pinned
+  visible-range count, and the existing point selection, direction and XYZ
+  controls. Origin constraints, free draw, smoothing and commit behavior remain
+  in the Sweep controller.
+- **Dimensions:** one outlined table with aligned name and measurement columns,
+  selected-row feedback, and separate visibility/delete icons. Unplaced
+  measurements display `UNPLACED`; units remain nm. Recording, endpoint pinning,
+  persistence and selection use the existing Dimensions controller.
+- **Simulation jobs:** shallow beveled job cards with selected/status stripes,
+  bounded labels and status detail, and a persistent count. Selecting a job
+  retains the existing engine-specific visualization column and trajectory UI.
+- **Feature Log:** a native history rail, six visible entries, independent list
+  scrolling, and separate edit, revert and delete icons. Drag the green state
+  rail on the left; the highlighted notch previews the destination and release
+  loads it. Releasing without changing the notch does nothing. Tracking loss,
+  leaving the tab, or a new desktop history version cancels the drag. Holding
+  beyond the upper/lower edge reveals earlier/later entries. The right rail
+  scrolls the list without seeking. Trackpad navigation can select rows/actions.
+
+History uses the desktop panel's actual rows and handlers, including F0, expanded
+Fine Routing sub-steps, selected assembly/part targets and configurations. Select
+an eligible routing header and use **Expand / collapse sub-steps** to reveal its
+intermediate states. The target header cycles the desktop target options. The
+current cursor and unavailable actions come from the desktop; absent/disabled
+editors stay disabled. Editing and destructive-action confirmations appear on
+the existing interactive desktop surface inside VR, keeping the desktop's
+specialized editors and dependency decisions available. A pending API operation,
+seek, confirmation dialog or VR scene refresh blocks additional history actions.
+
+The browser publishes a document-bound `.feature-log` snapshot. Commands carry
+its version and an acknowledged sequence; stale targets/revisions and duplicate
+requests do not execute. History-driven desktop state changes request native
+scene refreshes. The new modules are `feature_log_panel.hpp`, `feature_log_vr.js`,
+`vr_feature_log.js` and `vr_feature_log.py`. Native list styling is shared through
+`sidebar_sets.hpp` and `job_card.hpp`. No history semantics are reimplemented in
+C++.
+
+**Debug → VR Tours & Tests → Controls & layout → Feature history and production
+lists** runs the native panel checks and creates a production-rendered review
+atlas. The focused browser scenario is `frontend/e2e/vr_feature_log.spec.js`; it
+uses an isolated `__e2e__` document, actual desktop seek/edit/revert/delete handlers,
+and a stubbed VR transport (no physical headset claim). Retained development
+evidence lives under `.development-artifacts/vr-production-lists/`.
+
+Validation, October 9: the full frontend suite passed (652 files, 7,746 tests;
+1 skipped), followed by 51 focused checks after bridge refinements. All four
+native panel tests pass. The production render audit covers 413 states, real
+controller-input scrub/release/tracking-loss dispatch, bounds and visible pixels.
+`main.js` adds four net lines of imports/initialization/event wiring; cohesive
+history behavior lives in the new modules. Physical headset ergonomics and
+controller profiles remain MV-42.
+
+Backend `test-smart` selected `FAST`: 10,255 passed, 55 failed, 90 skipped before
+interrupting a host-disk-dependent fake-process hang. The host had 3.2–3.5 GiB
+free, below runner guards' 5 GiB minimum. This is **not a broad-suite pass**.
+A 139-test focused run passed VR transport/tours, placement and disk guard checks.
+One marked mock retry failure latched the placement review; retained input matched
+all 504 canonical sites/orientations exactly, eight seed/retry checks passed,
+and the documented review was explicitly acknowledged. Evidence and review are in
+`.development-artifacts/vr-production-lists/placement-review/`.
+The mock runner and four callback tests now pin disk headroom; production low-disk
+checks remain intact. Slow-test triage moved the real NAMD nanoparticle preflight
+(11.02 s) to the NAMD slow group. The broad budget was not revalidated on this
+low-space host. Scoped Ruff passes; repository lint still reports the existing
+unused `Path` import in `tests/test_cpd_cube_validation_v6.py`.
+
+The selector's deferred notice, verbatim:
+
+```text
+  DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+  This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+  Only request `just test-session` when a broad/full sweep is actually needed.
+```
+
+Browser verification passed all 23 smoke/assembly teardown checks plus the focused
+history scenario (seek F0/latest, edit cancellation, revert, delete). Native
+transport/scene publication is stubbed only in the browser scenario; desktop
+operations use the actual backend. Cleanup verification found no prefixed designs,
+new revision stores or test credentials. Final native screenshots and the review
+atlas are in `.development-artifacts/vr-production-lists/render-reviewed/`.

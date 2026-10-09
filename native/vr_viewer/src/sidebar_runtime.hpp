@@ -1,6 +1,7 @@
 #pragma once
 #include "sidebar_grips.hpp"
 #include "solid_ui.hpp"
+#include "job_card.hpp"
 // Included after the native GL surface types; owns both sidebar panels.
 class SidebarRuntime {
  public:
@@ -8,6 +9,7 @@ class SidebarRuntime {
     std::array<MenuPanelSurface,2> surfaces;
     std::array<SolidUi,2> raised;
     std::array<bool,2> openedBefore{};
+    std::array<nadoc_vr::SidebarMenu*,2> historyGrab{};
     void initialize() { for(auto& s:surfaces) s.initialize(); }
     void shutdown() { for(auto& s:surfaces) s.shutdown(); for(auto& s:raised)s.shutdown(); }
     bool anyOpen() const {return menus[0].open||menus[1].open;}
@@ -80,6 +82,13 @@ class SidebarRuntime {
     template<class Action> std::array<bool,2> input(const std::array<nadoc_vr::HandPose,2>& hands,
             const std::array<bool,2>& clicked,const std::array<bool,2>& held,std::array<bool,2> blocked,const std::array<float,2>& foreground,double now,Action action) {
         for(auto& m:menus) {m.hovered.clear();if(now>=m.pressedUntil)m.pressed.clear();if(!m.open)m.focus.reset();}
+        for(size_t h=0;h<2;++h)if(auto* m=historyGrab[h]) {
+            const auto point=m->placement.rayPanelLocalPoint(hands[h],{-100,-100},{100,100});
+            if(blocked[h] || !hands[h].valid || !m->open || m->tab().key!="feature-log" || !point){m->historyScrubCancel();historyGrab[h]=nullptr;continue;}
+            const auto command=m->historyScrub(point->y,!held[h]);
+            if(!held[h]){historyGrab[h]=nullptr;if(!command.empty())action(command,h);}
+            blocked[h]=true;
+        }
         for(size_t h=0;h<2;++h) if(!blocked[h]) {
             // Resolve the nearest physical panel, including its blank/disabled areas.
             nadoc_vr::SidebarMenu* target=nullptr; float distance=foreground[h];
@@ -107,7 +116,12 @@ class SidebarRuntime {
             auto c=target->hit(hands[h]);
             if(!c) continue;
             target->hovered=c->id;
-            if(nadoc_vr::SidebarMenu::isScrollbar(c->id) && c->enabled && held[h]) {
+            if(c->id=="history:scrub" && c->enabled) {
+                if(clicked[h] && historyGrab[1-h]!=target){
+                    const auto point=target->placement.rayPanelLocalPoint(hands[h],target->bounds().minimum,target->bounds().maximum);
+                    if(point){target->historyScrubCancel();historyGrab[h]=target;target->historyScrub(point->y,false);}
+                }
+            } else if(nadoc_vr::SidebarMenu::isScrollbar(c->id) && c->enabled && held[h]) {
                 auto point=target->placement.rayPanelLocalPoint(hands[h],target->bounds().minimum,target->bounds().maximum);
                 if(point) target->scrollControl(c->id,point->y);
             } else if(clicked[h]) {
@@ -179,6 +193,7 @@ class SidebarRuntime {
                 const auto b=c.bounds;const auto size=b.maximum-b.minimum;
                 const bool hover=menu.hovered==c.id || (menu.focus.active && menu.focus.id==c.id);
                 const float z=menu.controlDepth(c);
+                if(c.id.starts_with("sim:j:")){drawJobCard(ui,c,hover,z);continue;}
                 const bool back=c.id.ends_with(":back");
                 const bool spinning=menu.spinning(c.action);
                 const bool green=c.id=="sweep:confirm" || c.id=="move:apply";

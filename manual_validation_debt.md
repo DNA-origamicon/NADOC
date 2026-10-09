@@ -724,7 +724,7 @@ clear head/grip motion comfort. Review original framing, Stick and Ball & Stick,
 head turns and grip translation/rotation without changing detail or motion
 settings. [Evidence](docs/audits/vr_motion_regression_20260929.md).
 
-- **MV-VR-GALLERY — PENDING — Component gallery in-headset comparison (2026-10-01).** Open Debug → VR Component Gallery → Component evaluations → VR demo. User selected 0–1000 / 35% for Extrude and 0–100 / 35% for Bend; those presets are applied. Compare the six Button styles and six Cards and lists styles for through-lens readability, press feedback, target comfort and aesthetic preference. Desktop render/input checks do not establish headset comfort. Reproduction: `docs/vr_component_gallery.md`.
+- **MV-VR-GALLERY — PENDING — Component gallery in-headset comparison (2026-10-01).** Open Debug → VR Component Gallery → Component evaluations → VR demo. User selected 0–1000 / 35% for Extrude and 0–100 / 35% for Bend; those presets are applied. Compare the six Button styles, six Cards and lists styles, and six Scrollable sets styles (added 2026-10-08; also check rail dragging, row actions and persistent selection) for through-lens readability, press feedback, target comfort and aesthetic preference. Desktop render/input checks do not establish headset comfort. Reproduction: `docs/vr_component_gallery.md`.
 
 ## MV-VR-MOTION-QUALITY — through-lens transition review (2026-10-03)
 
@@ -809,3 +809,5 @@ presets. SteamVR was not running during implementation. Native production-handle
 GL panel/layout and actual browser/backend history checks passed; they do not
 establish through-lens legibility or physical controller comfort. Evidence:
 `.development-artifacts/vr-move-20261008/`.
+
+- **MV-42 — PENDING — Production VR list components and history rail (2026-10-08).** In-headset check Sweep's grouped point markers/XYZ targets, the Dimensions table with long labels and visibility/delete, and job-card text/selection at the normal tablet scale. Scrub Feature Log across more than six entries, release at F0 and a routing sub-step, verify scene readiness, and use edit/revert/delete including cancellation on the in-headset desktop surface. Check assembly/part target changes, tracking loss and both controllers. Automated native layout/actions, production pixels and isolated browser handlers are separate evidence; through-lens comfort and physical controller profiles remain open. Reusable checks: Debug → VR Tours & Tests → Controls & layout → Feature history and production lists.

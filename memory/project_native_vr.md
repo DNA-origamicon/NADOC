@@ -347,6 +347,19 @@ frames, causing recurring p99 wall costs invisible to p95. Neither candidate
 optimization has been implemented by this audit. Preserve readback provenance
 and slab geometry authority when optimizing; do not lower render quality.
 
+## Production scrollable sets and history (2026-10-08)
+
+Sweep points now use a grouped rail; Dimensions uses aligned outlined-table
+columns; simulation jobs use native beveled cards with status detail. Feature
+Log has a versioned desktop-authoritative native rail: preview notch while
+trigger-held, seek on release, independent list scroll, per-row edit/revert/delete,
+F0 and expanded routing children, and desktop assembly/part/configuration targets.
+Specialized editors and confirmations use the interactive in-headset desktop
+surface. Pending seeks/operations/scene exports disable history actions; stale
+versions and duplicate commands are rejected. The reusable review is registered
+under Controls & layout → Feature history and production lists. See
+[production list behavior](../docs/vr_sidebar_menus.md#production-scrollable-sets-and-feature-history-2026-10-08).
+
 ## Component gallery (2026-10-01)
 
 Debug → VR Component Gallery now offers native VR and headset-free desktop
@@ -354,7 +367,7 @@ thumbwheel evaluation demos. Both share solid ridged meshes and inertia, with
 20/35/50% exposure columns and 0–10/100/1000 range rows. Extrude and Bend share
 the new clipped solid rendering. Launch, controls and validation:
 [component gallery](../docs/vr_component_gallery.md). Range-dependent sizing is
-approved by the user: Extrude uses 0–1000 / 35%, and Bend uses 0–100 / 35% with expanded layout and raised-surface hit testing. The gallery also offers six button styles inspired by MRTK, visionOS, Material and Blender, with VR/desktop demos and all-four-profile validation. Cards and lists adds six expandable studies with selectable children and the same launch modes.
+approved by the user: Extrude uses 0–1000 / 35%, and Bend uses 0–100 / 35% with expanded layout and raised-surface hit testing. The gallery also offers six button styles inspired by MRTK, visionOS, Material and Blender, with VR/desktop demos and all-four-profile validation. Cards and lists adds six expandable studies with selectable children and the same launch modes. Scrollable sets (2026-10-08) adds six bounded-list studies: inset tray, outlined table, job cards, sweep rail, grouped set, and pinned inspector. Twelve sample rows per set have independent actions and persistent selection, draggable rails and UP/DN targets. Desktop/VR launch and profile validation are registered; native interaction/render checks cover the new lists. Production feature binding and through-lens comfort remain separate.
 
 ## Resource limits after the October 1 UI evaluation crash
 
