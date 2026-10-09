@@ -1,5 +1,257 @@
 # Cis-anti-I additive parity campaign
 
+**PAUSED BY USER — 2026-10-08. Explicit resume required.**
+Stopped control2 completion watcher first,then entire NAMD service. Both units
+inactive/dead; no NAMD remains. This pause supersedes all earlier next-job
+admissions and wake instructions. Do not continue from a delayed completion wake.
+Control2 worker reviewed segments01–09 (9ns),all gates pass; independent full
+control2 audit remains pending. Segment10 interrupted at user request.
+Verified latest checkpoint step5100000 =9.14ns validation; log reached5101000.
+Complete265477-atom coor/vel/fullXSC finite,geometry/water/image pass,image48.625A;
+checkpoint matches saved DCD coordinates and cell. Remaining430000steps=0.86ns
+to5530000. Raw tail after checkpoint is retained but not credited on resume.
+
+Pause receipt `cpd-anti-gpu-cube-context-v5/campaign_pause_20261008.json`, copied
+to service `user_pause_20261008.json`. Original supervisor status can remain
+stale running; actual inactive units and explicit pause receipt are authoritative.
+See [resume handoff](cpd_resume_handoff_20261008.md). All simulation data retained;
+no automatic restart,deadline reset or commit requested/performed. No readiness
+promotion. Prior failures and all three completed10ns validation audits preserved.
+
+**Anti2 aggregate10ns audited; control2 admitted (latest).**
+Wake7849095e-efc6-4f8d-9bd6-9b311afc60b0 ACKed. Remaining8.9ns returned0
+in28755.90s (7.99h),without another startup exception. Successful aggregate10ns
+native31382.61s (27.53ns/day). Auditor`audit_cube_anti2_v12.py` checks1000DCD
+cells,100periodic restart triples,22native jobs,33stratified geometry frames,
+11binary endpoints and native/restart/CPU endpoint energies.1011worker geometry
+records pass; not independent all-frame chemistry. Exact step sequence535000
+through5530000 excludes failed originalsegment02 and duplicate endpoints.
+
+Minimum image36.743A,max sampled void3.780A. Late5ns299.185K,+1.640bar,
+density1.022953g/cm3,149.844mM addedNaCl; density half-change-0.00000236g/cm3.
+All finite context gates pass,not equilibrium/minimum/readiness certification.
+On same28 shared contact identities,anti2 blockretention0.744–0.813 versusanti1
+0.464–0.605. Prepared fractions0.821 versus0.643 demonstrate initial-state
+variation. Control1 retention0.811–0.853 is contextual,not matchedcontrol2.
+Both anti outcomes retained; no preference for favorable replica or parameter
+refit. `replicate_comparison_v12.json` stores baselines,blocks and per-contact
+retention. Initial-state/replica variability remains a material limitation.
+
+Anti2 original`validation/aggregate_assessment_v12.json`,
+`aggregate_native_audit_v12.json`,`aggregate_performance_v12.json`,
+`completion_review.json` retain evidence/admission. Failedstartup source and
+one successful diagnostic remain preserved; unresolved runtime rootcause is
+not called fixed. Any recurrence stops for method investigation without retries.
+
+Three of six registered10ns runs complete. Next ONLYcontrol2 via unchanged
+v6launcher/worker;15h cap,1ns audits,100ps checkpoints,10psDCD,fullXSC and
+unchanged gates. Service`cpd-anti-cube-validation-control-2-v6`, evidence
+`cpd-anti-cube-validation-control-2-service-v6`. Completes second matchedpair,
+testing control variability; no extra anti extension/tuning justified by timing.
+On wake ACK and run `audit_cube_replica_v9.py /tmp/control2_audit.json control 2`
+with NADOC_REPO_ROOT andOPENBLAS_NUM_THREADS=1; review shared28contacts and
+preparedbaseline with anti2/control1,without treating correlated frames as
+independent replicas. Pin assessment,audit,performance_report in completion_review
+before anti3. Anti3/control3,final interpretation,provenance errata and portable
+package remain pending; no cloud or readiness promotion.
+
+**Anti2 startup diagnostic passed; remaining8.9ns admitted — 2026-10-07.**
+Wake d4abb3c9-b784-4ec4-ba03-326018ddb9db ACKed.100ps test returned0 in305.67s
+(5.09min),295.62native s. Native startup exception did not reproduce; root cause
+remains unresolved,not declared fixed. Audit replays all10DCD frames plus binary
+endpoint,full cells,complete1050000 restart triple,1080000 endpoint and CPU/
+resident initial/endpoint energies. Minimum image51.345A,max void3.338A;
+50ps blocks299.338/299.257K,-7.447/+15.695bar,density1.023196/1.022833.
+Same originalcheckpoint/seed55227/engine/method/gates; only runlength/output
+changed. Credit100ps after audit,bringing anti2 to1.1ns. Failed originalsegment02
+has zero credit and remains preserved. No equilibrium/minimum/readiness claim.
+
+Worker`continue_cube_v11.py`: new output`anti/replica-2/validation-remaining-v11`,
+first1080000→1530000 (0.9ns),then segments03–10 (8ns),final5530000. Full saved
+coor/vel/XSC from diagnostic endpoint,unchanged2fs,NPT force-switch,PME144,p4.
+New seedbase95027+100*segment declared; no bitwise RNG continuity claim.13h
+hard cap (<16h),~8–9h expected; conservative budget12.452h.100ps checkpoints,
+10psDCD,per-segment chemistry/water/image/cell/energy/observable checks and
+slowdown/time admission unchanged. Any native exception stops; no automatic
+retry. If bad_any_cast recurs, investigate runtime/method before another retry.
+
+Service`cpd-anti2-remaining-v11`, evidence`cpd-anti2-remaining-service-v11`.
+On completion ACK and audit aggregate10ns:originalsegment01(1ns),diagnostic
+1030000–1080000(0.1ns),v11segment02(0.9ns),segments03–10(8ns). Excludefailed
+originalsegment02 and duplicate endpoints. Include failure history and shared
+contact comparison to anti1/prepared baselines; aggregate review precedescontrol2.
+Write originalanti2 validation/completion_review with pinned aggregate assessment,
+audit,performance_report for successor admission. Six focused tests passed for
+exactpartial-segment chaining,no overlap/overwrite,failure stopping and timing
+limits. No cloud,parameter changes or readiness promotion.
+
+**Anti2 native startup failure preserved; bounded diagnostic admitted — 2026-10-07.**
+Failed wake d8262642-3a41-4cab-81aa-cd41fdd05583 ACKed. Segment01 completed1ns
+and passed worker checks; segment02 aborted after2.03s at native startup with
+returncode-6 and Charm++ `bad any_cast` in SynchronousCollectives recvIndexData
+<unsigned long long>. No segment02 ENERGY record, so zero new simulation credited.
+Root cause remains unresolved; this is not a recorded chemistry/image failure.
+Outside-sandbox nvidia-smi confirms healthy RTX3080Ti and no NAMD process.
+Restricted-sandbox driver-access error was not evidence of driver failure.
+
+Checkpoint audit replays all100 saved segment01 frames plus endpoint,full cells,
+water/chemistry/image/observables,ten regular checkpoints and endpoint/restart
+energies. Step1030000 complete coor/vel/XSC verified. Minimum image44.292A,
+max void3.470A; native1ns2915.69s,29.63ns/day. Preserve completed segment01,
+failed segment02/config/traceback and original deadlines. Do not launch control2
+or count anti2 as10ns completed.
+
+Next is ONE same-engine,same-p4,same-seed55227 diagnostic from step1030000,
+100ps to1080000,unchanged2fs,NPT force-switch,PME144,fullXSC and scientific gates.
+Only run length/output directory differs from failed attempt. Worker
+`cube_startup_diagnostic_v10.py`; output`anti/replica-2/validation-startup-diagnostic-v10`.
+Expected~5–8min,hard15min cap; no retry loop. Service
+`cpd-anti2-startup-diagnostic-v10`, evidence
+`cpd-anti2-startup-diagnostic-service-v10` retains failure audit/authorization.
+On wake ACK/audit native initial and endpoint energies,all10 frames plus endpoint,
+checkpoint,physical/observables and performance. If startup failure recurs,stop
+for runtime-method investigation rather than another blind retry. If diagnostic
+passes,review whether to credit the100ps and prepare a new bounded continuation
+for remaining8.9ns (450000steps to original segment02 endpoint1530000,then8ns).
+No original output overwrite,threshold changes or readiness promotion. All later
+replicas remain gated. No cloud.
+
+**Control1 audited; matched structural limitation retained; anti2 admitted — 2026-10-07.**
+Wake85ca6cd5-9764-4364-aa71-d3651c1c5417 ACKed. Control1 return0,10ns in
+31190.17service s (8.66h),30426.73native s (28.40ns/day). Independent native/cell/
+restart audit verified20native jobs,1000DCD cells,100periodic triples,restart/CPU
+endpoint energies,30stratified geometry frames and10binary endpoints. All1010
+worker geometry records pass; chemistry routines reused,not independent all-frame.
+Minimum image33.655A. Late5ns299.231K,+0.192bar,density1.022883g/cm3,
+149.833mM addedNaCl,density half-change+0.00001576g/cm3. No former image/cavity/
+tension failure; finite physical behavior does not establish equilibrium.
+
+Matched comparison uses28 shared preregistered contacts keyed by segid,resid,
+atomname and fixed3.5A descriptive cutoff,not raw fractions from different35/34
+source lists. Anti1 per-ns retention0.464–0.605 versus control1 0.811–0.853.
+Prepared baselines0.643/0.679 and mean shared-contact distances6.206/3.553A
+already differ. This is a material structural difference with initial-state
+confounding,not an isolated lesion causal effect,significance or parameter-fidelity
+claim. Correlated frames are not independent replicas. Preserve limitations;
+no source contacts,fit parameters,acceptance thresholds or readiness flags changed.
+Report`matched_pair1_comparison_v9.json`; script`compare_cube_pair_v9.py`.
+
+Control1 `validation/native_audit_v9.json` and `completion_review.json` retain
+native and physical/structural/performance/necessity review; auditor
+`audit_cube_replica_v9.py` supports uninterrupted case/replica audits. CLI:
+`NADOC_REPO_ROOT=/home/jojo/Work/NADOC OPENBLAS_NUM_THREADS=1 .venv/bin/python experiments/cpd_anti_additive/audit_cube_replica_v9.py /tmp/audit.json CASE REPLICA`.
+Two of six registered10ns runs complete. Next anti2 fresh10ns using registered
+seed and unchanged worker/method,15h cap,1ns checks/100ps checkpoints. Service
+`cpd-anti-cube-validation-anti-2-v6`, evidence
+`cpd-anti-cube-validation-anti-2-service-v6`. Necessity: test persistence/variation
+of anti structural behavior across another registered preparation,not extend/refit
+anti1. Retainp4/2fs/cube; no new tuning justified by current timing.
+On completion ACK/audit all native outputs and physical/structural/performance
+trends before control2 admission. Compare against anti1 and prepared baselines;
+update comparisons without relabeling correlated frames as replica evidence.
+Remaining replicas,final interpretation,provenance errata and package pending.
+
+**Anti1 complete10ns audited; matched control1 admitted — 2026-10-07.**
+Wake9bde86a2-0e42-4903-a994-2e79bb78146d acknowledged. Remaining8ns return0,
+26489.83s (7.36h),25964.46native s (26.62ns/day). Audit verified800 new DCD
+cells,80 periodic restart triples,16 native jobs, restart/CPU endpoint energies,
+24 stratified geometry frames and8 binary endpoints. Prior200frame audits
+remain linked. Combined1000 unique10ps frames span535000..5530000 without
+interrupted tail or duplicate endpoints. Final8ns worker808geometry records
+pass; replay is stratified for chemistry, not independent all-frame chemistry.
+
+Late5ns299.217K,+2.146bar,density1.022959g/cm3,149.844mM addedNaCl;
+density half-change+0.00000718g/cm3. Final8ns image minimum34.425A, maximum
+sampled void3.679A. No former image/cavity/tension failure. Crosslink1ns means
+~1.566–1.583A; source-contact means0.478/0.517(first2ns),0.390(at6ns),0.455(at10ns),
+endpoint0.486. Structural evolution is retained, not called converged or attributed
+to CPD without controls. No threshold changed, no refit, no readiness promotion.
+
+Original anti1 `validation/aggregate_assessment_v8.json`,
+`aggregate_native_audit_v8.json`, `aggregate_performance_v8.json` and
+`completion_review.json` record the split10ns and admission decision. Auditor
+`audit_cube_aggregate_v8.py` archived alongside results. Native speed projection
+for fresh10ns~9.02h; preserve conservative13.93h budget and15h cap from startup.
+Current p4 method remains preferable to unmotivated cell/timestep/core changes.
+
+Next only control1 fresh10ns via unchanged`launch_cube_validation_v6.py`,
+service`cpd-anti-cube-validation-control-1-v6`, evidence
+`cpd-anti-cube-validation-control-1-service-v6`. Ten1ns stages,100ps checkpoints,
+fullXSC,10ps frames,registered observables and unchanged gates; stop on failure,
+time-budget shortage or>20%slowdown; completion review before anti2. On wake
+ACK and independently audit native/restart/cell evidence and sampled chemistry,
+review physical/structural/performance with anti1 using shared contact pairs
+(the source-specific contact fractions alone are not a matched effect estimate).
+Write control1 validation/completion_review with pinned assessment,audit and
+performance_report before anti2 admission. Four later replicas, full matched
+interpretation,provenance errata and portable package still remain. No cloud.
+
+**Resumed segment02 audited; remaining8ns admitted — 2026-10-07.**
+Wake d97adfe9-34e3-4413-b96a-1c1f65e1296d ACKed. Service return0;0.46ns
+finished in1527.62s (25.46min). Native audit verifies three jobs, exact saved-step
+CPU/resident energy agreement, endpoint energy, all46 DCD frames plus endpoint,
+full cells and four complete100ps restart sets. Geometry replay uses frozen
+engine routines; earlier154frame audit retained, uncheckpointed old tail excluded.
+Anti1 is now at2ns; no convergence/minimum or full-readiness claim.
+
+Remainder minimum image35.681A,max void witness3.413A.50ps-block means299.207K,
+-2.693bar,density1.022825g/cm3,149.825mM addedNaCl. Source-contact fraction across
+retained0–2ns ranges0.343–0.686, ends0.486; variation is descriptive only.
+Native3247.045s/ns (26.61ns/day), faster than preparation reference. Retainp4,
+ordinary2fs,cubic cell and fixed gates; no need for repetition or tuning detour.
+
+New `continue_cube_v8.py` runs segments03–10 only, starting step1530000 from
+`validation-resume-v7/segment-02-remainder/result.restart` with full coor/vel/XSC.
+Outputs `anti/replica-1/validation-remaining-v8`; no overwrites or duplicated time.
+Registered seedbase84017+100*segment; no bitwise RNG continuity claim.
+Worst preparation native+analysis costs with25%margin and1800s reserve give
+11.24h for8ns; hard12h (<16h), nominal~8–9h. Check each1ns segment,100ps
+checkpoints,10ps DCD,CPU endpoint/restart energy,all saved chemistry/water/image,
+physical blocks/voids/observables; stop on failure,insufficient time or>20%slowdown.
+
+Service`cpd-anti-cube-remaining-anti-1-v8`, evidence
+`cpd-anti-cube-remaining-anti-1-service-v8`. Watcher review at10h if still active.
+On completion ACK and audit all outputs. Aggregate10ns consists of original
+segment01, original segment02 only through1300000, v7 remainder1300000–1530000,
+and v8 segments03–10. Exclude duplicate endpoints/tail in time series. Independently
+review aggregate physical/structural/performance evidence before control1. Write
+original `validation/completion_review.json` with approved_for_next_run and pinned
+aggregate assessment,audit,performance_report to satisfy successor launcher.
+No other replica automatically admitted. Six-replica comparison,provenance errata
+and portable package still pending. Tests cover exact8ns chaining,stop on failure,
+no overwrite and interrupted-log checkpoint handling.
+
+**Explicit resume; bounded segment02 continuation — 2026-10-07.**
+The user said "resume", superseding the6October pause for newly admitted work.
+Historical pause/deadlines remain unchanged. No existing NAMD process was found.
+New `resume_cube_v7.py` audit replayed154 saved frames through step1300000,
+including full cells, chemistry/water/image gates, registered observables and16
+complete100ps checkpoint sets. Minimum image36.049A; checkpoint geometry passes.
+Completed segment01 native termination and CPU endpoint energy verified; partial
+segment02 energy parsed explicitly through checkpoint, never treated as completed.
+Bulk blocks remain near299K,1.023g/cm3 and149.85mM; no equilibrium claim.
+Source-contact fraction0.486→0.543 is short-time descriptive evidence only.
+
+Launch only remaining0.46ns from step1300000 to1530000 in
+`anti/replica-1/validation-resume-v7/segment-02-remainder`, preserving existing
+segment02 and discarding uncheckpointed tail after1300000 from continuation.
+Before MD, exact checkpoint CPU run0 energy must agree with original saved-step
+potential; resident initial energy checked too. Full coor/vel/XSC,2fs,p4,NPT
+force-switch,PME144,100ps checkpoints and10ps DCD retained. New seed74217 is
+registered; stochastic trajectory is not claimed bitwise identical.2h hard cap,
+~30–40min expected. Worker stops at2ns total validation endpoint for model audit;
+eight remaining ns require new admission. No duplicate10ns launch or overwrites.
+
+Service `cpd-anti-cube-resume-anti-1-v7`, evidence
+`cpd-anti-cube-resume-anti-1-service-v7`, containing resume_authorization, archived
+worker/launcher, resume_audit and plan. On completion ACK and audit exact native
+restart/endpoint energies, all46 frames plus endpoint, checkpoints, physical/
+structural trends and performance before admitting subsequent8ns. Review must
+include earlier1.54ns without counting discarded tail twice. Readiness false.
+Eight focused tests pass, including interrupted-log checkpoint-energy selection,
+gap/nonfinite rejection and earlier restart/limit tests. Unrelated working-tree
+extrusion changes are outside this task. Historical handoff below remains evidence.
+
 **PAUSED BY USER — 2026-10-06. Do not launch or continue jobs until explicit resume.**
 The user requested: "Pause the run. commit what we have so far. prepare to resume later."
 Stopped `cpd-anti-cube-validation-anti-1-v6-watch.service` first, then the complete

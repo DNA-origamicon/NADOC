@@ -257,7 +257,7 @@ def _compute_helix_membership(
         origin = report.new_helix_origins.get(new_hid) if new_hid in report.new_helix_origins else inferred.get(new_hid)
         new_helix_targets[new_hid] = set(helix_membership_before.get(origin, ()))
         helix = next(h for h in design_after.helices if h.id == new_hid)
-        if helix.lattice_frame_id is not None:
+        if helix.lattice_frame_id is not None and new_hid not in report.new_helix_origins:
             frame = next(f for f in design_after.lattice_frames if f.id == helix.lattice_frame_id)
             new_helix_targets[new_hid].add(frame.placement_cluster_id)
 

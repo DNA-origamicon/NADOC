@@ -93,3 +93,12 @@ Slice-plane extrude • overhang extrude • overhang connection create/patch/de
 - `tests/test_cluster_reconcile.py` — 19 unit tests against synthetic Designs.
 - `tests/test_cluster_reconcile_e2e.py` — 5 e2e tests through `/design/*` routes with non-identity transforms.
 - `tests/test_overhang_geometry.py` and `tests/test_overhang_connections.py` — older tests that were re-pointed to call the reconciler explicitly after `make_overhang_extrude` / `generate_linker_topology` (since those lattice functions no longer touch clusters).
+
+## 2026-10-06: fresh extrusion ownership (supersedes neighbor inheritance for new extrusion requests)
+
+- `backend/core/extrusion_clusters.py` distinguishes continuation from fresh lattice cells. A fresh footprint creates **one** cluster, including disconnected painted cells, without inheriting adjacent clusters. Continuing an existing address or growing an existing helix retains membership; mixed operations assign new cells to that continuation's cluster, even when disconnected. Multiple explicit continuation parents keep their own ownership; unmatched cells follow the deterministic first source.
+- Straight segment, circle, continuation, bent continuation, and frame routes share the policy. Bent builders report actual endpoint continuations (they have no lattice addresses). Fresh framed/bent extrusions copy source placement into the independent cluster. Explicit origins/orphans now override the frame placement fallback as well as lattice adjacency.
+- Requests persist `separate_fresh_extrusions=True`; old feature params lacking this field replay with the legacy rules. Editing a feature retains its saved policy if the editor omits the flag. Undo/redo use snapshots. Fresh operation clusters are not marked as autodetected, so legacy component repair cannot regroup them.
+- Fresh bundle creation uses one default cluster/frame. Compound hinge/corner builders explicitly request the legacy per-leaf grouping they require. Import autodetection, explicit orphan repair, ordinary resizing, and overhang extrusion (which extends a parent) retain their existing rules.
+- Multiple legacy plane clusters with identical, disjoint placements remain a valid extrusion source; the common placement is applied once. Once their poses differ, the existing ambiguous-source rejection still applies.
+- Coverage: `tests/test_extrusion_clusters.py`, `test_cluster_reconcile_e2e.py`, `test_frame_extrusion.py`, and `frontend/e2e/extrusion_clusters.spec.js`; native extrude tour also checks independent footprint membership.

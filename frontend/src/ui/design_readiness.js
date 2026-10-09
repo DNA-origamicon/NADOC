@@ -5,19 +5,23 @@
 
 let nextPanelId = 0
 
-/** Display counts are standard checks only; simulation is a separate next step. */
+/** Integrity can subtract one point; simulation is a separate next step. */
 export function designReadinessSummary(report) {
   const total = Math.max(0, Math.trunc(Number(report?.total_steps) || 0))
   const completed = Math.max(0, Math.min(total, Math.trunc(Number(report?.completed_steps) || 0)))
-  const complete = total > 0 && completed === total
+  const penalty = report?.integrity_penalty === -1 ? -1 : 0
+  const score = completed + penalty
+  const complete = total > 0 && completed === total && penalty === 0
   const state = complete && report?.state === 'ready' && report?.simulation?.complete === true
     ? 'ready' : complete ? 'simulation_recommended' : 'incomplete'
   return {
     state,
     completed,
     total,
-    fraction: total ? completed / total : 0,
-    label: `${completed}/${total} complete`,
+    score,
+    penalty,
+    fraction: total ? Math.max(0, score) / total : 0,
+    label: !total && penalty ? 'Integrity issue' : `${score}/${total} readiness`,
     caption: state === 'ready' ? 'Simulation complete' : state === 'simulation_recommended' ? 'Sim recommended' : '',
   }
 }
@@ -194,6 +198,7 @@ export function initDesignReadiness({ host, onAction, onDismiss } = {}) {
   }
 
   function renderStep(step, { simulation = false } = {}) {
+    const integrity = step.id === 'topology'
     const applicable = step.applicable !== false
     const complete = applicable && step.complete === true
     const actionable = applicable && !complete && !!step.action && typeof onAction === 'function'
@@ -220,12 +225,12 @@ export function initDesignReadiness({ host, onAction, onDismiss } = {}) {
         }
       })
     }
-    const marker = element('span', 'design-readiness__marker', !applicable ? '–' : complete ? '✓' : simulation ? '↗' : '○')
+    const marker = element('span', 'design-readiness__marker', !applicable ? '–' : integrity ? '!' : complete ? '✓' : simulation ? '↗' : '○')
     marker.setAttribute('aria-hidden', 'true')
     const content = element('span', 'design-readiness__step-content')
     const line = element('span', 'design-readiness__step-line')
     line.append(element('span', 'design-readiness__step-label', step.label || (simulation ? 'Fine / production simulation' : step.id)))
-    const status = !applicable ? 'Not required' : complete ? 'Complete' : simulation ? 'Recommended' : 'Missing'
+    const status = !applicable ? 'Not required' : integrity ? '−1 point' : complete ? 'Complete' : simulation ? 'Recommended' : 'Missing'
     line.append(element('span', 'design-readiness__step-state', status))
     content.append(line)
     if (step.detail) content.append(element('span', 'design-readiness__detail', step.detail))
@@ -275,8 +280,13 @@ export function initDesignReadiness({ host, onAction, onDismiss } = {}) {
       ? 'Standard steps complete; a matching fine or production simulation is complete.'
       : summary.state === 'simulation_recommended'
         ? 'Standard steps complete. A fine or production simulation is recommended.'
-        : 'Complete the missing steps to prepare this design.'
-    for (const step of report.steps || []) rows.append(renderStep(step))
+        : summary.penalty
+          ? `${summary.completed}/${summary.total} steps complete. Resolve the design integrity issues to remove the 1-point penalty.`
+          : 'Complete the missing steps to prepare this design.'
+    for (const step of report.steps || []) {
+      if (step.id === 'topology' && (step.complete || step.applicable === false)) continue
+      rows.append(renderStep(step))
+    }
     if (report.simulation) {
       simulationHost.hidden = false
       simulationHost.append(renderStep(report.simulation, { simulation: true }))

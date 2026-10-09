@@ -44,7 +44,7 @@ test('design tools use grouped controls and preserve their selection and cancel 
     await page.getByRole('button', { name: 'Tools', exact: true }).hover()
     await page.locator(`#menu-tools-${tool}`).click()
     await expect(page.locator('#def-current-selection')).toBeVisible()
-    await expect(page.locator('#def-pick-planes')).toBeDisabled()
+    await expect(page.locator('#def-apply-btn')).toBeDisabled()
     // Canonical preselection, as when launching from a cluster list selection.
     await page.evaluate(async () => {
       const { store } = await import('/src/state/store.js')
@@ -52,11 +52,12 @@ test('design tools use grouped controls and preserve their selection and cancel 
       const cluster = store.getState().currentDesign.cluster_transforms[0]
       createSelectionController({ store }).replace([{ kind: 'cluster', id: cluster.id }])
     })
-    await page.locator('#def-pick-planes').click()
     const popup = page.locator('.tool-popup[data-tool-panel="deform-panel"]')
     await expect(popup).toBeVisible()
-    await expect(popup.locator('.tool-picking-hint')).toContainText('Select plane A')
-    await expect(popup.locator('#def-apply-btn')).toBeDisabled()
+    await expect(popup.locator('.tool-picking-hint')).toBeHidden()
+    await expect(popup.locator('#def-plane-a-bp')).toHaveValue('0')
+    await expect(popup.locator('#def-plane-b-bp')).toHaveValue('199')
+    await expect(popup.locator('#def-apply-btn')).toBeEnabled()
     await expect(popup.locator(`#def-${tool}-controls`)).toBeVisible()
     await page.locator('#right-tab-strip [data-tab=visualization]').click()
     await expect(popup).toBeVisible()
@@ -75,6 +76,7 @@ test('design tools use grouped controls and preserve their selection and cancel 
       const { store } = await import('/src/state/store.js')
       const editor = await import('/src/scene/deformation_editor.js')
       editor.exitTool()
+      await editor.waitForDeformationIdle()
       editor.startToolAtBp(tool, store.getState().currentDesign.helices[0].id, 100, 1)
     }, tool)
     await expect(popup.locator('#def-plane-b-bp')).toHaveValue('100')

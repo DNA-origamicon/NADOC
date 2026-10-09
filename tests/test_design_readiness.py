@@ -53,12 +53,12 @@ def test_standard_steps_and_simulation_are_separate_and_read_only():
     design = make_minimal_design()
     before = design.model_dump()
     report = standard_readiness(design)
-    assert report["completed_steps"] == 3
-    assert report["total_steps"] == 5
+    assert report["completed_steps"] == 2
+    assert report["total_steps"] == 4
     assert report["state"] == "incomplete"
     assert design.model_dump() == before
     ready = standard_readiness(sequenced_design())
-    assert ready["completed_steps"] == 5
+    assert ready["completed_steps"] == 4
     assert ready["state"] == "simulation_recommended"
     assert finish_readiness(ready, {"complete": True})["state"] == "ready"
     assert finish_readiness(report, {"complete": True})["state"] == "incomplete"
@@ -88,7 +88,7 @@ def test_native_oligos_have_no_scaffold_obligation():
     design = sequenced_design(with_scaffold=False)
     design.helices[0].native_residues = [NativeResidue(bp_index=0, base="A", source_residue="A1", atoms={})]
     report = standard_readiness(design)
-    assert report["total_steps"] == 3
+    assert report["total_steps"] == 2
     assert report["state"] == "simulation_recommended"
     assert not steps(report)["scaffold_routing"]["applicable"]
 
@@ -239,3 +239,131 @@ def test_lammps_can_prove_current_design_through_immutable_revision(tmp_path):
     assert result["engine"] == "lammps"
     design.strands[0].sequence = "C" * len(design.strands[0].sequence)
     assert not completed_simulation(design, tmp_path)["complete"]
+
+
+@pytest.mark.parametrize("plane", ["XY", "XZ", "YZ"])
+def test_extruded_precursors_require_routing_even_when_sequenced(plane):
+    from backend.core.lattice import make_bundle_design
+
+    design = make_bundle_design([(0, 0), (0, 1)], 84, plane=plane)
+    for strand in design.strands:
+        strand.sequence = 'A' * strand_sequence_length(design, strand)
+    # Readiness survives saving, loading and cosmetic edits.
+    design = Design.from_json(design.to_json())
+    before = design.model_dump()
+    report = steps(standard_readiness(design))
+    for key, command in [('scaffold_routing', 'Autoscaffold'), ('staple_routing', 'Full Autostaple')]:
+        assert not report[key]['complete']
+        assert report[key]['action'] == key
+        assert command in report[key]['detail']
+    assert report['scaffold_sequence']['complete']
+    assert report['staple_sequences']['complete']
+    assert design.model_dump() == before
+
+
+def test_legacy_extrusion_precursors_are_not_authored_routes():
+    from backend.core.lattice import make_bundle_design
+
+    data = make_bundle_design([(0, 0)], 42).model_dump()
+    for strand in data['strands']:
+        strand.pop('routing_seed')
+    report = steps(standard_readiness(Design.model_validate(data)))
+    assert not report['scaffold_routing']['complete']
+    assert not report['staple_routing']['complete']
+
+
+def test_manual_nicking_counts_without_automatic_command_history():
+    from backend.core.lattice import make_bundle_design, make_nick
+
+    design = make_bundle_design([(0, 0)], 42)
+    for strand in list(design.strands):
+        domain = strand.domains[0]
+        design = make_nick(design, domain.helix_id, 20, domain.direction)
+    assert not design.feature_log
+    report = steps(standard_readiness(design))
+    assert report['scaffold_routing']['complete']
+    assert report['staple_routing']['complete']
+
+
+def test_new_precursors_invalidate_previously_routed_design():
+    from backend.core.lattice import make_bundle_design
+
+    design = sequenced_design()
+    extra = make_bundle_design([(0, 1)], 42)
+    design = design.copy_with(helices=design.helices + extra.helices,
+                              strands=design.strands + extra.strands)
+    report = steps(standard_readiness(design))
+    assert not report['scaffold_routing']['complete']
+    assert not report['staple_routing']['complete']
+
+
+def test_integrity_checks_current_content_beyond_routing():
+    design = sequenced_design()
+    report = steps(standard_readiness(design))
+    assert report['topology']['label'] == 'Design integrity'
+    assert 'duplicate IDs' in report['topology']['detail']
+    design.extensions = [StrandExtension(strand_id='missing', end='five_prime', modification='biotin')]
+    report = steps(standard_readiness(design))
+    assert report['scaffold_routing']['complete']
+    assert report['staple_routing']['complete']
+    assert not report['topology']['complete']
+    assert any('does not exist' in issue for issue in report['topology']['issues'])
+
+
+def test_readiness_provenance_does_not_change_simulation_fingerprint():
+    design = sequenced_design()
+    fingerprint = design_build_fingerprint(design)
+    design.strands[0].routing_seed = [design.strands[0].domains[0].model_copy(deep=True)]
+    assert design_build_fingerprint(design) == fingerprint
+    design.strands[0].routing_seed = []
+    assert design_build_fingerprint(design) == fingerprint
+
+
+def test_placement_remapping_does_not_route_precursors():
+    from backend.core.lattice import make_bundle_design
+
+    design = make_bundle_design([(0, 0)], 42)
+    design.helices[0].id = 'placed-helix'
+    design.helices[0].bp_start = 100
+    for strand in design.strands:
+        domain = strand.domains[0]
+        domain.helix_id = 'placed-helix'
+        domain.start_bp += 100
+        domain.end_bp += 100
+    report = steps(standard_readiness(design))
+    assert not report['scaffold_routing']['complete']
+    assert not report['staple_routing']['complete']
+
+
+def test_integrity_only_subtracts_one_point_and_repair_restores_it():
+    design = sequenced_design()
+    clean = standard_readiness(design)
+    assert clean['total_steps'] == clean['completed_steps'] == clean['score'] == 4
+    assert clean['integrity_penalty'] == 0
+    design.extensions = [
+        StrandExtension(strand_id='missing', end='five_prime', modification='biotin'),
+        StrandExtension(strand_id='also-missing', end='three_prime', modification='biotin'),
+    ]
+    broken = standard_readiness(design)
+    assert broken['completed_steps'] == broken['total_steps'] == 4
+    assert broken['integrity_penalty'] == -1
+    assert broken['score'] == 3
+    assert broken['state'] == 'incomplete'
+    # Recalculation, including completed simulation evidence, never compounds or
+    # bypasses the single integrity penalty.
+    repeated = finish_readiness(broken, {'complete': True})
+    assert repeated['score'] == 3
+    assert repeated['state'] == 'incomplete'
+    design.extensions = []
+    fixed = standard_readiness(design)
+    assert fixed['score'] == 4
+    assert fixed['integrity_penalty'] == 0
+    assert fixed['state'] == 'simulation_recommended'
+
+
+def test_integrity_penalty_can_make_the_score_negative():
+    design = make_minimal_design(with_scaffold=False, with_staple=False)
+    report = standard_readiness(design)
+    assert report['completed_steps'] == 0
+    assert report['total_steps'] == 4
+    assert report['score'] == report['integrity_penalty'] == -1

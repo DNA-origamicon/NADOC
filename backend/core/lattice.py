@@ -70,6 +70,13 @@ from backend.core.models import (
 from backend.core.sequences import domain_bp_range
 
 
+def _routing_precursor(**kwargs) -> Strand:
+    """Mark newly extruded strands until their initial domain is routed."""
+    strand = Strand(**kwargs)
+    strand.routing_seed = [domain.model_copy(deep=True) for domain in strand.domains]
+    return strand
+
+
 # ── Global bp_start helper ────────────────────────────────────────────────────
 
 
@@ -457,7 +464,7 @@ def make_bundle_design(
             scaf_start, scaf_end = bp_start_val + actual_length - 1, bp_start_val
 
         if include_scaffold:
-            scaffold = Strand(
+            scaffold = _routing_precursor(
                 id=scaf_id,
                 domains=[
                     Domain(
@@ -484,7 +491,7 @@ def make_bundle_design(
             else:
                 stpl_start, stpl_end = bp_start_val + actual_length - 1, bp_start_val
 
-            staple = Strand(
+            staple = _routing_precursor(
                 id=stpl_id,
                 domains=[
                     Domain(
@@ -637,7 +644,7 @@ def make_bundle_segment(
 
         if include_scaffold:
             new_strands.append(
-                Strand(
+                _routing_precursor(
                     id=scaf_id,
                     domains=[
                         Domain(
@@ -663,7 +670,7 @@ def make_bundle_segment(
                 stpl_start, stpl_end = bp_start_val + actual_length - 1, bp_start_val
 
             new_strands.append(
-                Strand(
+                _routing_precursor(
                     id=stpl_id,
                     domains=[
                         Domain(
@@ -806,7 +813,7 @@ def make_circle_segment(
 
         if include_scaffold:
             new_strands.append(
-                Strand(
+                _routing_precursor(
                     id=scaf_id,
                     domains=[
                         Domain(
@@ -832,7 +839,7 @@ def make_circle_segment(
                 stpl_start, stpl_end = bp_start_val + actual_length - 1, bp_start_val
 
             new_strands.append(
-                Strand(
+                _routing_precursor(
                     id=stpl_id,
                     domains=[
                         Domain(
@@ -1364,7 +1371,7 @@ def make_bundle_continuation(
 
             if include_scaffold:
                 new_strands.append(
-                    Strand(
+                    _routing_precursor(
                         id=scaf_id,
                         domains=[
                             Domain(
@@ -1392,7 +1399,7 @@ def make_bundle_continuation(
                     stpl_end = new_bp_start_val
 
                 new_strands.append(
-                    Strand(
+                    _routing_precursor(
                         id=stpl_id,
                         domains=[
                             Domain(
@@ -1515,7 +1522,7 @@ def make_bundle_continuation(
 
                 if include_scaffold:
                     new_strands.append(
-                        Strand(
+                        _routing_precursor(
                             id=scaf_id,
                             domains=[
                                 Domain(
@@ -1547,7 +1554,7 @@ def make_bundle_continuation(
                         )
 
                     new_strands.append(
-                        Strand(
+                        _routing_precursor(
                             id=stpl_id,
                             domains=[
                                 Domain(
@@ -1603,6 +1610,7 @@ def make_bundle_deformed_continuation(
     deformed_endpoints: dict,
     plane: str = "XY",
     ref_helix_id: str | None = None,
+    *, continuation_origins: dict[str, str] | None = None,
 ) -> Design:
     """Append a deformed bundle segment to *existing_design*.
 
@@ -1766,7 +1774,7 @@ def make_bundle_deformed_continuation(
                 scaf_start, scaf_end = bp_start_val + actual_length - 1, bp_start_val
 
             new_strands.append(
-                Strand(
+                _routing_precursor(
                     id=scaf_id,
                     domains=[
                         Domain(
@@ -1791,7 +1799,7 @@ def make_bundle_deformed_continuation(
                 stpl_start, stpl_end = bp_start_val + actual_length - 1, bp_start_val
 
             new_strands.append(
-                Strand(
+                _routing_precursor(
                     id=stpl_id,
                     domains=[
                         Domain(
@@ -1887,6 +1895,8 @@ def make_bundle_deformed_continuation(
             )
         corrected_helices.append(h)
     new_helices = corrected_helices
+    if continuation_origins is not None:
+        continuation_origins.update(continuation_map)
 
     return existing_design.copy_with(
         helices=existing_design.helices + new_helices,

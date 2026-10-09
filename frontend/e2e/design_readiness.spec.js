@@ -19,7 +19,7 @@ async function refreshDesign(page, doc) {
 async function expectAnchored(page, host) {
   await expect.poll(async () => {
     const canvas = await page.locator(host).boundingBox()
-    const pill = await trigger(page).boundingBox()
+    const pill = await badge(page).boundingBox()
     return canvas && pill ? Math.abs(canvas.x + canvas.width - pill.x - pill.width - 12) : 999
   }).toBeLessThan(2)
 }
@@ -45,7 +45,7 @@ test('readiness commands, shared views, resizing and simulation navigation', asy
   })
   expect(added.ok()).toBe(true)
   await refreshDesign(page, doc)
-  await expect(trigger(page)).toContainText('3/5 complete')
+  await expect(trigger(page)).toContainText('2/4 readiness')
   await expect(badge(page)).toHaveAttribute('data-state', 'incomplete')
   await expectAnchored(page, '#canvas-area')
   await page.locator('#right-tab-toggle').click()
@@ -61,16 +61,16 @@ test('readiness commands, shared views, resizing and simulation navigation', asy
   await page.locator('[data-action="scaffold_sequence"]').click()
   await expect(page.locator('#assign-scaffold-modal-body')).toBeVisible()
   await page.getByRole('button', { name: 'Apply', exact: true }).click()
-  await expect(trigger(page)).toContainText('4/5 complete')
+  await expect(trigger(page)).toContainText('3/4 readiness')
 
   // Complete the last real command in the separate cadnano host.
   const pathview = await context.newPage()
   const pathErrors = trackConsoleErrors(pathview)
   await pathview.goto(`/cadnano-editor.html?doc=${doc}`)
-  await expect(trigger(pathview)).toContainText('4/5 complete')
+  await expect(trigger(pathview)).toContainText('3/4 readiness')
   await trigger(pathview).hover()
   await pathview.locator('[data-action="staple_sequences"]').click()
-  await expect(trigger(pathview)).toContainText('5/5 complete')
+  await expect(trigger(pathview)).toContainText('4/4 readiness')
   await expect(badge(pathview)).toHaveAttribute('data-state', 'simulation_recommended')
   await expect(trigger(pathview)).toContainText('Sim recommended')
   await expectAnchored(pathview, '#pathview-container')
@@ -123,7 +123,7 @@ test('readiness commands, shared views, resizing and simulation navigation', asy
     const { exportVideo } = await import('/src/scene/export_video.js')
     let hiddenDuringPreparation = false
     try {
-      await exportVideo({ animation: {}, player: { play: async () => {
+      await exportVideo({ animation: {}, player: { stop() {}, play: async () => {
         hiddenDuringPreparation = document.querySelector('[data-role="design-readiness"]').hidden
         throw new Error('Intentional test cancellation')
       } } })
@@ -135,6 +135,10 @@ test('readiness commands, shared views, resizing and simulation navigation', asy
   expect(captureVisibility).toBe(true)
   await expect(badge(simulationPage)).toBeVisible()
 
+  // These views have finished their checks. Close them before deleting their
+  // shared backend session so pending refreshes cannot race session teardown.
+  await pathview.close()
+  await page.close()
   await simulationPage.locator('.menu-item').filter({ hasText: 'File' }).first().hover()
   await simulationPage.locator('#menu-file-close-session').click()
   await expect(simulationPage.locator('#welcome-screen')).toBeVisible()
@@ -143,4 +147,47 @@ test('readiness commands, shared views, resizing and simulation navigation', asy
   expect(errors, errors.join('\n')).toEqual([])
   expect(pathErrors, pathErrors.join('\n')).toEqual([])
   expect(simulationErrors, simulationErrors.join('\n')).toEqual([])
+})
+
+
+test('extrusion needs scaffold and staple routing before readiness passes', async ({ page }) => {
+  const doc = `e2e-readiness-extrusion-${Date.now()}`
+  const headers = { 'X-NADOC-Doc': doc }
+  await loadScaffoldedPart(page, { doc, name: 'readiness_extrusion' })
+  const snapshot = await (await page.request.get(`${API}/design`, { headers })).json()
+  const response = await page.request.post(`${API}/design/frame-extrusion`, {
+    headers,
+    data: { expected_design_id: snapshot.design.id, expected_revision: snapshot.revision,
+      cells: [[2, 0], [2, 1], [3, 0], [3, 1]], length_bp: 84, plane: 'XY' },
+  })
+  expect(response.ok(), await response.text()).toBe(true)
+  await refreshDesign(page, doc)
+  await trigger(page).hover()
+  for (const id of ['scaffold_routing', 'staple_routing']) {
+    const step = page.locator(`[data-step-id="${id}"]`)
+    await expect(step).toHaveAttribute('data-complete', 'false')
+    await expect(step.locator(`[data-action="${id}"]`)).toBeEnabled()
+  }
+  await expect(page.locator('[data-step-id="scaffold_routing"]')).toContainText('Autoscaffold')
+  await expect(page.locator('[data-step-id="staple_routing"]')).toContainText('Full Autostaple')
+  await expect(page.locator('[data-step-id="topology"]')).toHaveCount(0)
+  await expect(trigger(page)).toContainText('0/4 readiness')
+
+  // Backend tests cover actual integrity failures; substitute the report here
+  // to verify the negative score and the issue-only row in the browser.
+  await page.route('**/api/design/readiness', async route => {
+    const response = await route.fetch()
+    const report = await response.json()
+    await route.fulfill({ json: { ...report, integrity_penalty: -1, score: -1,
+      steps: report.steps.map(step => step.id === 'topology'
+        ? { ...step, complete: false, detail: 'Review invalid extensions.',
+          issues: ['Extension references a missing strand.'] } : step),
+    } })
+  })
+  await refreshDesign(page, doc)
+  await expect(trigger(page)).toContainText('-1/4 readiness')
+  await trigger(page).hover()
+  await expect(page.locator('[data-step-id="topology"]')).toContainText('−1 point')
+  await page.locator('[data-action="validation"]').click()
+  await expect(page.locator('[data-readiness-issues]')).toContainText('Extension references a missing strand.')
 })

@@ -137,9 +137,9 @@ def test_scaffold_domain_paint_domain_level_cluster_gets_new_ref(client):
     assert c["translation"] == [5.0, 0.0, 0.0]
 
 
-def test_bundle_segment_new_helix_inherits_neighbor_cluster(client):
+def test_bundle_segment_new_helix_gets_own_cluster(client):
     """Slice-plane extrude (fresh segment): new helix at adjacent grid_pos to a
-    clustered helix should join that cluster via lattice-neighbor proximity."""
+    clustered helix should receive its own independent cluster."""
     # Seed: existing helix at (0,0) in cluster c0, no helices elsewhere.
     seed = _seed_design_with_cluster(domain_level=False)
     design_state.set_design(seed)
@@ -156,10 +156,9 @@ def test_bundle_segment_new_helix_inherits_neighbor_cluster(client):
     helix_ids_in_cluster = set(cluster["helix_ids"])
     new_helix_ids = {h["id"] for h in design["helices"] if h["id"] != "h_XY_0_0"}
 
-    # Reconciler should have added the new helix(es) at (0,1) to c0.
-    assert new_helix_ids.issubset(helix_ids_in_cluster), (
-        f"new helices {new_helix_ids} not in cluster helix_ids {helix_ids_in_cluster}"
-    )
+    assert new_helix_ids.isdisjoint(helix_ids_in_cluster)
+    assert len(design["cluster_transforms"]) == 2
+    assert new_helix_ids == set(design["cluster_transforms"][1]["helix_ids"])
     assert cluster["translation"] == [5.0, 0.0, 0.0]
 
 
@@ -241,9 +240,24 @@ def test_disconnected_extrude_clusters_undo_redo_and_repair(client):
     assert client.post('/api/design/cluster-unassigned').status_code == 200
     repaired = design_state.get_or_404()
     assert repaired.cluster_transforms[0] == original
-    assert repaired.cluster_transforms[1] == added
+    assert repaired.cluster_transforms[1].helix_ids == added.helix_ids
     assert repaired.helices == legacy.helices and repaired.strands == legacy.strands
-    assert repaired.feature_log[-1].cluster_id == added.id
+    assert repaired.feature_log[-1].cluster_id == repaired.cluster_transforms[1].id
     assert client.post('/api/design/cluster-unassigned').status_code == 200
     assert client.post('/api/design/undo').status_code == 200
     assert design_state.get_or_404().cluster_transforms == [original]
+
+
+def test_edit_fresh_extrusion_retains_policy_when_editor_omits_flag(client):
+    design_state.set_design(_seed_design_with_cluster(domain_level=False))
+    params = {'cells': [[0, 1]], 'length_bp': 21}
+    assert client.post('/api/design/bundle-segment', json=params).status_code == 201
+    before = design_state.get_or_404()
+    assert len(before.cluster_transforms) == 2
+    response = client.post(f'/api/design/features/{len(before.feature_log)-1}/edit',
+                           json={'params': {**params, 'length_bp': 28}})
+    assert response.status_code == 200, response.text
+    after = design_state.get_or_404()
+    assert len(after.cluster_transforms) == 2
+    assert after.cluster_transforms[0] == before.cluster_transforms[0]
+    assert after.feature_log[-1].params['separate_fresh_extrusions'] is True

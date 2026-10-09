@@ -70,7 +70,7 @@ def _assembly_report(assembly):
     if failures:
         report = standard_readiness(None)
         report.update(available=True, design_id=f"flat_{assembly.id}", steps=[{
-            "id": "topology", "label": "Design validation", "complete": False,
+            "id": "topology", "label": "Design integrity", "complete": False,
             "applicable": True, "action": "validation", "detail": "Resolve unavailable assembly parts.",
             "issues": [item["detail"] for item in failures], "targets": failures,
         }])
@@ -112,7 +112,7 @@ def _assembly_report(assembly):
     except (OSError, ValueError) as exc:
         report = standard_readiness(None)
         report.update(available=True, design_id=f"flat_{assembly.id}", steps=[{
-            "id": "topology", "label": "Design validation", "complete": False,
+            "id": "topology", "label": "Design integrity", "complete": False,
             "applicable": True, "action": "validation", "detail": "Review assembly topology before simulation.",
             "issues": [str(exc)], "targets": [],
         }])

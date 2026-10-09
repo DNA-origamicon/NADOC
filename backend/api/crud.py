@@ -819,6 +819,7 @@ class OpenLibraryPartRequest(BaseModel):
 
 
 class BundleRequest(BaseModel):
+    separate_fresh_extrusions: bool = True
     cells: List[List[int]]  # [[row, col], ...]
     length_bp: int
     name: str = "Bundle"
@@ -829,6 +830,7 @@ class BundleRequest(BaseModel):
 
 
 class BundleSegmentRequest(BaseModel):
+    separate_fresh_extrusions: bool = True
     cells: List[List[int]]  # [[row, col], ...]
     length_bp: int  # may be negative — extrudes in -axis direction
     plane: str = "XY"
@@ -838,6 +840,7 @@ class BundleSegmentRequest(BaseModel):
 
 
 class CircleSegmentRequest(BaseModel):
+    separate_fresh_extrusions: bool = True
     cells: List[List[int]]  # [[row, col], ...] — a single row (the disc footprint)
     cell_lengths: List[
         int
@@ -849,6 +852,7 @@ class CircleSegmentRequest(BaseModel):
 
 
 class BundleContinuationRequest(BaseModel):
+    separate_fresh_extrusions: bool = True
     expected_design_id: Optional[str] = None
     expected_revision: Optional[int] = Field(default=None, ge=0, strict=True)
     source_frame_id: Optional[str] = None
@@ -864,6 +868,7 @@ class BundleContinuationRequest(BaseModel):
 
 
 class BundleDeformedContinuationRequest(BaseModel):
+    separate_fresh_extrusions: bool = True
     cells: List[List[int]]  # [[row, col], ...]
     length_bp: int
     # Deformed cross-section frame from GET /design/deformed-frame
@@ -1159,6 +1164,9 @@ def _build_extrude_segment(d: Design, body: "BundleSegmentRequest"):
         new_ids = {s.id for s in updated.strands if s.id not in existing_ids}
         if new_ids:
             updated = ligate_new_strands(updated, new_ids)
+    if body.separate_fresh_extrusions:
+        from backend.core.extrusion_clusters import extrusion_clusters
+        return extrusion_clusters(d, updated, _origins_by_grid_pos(d, updated))
     return updated, MutationReport(new_helix_origins=_origins_by_grid_pos(d, updated), cluster_disconnected=True)
 
 
@@ -1220,6 +1228,9 @@ def _build_circle_segment(d: Design, body: "CircleSegmentRequest"):
         new_ids = {s.id for s in updated.strands if s.id not in existing_ids}
         if new_ids:
             updated = ligate_new_strands(updated, new_ids)
+    if body.separate_fresh_extrusions:
+        from backend.core.extrusion_clusters import extrusion_clusters
+        return extrusion_clusters(d, updated, _origins_by_grid_pos(d, updated))
     return updated, MutationReport(new_helix_origins=_origins_by_grid_pos(d, updated), cluster_disconnected=True)
 
 
@@ -1284,6 +1295,9 @@ def _build_extrude_continuation(d: Design, body: "BundleContinuationRequest"):
         new_ids = {s.id for s in updated.strands if s.id not in existing_ids}
         if new_ids:
             updated = ligate_new_strands(updated, new_ids)
+    if body.separate_fresh_extrusions:
+        from backend.core.extrusion_clusters import extrusion_clusters
+        return extrusion_clusters(d, updated, _origins_by_grid_pos(d, updated))
     return updated, MutationReport(new_helix_origins=_origins_by_grid_pos(d, updated), cluster_disconnected=True)
 
 
@@ -1425,6 +1439,7 @@ def _build_extrude_deformed_continuation(
         ax["helix_id"]: {"start": ax["start"], "end": ax["end"]} for ax in axes
     }
     cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
+    continuation_origins = {}
     updated = make_bundle_deformed_continuation(
         d,
         cells,
@@ -1433,7 +1448,13 @@ def _build_extrude_deformed_continuation(
         deformed_endpoints,
         body.plane,
         ref_helix_id=body.ref_helix_id,
+        continuation_origins=continuation_origins,
     )
+    if body.separate_fresh_extrusions:
+        from backend.core.extrusion_clusters import extrusion_clusters
+        return extrusion_clusters(d, updated,
+            {hid: body.ref_helix_id or parent for hid, parent in continuation_origins.items()},
+            placement_helix_id=body.ref_helix_id)
     return updated, MutationReport(
         new_helix_origins=_origins_by_grid_pos(
             d, updated, fallback_origin=body.ref_helix_id
@@ -1541,7 +1562,8 @@ def _build_bundle(cells, body: "BundleRequest") -> Design:
         if new_ids:
             new_design = ligate_new_strands(new_design, new_ids)
     from backend.core.lattice_frames import register_created_bundle_frames
-    return register_created_bundle_frames(new_design, body.plane, cells)
+    return register_created_bundle_frames(new_design, body.plane, cells,
+        single_cluster=body.separate_fresh_extrusions)
 
 
 @router.post("/design", status_code=201)
@@ -8236,6 +8258,8 @@ def _edit_dispatch_run(op_kind: str, pre_state: Design, params: dict) -> Design:
     if op_kind == "sweep":
         from backend.core.sweep import SweepRequest, build_sweep
         return build_sweep(pre_state, SweepRequest.model_validate(params))
+    # Old saved features retain the clustering policy under which they were made.
+    params = {"separate_fresh_extrusions": False, **params}
     if op_kind == "bundle-create":
         body = BundleRequest.model_validate(params)
         cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
@@ -8418,8 +8442,12 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
     if entry.op_kind == "sweep":
         body.params = {**body.params, "sweep_id": entry.params["sweep_id"]}
 
+    params = dict(body.params)
+    if entry.op_kind != "sweep":
+        params = {"separate_fresh_extrusions": entry.params.get("separate_fresh_extrusions", False),
+                  **params}
     try:
-        new_post = _edit_dispatch_run(entry.op_kind, pre_state, body.params)
+        new_post = _edit_dispatch_run(entry.op_kind, pre_state, params)
     except HTTPException:
         raise
     except ValidationError as exc:
@@ -8435,7 +8463,7 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
 
     updated_entry = entry.model_copy(
         update={
-            "params": body.params,
+            "params": params,
             "design_snapshot_gz_b64": new_pre_b64,
             "snapshot_size_bytes": new_pre_size,
             "post_state_gz_b64": new_post_b64,

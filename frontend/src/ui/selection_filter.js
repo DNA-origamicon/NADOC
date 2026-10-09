@@ -11,12 +11,11 @@
 // (`collapsedSelectable`). Clicking a LEVEL closes the menu (one-shot choice);
 // toggling a gate leaves it open (you usually flip more than one).
 //
-// Tab (keyboard_shortcuts.js) calls `flashLevelChange(prev, next)`: the menu pops
+// Q/E (keyboard_shortcuts.js) calls `flashLevelChange(prev, next)`: the menu pops
 // open read-only, a marker bar slides from the old level's row to the new one, and
-// it closes ~250 ms later. Repeated Tabs restart the timer, so fast cycling reads as
+// it closes ~250 ms later. Repeated key presses restart the timer, so fast cycling reads as
 // one continuous scroll down the list — which is why the level rows are laid out in
-// TAB_CYCLE order (strand → dom → ends → xover → base → default), with the
-// out-of-cycle `clust` after them.
+// TAB_CYCLE order (clust → strand → dom → ends → xover → base → default).
 //
 // `selectionManager` is created AFTER this factory in main()'s init order (the
 // factory's `reflectDrillLevel` is passed INTO its init as `onDrillLevel`), so it
@@ -49,7 +48,7 @@ const SEL_KEY_MAP = [
 // (it gates nothing — it changes what a click resolves to), so it has no store key and
 // therefore no SEL_KEY_MAP row. Without this list `attachFilterButtons` would skip it
 // entirely and the button would get no click listener, while `reflectDrillLevel` (which
-// iterates LEVEL_BTN) would still light it from Tab — a button that looks live and does
+// iterates LEVEL_BTN) would still light it from Q/E — a button that looks live and does
 // nothing. `null` storeKey means "level-only": never touch selectableTypes.
 const LEVEL_ONLY_BTNS = [
   [null, 'base'],
@@ -178,11 +177,11 @@ export function initSelectionFilter({ store, getSelectionManager }) {
   }
 
   /**
-   * Tab feedback: pop the menu open read-only, slide the marker from the outgoing
-   * level's row to the incoming one, then close. Called from the Tab shortcut —
+   * Q/E feedback: pop the menu open read-only, slide the marker from the outgoing
+   * level's row to the incoming one, then close. Called from the Q/E shortcuts —
    * NOT from `reflectDrillLevel`, which also fires on every canvas click.
    *
-   * A repeat Tab restarts the timer instead of closing, so holding Tab reads as one
+   * A repeated key press restarts the timer instead of closing, so holding Tab reads as one
    * continuous scroll. If the user has the menu open by hand, the marker still
    * slides but the menu is left open.
    */

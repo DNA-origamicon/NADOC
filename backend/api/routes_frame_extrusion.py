@@ -24,9 +24,10 @@ class FrameExtrusionRequest(BaseModel):
     source_frame_id: str | None = Field(default=None, min_length=1, max_length=128)
     source_legacy_plane: bool = False
     name: str = Field(default='Extrude', min_length=1, max_length=128)
+    separate_fresh_extrusions: bool = True
 
 
-def _candidate(design, body):
+def _legacy_candidate(design, body):
     if design.id != body.expected_design_id:
         raise HTTPException(409, detail='Active design changed')
     # Keep a single interactive operation within bounded topology construction.
@@ -56,6 +57,22 @@ def _candidate(design, body):
         raise HTTPException(422, detail=str(error)) from error
 
 
+def _candidate_result(design, body):
+    from backend.core.cluster_reconcile import MutationReport
+    updated = _legacy_candidate(design, body)
+    if body.separate_fresh_extrusions and (body.source_frame_id or body.source_legacy_plane):
+        from backend.core.extrusion_clusters import extrusion_clusters
+        return extrusion_clusters(design, updated, {})
+    old_ids = {h.id for h in design.helices}
+    return updated, MutationReport(new_helix_origins={
+        h.id: None for h in updated.helices if h.id not in old_ids
+    } if body.separate_fresh_extrusions else {})
+
+
+def _candidate(design, body):
+    return _candidate_result(design, body)[0]
+
+
 @router.post('/design/frame-extrusion/validate')
 def validate_frame_extrusion(body: FrameExtrusionRequest):
     design, revision = state.copy_for_persist()
@@ -75,7 +92,7 @@ def commit_frame_extrusion(body: FrameExtrusionRequest):
     from backend.api.crud import _design_response
     updated, report, entry = state.mutate_with_feature_log(
         op_kind='extrude-frame', label=f'Extrude frame: {len(body.cells)} cells × {body.length_bp} bp',
-        params=body.model_dump(mode='json'), fn=lambda design: _candidate(design, body),
+        params=body.model_dump(mode='json'), fn=lambda design: _candidate_result(design, body),
         expected_revision=body.expected_revision)
     payload = _design_response(updated, report, preserve_feature_log_id=entry.id)
     payload["vr_transaction"] = {"feature_log_entry_id": entry.id, "target_count": len(body.cells)}

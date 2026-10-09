@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   LEVELS, TAB_CYCLE, BTN_LEVEL, LEVEL_BTN,
-  normalizeLevel, nextTabLevel, toggleLevel, hoverPreviewTarget,
+  normalizeLevel, nextTabLevel, previousTabLevel, toggleLevel, hoverPreviewTarget,
   lassoCaptureType, toggleClusterSelection, extensionSelectionEntries, extensionContextIds,
 } from './selection_level.js'
 
@@ -10,9 +10,8 @@ describe('selection_level — constants & maps', () => {
     expect(LEVELS).toEqual(['default', 'cluster', 'strand', 'domain', 'end', 'xover', 'base'])
   })
 
-  it('Tab cycle is strand → domain → end → xover → base → none(default) — cluster excluded (button-only)', () => {
-    expect(TAB_CYCLE).toEqual(['strand', 'domain', 'end', 'xover', 'base', 'default'])
-    expect(TAB_CYCLE).not.toContain('cluster')
+  it('Q/E cycle includes clusters before strands', () => {
+    expect(TAB_CYCLE).toEqual(['cluster', 'strand', 'domain', 'end', 'xover', 'base', 'default'])
   })
 
   it('BTN_LEVEL and LEVEL_BTN round-trip; strand is its own level, default has no button', () => {
@@ -38,20 +37,22 @@ describe('normalizeLevel', () => {
 })
 
 describe('nextTabLevel — Tab cycle', () => {
-  it('from default/none → strand; unknown → strand', () => {
-    expect(nextTabLevel('default')).toBe('strand')   // none → first
-    expect(nextTabLevel(null)).toBe('strand')         // not in cycle → start
+  it('from default or unknown → cluster', () => {
+    expect(nextTabLevel('default')).toBe('cluster')   // none → first
+    expect(nextTabLevel(null)).toBe('cluster')         // not in cycle → start
   })
-  it('cluster is not in the cycle → Tab from cluster restarts at strand', () => {
-    expect(nextTabLevel('cluster')).toBe('strand')   // cluster excluded → first
+  it('cluster advances to strand and Q reverses both edges', () => {
+    expect(nextTabLevel('cluster')).toBe('strand')
+    expect(previousTabLevel('strand')).toBe('cluster')
+    expect(previousTabLevel('cluster')).toBe('default')
   })
-  it('walks strand → domain → end → xover → base → none(default) → strand', () => {
+  it('walks strand → domain → end → xover → base → default → cluster', () => {
     expect(nextTabLevel('strand')).toBe('domain')
     expect(nextTabLevel('domain')).toBe('end')
     expect(nextTabLevel('end')).toBe('xover')
     expect(nextTabLevel('xover')).toBe('base')      // base is the finest grain, last stop
     expect(nextTabLevel('base')).toBe('default')    // → none
-    expect(nextTabLevel('default')).toBe('strand')  // wraps
+    expect(nextTabLevel('default')).toBe('cluster')  // wraps
   })
 })
 

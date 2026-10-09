@@ -69,10 +69,10 @@ test.describe('Base-level selection', () => {
     await expect(page.locator('#select-filter .sf-btn[data-key="base"]')).toHaveClass(/active/)
   })
 
-  test('Tab reaches base from xover, and Escape leaves it', async ({ page }) => {
+  test('E cycles through cluster to base, and Escape leaves it', async ({ page }) => {
     await loadFramedPart(page, { doc: 'e2e-base-tab', name: 'base-tab' })
-    // strand → domain → end → xover → base
-    for (let i = 0; i < 5; i++) { await page.keyboard.press('Tab'); await page.waitForTimeout(50) }
+    // cluster → strand → domain → end → xover → base
+    for (let i = 0; i < 6; i++) { await page.keyboard.press('e'); await page.waitForTimeout(50) }
     expect(await page.evaluate(() => window.__nadocTest.getSelectionLevel())).toBe('base')
     await page.keyboard.press('Escape')
     await page.waitForTimeout(80)

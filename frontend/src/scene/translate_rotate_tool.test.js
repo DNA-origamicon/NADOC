@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { initTranslateRotateTool, decideSelectionAction, resolveSelectionClusterId } from './translate_rotate_tool.js'
+import { createSelectionController } from './selection_controller.js'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 import { clearShortcuts } from '../input/shortcuts.js'
@@ -56,8 +57,10 @@ function makeDeps(overrides = {}) {
   const proteinGizmo = overrides.proteinGizmo ?? {
     isAttached: vi.fn(() => false), commit: vi.fn(), cancel: vi.fn(), reset: vi.fn(),
   }
+  const controller = createSelectionController({ store })
   const deps = {
     store,
+    selectionManager: { setSelectionLevel: controller.setLevel },
     scene: {}, camera: {}, canvas: { addEventListener: vi.fn(), removeEventListener: vi.fn() },
     designRenderer: { getHelixCtrl: vi.fn(() => helixCtrl) },
     getJointRenderer: () => jointRenderer,
@@ -710,4 +713,22 @@ describe('resolveSelectionClusterId', () => {
     expect(resolveSelectionClusterId({ kind: 'cluster', id: 'missing' }, design)).toBeNull()
     expect(resolveSelectionClusterId({ kind: 'protein', id: 'p1' }, design)).toBeNull()
   })
+})
+
+it('arms Move with cluster picking, retains the target, and resets the picker after selection', async () => {
+  const { deps, store } = makeDeps()
+  const tool = initTranslateRotateTool(deps)
+  await tool.activate()
+  expect(store.getState().selection.level).toBe('cluster')
+  const controller = createSelectionController({ store })
+  controller.select({ kind: 'cluster', id: 'C1' })
+  await Promise.resolve()
+  expect(store.getState().selection.level).toBe('default')
+  expect(store.getState().selection.items).toEqual([{ kind: 'cluster', id: 'C1' }])
+  await tool.cancel()
+  controller.clear()
+  await tool.activate()
+  expect(store.getState().selection.level).toBe('cluster')
+  await tool.cancel()
+  expect(store.getState().selection.level).toBe('default')
 })

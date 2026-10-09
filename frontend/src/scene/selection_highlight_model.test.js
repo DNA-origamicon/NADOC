@@ -34,3 +34,12 @@ describe('selection highlight descriptor', () => {
     expect(descriptor.primary).toBeNull()
   })
 })
+
+it('suppresses Bend/Twist highlights without changing target refs and restores them on exit', () => {
+  const state = { selection: { items: [{ kind: 'cluster', id: 'c' }, { kind: 'strand', id: 's' }] } }
+  const original = structuredClone(state)
+  const normal = selectionHighlightDescriptor(state)
+  expect(highlightDescriptorIsEmpty(selectionHighlightDescriptor({ ...state, deformToolActive: true }))).toBe(true)
+  expect(state).toEqual(original)
+  expect(selectionHighlightDescriptor({ ...state, deformToolActive: false })).toEqual(normal)
+})

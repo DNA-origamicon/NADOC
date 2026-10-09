@@ -83,6 +83,10 @@ def test_existing_frame_transaction_and_rejected_placement(client):
     assert len(updated.helices) == 3
     assert updated.helices[-1].lattice_frame_id == frame_id
     assert updated.cluster_transforms[0].translation == [12,-4,8]
+    assert len(updated.cluster_transforms) == 2
+    assert updated.cluster_transforms[0].helix_ids == [h.id for h in updated.helices[:2]]
+    assert updated.cluster_transforms[1].helix_ids == [updated.helices[-1].id]
+    assert updated.cluster_transforms[1].translation == [12,-4,8]
     committed = updated.to_json()
     assert client.post('/api/design/undo').status_code == 200
     assert state.get_or_404().to_json() == original

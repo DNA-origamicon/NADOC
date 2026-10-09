@@ -5007,7 +5007,7 @@ async function main() {
   })
 
   const _translateRotateTool = initTranslateRotateTool({
-    store, scene, camera, canvas,
+    store, scene, camera, canvas, selectionManager,
     designRenderer,
     getJointRenderer: () => jointRenderer,
     clusterGizmo, instanceGizmo, proteinGizmo,

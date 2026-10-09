@@ -9,7 +9,7 @@ const COMMANDS = {
 }
 
 const HELP = {
-  scaffold_routing: 'Choose a scaffold routing mode, then inspect the resulting strand path.',
+  scaffold_routing: 'Use Autoscaffold to connect the extruded scaffold precursors, or route them manually. Then inspect the resulting strand path.',
   staple_routing: 'Full Autostaple assigns sequences and routes staples. Review its result before continuing.',
   scaffold_sequence: 'Assign the intended scaffold sequence using the sequence picker.',
   staple_sequences: 'Assign the scaffold sequence first, then derive complementary staple sequences. Edit unpaired or functional sequences in the strand spreadsheet.',

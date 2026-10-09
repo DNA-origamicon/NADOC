@@ -198,7 +198,7 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     initKeyboardShortcuts(d)
     await press('e', { tag: 'CANVAS' })
     await press('q', { tag: 'CANVAS' })
-    expect(d.selectionManager.setSelectionLevel).toHaveBeenNthCalledWith(1, 'strand')
+    expect(d.selectionManager.setSelectionLevel).toHaveBeenNthCalledWith(1, 'cluster')
     expect(d.selectionManager.setSelectionLevel).toHaveBeenNthCalledWith(2, 'base')
 
     d.selectionManager.setSelectionLevel.mockClear()
@@ -747,14 +747,14 @@ describe('initKeyboardShortcuts — drill v2 (selectionLevel) E/Q/Escape', () =>
     return d
   }
 
-  it('E cycles the unified selectionLevel default→strand→domain→… (cluster excluded)', async () => {
+  it('E cycles default to cluster', async () => {
     const d = makeV2Deps('default')
     initKeyboardShortcuts(d)
     await press('e', { tag: 'CANVAS' })
-    expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('strand')
+    expect(d.selectionManager.setSelectionLevel).toHaveBeenCalledWith('cluster')
   })
 
-  it('E from cluster restarts at strand (cluster is button-only, not in the cycle)', async () => {
+  it('E advances from cluster to strand', async () => {
     const d = makeV2Deps('cluster')
     initKeyboardShortcuts(d)
     await press('e', { tag: 'CANVAS' })

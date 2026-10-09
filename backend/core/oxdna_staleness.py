@@ -121,6 +121,8 @@ def oxdna_design_fingerprint(design: Design) -> str:
     # existing jobs out of date.  Keep the rest of each strand intact (including
     # domains and sequence), and remove only the presentation field.
     for strand in payload.get("strands", []):
+        # Readiness provenance does not change the simulated molecule.
+        strand.pop("routing_seed", None)
         strand.pop("color", None)
     # Sub-domain ids are editor identity only. Older assembly flattening generated
     # a fresh UUID for each polymer-end sub-domain on every materialization, making

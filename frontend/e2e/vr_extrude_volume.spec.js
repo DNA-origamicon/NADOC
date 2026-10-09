@@ -85,6 +85,11 @@ test(`${process.env.NADOC_VR_AUDIT_DESIGN ? path.basename(process.env.NADOC_VR_A
   expect(design.helices.filter(h=>priorIds.has(h.id))).toEqual(before.helices)
   const created=design.helices.filter(h=>!priorIds.has(h.id))
   expect(created).toHaveLength(6)
+  const oldClusterIds=new Set(before.cluster_transforms.map(c=>c.id))
+  const newClusters=design.cluster_transforms.filter(c=>!oldClusterIds.has(c.id))
+  expect(newClusters).toHaveLength(1)
+  expect([...newClusters[0].helix_ids].sort()).toEqual(created.map(h=>h.id).sort())
+  expect(design.cluster_transforms.filter(c=>oldClusterIds.has(c.id))).toEqual(before.cluster_transforms)
   expect(design.lattice_type).toBe(square?'SQUARE':'HONEYCOMB')
   expect(created.map(h=>h.grid_pos).sort()).toEqual(sliceReference?
     [[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]]:square?

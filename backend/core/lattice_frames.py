@@ -111,12 +111,12 @@ def append_frame_cell(design, frame_id, row, col, *, length_bp=42, populate_stra
         cluster_transforms=clusters), helix
 
 
-def register_created_bundle_frames(design, plane, cells):
+def register_created_bundle_frames(design, plane, cells, *, single_cluster=False):
     """Attach canonical cells, placement clusters and identities to a fresh bundle.
 
     Source plane comes from the authoring request, never inferred from the view.
-    Preserve all existing topology, IDs and rigid transforms. Disconnected bodies
-    need separate identities because their placement clusters can move apart.
+    Preserve topology and IDs. Interactive creation groups the whole footprint;
+    legacy compound primitives can retain separate component placements.
     """
     if design.lattice_frames or any(h.lattice_frame_id for h in design.helices):
         raise ValueError('fresh bundle already has lattice frame identities')
@@ -124,7 +124,12 @@ def register_created_bundle_frames(design, plane, cells):
     validate_painted_footprint({'lattice_type':design.lattice_type.value, 'cells':[list(c) for c in cells]})
     design = design.copy_with(helices=[h.model_copy(update={'grid_pos':tuple(cell)})
         for h, cell in zip(design.helices, cells, strict=True)])
-    design = with_default_cluster(_cluster_bundle_regions(design))
+    if single_cluster:
+        design = design.copy_with(cluster_transforms=[ClusterRigidTransform(
+            id=str(uuid.uuid4()), name='Cluster 1',
+            helix_ids=[h.id for h in design.helices], auto_created=True, is_default=True)])
+    else:
+        design = with_default_cluster(_cluster_bundle_regions(design))
     membership = {}
     frames = []
     for cluster in design.cluster_transforms:

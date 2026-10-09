@@ -6,6 +6,8 @@ pairing coverage, repairs a route, assigns bases, or runs a simulation.
 
 from __future__ import annotations
 
+import re
+
 from backend.core.models import Design, StrandType
 from backend.core.sequences import strand_sequence_length
 from backend.core.topology_integrity import (
@@ -51,11 +53,46 @@ def _sequence_issues(design, strands):
     return issues
 
 
+def _routing_precursors(design, strands):
+    """Find untouched extrusion strands, independent of sequence or command history.
+
+    Nicking replaces the initial domain; ligation builds a multi-domain path.
+    Both manual and automatic routing therefore count. Old files predate the
+    seed marker: recognize their generated IDs only for full-helix precursors.
+    """
+    helices = {helix.id: helix for helix in design.helices}
+    pending = []
+    for strand in strands:
+        if len(strand.domains) != 1:
+            continue
+        domain = strand.domains[0]
+        helix = helices.get(domain.helix_id)
+        if helix is None or helix.native_residues:
+            continue
+        seed = strand.routing_seed
+        if seed is not None:
+            # Cloning/assembly placement can remap helix IDs and bp origins;
+            # moving an uninterrupted precursor does not route its backbone.
+            untouched = len(seed) == 1 and (
+                abs(seed[0].end_bp - seed[0].start_bp) == abs(domain.end_bp - domain.start_bp)
+            )
+        else:
+            untouched = bool(re.fullmatch(
+                r"(?:scaf|stpl)_(?:XY|XZ|YZ)_-?\d+_-?\d+(?:_.*)?", strand.id,
+            )) and sorted((domain.start_bp, domain.end_bp)) == [
+                helix.bp_start, helix.bp_start + helix.length_bp - 1,
+            ]
+        if untouched:
+            pending.append(strand)
+    return pending
+
+
 def standard_readiness(design: Design | None) -> dict:
     """Evaluate standard steps for active DNA; references never create obligations."""
     empty = {
         "available": False, "design_id": None, "steps": [],
         "completed_steps": 0, "total_steps": 0,
+        "integrity_penalty": 0, "score": 0,
         "state": "incomplete", "limitations": list(LIMITATIONS),
     }
     if design is None:
@@ -87,20 +124,24 @@ def standard_readiness(design: Design | None) -> dict:
             route_issues.append(f"Strand {strand.name or strand.id!r} has no routed domains.")
     scaffold_issues = _sequence_issues(active, scaffolds)
     oligo_issues = _sequence_issues(active, oligos)
-    scaffold_routed = bool(scaffolds) and all(s.domains for s in scaffolds) and not route_issues
-    staple_routed = bool(staples) and all(s.domains for s in staples) and not route_issues
+    scaffold_precursors = _routing_precursors(active, scaffolds)
+    staple_precursors = _routing_precursors(active, staples)
+    scaffold_routed = bool(scaffolds) and all(s.domains for s in scaffolds) and not route_issues and not scaffold_precursors
+    staple_routed = bool(staples) and all(s.domains for s in staples) and not route_issues and not staple_precursors
     if native_only:
         staple_routed = bool(oligos) and all(s.domains for s in oligos) and not route_issues
     steps = [
         _step("scaffold_routing", "Scaffold routing", scaffold_routed or not scaffold_applicable,
-              (f"{len(scaffolds)} scaffold path(s); recorded backbone connections checked."
+              (f"{len(scaffold_precursors)} extruded scaffold strand(s) still need routing. Use Autoscaffold, or route manually."
+               if scaffold_precursors else f"{len(scaffolds)} scaffold path(s); recorded backbone connections checked."
                if scaffolds else "Native oligo structure needs no scaffold." if native_only else "Route a scaffold path."),
               applicable=scaffold_applicable, issues=route_issues,
-              action="validation" if route_issues else "scaffold_routing"),
+              action="validation" if route_issues and not scaffold_precursors else "scaffold_routing"),
         _step("staple_routing", "Oligo routing" if native_only else "Staple routing", staple_routed,
-              (f"{len(oligos) if native_only else len(staples)} authored oligo path(s); unpaired scaffold is allowed."
+              (f"{len(staple_precursors)} extruded staple strand(s) still need routing. Use Full Autostaple after scaffold routing, or route manually."
+               if staple_precursors else f"{len(oligos) if native_only else len(staples)} authored oligo path(s); unpaired scaffold is allowed."
                if staples or native_only else "Create staple paths; linker strands alone do not satisfy this step."),
-              issues=route_issues, action="validation" if route_issues else "staple_routing"),
+              issues=route_issues, action="validation" if route_issues and not staple_precursors else "staple_routing"),
         _step("scaffold_sequence", "Scaffold sequence", bool(scaffolds) and not scaffold_issues or not scaffold_applicable,
               "Native oligo structure needs no scaffold sequence." if not scaffold_applicable else
               f"{len(scaffolds)} scaffold sequence(s) checked for complete A/C/G/T coverage.",
@@ -109,8 +150,8 @@ def standard_readiness(design: Design | None) -> dict:
               bool(oligos) and not oligo_issues,
               f"{len(oligos)} oligo sequence(s), including overhangs, linkers and terminal extensions.",
               issues=oligo_issues),
-        _step("topology", "Design validation", report.passed and bool(active.strands) and not route_issues,
-              "Existing design-integrity checks passed." if report.passed and active.strands and not route_issues else
+        _step("topology", "Design integrity", report.passed and not route_issues,
+              "Current design checked for duplicate IDs, invalid references, broken backbone connections, sequence lengths and invalid extensions or clusters." if report.passed and active.strands and not route_issues else
               "Review unresolved design-integrity findings.",
               action="validation", issues=list(dict.fromkeys(topology_issues + route_issues))),
     ]
@@ -118,16 +159,22 @@ def standard_readiness(design: Design | None) -> dict:
 
 
 def finish_readiness(report: dict, simulation: dict | None = None) -> dict:
-    """Derive the display state from standard steps and positive simulation evidence."""
+    """Score workflow steps with a single integrity penalty; keep simulation separate."""
     simulation = simulation or {
         "complete": False, "action": "simulation",
         "detail": "Complete a Fine run (mrDNA, CanDo or SNUPI) or Production run (oxDNA, NAMD or LAMMPS) for this design.",
     }
-    applicable = [step for step in report["steps"] if step.get("applicable", True)]
+    applicable = [step for step in report["steps"]
+                  if step.get("applicable", True) and step["id"] != "topology"]
+    integrity_penalty = -int(any(
+        step["id"] == "topology" and step.get("applicable", True) and not step["complete"]
+        for step in report["steps"]
+    ))
     completed = sum(step["complete"] for step in applicable)
-    ready = bool(applicable) and completed == len(applicable)
+    ready = bool(applicable) and completed == len(applicable) and integrity_penalty == 0
     return {
         **report, "completed_steps": completed, "total_steps": len(applicable),
+        "integrity_penalty": integrity_penalty, "score": completed + integrity_penalty,
         "state": ("ready" if simulation["complete"] else "simulation_recommended") if ready else "incomplete",
         "simulation": simulation,
     }

@@ -1,5 +1,37 @@
 import { canonicalSelection, selectedClusterIds } from '../scene/selection_model.js'
 
+/** Prefer clusters while a tool waits for its first target; retain the picked refs. */
+export function armToolClusterSelection({ store, selectionManager }) {
+  const initial = store.getState()
+  if (initial.assemblyActive || canonicalSelection(initial).items.length) return () => {}
+  const designId = initial.currentDesign?.id
+  store.setState({ selectableTypes: {
+    ...initial.selectableTypes, scaffold: true, staples: true,
+    loops: false, skips: false, extensions: false, overhangs: false,
+  } })
+  selectionManager.setSelectionLevel('cluster')
+  let active = true, queued = false
+  const finish = () => {
+    if (!active) return
+    active = false
+    unsubscribe()
+    selectionManager.setSelectionLevel('default')
+  }
+  const unsubscribe = store.subscribe(() => {
+    if (!active || queued) return
+    queued = true
+    // Lasso and multi-select gestures may commit several refs. Reset the level
+    // only once the gesture is done, without clearing or truncating its selection.
+    queueMicrotask(() => {
+      queued = false
+      if (!active) return
+      const state = store.getState()
+      if (state.assemblyActive || state.currentDesign?.id !== designId || canonicalSelection(state).items.length) finish()
+    })
+  })
+  return finish
+}
+
 function selectedCluster(state) {
   const selection = canonicalSelection(state)
   if (selection.items.some(ref => ref.kind !== 'cluster')) return null

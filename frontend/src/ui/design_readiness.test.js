@@ -20,10 +20,10 @@ const report = (overrides = {}) => ({
 describe('designReadinessSummary', () => {
   it('counts standard steps without including optional simulation', () => {
     expect(designReadinessSummary(report())).toEqual({
-      state: 'incomplete', completed: 1, total: 3, fraction: 1 / 3, label: '1/3 complete', caption: '',
+      state: 'incomplete', completed: 1, total: 3, score: 1, penalty: 0, fraction: 1 / 3, label: '1/3 readiness', caption: '',
     })
     expect(designReadinessSummary(report({ completed_steps: 3, state: 'simulation_recommended' }))).toMatchObject({
-      state: 'simulation_recommended', label: '3/3 complete', fraction: 1, caption: 'Sim recommended',
+      state: 'simulation_recommended', label: '3/3 readiness', fraction: 1, caption: 'Sim recommended',
     })
   })
 
@@ -36,9 +36,20 @@ describe('designReadinessSummary', () => {
   })
 
   it('does not show empty or malformed counts as complete', () => {
-    expect(designReadinessSummary(null)).toMatchObject({ state: 'incomplete', fraction: 0, label: '0/0 complete' })
+    expect(designReadinessSummary(null)).toMatchObject({ state: 'incomplete', fraction: 0, label: '0/0 readiness' })
     expect(designReadinessSummary(report({ completed_steps: -3, total_steps: 5 }))).toMatchObject({ completed: 0, fraction: 0 })
     expect(designReadinessSummary(report({ completed_steps: 8, total_steps: 5 }))).toMatchObject({ completed: 5, fraction: 1 })
+  })
+
+  it('subtracts integrity without losing completed steps or permitting a ready state', () => {
+    expect(designReadinessSummary(report({ completed_steps: 4, total_steps: 4,
+      integrity_penalty: -1, state: 'ready', simulation: { complete: true } }))).toMatchObject({
+      completed: 4, score: 3, penalty: -1, fraction: 0.75, label: '3/4 readiness', state: 'incomplete',
+    })
+    expect(designReadinessSummary(report({ completed_steps: 0, total_steps: 4,
+      integrity_penalty: -1 }))).toMatchObject({ score: -1, fraction: 0, label: '-1/4 readiness' })
+    expect(designReadinessSummary(report({ completed_steps: 0, total_steps: 0,
+      integrity_penalty: -1 }))).toMatchObject({ state: 'incomplete', fraction: 0, label: 'Integrity issue' })
   })
 })
 
@@ -66,7 +77,7 @@ describe('initDesignReadiness', () => {
 
   it('renders a partial ring and all complete/missing steps with genuine command shortcuts', () => {
     widget.setReport(report())
-    expect(trigger().textContent).toBe('1/3 complete')
+    expect(trigger().textContent).toBe('1/3 readiness')
     expect(root().dataset.state).toBe('incomplete')
     expect(Number.parseFloat(root().querySelector('.design-readiness__progress').getAttribute('stroke-dasharray'))).toBeCloseTo(100 / 3)
     hover()
@@ -98,12 +109,32 @@ describe('initDesignReadiness', () => {
     expect(trigger().textContent).not.toContain('Simulation complete')
   })
 
+  it('only shows integrity when it deducts a point, with an actionable issue', () => {
+    const integrity = { id: 'topology', label: 'Design integrity', complete: true,
+      action: 'validation', detail: 'Review invalid extensions.', issues: [] }
+    const clean = report({ completed_steps: 4, total_steps: 4, integrity_penalty: 0,
+      steps: [integrity] })
+    widget.setReport(clean)
+    expect(host.querySelector('[data-step-id="topology"]')).toBeNull()
+    widget.setReport({ ...clean, integrity_penalty: -1, steps: [{ ...integrity,
+      complete: false, issues: ['Extension references a missing strand.'] }] })
+    expect(trigger().textContent).toBe('3/4 readiness')
+    expect(action('validation').textContent).toContain('−1 point')
+    expect(popover().textContent).toContain('4/4 steps complete')
+    expect(popover().textContent).toContain('Extension references a missing strand.')
+    action('validation').click()
+    expect(onAction).toHaveBeenCalledWith('validation', expect.objectContaining({ id: 'topology' }))
+    widget.setReport(clean)
+    expect(host.querySelector('[data-step-id="topology"]')).toBeNull()
+    expect(trigger().textContent).toContain('4/4 readiness')
+  })
+
   it('keeps N/A rows visible and disabled actions honest', () => {
     widget.setReport(report({ completed_steps: 0, total_steps: 1, steps: [
       { id: 'scaffold_routing', label: 'Scaffold routing', applicable: false, complete: false, action: 'scaffold_routing' },
       { id: 'staple_routing', label: 'Staple routing', applicable: true, complete: false, action: 'staple_routing', hotkey: '2', blocked: true, blocked_reason: 'Open this part in its editor.' },
     ] }))
-    expect(trigger().textContent).toBe('0/1 complete')
+    expect(trigger().textContent).toBe('0/1 readiness')
     expect(host.querySelector('[data-step-id="scaffold_routing"]').textContent).toContain('Not required')
     expect(action('scaffold_routing')).toBeNull()
     expect(action('staple_routing').disabled).toBe(true)

@@ -261,6 +261,7 @@ def build_hinge_primitive(
             lattice=lattice,
             name=name,
             ligate_adjacent=True,
+            separate_fresh_extrusions=False,  # compound primitive needs separate leaves
         )
         _shift_duplexes(_DUPLEX_SHIFT_BP)
         for bridge in spec.bridges:
@@ -385,6 +386,7 @@ def build_hinge(
             lattice=lattice,
             name=f"{k}x{n_cols}_hinge",
             ligate_adjacent=True,
+            separate_fresh_extrusions=False,  # compound primitive needs separate leaves
         )
         _shift_duplexes(_DUPLEX_SHIFT_BP)
         design = design_state.get_or_404()

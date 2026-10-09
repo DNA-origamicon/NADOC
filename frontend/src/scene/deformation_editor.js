@@ -110,6 +110,17 @@ export function startTool(toolType) {
   _setState(STATE.AWAITING_A)
 }
 
+/** Start a scoped desktop session at the same outermost bounds used in VR. */
+export function startToolForSelection(toolType) {
+  if (!_scene) return
+  const helixIds = [...new Set((_sessionRanges ?? []).map(range => range.helixId))]
+  const a = extremeVRDeformationPlane('a', [], helixIds, _sessionRanges)
+  const b = extremeVRDeformationPlane('b', [], helixIds, _sessionRanges)
+  if (!a || !b || a.bp >= b.bp) throw new Error('Select a span of at least two base positions for Bend / Twist.')
+  startTool(toolType)
+  _placeA(a.bp, b.bp)
+}
+
 /** Tell the editor an in-place edit is being committed, so the subsequent exit
  *  does NOT silently revert the live preview op (main.js calls this right
  *  before POST /design/features/{i}/edit). */
@@ -185,7 +196,7 @@ export function isActive() {
 
 /** Force-exit the tool from any state (e.g. File > New). */
 export function exitTool() {
-  if (_state !== STATE.IDLE) _exitTool()
+  if (_state !== STATE.IDLE || _sessionTargets !== null || _sessionClusterIds !== null) _exitTool()
 }
 
 /**
@@ -399,14 +410,14 @@ function _setState(newState) {
   // STATE.A_PLACED and STATE.BOTH — no additional scene changes here
 }
 
-function _placeA(bp) {
+function _placeA(bp, endBp = _defaultBpForPlaneB(bp)) {
   _planeA = { bp }
   _hideGhost(true)
   _solidA = _makeSolidPlane(bp, 0xffffaa, 'A')
   _scene.add(_solidA.group)
   _setState(STATE.A_PLACED)
   // Auto-place B at the farthest consistent position and go straight to BOTH
-  _placeB(_defaultBpForPlaneB(bp))
+  _placeB(endBp)
 }
 
 function _placeB(bp) {

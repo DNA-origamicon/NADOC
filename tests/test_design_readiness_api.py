@@ -41,7 +41,7 @@ def test_route_empty_and_part_assembly_parity_without_state_writes(host):
     part = client.get("/api/design/readiness").json()
     combined = client.get("/api/design/readiness?assembly=true").json()
     assert part["state"] == combined["state"] == "simulation_recommended"
-    assert part["completed_steps"] == combined["completed_steps"] == 5
+    assert part["completed_steps"] == combined["completed_steps"] == 4
     assert combined["context"] == "assembly"
     assert combined["document_id"] == assembly.id
     assert combined["design_id"] == f"flat_{assembly.id}"
@@ -100,3 +100,29 @@ def test_missing_part_is_actionable_and_does_not_check_stale_active_part(host, t
     assert report["available"]
     assert report["state"] == "incomplete"
     assert steps(report)["topology"]["targets"][0]["instance_id"] == "missing"
+
+
+def test_assembly_retains_precursor_obligations_for_owning_part(host):
+    from backend.core.lattice import make_bundle_design
+
+    pending = instance(make_bundle_design([(0, 0), (0, 1)], 84), id='unrouted', name='New extrusion')
+    host['assembly'] = Assembly(instances=[instance(sequenced_design()), pending])
+    report = steps(routes.get_design_readiness(assembly=True))
+    for key in ('scaffold_routing', 'staple_routing'):
+        assert not report[key]['complete']
+        assert report[key]['action'] == key
+        assert report[key]['targets'][0]['instance_id'] == pending.id
+
+
+def test_assembly_integrity_penalty_is_once_per_design(host):
+    from backend.core.models import StrandExtension
+
+    bad = sequenced_design()
+    bad.extensions = [StrandExtension(strand_id='missing', end='five_prime', modification='biotin')]
+    host['assembly'] = Assembly(instances=[instance(bad), instance(bad)])
+    report = routes.get_design_readiness(assembly=True)
+    assert report['completed_steps'] == report['total_steps'] == 4
+    assert report['score'] == 3
+    assert report['integrity_penalty'] == -1
+    assert len(steps(report)['topology']['targets']) == 2
+    assert report['state'] == 'incomplete'

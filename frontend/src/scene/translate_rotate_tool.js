@@ -5,6 +5,7 @@ import { showOpProgress, hideOpProgress } from '../ui/op_progress.js'
 import { registerShortcut } from '../input/shortcuts.js'
 import { canonicalSelection, selectedClusterIds } from './selection_model.js'
 import { parseBaseKey } from './base_ref.js'
+import { armToolClusterSelection } from '../ui/tool_cluster_selection.js'
 
 /**
  * Translate/Rotate tool — the design-mode cluster gizmo + assembly-mode instance
@@ -73,7 +74,7 @@ export function resolveSelectionClusterId(ref, design) {
 
 export function initTranslateRotateTool(deps) {
   const {
-    store, scene, camera, canvas,
+    store, scene, camera, canvas, selectionManager,
     designRenderer,
     getJointRenderer,
     clusterGizmo, instanceGizmo, nucleotideTransformTool, proteinGizmo,
@@ -104,6 +105,7 @@ export function initTranslateRotateTool(deps) {
   const _showProgress = showOpProgress
   const _hideProgress = hideOpProgress
   const _mrPanel = mrPanel
+  let finishClusterPick = null
   const _mrPivotSel = mrPivotSel
   const _mrSetTransformValues = setTransformValues
   const _mrSetTransformValuesFromMatrix = setTransformValuesFromMatrix
@@ -380,6 +382,8 @@ export function initTranslateRotateTool(deps) {
     // activation; the first compatible entity selected below becomes the target.
     const first = targetClusterId && clusters.find(c => c.id === targetClusterId)
     if (!first) {
+      finishClusterPick?.()
+      finishClusterPick = armToolClusterSelection({ store, selectionManager })
       _moveRotatePanel.setAssemblyCtx(null)
       _moveRotatePanel.setSessionMode?.('waiting')
       if (_mrPivotSel) _mrPivotSel.disabled = true
@@ -438,6 +442,7 @@ export function initTranslateRotateTool(deps) {
   }
 
   function _removeToolPickListeners() {
+    finishClusterPick?.(); finishClusterPick = null
     canvas.removeEventListener('pointerdown', _onToolPickPointerDown)
   }
 

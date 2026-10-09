@@ -29,11 +29,14 @@ def legacy_plane_source(design, plane):
                 or abs(getattr(helix.axis_end, normal)-getattr(helix.axis_start, normal)) < 1e-9):
             raise ValueError('select an end or place freeform for mixed source planes')
     clusters = design.cluster_transforms
-    if clusters and (len(clusters) != 1 or clusters[0].domain_ids or
-                     clusters[0].parent_cluster_id or
-                     set(clusters[0].helix_ids) != {h.id for h in design.helices}):
-        raise ValueError('select an end or place freeform for multiple placements')
-    return origin, clusters
+    if clusters:
+        pose = lambda c: (c.translation, c.rotation, c.pivot)
+        claimed = [hid for c in clusters for hid in c.helix_ids]
+        if (any(c.domain_ids or c.parent_cluster_id or pose(c) != pose(clusters[0]) for c in clusters)
+                or len(claimed) != len(set(claimed))
+                or set(claimed) != {h.id for h in design.helices}):
+            raise ValueError('select an end or place freeform for multiple placements')
+    return origin, clusters[:1]
 
 
 def append_legacy_plane_bundle(design, cells, length_bp, *, plane):
@@ -46,5 +49,5 @@ def append_legacy_plane_bundle(design, cells, length_bp, *, plane):
     if clusters:
         updated = updated.copy_with(cluster_transforms=[clusters[0].model_copy(update={
             'helix_ids': [*clusters[0].helix_ids, *(h.id for h in updated.helices[len(design.helices):])],
-        })])
+        }), *design.cluster_transforms[1:]])
     return updated

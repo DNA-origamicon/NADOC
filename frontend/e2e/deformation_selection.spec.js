@@ -41,43 +41,38 @@ for (const kind of ['bend', 'twist']) test(`${kind} exact mixed selection, cance
   const popup = page.locator('.tool-popup[data-tool-panel="deform-panel"]')
   await expect(popup).toBeVisible()
   await expect(page.locator('#def-current-selection')).toContainText('Domain · selected [1]')
-  await page.locator('#def-pick-planes').click()
-  expect(await page.evaluate(async () => { const e = await import('/src/scene/deformation_editor.js'); const s = (await import('/src/state/store.js')).store.getState(); return { state: e.getState(), active: s.deformToolActive, targets: e.getDeformSessionTargets(), selection: s.selection } })).toMatchObject({ state: 'AWAITING_A', active: true })
-  // Real raycast plane picking: candidates on the selected half of the helix.
-  const points = await page.evaluate(() => {
-    const rects = ['.tool-popup', '#left-panel', '#right-panel', '#menu-bar'].flatMap(s => [...document.querySelectorAll(s)].map(n => n.getBoundingClientRect()))
-    return window.__nadocTest.getBackboneBeadScreenPositions(1000).filter(p => !rects.some(r => p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom))
-  })
-  for (const point of points.reverse().slice(0, 30)) {
-    await page.mouse.click(point.x, point.y)
-    if (await page.locator('#def-apply-btn').isEnabled()) break
-    expect(await page.evaluate(async () => (await import('/src/state/store.js')).store.getState().deformToolActive)).toBe(true)
-  }
+  expect(await page.evaluate(async () => { const e = await import('/src/scene/deformation_editor.js'); const s = (await import('/src/state/store.js')).store.getState(); return { state: e.getState(), active: s.deformToolActive, targets: e.getDeformSessionTargets(), selection: s.selection } })).toMatchObject({ state: 'BOTH', active: true })
   await expect(page.locator('#def-apply-btn')).toBeEnabled()
+  await expect(page.locator('#def-plane-a-bp')).toHaveValue('100')
+  await expect(page.locator('#def-plane-b-bp')).toHaveValue('199')
+  const highlights = () => page.evaluate(() => {
+    const scene = window.__nadocTest.scene
+    return { corners: scene.getObjectByName('clusterSelectionCorners')?.visible ?? false,
+      glow: scene.getObjectByName('selectionGlow')?.count ?? 0 }
+  })
+  await expect.poll(highlights).toEqual({ corners: false, glow: 0 })
   await page.locator('#def-plane-a-bp').fill('100'); await page.locator('#def-plane-a-bp').press('Tab')
   await page.locator('#def-plane-b-bp').fill('199'); await page.locator('#def-plane-b-bp').press('Tab')
   const input = page.locator(kind === 'bend' ? '#def-bend-angle' : '#def-twist-value')
   await input.fill('60'); await input.press('Tab')
   await page.evaluate(async () => (await import('/src/scene/deformation_editor.js')).waitForDeformationIdle())
   await page.locator('#def-change-selection').click()
-  await expect(page.locator('#def-pick-planes')).toBeVisible()
+  await expect(page.locator('#def-apply-btn')).toBeDisabled()
+  await expect.poll(async () => (await highlights()).corners).toBe(true)
   expect((await read()).design.deformations).toHaveLength(0)
   // Clear keeps the panel open and cannot fall back to whole-design deformation.
   await page.locator('#def-clear-selection').click()
-  await expect(page.locator('#def-pick-planes')).toBeDisabled()
+  await expect(page.locator('#def-apply-btn')).toBeDisabled()
   await page.evaluate(async () => {
     const { store } = await import('/src/state/store.js')
     const { createSelectionController } = await import('/src/scene/selection_controller.js')
     createSelectionController({ store }).replace([{ kind: 'strand', id: 'selected' }])
   })
-  await page.locator('#def-pick-planes').click()
-  expect(await page.evaluate(async () => { const e = await import('/src/scene/deformation_editor.js'); const s = (await import('/src/state/store.js')).store.getState(); return { state: e.getState(), active: s.deformToolActive, targets: e.getDeformSessionTargets(), selection: s.selection } })).toMatchObject({ state: 'AWAITING_A', active: true })
-  for (const point of points.reverse().slice(0, 30)) {
-    await page.mouse.click(point.x, point.y)
-    if (await page.locator('#def-apply-btn').isEnabled()) break
-    expect(await page.evaluate(async () => (await import('/src/state/store.js')).store.getState().deformToolActive)).toBe(true)
-  }
+  expect(await page.evaluate(async () => { const e = await import('/src/scene/deformation_editor.js'); const s = (await import('/src/state/store.js')).store.getState(); return { state: e.getState(), active: s.deformToolActive, targets: e.getDeformSessionTargets(), selection: s.selection } })).toMatchObject({ state: 'BOTH', active: true })
   await expect(page.locator('#def-apply-btn')).toBeEnabled()
+  await expect(page.locator('#def-plane-a-bp')).toHaveValue('0')
+  await expect(page.locator('#def-plane-b-bp')).toHaveValue('199')
+  await expect.poll(highlights).toEqual({ corners: false, glow: 0 })
   await page.locator('#def-plane-a-bp').fill('0'); await page.locator('#def-plane-a-bp').press('Tab')
   await page.locator('#def-plane-b-bp').fill('199'); await page.locator('#def-plane-b-bp').press('Tab')
   await input.fill('60'); await input.press('Tab')

@@ -958,6 +958,11 @@ class Strand(BaseModel):
     color: Optional[str] = None  # "#RRGGBB" hex; None → use STAPLE_PALETTE
     name: Optional[str] = None  # user-defined oligo/order name; blank by default
     notes: Optional[str] = None  # user-defined notes (shown in spreadsheet panel)
+    # Extrusion creates straight precursors, not authored routes. Remember the
+    # initial domain so nicking/ligation can demonstrate actual routing without
+    # requiring an automatic command. None = legacy/imported/manual strand;
+    # empty list = explicitly processed by a routing command.
+    routing_seed: Optional[List[Domain]] = None
     # Reference geometry: when True this strand is an inactive "backdrop" — a
     # frozen part the user is designing against.  ALL generative features
     # (bend/twist, sequence assignment, scaffold routing, autostaple/break/merge,

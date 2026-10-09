@@ -490,6 +490,11 @@ def full_autostaple_endpoint(body: _FullAutostapleBody = _FullAutostapleBody()) 
         # "add crossover" there).  Mismatched-bp attachments stay forced ligations.
         _backfill_dropped_junctions(clean)
         _assert_no_circular_staples(clean)
+        clean = clean.copy_with(strands=[
+            strand.model_copy(update={"routing_seed": []})
+            if strand.strand_type == StrandType.STAPLE and not strand.is_reference else strand
+            for strand in clean.strands
+        ])
         _run.full_report = {
             "scaffold": {
                 "total_nt": total_nt,

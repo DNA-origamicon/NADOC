@@ -5005,7 +5005,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // Canonical refs are the source of truth. Keep renderer adapters synchronized for
   // programmatic/controller mutations as well as pointer gestures.
   store.subscribe((newState, prevState) => {
-    if (newState.selection !== prevState.selection) {
+    if (newState.selection !== prevState.selection || newState.deformToolActive !== prevState.deformToolActive) {
+      if (newState.deformToolActive) _clearHoverPreview()
       vrDeformationSelection(selectionController.getState().items)
       _syncCanonicalHighlights(newState)
     }

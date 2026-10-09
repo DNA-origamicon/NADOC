@@ -290,6 +290,7 @@ def _lay_sheets(spec: CornerSpec, a_len, b_len, *, create_len: int) -> None:
         lattice=LatticeType.SQUARE,
         name="corner_miter",
         ligate_adjacent=True,
+        separate_fresh_extrusions=False,  # compound primitive needs separate leaves
     )
     design = design_state.get_or_404()
     helices = {h.id: h for h in design.helices}

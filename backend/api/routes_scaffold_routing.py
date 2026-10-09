@@ -62,6 +62,12 @@ def _run_auto_scaffold_with_feature_log(
             raise HTTPException(status_code=422, detail=str(exc))
         if hasattr(result, "valid") and not result.valid:
             raise HTTPException(status_code=422, detail="; ".join(result.errors))
+        if op_kind.startswith("auto-scaffold"):
+            updated = updated.copy_with(strands=[
+                strand.model_copy(update={"routing_seed": []})
+                if strand.is_scaffold and not strand.is_reference else strand
+                for strand in updated.strands
+            ])
         holder["result"] = result
         return updated
 

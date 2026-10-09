@@ -10,7 +10,11 @@
 import { canonicalSelection } from './selection_model.js'
 
 export function selectionHighlightDescriptor(state) {
-  const selection = canonicalSelection(state)
+  const canonical = canonicalSelection(state)
+  // Bend/Twist owns its target while planes and parameters are being edited.
+  // Keep the logical refs for scope and restore their highlighting on exit.
+  const selection = state?.deformToolActive
+    ? { ...canonical, items: [], primary: null } : canonical
   const byKind = kind => selection.items.filter(ref => ref.kind === kind)
   return {
     context: selection.context,

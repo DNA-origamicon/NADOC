@@ -406,6 +406,12 @@ reports 20 unrelated existing tests over 5 s, none from the new sweep suite.
 Full suite deferred by the session gate. Lint retains the existing unused `Path`
 import in `tests/test_cpd_cube_validation_v6.py`; `git diff --check` passes.
 
+2026-10-07 — ISSUE-59: fixed SNUPI coordinate-field parsing after the platform
+comparison exposed 1,194 silently omitted nodes. Adjacent signed 8-character
+coordinate fields now use a fixed-width fallback; legacy whitespace input is
+preserved. Added a regression using actual platform output. No molecular
+coordinates or topology are changed.
+
 2026-10-08 — ISSUE-67: construction animations now traverse intermediate states
 and render their historical DNA/particle topology. Explicit WebCodecs timestamps
 replace wall-clock WebM capture in both exporters. Root cause: endpoint-only

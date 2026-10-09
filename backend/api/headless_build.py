@@ -192,6 +192,7 @@ def create_bundle(
     plane: str = "XY",
     strand_filter: str = "both",
     ligate_adjacent: bool = True,
+    separate_fresh_extrusions: bool = True,
 ) -> Design:
     """Create a bundle on the active design (mirrors POST /design/bundle).
 
@@ -207,6 +208,7 @@ def create_bundle(
             strand_filter=strand_filter,
             lattice_type=lattice,
             ligate_adjacent=ligate_adjacent,
+            separate_fresh_extrusions=separate_fresh_extrusions,
         )
     )
     return design_state.get_or_404()

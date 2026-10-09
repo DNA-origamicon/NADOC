@@ -7481,7 +7481,7 @@
                live in #select-filter-menu below; the trigger shows whichever one is
                currently in force (an engaged skip/loop/ext/ovhg gate outranks the level,
                because those already take precedence for clicks + lasso). Row order in
-               the level group is TAB_CYCLE order, so the Tab flash reads top-to-bottom.
+               the level group follows the Q/E cycle, so the flash follows the level order.
                Buttons keep their data-key + .sf-btn markup — selection_filter.js still
                finds them with `#select-filter .sf-btn[data-key="…"]`. -->
           <div id="select-filter">
@@ -7495,6 +7495,10 @@
             <div id="select-filter-menu" hidden>
               <div class="sf-menu-marker"></div>
               <div class="sf-menu-head">Level</div>
+              <button class="sf-btn" data-key="clust" title="Cluster — select whole rigid cluster (Q/E to cycle)">
+                <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="2" y="2" width="12" height="6" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="5" cy="5" r="1" fill="currentColor"/><circle cx="8" cy="5" r="1" fill="currentColor"/><circle cx="11" cy="5" r="1" fill="currentColor"/></svg>
+                <span class="sf-label-text">clust</span>
+              </button>
               <button class="sf-btn" data-key="strand" title="Whole-strand selection">
                 <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="3" y1="5" x2="13" y2="5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="3" cy="5" r="2" fill="currentColor"/><circle cx="8" cy="5" r="2" fill="currentColor"/><circle cx="13" cy="5" r="2" fill="currentColor"/></svg>
                 <span class="sf-label-text">strand</span>
@@ -7518,10 +7522,6 @@
               <button class="sf-btn active" data-key="default" title="Default — drill ladder: 1st click selects the strand, 2nd click the leaf under the cursor">
                 <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><path d="M3,1 L3,9 L5.4,6.8 L7,9.6 L8.6,8.6 L7.1,6 L10,5.6 Z" fill="currentColor"/></svg>
                 <span class="sf-label-text">default</span>
-              </button>
-              <button class="sf-btn" data-key="clust" title="Cluster — select whole rigid cluster (button-only; not in Tab cycle)">
-                <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="2" y="2" width="12" height="6" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="5" cy="5" r="1" fill="currentColor"/><circle cx="8" cy="5" r="1" fill="currentColor"/><circle cx="11" cy="5" r="1" fill="currentColor"/></svg>
-                <span class="sf-label-text">clust</span>
               </button>
               <div class="sf-menu-sep"></div>
               <div class="sf-menu-head">Pickable</div>

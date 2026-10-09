@@ -447,7 +447,7 @@ export function showPickingPopup(toolType, planeA = null) {
 /** Selection stays in the same floating panel throughout the tool session. */
 export function showSelectionPopup(type) {
   showPickingPopup(type)
-  if (_pickingHint) _pickingHint.textContent = 'Build a selection, then choose Pick planes.'
+  if (_pickingHint) _pickingHint.textContent = 'Select clusters, strands, or domains. Planes will be placed at the far ends of the selection.'
   if (_clusterSection) _clusterSection.style.display = 'none'
 }
 
@@ -470,8 +470,7 @@ export function setDeformationSelectionUI(config) {
     _selectionSection.append(node)
   }
   button('def-clear-selection', 'Clear selection', config.onClear, !config.labels.length)
-  if (config.phase === 'selection') button('def-pick-planes', 'Pick planes', config.onPick, !!config.error)
-  else button('def-change-selection', 'Change selection', config.onChange)
+  if (config.phase !== 'selection') button('def-change-selection', 'Change selection', config.onChange)
 }
 
 export function closePopup() {

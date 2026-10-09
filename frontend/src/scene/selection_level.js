@@ -15,12 +15,9 @@
 // (backbone/5′ cubes/extension tails, fluorophore tips, extra crossover bases, flexible
 // ssDNA arcs, ss-linker bridges). It has its own key-based pool — see `base_ref.js`.
 //
-// E cycles forward and Q backward through strand → domain → end → xover → base →
-// none(default). Escape
-// returns to `default`. The #select-filter level buttons drive the SAME state
-// (clust/strand/line/ends/xover/base); no button lit = `default`. CLUSTER is reached via
-// its button ONLY — removed from the Tab cycle 2026-06-07 (rarely used: only for
-// repositioning in dynamic parts, after staple routing is mostly done).
+// E cycles forward and Q backward through cluster → strand → domain → end →
+// xover → base → default. Escape returns to default. Filter buttons drive
+// the same selection level.
 //
 // This is the only selection model — the legacy auto-drill ladder / manual filter
 // pins / Tab drill-lock were physically deleted 2026-06-06 (there is no flag any
@@ -29,11 +26,8 @@
 // Everything here is pure (no DOM / scene / store) so it unit-tests directly.
 
 export const LEVELS    = ['default', 'cluster', 'strand', 'domain', 'end', 'xover', 'base']
-// The E/Q cycle is strand → domain → end → xover → base → none(default) → strand. Cluster is
-// NOT in the cycle (button-only access, 2026-06-07). `base` sits last, immediately before
-// the wrap: it is the finest grain there is, and the position mirrors its button sitting
-// to the right of xover. `default` = no button engaged = the drill ladder (2026-06-06).
-export const TAB_CYCLE = ['strand', 'domain', 'end', 'xover', 'base', 'default']
+// Coarse-to-fine selection, followed by the default drill ladder.
+export const TAB_CYCLE = ['cluster', 'strand', 'domain', 'end', 'xover', 'base', 'default']
 
 // Filter-button dataKey ↔ selectionLevel. `strand` is now a DISTINCT fixed level
 // (every click → whole strand), separate from `default` (no button = drill ladder).
