@@ -134,6 +134,7 @@ LEAF_RULES: list[tuple[str, tuple[str, ...]]] = [
     # "cando" heavy group, so its source must select that group too.
     ("snupi", ("cando",)),
     ("namd", ("namd",)),
+    ("nanoparticle", ("namd",)),
     # Remote parser parity replays large native NAMD logs in the namd group.
     ("remote_cutoff_eval", ("namd",)),
     ("mrdna", ("mrdna",)),

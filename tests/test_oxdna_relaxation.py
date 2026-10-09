@@ -4121,6 +4121,11 @@ with open(cwd / energy, "w") as f:
 
 @pytest.fixture
 def mock_oxdna(tmp_path, monkeypatch):
+    from backend.core import oxdna_runner
+
+    # This copy-only binary tests orchestration, not host storage capacity.
+    # Keep the production disk guard intact; its low-space cases have dedicated tests.
+    monkeypatch.setattr(oxdna_runner, "free_bytes", lambda _: 100 * oxdna_runner.GiB)
     p = tmp_path / "mock_oxdna.py"
     p.write_text(_MOCK_OXDNA)
     p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)

@@ -144,7 +144,8 @@ def _run(coro):
     return asyncio.run(coro)
 
 
-def test_on_tick_fires_once_per_poll_while_the_process_runs(tmp_path):
+def test_on_tick_fires_once_per_poll_while_the_process_runs(tmp_path, monkeypatch):
+    monkeypatch.setattr(disk_guard, "free_bytes", lambda _: 100 * GiB)
     from backend.core.disk_guard import wait_proc_with_disk_guard
 
     calls = []
@@ -161,7 +162,8 @@ def test_on_tick_fires_once_per_poll_while_the_process_runs(tmp_path):
     assert len(calls) == 3
 
 
-def test_on_tick_may_be_async(tmp_path):
+def test_on_tick_may_be_async(tmp_path, monkeypatch):
+    monkeypatch.setattr(disk_guard, "free_bytes", lambda _: 100 * GiB)
     from backend.core.disk_guard import wait_proc_with_disk_guard
 
     calls = []
@@ -177,8 +179,9 @@ def test_on_tick_may_be_async(tmp_path):
     assert rc == 0 and len(calls) == 2
 
 
-def test_a_raising_on_tick_never_disturbs_the_run(tmp_path):
+def test_a_raising_on_tick_never_disturbs_the_run(tmp_path, monkeypatch):
     """Monitoring must not be able to kill the job it is monitoring."""
+    monkeypatch.setattr(disk_guard, "free_bytes", lambda _: 100 * GiB)
     from backend.core.disk_guard import wait_proc_with_disk_guard
 
     killed = []
@@ -199,8 +202,9 @@ def test_a_raising_on_tick_never_disturbs_the_run(tmp_path):
     assert killed == []  # and is never killed
 
 
-def test_on_tick_is_optional(tmp_path):
+def test_on_tick_is_optional(tmp_path, monkeypatch):
     """Omitting the hook reproduces the original behaviour exactly."""
+    monkeypatch.setattr(disk_guard, "free_bytes", lambda _: 100 * GiB)
     from backend.core.disk_guard import wait_proc_with_disk_guard
 
     assert (
