@@ -230,7 +230,8 @@ def _plan_platforms_in_frame(source, settings, base_frame):
             break
     if not best:
         raise ValueError(
-            "Neither 7249 nor 8064 can route a complete solid platform covering these particle positions. The centers were not moved."
+            "Neither 7249 nor 8064 can route a complete solid platform covering these particle positions. "
+            "Try Curved rod under Design shape. The centers were not moved."
         )
     chosen = best.get(7249) or best[8064]
     if 8064 in best and best[8064].summary["layers"] > chosen.summary["layers"]:

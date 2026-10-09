@@ -16,6 +16,26 @@ const button = text => [...document.querySelectorAll('button')].find(b => b.text
 const flush = async () => { await new Promise(resolve => setTimeout(resolve, 0)) }
 afterEach(() => { document.body.replaceChildren() })
 
+it('reviews the per-particle connection count and displays the automatic CanDo result', async () => {
+  const { api } = setup()
+  await flush()
+  const count = document.querySelector('[aria-label="Connections per nanoparticle"]')
+  expect([...count.options].map(o => o.value)).toEqual(['1', '2', '3'])
+  count.value = '3'; count.dispatchEvent(new Event('change'))
+  expect(button('Generate in current loadout').disabled).toBe(true)
+  button('Calculate design').click(); await flush()
+  expect(api.planGeneratedDesign.mock.lastCall[0].connections_per_particle).toBe(3)
+  api.generateDesign.mockResolvedValue({ generation: {
+    connections: Array.from({ length: 6 }, () => ({ reused: false })),
+    structural_validation: { status: 'warning', max_rmsf_nm: 6, warnings: ['Inspect flexibility.'] },
+  } })
+  button('Generate in current loadout').click(); await flush()
+  expect(api.generateDesign.mock.lastCall[0].connections_per_particle).toBe(3)
+  expect(document.body.textContent).toContain('Added 6 connections')
+  expect(document.body.textContent).toContain('CanDo structural check: warning')
+  expect(document.body.textContent).toContain('Inspect flexibility.')
+})
+
 describe('Generate design', () => {
   it('shows budgets and commits the exact reviewed revision and document', async () => {
     const { api, modal } = setup()

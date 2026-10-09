@@ -35,12 +35,25 @@ def attach_nanoparticle(
     fixed_center=False,
     frame=None,
     angles=None,
+    place_new_graft=False,
+    pending_connections=(),
 ):
     from backend.api.routes_nanoparticles import (
         _set_np_version_applied,
         _validate_np_connection_polarity,
     )
     from backend.core.nanoparticle_kinematics import solve_nanoparticle_anchors
+
+    # The generator fits a batch in sequence. Unplaced members still have their
+    # construction poses, not their final locations. Every completed attachment
+    # remains an obstacle; the last fit and generator's final check include all.
+    pending_overhangs = {item["overhang_id"] for item in pending_connections}
+    pending_handles = {item["strand_id"] for item in pending_connections}
+
+    def obstacle_geometry(current):
+        return [n for n in fitting_geometry(current)
+                if n.get("overhang_id") not in pending_overhangs
+                and n.get("strand_id") not in pending_handles]
 
     particle = next((p for p in design.nanoparticles if p.id == nanoparticle_id), None)
     target = next((o for o in design.overhangs if o.id == overhang_id), None)
@@ -50,6 +63,10 @@ def attach_nanoparticle(
         raise ValueError(
             "Attach to overhang currently requires thiol-DNA on an uncoated gold nanoparticle."
         )
+    if place_new_graft and (not fixed_center or not strand_id or any(
+        v.strand_id == strand_id for v in design.nanoparticle_connection_versions
+    )):
+        raise ValueError("Graft placement requires a new, unconnected handle and a fixed center.")
     if (
         any(
             v.applied and v.overhang_id == overhang_id
@@ -155,7 +172,7 @@ def attach_nanoparticle(
                     out = replace_gold_nanosphere(
                         out, nanoparticle_id, pose=pose.reshape(-1).tolist()
                     )
-            if not fixed_center or len(applied) > 1:
+            if not place_new_graft and (not fixed_center or len(applied) > 1):
                 out, diagnostics = solve_nanoparticle_anchors(
                     out,
                     nanoparticle_id,
@@ -174,8 +191,8 @@ def attach_nanoparticle(
                     raise ValueError(
                         "No feasible pose preserves every applied attachment."
                     )
-            if len(applied) == 1:
-                geometry = fitting_geometry(out)
+            if len(applied) == 1 or place_new_graft:
+                geometry = obstacle_geometry(out)
                 root, _ = resolve_overhang_anchor(geometry, overhang_id, "root")
                 joint, local = attachment_joint(out, version, geometry)
                 current = next(p for p in out.nanoparticles if p.id == nanoparticle_id)
@@ -194,6 +211,8 @@ def attach_nanoparticle(
                     [p.pose.to_array()[:3, 3] for p in out.nanoparticles],
                     angles,
                     obstacle_tree=tree,
+                    phase_samples=64 if place_new_graft else 16,
+                    roll_samples=48 if place_new_graft else 24,
                 )
                 cluster = duplex_cluster_for(out, overhang_id)
                 out = dematerialize_duplex_cluster(out, overhang_id)
@@ -214,20 +233,60 @@ def attach_nanoparticle(
                     ]
                 )
                 pose = current.pose.to_array().copy()
-                pose[:3, :3] = (
-                    _rotation_between(pose[:3, :3] @ local, target_joint - center)
-                    @ pose[:3, :3]
-                )
-                out = replace_gold_nanosphere(
-                    out, nanoparticle_id, pose=pose.reshape(-1).tolist()
-                )
+                graft_rotation = _rotation_between(pose[:3, :3] @ local, target_joint - center)
+                if place_new_graft:
+                    # During generation the NEW graft site is a design variable.
+                    # Rotate only that site's local coordinates; preserve the body
+                    # pose and every previously fitted or reused graft.
+                    local_rotation = pose[:3, :3].T @ graft_rotation @ pose[:3, :3]
+                    out = out.copy_with(nanoparticle_conjugations=[
+                        c.model_copy(update={"surface_strands": [
+                            r.model_copy(update={
+                                key: tuple(local_rotation @ np.asarray(getattr(r, key)))
+                                for key in ("site_local", "sulfur_local_nm", "backbone_attachment_local_nm")
+                            }) if r.strand_id == selected else r
+                            for r in c.surface_strands
+                        ]}) if c.nanoparticle_id == nanoparticle_id else c
+                        for c in out.nanoparticle_conjugations
+                    ])
+                    # Unbinding restores the original radial carrier from this
+                    # snapshot. Rotate its axis AND helical phase with the graft,
+                    # so a later rebind recovers the same exact backbone joint.
+                    from backend.core.geometry import _frame_from_helix_axis
+                    from backend.core.models import Helix, Vec3
+
+                    duplex_id = next(v.duplex_id for v in out.nanoparticle_connection_versions if v.id == version.id)
+                    duplexes = []
+                    for dx in out.duplexes:
+                        if dx.id == duplex_id and dx.prior_driven_topology:
+                            saved = dict(dx.prior_driven_topology)
+                            helix = Helix.model_validate(saved["driven_helix"])
+                            start, end = helix.axis_start.to_array(), helix.axis_end.to_array()
+                            old_frame = _frame_from_helix_axis(end - start)
+                            new_start = center + graft_rotation @ (start - center)
+                            new_end = center + graft_rotation @ (end - center)
+                            new_frame = _frame_from_helix_axis(new_end - new_start)
+                            radial = graft_rotation @ (np.cos(helix.phase_offset) * old_frame[:, 0] + np.sin(helix.phase_offset) * old_frame[:, 1])
+                            saved["driven_helix"] = helix.model_copy(update={
+                                "axis_start": Vec3(**dict(zip(("x", "y", "z"), new_start))),
+                                "axis_end": Vec3(**dict(zip(("x", "y", "z"), new_end))),
+                                "phase_offset": float(np.arctan2(radial @ new_frame[:, 1], radial @ new_frame[:, 0])),
+                            }).model_dump(mode="json")
+                            dx = dx.model_copy(update={"prior_driven_topology": saved})
+                        duplexes.append(dx)
+                    out = out.copy_with(duplexes=duplexes)
+                else:
+                    pose[:3, :3] = graft_rotation @ pose[:3, :3]
+                    out = replace_gold_nanosphere(
+                        out, nanoparticle_id, pose=pose.reshape(-1).tolist()
+                    )
                 out, _ = materialize_duplex_cluster(
                     out,
                     overhang_id,
                     cluster_id=cluster.id if cluster else None,
                     name=cluster.name if cluster else None,
                 )
-            geometry = fitting_geometry(out)
+            geometry = obstacle_geometry(out)
             clearance = particle_clearance(out, geometry, nanoparticle_id)
             if clearance < -1e-6:
                 raise ValueError(
@@ -303,6 +362,7 @@ def attach_nanoparticle(
                 "version_id": version.id,
                 "strand_id": selected,
                 "fixed_center": fixed_center,
+                "place_new_graft": place_new_graft,
                 "clearance_nm": clearance,
                 "residual_nm": measurements[version.id]["residual_nm"],
             }

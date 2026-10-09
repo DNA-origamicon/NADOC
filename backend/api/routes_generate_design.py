@@ -79,6 +79,8 @@ def _generate_design(body):
     except ValueError as exc:
         raise HTTPException(422, detail=str(exc)) from exc
     generated = generated.copy_with(id=source.id)
+    if state.revision() != revision:
+        raise HTTPException(409, detail="Design changed during generation. Recalculate before generating.")
     progress("Validate topology", "Check strands, crossovers and fixed-center attachments", .93)
     validation = validate_design(generated)
     if not validation.passed:
@@ -89,6 +91,14 @@ def _generate_design(body):
                 "validation": str(validation),
             },
         )
+    from backend.core.generator_validation import check_generated_structure
+    progress("CanDo structural check", "Check duplex connectivity and solve linear shape and flexibility", .94)
+    try:
+        report["structural_validation"] = check_generated_structure(
+            generated, placement["generated_helix_ids"]
+        )
+    except ValueError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
     pending_validation = None
     if settings.mechanics in ("fem-linear", "fem-nonlinear", "oxdna"):
         from backend.core.generator_validation import prepare_validation

@@ -9,14 +9,16 @@ export function showGenerateDesign({ api, store }) {
   const particles = state.currentDesign?.nanoparticles?.filter(p => p.kind === 'gold_nanosphere') ?? []
   const platform = particles.length > 2
   const enabled = !state.assemblyActive && !!state.currentDesign && [2, 3, 4].includes(particles.length)
-  const body = el('div', { attrs: { style: 'display:grid;gap:var(--space-3,12px)' } })
+  const body = el('div', { attrs: { style: 'display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-3,12px)' } })
   const summary = el('div', { text: enabled ? `${particles.length} gold nanoparticles · ${state.currentDesign.lattice_type ?? ''}` : 'Open a part with 2–4 gold nanoparticles.', attrs: {
-    title: 'Preserve particle centers and existing geometry. Add individual editable construction steps to the current loadout. Choose geometric sizing or mechanical reinforcement for curved rods within scaffold, bend, and clearance limits. Mechanical predictions are uncalibrated; optional simulation jobs provide additional validation.',
+    title: 'Preserve particle centers and existing geometry. Add individual editable construction steps to the current loadout. Choose geometric sizing or mechanical reinforcement for curved rods within scaffold, bend, and clearance limits. Mechanical predictions are uncalibrated. Every generated design receives a CanDo connectivity and flexibility check before it is added. Optional simulation jobs provide additional validation.',
   } })
   body.append(summary)
   function field(label, control, tooltip, ariaLabel = label) {
     control.setAttribute('aria-label', ariaLabel)
     control.title = tooltip
+    control.style.minWidth = '0'
+    control.style.maxWidth = '55%'
     const row = el('div', { children: [el('label', { className: 'input-group', attrs: { title: tooltip, style: 'width:100%;justify-content:space-between' }, children: [el('span', { className: 'input-group__label', text: label }), control] })] })
     body.append(row)
     return row
@@ -44,7 +46,10 @@ export function showGenerateDesign({ api, store }) {
   const roll = createInput({ type: 'number', min: -180, max: 180, step: 1, value: '0', disabled: !enabled })
   const rollRow = field('Rotation (°)', roll, platform ? 'Rotate within the fitted plane. Zero prefers alignment with at least one perimeter edge for three particles, or two for four when feasible.' : 'Rotate the rod around the line between particle centers.', rotationLabel)
   const length = createInput({ type: 'number', min: 12, max: 60, step: 1, value: '18', disabled: !enabled })
-  field('New duplex length (bp)', length, 'Reuse compatible handles at their existing sequence and length. Otherwise create one direct-thiol handle and complementary overhang per particle with this duplex length.')
+  field('New duplex length (bp)', length, 'Reuse compatible handles at their existing sequence and length. Create missing direct-thiol handles and complementary overhangs with this duplex length. New graft sites are fitted; existing graft sites are preserved.')
+  const connections = createSelect({ disabled: !enabled, options: [1, 2, 3].map(n => ({ value: String(n), label: String(n) })) })
+  field('Connections per nanoparticle', connections, 'Add 1–3 independent overhang connections to every nanoparticle. All requested connections must fit without moving particle centers; otherwise generation leaves the design unchanged.')
+  body.append(el('div', { text: 'Automatic CanDo check: duplex connectivity, shape and flexibility before adding the design.', attrs: { title: 'An elastic structural screen; it does not predict folding, strand dissociation or gold/linker dynamics.' } }))
   const order = createInput({ placeholder: 'Automatic' })
   let orderEdited = false
   const particleKey = particles.map((p, i) => {
@@ -71,6 +76,7 @@ export function showGenerateDesign({ api, store }) {
   let busy = false
   function settings(useReviewedOrder = false) {
     const values = { roll_deg: curved() ? 0 : Number(roll.value), duplex_bp: Number(length.value), extend_rod: true }
+    if (connections.value !== '1') values.connections_per_particle = Number(connections.value)
     if (curved()) {
       values.shape = 'curved-rod'
       if (mechanics.value !== 'legacy') values.mechanics = mechanics.value
@@ -90,7 +96,7 @@ export function showGenerateDesign({ api, store }) {
     busy = value
     calculate.disabled = value || !enabled
     generate.disabled = value || !plan
-    for (const input of [shape, pathing, length, order, mechanics]) input.disabled = value || !enabled
+    for (const input of [shape, pathing, length, order, mechanics, connections]) input.disabled = value || !enabled
     roll.disabled = value || !enabled || curved()
   }
   function invalidate() {
@@ -147,6 +153,11 @@ export function showGenerateDesign({ api, store }) {
       if (result) {
         const items = result.generation.connections
         status.textContent = `Added ${items.length} connections. Particle centers preserved.`
+        const check = result.generation.structural_validation
+        if (check) {
+          status.textContent += `\nCanDo structural check: ${check.status}. Maximum core RMSF: ${check.max_rmsf_nm.toFixed(2)} nm.`
+          if (check.warnings?.length) status.textContent += `\n${check.warnings.join('\n')}`
+        }
         if (result.generation.validation_job) {
           const j = result.generation.validation_job
           status.textContent += `\n${j.engine} job ${j.job_id}: ${j.status}. See Simulations.\n${j.error || j.qualification}`
@@ -164,6 +175,7 @@ export function showGenerateDesign({ api, store }) {
   })
   pathing.addEventListener('change', invalidate)
   mechanics.addEventListener('change', invalidate)
+  connections.addEventListener('change', invalidate)
   order.addEventListener('input', () => { orderEdited = !!order.value.trim() })
   for (const input of [roll, length, order]) input.addEventListener('input', invalidate)
   const modal = createModal({ title: 'Generate design', size: 'md', body, actions: [calculate, generate], onClose: () => !busy })

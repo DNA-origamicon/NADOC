@@ -118,11 +118,15 @@ def _handles(source, rod, particles, settings, history=None):
             "prepare-handles",
         )
     selected = []
-    for index, particle in enumerate(particles):
+    used_handles = set()
+    for index in range(len(particles) * settings.connections_per_particle):
+        particle_index = index % len(particles)
+        particle = particles[particle_index]
         from backend.core.two_np_generator import compatible_particle_handle
-        compatible = compatible_particle_handle(rod, particle.id)
+        compatible = compatible_particle_handle(rod, particle.id, exclude=used_handles)
         if compatible:
             c, record, s = compatible
+            used_handles.add(record.strand_id)
             selected.append((c, record, s.sequence, True))
             continue
         # Deterministic, mixed-base prototype sequence; not a thermodynamic
@@ -132,7 +136,7 @@ def _handles(source, rod, particles, settings, history=None):
             "GTCAGATCGTACAGTCGA",
             "TCGATGACCTAGTCAGAC",
             "CATGTCAGGATCTACGTC",
-        )[index]
+        )[particle_index]
         length = _params(
             history,
             f"overhang:{index}",
@@ -186,11 +190,12 @@ def _handles(source, rod, particles, settings, history=None):
             before,
             rod,
             "nanoparticle-conjugate",
-            f"Create thiol handle for nanoparticle {index + 1}",
+            f"Create thiol handle for nanoparticle {particle_index + 1}",
             hp,
             f"handle:{index}",
             ("sequence", "spacer_nm"),
         )
+        used_handles.add(record.strand_id)
         selected.append((c, record, seq, False))
     return rod, selected
 
@@ -205,9 +210,12 @@ def _add_root(
     index=0,
     target_x=None,
     independent_carriers=False,
+    excluded_sites=(),
+    particle_number=None,
     attachment_side=(0.0, 1.0),
 ):
     """Choose a legal outward crossover phase near the target axial position."""
+    particle_number = particle_number or index + 1
     pinned = _params(history, f"nick:{index}", {}, ("bp_index",)).get("bp_index")
     hs = [h for h in design.helices if h.id in rod_ids]
     occupied = {tuple(h.grid_pos) for h in hs}
@@ -226,6 +234,8 @@ def _add_root(
         center = h.axis_start.to_array()
         desired = h.bp_start + int(round((target_z - center[2]) / BDNA_RISE_PER_BP))
         for bp in range(max(h.bp_start + 5, desired - 32), min(h.bp_start + h.length_bp - 5, desired + 33)):
+            if any(h.id == hid and abs(bp - prior_bp) < 7 for hid, prior_bp in excluded_sites):
+                continue
             if pinned is not None and bp != pinned:
                 continue
             neighbor = crossover_neighbor(design.lattice_type, row, col, bp)
@@ -316,7 +326,7 @@ def _add_root(
                     design,
                     nicked,
                     "nick",
-                    f"Nick staple for nanoparticle {index + 1}",
+                    f"Nick staple for nanoparticle {particle_number}",
                     {
                         "bp_index": bp,
                         "cut_bp_index": cut,
@@ -331,7 +341,7 @@ def _add_root(
                 nicked,
                 trial,
                 "overhang-extrude",
-                f"Extrude nanoparticle {index + 1} overhang",
+                f"Extrude nanoparticle {particle_number} overhang",
                 {
                     "length_bp": length,
                     "helix_id": hid,
@@ -615,12 +625,15 @@ def materialize(
     progress("Prepare nanoparticle handles", "Reuse compatible handles or create direct-thiol strands", .55)
     rod, handles = _handles(source, rod, particles, settings, history)
     connections = []
+    root_sites = []
+    particle_indices = {p.id: i for i, p in enumerate(particles)}
     for index, (owner, record, sequence, reused) in enumerate(handles):
         progress(f"Build attachment {index + 1}/{len(handles)}", "Nick, extrude, orient and sequence the overhang", .58 + .16 * index / len(handles))
+        particle_index = particle_indices[owner.nanoparticle_id]
         target_z = center_local[2] + (
-            candidate.summary["path"]["station_s"][index]
+            candidate.summary["path"]["station_s"][particle_index]
             if curved
-            else targets[index, 2]
+            else targets[particle_index, 2]
         )
         length = _params(
             history, f"overhang:{index}", {"length_bp": len(sequence)}, ("length_bp",)
@@ -635,7 +648,7 @@ def materialize(
 
             arm = [h for h in rod.helices if h.id in rod_ids]
             spine, rotation, _ = _frame_at_bp(rod, target_z / BDNA_RISE_PER_BP, arm)
-            local_particle = center_local + frame.T @ (centers[index] - origin)
+            local_particle = center_local + frame.T @ (centers[particle_index] - origin)
             side = (rotation.T @ (local_particle - spine))[:2]
             attachment_side = side / max(np.linalg.norm(side), 1e-12)
         rod, oid = _add_root(
@@ -646,10 +659,21 @@ def materialize(
             owner.attach_end == "3p",
             history,
             index,
-            target_x=center_local[0] + targets[index, 0] if platform else None,
-            independent_carriers=curved,
+            # Extra roots must stay near the particle's transverse station as
+            # well as its axial station. Otherwise the third root can jump to a
+            # low outer helix and make the common fixed-center offset impossible.
+            target_x=(center_local[0] + (targets[particle_index, 0] if platform else 0.0))
+            if platform or (settings.connections_per_particle > 1 and not lateral) else None,
+            independent_carriers=curved or settings.connections_per_particle > 1,
+            excluded_sites=root_sites,
+            particle_number=particle_index + 1,
             attachment_side=attachment_side,
         )
+        added_spec = next(o for o in rod.overhangs if o.id == oid)
+        carrier_strand = rod.find_strand(added_spec.strand_id)
+        embedded = [d for d in carrier_strand.domains if not d.overhang_id]
+        adjacent = embedded[0] if owner.attach_end == "3p" else embedded[-1]
+        root_sites.append((adjacent.helix_id, adjacent.start_bp if owner.attach_end == "3p" else adjacent.end_bp))
         if curved:
             progress(f"Orient attachment {index + 1}/{len(handles)}", "Transport the overhang carrier along the curved rod", .58 + .16 * index / len(handles))
             from backend.core.deformation import (
@@ -678,7 +702,7 @@ def materialize(
                 before,
                 rod,
                 "cluster-pose",
-                f"Transport nanoparticle {index + 1} overhang along curve",
+                f"Transport nanoparticle {particle_index + 1} overhang along curve",
                 {},
                 f"path-root:{index}",
             )
@@ -690,7 +714,7 @@ def materialize(
             rod,
             oid,
             OverhangPatchRequest(
-                sequence=sp["sequence"], label=f"NP {index + 1} anchor"
+                sequence=sp["sequence"], label=f"NP {particle_index + 1} anchor"
             ),
         )
         _record(
@@ -698,14 +722,14 @@ def materialize(
             before,
             rod,
             "overhang-sequence",
-            f"Sequence nanoparticle {index + 1} overhang",
+            f"Sequence nanoparticle {particle_index + 1} overhang",
             sp,
             f"sequence:{index}",
             ("sequence",),
         )
         connections.append(
             dict(
-                particle_id=particles[index].id,
+                particle_id=owner.nanoparticle_id,
                 strand_id=record.strand_id,
                 overhang_id=oid,
                 reused=reused,
@@ -789,7 +813,7 @@ def materialize(
                 before,
                 rod,
                 "nanoparticle-connection-version-create",
-                f"Pair nanoparticle {index + 1} handle and overhang",
+                f"Pair nanoparticle {particle_indices[item['particle_id']] + 1} handle and overhang",
                 item,
                 f"connect:{index}",
             )
@@ -809,22 +833,26 @@ def materialize(
         + 1.2
     )
     for i, v in enumerate(rod.nanoparticle_connection_versions):
+        particle_index = particle_indices[v.nanoparticle_id]
         if lateral:
             break
         root, _ = resolve_overhang_anchor(geometry, v.overhang_id, "root")
         joint, local = _joint(rod, v, geometry)
         reach = np.linalg.norm(joint - root) + np.linalg.norm(local)
-        relative = frame.T @ (root - centers[i])
+        relative = frame.T @ (root - centers[particle_index])
         radial_sq = reach**2 - relative[0] ** 2 - relative[2] ** 2
         if radial_sq <= 0:
             raise ValueError(
                 "An attachment cannot reach its fixed particle center at a legal crossover phase. Increase duplex length."
             )
         upper = min(upper, relative[1] + np.sqrt(radial_sq))
+    # Multiple duplexes need angular room to clear each other. Retain at least
+    # a small body clearance while backing off the fully extended reach limit.
+    reach_margin = min(1.0, max(0.03, (upper - lower) / 2)) if settings.connections_per_particle > 1 else 0.03
     offset_params = _params(
         history,
         "rod-offset",
-        {"offset_nm": 0.0 if lateral else float(upper - 0.03)},
+        {"offset_nm": 0.0 if lateral else float(upper - reach_margin)},
         ("offset_nm",),
     )
     offset = float(offset_params["offset_nm"])
@@ -870,21 +898,30 @@ def materialize(
     )
     progress("Calculate placed attachment geometry", "Resolve the displaced rod and duplex anchors before fixed-center fitting", .79)
     geometry = attachment_geometry(rod)
-    if standard:
+    if standard or settings.connections_per_particle > 1:
         from backend.api.nanoparticle_attachment import attach_nanoparticle
         # Reach planning used temporary duplexes. Commit only complete fitted
         # attachments, starting from the already-created, world-placed overhangs.
         poses = {c.id: c for c in rod.cluster_transforms}
         rod = unpaired.copy_with(cluster_transforms=[poses[c.id] for c in unpaired.cluster_transforms])
         for i, item in enumerate(connections):
-            progress(f"Attach nanoparticle {i + 1}/{len(connections)}", "Fit and bind at fixed center", .80 + .10 * i / len(connections))
+            progress(f"Attach connection {i + 1}/{len(connections)}", "Fit and bind at fixed center", .80 + .10 * i / len(connections))
             before = rod
-            rod, diagnostics = attach_nanoparticle(rod, item["particle_id"], item["overhang_id"],
-                strand_id=item["strand_id"], fixed_center=True, frame=frame)
+            try:
+                rod, diagnostics = attach_nanoparticle(rod, item["particle_id"], item["overhang_id"],
+                    strand_id=item["strand_id"], fixed_center=True, frame=frame,
+                    place_new_graft=settings.connections_per_particle > 1 and not item["reused"],
+                    pending_connections=connections[i + 1:] if settings.connections_per_particle > 1 else ())
+            except ValueError as exc:
+                raise ValueError(
+                    f"Connection {i // len(particles) + 1}/{settings.connections_per_particle} "
+                    f"for nanoparticle {particle_indices[item['particle_id']] + 1}: {exc}"
+                ) from exc
             _record(history, before, rod, "nanoparticle-attach-overhang", "Attach nanoparticle to overhang",
                 {**item, "nanoparticle_id": item["particle_id"], **diagnostics}, f"attach:{i}")
     else:
         for i, v in enumerate(rod.nanoparticle_connection_versions):
+            particle_index = particle_indices[v.nanoparticle_id]
             progress(f"Fit attachment {i + 1}/{len(connections)}", "Find overhang and nanoparticle rotations while holding the center fixed", .80 + .10 * i / len(connections))
             root, _ = resolve_overhang_anchor(geometry, v.overhang_id, "root")
             joint, local = _joint(rod, v, geometry)
@@ -893,7 +930,7 @@ def materialize(
             target, rotation, fit_params = _fit_swing(
                 root,
                 joint,
-                centers[i],
+                centers[particle_index],
                 np.linalg.norm(local),
                 frame,
                 geometry,
@@ -915,12 +952,12 @@ def materialize(
                 _record(history, before, rod, "overhang-sequence", "Rotate overhang",
                     {"overhang_id": v.overhang_id, "rotation": Rotation.from_matrix(rotation).as_quat().tolist()}, f"fit-overhang:{i}")
                 before = rod
-            pose = particles[i].pose.to_array().copy()
+            pose = particles[particle_index].pose.to_array().copy()
             pose[:3, :3] = (
-                _rotation_between(pose[:3, :3] @ local, target - centers[i]) @ pose[:3, :3]
+                _rotation_between(pose[:3, :3] @ local, target - centers[particle_index]) @ pose[:3, :3]
             )
             rod = replace_gold_nanosphere(
-                rod, particles[i].id, pose=pose.flatten().tolist()
+                rod, particles[particle_index].id, pose=pose.flatten().tolist()
             )
             rod, _ = materialize_duplex_cluster(rod, v.overhang_id)
             _record(
@@ -929,7 +966,7 @@ def materialize(
                 rod,
                 "nanoparticle-patch" if history and history.standard else "nanoparticle-connection-relax",
                 f"Fit nanoparticle {i + 1} duplex at fixed center",
-                {"nanoparticle_id": particles[i].id, "pose": pose.flatten().tolist()} if history and history.standard else fit_params,
+                {"nanoparticle_id": particles[particle_index].id, "pose": pose.flatten().tolist()} if history and history.standard else fit_params,
                 f"fit:{i}",
                 ("phase_deg", "duplex_roll_deg"),
             )
@@ -940,23 +977,24 @@ def materialize(
     # Verify actual emitted coordinates, never just the nominal helix axes.
     residuals = []
     for i, v in enumerate(rod.nanoparticle_connection_versions):
+        particle_index = particle_indices[v.nanoparticle_id]
         joint, local = _joint(rod, v, geometry)
         particle = next(p for p in rod.nanoparticles if p.id == v.nanoparticle_id)
         predicted = (particle.pose.to_array() @ np.r_[local, 1])[:3]
         residual = float(np.linalg.norm(joint - predicted))
         if residual > 0.02 or not np.allclose(
-            particle.pose.to_array()[:3, 3], centers[i], atol=1e-9
+            particle.pose.to_array()[:3, 3], centers[particle_index], atol=1e-9
         ):
             raise ValueError(
                 "Generated attachment failed its fixed-center geometry check."
             )
         root, _ = resolve_overhang_anchor(geometry, v.overhang_id, "root")
         side_direction = (
-            np.asarray(candidate.summary["path"]["attachment_directions"][i])
+            np.asarray(candidate.summary["path"]["attachment_directions"][particle_index])
             if lateral
             else frame[:, 1]
         )
-        if np.dot(centers[i] - root, side_direction) <= 0:
+        if np.dot(centers[particle_index] - root, side_direction) <= 0:
             raise ValueError(
                 "Generated attachment is not on the requested common side."
             )
@@ -998,6 +1036,7 @@ def materialize(
     )
     return rod, {
         "connections": connections,
+        "generated_helix_ids": sorted(rod_ids),
         "attachment_residuals_nm": residuals,
         "rod_offset_nm": offset,
         "platform_offset_nm": offset if platform else None,

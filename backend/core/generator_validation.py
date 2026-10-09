@@ -1,10 +1,55 @@
-"""Prepare and launch optional generator validation through the existing job system.
+"""Screen every generated core with CanDo; prepare optional detailed validation jobs.
 
 These jobs validate a snapshot, never silently rewrite the generated geometry.
 A launched job is not a converged result or experimental calibration.
 """
 
 import json
+
+
+def check_generated_structure(design, helix_ids):
+    """Screen the new duplex core before commit; existing disconnected parts are out of scope.
+
+    CanDo pins every disconnected component, so a successful solve alone cannot
+    establish connectivity. Check the mesh explicitly before solving. This is an
+    elastic screening test, not a prediction of folding or bond dissociation.
+    """
+    import numpy as np
+    from threadpoolctl import threadpool_limits
+    from backend.physics.fem_solver import build_fem_mesh, _mesh_component_labels, predict_shape
+
+    helix_ids = set(helix_ids)
+    mesh = build_fem_mesh(design)
+    indices = [i for i, node in enumerate(mesh.nodes) if node.helix_id in helix_ids]
+    represented = {mesh.nodes[i].helix_id for i in indices}
+    if not indices or represented != helix_ids:
+        raise ValueError("CanDo validation failed: generated helices are missing paired duplex regions.")
+    _, labels = _mesh_component_labels(mesh)
+    components = len(set(int(labels[i]) for i in indices))
+    if components != 1:
+        raise ValueError(
+            f"CanDo validation failed: the generated duplex core has {components} disconnected components."
+        )
+    # Sparse FEM/NMA is slower with a large BLAS pool on ordinary origami meshes.
+    with threadpool_limits(limits=1, user_api="blas"):
+        result = predict_shape(design, nonlinear=False, with_rmsf=True, with_thermal_fluctuations=False)
+    rmsf = np.asarray([r["rmsf_nm"] for r in result.get("rmsf", []) if r["helix_id"] in helix_ids])
+    positions = np.asarray([p["backbone_position"] for p in result.get("positions", []) if p["helix_id"] in helix_ids])
+    if len(rmsf) != len(indices) or not positions.size or not np.isfinite(rmsf).all() or not np.isfinite(positions).all() or np.any(rmsf < 0):
+        raise ValueError("CanDo validation failed: no finite shape and flexibility result for the generated core.")
+    maximum = float(rmsf.max())
+    if maximum == 0:
+        raise ValueError("CanDo validation failed: normal-mode analysis returned no thermal fluctuations.")
+    # A conspicuous review threshold, not an experimentally calibrated stability cutoff.
+    warnings = []
+    if maximum > 5.0:
+        warnings.append("Predicted core RMSF exceeds the 5 nm screening threshold; inspect flexibility before using this design.")
+    return dict(
+        engine="cando", solver="linear", status="warning" if warnings else "passed",
+        connected_components=components, n_nodes=len(indices),
+        max_rmsf_nm=maximum, mean_rmsf_nm=float(rmsf.mean()), warnings=warnings,
+        qualification="Connected, finite elastic duplex-core response. This does not validate folding, strand dissociation, or gold/linker dynamics.",
+    )
 
 
 def prepare_validation(design, level, workspace, *, doc_id=None):

@@ -29,6 +29,7 @@ class GeneratorSettings(BaseModel):
     roll_deg: float = Field(default=0.0, ge=-180, le=180)
     duplex_bp: int = Field(default=18, ge=12, le=60)
     extend_rod: bool = True
+    connections_per_particle: int = Field(default=1, ge=1, le=3, strict=True)
     mechanics: Literal[
         "legacy", "beam", "variable", "robust", "fem-linear", "fem-nonlinear", "oxdna"
     ] = "legacy"
@@ -37,7 +38,7 @@ class GeneratorSettings(BaseModel):
     pathing: Literal["colocalized", "interior", "exterior"] = "colocalized"
 
 
-def compatible_particle_handle(design, particle_id):
+def compatible_particle_handle(design, particle_id, *, exclude=()):
     """The same deterministic handle choice for planning and construction."""
     for conjugation in design.nanoparticle_conjugations:
         if conjugation.nanoparticle_id != particle_id:
@@ -46,6 +47,7 @@ def compatible_particle_handle(design, particle_id):
             strand = design.find_strand(record.strand_id)
             if (
                 strand
+                and strand.id not in exclude
                 and strand.sequence
                 and 12 <= len(strand.sequence) <= 60
                 and set(strand.sequence.upper()) <= set("ACGT")

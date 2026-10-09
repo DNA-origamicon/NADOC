@@ -37,6 +37,8 @@ def fit_swing(
     centers,
     angles=None,
     obstacle_tree=None,
+    phase_samples=16,
+    roll_samples=24,
 ):
     """Search the sphere-intersection circle and duplex axial roll for clearance.
 
@@ -74,12 +76,12 @@ def fit_swing(
     phases = (
         [np.radians(angles["phase_deg"])]
         if angles and "phase_deg" in angles
-        else np.linspace(0, 2 * np.pi, 16, endpoint=False)
+        else np.linspace(0, 2 * np.pi, phase_samples, endpoint=False)
     )
     rolls = (
         np.array([np.radians(angles["duplex_roll_deg"])])
         if angles and "duplex_roll_deg" in angles
-        else np.linspace(0, 2 * np.pi, 24, endpoint=False)
+        else np.linspace(0, 2 * np.pi, roll_samples, endpoint=False)
     )
     if not np.isfinite(phases).all() or not np.isfinite(rolls).all():
         raise ValueError("Attachment angles must be finite.")
