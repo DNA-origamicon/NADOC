@@ -249,7 +249,7 @@ def build_recorded(
     particle_ids = {p.id for p in source.nanoparticles if p.kind == "gold_nanosphere"}
     try:
         for v in list(prepared.nanoparticle_connection_versions):
-            if v.applied and v.nanoparticle_id in particle_ids:
+            if v.applied and v.nanoparticle_id in particle_ids and settings.connectivity_plan is None:
                 before = prepared
                 cluster = duplex_cluster_for(prepared, v.overhang_id)
                 if cluster:
@@ -287,7 +287,7 @@ def build_recorded(
 
 def edit_generated_feature(index, params):
     from backend.core.two_np_generator import GeneratorSettings
-    from backend.core.platform_generator import plan_generated
+    from backend.api.branch_optimization import plan_for_generation as plan_generated
     from backend.core.validator import validate_design
     from backend.api.crud import _design_response_with_geometry
 
@@ -324,7 +324,7 @@ def edit_generated_feature(index, params):
         active_loadout_id=current.active_loadout_id,
         last_editable_loadout_id=current.last_editable_loadout_id,
     )
-    settings = GeneratorSettings(**meta["settings"])
+    settings = GeneratorSettings.from_history(meta["settings"])
     pathing = overrides.get("curve-path", {}).get("pathing", settings.pathing)
     if pathing not in ("colocalized", "interior", "exterior"):
         raise HTTPException(

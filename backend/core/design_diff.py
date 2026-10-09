@@ -39,6 +39,7 @@ _DIFF_FIELDS: tuple[str, ...] = (
     "overhangs",
     "strands",
     "crossovers",
+    "crossover_constraints",
     "forced_ligations",
     "extensions",
     "overhang_connections",
@@ -53,6 +54,7 @@ def _model_classes() -> dict[str, type]:
     from backend.core.models import (
         ClusterJoint,
         Crossover,
+        CrossoverConstraint,
         ForcedLigation,
         Helix,
         OverhangConnection,
@@ -67,6 +69,7 @@ def _model_classes() -> dict[str, type]:
         "overhangs": OverhangSpec,
         "strands": Strand,
         "crossovers": Crossover,
+        "crossover_constraints": CrossoverConstraint,
         "forced_ligations": ForcedLigation,
         "extensions": StrandExtension,
         "overhang_connections": OverhangConnection,

@@ -10,7 +10,7 @@ from backend.api.generation_progress import tracking, report as progress, snapsh
 from backend.api.crud import _design_response_with_geometry
 from backend.api.generated_history import build_recorded
 from backend.core.two_np_generator import GeneratorSettings
-from backend.core.platform_generator import plan_generated
+from backend.api.branch_optimization import plan_for_generation as plan_generated
 from backend.core.validator import validate_design
 
 router = APIRouter()
@@ -41,7 +41,7 @@ def plan_design(settings: GeneratorSettings):
     return {
         **report,
         "revision": revision,
-        "attachment_status": "Attachment reach and gold-core clearance are checked during generation.",
+        "attachment_status": report.get("attachment_status", "Attachment reach and gold-core clearance are checked during generation."),
     }
 
 

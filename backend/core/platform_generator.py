@@ -281,6 +281,10 @@ def plan_platforms(source, settings):
 
 def plan_generated(source, settings, *, use_sweeps=True):
     particles, _, _ = gold_particles(source)
+    if settings.shape == "branched":
+        from backend.core.branched_generator import plan_branches
+
+        return plan_branches(source, settings)
     if settings.shape == "curved-rod":
         from backend.core.curved_rod_generator import plan_curved_rods
 

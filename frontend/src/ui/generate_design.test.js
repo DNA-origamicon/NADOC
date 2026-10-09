@@ -218,3 +218,68 @@ it('exposes independent mechanics levels and sends the reviewed choice', async (
   expect(document.body.textContent).toContain('Not calibrated')
   modal.close()
 })
+
+it('offers branched layouts below curved rods and submits only branch settings', async () => {
+  const { api } = setup({ currentDesign: { nanoparticles: Array.from({ length: 4 }, (_, i) => ({ id: String(i), kind: 'gold_nanosphere' })) } })
+  await flush()
+  const shape = document.querySelector('[aria-label="Design shape"]')
+  expect([...shape.options].map(o => o.value)).toEqual(['auto', 'curved-rod', 'branched'])
+  shape.value = 'branched'; shape.dispatchEvent(new Event('change'))
+  expect(button('Generate in current loadout').disabled).toBe(true)
+  expect(document.body.textContent).toContain('Size curved arms, stems and junctions')
+  api.planGeneratedDesign.mockResolvedValue({ ...plan, selected: { scaffold_size: 7249, scaffold_used_nt: 6300 }, qualification: 'Experimental planar lattice branches.' })
+  button('Calculate design').click(); await flush()
+  expect(api.planGeneratedDesign).toHaveBeenLastCalledWith({ shape: 'branched', branch_geometry: 'curved', branch_sizing: 'optimized', branch_scaffold_size: 'auto', roll_deg: 0, duplex_bp: 18, extend_rod: false })
+  expect(document.querySelector('[role="status"]').textContent).toContain('6300 / 7249 scaffold bases')
+  button('Generate in current loadout').click(); await flush()
+  expect(api.generateDesign).toHaveBeenLastCalledWith({ shape: 'branched', branch_geometry: 'curved', branch_sizing: 'optimized', branch_scaffold_size: 'auto', roll_deg: 0, duplex_bp: 18, extend_rod: false }, 17, 'part-a', expect.any(Function))
+})
+
+it('retains straight lattice branches and invalidates the plan when branch geometry changes', async () => {
+  const { api } = setup({ currentDesign: { nanoparticles: Array.from({ length: 4 }, (_, i) => ({ id: String(i), kind: 'gold_nanosphere' })) } })
+  await flush()
+  const shape = document.querySelector('[aria-label="Design shape"]')
+  shape.value = 'branched'; shape.dispatchEvent(new Event('change'))
+  const geometry = document.querySelector('[aria-label="Branch geometry"]')
+  expect(geometry.value).toBe('curved')
+  geometry.value = 'lattice'; geometry.dispatchEvent(new Event('change'))
+  expect(button('Generate in current loadout').disabled).toBe(true)
+  button('Calculate design').click(); await flush()
+  expect(api.planGeneratedDesign.mock.lastCall[0].branch_geometry).toBe('lattice')
+  expect(document.body.textContent).toContain('crosslinked straight branches')
+})
+
+it('selects scaffold budget and invalidates a reviewed branch plan', async () => {
+  const { api } = setup({ currentDesign: { nanoparticles: Array.from({ length: 4 }, (_, i) => ({ id: String(i), kind: 'gold_nanosphere' })) } })
+  await flush()
+  const shape = document.querySelector('[aria-label="Design shape"]')
+  shape.value = 'branched'; shape.dispatchEvent(new Event('change'))
+  const scaffold = document.querySelector('[aria-label="Branch scaffold"]')
+  expect(scaffold.value).toBe('auto')
+  expect(scaffold.closest('label').parentElement.hidden).toBe(false)
+  scaffold.value = '7249'; scaffold.dispatchEvent(new Event('change'))
+  expect(button('Generate in current loadout').disabled).toBe(true)
+  button('Calculate design').click(); await flush()
+  expect(api.planGeneratedDesign.mock.lastCall[0].branch_scaffold_size).toBe(7249)
+  const sizing = document.querySelector('[aria-label="Branch sizing"]')
+  sizing.value = 'fixed'; sizing.dispatchEvent(new Event('change'))
+  expect(scaffold.closest('label').parentElement.hidden).toBe(true)
+  expect(button('Generate in current loadout').disabled).toBe(true)
+  button('Calculate design').click(); await flush()
+  expect(api.planGeneratedDesign.mock.lastCall[0].branch_sizing).toBe('fixed')
+})
+
+it('passes the reviewed connectivity tree through planning and generation with explicit assumed attachments', async () => {
+  const connectivityPlan={nodes:[],edges:[],uniform_hb:6}
+  const api={
+    planGeneratedDesign:vi.fn(async()=>({...plan,selected:{scaffold_size:7249,scaffold_used_nt:2144,unused_scaffold_nt:5105},qualification:'Blunt-end attachments are assumed.'})),
+    generateDesign:vi.fn(async()=>({generation:{connections:[],attachment_mode:'blunt-end-assumed',blunt_end_ports:[{},{},{},{}]}})),
+  }
+  const store={getState:()=>({currentDesign:{nanoparticles:Array.from({length:4},()=>({kind:'gold_nanosphere'}))}})}
+  showGenerateDesign({api,store,connectivityPlan});await flush()
+  expect(api.planGeneratedDesign.mock.lastCall[0].connectivity_plan).toEqual(connectivityPlan)
+  button('Generate in current loadout').click();await flush()
+  expect(api.generateDesign.mock.lastCall[0].connectivity_plan).toEqual(connectivityPlan)
+  expect(document.body.textContent).toContain('4 blunt-end attachment faces')
+  expect(document.body.textContent).toContain('Overhangs and NP binding remain unassigned')
+})

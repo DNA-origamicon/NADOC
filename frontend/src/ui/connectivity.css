@@ -1,0 +1,27 @@
+#connectivity-panel {
+  position: fixed; right: 18px; top: 100px; z-index: 110;
+  width: 370px; max-width: calc(100vw - 36px); max-height: calc(100vh - 125px);
+  overflow: auto; box-sizing: border-box; padding: 14px;
+  color: #e6edf3; background: rgba(13, 17, 23, .96); border: 1px solid #596874;
+  border-radius: 8px; box-shadow: 0 8px 32px #0008; font-size: 12px;
+}
+#connectivity-panel[hidden] { display: none; }
+#connectivity-panel .connectivity-heading { display: flex; justify-content: space-between; align-items: center; font-size: 15px; }
+#connectivity-panel button { color: #e6edf3; background: transparent; border: 0; cursor: pointer; font-size: 22px; }
+#connectivity-panel p { margin: 9px 0; line-height: 1.45; }
+#connectivity-panel label { display: block; }
+#connectivity-panel select { display: block; width: 100%; margin-top: 5px; padding: 5px; background: #202b35; color: #e6edf3; border: 1px solid #596874; }
+#connectivity-panel svg { width: 100%; background: #101820; margin-top: 10px; border-radius: 5px; }
+#connectivity-panel svg[hidden] { display: none; }
+#connectivity-panel text { text-anchor: middle; fill: #e6edf3; font-size: 10px; paint-order: stroke; stroke: #101820; stroke-width: 3px; stroke-linejoin: round; }
+#connectivity-panel .connectivity-split-label { font-size: 9px; }
+#connectivity-panel .connectivity-note { color: #b1bfcb; font-size: 11px; }
+#connectivity-panel .connectivity-warnings { color: #ffcc83; padding-left: 18px; }
+
+#connectivity-panel .connectivity-frame { font-size: 12px; margin-top: 8px; border: 1px solid #596874; border-radius: 4px; padding: 5px 8px; }
+#connectivity-panel .connectivity-frame:disabled { opacity: .4; cursor: default; }
+
+#connectivity-panel .connectivity-path-toggle { display: flex; align-items: center; gap: 7px; margin: 12px 0 8px; cursor: pointer; }
+#connectivity-panel .connectivity-path-toggle input { accent-color: #58d9ce; }
+#connectivity-panel .connectivity-path-controls { padding: 9px; border: 1px solid #405866; border-radius: 5px; }
+#connectivity-panel .connectivity-path-controls[hidden] { display: none; }

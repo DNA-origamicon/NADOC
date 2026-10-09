@@ -114,6 +114,7 @@ import { initStrandLengthHistogram } from './ui/strand_length_histogram.js'
 import { initMolecularPlacementAudit } from './ui/molecular_placement_audit.js'
 import { initExtraBaseMetricsAudit } from './ui/extra_base_metrics_audit.js'
 import { initHullAudit } from './ui/hull_audit.js'
+import { initConnectivity } from './ui/connectivity.js'
 import { initOverhangSequencesPanel } from './ui/overhang_sequences_panel.js'
 import { initOverhangDialog } from './ui/overhang_dialog.js'
 import { initStrandGroupsPanel } from './ui/strand_groups_panel.js'
@@ -6936,6 +6937,8 @@ async function main() {
     subscribe: callback => store.subscribe(callback),
     setMenuToggle: _setMenuToggle,
   })
+
+  initConnectivity({ api, store, scene, camera, controls, setMenuToggle: _setMenuToggle })
 
   // ── Help > Overlay Mode ────────────────────────────────────────────────────
   // A display-only composite: Full remains visible underneath the global

@@ -23,9 +23,13 @@ from backend.core.models import Design, LatticeType
 from backend.core.seamed_router import auto_scaffold_seamed
 
 
+from backend.core.connectivity_generator import ConnectivityInput
+
+
 class GeneratorSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
+    connectivity_plan: ConnectivityInput | None = None
     roll_deg: float = Field(default=0.0, ge=-180, le=180)
     duplex_bp: int = Field(default=18, ge=12, le=60)
     extend_rod: bool = True
@@ -33,9 +37,22 @@ class GeneratorSettings(BaseModel):
     mechanics: Literal[
         "legacy", "beam", "variable", "robust", "fem-linear", "fem-nonlinear", "oxdna"
     ] = "legacy"
-    shape: Literal["auto", "platform", "curved-rod"] = "auto"
+    shape: Literal["auto", "platform", "curved-rod", "branched"] = "auto"
+    branch_geometry: Literal["curved", "lattice"] = "curved"
+    branch_sizing: Literal["optimized", "fixed"] = "optimized"
+    branch_scaffold_size: Literal["auto", 7249, 8064] = "auto"
+    branch_sections: list[list[tuple[int, int]]] | None = None
     particle_order: list[str] | None = None
     pathing: Literal["colocalized", "interior", "exterior"] = "colocalized"
+
+    @classmethod
+    def from_history(cls, values):
+        values = dict(values)
+        if values.get("shape") == "branched":
+            # Missing fields identify runs made before curved forks / sizing.
+            values.setdefault("branch_geometry", "lattice")
+            values.setdefault("branch_sizing", "fixed")
+        return cls(**values)
 
 
 def compatible_particle_handle(design, particle_id, *, exclude=()):

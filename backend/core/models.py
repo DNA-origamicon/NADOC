@@ -1125,6 +1125,18 @@ class Crossover(BaseModel):
     )
 
 
+class CrossoverConstraint(BaseModel):
+    """Allow links between two helix groups only in authored junction windows.
+
+    Forks retain lattice adjacency after their arms separate geometrically.
+    This topology constraint prevents later auto-routing from bridging the split.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    helix_ids_a: List[str]
+    helix_ids_b: List[str]
+    allowed_bp_intervals: List[Tuple[int, int]]
+
+
 class ForcedLigation(BaseModel):
     """Records a manually forced ligation between two strand ends.
 
@@ -3119,6 +3131,7 @@ class Design(BaseModel):
     visibility_state: VisibilityState = Field(default_factory=VisibilityState)
     photoproduct_junctions: List[PhotoproductJunction] = Field(default_factory=list)
     crossovers: List[Crossover] = Field(default_factory=list)
+    crossover_constraints: List[CrossoverConstraint] = Field(default_factory=list)
     forced_ligations: List[ForcedLigation] = Field(default_factory=list)
     camera_poses: List[CameraPose] = Field(default_factory=list)
     animations: List[DesignAnimation] = Field(default_factory=list)

@@ -231,7 +231,10 @@ def validate_design(design: Design) -> ValidationReport:
     # was rewritten onto the driver helix at a mismatched bp; relocation now emits a
     # ForcedLigation (see binding_relax.apply_bind_topology).
     improper_xovers: List[str] = []
+    from backend.core.crossover_positions import crossover_allowed
     for xo in design.crossovers:
+        if not crossover_allowed(design, xo.half_a.helix_id, xo.half_b.helix_id, xo.half_a.index):
+            improper_xovers.append(f"crossover {xo.id!r}: outside the authored branch junction")
         if int(xo.half_a.index) != int(xo.half_b.index):
             improper_xovers.append(
                 f"crossover {xo.id!r}: halves at mismatched bp "

@@ -139,6 +139,20 @@ def sweep_frames(op, local_bps, arm_min_bp, centroid, canonical_tangent):
     """Evaluate one persisted sweep in its owning cluster's rest frame."""
     p = op.params
     bps = np.asarray(local_bps, dtype=float) + arm_min_bp
+    if p.bp_positions_nm is not None:
+        from backend.core.constants import BDNA_RISE_PER_BP
+        positions = np.asarray(p.bp_positions_nm)
+        frames = np.asarray(p.bp_frames).reshape(-1, 3, 3)
+        index = bps - op.plane_a_bp
+        clipped = np.clip(index, 0, len(positions) - 1)
+        out = np.column_stack([
+            np.interp(clipped, np.arange(len(positions)), positions[:, k])
+            for k in range(3)
+        ])
+        matrices = Slerp(np.arange(len(frames)), Rotation.from_matrix(frames))(clipped).as_matrix()
+        tangent = matrices[:, :, 2]
+        out += (index - clipped)[:, None] * tangent * BDNA_RISE_PER_BP
+        return out, matrices, tangent
     step = bps - op.plane_a_bp if p.direction == 1 else op.plane_b_bp - bps
     distances = (step + p.start_step) * p.path_length_nm / p.steps
     positions, matrices, tangents = oriented_sample(p.points_nm, distances, p.initial_tangent,

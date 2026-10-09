@@ -26,6 +26,12 @@ def sweep_strain_vectors(op, tangent):
     """
     p = op.params
     bps = np.arange(op.plane_a_bp, op.plane_b_bp + 1)
+    if p.bp_positions_nm is not None:
+        frames = np.asarray(p.bp_frames).reshape(-1, 3, 3)
+        tangent = frames[:, :, 2]
+        change = np.gradient(tangent, axis=0)
+        # Integrated change of tangent per bp, expressed in the canonical frame.
+        return bps, -np.einsum('nji,nj->ni', frames, change) / RISE
     step = bps - op.plane_a_bp if p.direction == 1 else op.plane_b_bp - bps
     centers = step + p.start_step - (.5 if p.start_step else 0)
     pitch = p.path_length_nm / p.steps

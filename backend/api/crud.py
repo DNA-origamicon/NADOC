@@ -8943,6 +8943,7 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
         lattice_frames=snap_design.lattice_frames,
         strands=snap_design.strands,
         crossovers=snap_design.crossovers,
+        crossover_constraints=snap_design.crossover_constraints,
         overhangs=snap_design.overhangs,
         overhang_connections=snap_design.overhang_connections,
         extensions=snap_design.extensions,

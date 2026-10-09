@@ -231,21 +231,10 @@ def _split_dom(dom: Domain, X: int) -> tuple[Domain, Domain]:
     return a, b
 
 
-def _revd(dm: Domain) -> Domain:
-    return Domain(
-        helix_id=dm.helix_id,
-        start_bp=dm.end_bp,
-        end_bp=dm.start_bp,
-        direction=Direction.FORWARD
-        if dm.direction == Direction.REVERSE
-        else Direction.REVERSE,
-    )
-
-
 def _cut_window_cycle(
     wdoms: list[Domain], helix_id: str, X: int
 ) -> list[Domain] | None:
-    """Linearise the window loop so the chain starts at ``helix_id[X+1]`` and ends at ``helix_id[X]``.
+    """Linearise a window at X|X+1 without reversing scaffold polarity.
 
     ``wdoms`` is the router's window strand in 5'→3' order; its 5'/3' sit on one
     helix at adjacent bp, so it is a loop nicked at one spot.  Find the visit of
@@ -260,13 +249,9 @@ def _cut_window_cycle(
             first, second = (a, b) if dm.direction == Direction.FORWARD else (b, a)
             rest = wdoms[i + 1 :] + wdoms[:i]
             chain = [second] + rest + [first]  # cut between first/second; wrap
-            # ensure chain starts at the X+1 side
-            head = chain[0]
-            if not (
-                head.helix_id == helix_id
-                and (head.start_bp == X + 1 or head.end_bp == X + 1)
-            ):
-                chain = [_revd(d) for d in reversed(chain)]
+            # Preserve each domain's scaffold direction. A reverse-track window
+            # starts at X (forward starts at X+1); reversing its entire cycle
+            # would put scaffold on the staple side and invalidate its crossovers.
             return chain
     return None
 
@@ -417,7 +402,7 @@ def _recompute_helices(design: Design, domains: list[Domain]):
 # ── Entry point ─────────────────────────────────────────────────────────────────
 
 
-def route_sections(design: Design, *, seamless: bool = False):
+def route_sections(design: Design, *, seamless: bool = False, partition=None, splice_intervals=None, splice_parents=None):
     """Route an irregular multi-section design to a single scaffold strand.
 
     ``seamless`` selects the routing style for the sub-bundles and the result type:
@@ -433,7 +418,9 @@ def route_sections(design: Design, *, seamless: bool = False):
         return None  # never override manual anchors
 
     hb = {h.id: h for h in design.helices}
-    trunk_sec, windows = _decompose(design)
+    # Generators may supply an explicit trunk and disjoint branch windows.
+    # Automatic decomposition cannot distinguish a one-window branch from a trunk.
+    trunk_sec, windows = _decompose(design) if partition is None else partition
     if not trunk_sec or not windows:
         return None
 
@@ -475,26 +462,28 @@ def route_sections(design: Design, *, seamless: bool = False):
             # its coverage — bail to the existing router rather than ship a partial.
             return None
         wdoms = list(w_strand.domains)
+        if splice_intervals is not None:
+            lo = max(lo, splice_intervals[wi][0])
+            hi = min(hi, splice_intervals[wi][1])
 
         # window helix nearest the trunk (grid-adjacent to a continuous helix)
-        wh = sorted(w, key=lambda h: tuple(hb[h].grid_pos))[0]
-        rW, cW = hb[wh].grid_pos
-        Tid = next(
-            (
-                ch
-                for ch in sorted(trunk_sec)
-                if any(
-                    _scaf_nb(design, *hb[ch].grid_pos, b) == (rW, cW)
-                    for b in range(lo, hi + 1)
-                )
-            ),
-            None,
-        )
-        if Tid is None:
-            return None  # no trunk-adjacent continuous helix — fall back
-        X = _adj_pair_in_domain(design, hb, Tid, (rW, cW), wh, lo, hi, main_doms, wdoms)
-        if X is None:
+        connection = None
+        for wh in sorted(w, key=lambda h: tuple(hb[h].grid_pos)):
+            for Tid in sorted(splice_parents[wi] if splice_parents is not None else trunk_sec):
+                if not any(_scaf_nb(design, *hb[Tid].grid_pos, b) == hb[wh].grid_pos
+                           for b in range(lo, hi + 1)):
+                    continue
+                X = _adj_pair_in_domain(design, hb, Tid, hb[wh].grid_pos,
+                                        wh, lo, hi, main_doms, wdoms)
+                if X is not None:
+                    connection = wh, Tid, X
+                    break
+            if connection is not None:
+                break
+        if connection is None:
             return None  # no valid in-domain double-pair — fall back
+        wh, Tid, X = connection
+        rW, cW = hb[wh].grid_pos
 
         ti = next(
             i for i, dm in enumerate(main_doms) if dm.helix_id == Tid and _covers(dm, X)

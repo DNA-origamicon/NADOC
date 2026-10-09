@@ -1,0 +1,1 @@
+{"nodes":[{"id":"np:0","kind":"particle","position":[0,0,0],"particleId":"0"},{"id":"np:1","kind":"particle","position":[0,0,100],"particleId":"1"}],"edges":[{"id":"edge:0","source":"np:0","target":"np:1","controlPoints":[[0,0,7],[0,0,19],[0,0,81],[0,0,93]]}],"uniform_hb":6}

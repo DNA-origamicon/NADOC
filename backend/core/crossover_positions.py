@@ -94,6 +94,15 @@ def crossover_neighbor(
     return (row + delta[0], col + delta[1])
 
 
+def crossover_allowed(design: Design, a: str, b: str, bp: int) -> bool:
+    for rule in design.crossover_constraints:
+        if ((a in rule.helix_ids_a and b in rule.helix_ids_b)
+                or (b in rule.helix_ids_a and a in rule.helix_ids_b)):
+            if not any(lo <= bp <= hi for lo, hi in rule.allowed_bp_intervals):
+                return False
+    return True
+
+
 def all_valid_crossover_sites(
     design: Design,
     *,
@@ -136,6 +145,8 @@ def all_valid_crossover_sites(
             nb = crossover_neighbor(design.lattice_type, row, col, index)
             if nb is not None and nb in cell_to_helix:
                 hb = cell_to_helix[nb]
+                if not crossover_allowed(design, h.id, hb.id, index):
+                    continue
                 # Gate on strand occupancy: both helices must have a strand
                 # at this bp index in the appropriate staple direction.
                 if sr is not None:
@@ -378,6 +389,8 @@ def validate_crossover(
         return f"Helix {half_b.helix_id!r} has no grid_pos"
     if half_a.index != half_b.index:
         return f"Crossover indices must match ({half_a.index} ≠ {half_b.index})"
+    if not crossover_allowed(design, ha.id, hb.id, half_a.index):
+        return "Crossover lies outside the authored branch junction."
 
     # Check both staple and scaffold offset tables — a crossover is valid if
     # either table maps half_a's helix to half_b's cell (or vice versa).
