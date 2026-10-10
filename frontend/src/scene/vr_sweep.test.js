@@ -7,7 +7,7 @@ import { createVRSweepCommit } from './vr_sweep_commit.js'
 
 const draft = () => ({ mode: 'sweep', target_kind: 'none', target_identity: null, target_owner_tokens: [],
   painted_footprint: { lattice_type: 'HONEYCOMB', cells: [[0, 0], [0, 1]] }, extrude_from: 'XY',
-  points_nm: [[0, 0, 0], [0, 0, 10], [5, 3, 18]], strand_filter: 'both', ligate_adjacent: true })
+  points_nm: [[2, -1, 1], [0, 0, 10], [5, 3, 18]], strand_filter: 'both', ligate_adjacent: true })
 const design = () => ({ id: 'doc', lattice_type: 'HONEYCOMB', feature_log: [] })
 
 describe('native Sweep transport and canonical desktop plan', () => {
@@ -45,7 +45,7 @@ describe('native Sweep transport and canonical desktop plan', () => {
     expect(result.plan.commit.arguments.source_helix_id).toBeUndefined()
   })
   it.each([
-    { points_nm: [[1, 0, 0], [0, 0, 1]] }, { points_nm: [[0, 0, 0], [NaN, 0, 1]] },
+    { points_nm: [[0, 0, 0], [NaN, 0, 1]] },
     { points_nm: [[0, 0, 0], [0, 10001, 0]] }, { points_nm: Array.from({ length: 257 }, () => [0, 0, 0]) },
     { freeform_placement: {} }, { source_helix_id: 'h1' }, { target_kind: 'end' },
     { painted_footprint: { lattice_type: 'HONEYCOMB', cells: [[10001, 0]] } },

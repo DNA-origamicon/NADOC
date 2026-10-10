@@ -32,7 +32,7 @@ def test_sweep_survives_event_transport_and_binds_action_time_config(tmp_path):
 
 
 @pytest.mark.parametrize('changes', [
-    {'points_nm': [[1, 0, 0], [0, 0, 1]]}, {'points_nm': [[0, 0, 0], [float('nan'), 0, 1]]},
+    {'points_nm': [[0, 0, 0], [float('nan'), 0, 1]]},
     {'points_nm': [[0, 0, 0], [True, 0, 1]]}, {'points_nm': [[0, 0, 0], [10001, 0, 0]]},
     {'points_nm': [[0, 0, 0]] * 257}, {'freeform_placement': {}}, {'source_helix_id': 'helix:1'},
     {'painted_footprint': {'lattice_type': 'HONEYCOMB', 'cells': [[10001, 0]]}},
@@ -75,7 +75,7 @@ def test_native_sweep_s_curve_can_be_edited_in_desktop_history_and_undo_redone()
     # Exercise the actual native draft validator before the same request mapping
     # used by buildVRSweepPlan. The fitted stroke remains ordinary Sweep points.
     raw = draft()
-    raw['points_nm'] = [[0, 0, 0], [5, 1, 5], [0, 2, 10], [-5, 1, 15], [0, 0, 20]]
+    raw['points_nm'] = [[2, -1, 1], [5, 1, 5], [0, 2, 10], [-5, 1, 15], [0, 0, 20]]
     native = _parse_tool_config(raw, 8)
     request = dict(cells=native['painted_footprint']['cells'], points_nm=native['points_nm'],
                    plane=native['extrude_from'], strand_filter=native['strand_filter'],
@@ -106,6 +106,7 @@ def test_native_sweep_s_curve_can_be_edited_in_desktop_history_and_undo_redone()
     # snapshots) before opening the editor, without inventing another mutation.
     state.set_design_silent(Design.model_validate_json(committed.model_dump_json()))
     changed_points = [list(p) for p in entry.params['points_nm']]
+    changed_points[0][0] += 3
     changed_points[2][0] += 3
     changed = {**entry.params, 'points_nm': changed_points}
     # Desktop preview must remain read-only and restore the saved feature's

@@ -85,8 +85,7 @@ export function normalizeVRToolConfig(input) {
         !STRAND_FILTERS.has(input.strand_filter) || typeof input.ligate_adjacent !== 'boolean' ||
         !Array.isArray(input.points_nm) || input.points_nm.length > 256 ||
         input.points_nm.some(point => !Array.isArray(point) || point.length !== 3 ||
-          point.some(v => !Number.isFinite(v) || Math.abs(v) > 10000)) ||
-        input.points_nm[0]?.some(v => v !== 0)) return null
+          point.some(v => !Number.isFinite(v) || Math.abs(v) > 10000))) return null
     const orientations = input.orientations_deg
     if (orientations != null && (!Array.isArray(orientations) || orientations.length !== input.points_nm.length ||
         orientations.some(a => a != null && (!Array.isArray(a) || a.length !== 3 || a.some(v => !Number.isFinite(v) || Math.abs(v) > 360))))) return null

@@ -1,0 +1,45 @@
+import {installAuditBrowserTrace, saveAuditBrowserTrace, importAuditDesign} from './helpers/vr_audit_design.js'
+import { test, expect } from '@playwright/test'
+import { execFileSync } from 'node:child_process'
+import path from 'node:path'
+test.skip(!process.env.NADOC_PHYSICAL_VR_TEST, 'physical runtime opt-in')
+const base = process.env.NADOC_E2E_API_BASE
+let pid
+test.afterEach(async ({ request }) => {
+  const status = await (await request.get(`${base}/api/vr/status`)).json()
+  if (pid && status.pid === pid) await request.post(`${base}/api/vr/stop`)
+})
+test('reach-back independently equips scissors and carries the view tablet without editing', async ({ page, request }, info) => {
+  test.setTimeout(240000)
+  if (process.env.NADOC_VR_FRAME_AUDIT === '1') { const cdp = await page.context().newCDPSession(page); await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: false }) }
+  await page.goto('/?doc=__e2e__quiver&scrywrite=transactions')
+  await page.locator('.menu-item').filter({ hasText: 'File' }).first().hover()
+  await page.click('#menu-file-new')
+  await page.fill('#new-design-name', '__e2e__VR Quiver')
+  await page.getByRole('button', { name: 'Create', exact: true }).click()
+  if (!await importAuditDesign(page, info)) {
+  await page.evaluate(async () => (await import('/src/api/client.js')).createBundle({
+    cells: [[0,0]], lengthBp: 42, plane: 'XY', name: '__e2e__Quiver',
+  }))
+  }
+  const read = () => page.evaluate(async () => (await import('/src/state/store.js')).store.getState().currentDesign)
+  const before = await read()
+  await page.evaluate(() => document.querySelector('#menu-help-view-vr').click())
+  let status
+  await expect.poll(async () => {
+    status = await (await request.get(`${base}/api/vr/status`)).json()
+    if (status.pid) pid = status.pid
+    return status.running && !!status.scrywrite_socket
+  }, { timeout: 30000 }).toBe(true)
+  execFileSync('uv', ['run','python','-m','tools.vr_workflows.nick_probe',status.scrywrite_socket,
+    info.outputPath('quiver'),'quiver'],{cwd:path.resolve(process.cwd(),'..'),env:process.env,timeout:160000,stdio:'inherit'})
+  const after=await read()
+  expect(after.helices).toEqual(before.helices)
+  expect(after.strands).toEqual(before.strands)
+  expect(after.feature_log).toEqual(before.feature_log)
+
+})
+
+// Optional read-only resource-condition evidence for full-size VR audits.
+test.beforeEach(async ({page}) => { await installAuditBrowserTrace(page) })
+test.afterEach(async ({page}, info) => { await saveAuditBrowserTrace(page, info) })

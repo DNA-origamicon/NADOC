@@ -102,3 +102,17 @@ it('exports the committed revision while desktop synchronization is still pendin
   expect(await done).toBe(true)
   expect(h.api.refreshNativeVRScene).toHaveBeenCalledOnce()
 })
+
+it('retries a failed acknowledgement publication without repeating the edit', async () => {
+  const h = fixture()
+  h.api.sendVRLigationEnds.mockResolvedValueOnce(null)
+  const event = { version: h.tool.catalog().version, source: 0, target: 1 }
+  expect(await h.tool.commit(event)).toBe(true)
+  const feedback = h.api.sendVRLigationEnds.mock.calls[0][0]
+  await h.tool.publish()
+  expect(h.api.sendVRLigationEnds).toHaveBeenCalledTimes(2)
+  expect(h.api.sendVRLigationEnds.mock.calls[1][0]).toEqual(feedback)
+  await h.tool.publish()
+  expect(h.api.sendVRLigationEnds).toHaveBeenCalledTimes(2)
+  expect(h.api.forcedLigation).toHaveBeenCalledOnce()
+})

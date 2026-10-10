@@ -39,7 +39,7 @@ int main() {
     assert(control("sweep:free-draw").label=="FREE DRAW");
     assert(control("sweep:bp-info").label=="NEW BP: CALCULATING");
     assert(!control("sweep:bp-info").enabled);
-    assert(!control("sweep:axis:0:0:1").enabled && control("sweep:axis:1:0:1").enabled);
+    assert(control("sweep:axis:0:0:1").enabled && control("sweep:axis:1:0:1").enabled);
     assert(control("sweep:axis:1:2:value").label=="Z 10.00");audit();
     for(int i=0;i<9;++i)draft.addPoint();
     refresh();

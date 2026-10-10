@@ -19,3 +19,11 @@ it('explains the same layout prerequisites as the desktop',async()=>{
   expect(viewToolUnavailable('cadnano2d',straight)).toContain('not available in VR')
   expect(viewToolUnavailable('deform',{...posed,unfoldActive:true})).toContain('desktop 2D')
 })
+
+it('encodes lit surfaces with normals and unlit lines as schema 5',async()=>{
+  const vertices=new Float32Array([1,2,3,1,.5,.2,1,-1,-1,0,1,0])
+  const blob=encodeVRView({schema:5,flags:257,triangles:new Float32Array([...vertices,...vertices,...vertices]),lines:new Float32Array(),sprites:new Float32Array(),pixels:new Uint8Array(16),width:2,height:2},10)
+  const buffer=await new Promise(resolve=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.readAsArrayBuffer(blob)}),header=new Uint32Array(buffer,8,10)
+  expect([...header.slice(0,5)]).toEqual([5,10,257,3,0])
+  expect([...new Float32Array(buffer,48+9*4,3)]).toEqual([0,1,0])
+})

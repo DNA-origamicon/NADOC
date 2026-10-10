@@ -78,14 +78,15 @@ def run(socket, output, action):
             reach(behind.tolist(),holster)
             assert live.state['ligation']['quiver']['sequence']==seq+1
             assert live.state['view_tools']['open']==(action=='equip')
+            assert live.state['view_tools']['following']==(action=='equip')
             assert live.state['ligation']['nick_active']==nick,'Left gesture changed scissors'
             dwell(.6)
             assert live.state['ligation']['quiver']['sequence']==seq+1
             reach(front.tolist(),q)
+            assert live.state['view_tools']['following']==(action=='equip'), 'Tablet attachment changed after returning in front'
             if action=='equip':
-                # Quiver opens at the invoking controller pose, which is behind
-                # the head here. Bring its actual border into the review view
-                # using a normal grip; do not alter head tracking or the panel.
+                # The tablet still follows the left hand. Explicitly place
+                # its actual border only to frame the subsequent tile checks.
                 from scipy.spatial.transform import Rotation
                 live.capture_to(out/'quiver-open-before-framing',discard_source=True)
                 centers=np.array([item['center'] for item in live.state['view_tools']['items']])
@@ -96,16 +97,62 @@ def run(socket, output, action):
                 panel_q=Rotation.from_matrix(np.column_stack((right_axis,up_axis,normal))).as_quat().tolist()
                 # The mean tile center is 104/768 above the content center.
                 center=centers.mean(axis=0)-up_axis*width*(104/768)
+                dock=center+right_axis*width*(184/768-.5)+up_axis*width*(.5-652/768)
+                reach((dock+normal*.22).tolist(),panel_q,hand=1)
+                live.button('trigger',hand=1);live.frame()
+                assert not live.state['view_tools']['following'], 'Dock button did not freeze tablet'
                 border=center+right_axis*width*.565
-                reach((border+rotate(panel_q,[0,0,.12])).tolist(),panel_q)
-                live.send('button',hand=0,button='grip',pressed=True);live.frame()
+                reach((border+rotate(panel_q,[0,0,.12])).tolist(),panel_q,hand=1)
+                live.send('button',hand=1,button='grip',pressed=True);live.frame()
                 destination=head+rotate(q,[-.25,.08,-.60])
                 try:
-                    reach((destination+rotate(q,[width*.565,0,.12])).tolist(),q)
+                    reach((destination+rotate(q,[width*.565,0,.12])).tolist(),q,hand=1)
                 finally:
-                    live.send('button',hand=0,button='grip',pressed=False);live.frame()
+                    live.send('button',hand=1,button='grip',pressed=False);live.frame()
                 (out/'tablet-framing.json').write_text(json.dumps({'initial_center':center.tolist(),
                     'destination':destination.tolist(),'policy':'ordinary border grip; orientation derived from live tile positions'},indent=2))
+        elif action=='controls':
+            from scipy.spatial.transform import Rotation
+            def geometry():
+                centers=np.array([item['center'] for item in live.state['view_tools']['items']])
+                across=centers[1]-centers[0];down=centers[2]-centers[0]
+                width=np.linalg.norm(across)/(376/768)
+                right=across/np.linalg.norm(across);up=-down/np.linalg.norm(down);normal=np.cross(right,up)
+                q=Rotation.from_matrix(np.column_stack((right,up,normal))).as_quat().tolist()
+                center=centers.mean(axis=0)-up*width*(104/768)
+                return center,right,up,normal,width,q
+            evidence,_=live.capture_to(out/'controls-before',discard_source=True)
+            head=np.mean([e['position'] for e in evidence['eyes']],axis=0)
+            eyeq=evidence['eyes'][0]['orientation_xyzw']
+            forward=rotate(eyeq,[0,0,-1]);forward[1]=0;forward/=np.linalg.norm(forward)
+            side=np.cross(forward,[0,1,0]);holster=multiply(eyeq,[np.sin(3*np.pi/8),0,0,np.cos(3*np.pi/8)])
+            def shoulder(hand):
+                sign=1 if hand else -1
+                reach((head+side*.28*sign+forward*.4+[0,-.1,0]).tolist(),eyeq,hand=hand)
+                reach((head+side*.28*sign-forward*.28+[0,.08,0]).tolist(),holster,hand=hand)
+            def button_at(x,y):
+                center,right,up,normal,width,q=geometry()
+                point=center+right*width*(x/768-.5)+up*width*(.5-y/768)
+                reach((point+normal*.22).tolist(),q,hand=1,acquired=(lambda s:s['view_tools']['close_hover'][1]) if x==682 else None)
+                live.capture_to(out/f'pointer-{len(trials)}-{x}-{y}',discard_source=True)
+                live.button('trigger',hand=1);live.frame()
+            for hand,button in [(1,'trigger'),(0,'grip')]:
+                assert live.state['view_tools']['open'] and not live.state['view_tools']['following']
+                center,right,up,normal,width,q=geometry()
+                border=center+right*width*.565
+                reach((border+normal*(.3 if button=='trigger' else .12)).tolist(),q,hand=hand)
+                live.send('button',hand=hand,button=button,pressed=True);live.frame()
+                try:shoulder(hand)
+                finally:live.send('button',hand=hand,button=button,pressed=False);live.frame()
+                assert not live.state['view_tools']['open'], f'{button} shoulder dismissal failed'
+                live.capture_to(out/f'dismissed-{button}',discard_source=True)
+                shoulder(0)
+                reach((head-side*.28+forward*.4+[0,-.1,0]).tolist(),eyeq,hand=0)
+                assert live.state['view_tools']['following']
+                button_at(184,652)
+                assert not live.state['view_tools']['following']
+            button_at(682,30)
+            assert not live.state['view_tools']['open'], 'Close button failed'
         else:
             i=int(action);v=live.state['view_tools'];assert v['open']
             p=np.array(v['items'][i]['center'])
@@ -118,7 +165,7 @@ def run(socket, output, action):
             wait(lambda s:s['view_tools']['ack_sequence']>=expected_sequence and not s['view_tools']['waiting'])
         live.capture_to(out/'after',discard_source=True)
         from tools.vr_workflows.view_tools_pixels import check
-        if action!='stow':
+        if action not in ('stow','controls'):
             assert check(out/'after')['passed'], 'Tablet missing from stereo/mirror pixels'
             assert not check(out/'after',offscreen=True)['passed']
         else:

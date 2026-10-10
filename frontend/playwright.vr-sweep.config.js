@@ -7,6 +7,7 @@ process.env.NADOC_E2E_API_BASE ??= `http://127.0.0.1:${process.env.SCRYWRITE_BAC
 export default defineConfig({
   ...isolated,
   testDir: './e2e',
+  globalTeardown: './e2e/global-teardown.js',
   testMatch: 'vr_sweep.spec.js',
   timeout: 360_000,
   globalTimeout: 420_000,

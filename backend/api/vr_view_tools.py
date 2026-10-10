@@ -13,7 +13,7 @@ def validate_and_rotate(data, rotation):
     if len(data)<48 or data[:8]!=b'NADOCVT1':
         raise HTTPException(422,detail='Invalid VR display header')
     schema,version,flags,triangles,lines,sprites,width,height,batches,ack=struct.unpack_from('<10I',data,8)
-    if schema!=4 or version<1 or (flags>=4096 or flags&(128|512|1024)) or triangles%3 or lines%2 or triangles+lines>4000000 or sprites>100000 or batches>10000 or width!=2048 or height!=2048 or len(data)>MAX_BYTES:
+    if schema not in (4,5) or version<1 or (flags>=4096 or flags&(128|512|1024)) or triangles%3 or lines%2 or triangles+lines>4000000 or sprites>100000 or batches>10000 or width!=2048 or height!=2048 or len(data)>MAX_BYTES:
         raise HTTPException(422,detail='Invalid VR display dimensions')
     r=np.asarray(rotation,dtype=float)
     if r.shape!=(3,3) or not np.isfinite(r).all():raise HTTPException(422,detail='Invalid VR view rotation')
@@ -26,7 +26,9 @@ def validate_and_rotate(data, rotation):
         offset=end
         if not np.isfinite(a).all() or np.max(np.abs(a),initial=0)>1e9:raise HTTPException(422,detail='Invalid VR display values')
         return a
-    vertices=values(triangles+lines,9);vertices[:,:3]=vertices[:,:3]@r.T
+    stride=12 if schema==5 else 9
+    vertices=values(triangles+lines,stride);vertices[:,:3]=vertices[:,:3]@r.T
+    if schema==5:vertices[:,9:12]=vertices[:,9:12]@r.T
     labels=values(sprites,15);labels[:,:3]=labels[:,:3]@r.T
     total_vertices=triangles+lines;total_instances=0
     for _ in range(batches):
@@ -35,7 +37,7 @@ def validate_and_rotate(data, rotation):
         total_vertices+=nv;total_instances+=ni
         if nv%3 or not nv or not ni or total_vertices>4000000 or total_instances>1000000:
             raise HTTPException(422,detail='Invalid VR mesh dimensions')
-        values(nv,9)  # shared local geometry; rotate instance transforms instead
+        values(nv,stride)  # shared local geometry; rotate instance transforms instead
         instances=values(ni,20)
         matrix=instances[:,:16].reshape((-1,4,4))  # column-major columns
         matrix[:,:,:3]=matrix[:,:,:3]@r.T

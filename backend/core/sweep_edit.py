@@ -21,7 +21,7 @@ def restore_follow_poses(design, snapshot):
 
 
 class SweepEdit:
-    def __init__(self, created, rebuilt, sweep_id, attachments=(), resized=()):
+    def __init__(self, created, rebuilt, sweep_id, attachments=(), resized=(), detach_sources=()):
         self.old = next(o for o in created.deformations if o.id == 'sweep_' + sweep_id)
         self.new = next(o for o in rebuilt.deformations if o.id == self.old.id)
         self.ids = set(self.old.affected_helix_ids)
@@ -34,6 +34,7 @@ class SweepEdit:
             if source in self.ids or source in self.shifts:
                 shift = self.site(bp) - bp if source in self.ids else self.shifts[source]
                 self.shifts.update({hid: shift for hid in members})
+        self.detach_sources = set(detach_sources)
         self.resized = resized
         self.warnings = set()
 
@@ -92,6 +93,10 @@ class SweepEdit:
     def rebase(self, design):
         if not any(o.id == self.old.id for o in design.deformations):
             return design
+        if self.detach_sources:
+            from backend.core.sweep_detach import detach_sweep_source
+            design = detach_sweep_source(design, self.ids, self.detach_sources)
+            self.warnings.add('Sweep detached from its source; connecting strands were split and source helices retained.')
         pins = {}
         # Explicit terminal resizing keeps its offset from the original end,
         # including a trimmed end inside the generated span.

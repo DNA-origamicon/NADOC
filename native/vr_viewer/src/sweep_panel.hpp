@@ -58,7 +58,7 @@ class SweepPanel {
             row("bp-info","NEW BP: "+totalBp);
             for(size_t i=0;i<draft.pointsNm.size();++i) {
                 const auto id=std::to_string(i);
-                row("point:"+id,i==0?"ORIGIN - FIXED":"POINT "+id,i==draft.selected?"SELECTED":"");
+                row("point:"+id,i==0?"ORIGIN":"POINT "+id,i==draft.selected?"SELECTED":"");
                 row("direction:"+id,draft.directionControlled(i)?"DIR ON":"DIR OFF");
                 for(int axis=0;axis<3;++axis) {
                     const auto prefix="axis:"+id+":"+std::to_string(axis);

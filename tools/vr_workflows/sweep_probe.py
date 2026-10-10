@@ -358,9 +358,36 @@ def run(socket, output):
             controls.click(f'sweep:axis:{selected}:1:1')
             numeric_after = float(live.state['sweep']['points_nm'][selected][1])
             assert numeric_after > numeric_before
-            assert live.state['sweep']['points_nm'][0] == [0, 0, 0]
             wait(lambda state: state['sweep']['ready'])
             capture(f'fitted-xyz-after-{preset}')
+            # The origin uses the same trigger gesture as every other knot.
+            controls.click('sweep:point:0')
+            # Clear the floating panel from the origin ray before measured motion.
+            if live.state['sidebars'][1]['open']:
+                live.button('menu', hand=1)
+                wait(lambda state: not state['sidebars'][1]['open'])
+            before_origin = np.asarray(live.state['sweep']['points_nm'])
+            target_origin = np.asarray(live.state['sweep']['points_world'][0])
+            hand_origin = target_origin + .25*(head-target_origin)/np.linalg.norm(head-target_origin)
+            origin_direction = aim_orientation(hand_origin.tolist(), target_origin.tolist())
+            pose(hand_origin, origin_direction)
+            wait(lambda state: state['sweep']['hover_point'] == 0)
+            live.send('button', hand=1, button='trigger', pressed=True)
+            live.frame()
+            assert live.state['sweep']['dragging'] and live.state['sweep']['selected'] == 0
+            destination_origin = hand_origin + rotate(q, [.04, .015, 0])
+            origin_drag = reach_target(live, destination_origin.tolist(), preset, 7250,
+                target_position=destination_origin.tolist(), target_orientation=origin_direction)
+            live.send('button', hand=1, button='trigger', pressed=False)
+            live.frame()
+            wait(lambda state: state['sweep']['ready'])
+            after_origin = np.asarray(live.state['sweep']['points_nm'])
+            assert np.linalg.norm(after_origin[0]-before_origin[0]) > .1
+            assert np.array_equal(after_origin[1:], before_origin[1:])
+            capture(f'origin-dragged-{preset}')
+            (output/f'origin-drag-{preset}.json').write_text(json.dumps({
+                'before_nm': before_origin.tolist(), 'after_nm': after_origin.tolist(),
+                'reach': origin_drag}, indent=2))
             # Grip the fitted point, rotate through normal profile input, and
             # verify orientation is snapped in the starting frame, with XYZ fixed.
             if live.state['sidebars'][1]['open']:

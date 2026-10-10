@@ -578,10 +578,13 @@ constexpr const char* kLitFragmentSource = R"GLSL(
         return visibility / 9.0;
     }
 
+    float sceneLighting(vec3 normal) {
+        return 0.20 + 0.90 * max(dot(normal,uLightDirection),0.0) * shadowVisibility(normal);
+    }
     void main() {
         vec3 normal = normalize(vNormal) * (vTwoSided != 0 && !gl_FrontFacing ? -1.0 : 1.0);
         float diffuse = max(dot(normal, uLightDirection), 0.0);
-        float lighting = 0.20 + 0.90 * diffuse * shadowVisibility(normal);
+        float lighting = sceneLighting(normal);
         lighting = mix(lighting, 1.0, uEmissive);
         outObjectId = vObjectId;
         vec3 shaded = vColor * lighting;
@@ -2831,19 +2834,21 @@ class GlScene {
     bool motionDetailReduced() const { return motionDetail_.reduced; }
 
     void renderShadowMap(const glm::mat4& modelTransform, const nadoc_vr::ShadowLightFrame& light,
-                         const nadoc_vr::ShadowLightFrame* stabilized = nullptr) {
+                         const nadoc_vr::ShadowLightFrame* stabilized = nullptr,
+                         const std::function<void(const glm::mat4&)>& displayShadow = {},
+                         std::optional<nadoc_vr::BoundsSummary> displayBounds = std::nullopt) {
         nadoc_vr::CalculationScope auditScope("renderShadowMap");
         lightDirection_ = glm::normalize(light.direction);
         motionDetail_.beginFrame(!toolPreviewToken_.empty());
         if (motionDetail_.reduced) { nadoc_vr::CalculationScope reduced("motionDetail"); return; }
         const glm::vec3 worldCenter = glm::vec3(
-            modelTransform * glm::vec4(localCenter_, 1.0F));
+            modelTransform * glm::vec4(displayBounds?displayBounds->center:localCenter_, 1.0F));
         const float modelScale = std::max({
             glm::length(glm::vec3(modelTransform[0])),
             glm::length(glm::vec3(modelTransform[1])),
             glm::length(glm::vec3(modelTransform[2])),
         });
-        const float radius = std::max(localRadius_ * modelScale * 1.08F, 0.02F);
+        const float radius = std::max((displayBounds?displayBounds->radius:localRadius_) * modelScale * 1.08F, 0.02F);
         const auto& projectionLight = stabilized ? *stabilized : light;
         const glm::vec3 eye = worldCenter + glm::normalize(projectionLight.direction) * (2.0F * radius);
         lightViewProjection_ = glm::ortho(
@@ -2862,6 +2867,8 @@ class GlScene {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, 0);
 
+        if(displayShadow)displayShadow(lightViewProjection_);
+        else {
         auto shadowUniforms = [&](GLuint program, GLint projection, GLint model,
                                   GLint lightProjection, GLint lightDirectionUniform) {
             glUseProgram(program);
@@ -2902,10 +2909,18 @@ class GlScene {
             glDrawElementsInstanced(
                 GL_TRIANGLES, boxDrawCount(), GL_UNSIGNED_SHORT, boxDrawOffset(), boxCount_);
         }
+        }
         glDisable(GL_POLYGON_OFFSET_FILL);
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glBindVertexArray(0);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    void bindDisplayLighting(GLuint program) const {
+        glUseProgram(program);
+        applyLightingUniforms(glGetUniformLocation(program,"uLightViewProjection"),
+            glGetUniformLocation(program,"uLightDirection"),glGetUniformLocation(program,"uShadowMap"),
+            glGetUniformLocation(program,"uShadowsEnabled"));
     }
 
     ~GlScene() {
@@ -6658,6 +6673,51 @@ class Viewer {
         return !bendPanel_.selecting && std::abs(bendPanel_.twist?toolConfig_.twistAmount():toolConfig_.bendAngleDegrees())>1e-6;
     }
 
+    bool holdsViewTools(size_t hand) const {
+        return viewTools_.open && (viewTools_.placement.dragHand()==hand ||
+            remotePanels_.owns(viewTools_.placement,hand) ||
+            (viewTools_.placement.resizeActive() && gripPressed_[hand]));
+    }
+    void closeViewTools() {
+        if(remotePanels_.active==&viewTools_.placement)remotePanels_.cancel();
+        viewTools_.close();suppressManipulationUntilRelease_=true;
+    }
+    const char* quiverBlockReason(size_t hand,bool tracked) const {
+        if(!tracked || !hands_[hand].valid)return "tracking";
+        if(sessionState_!=XR_SESSION_STATE_FOCUSED)return "focus";
+        if(startup_.active || placementIntegrity_.blocked())return "scene_unavailable";
+        if(controllerPrompt_.active() || routingPopup_.anyOpen())return "modal";
+        if(inputResumeBlocked_[hand])return "release_after_focus";
+        if(holdsViewTools(hand) && !trackpadPressed_[hand])return "";
+        if(triggerPartial_[hand] || gripPressed_[hand] || trackpadPressed_[hand])return "release_buttons";
+        // The left shortcut only opens/stows a display panel; an idle sidebar,
+        // modeling tool or pending edit on the other hand must not disable it.
+        if(hand==0)return "";
+        if(ligation_.waiting || endResize_.waitingVersion || toolShell_.executionPending() || moveAwaitRefresh_)return "pending_edit";
+        if(ligation_.hand || endResize_.hand || gripPressed_[0] || triggerPartial_[0] || trackpadPressed_[0])return "other_hand_busy";
+        if(movePanel_.active || volumePanel_.active || dimensionPanel_.tool.active ||
+           extrudePanel_.active || bendPanel_.active || sweepPanel_.active || latticeOpen_)return "finish_modeling_tool";
+        return "";
+    }
+
+    bool processQuiver(bool tracked,double now) {
+        std::array<bool,2> enabled{};
+        for(size_t h=0;h<2;++h) {
+            quiverBlocked_[h]=quiverBlockReason(h,tracked);
+            enabled[h]=!*quiverBlocked_[h];
+        }
+        if(tracked && sessionState_==XR_SESSION_STATE_FOCUSED && !controllerPrompt_.active() && !inputResumeBlocked_[0])
+            viewTools_.updateFollowing(hands_);
+        if(const auto hand=quiver_.update(hands_,witnessObserverPosition_,witnessObserverOrientation_,now,enabled)) {
+            if(holdsViewTools(*hand)){closeViewTools();inputResumeBlocked_[*hand]=true;}
+            else if(*hand==1)activateEditTool(1);
+            else viewTools_.toggleFromQuiver(hands_);
+            pulse(*hand,(*hand==1?ligation_.nickActive:viewTools_.open)?.55F:.25F);
+            return true;
+        }
+        return false;
+    }
+
     void activateRadialEdit(size_t item) {
         if(sweepPanel_.active) {
             if(sweepDraft_.step==2)activateSweepAction(item==0?"sweep:delete-last-point":"sweep:add-point",1);
@@ -6672,6 +6732,12 @@ class Viewer {
             }
             return;
         }
+        activateEditTool(item);
+    }
+
+    // Shoulder access has fixed semantics; only the radial wheel remaps its
+    // entries to Bend/Sweep actions while those tools are active.
+    void activateEditTool(size_t item) {
         if(!nadoc_vr::radialEditEnabled(item) || toolShell_.executionPending() || ligation_.waiting || endResize_.waitingVersion)return;
         if(item>=2) {
             if(!ligation_.version)return;
@@ -7005,18 +7071,16 @@ class Viewer {
             line(origin, tip, color);
             line(tip - right * 0.008F, tip + right * 0.008F, color);
             line(tip - up * 0.008F, tip + up * 0.008F, color);
-            if (const auto p = desktopPanel_.hit(hands_[hand])) line(tip,desktopPanel_.placement.worldPoint(*p),color*.55F);
-            if(remotePanels_.rayPoints[hand])line(tip,*remotePanels_.rayPoints[hand],color*.55F);
-            else if (const auto hit = routingPopup_.anyOpen()?routingPopup_.rayEndpoint(hands_[hand]):sidebarMenus_.rayEndpoint(hands_[hand])) {
-                line(tip, *hit, color * 0.55F);
-            }
-            if (latticeOpen_ && hand == 1U) {
-                if (const auto panelHit = latticePlacement_.rayPanelLocalPoint(
-                        hands_[hand], kLatticePanelBounds.minimum,
-                        kLatticePanelBounds.maximum)) {
-                    line(tip, latticePlacement_.worldPoint(*panelHit), color * 0.55F);
-                }
-            }
+            std::optional<glm::vec3> beamEnd=remotePanels_.rayPoints[hand];
+            auto beam=[&](std::optional<glm::vec3> p){
+                if(p && (!beamEnd || glm::distance(origin,*p)<glm::distance(origin,*beamEnd)))beamEnd=p;
+            };
+            beam(viewTools_.rayEndpoint(hands_[hand]));
+            if(const auto p=desktopPanel_.hit(hands_[hand]))beam(desktopPanel_.placement.worldPoint(*p));
+            beam(routingPopup_.anyOpen()?routingPopup_.rayEndpoint(hands_[hand]):sidebarMenus_.rayEndpoint(hands_[hand]));
+            if(latticeOpen_ && hand==1U)if(const auto p=latticePlacement_.rayPanelLocalPoint(
+                hands_[hand],kLatticePanelBounds.minimum,kLatticePanelBounds.maximum))beam(latticePlacement_.worldPoint(*p));
+            if(beamEnd)line(tip,*beamEnd,color*.55F);
             const glm::vec3 sphereColor = triggerPartial_[hand]
                 ? glm::mix(color, glm::vec3(1.0F), 0.35F) : color * 0.52F;
             const float radius = selectionVolumes_[hand].radius();
@@ -8266,6 +8330,8 @@ class Viewer {
         }
         const auto moveCenter=glScene_?glScene_->ownerHandle(selectedOwnerTokens_,manipulator_.transform()):std::nullopt;
         out << "],\"qr_calibration\":" << qrCalibration_.json() << ",\"room_floor\":" << roomFloor_.json() << ",\"menu_glass\":{\"enabled\":true,\"gray_opacity\":0.10,\"blur_radius_px\":15},\"view_tools\":{\"open\":" << (viewTools_.open?"true":"false") << ",\"waiting\":" << (viewTools_.waiting?"true":"false")
+            << ",\"close_hover\":[" << (viewTools_.closeHover[0]?"true":"false") << ',' << (viewTools_.closeHover[1]?"true":"false") << "]"
+            << ",\"following\":" << ((viewTools_.open && !viewTools_.placement.worldDocked())?"true":"false")
             << ",\"sequence\":" << viewTools_.sequence << ",\"ack_sequence\":" << viewTools_.acknowledged << ",\"version\":" << viewTools_.version << ",\"flags\":" << viewTools_.flags << ",\"triangles\":" << viewTools_.triangles.size()/3
             << ",\"parse_ms\":" << viewTools_.parseMs << ",\"upload_ms\":" << viewTools_.uploadMs << ",\"instances\":" << viewTools_.instanceCount() << ",\"lines\":" << viewTools_.lines.size()/2 << ",\"sprites\":" << viewTools_.sprites.size() << ",\"hover\":[" << viewTools_.hover[0] << ',' << viewTools_.hover[1] << "],\"items\":[";
         for(size_t i=0;i<VRViewTools::keys.size();++i){if(i)out<<',';out<<"{\"key\":"<<quote(VRViewTools::keys[i])<<",\"active\":"<<((viewTools_.flags&(1<<(i<7?i:i+1)))?"true":"false")<<",\"center\":"<<point(viewTools_.world(VRViewTools::cell(i)))<<'}';}
@@ -8305,7 +8371,8 @@ class Viewer {
         }
         out << "],\"quiver\":{\"sequence\":" << quiver_.sequence
             << ",\"armed\":[" << (quiver_.armed[0]?"true":"false") << ',' << (quiver_.armed[1]?"true":"false")
-            << "],\"inside\":[" << (quiver_.inside[0]?"true":"false") << ',' << (quiver_.inside[1]?"true":"false") << "]}"
+            << "],\"blocked\":[" << quote(quiverBlocked_[0]) << ',' << quote(quiverBlocked_[1]) << "]"
+            << ",\"inside\":[" << (quiver_.inside[0]?"true":"false") << ',' << (quiver_.inside[1]?"true":"false") << "]}"
             << ",\"nick_active\":" << (ligation_.nickActive?"true":"false") << ",\"nick_hover\":[";
         for(size_t h=0;h<2;++h){if(h)out<<',';out<<(ligation_.nickHover[h]?std::to_string(*ligation_.nickHover[h]):"null");}
         out << "],\"scissor_angles\":[" << nadoc_vr::Ligation::scissorAngle(triggerValues_[0]) << ',' << nadoc_vr::Ligation::scissorAngle(triggerValues_[1]) << "],\"bonds\":[";
@@ -9132,9 +9199,11 @@ class Viewer {
         if(viewTools_.poll(eventPath_,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters})) {
         }
         for(size_t h=0;h<2;++h)menuControlTargeted[h]=menuControlTargeted[h]||menuGripTargeted[h];
+        const bool viewWasOpen=viewTools_.open;
         viewTools_.input(hands_,triggerClicked_,menuControlTargeted,[&](size_t hand){publishEventState();pulse(hand,.3F);});
         // Alternate layouts have different positions from canonical edit targets.
         // Keep tablet input and world manipulation, but never cut an unseen bond.
+        if(viewWasOpen && !viewTools_.open)closeViewTools();
         if(viewTools_.inspectionLayout()) menuControlTargeted.fill(true);
         frameAudit_.mark("feeds_view_tools");
         ligation_.poll(eventPath_,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters});
@@ -9792,12 +9861,18 @@ class Viewer {
             *toolConfig_.planeABp()<*toolConfig_.planeBBp() &&
             !viewTools_.overrideScene() && !toolShell_.executionPending();
     }
+    void renderSceneShadow(const nadoc_vr::ShadowLightFrame& light) {
+        const auto model=manipulator_.transform();
+        if(viewTools_.inspectionLayout())glScene_->renderShadowMap(model,light,nullptr,
+            [&](const glm::mat4& lightVP){viewTools_.renderScene(lightVP,model,witnessObserverOrientation_,true);},viewTools_.sceneBounds());
+        else glScene_->renderShadowMap(model,light);
+    }
     void renderVolumeScene(const glm::mat4& vp,const glm::mat4& model,const std::vector<Vertex>& guides,bool ids=false) {
         if(placementIntegrity_.blocked())return;
         auto arc=bendPanel_.arc;
         if(bendPanel_.twist)arc.angle=glm::radians(float(toolConfig_.twistTotalDegrees()));
         glScene_->setBendPointArc(bendPointPreviewActive()?std::optional{arc}:std::nullopt,bendPanel_.twist);
-        if(viewTools_.overrideScene()) {viewTools_.renderScene(vp,model,witnessObserverOrientation_);if(!guides.empty())glScene_->renderGuides(vp,guides);}
+        if(viewTools_.overrideScene()) {glScene_->bindDisplayLighting(viewTools_.program);viewTools_.renderScene(vp,model,witnessObserverOrientation_);if(!guides.empty())glScene_->renderGuides(vp,guides);}
         else glScene_->renderVolumes(vp,model,guides,ids,volumePanel_.entries,representationLoading_.pending && representationLoading_.lightweight);
         referenceModels_.render(vp,model);
     }
@@ -10469,21 +10544,8 @@ class Viewer {
                 witnessObserverOrientation_ = glm::normalize(glm::quat(
                     views_[0].pose.orientation.w, views_[0].pose.orientation.x,
                     views_[0].pose.orientation.y, views_[0].pose.orientation.z));
-                const bool quiverEnabled=validViewSet && positionTracked && orientationTracked &&
-                    sessionState_==XR_SESSION_STATE_FOCUSED &&
-                    !sidebarMenus_.menus[0].open && !sidebarMenus_.menus[1].open && !radialToolMenu_.open() &&
-                    !ligation_.waiting && !endResize_.waitingVersion && !toolShell_.executionPending() &&
-                    !ligation_.hand && !endResize_.hand && !movePanel_.active && !volumePanel_.active &&
-                    !dimensionPanel_.tool.active && !latticeOpen_ &&
-                    !triggerPartial_[0] && !triggerPartial_[1] && !gripPressed_[0] && !gripPressed_[1] &&
-                    !trackpadPressed_[0] && !trackpadPressed_[1];
-                if(const auto hand=quiver_.update(hands_,witnessObserverPosition_,witnessObserverOrientation_,
-                        double(frameState.predictedDisplayTime)/1e9,quiverEnabled)) {
-                    if(*hand==1)activateRadialEdit(1);
-                    else viewTools_.toggle(hands_[*hand].position,hands_[*hand].orientation);
-                    pulse(*hand,(*hand==1?ligation_.nickActive:viewTools_.open)?.55F:.25F);
-                    updateControllerGuides();
-                }
+                if(processQuiver(validViewSet && positionTracked && orientationTracked,
+                                 double(frameState.predictedDisplayTime)/1e9)) updateControllerGuides();
                 const XrQuaternionf& head = views_[0].pose.orientation;
                 const glm::quat headOrientation(head.w, head.x, head.y, head.z);
                 if (frameState.shouldRender && validViewSet) {
@@ -10497,10 +10559,10 @@ class Viewer {
                     if (witness_) {
                         const auto actorKeyLight = witnessShadowLight_.update(
                             witness_->input().head.orientation);
-                        if(!placementIntegrity_.blocked())glScene_->renderShadowMap(manipulator_.transform(), actorKeyLight);
+                        if(!placementIntegrity_.blocked())renderSceneShadow(actorKeyLight);
                         captureWitnessView();
                     }
-                    if(!placementIntegrity_.blocked() && !representationLoading_.lightweight)glScene_->renderShadowMap(manipulator_.transform(), keyLight);
+                    if(!placementIntegrity_.blocked() && !representationLoading_.lightweight)renderSceneShadow(keyLight);
                     traceRender("shadow");
                     for (uint32_t offset = 0; offset < viewCount; ++offset) {
                         const auto i=nadoc_vr::spectatorRenderViewIndex(mirrorEye_,offset,viewCount);
@@ -10520,10 +10582,10 @@ class Viewer {
                     if (witness_) {
                         const auto actorKeyLight = witnessShadowLight_.update(
                             witness_->input().head.orientation);
-                        if(!placementIntegrity_.blocked())glScene_->renderShadowMap(manipulator_.transform(), actorKeyLight);
+                        if(!placementIntegrity_.blocked())renderSceneShadow(actorKeyLight);
                         captureWitnessView();
                     }
-                    if(!placementIntegrity_.blocked() && !representationLoading_.lightweight)glScene_->renderShadowMap(manipulator_.transform(), keyLight);
+                    if(!placementIntegrity_.blocked() && !representationLoading_.lightweight)renderSceneShadow(keyLight);
                     const auto selected = nadoc_vr::spectatorMirrorViewIndex(
                         mirrorEye_, viewCount);
                     if (selected) {
@@ -10949,6 +11011,7 @@ class Viewer {
     mutable glm::mat4 liveBondModel_{1};
     mutable std::string liveBondCatalog_;
     nadoc_vr::QuiverGesture quiver_;
+    std::array<const char*,2> quiverBlocked_{"tracking","tracking"};
     std::string ligationPreviousLevel_="default";
     nadoc_vr::EndResize endResize_;
     std::string eventPath_;

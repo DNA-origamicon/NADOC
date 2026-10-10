@@ -21,6 +21,14 @@ def catalog():
     def add(identifier, group, title, description, args=(), module='menu_tour', runnable=True):
         tours.append(dict(id=identifier, group=group, title=title, description=description,
                           module=module, args=list(args), runnable=runnable))
+    add('tablet-controls', 'interaction', 'View tablet · grab, stow and close',
+        'Physical controller tour: Dock, shared trigger/grip border movement, shoulder dismissal and Close. Validation uses all four motion profiles.', module='tablet_controls_tour')
+    add('quiver', 'interaction', 'Reach-back · scissors and view tablet',
+        'Isolated physical viewer: equip/stow scissors, carry the left tablet forward, verify both-eye and mirror pixels, and preserve topology. Validation uses all four motion profiles. This focuses on shoulder access; full Nick cutting and Undo/Redo remain in the Nick tour.', module='quiver_tour')
+    add('quiver-reactivation', 'interaction', 'Reach-back · tool exit and reactivation',
+        'Checks scissors after tool exit, pending-edit and tracking recovery, independent left-hand access, and continuous tablet following, grab dismissal, Close, and real GPU lighting/shadow preservation. Runs production native handlers without taking over the headset. Physical Nick and View Tools tours provide the four-profile stereo checks.', module='quiver_reactivation_check')
+    add('history-refresh', 'interaction', 'Feature history · desktop-to-VR refresh',
+        'Seek backward and forward through a temporary part using native history event dispatch. Checks desktop geometry and the current design/revision sent to VR. Isolated browser with intercepted VR transport; keeps the physical headset session running.', module='history_refresh_check')
     add('production-lists', 'interaction', 'Feature history and production lists',
         'Review sweep rails, dimension tables, simulation job cards and the feature-history scrub rail. Runs bounded native interaction checks and retains production-rendered state images.', module='list_components_check')
     add('list-gallery', 'components', 'Scrollable sets',
@@ -88,7 +96,7 @@ def catalog():
     add('extrude', 'authoring', 'Extrude a 6HB and inspect a volume',
         'Creates a new isolated part; paints a honeycomb ring, zooms and moves its frosted lattice window, and adjusts coarse (7/8 bp) and fine (1 bp) wheels. Checks that Confirm closes the painter and right menu, removes the draft preview and preserves Undo. Compares local volume representations. Native checks cover failed-commit recovery; motion validation covers all four profiles.', module='extrude_tour')
     add('sweep', 'authoring', 'Sweep an S shape · Free Draw and point editing',
-        'Isolated part: paint a footprint, draw a glowing S-shaped stroke, edit its fitted points by trigger dragging and XYZ arrows, and check radial Delete Last. Confirm, edit through the desktop feature log, then Undo and Redo both edits and creation. Demo pauses for review; validation uses all four controller profiles and retained stereo evidence.', module='sweep_tour')
+        'Isolated part: paint a footprint, draw a glowing S-shaped stroke, edit its fitted points and movable origin by trigger dragging and XYZ arrows, and check radial Delete Last. Confirm, edit through the desktop feature log, then Undo and Redo both edits and creation. Demo pauses for review; validation uses all four controller profiles and retained stereo evidence.', module='sweep_tour')
     add('extrude-slice', 'authoring', 'Extrude beside an existing 1x8 platform',
         'Isolated square part: display the existing 1x8 cross-section, paint one and two lattice rows beside it, use coarse/fine wheels, and verify preview, committed 3D spacing, refreshed occupied cells, independent clustering of the fresh footprint, and both menus closing on Confirm. Native checks preserve drafts for retry after failure. Motion validation uses all four profiles.',
         ['--slice-reference'], module='extrude_tour')
@@ -141,7 +149,7 @@ def arguments(tour, validate=False):
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
     elif tour['module'] == 'view_volumes_check':
         args += ['--validate'] if validate else ['--demo']
-    elif tour['module'] in ('list_components_check', 'menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'deformation_selection_check', 'lattice_compatibility_check', 'representation_tour', 'extrude_tour', 'sweep_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'edit_wheel_history_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
+    elif tour['module'] in ('quiver_tour', 'tablet_controls_tour', 'quiver_reactivation_check', 'history_refresh_check', 'list_components_check', 'menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'deformation_selection_check', 'lattice_compatibility_check', 'representation_tour', 'extrude_tour', 'sweep_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'edit_wheel_history_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
         if validate:
             args += ['--validate']
     return args

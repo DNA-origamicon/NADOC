@@ -61,7 +61,6 @@
         if(action=="sweep:add-point")return !sweepDraft_.freeDrawArmed && sweepDraft_.pointsNm.size()<256;
         if(action=="sweep:delete-point")return !sweepDraft_.freeDrawArmed && sweepDraft_.selected>0 && sweepDraft_.pointsNm.size()>1;
         if(action=="sweep:delete-last-point")return !sweepDraft_.freeDrawArmed && sweepDraft_.pointsNm.size()>1;
-        if(action.starts_with("sweep:axis:0:") && !sweepDraft_.directionControlled(0))return false;
         return true;
     }
     void activateSweep() {
@@ -117,7 +116,8 @@
             setSweepSmoothingScale();
             if(!sweepDraft_.strokeInvalid && !sweepDraft_.strokeNm.empty()) {
                 auto points=nadoc_vr::smoothSweepStroke(sweepDraft_.strokeNm,sweepDraft_.smoothing);
-                if(points.size()>1) {sweepDraft_.pointsNm=std::move(points);sweepDraft_.orientations.assign(sweepDraft_.pointsNm.size(),std::nullopt);sweepDraft_.selected=sweepDraft_.pointsNm.size()-1;++sweepDraft_.revision;}
+                for(auto& point:points)point+=sweepDraft_.strokeNm.front();
+                if(points.size()>1 && std::all_of(points.begin(),points.end(),nadoc_vr::boundedSweepPoint)) {sweepDraft_.pointsNm=std::move(points);sweepDraft_.orientations.assign(sweepDraft_.pointsNm.size(),std::nullopt);sweepDraft_.selected=sweepDraft_.pointsNm.size()-1;++sweepDraft_.revision;}
             }
         } else if(action.starts_with("sweep:direction:")) {
             try {
@@ -286,7 +286,7 @@
                     sweepStartModel_=manipulator_.transform();publishSweepDraft();break;
                 } else if(triggerClicked_[h] && hit && !sweepDraft_.freeDrawArmed) {
                     sweepDraft_.select(hit->index);pulse(h,.2F);
-                    if(hit->index) {
+                    {
                         sweepHand_=h;sweepDragStart_=sweepRelativePoint(tip);sweepPointStart_=sweepDraft_.pointsNm[hit->index];
                         sweepStartModel_=manipulator_.transform();sweepDraft_.strokeNm.clear();
                     }

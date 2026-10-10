@@ -21,7 +21,10 @@ implementation is recorded in commit `561c590c`.
    **Feature Log → Edit** to change the path or orientation.
 
 For continuation from the model, use the selected terminal blunt end's **Sweep**
-action. The attached origin's position and orientation remain fixed to that end.
+action. Moving an attached origin detaches the sweep: the source helices stay
+fixed and connecting strands are split at their junctions. The preview reports
+**Detached from source**. This state persists through editing, save/load, Undo
+and Redo; returning the origin to zero does not silently reconnect strands.
 
 ## VR workflow
 
@@ -33,15 +36,16 @@ origin and a second spline point, and displays a lightweight point-cloud preview
 Select a point in the scrollable list or point at its sphere and click Trigger.
 A pointer line identifies the hovered point. Hold Trigger and move to drag it;
 the XYZ fields and their arrows edit coordinates in nanometres relative to the
-fixed origin. The right touchpad menu offers **Add Point** on the right and
+cross-section reference frame. Drag the origin to reshape the start while leaving
+later points in place. The right touchpad menu offers **Add Point** on the right and
 **Delete Last** on the left. Deletion removes the last added point (the last point
 in the list), regardless of the selection. The panel's **Delete Selected** button
-removes the selected point. The origin remains fixed.
+removes the selected point. The origin can move but cannot be deleted.
 
 **Free draw** clears the path and arms one continuous stroke. Hold the right-hand Trigger and
 sketch in three dimensions; a glowing green line follows the captured stroke.
 Releasing Trigger replaces it with a smoothed, editable point list. The sketch
-starts at the sweep origin; its shape follows controller-tip displacement.
+starts at the current sweep origin; its shape follows controller-tip displacement.
 Confirm creates the same editable Sweep feature as desktop authoring, with
 ordinary history, undo and redo.
 
@@ -90,8 +94,12 @@ in 15° steps instead of XYZ in nanometres. RZ is cross-section twist.
 Angles reference the starting plane, even after moving or rotating the model.
 The convention is a right-handed local frame: right is +X for XY/XZ and +Y for
 YZ; up is normal × right. Orientation is `Ry(tilt Y) Rx(tilt X) Rz(twist)`.
-The new-bundle origin can rotate but cannot move. An attached origin retains its
-source end's complete orientation so that the connection remains continuous.
+The new-bundle origin can move and rotate in both desktop and VR.
+Select **Origin**, then use XYZ or the desktop translation gizmo; in VR,
+hold Trigger on its sphere or use its XYZ arrows. Moving it reshapes the start
+without translating later points. Free Draw and subsequent smoothing retain
+the moved start. An attached origin retains its
+source end's orientation until moving it detaches the sweep.
 Full point orientations survive feature editing, persistence, Undo and Redo.
 
 Orange-red path segments and a warning identify bending demand above the existing

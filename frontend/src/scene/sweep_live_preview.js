@@ -19,7 +19,7 @@ export function createSweepLivePreview(parent) {
     setBaseline(response,draft={}) {
       data=response;group.visible=false
       basis=sweepFrameQuaternion(data.orientation_basis ?? [[1,0,0],[0,1,0],[0,0,1]])
-      initial=draft.source_helix_id && data.point_bases?.[0]
+      initial=draft.source_helix_id && !draft.detach_source && data.point_bases?.[0]
         ? new THREE.Vector3(...data.point_bases[0].map(row=>row[2])) : null
       const baseline=sampleLiveSweep(data.points_nm,draft.orientations_deg,basis,initial)
       bindings=baseline?bindSweepCloud(data,baseline):[]
@@ -29,7 +29,7 @@ export function createSweepLivePreview(parent) {
       const rotation=new THREE.Matrix3().set(...(data.point_rotation ?? [[1,0,0],[0,1,0],[0,0,1]]).flat())
       const origin=new THREE.Vector3(...(data.origin_nm ?? data.points_nm[0]))
       const points=values.map(p=>new THREE.Vector3(...p).applyMatrix3(rotation).add(origin).toArray())
-      const sampled=sampleLiveSweep(points,angles,basis,initial)
+      const sampled=sampleLiveSweep(points,angles,basis,values[0].some(v=>v!==0)?null:initial)
       if(!sampled){group.visible=false;return null}
       sampled.positions.forEach((p,i)=>p.toArray(pathBuffer.array,3*i))
       path.geometry.setDrawRange(0,sampled.positions.length);pathBuffer.needsUpdate=true

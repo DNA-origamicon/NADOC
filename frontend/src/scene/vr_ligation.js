@@ -59,8 +59,8 @@ export function createVRLigation({ getState, api, clearSelection = () => {}, onO
     if (key === published) return
     publishing = true
     try {
-      await api.sendVRLigationEnds({ version: current.version, status, ends: current.ends, bonds: current.bonds })
-      published = key
+      const result = await api.sendVRLigationEnds({ version: current.version, status, ends: current.ends, bonds: current.bonds })
+      if (result) published = key
     } catch { /* Retry publication on the next native poll. */ }
     finally { publishing = false }
   }

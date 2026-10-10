@@ -11,6 +11,132 @@ void requireLive(bool condition, const char* detail) {
 }
 #include "representation_shadow_check.hpp"
 struct LiveViewerTest {
+    static void verifyQuiverReactivation() {
+        Viewer v(SceneData{});
+        std::istringstream script("SCRYWRITE_WITNESS 1\nstep 100\n");
+        v.witness_.emplace(nadoc_vr::scrywrite::WitnessReplay::load(script));
+        v.sessionState_=XR_SESSION_STATE_FOCUSED;
+        v.witnessObserverPosition_={0,1.6F,0};v.witnessObserverOrientation_={1,0,0,0};
+        const auto holster=glm::rotation(glm::vec3(0,0,-1),glm::normalize(glm::vec3(0,1,1)));
+        auto pose=[&](size_t h,bool behind) {
+            v.hands_[h]={true,false,v.witnessObserverPosition_+glm::vec3(h?.28F:-.28F,behind?.08F:-.1F,behind?.28F:-.4F),behind?holster:glm::quat(1,0,0,0)};
+            v.processQuiver(true,0);
+        };
+        auto reach=[&](size_t h) {pose(h,false);pose(h,true);};
+        v.sidebarMenus_.menus[0].open=v.sidebarMenus_.menus[1].open=true;
+        v.bendPanel_.active=true;v.triggerPartial_[1]=true;
+        reach(0);
+        requireLive(v.viewTools_.open && !v.viewTools_.placement.worldDocked() && !v.ligation_.nickActive,
+                    "Other-hand tool/button or open sidebar suppressed left quiver");
+        const auto behind=v.viewTools_.position;
+        v.hands_[0].position.z=.05F;v.processQuiver(true,0);
+        requireLive(!v.viewTools_.placement.worldDocked() && v.viewTools_.position!=behind,"Tablet did not follow the hand out of holster");
+        pose(0,false);
+        requireLive(!v.viewTools_.placement.worldDocked(),"Returning in front automatically docked tablet");
+        const auto followed=v.viewTools_.position;
+        const auto facing=v.viewTools_.orientation;
+        v.hands_[0].position.x-=.1F;
+        v.hands_[0].orientation=glm::angleAxis(.2F,glm::vec3(0,1,0));
+        v.processQuiver(true,0);
+        requireLive(v.viewTools_.position!=followed && v.viewTools_.orientation!=facing,
+                    "Tablet stopped following controller position or rotation");
+        auto clickDock=[&]() {
+            auto pointers=v.hands_;pointers[1].valid=true;
+            pointers[1].position=v.viewTools_.world({184.F/768,652.F/768})+v.viewTools_.orientation*glm::vec3(0,0,.2F);
+            pointers[1].orientation=v.viewTools_.orientation;
+            std::array<bool,2> blocked{};
+            v.viewTools_.input(pointers,{false,true},blocked,[](size_t){});
+            requireLive(blocked[1],"Dock control was not interactive while following");
+        };
+        clickDock();
+        requireLive(v.viewTools_.placement.worldDocked(),"Dock button did not freeze tablet");
+        const auto docked=v.viewTools_.position;
+        v.hands_[0].position.x-=.1F;v.processQuiver(true,0);
+        requireLive(v.viewTools_.position==docked,"Docked tablet kept following the controller");
+        clickDock();
+        requireLive(!v.viewTools_.placement.worldDocked(),"Follow button did not restore controller attachment");
+        const auto reattached=v.viewTools_.position;
+        v.hands_[0].position.x+=.1F;v.processQuiver(true,0);
+        requireLive(v.viewTools_.position!=reattached,"Follow button attached tablet to clicking hand instead of left hand");
+        clickDock();
+        reach(0);requireLive(!v.viewTools_.open,"Reach-back did not dismiss fixed tablet");
+        reach(0);requireLive(v.viewTools_.open && !v.viewTools_.placement.worldDocked(),"Reopened tablet did not start following");
+        v.triggerPartial_[1]=false;
+        reach(1);
+        requireLive(!v.ligation_.nickActive && v.bendPanel_.active &&
+                    std::string(v.quiverBlocked_[1])=="finish_modeling_tool","Quiver changed or confirmed unfinished Bend");
+        v.bendPanel_.exit(v.sidebarMenus_.menus);
+        reach(1);
+        requireLive(v.ligation_.nickActive && v.sidebarMenus_.menus[1].open,"Scissors did not reactivate after tool exit with sidebar open");
+        const auto sequence=v.quiver_.sequence;
+        v.processQuiver(true,0);v.processQuiver(true,0);
+        requireLive(v.quiver_.sequence==sequence,"Held holster repeated");
+        v.ligation_.waiting=true;reach(1);
+        requireLive(v.ligation_.nickActive && std::string(v.quiverBlocked_[1])=="pending_edit","Pending Nick did not block another edit");
+        reach(0);requireLive(!v.viewTools_.open,"Pending Nick blocked left panel stow");
+        v.ligation_.waiting=false;reach(1);
+        requireLive(!v.ligation_.nickActive,"Acknowledged Nick did not rearm");
+        v.sweepPanel_.active=true;v.sweepDraft_.step=2;
+        const auto points=v.sweepDraft_.pointsNm.size();reach(1);
+        requireLive(v.sweepDraft_.pointsNm.size()==points && !v.ligation_.nickActive,"Shoulder gesture added a Sweep point");
+        v.sweepPanel_.exit(v.sidebarMenus_.menus);reach(1);
+        requireLive(v.ligation_.nickActive,"Sweep exit did not restore scissors access");
+        pose(1,false);v.hands_[1].valid=false;v.processQuiver(true,0);pose(1,true);
+        requireLive(v.ligation_.nickActive,"Tracking loss triggered an unarmed reach");
+        reach(1);requireLive(!v.ligation_.nickActive,"Tracking recovery did not rearm");
+        v.inputResumeBlocked_[0]=true;reach(0);
+        requireLive(!v.viewTools_.open && std::string(v.quiverBlocked_[0])=="release_after_focus","Focus-release guard bypassed");
+        v.inputResumeBlocked_[0]=false;reach(0);
+        requireLive(v.viewTools_.open,"Focus-release recovery left tablet disabled");
+        requireLive(v.liveState().find("\"blocked\":[")!=std::string::npos,"Quiver blockers missing from inspector");
+    }
+    static void verifyViewToolsDismissal() {
+        for(size_t hand:{0U,1U})for(bool trigger:{false,true}) {
+            Viewer v(SceneData{});
+            std::istringstream script("SCRYWRITE_WITNESS 1\nstep 100\n");
+            v.witness_.emplace(nadoc_vr::scrywrite::WitnessReplay::load(script));
+            v.sessionState_=XR_SESSION_STATE_FOCUSED;
+            v.witnessObserverPosition_={0,1.6F,0};v.witnessObserverOrientation_={1,0,0,0};
+            auto& t=v.viewTools_;t.open=true;t.placement.openDocked({0,1.5F,-.7F},{1,0,0,0});t.syncPose();
+            auto& h=v.hands_[hand];h.valid=true;h.orientation={1,0,0,0};
+            const auto b=VRViewTools::panelBounds();
+            h.position=t.placement.worldPoint({b.maximum.x,0,trigger?.3F:0.F});
+            if(trigger) {
+                std::array<bool,2> buttons{};buttons[hand]=true;
+                v.remotePanels_.update(v.remotePanelTargets(),v.hands_,buttons,buttons,v.witnessObserverPosition_,0);
+                requireLive(v.remotePanels_.active==&t.placement,"View tablet did not use shared trigger border controller");
+                const auto before=t.placement.position();h.position.x+=.05F;
+                v.remotePanels_.update(v.remotePanelTargets(),v.hands_,{},buttons,v.witnessObserverPosition_,1);
+                requireLive(glm::distance(t.placement.position(),before+glm::vec3(.05F,0,0))<1e-5F,"Trigger border movement differs from hand movement");
+                v.triggerPartial_[hand]=v.triggerPressed_[hand]=true;
+            } else {
+                h.pressed=true;v.gripPressed_[hand]=true;
+                requireLive(t.placement.beginDrag(hand,v.hands_,b.minimum,b.maximum),"Grip border grab failed");
+            }
+            h.position=v.witnessObserverPosition_+glm::vec3(hand?.28F:-.28F,-.1F,-.4F);
+            v.processQuiver(true,0);
+            requireLive(v.quiver_.armed[hand],"Held tablet did not arm shoulder dismissal");
+            h.position=v.witnessObserverPosition_+glm::vec3(hand?.28F:-.28F,.08F,.28F);
+            h.orientation=glm::rotation(glm::vec3(0,0,-1),glm::normalize(glm::vec3(0,1,1)));
+            v.processQuiver(true,0);
+            requireLive(!t.open && !v.remotePanels_.active && !t.placement.dragHand() && !v.ligation_.nickActive,
+                        "Held tablet shoulder dismissal leaked a grab or equipped scissors");
+        }
+        Viewer v(SceneData{});auto& t=v.viewTools_;t.open=true;
+        t.placement.openDocked({0,0,-1},{1,0,0,0});t.syncPose();
+        for(size_t hand:{0U,1U}) {
+            v.hands_={};auto& h=v.hands_[hand];h.valid=true;h.orientation=t.orientation;
+            const auto target=t.world({682.F/768,30.F/768});h.position=target+glm::vec3(0,0,.4F);
+            requireLive(t.rayEndpoint(h) && glm::distance(*t.rayEndpoint(h),target)<1e-5F,"Tablet pointer beam misses close control");
+            std::array<bool,2> clicked{},blocked{};
+            t.input(v.hands_,clicked,blocked,[](size_t){});
+            requireLive(t.closeHover[hand],"Close control did not expose pointer hover");
+            clicked[hand]=true;blocked={};
+            t.input(v.hands_,clicked,blocked,[](size_t){throw std::runtime_error("Close committed visualization");});
+            requireLive(!t.open && blocked[hand] && !t.rayEndpoint(h),"Close button failed or left a beam visible");
+            t.open=true;
+        }
+    }
     static void verifyNickCatalog() {
         Viewer v(SceneData{});
         v.ligation_.version=7;
@@ -742,10 +868,45 @@ struct LiveViewerTest {
 };
 }
 
+// Real framebuffer check: recoloring must preserve the directional lighting
+// ratio, and surfaces must receive the shared shadow sampler. No headset needed.
+void verifyTabletLighting(GLuint fbo) {
+    VRViewTools t;t.initialize();t.version=1;
+    auto sample=[&](glm::vec4 color,bool shadow) {
+        t.triangles.clear();
+        for(int side=0;side<2;++side){const float x=side?0.F:-1.F;
+            const glm::vec3 n=side?glm::vec3(1,0,0):glm::vec3(0,0,1);
+            for(auto p:std::array<glm::vec3,6>{{{x,-1,0},{x+1,-1,0},{x,1,0},{x,1,0},{x+1,-1,0},{x+1,1,0}}})t.triangles.push_back({p,color,{-1,-1},n});
+        }
+        glBindBuffer(GL_ARRAY_BUFFER,t.triangleVbo);glBufferData(GL_ARRAY_BUFFER,t.triangles.size()*sizeof(VRViewTools::V),t.triangles.data(),GL_STATIC_DRAW);
+        glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,128,128);
+        glDrawBuffer(GL_COLOR_ATTACHMENT0);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+        glUseProgram(t.program);glUniform3f(glGetUniformLocation(t.program,"uLightDirection"),0,0,1);
+        const glm::mat4 identity(1);glUniformMatrix4fv(glGetUniformLocation(t.program,"uLightViewProjection"),1,GL_FALSE,&identity[0][0]);
+        glUniform1i(glGetUniformLocation(t.program,"uShadowsEnabled"),shadow);glUniform1i(glGetUniformLocation(t.program,"uShadowMap"),0);
+        t.renderScene(identity,identity,{1,0,0,0});
+        std::array<unsigned char,4> a{},b{};glReadBuffer(GL_COLOR_ATTACHMENT0);
+        glReadPixels(32,64,1,1,GL_RGBA,GL_UNSIGNED_BYTE,a.data());glReadPixels(96,64,1,1,GL_RGBA,GL_UNSIGNED_BYTE,b.data());
+        return std::array{a,b};
+    };
+    const auto gray=sample({.25F,.25F,.25F,1},false);
+    const auto recolored=sample({.08F,.25F,.04F,1},false);
+    requireLive(gray[0][0]>gray[1][0]*4 && gray[1][0]>10,"View overlay surfaces lost directional shading");
+    requireLive(std::abs(int(gray[0][1])-int(recolored[0][1]))<=1 && std::abs(int(gray[1][1])-int(recolored[1][1]))<=1,
+                "Recoloring changed unchanged-channel lighting");
+    GLuint depth;glGenTextures(1,&depth);glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,depth);
+    const float blocker=.1F;glTexImage2D(GL_TEXTURE_2D,0,GL_DEPTH_COMPONENT24,1,1,0,GL_DEPTH_COMPONENT,GL_FLOAT,&blocker);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_COMPARE_MODE,GL_COMPARE_REF_TO_TEXTURE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_COMPARE_FUNC,GL_LEQUAL);
+    const auto shaded=sample({.25F,.25F,.25F,1},true);
+    requireLive(shaded[0][0]<gray[0][0]/3 && std::abs(int(shaded[0][0])-int(gray[1][0]))<=2,"View overlay ignored shared shadows");
+    glDeleteTextures(1,&depth);t.shutdown();
+}
+
 // Real rasterization regression: nearest sphere wins regardless of draw order,
 // discarded impostor corners stay zero, all primitive shaders write IDs, and
 // IDs survive representation changes. No OpenXR runtime is required.
-int objectIdGlChecks() {
+int objectIdGlChecks(bool tabletOnly=false) {
     if (!glfwInit()) return 77;
     glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -766,6 +927,11 @@ int objectIdGlChecks() {
     glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH24_STENCIL8,128,128);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_STENCIL_ATTACHMENT,GL_RENDERBUFFER,depth);
     requireLive(glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE,"ID test framebuffer");
+    verifyTabletLighting(fbo);
+    if(tabletOnly){
+        glDeleteTextures(1,&color);glDeleteTextures(1,&ids);glDeleteRenderbuffers(1,&depth);glDeleteFramebuffers(1,&fbo);
+        glfwDestroyWindow(window);glfwTerminate();std::cout << "View tablet recolor lighting and shadows passed.\n";return 0;
+    }
     verifyRepresentationShadows(fbo);
     verifySphereProjectionLighting(fbo);
     LiveViewerTest::verifyFirstStyleAcknowledgement();
@@ -940,6 +1106,7 @@ int objectIdGlChecks() {
 
 int main(int argc, char** argv) {
     try {
+        if (argc == 2 && std::string(argv[1]) == "--tablet-lighting") return objectIdGlChecks(true);
         if (argc == 2 && std::string(argv[1]) == "--gl-ids") return objectIdGlChecks();
         if (argc < 2) return 2;
         // IPC clients exercise production handlers directly. Keep their server
@@ -950,10 +1117,17 @@ int main(int argc, char** argv) {
             LiveViewerTest::serve(viewer);
             return 0;
         }
+        if (argc == 2 && std::string(argv[1]) == "--quiver") {
+            LiveViewerTest::verifyQuiverReactivation();
+            LiveViewerTest::verifyViewToolsDismissal();
+            std::cout << "Quiver lifecycle, independent hands and controller following and docking passed.\n";
+            return 0;
+        }
         if (argc == 2 && std::string(argv[1]) == "--nick-catalog") {
             LiveViewerTest::verifyNickCatalog();
             return 0;
         }
+        LiveViewerTest::verifyQuiverReactivation();
         LiveViewerTest::verifyNickCatalog();
         LiveViewerTest::verifyDashboardFocusLoss();
         LiveViewerTest::verifyViewToolsFrameSeam();

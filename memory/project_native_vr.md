@@ -7,6 +7,24 @@ review_after: 2026-09-01
 
 # Native VR expansion
 
+## Movable sweep start (2026-10-09)
+
+New-bundle Sweep origins now use the same position controls as later knots:
+Trigger drag / XYZ arrows in VR, XYZ fields / translation gizmo on desktop.
+Moving the first knot reshapes the start while keeping subsequent knots fixed.
+Moving an attached start detaches its source connections with ordinary nick
+operations, leaving source helices fixed. The saved `detach_source` intent
+prevents silent reconnection on returning to zero. Free Draw and
+smoothing preserve a moved start; the native/browser transport accepts bounded
+nonzero first coordinates. Existing Sweep history carries these coordinates
+through edit, save/load and Undo/Redo. The registered S-shaped Sweep tour also
+drags the origin and verifies the other knots remain unchanged.
+
+Validation: four-profile native Sweep tour including commit/edit/Undo/Redo,
+three native checks, desktop creation/continuation/detachment browser tests,
+23 smoke checks, and focused history/detachment tests pass. Evidence and broader
+suite failures: `.development-artifacts/sweep-origin-20261009/verification-summary.json`.
+
 ## Edit latency (2026-10-08)
 
 `Circle_spiral.nadoc` Full resize reproduced ~27 s, dominated by two 12–13 s
@@ -90,8 +108,9 @@ native/API checks pass. Failures, framing adjustments and evidence paths:
 
 Sidebars now spawn 40 cm along the invoking controller's -Z pointer, with a
 30° backward local-X tilt, then remain world-docked. Head pose no longer chooses
-menu placement. Desktop and View tools use the same controller orientation at
-1.35 m / .8 m; attached authoring/lattice panels inherit their parent pose.
+menu placement. Desktop uses the same controller orientation at 1.35 m;
+View tools now opens following the left controller (October 9 correction below).
+Attached authoring/lattice panels inherit their parent pose.
 Follow mode and both touchpad wheels share the 30° tilt. Border targeting uses
 selection-sphere center (-.12 m in controller space) and the current per-hand
 radius against the visible rail band, including its inner edge at minimum
@@ -506,19 +525,35 @@ Do not leave new major demos or validation workflows as undiscoverable shell com
 
 ## Quiver gesture for scissors (2026-09-28)
 
-Either controller can now toggle global Nick mode by reaching from in front of
-the headset to behind the head/shoulder and dwelling 0.35 s, with buttons released.
-A 0.15 s front dwell rearms it; remaining behind cannot repeat. Head-relative
-position uses horizontal headset facing, with a real controller-travel requirement
-so head turns alone do not count. Tracking loss, menus, buttons, active gestures
-and pending edits suppress detection. Equip/stow use different haptic amplitudes.
-Selecting Nick again on the wheel remains the alternate way to put scissors away.
-The existing **Nick with scissors, Undo and Redo** tour now includes two quiver
-reaches, held-behind non-repetition, no design mutation and visible sphere/scissors
-restoration before its cut/history checks.
-All four profiles passed; evidence `.development-artifacts/vr-nick/a4fdd8b73e/`.
-See the [gesture audit](../docs/audits/vr_quiver_gesture_20260928.md) for the precise
-region/dwell, rendered pixel checks and remaining human comfort/tracking limits.
+Right reach-back equips/stows Nick; left reach-back independently opens/stows the
+view-tools tablet. Matching shoulder position and upward/backward controller aim
+trigger immediately; returning in front rearms, without dwell. Tracking loss and
+focus/button guards disarm, and require a fresh front-to-shoulder reach.
+
+October 9 lifecycle repair: ordinary open sidebars no longer disable reach-back.
+The left shortcut remains available during right-hand tools/pending edits; right
+scissors require leaving the active modeling tool first (user preference).
+The shoulder path no longer shares Bend/Sweep's contextual radial action mapping.
+The tablet starts and remains attached to the left controller, including after
+returning in front. Tiles stay active. Dock freezes it; Follow reattaches to the
+left hand. Reaching back dismisses either mode, and reopening starts attached.
+Either hand holding its border by trigger or grip can stow it with the matching
+shoulder gesture; this consumes the grab without toggling scissors. Header Close
+and nearest-panel pointer beams are supported. Trigger borders retain the shared
+RemotePanelControl movement/resize rules. Schema 5 carries normals for native
+lighting/shadows; color/label toggles keep the canonical shadow map. Layout
+changes cast their displayed geometry; labels/lines remain unlit.
+`ligation.quiver.blocked` and `view_tools.following` expose these states to the
+inspector. Failed browser publication of nick/ligation and resize completion
+feedback must remain retryable: `_request` returns null rather than throwing.
+Never mark that null delivery as acknowledged, or native pending-edit state can
+remain locked indefinitely.
+
+`--quiver` in the production live-test binary checks lifecycle transitions;
+Debug → VR Tours & Tests → **Reach-back · tool exit and reactivation** runs it.
+The existing Nick and View Tools physical tours check all four profiles and now
+assert continuous controller following. Old September 28 evidence predates this lifecycle fix;
+see `docs/vr_view_tools.md` for current behavior and physical validation limits.
 
 ## Radius-wheel Nick and history (2026-09-28)
 

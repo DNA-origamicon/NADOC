@@ -58,7 +58,7 @@ def run(socket, output, action):
         initial_bonds = bridge.request('observe targets')['ligation']['bonds']
         assert len(initial_bonds)>5
         evidence,_=live.capture_to(out/'before',discard_source=True);eye=evidence['eyes'][0]
-        if action=='nick':
+        if action in ('nick','quiver'):
             points=[b[k] for b in initial_bonds for k in ('a','b')]
             center=np.mean(points,axis=0)
             # Fit the actual bundle, preserving enough apparent bond width for
@@ -79,7 +79,7 @@ def run(socket, output, action):
         reach((center+rotate(q,[0,0,.12])).tolist(),q)
         live.send('trackpad_axis', hand=1, x=0, y=0);live.frame()
         live.send('button',hand=1,button='trackpad',pressed=True);live.frame()
-        index={'nick':1,'undo':2,'redo':3}[action]
+        index={'nick':1,'quiver':1,'undo':2,'redo':3}[action]
         item=live.state['radial_edit']['items'][index]
         assert item['enabled']
         from .edit_wheel_check import slide
@@ -101,7 +101,7 @@ def run(socket, output, action):
             assert history_panels == [(panel['open'], panel['tab']) for panel in live.state['sidebars']]
             if not os.environ.get('NADOC_VR_FRAME_AUDIT'):
                 live.capture_to(out/'history-feedback',discard_source=True)
-        if action=='nick':
+        if action in ('nick','quiver'):
             assert live.state['ligation']['nick_active']
             # Quiver toggles only after a deliberate front-to-behind reach.
             head=np.mean([e['position'] for e in evidence['eyes']],axis=0)
@@ -152,12 +152,17 @@ def run(socket, output, action):
                         trials.append(trial);dwell(pause,hand=0)
                     (out/'reaches.json').write_text(json.dumps(trials,indent=2))
                     assert live.state['view_tools']['open']==opened
+                    assert live.state['view_tools']['following']==opened, 'Left tablet attachment differs from open state'
                     assert live.state['ligation']['nick_active']
                     live.capture_to(out/label,discard_source=True)
                     from tools.vr_workflows.view_tools_pixels import check as tablet_pixels
                     assert tablet_pixels(out/label)['passed']==opened
                     assert not tablet_pixels(out/label,offscreen=True)['passed']
                     assert quiver_pixels(out/label)['passed']
+            if action=='quiver':
+                assert live.state['scene_revision']==revision
+                (out/'result.json').write_text(json.dumps(live.state,indent=2))
+                return
             # Empty-space full click must not edit.
             reach((np.array(eye['position'])+rotate(q,[.4,0,-.5])).tolist(),q)
             live.button('trigger',hand=1);live.frame()

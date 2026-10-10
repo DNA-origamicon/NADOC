@@ -6,7 +6,9 @@ using namespace nadoc_vr;
 int main() {
     SweepDraft draft;
     assert(draft.step==1 && draft.pointsNm.size()==2 && draft.selected==1);
-    assert(!draft.movePoint(0,{1,2,3}));
+    assert(draft.movePoint(0,{1,2,3}));
+    assert(draft.pointsNm[0]==glm::vec3(1,2,3) && draft.pointsNm[1]==glm::vec3(0,0,10));
+    draft.reset();
     assert(!draft.adjustPoint(1,3,1));
     assert(draft.adjustPoint(1,0,1));assert(draft.pointsNm[1]==glm::vec3(1,0,10));
     assert(draft.addPoint());assert(draft.pointsNm.back()==glm::vec3(2,0,20));
@@ -51,6 +53,14 @@ int main() {
     draft.armFreeDraw();draft.beginStroke({0,0,0});draft.appendStroke({0,0,8});
     assert(draft.previous());assert(!draft.drawing && !draft.freeDrawArmed);
     draft.reset({10,0,0});assert(draft.pointsNm[1]==glm::vec3(10,0,0));
+
+    draft.reset();draft.next();draft.movePoint(0,{3,-2,1});draft.armFreeDraw();
+    assert(draft.beginStroke({100,200,300}));draft.appendStroke({100,200,310});
+    assert(draft.finishStroke());
+    assert(draft.pointsNm.front()==glm::vec3(3,-2,1));
+    assert(draft.pointsNm.back()==glm::vec3(3,-2,11));
+    assert(!draft.strokeNm.empty());
+    assert(draft.adjustPoint(0,0,1));assert(draft.strokeNm.empty());
 
     // Equal treatment of X/Y/Z removes high-frequency 3D jitter without
     // flattening the intended curve into a plane.
@@ -98,7 +108,8 @@ int main() {
     assert(hit && hit->index==0 && std::abs(hit->distance-1.8F)<1e-4F);
     assert(!sweepPointRayHit(handles,{0,0,0},{0,0,1},.2F));
     SweepPointDrag drag;
-    assert(!drag.begin(0,handles[0],{0,0,0},{0,0,-1}));
+    assert(drag.begin(0,handles[0],{0,0,0},{0,0,-1}));
+    assert(glm::length(*drag.update({1,2,0},{0,0,-1})-glm::vec3(1,2,-2))<1e-6F);
     assert(drag.begin(1,handles[1],{.1F,0,0},{0,0,-1}));
     assert(glm::length(*drag.update({.1F,0,0},{0,0,-1})-handles[1])<1e-6F);
     assert(glm::length(*drag.update({1.1F,2,0},{0,0,-1})-glm::vec3(1,2,-4))<1e-6F);

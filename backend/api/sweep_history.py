@@ -133,7 +133,7 @@ def prepare_sweep_edit(design, index, params, *, history=True):
         if item.feature_type != 'snapshot' or not item.design_snapshot_gz_b64 or not item.post_state_gz_b64:
             continue
         source = item.params.get('ref_helix_id') or item.params.get('source_helix_id')
-        if not source:
+        if not source or item.params.get('detach_source'):
             continue
         pre = state.decode_design_snapshot(item.design_snapshot_gz_b64)
         post = state.decode_design_snapshot(item.post_state_gz_b64)
@@ -157,7 +157,11 @@ def prepare_sweep_edit(design, index, params, *, history=True):
                 'post_state_gz_b64': payload, 'post_state_size_bytes': size})
         return rebuilt.copy_with(feature_log=log, feature_log_cursor=-1), []
     resized = []
-    edit = SweepEdit(created, rebuilt, entry.params['sweep_id'], attachments, resized)
+    detach_sources = ()
+    if request.detach_source and request.source_helix_id and not entry.params.get('detach_source', False):
+        from backend.core.sweep import sweep_source
+        detach_sources = {h.id for h in sweep_source(before, request)['sources'].values()}
+    edit = SweepEdit(created, rebuilt, entry.params['sweep_id'], attachments, resized, detach_sources)
     log = list(design.feature_log)
     if history:
         payload, size = state.encode_design_snapshot(rebuilt)

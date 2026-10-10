@@ -17,6 +17,7 @@ class RemotePanelControl {
     bool resizing=false;
     std::array<std::optional<glm::vec3>,2> rayPoints;
     static float outsideMargin(const RemotePanelTarget& t) {return std::max(t.width,.05F/t.placement->scale());}
+    bool owns(const MenuPlacement& placement,size_t h) const {return active==&placement && (hand==h || twoHand);}
     void cancel() {
         if(active)active->endRemote();
         active=nullptr;last=nullptr;twoHand=resizing=false;rayPoints={};

@@ -18,10 +18,9 @@ class QuiverGesture {
         return {glm::dot(delta,glm::cross(forward,glm::vec3(0,1,0))),delta.y,-glm::dot(delta,forward)};
     }
     std::optional<size_t> update(const std::array<HandPose,2>& hands,glm::vec3 head,
-        glm::quat orientation,double /*now*/,bool enabled) {
-        if(!enabled){reset();return std::nullopt;}
+        glm::quat orientation,double /*now*/,const std::array<bool,2>& enabled) {
         for(size_t h=0;h<2;++h) {
-            if(!hands[h].valid){armed[h]=inside[h]=false;continue;}
+            if(!enabled[h] || !hands[h].valid){armed[h]=inside[h]=false;continue;}
             const auto p=local(hands[h].position,head,orientation);
             const bool front=p.z<-.12F && glm::length(p)<1.2F;
             if(front) {armed[h]=true;frontPosition[h]=hands[h].position;}
@@ -37,6 +36,10 @@ class QuiverGesture {
             }
         }
         return std::nullopt;
+    }
+    std::optional<size_t> update(const std::array<HandPose,2>& hands,glm::vec3 head,
+        glm::quat orientation,double now,bool enabled) {
+        return update(hands,head,orientation,now,std::array<bool,2>{enabled,enabled});
     }
 };
 }

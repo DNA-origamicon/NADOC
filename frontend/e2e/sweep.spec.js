@@ -5,7 +5,7 @@ import path from 'node:path'
 // removed by global-teardown.js, including on failure. Smoke servers disable
 // session caching. Four screenshots are retained as review evidence in
 // .development-artifacts/sweep-popup.png, sweep-gizmo.png, sweep-reloaded.png
-// and sweep-continuation.png.
+// and sweep-continuation.png / sweep-detached.png.
 test('Sweep creates one editable spline feature with nm point controls and undo/redo', async ({ page }) => {
   test.setTimeout(90_000)
   const errors = []
@@ -57,7 +57,9 @@ test('Sweep creates one editable spline feature with nm point controls and undo/
   await page.getByRole('button', { name: 'Next', exact: true }).click()
   await expect(page.locator('#sweep-apply')).toBeEnabled()
   await page.getByRole('option', { name: /Origin/ }).click()
-  await expect(page.getByRole('spinbutton', { name: 'Point X (nm)' })).toBeDisabled()
+  await expect(page.getByRole('spinbutton', { name: 'Point X (nm)' })).toBeEnabled()
+  await page.getByRole('spinbutton', { name: 'Point X (nm)' }).fill('-3')
+  await expect(page.locator('#sweep-apply')).toBeEnabled()
   await expect(page.getByRole('button', { name: 'Delete point 0' })).toHaveCount(0)
   await page.screenshot({ path: path.resolve(import.meta.dirname, '../../.development-artifacts/sweep-popup.png') })
   await page.click('#sweep-apply')
@@ -74,6 +76,9 @@ test('Sweep creates one editable spline feature with nm point controls and undo/
   const row = page.locator('#feature-log-panel-body [data-fl-row="1"]')
   await row.getByRole('button', { name: '✎' }).click()
   await expect(page.locator('#sweep-panel')).toBeVisible()
+  await page.getByRole('option', { name: /Origin/ }).click()
+  await expect(page.getByRole('spinbutton', { name: 'Point X (nm)' })).toHaveValue('-3')
+  await page.getByRole('spinbutton', { name: 'Point X (nm)' }).fill('-5')
   await page.getByRole('option', { name: /Point 2/ }).click()
   await expect(page.getByRole('spinbutton', { name: 'Point X (nm)' })).toHaveValue('8')
   await page.getByRole('spinbutton', { name: 'Point X (nm)' }).fill('12')
@@ -164,5 +169,22 @@ test('Sweep continues from a selected existing end', async ({ page }) => {
   await page.locator('#canvas').focus()
   await page.keyboard.press('f')
   await page.screenshot({ path: path.resolve(import.meta.dirname, '../../.development-artifacts/sweep-continuation.png') })
+  await page.locator('#feature-log-panel-body [data-fl-row]').last().getByRole('button', { name: '✎' }).click()
+  await expect(page.locator('#sweep-panel')).toBeVisible()
+  await page.getByRole('option', { name: /Origin/ }).click()
+  await page.getByRole('spinbutton', { name: 'Point X (nm)' }).fill('4')
+  await expect(page.locator('#sweep-status')).toContainText('Detached from source')
+  await expect(page.locator('#sweep-apply')).toBeEnabled()
+  await page.evaluate(() => window.__nadocTest.applyCameraPoseForTest({ position: [12,14,-38], target: [12,0,-2] }))
+  await page.screenshot({ path: path.resolve(import.meta.dirname, '../../.development-artifacts/sweep-detached.png') })
+  await page.click('#sweep-apply')
+  await expect(page.locator('#sweep-panel')).not.toBeVisible()
+  await expect.poll(continuationRender).toEqual({ forcedLigations: 0, ordinaryBonds: 0, arcs: 0 })
+  const detached = await page.evaluate(async () => {
+    const d = (await import('/src/state/store.js')).store.getState().currentDesign
+    return { flag: d.feature_log.at(-1).params.detach_source, domains: d.strands.map(s => s.domains.length) }
+  })
+  expect(detached.flag).toBe(true)
+  expect(detached.domains).toEqual(Array(8).fill(1))
   expect(errors).toEqual([])
 })

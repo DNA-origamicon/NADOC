@@ -84,7 +84,7 @@ def test_bent_end_and_sweep_end_can_be_continued():
         np.testing.assert_allclose(single, batch[5], atol=1e-9)
 
 
-@pytest.mark.parametrize('points', [[(0,0,0)], [(1,0,0),(2,0,0)], [(0,0,0),(0,0,0)], [(0,0,0),(float('nan'),0,0)]])
+@pytest.mark.parametrize('points', [[(0,0,0)], [(0,0,0),(0,0,0)], [(0,0,0),(float('nan'),0,0)]])
 def test_bad_paths_rejected(points):
     with pytest.raises(ValueError):
         body = SweepRequest(cells=[(0,0)], points_nm=points)
@@ -305,3 +305,17 @@ def test_sweep_continuation_retains_complete_geometry_response():
     body = response.json()
     assert not body.get('partial_geometry')
     assert {n['helix_id'] for n in body['nucleotides']} == {h.id for h in state.get_or_404().helices}
+
+
+def test_movable_start_preview_matches_persisted_geometry():
+    points = [(3, -2, 1), (0, 0, 10), (5, 0, 20)]
+    body = SweepRequest(cells=[(0, 0)], points_nm=points, ligate_adjacent=False)
+    preview, _ = sweep_preview(Design(), body, include_geometry=True)
+    result = build_sweep(Design(), body)
+    restored = Design.model_validate_json(result.model_dump_json())
+    axes = deformed_nucleotide_arrays(restored.helices[0], restored)['axis_points']
+    np.testing.assert_allclose(preview['points_nm'], points)
+    np.testing.assert_allclose(preview['helix_paths_nm'][0][0], points[0])
+    np.testing.assert_allclose(axes[0], points[0])
+    assert restored.deformations[0].params.points_nm == points
+    assert SweepRequest(cells=[(0, 0)], points_nm=points, source_helix_id='source').detach_source

@@ -42,3 +42,14 @@ def test_instanced_mesh_rotates_pose_without_expanding_shared_geometry():
 def test_screen_layout_flags_are_rejected(flag):
     data=bytearray(packet());struct.pack_into('<I',data,16,flag)
     with pytest.raises(HTTPException):validate_and_rotate(data,np.eye(3))
+
+
+def test_lit_display_rotates_normals_without_translation():
+    vertices=np.array([[1,2,3,1,.5,.2,1,-1,-1,1,0,0]]*3,dtype='<f4')
+    data=(b'NADOCVT1'+struct.pack('<10I',5,10,257,3,0,0,2048,2048,0,0)
+          +vertices.tobytes()+bytes(2048*2048*4))
+    result=validate_and_rotate(data,[[0,0,1],[0,1,0],[-1,0,0]])
+    posed=np.frombuffer(result,dtype='<f4',offset=48,count=36).reshape(3,12)
+    assert np.allclose(posed[:,:3],[[3,2,-1]]*3)
+    assert np.allclose(posed[:,9:],[[0,0,-1]]*3)
+    assert np.array_equal(posed[:,3:9],vertices[:,3:9])

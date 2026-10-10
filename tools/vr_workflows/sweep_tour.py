@@ -39,6 +39,7 @@ def main():
             'SCRYWRITE_BACKEND_PORT': backend_port,
             'SCRYWRITE_FRONTEND_PORT': frontend_port,
             'SCRYWRITE_TEST_WORKSPACE': workspace,
+            'NADOC_E2E_FRONTEND_PORT': frontend_port,
             'NADOC_E2E_API_BASE': 'http://127.0.0.1:'+backend_port,
             'NADOC_WORKSPACE': workspace,
             'NADOC_PHYSICAL_VR_TEST': '1',

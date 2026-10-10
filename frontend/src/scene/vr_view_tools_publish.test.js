@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
-import { createVRViewTools, VR_VIEW_KEYS } from './vr_view_tools.js'
+import { createVRViewTools, captureVRView, VR_VIEW_KEYS } from './vr_view_tools.js'
 import { broadcastFingerprint } from '../viewer/broadcast_fingerprint.js'
 
 vi.mock('../viewer/broadcast_fingerprint.js', () => ({ broadcastFingerprint: vi.fn(() => 'same-scene') }))
@@ -64,4 +64,20 @@ it('publishes explicit tablet acknowledgements and a new viewer after reset', as
   controller.reset()
   await publishSettled()
   expect(fetch).toHaveBeenCalledTimes(3)
+})
+
+it('exports surface normals with inverse transpose and keeps lines unlit',async()=>{
+  document.querySelector('[data-vt="lengthHeatmap"]').classList.add('active')
+  const scene=new THREE.Scene(),geometry=new THREE.BufferGeometry()
+  geometry.setAttribute('position',new THREE.Float32BufferAttribute([0,0,0,1,0,0,0,1,0],3))
+  geometry.setAttribute('normal',new THREE.Float32BufferAttribute([1,1,0,1,1,0,1,1,0],3))
+  const mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial())
+  mesh.scale.set(2,1,1);mesh.position.set(8,9,10);scene.add(mesh)
+  const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3(1,0,0)]),new THREE.LineBasicMaterial());scene.add(line)
+  const view=await captureVRView(scene,document)
+  expect(view.schema).toBe(5)
+  const normal=new THREE.Vector3(...view.triangles.slice(9,12))
+  expect(normal.length()).toBeCloseTo(1,5)
+  expect(normal.x/normal.y).toBeCloseTo(.5,5)
+  expect([...view.lines.slice(9,12)]).toEqual([0,0,0])
 })

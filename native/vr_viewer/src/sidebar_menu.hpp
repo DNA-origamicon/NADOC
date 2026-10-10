@@ -282,8 +282,7 @@ class SidebarMenu {
                 const auto r=std::find_if(tab().rows.begin(),tab().rows.end(),[&](const auto& row){return row.id=="sweep:"+id;});
                 if(r==tab().rows.end())return;
                 const bool value=id.ends_with(":value") || id=="smoothing" || id=="bp-info";
-                const bool originAxis=id.starts_with("axis:0:") && !value && std::none_of(tab().rows.begin(),tab().rows.end(),[](const auto& row){return row.id=="sweep:direction:0" && row.label=="DIR ON";});
-                out.push_back({r->id,r->label,r->section,r->action,box,!originAxis && !value && available(r->action),selected || isActive(r->action),false,icon});
+                out.push_back({r->id,r->label,r->section,r->action,box,!value && available(r->action),selected || isActive(r->action),false,icon});
             };
             if(path) {
                 add("free-draw",{{left,.420F},{ui_style::toolHalfWidth,.510F}});

@@ -108,7 +108,7 @@ struct LiveViewerTest {
         v.activateSidebarAction("sweep:axis:1:0:1",1);
         assert(v.sweepDraft_.pointsNm[1].x==1);
         v.activateSidebarAction("sweep:axis:0:0:1",1);
-        assert(v.sweepDraft_.pointsNm[0]==glm::vec3(0));
+        assert(v.sweepDraft_.pointsNm[0]==glm::vec3(1,0,0));
         std::array<bool,2> blocked{};
         auto process=[&] {blocked.fill(false);v.processSweepInput(blocked,false);};
         v.hands_[1].valid=true;v.hands_[1].orientation=glm::quat(1,0,0,0);
@@ -129,6 +129,17 @@ struct LiveViewerTest {
         v.suspendControllerInput();assert(!v.sweepHand_ && !v.sweepDraft_.drawing);
         v.hands_[1].valid=true;v.hands_[1].orientation=glm::quat(1,0,0,0);
         v.hands_[1].position.x+=10;process();assert(!v.sweepHovered_[1]);
+        // Trigger-drag the origin through the same controller handler as other knots.
+        v.triggerClicked_[1]=v.triggerPressed_[1]=false;
+        const auto unchangedEnd=v.sweepDraft_.pointsNm[1];
+        v.hands_[1].position=v.sweepWorldPoint(v.sweepDraft_.pointsNm[0])+glm::vec3(0,0,.25F);
+        process();assert(v.sweepHovered_[1]==0);
+        v.triggerClicked_[1]=v.triggerPressed_[1]=true;process();assert(v.sweepHand_==1);
+        v.triggerClicked_[1]=false;v.hands_[1].position.x+=.078F;process();
+        assert(glm::distance(v.sweepDraft_.pointsNm[0],glm::vec3(4,0,0))<1e-4F);
+        assert(v.sweepDraft_.pointsNm[1]==unchangedEnd);
+        v.triggerPressed_[1]=false;process();assert(!v.sweepHand_);
+        renderPath(v,directory+"/sweep-origin-moved.ppm");
         // Canonical model-space points round-trip despite export rotation and framing.
         const auto originalAxes=v.sourceAxes_;
         for(const auto basis:{glm::mat3(1),glm::mat3_cast(glm::quat(glm::vec3(.4F,-.7F,1.1F)))}) {
@@ -158,9 +169,9 @@ struct LiveViewerTest {
         v.gripPressed_[1]=false;v.processSweepGrip(blocked);assert(!v.sweepGripHand_);
         renderPath(v,directory+"/sweep-point-orientation.ppm");
         v.activateSidebarAction("sweep:direction:1",1);assert(!v.sweepDraft_.directionControlled(1));
-        // The fixed origin permits orientation control, but remains position-fixed.
+        // Rotating the moved origin leaves its position unchanged.
         v.activateSidebarAction("sweep:direction:0",1);assert(v.sweepDraft_.directionControlled(0));
-        v.activateSidebarAction("sweep:axis:0:2:1",1);assert(v.sweepDraft_.pointsNm[0]==glm::vec3(0));
+        v.activateSidebarAction("sweep:axis:0:2:1",1);assert(glm::distance(v.sweepDraft_.pointsNm[0],glm::vec3(4,0,0))<1e-4F);
         v.activateSidebarAction("sweep:direction:0",1);
         const std::string record="NADOCVR_PREFLIGHT 3 "+std::to_string(v.toolConfigSequence_)+
             " 100 warn sweep none - backend_warning 2 1 1 1 0 0 0 0 0 10 1 0 0 1 0 0 0 1 0 0 0 1 0";
@@ -213,8 +224,8 @@ struct LiveViewerTest {
         v.triggerPressed_[1]=false;process();
         assert(!v.sweepHand_ && !v.sweepDraft_.drawing && !v.sweepDraft_.freeDrawArmed);
         assert(v.sweepDraft_.validPath() && v.sweepDraft_.pointsNm.size()<=64);
-        assert(v.sweepDraft_.pointsNm.front()==glm::vec3(0));
-        assert(glm::distance(v.sweepDraft_.pointsNm.back(),glm::vec3(8,0,18))<1e-3F);
+        assert(glm::distance(v.sweepDraft_.pointsNm.front(),glm::vec3(4,0,0))<1e-4F);
+        assert(glm::distance(v.sweepDraft_.pointsNm.back(),glm::vec3(12,0,18))<1e-3F);
         v.hands_={};v.sweepHovered_={};
         renderPath(v,directory+"/sweep-preview.ppm");
         assert(!v.sweepCloud_.empty() && v.sweepCloud_.size()<=4096);
@@ -229,7 +240,7 @@ struct LiveViewerTest {
         save(directory+"/sweep-panel.ppm",pixels,900,900);
         // The event retains native points and paints, and a stale selection cannot retarget it.
         std::ostringstream config;v.writeSweepConfiguration(config);
-        assert(config.str().find("\"points_nm\":[[0,0,0]")!=std::string::npos);
+        assert(config.str().find("\"points_nm\":[[4,0,0]")!=std::string::npos);
         const auto points=v.sweepDraft_.pointsNm;
         auto validate=[&] {
             v.toolPreflightFeedback_=nadoc_vr::ToolPreflightFeedback{

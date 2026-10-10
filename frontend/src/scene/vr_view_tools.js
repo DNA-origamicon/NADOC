@@ -34,6 +34,8 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
   const panel=doc.createElement('canvas');panel.width=768;panel.height=768
   const c=panel.getContext('2d');c.fillStyle='#111111';c.fillRect(0,0,768,768)
   c.fillStyle='#e0eaff';c.font='bold 28px sans-serif';c.fillText('VIEW TOOLS',24,40)
+  c.strokeStyle='#6e7681';c.strokeRect(620,8,124,44)
+  c.fillStyle='#e0eaff';c.font='bold 20px sans-serif';c.fillText('CLOSE',647,37)
   const desktopOnlyLayout=['expanded','unfold','cadnano2d'].some(key=>doc.querySelector(`[data-vt="${key}"]`)?.classList.contains('active'))
   const flags=displayFlags(doc)
   for(let i=0;i<VR_VIEW_KEYS.length;i++) {
@@ -65,8 +67,9 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
   }
   const triangles=[],lines=[],sprites=[],batches=[]
   const pos=new THREE.Vector3(),m=new THREE.Matrix4(),inst=new THREE.Matrix4(),col=new THREE.Color(),scale=new THREE.Vector3(),quat=new THREE.Quaternion()
-  const sphere=new THREE.SphereGeometry(1,10,6)
-  const add=(out,p,color,alpha,uv=null)=>{out.push(p.x,p.y,p.z,color.r,color.g,color.b,alpha,...(uv??[-1,-1]));if((triangles.length+lines.length)/9>MAX_VERTICES)throw new Error('VR display exceeds vertex budget')}
+  const sphere=new THREE.SphereGeometry(1,24,16)
+  const normal=new THREE.Vector3(),normalMatrix=new THREE.Matrix3()
+  const add=(out,p,color,alpha,uv=null,n=null)=>{out.push(p.x,p.y,p.z,color.r,color.g,color.b,alpha,...(uv??[-1,-1]),...(n?n.toArray():[0,0,0]));if((triangles.length+lines.length)/12>MAX_VERTICES)throw new Error('VR display exceeds vertex budget')}
   const visit=o=>{
     if(!o.visible || o.isTransformControlsRoot)return
     if(o.isSprite && o.material?.visible!==false && o.material.opacity>0) {
@@ -92,7 +95,8 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
             const idx=g.index?g.index.getX(j):j,a=g.attributes.uv
             col.copy(mat.color??new THREE.Color(1,1,1))
             if(mat.vertexColors&&g.attributes.color){const c=g.attributes.color;col.multiply(new THREE.Color(c.getX(idx),c.getY(idx),c.getZ(idx)))}
-            add(vertices,pos.fromBufferAttribute(p,idx),col,mat.opacity,uv&&a?[uv[0]+a.getX(idx)*(uv[2]-uv[0]),uv[1]+(1-a.getY(idx))*(uv[3]-uv[1])]:null)
+            const n=g.attributes.normal?normal.fromBufferAttribute(g.attributes.normal,idx):null
+            add(vertices,pos.fromBufferAttribute(p,idx),col,mat.opacity,uv&&a?[uv[0]+a.getX(idx)*(uv[2]-uv[0]),uv[1]+(1-a.getY(idx))*(uv[3]-uv[1])]:null,n)
           }
           for(let i=0;i<o.count;i++) {
             const alpha=original.attributes.instanceAlpha?.getX(i)??1
@@ -116,6 +120,7 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
           const spec=preparedImpostorSpec(materials[0]);const g=spec?sphere:original
           if(spec)m.scale(new THREE.Vector3(spec.radius,spec.radius,spec.radius))
           const p=g.attributes.position;if(!p)continue
+          normalMatrix.getNormalMatrix(m)
           const groups=g.groups.length?g.groups:[{start:0,count:g.index?.count??p.count,materialIndex:0}]
           for(const group of groups) {
             const mat=materials[group.materialIndex??0]??materials[0]
@@ -129,7 +134,7 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
               return col
             }
             const vertex=(out,k)=>{const idx=g.index?g.index.getX(k):k;pos.fromBufferAttribute(p,idx).applyMatrix4(m)
-              const a=g.attributes.uv;add(out,pos,colorAt(idx),mat.opacity*ia,uv&&a?[uv[0]+a.getX(idx)*(uv[2]-uv[0]),uv[1]+(1-a.getY(idx))*(uv[3]-uv[1])]:null)}
+              const a=g.attributes.uv,n=o.isMesh&&g.attributes.normal?normal.fromBufferAttribute(g.attributes.normal,idx).applyMatrix3(normalMatrix).normalize():null;add(out,pos,colorAt(idx),mat.opacity*ia,uv&&a?[uv[0]+a.getX(idx)*(uv[2]-uv[0]),uv[1]+(1-a.getY(idx))*(uv[3]-uv[1])]:null,n)}
             if(o.isLineSegments)for(let k=start;k+1<end;k+=2){vertex(lines,k);vertex(lines,k+1)}
             else if(o.isLine) {for(let k=start;k+1<end;k++){vertex(lines,k);vertex(lines,k+1)}if(o.isLineLoop&&end>start){vertex(lines,end-1);vertex(lines,start)}}
             else if(o.isMesh)for(let k=start;k+2<end;k+=3){vertex(triangles,k);vertex(triangles,k+1);vertex(triangles,k+2)}
@@ -140,14 +145,15 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
     for(const child of o.children)visit(child)
   }
   if(!panelOnly&&!desktopOnlyLayout&&flags!==256)visit(scene);sphere.dispose()
-  return {flags,menu,batches,triangles:new Float32Array(triangles),lines:new Float32Array(lines),sprites:new Float32Array(sprites),pixels:ctx.getImageData(0,0,2048,2048).data,width:2048,height:2048}
+  return {schema:5,flags,menu,batches,triangles:new Float32Array(triangles),lines:new Float32Array(lines),sprites:new Float32Array(sprites),pixels:ctx.getImageData(0,0,2048,2048).data,width:2048,height:2048}
 }
 
 export function encodeVRView(view,version,requestSequence=0) {
   const batches=view.batches??[]
-  const header=new Uint32Array([4,version,view.flags,view.triangles.length/9,view.lines.length/9,view.sprites.length/15,view.width,view.height,batches.length,requestSequence])
+  const schema=view.schema??4,stride=schema===5?12:9
+  const header=new Uint32Array([schema,version,view.flags,view.triangles.length/stride,view.lines.length/stride,view.sprites.length/15,view.width,view.height,batches.length,requestSequence])
   const parts=[new TextEncoder().encode('NADOCVT1'),header,view.triangles,view.lines,view.sprites]
-  for(const b of batches)parts.push(new Uint32Array([b.vertices.length/9,b.instances.length/20]),b.vertices,b.instances)
+  for(const b of batches)parts.push(new Uint32Array([b.vertices.length/stride,b.instances.length/20]),b.vertices,b.instances)
   return new Blob([...parts,view.pixels])
 }
 export function createVRViewTools({scene,getState,onError=console.error,doc=document}) {

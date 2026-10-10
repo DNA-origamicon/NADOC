@@ -15,8 +15,7 @@ def validate_sweep_draft(raw):
             or not isinstance(points, list) or len(points) > 256
             or any(not isinstance(p, list) or len(p) != 3 or any(
                 type(v) not in (int, float) or not math.isfinite(v) or abs(v) > 10000 for v in p)
-                for p in points)
-            or (points and points[0] != [0, 0, 0])):
+                for p in points)):
         raise ValueError('invalid sweep configuration')
     orientations = raw.get('orientations_deg')
     if orientations is not None and (not isinstance(orientations, list) or len(orientations) != len(points)

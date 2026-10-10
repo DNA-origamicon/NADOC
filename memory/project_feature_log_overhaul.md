@@ -66,6 +66,19 @@ Provenance survives persistence; it does not change feature replay or geometry.
 
 ## Native VR history rail (2026-10-08)
 
+October 9 refresh fix: `vr_feature_log.js` uses `createVRCommitRefresh` with the
+current store design and API revision watermark after the desktop seek. Display
+settings from `_vrCompanionState()` are not a valid `/vr/scene-refresh` request:
+the endpoint requires `expected_design_id` and `expected_revision`, otherwise
+it returns 422 after the desktop has already changed. Regression coverage uses
+the production adapter and actual browser history event dispatch in an isolated
+part, with intercepted VR transport to preserve the user's headset session.
+Debug → VR Tours & Tests → **Feature history · desktop-to-VR refresh** runs it
+(`python -m tools.vr_workflows.history_refresh_check --validate`). This checks
+browser geometry and publication identity; it does not claim controller motion
+or physical headset visibility.
+
+
 `feature_log_vr.js` exposes the actual desktop rows and action buttons to the
 versioned VR bridge. Native uses an independent scroll rail and a state rail
 that seeks only on release. F0, routing sub-positions, selected assembly parts,

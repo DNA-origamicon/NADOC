@@ -12,7 +12,7 @@ it('selects, edits in nm, adds in order, and deletes every point except origin',
   root.querySelector('[aria-label="Add sweep point"]').click()
   expect(editor.getPoints()).toEqual([[0, 0, 0], [0, 0, 11], [0, 0, 22]])
   root.querySelectorAll('[role=option]')[0].click()
-  expect(z.value).toBe('0'); expect(z.disabled).toBe(true)
+  expect(z.value).toBe('0'); expect(z.disabled).toBe(false)
   expect(root.querySelector('[aria-label="Delete point 0"]')).toBeNull()
   root.querySelector('[aria-label="Delete point 1"]').click()
   expect(editor.getPoints()).toEqual([[0, 0, 0], [0, 0, 22]])
@@ -23,15 +23,15 @@ it('selects, edits in nm, adds in order, and deletes every point except origin',
   expect(changed).toHaveBeenCalledTimes(4)
 })
 
-it('synchronizes scene selection and movement with the fields without moving the origin', () => {
+it('synchronizes scene selection and movement with the fields including the unattached origin', () => {
   const root = document.createElement('div'), changed = vi.fn(), selected = vi.fn()
   const editor = initSweepPoints(root, changed, selected)
   editor.select(1); editor.move(1, [3.5, 2, 10])
   expect(selected).toHaveBeenLastCalledWith(1)
   expect(root.querySelector('[aria-label="Point X (nm)"]').value).toBe('3.5')
   editor.move(0, [1,2,3])
-  expect(editor.getPoints()[0]).toEqual([0,0,0])
-  expect(changed).toHaveBeenCalledTimes(1)
+  expect(editor.getPoints()).toEqual([[1,2,3],[3.5,2,10]])
+  expect(changed).toHaveBeenCalledTimes(2)
 })
 
 it('enables arbitrary orientation independently of XYZ, keeps point associations and protects attached origins', () => {
@@ -71,4 +71,16 @@ it('truncates displayed positions only and puts help in hover tooltips', () => {
   expect(editor.getPoints()[1][0]).toBe(2.345678)
   expect(root.querySelector('p.tool-help')).toBeNull()
   expect(root.querySelector('.sweep-coordinates').title).toContain('precision')
+})
+
+
+it('allows an attached origin to move through fields and canvas movement', () => {
+  const root = document.createElement('div'), changed = vi.fn()
+  const editor = initSweepPoints(root, changed)
+  editor.setOrientations(null, true); editor.select(0)
+  expect(root.querySelector('[aria-label="Point X (nm)"]').disabled).toBe(false)
+  expect(editor.canMove(0)).toBe(true)
+  editor.move(0, [1,2,3])
+  expect(editor.getPoints()[0]).toEqual([1,2,3])
+  expect(changed).toHaveBeenCalledOnce()
 })

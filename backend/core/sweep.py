@@ -22,6 +22,7 @@ class SweepRequest(BaseModel):
     ligate_adjacent: bool = True
     source_helix_id: str | None = None
     source_end: Literal['start', 'end'] = 'end'
+    detach_source: bool = False
     expected_design_id: str | None = None
     expected_revision: int | None = Field(default=None, ge=0, strict=True)
 
@@ -33,8 +34,8 @@ class SweepRequest(BaseModel):
             raise ValueError('Sweep cells must be unique')
         if any(not math.isfinite(v) or abs(v) > 10000 for p in self.points_nm for v in p):
             raise ValueError('Sweep coordinates must be finite and within ±10000 nm')
-        if self.points_nm[0] != (0, 0, 0):
-            raise ValueError('The first sweep point is the fixed origin (0, 0, 0)')
+        if self.source_helix_id and self.points_nm[0] != (0, 0, 0):
+            self.detach_source = True
         if self.expected_revision is not None and self.expected_design_id is None:
             raise ValueError('A revision guard requires a design ID')
         if self.orientations_deg is not None:
@@ -42,7 +43,7 @@ class SweepRequest(BaseModel):
                 raise ValueError('Sweep orientations must match the point count')
             if any(not math.isfinite(v) or abs(v) > 360 for angles in self.orientations_deg if angles is not None for v in angles):
                 raise ValueError('Sweep angles must be finite and within ±360 degrees')
-            if self.source_helix_id and self.orientations_deg[0] is not None and any(abs(v) > 1e-8 for v in self.orientations_deg[0]):
+            if self.source_helix_id and not self.detach_source and self.orientations_deg[0] is not None and any(abs(v) > 1e-8 for v in self.orientations_deg[0]):
                 raise ValueError('The attached origin orientation is fixed to its source end')
         return self
 
@@ -128,7 +129,7 @@ def sweep_source(design, body):
 
 def sweep_preview(design, body, *, include_geometry=False):
     source = sweep_source(design, body)
-    initial = source['rotation'] @ source['normal'] * source['direction'] if body.source_helix_id else None
+    initial = source['rotation'] @ source['normal'] * source['direction'] if body.source_helix_id and not body.detach_source else None
     points = tuple(body.points_nm)
     basis = source['rotation'] @ canonical_basis(source['normal'] * source['direction'])
     frames = frame_key([None if a is None else (basis @ Rotation.from_euler('YXZ', [a[1], a[0], a[2]], degrees=True).as_matrix()).ravel().tolist()
@@ -167,7 +168,7 @@ def sweep_preview(design, body, *, include_geometry=False):
     _, point_matrices, _ = oriented_sample(points, np.interp(knots, table[1], table[2]), initial,
         source['rotation'], source['normal'] * source['direction'], frames)
     point_bases = point_matrices @ canonical_basis(source['normal'] * source['direction'])
-    return dict(**geometry, feasibility=feasibility, point_bases=point_bases.tolist(), orientation_basis=basis.tolist(), source_frame=frame, origin_nm=source['origin'].tolist(), path_nm=(positions + source['origin']).tolist(),
+    return dict(**geometry, source_detached=body.detach_source, feasibility=feasibility, point_bases=point_bases.tolist(), orientation_basis=basis.tolist(), source_frame=frame, origin_nm=source['origin'].tolist(), path_nm=(positions + source['origin']).tolist(),
                 points_nm=(np.asarray(points) + source['origin']).tolist(), length_nm=length,
                 length_bp=count, total_new_bp=count * len(body.cells),
                 cross_section_nm=(offsets @ canonical_basis(source['normal'] * source['direction']))[:, :2].tolist(), direction=source['direction']), source
@@ -262,7 +263,7 @@ def build_sweep(design, body):
         clusters.append(ClusterRigidTransform(id='sweep_cluster_'+token, name='Sweep', helix_ids=new_ids, auto_created=False))
     params = SweepParams(points_nm=points.tolist(), origin_nm=origin.tolist(),
         initial_rotation=rotation.ravel().tolist(),
-        initial_tangent=(rotation @ source['normal'] * direction).tolist() if body.source_helix_id else None,
+        initial_tangent=(rotation @ source['normal'] * direction).tolist() if body.source_helix_id and not body.detach_source else None,
         point_frames=point_frames, auto_loop_skips=True,
         preceding_op_ids=[o.id for o in design.deformations],
         direction=direction, start_step=1 if body.source_helix_id else 0,
@@ -303,6 +304,9 @@ def build_sweep(design, body):
     op.params.warning_bps = sorted(set(op.params.warning_bps + warning_sites))
     result = apply_loop_skips(result, marks)
     op.params.loop_skip_warnings = warnings
+    if body.detach_source and body.source_helix_id:
+        from backend.core.sweep_detach import detach_sweep_source
+        result = detach_sweep_source(result, set(new_ids), {h.id for h in source['sources'].values()})
     from backend.core.cluster_reconcile import reconcile_cluster_membership
     return reconcile_cluster_membership(design, result, sweep_mutation_report(design, result, body))
 

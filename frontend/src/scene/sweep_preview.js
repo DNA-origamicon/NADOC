@@ -6,7 +6,7 @@ import { createSweepLivePreview } from './sweep_live_preview.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 
 /** Display-only swept helix tubes, point picking and world translation controls. */
-export function createSweepPreview(scene, { canvas, getCamera, getControls, addFrameCallback, removeFrameCallback, onSelect, onMove, onOrient, canOrient = () => true, setPreviewHelices = () => {} } = {}) {
+export function createSweepPreview(scene, { canvas, getCamera, getControls, addFrameCallback, removeFrameCallback, onSelect, onMove, onOrient, canOrient = () => true, canMove = () => true, setPreviewHelices = () => {} } = {}) {
   const root = new THREE.Group(), geometry = new THREE.Group(), points = new THREE.Group()
   root.name = 'sweep-preview'; points.name = 'sweep-control-points'; geometry.name = 'sweep-geometry'
   root.add(geometry, points); scene.add(root)
@@ -80,7 +80,7 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
         onOrient?.(selected, anglesFromFrame(frame))
         return
       }
-      if (selected === 0) return
+      if (!canMove(selected)) return
       point.position.copy(target.position)
       updateSection(selected)
       const offset = target.position.clone().sub(origin).applyMatrix3(inverse)
@@ -91,7 +91,7 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
     selected = index
     for (const [i, point] of points.children.entries()) point.material.color.setHex(i === index ? 0xffffff : i === 0 ? 0x58a6ff : 0xffc857)
     sections.children.forEach((_, i) => updateSection(i))
-    if (points.children[index] && (mode === 'translate' ? index > 0 : canOrient(index))) {
+    if (points.children[index] && (mode === 'translate' ? canMove(index) : canOrient(index))) {
       ensureControls()
       if (!tc?.dragging) {
         target.position.copy(points.children[index].position)
@@ -129,7 +129,7 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
     if (event.target !== canvas || event.button !== 0 || !points.children.length) return
     syncCamera(); scene.updateMatrixWorld(true); getCamera().updateMatrixWorld(true)
     const p = pointer(event)
-    // A visible point wins over a gizmo handle behind it, including the fixed origin.
+    // A visible point wins over a gizmo handle behind it, including the origin.
     raycaster.setFromCamera(p, getCamera())
     const hit = raycaster.intersectObjects(points.children.filter(p => p.visible), false)[0]
     if (hit) { onSelect?.(hit.object.userData.pointIndex); consume(event); return }

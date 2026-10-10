@@ -174,9 +174,9 @@ struct SweepDraft {
     bool previous(){if(step!=2)return false;step=1;freeDrawArmed=drawing=false;strokeNm.clear();++revision;return true;}
     bool select(size_t index){if(index>=pointsNm.size())return false;selected=index;return true;}
     bool movePoint(size_t index,glm::vec3 value) {
-        if(index==0 || index>=pointsNm.size() || !boundedSweepPoint(value) || drawing)return false;
+        if(index>=pointsNm.size() || !boundedSweepPoint(value) || drawing)return false;
         if(glm::length(pointsNm[index]-value)<1e-7F)return false;
-        pointsNm[index]=value;strokeInvalid=false;++revision;return true;
+        pointsNm[index]=value;strokeNm.clear();strokeInvalid=false;++revision;return true;
     }
     bool adjustPoint(size_t index,int axis,float deltaNm) {
         if(axis<0 || axis>2 || index>=pointsNm.size() || !std::isfinite(deltaNm))return false;
@@ -207,16 +207,16 @@ struct SweepDraft {
     }
     void armFreeDraw() {
         if(step!=2)return;
-        pointsNm={glm::vec3(0)};orientations.assign(1,std::nullopt);selected=0;strokeNm.clear();freeDrawArmed=true;drawing=strokeInvalid=false;++revision;
+        pointsNm={pointsNm.empty()?glm::vec3(0):pointsNm.front()};orientations.assign(1,std::nullopt);selected=0;strokeNm.clear();freeDrawArmed=true;drawing=strokeInvalid=false;++revision;
     }
     bool beginStroke(glm::vec3 controllerNm) {
         if(!freeDrawArmed || drawing || !finiteSweepPoint(controllerNm))return false;
-        strokeStartNm=controllerNm;strokeNm={glm::vec3(0)};drawing=true;strokeInvalid=false;++revision;return true;
+        strokeStartNm=controllerNm;strokeNm={pointsNm.front()};drawing=true;strokeInvalid=false;++revision;return true;
     }
     bool appendStroke(glm::vec3 controllerNm) {
         if(!drawing)return false;
         if(!finiteSweepPoint(controllerNm)){strokeInvalid=true;return false;}
-        const auto p=controllerNm-strokeStartNm;
+        const auto p=pointsNm.front()+controllerNm-strokeStartNm;
         if(!boundedSweepPoint(p)){strokeInvalid=true;return false;}
         if(glm::length(p-strokeNm.back())<std::max(.001F,smoothing.sampleSpacingNm))return false;
         if(strokeNm.size()>=std::max(size_t(2),smoothing.maxSamples)) {
@@ -231,7 +231,8 @@ struct SweepDraft {
         if(!drawing)return false;
         drawing=freeDrawArmed=false;
         auto result=strokeInvalid?std::vector<glm::vec3>{}:smoothSweepStroke(strokeNm,smoothing);
-        if(result.size()<2){pointsNm={glm::vec3(0)};selected=0;++revision;return false;}
+        for(auto& p:result){p+=pointsNm.front();if(!boundedSweepPoint(p)){result.clear();break;}}
+        if(result.size()<2){pointsNm={pointsNm.front()};selected=0;++revision;return false;}
         pointsNm=std::move(result);orientations.assign(pointsNm.size(),std::nullopt);selected=pointsNm.size()-1;++revision;return true;
     }
     void cancelStroke(){drawing=freeDrawArmed=strokeInvalid=false;strokeNm.clear();++revision;}
@@ -327,7 +328,7 @@ struct SweepPointDrag {
     bool active=false;size_t index=0;float distance=0;glm::vec3 offset{};
     bool begin(size_t pointIndex,glm::vec3 point,glm::vec3 origin,glm::vec3 direction) {
         active=false;
-        if(pointIndex==0 || !finiteSweepPoint(point) || !finiteSweepPoint(origin) || !finiteSweepPoint(direction) || glm::length(direction)<1e-6F)return false;
+        if(!finiteSweepPoint(point) || !finiteSweepPoint(origin) || !finiteSweepPoint(direction) || glm::length(direction)<1e-6F)return false;
         direction=glm::normalize(direction);distance=glm::dot(point-origin,direction);
         if(distance<0)return false;
         active=true;index=pointIndex;offset=point-(origin+direction*distance);return true;

@@ -2,7 +2,7 @@ import { it, expect, vi } from 'vitest'
 import * as THREE from 'three'
 import { createSweepPreview } from './sweep_preview.js'
 
-it('raycasts points, translates the selected point in its saved frame, and cleans up controls', () => {
+it.each([0, 1])('raycasts and translates point %i in its saved frame and cleans up controls', pointIndex => {
   const canvas = document.createElement('canvas')
   document.body.append(canvas)
   canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 })
@@ -18,9 +18,11 @@ it('raycasts points, translates the selected point in its saved frame, and clean
   const fire = (type, p, button = 0) => { const event = new MouseEvent(type, { clientX: p.x, clientY: p.y, button, bubbles: true, cancelable: true }); Object.defineProperty(event, 'pointerId', { value: 1 }); canvas.dispatchEvent(event) }
   fire('pointerdown', screen(new THREE.Vector3(0,0,0)))
   expect(selected).toHaveBeenLastCalledWith(0)
-  expect(scene.getObjectByName('sweep-point-gizmo').visible).toBe(false)
-  fire('pointerdown', screen(new THREE.Vector3(0,5,0)))
-  expect(selected).toHaveBeenLastCalledWith(1)
+  expect(scene.getObjectByName('sweep-point-gizmo').visible).toBe(true)
+  if (pointIndex === 1) {
+    fire('pointerdown', screen(new THREE.Vector3(0,5,0)))
+    expect(selected).toHaveBeenLastCalledWith(1)
+  }
   scene.updateMatrixWorld(true)
   const helper = scene.getObjectByName('sweep-point-gizmo')
   const handles = []
@@ -36,8 +38,8 @@ it('raycasts points, translates the selected point in its saved frame, and clean
   expect(orbit.enabled).toBe(true)
   expect(moved).toHaveBeenCalled()
   const [index, point] = moved.mock.lastCall
-  expect(index).toBe(1)
-  expect(point[0]).toBeCloseTo(5, 2)
+  expect(index).toBe(pointIndex)
+  expect(point[0]).toBeCloseTo(pointIndex * 5, 2)
   expect(point[1]).toBeLessThan(-1)
   preview.clear()
   expect(scene.getObjectByName('sweep-control-points').children).toHaveLength(0)

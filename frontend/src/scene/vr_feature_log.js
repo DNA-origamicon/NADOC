@@ -1,8 +1,9 @@
 import { docHeaders } from '../shared/doc_id.js'
+import { createVRCommitRefresh } from './vr_commit_refresh.js'
 const wire = state => JSON.parse(JSON.stringify(state, (key, value) => ['element', 'actions', 'value'].includes(key) ? undefined : value))
 
 /** Revision-checked commands; existing desktop handlers retain all safeguards. */
-export function createVRFeatureLog({ panel, store, refresh, request = fetch, onError = console.error }) {
+export function createVRFeatureLog({ panel, store, api, refresh = () => createVRCommitRefresh({ api, getState: store.getState }).complete(), request = fetch, onError = console.error }) {
   let version = 1, acknowledged = 0, published, sending = false, epoch = 0, activeUntil = 0
   let watching = false, refreshing = false, dirty = false, status = '', refreshTimer
   const pending = new Set(), win = globalThis.window

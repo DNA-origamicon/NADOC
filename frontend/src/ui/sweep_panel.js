@@ -27,14 +27,20 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
   const sourceSelect = el('source'), planeSelect = el('plane'), status = el('status'), apply = el('apply')
   const popup = createToolPopup({ panel, title: 'Sweep', onClose: hide })
   const preview = createSweepPreview(scene, { setPreviewHelices, canvas, getCamera, getControls, addFrameCallback, removeFrameCallback,
-    onSelect: index => editor.select(index), onOrient: (index, value) => editor.orient(index, value), canOrient: index => editor.canOrient(index), onMove: (index, value) => editor.move(index, value) })
-  const editor = initSweepPoints(el('point-editor'), () => { resetPathDirection = false; schedulePreview() }, index => preview.select(index), index => preview.getOrientation(index))
+    onSelect: index => editor.select(index), onOrient: (index, value) => editor.orient(index, value), canOrient: index => editor.canOrient(index), canMove: index => editor.canMove(index), onMove: (index, value) => editor.move(index, value) })
+  const editor = initSweepPoints(el('point-editor'), () => {
+    if (source && !detachedSource && editor.getPoints()[0].some(v => Number.isFinite(v) && v !== 0)) {
+      detachedSource = true; editor.setOrientations(editor.getOrientations(), false)
+    }
+    resetPathDirection = false; schedulePreview()
+  }, index => preview.select(index), index => preview.getOrientation(index))
   let active = false, busy = false, editing = null, cells = [], source = null, sources = []
   let epoch = 0, timer = null, pin = {}, sweepId = null, updatingPicker = false, needsSourceFrame = false
+  let detachedSource = false
   let previousPreview = true, resetPathDirection = false, step = 1, sourceFrame = null
 
   function body() {
-    return { ...(sweepId ? { sweep_id: sweepId } : {}), cells, points_nm: editor.getPoints(), orientations_deg: editor.getOrientations(), plane: planeSelect.value,
+    return { ...(detachedSource ? { detach_source: true } : {}), ...(sweepId ? { sweep_id: sweepId } : {}), cells, points_nm: editor.getPoints(), orientations_deg: editor.getOrientations(), plane: planeSelect.value,
       strand_filter: el('strands').value, ligate_adjacent: el('ligate').checked,
       source_helix_id: source?.id ?? null, source_end: source?.end ?? 'end', ...pin }
   }
@@ -77,6 +83,7 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
       if (step === 2) { preview.update(response, request); preview.select(editor.getSelected()) }
       el('total-bp').textContent = (response.total_new_bp ?? response.length_bp * cells.length).toLocaleString()
       status.textContent = step === 1 ? `${cells.length} lattice cells selected.` : `${response.length_nm.toFixed(2)} nm · ${response.length_bp} bp per helix`
+      if (step === 2 && response.source_detached) status.textContent += ' · Detached from source; connecting strands split'
       if (step === 1 && source && needsSourceFrame && response.source_frame) {
         updatingPicker = true
         slicePlane.showDeformed(response.source_frame, { plane: planeSelect.value, continuation: true, refHelixId: source.id, allowOrbit: true })
@@ -113,7 +120,7 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
     el('cancel').textContent = step === 1 ? 'Cancel' : 'Previous'
     apply.textContent = step === 1 ? 'Next' : 'Confirm'
     if (step === 2) {
-      editor.setOrientations(editor.getOrientations(), !!source)
+      editor.setOrientations(editor.getOrientations(), !!source && !detachedSource)
       updatingPicker = true; slicePlane.hide(); updatingPicker = false
     } else {
       showPicker(cells); needsSourceFrame = !!source
@@ -149,7 +156,7 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
     extrudePanel.hide(); expandedSpacing?.forceOff?.()
     previousPreview = slicePlane.isPreviewEnabled?.() ?? true
     slicePlane.setPreviewEnabled(false); slicePlane.setExtrudeUiOpen(false)
-    active = true; editing = null; resetPathDirection = false; sweepId = crypto.randomUUID(); source = null; needsSourceFrame = false
+    active = true; detachedSource = false; editing = null; resetPathDirection = false; sweepId = crypto.randomUUID(); source = null; needsSourceFrame = false
     sourceFrame = null; store.setState({ sweepActive: true })
     pin = { expected_design_id: state.currentDesign.id }
     populateSources()
@@ -170,12 +177,13 @@ export function initSweepPanel({ store, api, slicePlane, scene, extrudePanel, ex
     sourceSelect.value = source ? String(sources.indexOf(source)) : ''
     needsSourceFrame = !!source
     editor.setPoints(p.points_nm)
-    editor.setOrientations(p.orientations_deg, !!p.source_helix_id)
+    detachedSource = !!p.detach_source
+    editor.setOrientations(p.orientations_deg, !!p.source_helix_id && !detachedSource)
     el('strands').value = p.strand_filter ?? 'both'; el('ligate').checked = p.ligate_adjacent ?? true
     popup.setTitle('Edit Sweep'); cells = p.cells.map(c => [...c]); setStep(2)
   }
   function changeSource() {
-    sourceFrame = null
+    detachedSource = false; sourceFrame = null
     source = sourceSelect.value === '' ? null : sources[Number(sourceSelect.value)]
     planeSelect.disabled = !!source
     let selected = []

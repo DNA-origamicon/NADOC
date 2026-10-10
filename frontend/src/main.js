@@ -6491,7 +6491,7 @@ async function main() {
   })
   setNativePromptHandler(opts => vrPrompts.ask(opts))
   const vrRouting = createVRRouting({ onError: message => showToast(message, { severity: 'error' }) })
-  const vrFeatureLog = createVRFeatureLog({ panel: () => _partFeatureLogPanel, store, refresh: () => api.refreshNativeVRScene(_vrCompanionState()), onError: message => showToast(message, { severity: 'error' }) })
+  const vrFeatureLog = createVRFeatureLog({ panel: () => _partFeatureLogPanel, store, api, onError: message => showToast(message, { severity: 'error' }) })
   const vrSimulations = createVRSimulations({ jobs: simulateJobs, engineSelector, onError: message => showToast(message, { severity: 'error' }) })
   const vrShare = createVRShare({})
   const vrViewTools = createVRViewTools({scene,getState:store.getState,onError:message=>showToast(message,{severity:'error'})})
@@ -6508,7 +6508,7 @@ async function main() {
     const key = JSON.stringify(payload)
     if (key === vrEndPublished) return
     vrEndPublishing = true
-    try { await api.sendVREndResizeHandles(payload); vrEndPublished = key }
+    try { if (await api.sendVREndResizeHandles(payload)) vrEndPublished = key }
     catch { /* Retry on the next native poll. */ }
     finally { vrEndPublishing = false }
   }

@@ -180,3 +180,22 @@ it('coalesces input into one local frame and rejects out-of-order server preview
   change(9);panel.hide();await vi.advanceTimersByTimeAsync(20)
   expect(scene.getObjectByName('sweep-live-preview').visible).toBe(false)
 })
+
+
+it('moving an attached origin detaches it, and returning to zero does not silently reconnect it', async () => {
+  const { api, store } = setup()
+  store.setState({ currentDesign: { id: 'part', helices: [{ id: 'h_XY_0_0', grid_pos: [0,0], axis_start: {x:0,y:0,z:0}, axis_end: {x:0,y:0,z:7} }], lattice_type: 'SQUARE' } })
+  panel.edit({ params: { cells: [[0,0]], plane: 'XY', source_helix_id: 'h_XY_0_0', source_end: 'end', points_nm: [[0,0,0],[0,0,10]] } }, 1)
+  await vi.advanceTimersByTimeAsync(130)
+  document.querySelector('[role=option]').click()
+  const x = document.querySelector('[aria-label="Point X (nm)"]')
+  expect(x.disabled).toBe(false)
+  x.value = '4'; x.dispatchEvent(new Event('input'))
+  await vi.advanceTimersByTimeAsync(130)
+  expect(api.previewSweep).toHaveBeenLastCalledWith(expect.objectContaining({detach_source: true, points_nm: [[4,0,0],[0,0,10]]}), 1)
+  x.value = '0'; x.dispatchEvent(new Event('input'))
+  await vi.advanceTimersByTimeAsync(130)
+  document.getElementById('sweep-apply').click()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(api.editFeature).toHaveBeenCalledWith(1, expect.objectContaining({detach_source: true, points_nm: [[0,0,0],[0,0,10]]}))
+})
