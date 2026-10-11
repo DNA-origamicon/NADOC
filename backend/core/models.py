@@ -955,6 +955,10 @@ class Strand(BaseModel):
     domains: List[Domain] = Field(default_factory=list)
     strand_type: StrandType = StrandType.STAPLE
     sequence: Optional[str] = None
+    # Full length of an explicitly supplied custom scaffold source, before the
+    # sequence assigner truncates/pads it to the routed domains. Never infer this
+    # from Strand.sequence: that may contain only a prefix of a supplied source.
+    custom_scaffold_length: Optional[int] = Field(default=None, gt=0)
     color: Optional[str] = None  # "#RRGGBB" hex; None → use STAPLE_PALETTE
     name: Optional[str] = None  # user-defined oligo/order name; blank by default
     notes: Optional[str] = None  # user-defined notes (shown in spreadsheet panel)
@@ -1912,6 +1916,7 @@ SnapshotOpKind = Literal[
     "generate-design",
     "nick",
     "cluster-pose",
+    "cluster-join",
     "extrude-frame",
     "aptamer-import",
     "bundle-create",

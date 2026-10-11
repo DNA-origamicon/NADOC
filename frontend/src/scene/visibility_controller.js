@@ -41,6 +41,7 @@ export function buildVisibilityGeometryIndex(geometry) {
 export function initVisibilityController({ store, designRenderer, unfoldView, onChange, onPersist } = {}) {
   const hidden = new Set()
   const shown = new Set()
+  let effectiveHidden = new Set()
   let hiddenClusters = new Set()
   const undoStack = []
   const redoStack = []
@@ -63,6 +64,7 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
     const all = new Set(hidden)
     for (const key of _keysFor({ clusterIds: [...hiddenClusters] })) all.add(key)
     for (const key of shown) all.delete(key)
+    effectiveHidden = all
     designRenderer.setHiddenNucs(all)
     designRenderer.setHiddenCrossovers(unfoldView?.setHiddenNucs?.(all) ?? new Set())
     if (notify) onChange?.(all, new Set(hiddenClusters))
@@ -175,6 +177,7 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
   return {
     hide, show, setHiddenClusters, unhideAll, undo, redo, isStrandShown,
     getHiddenBaseKeys: () => new Set(hidden),
+    isBaseShown: key => !effectiveHidden.has(key),
     flushPersistence: () => persistChain,
     destroy: () => unsubscribe?.(),
   }

@@ -754,11 +754,12 @@ def mutate_with_feature_log(
             report = result if isinstance(result, MutationReport) else None
 
         reconciled = reconcile_cluster_membership(before, s.design, report)
-        if op_kind in ("auto-break", "full-autostaple"):
+        if op_kind in ("auto-break", "full-autostaple", "cluster-join"):
             # Autobreak / full-autostaple deliberately leave crossovers unligated
             # so staples stay at or below the length cap.  Retrying pre-existing
             # unligated crossovers here would re-ligate across those breaks,
-            # busting the 56-nt cap and undoing the routed topology.
+            # busting the 56-nt cap and undoing the routed topology. Join also
+            # preserves existing fine-routing nicks outside its explicit splice.
             s.design = reconciled
         else:
             s.design = _retry_pending_ligations(before, reconciled)

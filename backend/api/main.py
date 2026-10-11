@@ -65,6 +65,7 @@ from backend.api.routes_camera_poses import router as camera_poses_router
 from backend.api.routes_cluster import router as cluster_router
 from backend.api.routes_runpod import router as runpod_router
 from backend.api.routes_cluster_joints import router as cluster_joints_router
+from backend.api.routes_cluster_join import router as cluster_join_router
 from backend.api.routes_clusters import router as clusters_router
 from backend.api.routes_nucleotide_transforms import router as nucleotide_transforms_router
 from backend.api.routes_deformation import router as deformation_router
@@ -430,6 +431,7 @@ app.include_router(nucleotide_transforms_router, prefix="/api")
 app.include_router(cluster_router, prefix="/api")
 app.include_router(runpod_router, prefix="/api")
 app.include_router(cluster_joints_router, prefix="/api")
+app.include_router(cluster_join_router, prefix="/api")
 app.include_router(animations_router, prefix="/api")
 app.include_router(chain_sim_router, prefix="/api")
 app.include_router(simulate_router, prefix="/api")

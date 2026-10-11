@@ -123,6 +123,7 @@ def oxdna_design_fingerprint(design: Design) -> str:
     for strand in payload.get("strands", []):
         # Readiness provenance does not change the simulated molecule.
         strand.pop("routing_seed", None)
+        strand.pop("custom_scaffold_length", None)
         strand.pop("color", None)
     # Sub-domain ids are editor identity only. Older assembly flattening generated
     # a fresh UUID for each polymer-end sub-domain on every materialization, making

@@ -40,11 +40,13 @@ export function installTestApi({
   _enterAssemblyMode,
   _exitAssemblyMode,
   forceCrossoverTool,
+  clusterJoinTool,
   markFlexibleRun,
   multiOverlay,
   multiView,
 }) {
   window.__nadocTest = {
+    clusterJoin: clusterJoinTool?.testApi,
     viewerFrameState: () => ({ rendered: renderer.info.render.frame, callbacks: window._cnFrame,
       focused: document.hasFocus(), hidden: document.hidden }),
     pauseViewerRenderingForTest: () => renderer.setAnimationLoop(null),

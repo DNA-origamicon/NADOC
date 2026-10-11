@@ -1559,6 +1559,20 @@ export async function forcedLigation(threePrimeStrandId, fivePrimeStrandId, isPe
   return _syncFromDesignResponse(json)
 }
 
+// Join owns a guarded preview session. Return raw responses so its controller
+// can discard retired selections/documents before applying the design response.
+export function getClusterJoinSites({ signal } = {}) {
+  return _request('GET', '/design/cluster-join/candidates', undefined, { signal, suppressBusy: true })
+}
+
+export function previewClusterJoin(body, { signal } = {}) {
+  return _request('POST', '/design/cluster-join/preview', body, { signal, suppressBusy: true })
+}
+
+export function applyClusterJoin(body) {
+  return _request('POST', '/design/cluster-join/apply', body)
+}
+
 export async function addAutoBreak(opts = {}) {
   const json = await _request('POST', '/design/auto-break', opts)
   return _syncFromDesignResponse(json)

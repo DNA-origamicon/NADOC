@@ -66,6 +66,20 @@ describe('visibility controller', () => {
     const { api } = setup()
     api.hide({ baseKeys: ['h1:0:FORWARD'] })
     expect(api.isStrandShown('s1')).toBe(true)
+    expect(api.isBaseShown('h1:0:FORWARD')).toBe(false)
+    expect(api.isBaseShown('h1:1:FORWARD')).toBe(true)
+  })
+
+  it('exposes effective attachment visibility including hidden clusters and shown exceptions', () => {
+    const { api } = setup({
+      hidden_base_keys: [], hidden_cluster_ids: ['c1'], shown_base_keys: ['h1:0:FORWARD'],
+    })
+    expect(api.isBaseShown('h1:0:FORWARD')).toBe(true)
+    expect(api.isBaseShown('h1:1:FORWARD')).toBe(false)
+    api.show({ baseKeys: ['h1:1:FORWARD'] })
+    expect(api.isBaseShown('h1:1:FORWARD')).toBe(true)
+    api.undo()
+    expect(api.isBaseShown('h1:1:FORWARD')).toBe(false)
   })
 
   it('undoes and redoes visibility-only edits without the design log', () => {

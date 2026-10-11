@@ -135,6 +135,7 @@ import {
          handlePointerUp   as deformPointerUp,
          handleEscape as deformEscape,
          exitTool as deformExitTool,
+         waitForDeformationIdle,
          getState as getDeformState,
        } from './scene/deformation_editor.js'
 import { initOverhangsManagerPopup,
@@ -238,6 +239,8 @@ import {
 } from './scene/selection_model.js'
 import { isSelectionRefLive } from './scene/selection_ref.js'
 import { initForceCrossoverTool }   from './scene/force_crossover_tool.js'
+import { initClusterJoinTool }      from './scene/cluster_join_tool.js'
+import { baseKey as joinBaseKey }   from './scene/base_ref.js'
 import { forceLigateSelectedEnds }  from './scene/force_ligation.js'
 import { initOverhangOrientationPanel } from './ui/overhang_orientation_panel.js'
 import { showToast, showPersistentToast, dismissToast } from './ui/toast.js'
@@ -706,6 +709,7 @@ async function main() {
   let visibilityController = null
   let selectionManager = null
   let dimensionsTool = null
+  let clusterJoinTool = null
   // Part-edit mode imports its design during boot, before the lower UI sections
   // are composed. Store subscribers can run synchronously during that import, so
   // every value they touch must already be initialized (optional chaining does
@@ -913,7 +917,7 @@ async function main() {
     controls,
     getHoverEntry: () => zoomScope.getHoverEntry(),
     getCamera:     () => sceneCtx.getRenderCamera(),
-    isDisabled:    () => slicePlane?.isContinuation() || store.getState().forceXoverActive || store.getState().sweepActive,
+    isDisabled:    () => slicePlane?.isContinuation() || store.getState().forceXoverActive || store.getState().sweepActive || store.getState().joinActive,
   })
   store.subscribe((newState, prevState) => {
     if (newState.currentDesign === prevState.currentDesign || !newState.currentDesign) return
@@ -2700,6 +2704,7 @@ async function main() {
       if (isDeformActive()) return true
       const s = store.getState()
       if (s.sweepActive) return true
+      if (s.joinActive) return true
       if (s.deformToolActive) return true
       if (s.translateRotateActive) return true
       return false
@@ -3204,6 +3209,7 @@ async function main() {
   /** Clear per-file state (slice plane, store) and return to workspace. */
   function _resetForNewDesign() {
     window.dispatchEvent(new Event('nadoc:document-reset')); dimensionsTool?.reset?.()
+    clusterJoinTool?.deactivate(true)
     dimensionsTool?.close?.()
     selectionController.reload('design')
     // Leave photo mode before tearing the scene down. Otherwise the photo
@@ -3865,7 +3871,7 @@ async function main() {
     _startEmptySpaceExtrude()
   })
 
-  initDeformationToolLauncher({ store, selectionManager, showToast, deformView, watchDeformState: _watchDeformState })
+  const deformationToolLauncher = initDeformationToolLauncher({ store, selectionManager, showToast, deformView, watchDeformState: _watchDeformState })
 
   // Tools → Add Primitive: reveal the right-sidebar Primitives library.
   document.getElementById('menu-tools-add-primitive')?.addEventListener('click', () => {
@@ -4082,6 +4088,54 @@ async function main() {
     store, canvas, camera, designRenderer, selectionManager, api,
     getCamera: () => sceneCtx.getRenderCamera(),
   })
+
+  clusterJoinTool = initClusterJoinTool({
+    store, scene, canvas, camera, controls, api, showToast,
+    getCamera: () => sceneCtx.getRenderCamera(),
+    getControls: () => sceneCtx.getActiveControls(),
+    getDocumentToken: () => `${getDocId() ?? ''}:${store.getState().currentDesign?.id ?? ''}`,
+    isSiteVisible: site => [site.from, site.to].every(endpoint =>
+      !endpoint?.helix_id || visibilityController?.isBaseShown(joinBaseKey(endpoint)) !== false),
+    onActivate: async () => {
+      forceCrossoverTool.deactivate()
+      deformationToolLauncher.cancel()
+      await waitForDeformationIdle()
+      if (_translateRotateActive) await _cancelTranslateRotateTool()
+      if (_nucleotideTransformTool.isActive()) await _nucleotideTransformTool.cancel()
+      sweepPanel.hide()
+      dimensionsTool?.close?.()
+      jointRenderer.exitDefineMode()
+      selectionManager.clearSelection()
+      cadnanoView.forceExit()
+      if (_isUnfoldActive()) await _toggleUnfold()
+      expandedSpacing.forceOff()
+      if (!deformView.isActive()) await deformView.activate()
+      _setRepresentation('full')
+      slicePlane.hide()
+      _extrudePanel.hide()
+      crossSectionMinimap.clearSlice(); crossSectionMinimap.hide(); sliceHighlighter.clear()
+      return true
+    },
+    onApplied: response => api._syncFromDesignResponse(response),
+  })
+  const joinButtons = [document.getElementById('menu-tools-join'), document.querySelector('#view-tools [data-key="join"]')].filter(Boolean)
+  for (const button of joinButtons) button.addEventListener('click', async () => {
+    try {
+      if (clusterJoinTool.isActive()) clusterJoinTool.deactivate()
+      else await clusterJoinTool.activate()
+    } catch (error) { showToast(error?.message || 'Join could not start.', { severity: 'error' }) }
+  })
+  store.subscribe((next, previous) => {
+    if (next.joinActive === previous.joinActive) return
+    for (const button of joinButtons) {
+      button.classList.toggle('active', next.joinActive)
+      button.setAttribute('aria-pressed', String(next.joinActive))
+    }
+  })
+  document.addEventListener('click', event => {
+    const other = event.target.closest?.('[id^="menu-tools-"]')
+    if (other && other.id !== 'menu-tools-join') clusterJoinTool.deactivate()
+  }, true)
 
   // Save/restore selectableTypes when deform tool activates/deactivates so that
   // all selection code that reads selectableTypes sees the correct blocked state.
@@ -6893,6 +6947,17 @@ async function main() {
     showGenerateDesign({ api, store })
   })
 
+  let tJunctionPreview = null
+  let tJunctionLoading = false
+  document.getElementById('menu-help-t-junctions')?.addEventListener('click', async () => {
+    if (tJunctionLoading || tJunctionPreview?.isOpen()) return
+    tJunctionLoading = true
+    try {
+      const { showTJunctionHelp } = await import('./ui/t_junction_help.js')
+      tJunctionPreview = showTJunctionHelp()
+    } finally { tJunctionLoading = false }
+  })
+
   document.getElementById('menu-help-cpd-progress')?.addEventListener('click', async () => {
     const { showCpdProgress } = await import('./ui/cpd_progress.js')
     showCpdProgress()
@@ -7157,6 +7222,7 @@ async function main() {
       _enterAssemblyMode,
       _exitAssemblyMode,
       forceCrossoverTool,
+      clusterJoinTool,
       markFlexibleRun: _markFlexibleRun,
       multiOverlay: _multiOverlay,
       multiView: _multiView,

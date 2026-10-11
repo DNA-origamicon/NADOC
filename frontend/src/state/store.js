@@ -65,6 +65,9 @@ const _initialState = {
    *  the selection manager (lasso/multi-select/click) so the tool owns the gesture. */
   forceXoverActive: false,
 
+  /** Join owns side/end attachment picking while its native tool is open. */
+  joinActive: false,
+
   /** The current ValidationReport from the API, or null. */
   validationReport: null,
 
@@ -377,7 +380,7 @@ const _SLICES = {
   /** Selection, multi-select, active tools, crossover placement */
   selection: new Set(['selection',
                       'selectableTypes', 'crossoverPlacement', 'deformToolActive',
-                      'activeClusterId', 'translateRotateActive', 'sweepActive', 'debugOverlayActive',
+                      'activeClusterId', 'translateRotateActive', 'sweepActive', 'joinActive', 'debugOverlayActive',
                       'domainDesigner']),
 
   /** Design topology + derived geometry */

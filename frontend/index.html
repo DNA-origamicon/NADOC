@@ -1737,6 +1737,7 @@
     .sf-btn.active[data-key="ext"]      { color: #58d6a8; border-color: #247a5c; background: rgba(88,214,168,0.08); }
     .sf-btn.active[data-key="blunt"]  { color: #ffaa00; border-color: #996600; background: rgba(255,170,0,0.08); }
     .sf-btn.active[data-key="fxover"] { color: #3fd2c0; border-color: #1f7a70; background: rgba(63,210,192,0.08); }
+    .sf-btn.active[data-key="join"] { color: var(--color-accent); border-color: var(--color-accent); background: var(--color-accent-soft); }
     .sf-btn.active[data-key="ovhg"]   { color: #aa88ff; border-color: #664488; background: rgba(170,136,255,0.08); }
     .sf-btn.active[data-key="clust"]  { color: #ffd479; border-color: #b8860b; background: rgba(255,212,121,0.08); }
     .sf-btn.active[data-key="default"] { color: #8b949e; border-color: #484f58; background: rgba(139,148,158,0.08); }
@@ -4095,6 +4096,7 @@
           <button class="dropdown-item" id="menu-tools-extrude">Extrude…</button>
           <button class="dropdown-item" id="menu-tools-sweep">Sweep…</button>
           <button class="dropdown-item" id="menu-tools-translate-rotate">Move/Rotate</button>
+          <button class="dropdown-item" id="menu-tools-join">Join…</button>
           <button class="dropdown-item" id="menu-tools-linear-pattern">Linear Pattern…</button>
           <button class="dropdown-item" id="menu-tools-circular-pattern">Circular Pattern…</button>
           <hr style="border:none;border-top:1px solid #30363d;margin:4px 0">
@@ -4263,6 +4265,7 @@
           <button class="dropdown-item" id="menu-help-open-log">Open Log</button>
           <button class="dropdown-item" id="menu-help-about-file">About this file…</button>
           <button class="dropdown-item" id="menu-help-generate-design">Generate design…</button>
+          <button class="dropdown-item" id="menu-help-t-junctions">T-junction routing previews…</button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-help-connectivity" aria-pressed="false" title="Preview nanoparticle connectivity using shared-section bundle splits.">Connectivity<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item" id="menu-help-md-engines">MD Engines (install / status)…</button>
           <button class="dropdown-item" id="menu-help-cpd-progress">CPD progress…</button>
@@ -7563,6 +7566,10 @@
             <button class="sf-btn" data-key="fxover" title="Force crossover — click a 5′/3′ end, then a matching end on another strand to ligate them into one strand. Esc cancels.">
               <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><path d="M2,3 H7 L9,7 H14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2,7 H7 L9,3 H14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="5" r="1.1" fill="currentColor"/></svg>
               <span class="sf-label-text">fxover</span>
+            </button>
+            <button class="sf-btn" data-key="join" aria-label="Join clusters" aria-pressed="false" title="Join — choose a fixed attachment point, then a point on the cluster to move and connect.">
+              <svg width="16" height="10" viewBox="0 0 16 10" fill="none" aria-hidden="true"><path d="M2 7H14M8 1V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="7" r="2" stroke="currentColor" stroke-width="1.2"/></svg>
+              <span class="sf-label-text">join</span>
             </button>
             <button class="sf-btn" data-key="ovhg" title="Overhang locations — show available snap points">
               <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><line x1="2" y1="5" x2="10" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10,5 L14,2 M10,5 L14,8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>

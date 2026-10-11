@@ -8161,6 +8161,18 @@ def delete_feature(
 
     new_log = [e for e in log if e.id != entry.id]
 
+    if entry.feature_type == "cluster_op" and any(
+        getattr(e, "op_kind", None) == "cluster-join" for e in new_log
+    ):
+        from backend.core.cluster_join_history import rebase_join_snapshots_after_move_delete
+        baseline = next((c for c in _seek_feature_log(design, -2).cluster_transforms
+                         if c.id == entry.cluster_id), None)
+        if baseline is not None:
+            new_log = rebase_join_snapshots_after_move_delete(
+                new_log, entry.cluster_id, baseline,
+                design_state.decode_design_snapshot, design_state.encode_design_snapshot,
+            )
+
     # Adjust the cursor so the active window remains consistent after removal.
     cursor = design.feature_log_cursor
     if cursor == -2 or cursor < index:
@@ -9213,7 +9225,9 @@ def _seek_feature_log(
     Deformations are reconstructed from op_snapshot (if present) or by looking up
     deformation_id in design.deformations (backward compat for old log entries).
     Cluster transforms are set to the last cluster_op state in the active window,
-    or identity if no op exists for a cluster in the active range.
+    or identity if no op exists for a cluster in the active range. Join snapshots
+    also author absolute cluster poses; those are replayed chronologically with
+    ordinary moves, retaining the imported PRE pose before the first Join.
 
     Snapshot + routing-cluster entries are handled by :func:`_seek_snapshot_base`,
     which substitutes the topology-bearing fields (helices/strands/crossovers)
@@ -9237,6 +9251,7 @@ def _seek_feature_log(
         design, design_state.decode_design_snapshot
     )
     design = design.copy_with(cluster_transforms=pattern_clusters)
+    from backend.core.cluster_join_history import restore_join_history_poses
 
     if position == -2:
         # Seeking to empty state — no features active.
@@ -9255,6 +9270,9 @@ def _seek_feature_log(
             else ct
             for ct in design.cluster_transforms
         ]
+        new_cts = restore_join_history_poses(
+            design, new_cts, 0, design_state.decode_design_snapshot
+        )
         new_joints = _rebase_joints_to_cts(design, new_cts)
         # Reset overhang rotations + sub-domain (theta, phi) for any
         # overhang that has ops in the log.
@@ -9367,6 +9385,9 @@ def _seek_feature_log(
             )
         new_cts.append(ct)
 
+    new_cts = restore_join_history_poses(
+        design, new_cts, len(active), design_state.decode_design_snapshot
+    )
     new_joints = _rebase_joints_to_cts(design, new_cts)
 
     if optimize_overlays:
