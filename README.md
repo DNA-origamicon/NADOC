@@ -1,11 +1,14 @@
 # NADOC — Not Another DNA Origami CAD
 
-A research-grade DNA origami design tool built for precision, extensibility, and
-scientific rigour.  Every design decision is grounded in peer-reviewed literature
-and validated through a systematic experiment pipeline.
+A browser-based DNA origami CAD and research environment for designing strands,
+assembling structures, inspecting molecular geometry, and preparing simulations.
+Edit in synchronized 2D and 3D views, attach proteins and nanoparticles, and
+present designs through publication renders, shared browser views, or native VR.
 
 **Explore the [feature list](FEATURES.md)** — a compact, grouped inventory of
-design tools, assemblies, simulations, visualization, and more.
+design tools, assemblies, simulations, visualization, and more. The
+[feature overview](#feature-overview) below explains the main workflows; the
+[documentation map](#documentation-map) links to setup and detailed references.
 
 ## Getting Started
 
@@ -88,7 +91,7 @@ NADOC enforces a strict three-layer separation:
 |-------|---------|-------|
 | **Topological** | Strand graph, crossover connectivity, loop/skip modifications. Ground truth. | `backend/core/models.py`, `lattice.py`, `loop_skip_calculator.py` |
 | **Geometric** | Helix axes, nucleotide positions derived from topology + B-DNA constants. | `backend/core/geometry.py`, `deformation.py` |
-| **Physical** | XPBD/oxDNA relaxed positions. Display only, never written back. | `backend/physics/xpbd.py`, `oxdna_interface.py` |
+| **Physical** | Simulation and FEM result coordinates for display and explicit downstream export/seeding; separate from authored topology. | `backend/physics/oxdna_interface.py`, `backend/physics/fem_solver.py`, `backend/physics/snupi_dynamics.py` |
 
 ## Stack
 
@@ -96,34 +99,29 @@ NADOC enforces a strict three-layer separation:
 - **Frontend**: Three.js (Vite), vanilla ES modules
 - **2D Editor**: Canvas 2D (pathview) + SVG (sliceview), BroadcastChannel sync
 
-## Why NADOC
+## Feature overview
 
-caDNAno (Douglas et al., *Nature* 2009) established the lattice-based idiom for
-scaffolded DNA origami that the whole field still builds on. Traditional design
-tools in that lineage, however, remain 2D schematic editors: you route the
-scaffold and break staples by hand on a flat path view, with no 3D feedback, no
-physical model, and no concept of structure beyond a single straight bundle.
-NADOC keeps the honeycomb/square lattice idiom designers already know and
-rebuilds around it as a modern, browser-based three-layer engine —
-**topology → geometry → physics** — that closes those gaps:
+NADOC combines lattice-based strand design, molecular visualization, assembly CAD,
+and simulation workflows in one workspace. Features below describe the current
+source tree; engine availability, hardware, and model support vary by workflow.
 
-| Limitation of traditional tools | What NADOC does instead |
+| Workflow | What you can do |
 |---|---|
-| **2D path/slice schematic only** — you fold blind to the 3D result | Real-time 3D view derived from B-DNA geometry, with coarse-grained, all-atom, and molecular-surface representations |
-| **Idealized straight bundles** — global twist/bend only via hand-computed insertions/deletions | Geometric bend/twist deformation layer **and** topological loop/skip (Dietz, Douglas & Shih, *Science* 2009) with enforced physical limits (6–15 bp/turn, minimum bend radius), updated live in 3D |
-| **No physical model** — shape is guesswork until an external solver | Built-in XPBD real-time relaxation, oxDNA batch relaxation, and Euler–Bernoulli FEM with an RMSF heatmap |
-| **Manual scaffold routing & staple breaking** | CSP scaffold router + seamless router and auto-staple, plus drag-to-resize / drag-to-shift / spreadsheet editing in an overhauled 2D editor |
-| **M13 threading only — no functional-sequence design** | Orthogonal overhang sequence generation (Johnson et al. 5-mer rare-sequence algorithm) with GC, secondary-structure, and corpus-diversity filtering |
-| **A single monolithic object** — no hierarchy or assembly | Parts library + assembly CAD: mate connectors, kinematic cluster joints, cross-part overhang binding, and 1D polymerization of repeating units |
-| **Poly-T loops only — no first-class overhangs, linkers, or conjugates** | Overhang subdomain model with ssDNA/dsDNA linkers (freely-jointed-chain / duplex geometry + relaxation), protein attachment from PDB, and fluorophore/FRET modeling |
-| **No design history or conformational animation** | Snapshot-bearing feature log with revert/edit, plus camera poses, keyframes, and pre-baked 60 fps animation |
-| **Schematic cartoons for publication figures** | Photo mode — PBR materials, HDRI lighting, subsurface scattering, fluorophores as real light sources, progressive path tracing, and 300/600 DPI tiled export (see below) |
-| **A separate converter for every downstream tool** | One-click atomistic (PDB/PSF), NAMD package, and GROMACS export; native import of caDNAno v2 **and** scadnano designs |
-| **No path from model to a physical object** | One-click 3D-print export of the molecular surface — watertight binary STL, or a multi-color 3MF (scaffold plus three map-colored staple sets, so touching staples print in different filaments) auto-scaled for a consumer printer bed |
-| **Desktop install on a heavyweight GUI toolchain** | A web app — one `./setup.sh`, open a browser; runs on Linux, macOS, and Windows (WSL2) |
+| **Design and route** | Paint honeycomb/square lattices; extrude bundles; draw, resize, shift, nick, ligate, and cross over strands; use automatic scaffold routing and staple generation in synchronized 2D/3D views. |
+| **Sequence and order** | Assign standard or custom scaffold sequences, derive staple sequences, edit the strand spreadsheet, screen overhangs and final oligos, and export CSV/Excel and IDT order layouts. |
+| **Shape and assemble** | Bend/twist geometry, introduce loop/skip deformations, group helices into clusters, assemble reusable parts with connectors and joints, and animate gears, belts, and repeating units. |
+| **Functionalize** | Add overhangs, ssDNA/dsDNA linkers, protein/biotin attachments, imported DNA aptamers, thiolated gold particles, quantum dots, and fluorophore labels. Support for simulation depends on the attachment and engine. |
+| **Inspect and compare** | Switch among eleven representations, including atomistic and coarse-grained previews; compare panels or overlays; inspect local view volumes and sections; measure distances and visualize scalar maps. |
+| **Simulate and analyze** | Use CanDo/SNUPI FEM, mrDNA, oxDNA, or NAMD; manage jobs and resources; inspect relaxed shapes, trajectories, RMSF, deviation, and conformational clusters. See [simulation scope](#simulation-engines-and-analysis). |
+| **Render and present** | Use Photo Mode, high-resolution PNG output, camera/keyframe animations, video export, and STL/3MF print exports. Experimental browser sharing and native VR provide additional presentation workflows. |
+| **Save and collaborate** | Keep native parts/assemblies, undoable feature history, loadouts and immutable versions; package selected simulation artifacts; synchronize workspaces over Tailscale with leases and conflict preservation. |
+| **Exchange and automate** | Import/export caDNAno and scadnano with compatibility review; export atomistic structures and simulation packages; build designs and assemblies through scripts and the backend API. |
 
-Every behavior is grounded in peer-reviewed literature (`Literature/`) and
-validated by a large backend test suite — run `just test` to see current state.
+**Scope and validation.** Core editing is installed by `setup.sh`; external MD
+engines, remote execution targets, and native VR need additional setup. A preview,
+kinematic animation, or successful software test does not establish physical
+behavior, folding yield, or simulation convergence. Scientific validation is an
+explicit, separate workflow; see [validation scope](docs/scientific_validation.md).
 
 ## 2D Cadnano Editor
 
@@ -139,7 +137,10 @@ backend.
 ### Pathview (Canvas 2D)
 - Activated helices as horizontal double tracks (forward + reverse)
 - Scaffold pencil tool: click-drag to draw scaffold domains cell by cell
-- Auto-scaffold button routes and connects painted segments
+- Automatic scaffold routing and staple generation
+- Strand-end resizing, domain shifting, nicking/ligation, and crossover editing
+- Loop/skip and crossover-extra-base editing
+- Strand spreadsheet with sequence editing, search, sorting, and selected-base highlighting
 - Zoom, pan, helix label gutter
 
 ### Sync model
@@ -216,6 +217,21 @@ as an undoable Feature Log entry. See
 [Protein conjugation and constrained movement](docs/protein_conjugate_movement.md)
 for kinematics, transaction semantics, performance targets, and regression tests.
 
+### Aptamers and quantum dots
+
+Import a bundled folded DNA motif or a local DNA PDB as editable oligos while
+preserving native residue coordinates. Each covalent chain appears in the strand
+spreadsheet; terminal extensions provide attachment bases. Save in `.nadoc` to
+retain imported geometry and identities. See [aptamer import](docs/aptamer_import.md)
+for supported input and preparation limits.
+
+The quantum-dot catalog provides size specifications and vendor spectral plots,
+rigid placement, emission-color visualization, and custom PDB-based streptavidin
+coatings. Some vendor entries are preview-only: a reported hydrodynamic size is
+not sufficient to infer an inorganic core diameter. Catalog colors and geometric
+coating estimates are not calibrated optical or binding predictions. See
+[quantum dots](docs/quantum_dots.md) and [gold quenching](docs/gold_quenching.md).
+
 ### Gold nanoparticle conjugation
 
 **Tools → Nanoparticle → Gold nanosphere** creates a persisted, selectable gold
@@ -234,8 +250,36 @@ Implements the Dietz, Douglas & Shih (Science 2009) mechanism for bending and
 twisting bundles by inserting/deleting base pairs. Enforces physical limits
 (6–15 bp/turn twist density, min bend radius).
 
+### Simulation engines and analysis
+
+The simulation workspace brings together engine status, job creation, queues,
+resource estimates, progress, cancellation, archives, and result visualization.
+Local CPU/GPU, remote cluster, and RunPod execution are available where supported
+by the engine and configured target; they are not interchangeable for every model.
+
+| Engine | Main role in NADOC | Setup / scope |
+|---|---|---|
+| **CanDo FEM** | Beam-based predicted shape and flexibility, coarse/fine analysis, and automatic refinement. | Built-in structural analysis; results depend on the beam model and topology. |
+| **SNUPI FEM** | Anisotropic structural analysis and thermal/dynamical visualization. | Built-in structural analysis; distinct from atomistic MD. |
+| **mrDNA** | Coarse-to-fine relaxation with relaxed-geometry display. | [mrDNA/ARBD setup](docs/mrdna_setup.md). Viewing its unsimulated coarse/fine representations does not run a job. |
+| **oxDNA** | Nucleotide-level relaxation, equilibration/production, live display, and atomistic seed generation. | [oxDNA setup](docs/oxdna_setup.md); [LAMMPS fallback](docs/lammps_setup.md) has its own supported scope. |
+| **NAMD** | Atomistic relaxation and production, explicit solvent or supported GBIS protocols, and live trajectories. | [NAMD setup](docs/namd_setup.md); complete sequences, topology preparation, and suitable resources are required to run. |
+
+Result tools include aligned playback/scrubbing, frame ranges, average structures,
+RMSF flexibility, deviation/strain maps, metrics export, and conformational
+occupancy clustering, including selection-scoped clustering where supported.
+Anchors, electric fields, and surface constraints are engine-specific controls.
+Specialized research workflows include
+[nanopore ion transport](docs/namd_nanopore_transport.md),
+[PEG coating setup](docs/peg_coating_setup.md), and
+[preliminary cis-syn CPD construction](docs/cpd_strand_builder.md).
+Their setup and qualification limits are documented separately; CPD construction
+is not a generally qualified force field for every photoproduct.
+
 ### Atomistic & NAMD export
 All-atom template with PDB/PSF export and in-app NAMD relaxation/production jobs.
+A standalone PDB/PSF export is distinct from the fully prepared simulation package;
+use the engine preparation workflow to obtain the required topology and parameters.
 Explicit-solvent jobs use a complete periodic water box; NADOC does not replace an
 oversized system with a finite hydration shell. If the full system does not fit the
 selected hardware, choose a larger-memory target, a smaller construct, or the optional
@@ -441,6 +485,70 @@ pipeline on entry and restores cleanly on exit. Features:
 - **Tiled high-resolution export** — 300 / 600 DPI PNG output (4200×2970 /
   8400×5940). Renders are tiled via `camera.setViewOffset()` to bypass the
   GPU's `MAX_TEXTURE_SIZE` limit, then stitched on a 2D canvas.
+
+### Browser sharing and prepared snapshots
+
+**Presentation → Sharing** creates a password-protected invitation for guests to
+inspect a design in their browser. The presenter can share a perspective and
+selected oxDNA/NAMD visualizations; guests can explore independently or follow.
+Stopping a job's sharing returns to the native model while keeping the invitation;
+ending the presentation closes the session. Internet access requires a configured
+sharing host, separate from Tailscale workspace synchronization.
+
+The experimental `.nadocview` snapshot captures a supported visible scene for
+`viewer.html`, which can be served statically without an editor backend. This is
+a viewing artifact, not an editable native design or a complete simulation archive.
+Representation coverage and large-scene/network performance have limitations;
+see [prepared viewing and sharing](docs/prepared_viewer.md) and
+[host setup](docs/sharing_host_setup.md).
+
+### Native VR viewing and authoring
+
+The native OpenXR/OpenGL companion provides molecular viewing, controller-based
+selection, grab/rotate navigation, two-handed scaling, and a desktop mirror.
+In-headset tools include lattice extrusion, strand-end editing, nicking/ligation,
+Move/Rotate, bend/twist, routing, and sequence assignment. Committed edits use the
+desktop document and its history. Simulation result controls and trajectory
+playback connect to the desktop's selected results.
+
+VR requires a supported native build, OpenXR runtime, and tracked hardware; it is
+not part of the browser-only installation. The documented workstation uses Linux
+and SteamVR. See [native build instructions](native/vr_viewer/README.md),
+[startup behavior](docs/vr_startup.md),
+[routing and sequencing](docs/vr_routing_sequence.md), and
+[authoring demonstration](docs/vr_workflow_demo.md).
+
+VR can pause/resume an existing desktop-hosted presentation and show a tracked
+presenter figure. Link creation stays on desktop, and the shared perspective is
+the desktop camera; first-person headset broadcasting and multi-user immersive
+editing are not implemented. See [VR sharing scope](docs/vr_sharing.md).
+Scripted stereo captures establish rendered behavior, not human comfort or
+through-lens legibility.
+
+### File compatibility and reproducibility
+
+Keep `.nadoc` parts and native assemblies as the editable source. caDNAno and
+scadnano exports have a compatibility review because target formats cannot retain
+every NADOC attachment, assembly relationship, or arbitrary 3D placement. Native
+packages (`.nadocpkg`) can include selected or full simulation artifacts; ordinary
+workspace sync transfers provenance and locations without automatically copying
+large trajectories. GROMACS package export is available through the backend API
+and requires its external preparation tools.
+
+## Documentation map
+
+| Task | Start here |
+|---|---|
+| Install and run | [Installation](INSTALL.md), [daily commands](START.md) |
+| Browse capabilities | [Grouped feature inventory](FEATURES.md) |
+| Learn selection and views | [Selection/sidebar](docs/selection_and_sidebar.md), [element visibility](docs/element_visibility.md) |
+| Design attachments | [Overhang screening](docs/overhang_generation_screening.md), [proteins](docs/protein_conjugate_movement.md), [gold particles](docs/nanoparticle_conjugation.md) |
+| Configure simulations | [External tools](docs/external_tools.md), [NAMD presets](docs/namd_setup_presets.md), [mrDNA pipeline](docs/mrdna/README.md) |
+| Present to others | [Browser viewer/sharing](docs/prepared_viewer.md), [sharing host](docs/sharing_host_setup.md), [VR startup](docs/vr_startup.md) |
+| Understand validation | [Software versus scientific validation](docs/scientific_validation.md) |
+
+These references include setup guides, implementation notes, and research audits;
+they are not yet a single end-to-end illustrated user manual.
 
 ## Development
 

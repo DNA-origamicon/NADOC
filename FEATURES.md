@@ -2,7 +2,10 @@
 
 A skimmable inventory of user-facing features in the current source tree.
 Main features are bold; subfeatures appear underneath. Titles use five words
-or fewer. Simulation engines and VR require their respective dependencies.
+or fewer. External MD engines and native VR require their respective dependencies.
+Availability varies by engine, execution target, and molecular model. Previews,
+kinematic animations, and experimental research workflows are not physical
+validation; see [scope and documentation](README.md#feature-overview).
 
 [Getting started](README.md#getting-started) · [Setup guide](INSTALL.md)
 
@@ -181,7 +184,9 @@ or fewer. Simulation engines and VR require their respective dependencies.
   - Vendor catalog
   - Size selection
   - Absorption/emission plot previews
-  - Streptavidin coatings
+  - Custom PDB-based streptavidin coatings
+  - Preview-only vendor entries identified
+  - Emission-color visualization
   - Move/rotate controls
 - **Fluorescence**
   - Terminal fluorophore labels
@@ -377,6 +382,10 @@ or fewer. Simulation engines and VR require their respective dependencies.
   - Intended/off-target pair screening
   - Reciprocal weld analysis
   - KIMMDY analysis command
+- **Preliminary CPD Construction**
+  - cis-syn TT-CPD strand-builder workflow
+  - Explicit-solvent NAMD preparation
+  - Qualification and export restrictions: [scope](docs/cpd_strand_builder.md)
 
 ## Rendering, Animation, and VR
 
@@ -423,7 +432,15 @@ or fewer. Simulation engines and VR require their respective dependencies.
   - Shared desktop selection
   - Grab/move/rotate navigation
   - Two-handed scaling
-  - In-headset tools
+  - Lattice extrusion and end continuation
+  - Strand-end resizing, nicking, ligation
+  - Move/rotate, bend, and twist
+  - Routing and sequence assignment
+  - In-headset undo/redo
+  - View volumes and dimensions
+  - Simulation result controls
+  - Existing-presentation pause/resume/end
+  - Tracked presenter figure
   - Desktop mirror
   - Shared trajectory controls
 
@@ -437,9 +454,18 @@ or fewer. Simulation engines and VR require their respective dependencies.
   - File metadata
   - Simulation-inclusive packages
   - Selective simulation packaging
+- **Browser Presentation (Experimental)**
+  - Password-protected guest invitations
+  - Independent guest navigation
+  - Presenter perspective following
+  - Selected oxDNA/NAMD visualization sharing
+  - Shared design/display updates
+  - Backend-free prepared snapshot viewing
+  - Coverage and hosting limits: [reference](docs/prepared_viewer.md)
 - **Import and Export**
   - caDNAno import/export
   - scadnano import/export
+  - Export compatibility/loss review
   - PDB structure import/export
   - PSF topology export
   - NAMD package export
