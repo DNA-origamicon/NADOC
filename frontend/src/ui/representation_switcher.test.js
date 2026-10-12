@@ -549,3 +549,49 @@ it('awaits the controller decision before applying a heavy representation to an 
     ])
   } finally { setNativePromptHandler(null) }
 })
+
+it('locks only unsupported simulation styles, including programmatic requests, and restores native choices', async () => {
+  mountIds(DOM)
+  let active = true
+  const deps = makeDeps({ currentDesign: {} })
+  deps.simulationDisplay = { active: () => active, beforeChange: vi.fn(), apply: vi.fn(() => true), refresh: vi.fn() }
+  const ui = initRepresentationSwitcher(deps)
+  for (const id of ['menu-view-hull-prism','menu-view-detail-cylinders','menu-view-detail-beads','menu-view-surface','menu-view-surface-detail']) {
+    expect(document.getElementById(id).disabled).toBe(true)
+  }
+  for (const repr of ['hull-prism','cylinders','beads','surface','surface-detail']) expect(await ui.setRepresentation(repr)).toBe(false)
+  expect(deps.beforeRepresentationChange).toBeUndefined()
+  for (const repr of ['full','vdw','ballstick','stick','oxdna','mrdna-coarse','mrdna-fine']) {
+    expect(await ui.setRepresentation(repr)).not.toBe(false)
+    expect(deps.setCurrentRepr).toHaveBeenLastCalledWith(repr)
+  }
+  active = false
+  window.dispatchEvent(new Event('nadoc:simulation-display'))
+  for (const id of REPR_IDS) expect(document.getElementById(id).disabled).toBe(false)
+})
+
+it('preserves presentation restrictions after simulation ends', () => {
+  mountIds(DOM)
+  let active = true
+  const deps = makeDeps({ presentationActive: true })
+  deps.simulationDisplay = { active: () => active }
+  initRepresentationSwitcher(deps)
+  active = false
+  window.dispatchEvent(new Event('nadoc:simulation-display'))
+  expect(document.getElementById('menu-view-surface').disabled).toBe(false)
+  expect(document.getElementById('menu-view-surface-detail').disabled).toBe(true)
+})
+
+it('preserves a supported style when loading a simulation and replaces a native-only style', async () => {
+  mountIds(DOM)
+  const deps = makeDeps()
+  const ui = initRepresentationSwitcher(deps)
+  await ui.setRepresentation('vdw')
+  deps.setCurrentRepr.mockClear()
+  await ui.ensureSimulationRepresentation()
+  expect(deps.setCurrentRepr).not.toHaveBeenCalled()
+  await ui.setRepresentation('cylinders')
+  await ui.ensureSimulationRepresentation()
+  expect(deps.setCurrentRepr).toHaveBeenLastCalledWith('full')
+  ui.dispose()
+})

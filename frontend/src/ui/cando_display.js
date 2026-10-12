@@ -378,6 +378,7 @@ export function initCandoDisplay({
         onRecolor: (lo, hi, cmap) => { if (_mode === mode && largeView.active()) largeView.recolor(lo, hi, cmap) } })
     }
     _progress(onProgress, 'compact-view', 1)
+    window.dispatchEvent(new Event('nadoc:simulation-source'))
     return { ok: true, n: view.meta.count }
   }
 
@@ -545,7 +546,24 @@ export function initCandoDisplay({
       flexScale?.show({ title: 'RMSF (nm)', min: resp.rmsf_min, max: resp.rmsf_p95, mapType: 'cando', onRecolor: _recolorCando })
     }
     _progress(onProgress, 'apply', 1)
+    window.dispatchEvent(new Event('nadoc:simulation-source'))
     return { ok: true, helices: resp.n_helices, joints: resp.n_joints }
+  }
+
+  async function prepareRepresentation() {
+    if (!_mode) return
+    if (_mode === 'cando') {
+      const job = _jobId, hasRmsf = _candoResp?.has_rmsf || _stats?.has_rmsf
+      if (hasRmsf) await showFlex(job)
+      else await showDeform(job)
+    }
+    if (largeView?.active() && !largeView.materialized?.()) {
+      const epoch = _epoch, snap = await api.getCandoSnapshotGeometry(_jobId)
+      if (epoch !== _epoch) return
+      if (!_snapshotReady(snap)) throw new Error('Simulation snapshot is unavailable')
+      _renderExternal(snap)
+      largeView.materialize(designRenderer)
+    }
   }
 
   function stopThermal() {} // compatibility hook for the jobs panel; representative state is static
@@ -573,6 +591,7 @@ export function initCandoDisplay({
   }
 
   return {
+    prepareRepresentation,
     showDeform,
     showFlex,
     showDeviation,

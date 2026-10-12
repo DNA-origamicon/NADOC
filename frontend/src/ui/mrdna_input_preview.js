@@ -41,11 +41,12 @@ export function buildMrdnaInputPreview(geometry, resolution) {
     const key = siteKey(nucleotide, resolution, coarseStarts)
     let site = sites.get(key)
     if (!site) {
-      site = { key, sum: [0, 0, 0], count: 0, first: index, helix: nucleotide.helix_id, bp: Number(nucleotide.bp_index) }
+      site = { key, sum: [0, 0, 0], count: 0, members: [], first: index, helix: nucleotide.helix_id, bp: Number(nucleotide.bp_index) }
       sites.set(key, site)
     }
     for (let axis = 0; axis < 3; axis++) site.sum[axis] += position[axis]
     site.count++
+    site.members.push(nucleotide)
     nucleotideSites.set(index, key)
   })
   const ordered = [...sites.values()].sort((a, b) => a.first - b.first)
@@ -91,5 +92,5 @@ export function buildMrdnaInputPreview(geometry, resolution) {
       for (let i = 1; i < entries.length; i++) addEdge(entries[i - 1].index, entries[i].index)
     }
   }
-  return { points, edges: [...edgeKeys].map(key => key.split(':').map(Number)) }
+  return { points, members: ordered.map(site => site.members), edges: [...edgeKeys].map(key => key.split(':').map(Number)) }
 }

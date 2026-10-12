@@ -19,6 +19,8 @@ import { strandsToSegments, clustersToSegments, domainsToSegments, editOverrides
 import { cancelSurfaceComputations } from '../api/surface_progress_request.js'
 import { showToast } from './toast.js'
 import { showConfirm } from './primitives/confirm.js'
+import { simulationRepresentationAllowed } from '../scene/simulation_representations.js'
+import { simulationViewActive } from '../scene/vr_simulations.js'
 import { registerShortcut } from '../input/shortcuts.js'
 
 // All representations are mutually exclusive. Exactly one is active at
@@ -101,6 +103,7 @@ export function initRepresentationSwitcher({
   setLodMode,
   setCurrentRepr,
   beforeRepresentationChange = () => {},
+  simulationDisplay = null,
   applyExternalRepresentation = async () => false,
 }) {
   function _updateReprRadio(activeRepr) {
@@ -186,6 +189,19 @@ export function initRepresentationSwitcher({
   // Null until the first apply, so the very first click always goes through.
   let _appliedRepr = null, generation = 0, pendingRepr = null
   const detailedBlocked = (repr, detail) => store.getState().presentationActive && (repr === 'surface-detail' || repr === 'surface' && detail && detail !== 'coarse')
+  const simulationActive = () => simulationDisplay?.active() || simulationViewActive(document)
+  function syncSimulation() {
+    const active = simulationActive()
+    for (const { id, repr, detail } of _ALL_REPRS) {
+      const button = document.getElementById(id)
+      if (button) button.disabled = (active && !simulationRepresentationAllowed(repr)) || detailedBlocked(repr, detail)
+    }
+    if (active && _appliedRepr && !simulationRepresentationAllowed(_appliedRepr) && pendingRepr !== "full") void _setRepresentation("full")
+  }
+  window.addEventListener("nadoc:simulation-display", syncSimulation)
+  document.addEventListener("change", syncSimulation)
+  const simulationObserver = new MutationObserver(syncSimulation)
+  simulationObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-vr-simulation-trajectory"] })
   function syncPresentation() {
     const active = !!store.getState().presentationActive
     const button = document.getElementById('menu-view-surface-detail')
@@ -196,15 +212,17 @@ export function initRepresentationSwitcher({
     }
   }
   store.subscribe((next, previous) => { if (next.presentationActive !== previous.presentationActive) syncPresentation() })
-  syncPresentation()
+  syncPresentation(); syncSimulation()
 
   async function _setRepresentation(repr, detail) {
+    if (simulationActive() && !simulationRepresentationAllowed(repr)) return false
     if (detailedBlocked(repr, detail)) { showToast('Detail Surface is unavailable during presentations. Use Quick Surface.', { severity: 'warn' }); return false }
     const ticket = ++generation
     pendingRepr = repr
     cancelSurfaceComputations()
     if (repr === 'surface-detail') { repr = 'surface'; detail = 'chimerax' }
     if (repr === 'surface') selectSurfaceDetail(detail ?? 'coarse')
+    simulationDisplay?.beforeChange()
     await beforeRepresentationChange(repr)
     if (ticket !== generation) return false
     // ── Deactivate any currently active exclusive mode ────────────────────────
@@ -250,7 +268,7 @@ export function initRepresentationSwitcher({
       getJointRenderer()?.setHullRepr(true)
     } else if (repr === 'mrdna-coarse' || repr === 'mrdna-fine' || repr === 'oxdna') {
       if (repr === 'oxdna' && _appliedRepr !== 'oxdna') setColoringMode('base')
-      const available = await applyExternalRepresentation(repr)
+      const available = simulationDisplay?.apply(repr) || await applyExternalRepresentation(repr)
       if (ticket !== generation || available === false) return false
     }
 
@@ -260,6 +278,7 @@ export function initRepresentationSwitcher({
     pendingRepr = null
     _updateReprRadio(repr)
     reprOptionSliders(repr)
+    await simulationDisplay?.refresh?.(repr)
     window.dispatchEvent(new CustomEvent('nadoc:representation-change', {
       detail: { representation: repr },
     }))
@@ -267,7 +286,7 @@ export function initRepresentationSwitcher({
 
   for (const { id, repr, external, detail } of _ALL_REPRS) {
     document.getElementById(id)?.addEventListener('click', async () => {
-      if (detailedBlocked(repr, detail)) return
+      if (detailedBlocked(repr, detail) || (simulationActive() && !simulationRepresentationAllowed(repr))) return
       cancelSurfaceComputations()
       const { currentDesign, assemblyActive, currentAssembly } = store.getState()
 
@@ -332,7 +351,7 @@ export function initRepresentationSwitcher({
         ...clustersToSegments(currentDesign, clusterIds),
         ...domainsToSegments(currentDesign, domainRefs),
       ]
-      if (!external && (proteinIds.length || segs.length)) {
+      if (!simulationActive() && !external && (proteinIds.length || segs.length)) {
         if (detail) selectSurfaceDetail(detail)
         let next = currentDesign.representation_overrides ?? []
         if (segs.length) next = editOverridesForSegments(next, segs, repr)
@@ -393,7 +412,9 @@ export function initRepresentationSwitcher({
 
   return {
     setRepresentation:    _setRepresentation,
+    ensureSimulationRepresentation: () => simulationRepresentationAllowed(_appliedRepr) ? undefined : _setRepresentation("full"),
     updateReprRadio:      _updateReprRadio,
     syncAssemblyReprMenu: _syncAssemblyReprMenu,
+    dispose() { simulationObserver.disconnect(); window.removeEventListener("nadoc:simulation-display", syncSimulation); document.removeEventListener("change", syncSimulation) },
   }
 }

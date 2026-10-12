@@ -136,7 +136,7 @@ test(`${process.env.NADOC_VR_AUDIT_DESIGN ? path.basename(process.env.NADOC_VR_A
         await probe(choice.id)
         await expect.poll(() => snapshot?.trajectory?.available ?? 0, { timeout: 60000 }).toBeGreaterThan(0)
         expect(snapshot.trajectory.phase).toBe('idle')
-        await probe('range-wheels')
+        if (process.env.NADOC_VR_SIM_REPRESENTATIONS !== '1') await probe('range-wheels')
         const initialCount = snapshot.trajectory.count
         const loadStart = Date.now()
         await probe('local:t:303')
@@ -153,6 +153,26 @@ test(`${process.env.NADOC_VR_AUDIT_DESIGN ? path.basename(process.env.NADOC_VR_A
           }
           await probe('local:transport')
         }
+        if (process.env.NADOC_VR_SIM_REPRESENTATIONS === '1') {
+          await probe('local:t:308')
+          await expect.poll(() => snapshot?.trajectory?.phase, {timeout:180000}).toBe('ready')
+          expect(snapshot.trajectory.source).toBeGreaterThan(1)
+          const positions = await page.evaluate(() => window.__nadocTest.getDesignRenderer().getFemPositions())
+          await probe('repr:availability')
+          const frame = snapshot.trajectory.source
+          for (const repr of ['vdw','ballstick','stick','oxdna','mrdna-coarse','mrdna-fine','full']) {
+            await probe('repr:'+repr)
+            await expect.poll(() => page.evaluate(async () => {
+              const ids = {'full':'menu-view-detail-full','vdw':'menu-view-atomistic-vdw','ballstick':'menu-view-atomistic-ballstick','stick':'menu-view-atomistic-stick','oxdna':'menu-view-oxdna','mrdna-coarse':'menu-view-mrdna-coarse','mrdna-fine':'menu-view-mrdna-fine'}
+              return Object.entries(ids).find(([,id]) => document.getElementById(id)?.classList.contains('is-checked'))?.[0]
+            }), {timeout:180000}).toBe(repr)
+            await expect.poll(() => snapshot?.trajectory?.phase, {timeout:180000}).toBe('ready')
+            expect(snapshot.trajectory.source).toBe(frame)
+            expect(await page.evaluate(() => window.__nadocTest.getDesignRenderer().getFemPositions())).toEqual(positions)
+            await probe('review:'+repr)
+            await page.screenshot({path:info.outputPath('trajectory-'+repr+'.png')})
+          }
+        }
         const playStart = Date.now()
         await probe('local:t:305')
         await expect.poll(() => snapshot?.trajectory?.index ?? 0, { timeout:60000 }).toBeGreaterThan(1)
@@ -161,7 +181,28 @@ test(`${process.env.NADOC_VR_AUDIT_DESIGN ? path.basename(process.env.NADOC_VR_A
         fs.appendFileSync(info.outputPath('intervals.jsonl'),JSON.stringify({name:'playback-unobserved',start_ms:quietStart,end_ms:Date.now()})+'\n')
         if (snapshot.trajectory.playing) await probe('local:t:305')
         fs.appendFileSync(info.outputPath('intervals.jsonl'),JSON.stringify({name:'trajectory-playback',start_ms:playStart,end_ms:Date.now()})+'\n')
-        await probe('capture')
+        if (process.env.NADOC_VR_SIM_REPRESENTATIONS !== '1') await probe('capture')
+        if (process.env.NADOC_VR_SIM_REPRESENTATIONS === '1') {
+          const off = snapshot.controls.find(c => c.kind === 'mode' && c.group === 'off')
+          await probe(off.id)
+          await expect.poll(() => page.locator('#menu-view-detail-cylinders').isEnabled()).toBe(true)
+          await probe('repr:native')
+          const flex = snapshot.controls.find(c => c.kind === 'mode' && /rmsf|flex/i.test(c.label) && c.enabled)
+          if (flex) {
+            await probe(flex.id)
+            const readColors = () => page.evaluate(() => { const colors = window.__nadocTest.getDesignRenderer().getScalarColors(); return colors instanceof Map ? [...colors] : Object.entries(colors ?? {}) })
+            await expect.poll(async () => (await readColors()).length, {timeout:180000}).toBeGreaterThan(0)
+            const colors = await readColors()
+            expect(colors.length).toBeGreaterThan(0)
+            for (const repr of ['oxdna','mrdna-fine','ballstick','full']) {
+              await probe('repr:'+repr)
+              await probe('review:'+repr)
+              expect(await readColors()).toEqual(colors)
+            }
+            await probe(snapshot.controls.find(c => c.kind==='mode' && c.group==='off').id)
+            await probe('repr:native')
+          }
+        }
         coverage.push({ engine, job:snapshot.selected, mode:'trajectory', state:snapshot.trajectory })
         fs.writeFileSync(info.outputPath('coverage.json'),JSON.stringify(coverage,null,2))
       }

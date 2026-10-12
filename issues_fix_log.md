@@ -426,3 +426,20 @@ Reopen count: 0. Validation evidence: `.development-artifacts/build-animation/`.
 path end in Full/Cylinders/atomistic/surface displays; reverse playback retracts
 from the end. Empty initial surface preparation is handled explicitly. Headed
 preview and decoded video verified; source geometry/topology stays unchanged.
+
+2026-10-12 — ISSUE-72 fixed: range configuration now publishes atomically after
+clearing old playback state. The new acknowledgement can no longer carry the
+previous range. Fifteen focused trajectory/bridge tests pass, including a new
+notification regression; native/live range-wheel evidence is retained under
+`.development-artifacts/vr-range-wheels-20261012/`. `main.js` delta 0.
+
+2026-10-12 — ISSUE-73 fixed: removed adjacent-sidebar closure during simulation
+snapshot adoption and separated representation changes from simulation teardown.
+Shared physical-coordinate representations preserve scalar colors; exact sampled
+source IDs drive MD/oxDNA atoms. FEM/CG atomistic requests are serialized and stale
+responses are discarded. Compact sources retain nucleotide identities and publish
+their current frame on representation changes. An initial live failure exposed a
+missing switcher helper export; the export and regression were added. Another
+capture attempt was invalidated by a development reload while source was edited;
+subsequent live validation freezes the source. Evidence and limits are retained in
+`docs/audits/vr_simulation_representations_20261012.md`. `main.js` delta −12.

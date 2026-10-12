@@ -43,6 +43,7 @@ export function parseOxdnaTrajectoryBin(buf) {
   return {
     ready: true,
     frame_start: header.frame_start ?? 0,
+    frame_step: header.frame_step ?? 1,
     total_n_frames: header.total_n_frames ?? nFrames,
     n_frames: nFrames,
     n_nucleotides: nKeys,

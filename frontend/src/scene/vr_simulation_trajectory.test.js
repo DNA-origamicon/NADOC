@@ -7,6 +7,25 @@ function binary(n, first=0) {
   return buffer
 }
 describe('Full trajectory gate and bounded frame pages', () => {
+ it('holds SNUPI frame acknowledgement until its selected representation is ready and rejects a cancelled build', async () => {
+  let release
+  const display={showTrajectory:async()=>({ok:true}),seekFullTrajectoryFrame:async()=>({ok:true})}
+  const t=createVRSimulationTrajectory({api:{getSnupiTrajectoryMeta:async()=>({n_frames:5})},controller:()=>display,
+   ensureFull:async()=>{},prepareFrame:()=>new Promise(resolve=>{release=resolve})})
+  await t.select('snupi','job')
+  const load=t.load();await vi.waitFor(()=>expect(release).toBeTypeOf('function'))
+  expect(t.snapshot().phase).toBe('loading');release();await load
+  release=null
+  const next=t.seek(2);await vi.waitFor(()=>expect(release).toBeTypeOf('function'))
+  expect(t.snapshot()).toMatchObject({phase:'buffering',source:1,index:0})
+  release();expect(await next).toBe(true)
+  expect(t.snapshot()).toMatchObject({phase:'ready',source:3,index:2})
+  release=null
+  const cancelled=t.seek(3);await vi.waitFor(()=>expect(release).toBeTypeOf('function'))
+  t.cancel();release();expect(await cancelled).toBe(false)
+  expect(t.snapshot()).toMatchObject({phase:'idle',source:3,index:2})
+  t.dispose()
+ })
  it('validates exact inclusive source ranges', () => {
   expect(trajectorySelection(50001,100000,500,100000)).toEqual({first:50001,last:100000,interval:500,count:100})
   for(const values of [[0,4,1,4],[4,3,1,4],[1,5,1,4],[1,4,0,4],[1.2,4,1,4]])expect(trajectorySelection(...values)).toBeNull()

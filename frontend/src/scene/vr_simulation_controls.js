@@ -62,5 +62,9 @@ export function simulationProgress(doc, engine) {
     const busy = /\b(?:loading|preparing|downloading|building|parsing|aligning|analysing|analyzing|reading|transferring|computing|clustering|buffering)\b/i.test(text) || el.dataset.loading === 'true'
     if (busy || el.matches('[role="progressbar"],progress')) rows.push({ label: text || 'Preparing visualization', fraction: percent < 0 ? -1 : Math.min(1, percent / 100), busy })
   }
+  for (const el of doc.querySelectorAll(".toast--visible")) {
+    const text = clean(el.querySelector(".toast-message")?.textContent || el.textContent)
+    if (/loading|preparing|building|reconstructing/i.test(text)) rows.push({ label: text, fraction: -1, busy: true })
+  }
   return rows.slice(-8)
 }

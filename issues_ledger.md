@@ -1430,3 +1430,31 @@ slow tests took 0.05s and 0.02s in isolated reruns (no real engine work); no bud
 or classification changes. Native placement review gate clear. Test artifacts
 removed. Decoded sweep video has exactly 76 frames / 9.5s at 8fps. Full validation
 record: `.development-artifacts/build-animation/sweep-validation.json`.
+
+## ISSUE-72 — VR range acknowledgement briefly restores old frame bounds (2026-10-12, FIXED)
+
+- Repro: the slow/fast live range-wheel tour changes End 1225 → 515; the native
+  drag trace is correct but the first acknowledged desktop snapshot says 1225.
+- Cause: trajectory `configure()` called notifying `cancel()` before assigning
+  new bounds, publishing the old range with the new event acknowledgement.
+- [x] Suppress that intermediate cancellation notification inside configure and
+  publish the completed range once; ordinary Cancel still publishes normally.
+- Regression: `vr_simulation_trajectory.test.js` observes exactly one final-range
+  notification. Original live failure is retained in
+  `.development-artifacts/vr-range-wheels-20261012/initial/`.
+
+## ISSUE-73 — Simulation snapshots close the right VR menu and representation changes discard results (2026-10-12, FIXED)
+
+- User repro: load a trajectory and try to open the right controller menu beside
+  the focused left simulation menu. Periodic snapshot adoption closes it again.
+- Cause: `SimulationPanel::adopt` explicitly closed the adjacent sidebar; the
+  representation lifecycle also cleared simulation overlays and assumed Full-only
+  trajectory pages. Local page indices did not encode the sampled source frame.
+- [x] Preserve both sidebars, enforce the simulation representation allowlist in
+  native and desktop controls, retain physical positions/scalars, and map sampled
+  page indices to exact source frames for atomistic reconstruction.
+- [x] Materialize standalone/compact FEM and mrDNA views against the job snapshot
+  when changing representation. Restore all representation choices on Off.
+- Regression evidence: native panel tests, representation/trajectory/fallback
+  tests, and the reusable dual-menu simulation tour with submitted stereo review.
+  See `.development-artifacts/vr-simulation-representations-20261012/`.

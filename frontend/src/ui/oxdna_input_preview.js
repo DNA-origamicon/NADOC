@@ -97,8 +97,8 @@ export function applySimulationToOxdnaFrames(frames, updates) {
   return frames.map(frame => {
     const update = byKey.get(frame.key)
     if (!update) return frame
-    const a1 = unit([update.nx, update.ny, update.nz])
-    const a3 = unit([update.tx, update.ty, update.tz])
+    const a1 = unit([update.nx, update.ny, update.nz]) ?? frame.a1
+    const a3 = unit([update.tx, update.ty, update.tz]) ?? frame.a3
     let r = vector3(update.cm_position)
     const backbone = vector3(update.backbone_position)
     if (!r && backbone && a1 && a3) {

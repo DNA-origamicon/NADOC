@@ -5,6 +5,7 @@ import { initDeformationToolLauncher } from './ui/deformation_tool_launcher.js'
 import { createVRPrompts } from './scene/vr_prompts.js'
 import { setNativePromptHandler } from './ui/primitives/native_prompt.js'
 import { createVRRouting } from './scene/vr_routing.js'
+import { createSimulationRepresentations } from './scene/simulation_representations.js'
 import { createVRSimulations } from './scene/vr_simulations.js'
 import { commitVRMovePose } from './scene/vr_move_pose.js'
 import { nativeRepresentation } from './scene/vr_representations.js'
@@ -1363,21 +1364,6 @@ async function main() {
     getAtomisticRenderer: () => atomisticRenderer,
     getSurfaceRenderer:   () => surfaceRenderer,   // const declared ~1918 (resolved lazily)
     getCurrentRepr:       () => _currentRepr,       // let declared ~2976 (resolved lazily)
-    // The oxDNA representation is a standalone overlay; route simulation frames to it
-    // instead of deforming the native renderer hidden underneath it.
-    applyOxdnaFrame: (updates) => {
-      const state = store.getState()
-      const args = [
-        state.currentGeometry, state.currentDesign, state.coloringMode,
-        state.simulationTabActive === true || state.showReferenceGeometry === false,
-        { strandColors: state.strandColors, strandGroups: state.strandGroups,
-          loopStrandIds: state.loopStrandIds },
-      ]
-      const result = updates
-        ? mrdnaDisplay?.showOxdnaSimulationPreview?.(args[0], args[1], updates, ...args.slice(2))
-        : mrdnaDisplay?.showOxdnaInputPreview?.(...args)
-      return result?.ok === true
-    },
     // Toggle-off / job-switch: rebuild the atomistic + surface meshes from the
     // live design so they drop the oxDNA overlay (mirrors the animation player's
     // stop handler).
@@ -2076,7 +2062,7 @@ async function main() {
     getSimOverlayWillDriveHeavy: (kind) =>
       (oxdnaDisplay.drivesHeavy?.(kind) ?? false) ||
       (mdViz.drivesHeavy?.(kind) ?? false) ||
-      (mdDisplayController?.drivesHeavy?.(kind) ?? false),
+      (mdDisplayController?.drivesHeavy?.(kind) ?? false) || (kind === 'atomistic' && !!designRenderer.getFemPositions()?.length),
     // A surface option changed while the overlay owns the surface → re-generate its mesh
     // with the new probe radius / colour mode (debounced; reapplyForRepr re-runs the fetch).
     onSurfaceParamsChanged: _regenOverlaySurfaceDebounced,
@@ -6178,7 +6164,9 @@ async function main() {
     _lastMrdnaRepresentationWarning = message
     showToast(message, { severity: 'warn' })
   }
+  const simulationRepresentations = createSimulationRepresentations({ scene, store, designRenderer, setCGVisible: _setCGVisible, getRepresentation: () => _currentRepr, prepareSource: async () => { for (const source of [candoDisplay, snupiDisplay, mrdnaDisplay]) await source.prepareRepresentation() }, clearPreview: () => mrdnaDisplay.clearRepresentationPreview(), restoreRepresentation: () => _setRepresentation(_currentRepr), restoreAtoms: _restoreDesignHeavy, atomisticRenderer, heavyOwner: () => oxdnaDisplay.drivesHeavy?.("atomistic") || mdViz.drivesHeavy?.("atomistic") || mdDisplayController.drivesHeavy?.("atomistic"), onError: message => showToast(message, { severity: "error" }) })
   const _reprSwitcher = initRepresentationSwitcher({
+    simulationDisplay: simulationRepresentations,
     store,
     api,
     atomisticRenderer,
@@ -6201,7 +6189,7 @@ async function main() {
     setLastDetailLevel: (v) => { _lastDetailLevel = v },
     setLodMode: (v) => { _lodMode = v },
     setCurrentRepr: (v) => { _currentRepr = v },
-    beforeRepresentationChange: () => { mrdnaDisplay.stopAndRestore() },
+    beforeRepresentationChange: async () => { await simulationRepresentations.prepare(); if (!simulationRepresentations.active()) mrdnaDisplay.stopAndRestore() },
     applyExternalRepresentation: async representation => {
       const available = await applyComparisonRepresentation(representation, {
         setRepresentation: async () => {},
@@ -6546,7 +6534,7 @@ async function main() {
   setNativePromptHandler(opts => vrPrompts.ask(opts))
   const vrRouting = createVRRouting({ onError: message => showToast(message, { severity: 'error' }) })
   const vrFeatureLog = createVRFeatureLog({ panel: () => _partFeatureLogPanel, store, api, onError: message => showToast(message, { severity: 'error' }) })
-  const vrSimulations = createVRSimulations({ jobs: simulateJobs, engineSelector, api, companion: engine => engine === 'namd' ? mdPanel?.trajectorySolvent : null, controller: engine => ({ namd: mdViz, oxdna: oxdnaDisplay, lammps: lammpsDisplay, snupi: snupiDisplay })[engine], ensureFull: () => _currentRepr === 'full' ? undefined : _setRepresentation('full'), scale: () => flexScale, onFrame: () => vrViewTools.refresh(), onError: message => showToast(message, { severity: 'error' }) })
+  const vrSimulations = createVRSimulations({ jobs: simulateJobs, engineSelector, api, companion: engine => engine === 'namd' ? mdPanel?.trajectorySolvent : null, controller: engine => ({ namd: mdViz, oxdna: oxdnaDisplay, lammps: lammpsDisplay, snupi: snupiDisplay })[engine], ensureFull: () => _reprSwitcher.ensureSimulationRepresentation(), prepareFrame: () => _currentRepr === 'full' ? undefined : simulationRepresentations.prepare().then(() => simulationRepresentations.refresh()), scale: () => flexScale, onFrame: () => vrViewTools.refresh(), onError: message => showToast(message, { severity: 'error' }) })
   const vrShare = createVRShare({})
   const vrViewTools = createVRViewTools({scene,getState:store.getState,onError:message=>showToast(message,{severity:'error'})})
   const vrLigation = createVRLigation({ getState: store.getState, api,
@@ -6677,7 +6665,7 @@ async function main() {
         // acknowledged desktop state back to the companion.
         _vrStyleApply = _vrStyleApply.then(async () => {
           await _setRepresentation(event.representation)
-          _setColoringMode(event.coloring)
+          _setColoringMode(event.coloring); vrViewTools.refresh()
           await vrSession.publishNativeState?.()
         }).catch(error => {
           console.error('VR representation failed:', error)

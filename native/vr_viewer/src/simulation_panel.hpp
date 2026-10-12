@@ -47,7 +47,7 @@ class SimulationPanel {
   engines=next.engines;jobs=next.jobs;views=next.views;
   if(engineChanged || jobChanged || next.mode!=snapshot.mode || (!trajectoryUi.popup && !wheelHand && !(sequence>acknowledged && requested=="t:configure")))trajectory=next.trajectory;
   snapshot=std::move(next);
-  if(focused&&adjacent&&menu->open&&menu->dynamicActive())adjacent->open=false;
+
  }
  bool send(const std::string& id,double value=0){if(!ready()||version<1)return false;requested=id;requestedValue=value;requestedFirst=trajectory.first;requestedLast=std::max(1,trajectory.last);requestedInterval=trajectory.interval;requestedVersion=version;++sequence;return true;}
  void scroll(bool options,int direction){auto& offset=options?viewOffset:jobOffset;const size_t count=options?optionsList().size():jobs.size(),step=options?(snapshot.hasScale?3:7):page;if(direction<0)offset=offset>=step?offset-step:0;else if(offset+step<count)offset+=step;}

@@ -144,6 +144,7 @@ export function initSnupiDisplay({
   const compact = initCandoDisplay({ designRenderer, cylinderOverlay, setDesignVisible,
     restoreDesignVisible, flexScale, largeView, api: {
       getCandoJob: api.getSnupiJob, getCandoVisualizationBin: api.getSnupiVisualizationBin,
+      getCandoSnapshotGeometry: api.getSnupiSnapshotGeometry,
     } })
   async function _large(jobId, fn, epoch, signal, onProgress, nNucleotides) {
     if (!largeView || !api.getSnupiVisualizationBin) return null
@@ -294,6 +295,7 @@ export function initSnupiDisplay({
     if (resp.has_rmsf) {
       flexScale?.show({ title: 'RMSF (nm)', min: resp.rmsf_min, max: resp.rmsf_p95, mapType: 'cando', onRecolor: _recolorCando })
     }
+    window.dispatchEvent(new Event('nadoc:simulation-source'))
     return { ok: true, helices: resp.n_helices, joints: resp.n_joints }
   }
 
@@ -309,10 +311,27 @@ export function initSnupiDisplay({
       _jobId = jobId; _mode = 'trajectory'
       _stats = { kind: 'trajectory', frames: result.frames, large: true,
         representation: 'zoom-adaptive nucleotide points; one frame in memory' }
+      window.dispatchEvent(new Event('nadoc:simulation-source'))
     }
     return result
   }
   function stopTrajectory() { player.stop() }
+
+  async function prepareRepresentation() {
+    if (!_mode) return
+    if (_mode === 'cando') {
+      const job = _jobId, hasRmsf = _candoResp?.has_rmsf || _stats?.has_rmsf
+      if (hasRmsf) await showFlex(job)
+      else await showDeform(job)
+    }
+    if (largeView?.active() && !largeView.materialized?.()) {
+      const epoch = _epoch, snap = await api.getSnupiSnapshotGeometry(_jobId)
+      if (epoch !== _epoch) return
+      if (!_snapshotReady(snap)) throw new Error('Simulation snapshot is unavailable')
+      _renderExternal(snap)
+      largeView.materialize(designRenderer)
+    }
+  }
 
   /** Re-apply the active mode for the current job (e.g. after a running job completes). */
   async function refresh() {
@@ -338,6 +357,7 @@ export function initSnupiDisplay({
   }
 
   return {
+    prepareRepresentation,
     showDeform,
     showFlex,
     showDeviation,

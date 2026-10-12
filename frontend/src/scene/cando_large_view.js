@@ -1,7 +1,7 @@
 /** Exact positions with bounded GPU work: one point per nucleotide or line per axis
  * segment/joint. Scalar recoloring changes shader uniforms, never geometry. */
 import * as THREE from 'three'
-import { colormapRGB } from '../ui/colormaps.js'
+import { colormapRGB, colormapHex } from '../ui/colormaps.js'
 
 export const LARGE_CANDO_THRESHOLD = 50000
 export const MAX_CANDO_VIEW_BYTES = 256 * 1024 * 1024
@@ -47,9 +47,11 @@ export function projectedDrawCount(radiusPixels, count, lines = false) {
 }
 
 export function initCandoLargeView(scene, name = 'cando-large-result') {
+  let simulationRenderer = null
   let object = null, data = null, texture = null, material = null, boundsBox = null
   let bounds = null, cmap = 'jet'
   function clear() {
+    simulationRenderer = null
     if (object) { scene.remove(object); for (const tile of object.children) tile.geometry.dispose() }
     material?.dispose()
     texture?.dispose()
@@ -67,6 +69,7 @@ export function initCandoLargeView(scene, name = 'cando-large-result') {
     texture.needsUpdate = true
     material.uniforms.low.value = lo
     material.uniforms.span.value = Math.max(hi - lo, 1e-9)
+    publishSimulation()
   }
   function update(next, colormap = 'jet') {
     clear(); data = next
@@ -140,6 +143,29 @@ export function initCandoLargeView(scene, name = 'cando-large-result') {
       tile.geometry.computeBoundingBox(); tile.geometry.computeBoundingSphere()
       boundsBox.union(tile.geometry.boundingBox)
     }
+    publishSimulation()
+  }
+  function publishSimulation() {
+    if (!simulationRenderer || !data?.identities) return
+    const { meta, identities: ids, positions, scalars } = data
+    const updates = [], colors = new Map()
+    for (let i = 0; i < meta.count; i++) {
+      const n = { helix_id: meta.helix_ids[ids[4*i]], bp_index: ids[4*i+1],
+        direction: ids[4*i+2] ? 'REVERSE' : 'FORWARD', copy: ids[4*i+3],
+        backbone_position: Array.from(positions.subarray(3*i,3*i+3)) }
+      updates.push(n)
+      if (scalars[i] >= 0) colors.set(`${n.helix_id}:${n.bp_index}:${n.direction}`,
+        colormapHex(cmap, (scalars[i]-bounds.lo)/Math.max(1e-9,bounds.hi-bounds.lo)))
+    }
+    simulationRenderer.applyFemPositions(updates)
+    if (colors.size) simulationRenderer.applyScalarColors(colors)
+  }
+  function materialize(renderer) {
+    if (!data?.identities || simulationRenderer) return false
+    simulationRenderer = renderer
+    object.visible = false
+    publishSimulation()
+    return true
   }
   function coloringInfo() {
     if (!data?.identities || !['flex', 'deviation'].includes(data.meta.kind)) return null
@@ -154,6 +180,7 @@ export function initCandoLargeView(scene, name = 'cando-large-result') {
     return { attribute: flex ? 'rmsf' : 'deviation', title: flex ? 'RMSF' : 'Deviation', unit: 'nm',
       colormap: cmap, ...bounds, values }
   }
-  return { update, updatePositions, recolor, clear, coloringInfo, active: () => !!object,
+  return { update, updatePositions, recolor, clear, coloringInfo, materialize,
+    materialized: () => !!simulationRenderer, active: () => !!object,
     getBoundingBox: () => boundsBox }
 }

@@ -279,6 +279,7 @@ export function initMrdnaDisplay({
     _beadsJobId = jobId
     _mode = 'beads'; _stats = { kind: 'beads', n: pts.length, edges: edges.length,
       confidence: _confidence(resp) }
+    window.dispatchEvent(new Event('nadoc:simulation-source'))
     return { ok: true, n: pts.length, edges: edges.length }
   }
 
@@ -343,6 +344,7 @@ export function initMrdnaDisplay({
   }
 
   return {
+    prepareRepresentation: async () => { if (_mode === 'beads') await showDeform(_beadsJobId) },
     showDeform,
     showFlex,
     showDeviation,
@@ -350,6 +352,7 @@ export function initMrdnaDisplay({
     stopDeform,
     showBeads,
     showInputPreview,
+    clearRepresentationPreview() { if (_mode?.startsWith("input-") || _mode === "simulation-oxdna") { beadOverlay?.update([]); connectionOverlay?.clear(); oxdnaInputOverlay?.clear(); _mode = null } },
     showOxdnaInputPreview,
     showOxdnaSimulationPreview,
     oxdnaBounds: () => oxdnaInputOverlay?.bounds?.() ?? null,

@@ -423,6 +423,17 @@ describe('initCandoDisplay — CanDo-style cylinder mode', () => {
     expect(c.lastStats()).toMatchObject({ kind: 'cando', helices: 2, joints: 3 })
   })
 
+  it('retains the job coordinates and RMSF when replacing standalone tubes with a representation', async () => {
+    const deps = makeCylDeps(), c = initCandoDisplay(deps)
+    await c.showCandoStyle('j')
+    await c.prepareRepresentation()
+    expect(c.mode()).toBe('flex')
+    expect(deps.cylinderOverlay.clear).toHaveBeenCalled()
+    expect(deps.designRenderer.applyFemPositions.mock.lastCall[0][0].backbone_position).toEqual([0,0,0])
+    expect(deps.designRenderer.applyScalarColors).toHaveBeenCalled()
+    expect(c.deformJobId()).toBe('j')
+  })
+
   it('shows the RMSF scale (min→p95) for the cylinder heat map; hidden when no RMSF', async () => {
     const { designRenderer, api, cylinderOverlay, setDesignVisible } = makeCylDeps()
     const flexScale = { show: vi.fn(), hide: vi.fn() }

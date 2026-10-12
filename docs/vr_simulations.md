@@ -8,8 +8,15 @@ percentage or completed production duration when the job reports it. Parent rows
 also expose their child-run expand/collapse action. Exp uses the current session.
 
 Point and pull Trigger to select a mode. The right inspector mirrors its desktop
-suboptions, including disabled states and exact numeric entry. All result actions
-select **Full** representation. Atomistic playback is outside this implementation.
+suboptions, including disabled states and exact numeric entry. Both controller menus
+can remain open. Simulation results preserve Full, VDW, ball-and-stick, stick, oxDNA,
+and coarse/fine mrDNA representations. Beads, cylinders, prisms and surfaces are
+disabled while simulation data is displayed, and become available again on Off.
+Changing representation preserves the selected trajectory source frame and scalar
+colors. MD/oxDNA atomistic frames use their existing engine reconstruction; FEM and
+CG sources use the visualized-coordinate atomistic builder. Reconstruction is
+serialized and reports progress. Compact FEM views materialize the job snapshot
+only when a different representation is requested, retaining frame/scalar identity.
 The horizontal color mapper shares the desktop's range and recoloring callback.
 Its min/max handles highlight under the ray; drag and release to apply a bound.
 The palette button opens the existing six-choice popup around the left controller's

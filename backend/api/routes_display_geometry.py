@@ -37,7 +37,10 @@ from backend.api import state as design_state
 from backend.core.flexible_display import flexible_segment_atomistic_frame_overrides
 from backend.core.models import RepresentationSegment
 
+from backend.api.simulation_atomistic_display import router as simulation_atomistic_router
+
 router = APIRouter()
+router.include_router(simulation_atomistic_router)
 
 
 class SurfaceRegionRequest(BaseModel):

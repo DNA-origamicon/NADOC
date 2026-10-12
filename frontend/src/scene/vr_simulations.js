@@ -6,10 +6,14 @@ import { createVRSimulationTrajectory } from './vr_simulation_trajectory.js'
 export { simulationControls } from './vr_simulation_controls.js'
 
 export function createVRSimulations({ jobs, engineSelector, doc = document, request = fetch, onError = console.error,
-  api, controller = () => null, companion = () => null, ensureFull = async () => {}, onFrame = () => {}, scale = () => null }) {
+  api, controller = () => null, companion = () => null, ensureFull = async () => {}, prepareFrame = async () => {}, onFrame = () => {}, scale = () => null }) {
   let version = Math.floor(Math.random() * 1e9), acknowledged = 0, signature = '', published = null, sending = false, epoch = 0
   let trajectoryMode = '', owner = '', pendingMessage = '', actionBusy = false
-  const trajectory = api ? createVRSimulationTrajectory({ api, controller, companion, ensureFull, request, changed: geometry => { if (geometry) { doc.documentElement.dataset.vrSimulationTrajectory = 'true'; const radio = simulationControls(doc, engineSelector.getSelected()).find(c => c.kind === 'mode' && c.group === trajectoryMode); if (radio) radio.element.checked = true; onFrame() } void publish().catch(() => {}) } }) : null
+  const trajectory = api ? createVRSimulationTrajectory({ api, controller, companion, ensureFull, prepareFrame, request, changed: geometry => { if (geometry) { doc.documentElement.dataset.vrSimulationTrajectory = 'true'; const radio = simulationControls(doc, engineSelector.getSelected()).find(c => c.kind === 'mode' && c.group === trajectoryMode); if (radio) radio.element.checked = true; onFrame() } void publish().catch(() => {}) } }) : null
+  doc.defaultView?.addEventListener('nadoc:representation-change', () => {
+    if (trajectory?.active) { trajectory.pause(); void trajectory.seek(trajectory.snapshot().index) }
+    onFrame()
+  })
   function snapshot() {
     const engine = engineSelector.getSelected(), selection = jobs.getSelected()
     const list = doc.getElementById('simulate-jobs-list'), rows = [...(list?.querySelectorAll('[data-job-id]') ?? [])]
@@ -85,7 +89,7 @@ export function createVRSimulations({ jobs, engineSelector, doc = document, requ
       } else if (control.id.startsWith('j:')) {
         pendingMessage = 'Reading selected job'; await publish(); if (control.id.endsWith(':tree') || current.selected !== control.jobId) control.element.click()
       } else {
-        if (control.group !== 'off') { pendingMessage = 'Preparing Full visualization'; await publish(); await ensureFull() }
+        if (control.group !== 'off') { pendingMessage = 'Preparing visualization'; await publish(); await ensureFull() }
         const el = control.element
         if (el.tagName === 'SELECT') { el.value = control.choice; el.dispatchEvent(new Event('change', { bubbles: true })) }
         else if (control.kind === 'number') {

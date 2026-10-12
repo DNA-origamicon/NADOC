@@ -43,8 +43,10 @@ def _trajectory(tmp_path):
 def test_trajectory_random_access_and_invalidation(tmp_path, monkeypatch):
     p = _trajectory(tmp_path)
     first = trajectory_frame(tmp_path, 1)
-    meta, xyz, _, _ = _read(first)
+    meta, xyz, _, identities = _read(first)
     assert meta["frames"] == 2 and meta["frame"] == 1
+    assert meta["helix_ids"] == ['h]"']
+    assert identities.reshape(-1, 4).tolist() == [[0, 0, 0, 0]]
     np.testing.assert_array_equal(xyz, [[4, 5, 6]])
     assert trajectory_frame(tmp_path, 1) == first
     old = p.stat().st_mtime_ns

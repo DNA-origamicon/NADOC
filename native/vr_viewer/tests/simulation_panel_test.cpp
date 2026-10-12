@@ -1,13 +1,15 @@
 #include "simulation_panel.hpp"
+#include "representations.hpp"
 #include <cassert>
 int main(){
  nadoc_vr::SidebarMenu menu(0);for(size_t i=0;i<menu.tabs.size();++i)if(nadoc_vr::kSidebarTabs[menu.tabs[i]].key=="dynamics")menu.selected=i;menu.open=true;
- nadoc_vr::SimulationPanel panel;panel.bind(menu);
+ nadoc_vr::SidebarMenu right(1);right.open=true;
+ nadoc_vr::SimulationPanel panel;panel.bind(menu,&right);
  nadoc_vr::SimulationSnapshot state;state.version=1;state.engines={{"e:cando","CanDo","",true,true},{"e:namd","NAMD","",true,false}};
  for(int i=0;i<20;++i)state.jobs.push_back({"j:"+std::to_string(i),"24HB production","OCT 12 09:40 / 120 NS",true,i==0});
  state.selected=true;state.mode="trajectory";state.views={{"v:0","Native model","",true,false,"mode","off"},{"v:1","Trajectory","",true,true,"mode","trajectory"}};
  state.hasTrajectory=true;state.trajectory.available=100000;state.trajectory.first=1;state.trajectory.last=100000;state.trajectory.interval=1;state.trajectory.phase=0;
- panel.adopt(state);assert(panel.focused);assert(menu.bounds().maximum.x<1.1F);
+ panel.adopt(state);assert(right.open);assert(panel.focused);assert(menu.bounds().maximum.x<1.1F);
  auto find=[&](const std::string& id){for(const auto& c:panel.controls())if(c.id==id)return c;throw std::runtime_error(id);};
  assert(!find("sim:local:t:305").enabled);assert(find("sim:local:t:303").enabled);
  assert(!panel.activate("simulation:local:t:303"));assert(panel.trajectoryUi.popup==2);assert(!find("sim:e:namd").enabled);
@@ -41,5 +43,7 @@ int main(){
  // Hidden controls and loading never acquire the wheel.
  panel.focused=false;clicks[1]=held[1]=true;input();assert(!panel.wheelHand);
  panel.focused=true;state.trajectory.phase=1;panel.adopt(state);clicks[1]=true;input();assert(!panel.wheelHand);
+ for(auto rep:{Representation::full,Representation::vdw,Representation::ballstick,Representation::stick,Representation::oxdna,Representation::mrdnaCoarse,Representation::mrdnaFine})assert(simulationRepresentationAllowed(rep));
+ for(auto rep:{Representation::cylinders,Representation::beads,Representation::hull,Representation::surface,Representation::surfaceDetail})assert(!simulationRepresentationAllowed(rep));
  return 0;
 }

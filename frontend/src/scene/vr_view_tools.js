@@ -172,6 +172,8 @@ export function encodeVRView(view,version,requestSequence=0) {
 export function createVRViewTools({scene,getState,onError=console.error,doc=document}) {
   let busy=false,dirty=true,version=Math.floor(Math.random()*1e9)+1,last='',settle=0,stamp='',lastStampAt=0,message='',epoch=0,appliedSequence=0,lastGood=null,lastError=''
   const fingerprint=()=>[...VR_VIEW_KEYS,'expanded','unfold','cadnano2d'].map(k=>doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?'1':'0').join('')
+  const refresh = () => { dirty=true; settle=0 }
+  for (const event of ["nadoc:representation-change", "nadoc:simulation-display", "nadoc:md-heavy-status", "nadoc:oxdna-heavy-status"]) doc.defaultView?.addEventListener(event, refresh)
   let geometry,design
   async function publish() {
     const s=getState(),now=performance.now()

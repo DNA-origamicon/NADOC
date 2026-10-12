@@ -142,6 +142,17 @@ describe('initMrdnaDisplay controller', () => {
     expect(c.deformActive()).toBe(false)
   })
 
+  it('switching away from standalone beads materializes that job and Off restores native positions', async () => {
+    const deps = makeDeps(), c = initMrdnaDisplay(deps)
+    await c.showBeads('job1')
+    await c.prepareRepresentation()
+    expect(c.deformJobId()).toBe('job1')
+    expect(deps.designRenderer.applyFemPositions.mock.lastCall[0][0].backbone_position).toEqual([0,0,0])
+    expect(deps.beadOverlay.update).toHaveBeenLastCalledWith([], expect.any(Number), expect.any(Number))
+    c.stopAndRestore()
+    expect(deps.designRenderer.applyFemPositions).toHaveBeenLastCalledWith(null)
+  })
+
   it('showBeads draws beads + connections and hides the native model; hideBeads restores', async () => {
     const { designRenderer, beadOverlay, connectionOverlay, setDesignVisible, api } = makeDeps()
     const c = initMrdnaDisplay({ designRenderer, api, beadOverlay, connectionOverlay, setDesignVisible })

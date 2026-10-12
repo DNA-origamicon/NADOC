@@ -87,6 +87,10 @@ export function initOxdnaInputOverlay(scene) {
     const letterMap = buildNucLetterMap(currentDesign, currentFrames)
     const strandColor = frame => nucColor(frame, stapleColors, customColors, loopSet)
     const nucleotideColor = frame => {
+      const key = `${frame.helix_id}:${frame.bp_index}:${frame.direction}`
+      const scalar = currentColorState.scalarColors
+      const value = scalar instanceof Map ? scalar.get(key) : scalar?.[key]
+      if (value != null) return value
       if (coloringMode === 'cluster') return clusterColor(frame) ?? strandColor(frame)
       if (coloringMode === 'overhang-only') return frame.overhang_id != null ? strandColor(frame) : C.dim_gray
       if (coloringMode === 'base') {
@@ -126,17 +130,13 @@ export function initOxdnaInputOverlay(scene) {
   }
 
   function update(frames, edges, mode = 'base', design = null, colorState = {}) {
-    clear()
-    if (!frames?.length) return
-    group = new THREE.Group()
-    group.name = 'oxDNA input representation'
-    group.userData.oxdnaInput = true
-    group.userData.edges = edges ?? []
-    currentFrames = frames
-    currentDesign = design
-    currentColorState = colorState
-    coloringMode = ['strand', 'base', 'cluster', 'overhang-only'].includes(mode) ? mode : 'strand'
-    const sites = frames.map(frameSites)
+    if (!frames?.length) { clear(); return }
+    if (group && (currentFrames.length !== frames.length || group.userData.edgeCapacity !== (edges?.length ?? 0))) clear()
+    if (!group) {
+      group = new THREE.Group()
+      group.name = 'oxDNA input representation'
+      group.userData.oxdnaInput = true
+      group.userData.edgeCapacity = edges?.length ?? 0
     const sphere = new THREE.SphereGeometry(1, 16, 12)
     const baseSphere = new THREE.SphereGeometry(1, 16, 12)
     const cylinder = new THREE.CylinderGeometry(1, 1, 1, 12, 1)
@@ -155,6 +155,15 @@ export function initOxdnaInputOverlay(scene) {
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
       group.add(mesh)
     }
+      scene.add(group)
+    }
+    group.userData.edges = edges ?? []
+    currentFrames = frames
+    currentDesign = design
+    currentColorState = colorState
+    coloringMode = ['strand', 'base', 'cluster', 'overhang-only'].includes(mode) ? mode : 'strand'
+    const sites = frames.map(frameSites)
+    const [backbones, bases, connectors, backboneBonds] = group.children
 
     for (let i = 0; i < frames.length; i++) {
       const frame = frames[i], site = sites[i]
@@ -181,7 +190,6 @@ export function initOxdnaInputOverlay(scene) {
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
     }
     applyColors()
-    scene.add(group)
   }
 
   return {

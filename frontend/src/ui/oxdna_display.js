@@ -573,7 +573,8 @@ export function initOxdnaDisplay({
   let _trajRange = {}
   let _stream = null
   let _streamSeekToken = 0
-  const sourceFrame = i => i + (_traj?.frame_start ?? 0)
+  let _vrPage = false
+  const sourceFrame = i => i * (_vrPage ? (_traj?.frame_step ?? 1) : 1) + (_traj?.frame_start ?? 0)
   let _frameIdx = 0          // current trajectory frame (for re-apply on rep change)
   let _granularity = 'coarse'  // 'coarse' = downsample+snap | 'fine' = exact frame
   let _playing = false       // play loop running → force coarse (every frame must be instant)
@@ -1970,6 +1971,7 @@ export function initOxdnaDisplay({
     _align = align
     _trajScope = scope
     _trajStride = stride
+    _vrPage = false
     _trajRange = { frameStart: range.frameStart, frameEnd: range.frameEnd }
     if (preparationOnly) {
       _active = false
@@ -1999,22 +2001,23 @@ export function initOxdnaDisplay({
   // Native Full playback supplies bounded, already sampled coordinate pages. Reuse
   // the same measured-base/FEM application and companions as the desktop trajectory.
   async function loadFullTrajectoryPage(jobId, payload) {
-    if (_repKind() !== 'cg' || !payload?.frames?.length) return { ok: false, reason: 'Full representation required' }
+    if (!payload?.frames?.length) return { ok: false, reason: 'No trajectory frames' }
     const epoch = ++_epoch, signal = _beginLoad()
     _stream = null
-    _traj = { ...payload, frame_start: 0, total_n_frames: payload.frames.length }
+    _vrPage = true; _traj = { ...payload, total_n_frames: payload.frames.length }
     _active = true; _mode = 'trajectory'; _jobId = jobId; _align = true
-    _trajScope = 'job'; _trajStride = 1; _trajRange = {}
+    _trajScope = payload.scope || 'job'; _trajStride = 1; _trajRange = {}
     designRenderer.clearScalarColors?.()
     if (!await _applyJobCompanions(jobId, true, epoch, signal) || epoch !== _epoch) return { ok: false, reason: 'superseded' }
     showFrame(0, { heavy: false })
     return { ok: true }
   }
-  function showFullTrajectoryFrame(payload, index) {
-    if (_repKind() !== 'cg' || _mode !== 'trajectory') return false
-    if (_traj?.frames !== payload.frames) { _interpolationPair = null; _interpolationCg = null }
-    _traj = { ...payload, frame_start: 0, total_n_frames: payload.frames.length }
+  async function showFullTrajectoryFrame(payload, index) {
+    if (_mode !== 'trajectory') return false
+    if (_traj?.frames !== payload.frames) { _interpolationPair = null; _interpolationCg = null; _interpolationAtoms.clear(); _bakedAtom = null; _bakedSurf = null }
+    _vrPage = true; _traj = { ...payload, total_n_frames: payload.frames.length }
     showFrame(index, { heavy: false })
+    if (_repKind() !== "cg") await _applyHeavy({ exact: true, strict: true })
     return true
   }
 
@@ -2050,7 +2053,7 @@ export function initOxdnaDisplay({
   }
 
   async function ensureInterpolationFrames(from, to, { before = null, after = null } = {}) {
-    const epoch = _epoch, offset = _traj?.frame_start ?? 0
+    const epoch = _epoch, offset = _vrPage ? 0 : (_traj?.frame_start ?? 0)
     const request = ++_interpolationRequest
     const live = () => epoch === _epoch && request === _interpolationRequest
     from -= offset; to -= offset
@@ -2119,7 +2122,7 @@ export function initOxdnaDisplay({
 
   function showInterpolatedFrame(from, to, t, { before = null, after = null } = {}) {
     if (!_playing || _mode !== 'trajectory' || !_traj) return
-    const offset = _traj.frame_start ?? 0
+    const offset = _vrPage ? 0 : (_traj.frame_start ?? 0)
     from -= offset; to -= offset
     before = before == null ? null : before - offset
     after = after == null ? null : after - offset
@@ -2191,7 +2194,7 @@ export function initOxdnaDisplay({
       if (_lastCgUpdates) _applyFem(_lastCgUpdates)
       return
     }
-    return _applyHeavy(options)
+    return _applyHeavy(_vrPage ? { ...options, exact: true } : options)
   }
 
   /** Re-fetch the current job's frame (e.g. after a stage completes). */
@@ -2216,6 +2219,7 @@ export function initOxdnaDisplay({
     _interpolationAtoms.clear(); _interpolationPair = null; _interpolationCg = null; _surfaceMotion = null
     trajectoryDownloads.clear()
     _stream = null
+    _vrPage = false
     _traj = null
     _bakedAtom = null
     _bakedSurf = null

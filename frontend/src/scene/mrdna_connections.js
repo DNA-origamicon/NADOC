@@ -50,13 +50,16 @@ export function initMrdnaConnections(scene) {
      * @param {Array<[number,number]>} edges  index pairs into `points`
      */
     update(points, edges) {
-      clear()
-      if (!points?.length || !edges?.length) return
+      if (!points?.length || !edges?.length) { clear(); return }
+      if (_mesh && _mesh.instanceMatrix.count !== edges.length) clear()
+      if (!_mesh) {
 
       _mat = new THREE.MeshStandardMaterial({ color: _COLOR, roughness: 0.6, metalness: 0.05 })
       _mesh = new THREE.InstancedMesh(_BASE_GEO, _mat, edges.length)
       _mesh.frustumCulled = false
       _mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+      scene.add(_mesh)
+      }
 
       let n = 0
       for (let e = 0; e < edges.length; e++) {
@@ -77,7 +80,6 @@ export function initMrdnaConnections(scene) {
       }
       _mesh.count = n
       _mesh.instanceMatrix.needsUpdate = true
-      scene.add(_mesh)
     },
 
     clear,

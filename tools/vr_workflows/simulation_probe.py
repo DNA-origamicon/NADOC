@@ -67,6 +67,10 @@ def run(socket, output, identifier):
             live.send('button', hand=1, button='grip', pressed=False);live.frame()
             live.capture_to(out/'positioned', files=['left.png','right.png','mirror.png','evidence.json'], discard_source=True)
             return
+        if identifier.startswith(('repr:', 'review:')):
+            from tools.vr_workflows.simulation_representation_probe import run as representations
+            representations(live,out,identifier,preset,trials,socket)
+            return
         if identifier == 'capture':
             # Frame result is a footer action, outside the list navigation path.
             # Use the ordinary profile-driven ray click; keep prior touchpad

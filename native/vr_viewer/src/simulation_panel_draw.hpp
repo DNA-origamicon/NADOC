@@ -20,7 +20,7 @@ template<class UI> void SimulationPanel::draw(UI& ui)const{
  };
  for(size_t i=0;i<engines.size();++i)if(!engines[i].active)tab(i);
  for(size_t i=0;i<engines.size();++i)if(engines[i].active)tab(i);
- text("SIMULATION JOBS / FULL",-.60F,.444F,1.2F,.004F,cyan);
+ text("SIMULATION JOBS",-.60F,.444F,1.2F,.004F,cyan);
  if(focused){for(const auto& j:jobs)if(j.active){text(j.label,-.34F,.220F,.69F,.004F,ink);jobDetail(j.detail,-.34F,.179F,.69F,.0026F,.018F);break;}
   ui.rect(-.6F,.132F,1.2F,.002F,{.23F,.34F,.40F},.011F);text("VISUALIZATIONS",-.60F,.111F,.53F,.0033F,cyan);
   text(snapshot.hasTrajectory?"TRAJECTORY":"OPTIONS",-.05F,.100F,.65F,.0032F,cyan);
@@ -38,7 +38,7 @@ template<class UI> void SimulationPanel::draw(UI& ui)const{
   if(c.id.starts_with("sim:j:"))jobDetail(c.section,b.minimum.x+.012F,b.minimum.y+.028F,size.x-.024F,.0028F,.024F);
  }
  // Real phase progress remains visible throughout preparation and errors.
- const auto& ps=snapshot.progress;const auto label=ps.empty()?(snapshot.hasTrajectory?snapshot.message:version?"FULL REPRESENTATION":"WAITING FOR DESKTOP"):ps.back().label;
+ const auto& ps=snapshot.progress;const auto label=ps.empty()?(snapshot.hasTrajectory?snapshot.message:version?"STYLE: RIGHT MENU":"WAITING FOR DESKTOP"):ps.back().label;
  text(label,-.60F,-.490F,1.2F,.0028F,cyan,.033F);ui.rect(-.60F,-.536F,1.20F,.010F,{.18F,.25F,.30F},.022F);
  if(!ps.empty()){const auto& p=ps.back();if(p.fraction>=0)ui.rect(-.60F,-.536F,1.2F*std::clamp(p.fraction,0.F,1.F),.010F,cyan,.024F);
   else if(p.busy){float f=std::fmod(float(menu->animationClock())*.45F,1.F);ui.rect(-.60F+f*.95F,-.536F,.25F,.010F,cyan,.024F);}}

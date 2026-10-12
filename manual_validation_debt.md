@@ -811,3 +811,27 @@ establish through-lens legibility or physical controller comfort. Evidence:
 `.development-artifacts/vr-move-20261008/`.
 
 - **MV-42 — PENDING — Production VR list components and history rail (2026-10-08).** In-headset check Sweep's grouped point markers/XYZ targets, the Dimensions table with long labels and visibility/delete, and job-card text/selection at the normal tablet scale. Scrub Feature Log across more than six entries, release at F0 and a routing sub-step, verify scene readiness, and use edit/revert/delete including cancellation on the in-headset desktop surface. Check assembly/part target changes, tracking loss and both controllers. Automated native layout/actions, production pixels and isolated browser handlers are separate evidence; through-lens comfort and physical controller profiles remain open. Reusable checks: Debug → VR Tours & Tests → Controls & layout → Feature history and production lists.
+
+- **MV-43 — PENDING — Live Full simulation menu (2026-10-12).** Wear the headset and review curved engine tabs, focused job/back navigation, compact options, horizontal min/max handles and all six gradient-only palette choices now docked around the left touchpad. Confirm the physical left-touchpad triple pulse, shallow Start/End/Every wheels (single-frame control, speed transitions to 10/100 and release stopping), source-frame popup and 500-frame warning, raised scrubber hover/drag, Load cancellation, Play/Pause and ion/cell alignment. The four-profile campaign passed steady-deliberate and variable-fast; steady-fast encountered an input stall, and variable-deliberate missed the compact Overlays tab. Review that tab’s pointer tolerance and the remaining loading/page-transition stalls. Submitted stereo and software-generated controller trials do not establish through-lens comfort or physical haptics. Benchmark timing and fixture coverage: `docs/audits/vr_simulations_20261012.md`. Atomistic is explicitly deferred by the user. The follow-up P1 RunPod campaign passed both steady profiles; variable-fast selected one map then missed the small palette opener on reopen, while variable-deliberate missed the initial opener. All three reached-wheel captures pass exact gradient checks in both eyes and desktop delivery. Preserve this pointer-tolerance debt; see `docs/audits/vr_palette_pbc_20261012.md`.
+
+Range-wheel follow-up to MV-43 (2026-10-12): both steady profiles passed the
+three slow/fast range edits, native/desktop acknowledgement, explicit Load gate,
+playback, stereo pixels and desktop delivery on the private P1 RunPod fixture.
+The variable-fast profile missed the smallest physical Start cylinder after three
+reaches; variable-deliberate missed the existing All Frames button before reaching
+the wheels. The actual cylinder highlight, rather than its surrounding sidebar
+rectangle, now drives the acquisition oracle. Keep the requested small shape and
+unchanged stress profiles visible in the next headset review; evaluate acquisition
+and 1/10/100 speed transitions. Evidence and retained failures:
+`.development-artifacts/vr-range-wheels-20261012/review.json`.
+
+Representation follow-up to MV-43 (2026-10-12): the user has now requested VDW,
+ball-and-stick, stick, oxDNA and both mrDNA representations during simulation
+display. The earlier atomistic deferral is superseded. Review both controller menus
+open together, same-frame changes among these styles, scalar color continuity,
+progress during reconstruction, and reenabled surfaces/cylinders/prisms on Off.
+Software stereo captures establish rendered behavior; physical headset comfort,
+legibility and sustained delivery remain a human review item. Reusable entry:
+Simulation jobs · representations + trajectory, with
+`NADOC_VR_SIM_REPRESENTATIONS=1`. See
+`docs/audits/vr_simulation_representations_20261012.md`.

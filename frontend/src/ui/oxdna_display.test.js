@@ -1899,3 +1899,26 @@ it('awaits exact atomic export frames even in coarse playback mode and rejects m
   await expect(ctrl.showFrameForExport(3)).rejects.toThrow('exact atomic trajectory frame')
   ctrl.stopAndRestore()
 })
+
+it('keeps VR paged trajectory source indices exact across styles and page boundaries', async () => {
+  let repr = 'full'
+  const atom = { getMode: () => repr, update: vi.fn(), applyPositionLerp: vi.fn() }
+  const api = {
+    getOxdnaAtomisticModel: vi.fn(async () => ({ n_serials: 1, atoms: [{ serial: 0, element: 'P', strand_id: 's', x: 0, y: 0, z: 0 }], bonds: [] })),
+    getOxdnaFramesAtomistic: vi.fn(async (_, frames) => Object.fromEntries(frames.map(i => [i, [i, 2, 3]]))),
+  }
+  const ctrl = initOxdnaDisplay({ designRenderer: { applyFemPositions: vi.fn(), clearScalarColors: vi.fn() }, api,
+    getCurrentRepr: () => repr, getAtomisticRenderer: () => atom })
+  const page = { keys: [['h',0,'FORWARD']], frame_start: 500, frame_step: 10, scope: 'lineage',
+    frames: [[0,0,0,1,0,0],[1,0,0,1,0,0]] }
+  expect((await ctrl.loadFullTrajectoryPage('job',page)).ok).toBe(true)
+  for (repr of ['vdw','ballstick','stick']) {
+    expect(await ctrl.showFullTrajectoryFrame(page,1)).toBe(true)
+    expect(api.getOxdnaFramesAtomistic).toHaveBeenLastCalledWith('job',[510],true,'lineage',1)
+    expect(atom.applyPositionLerp).toHaveBeenLastCalledWith([510,2,3],[510,2,3],0,null,[],null)
+  }
+  await ctrl.showFullTrajectoryFrame({...page, frame_start:580},0)
+  expect(api.getOxdnaFramesAtomistic.mock.lastCall[1]).toEqual([580])
+  for (repr of ['oxdna','mrdna-coarse','mrdna-fine','full']) expect(await ctrl.showFullTrajectoryFrame(page,1)).toBe(true)
+  ctrl.stopAndRestore()
+})

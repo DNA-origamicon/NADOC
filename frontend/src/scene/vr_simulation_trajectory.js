@@ -6,11 +6,11 @@ export function trajectorySelection(first, last, interval, available) {
   return { first, last, interval, count: Math.floor((last - first) / interval) + 1 }
 }
 
-/** Full-only playback, two coordinate pages, one network request and one render in flight.
+/** Two coordinate pages, one network request and one render in flight.
  * Source IDs are one-based; API indices are zero-based and sampled globally.
  * Neither opening a job nor selecting Trajectory downloads coordinates.
  */
-export function createVRSimulationTrajectory({ api, controller, ensureFull, companion = () => null, changed = () => {}, request = fetch, clock = () => performance.now() }) {
+export function createVRSimulationTrajectory({ api, controller, ensureFull, prepareFrame = async () => {}, companion = () => null, changed = () => {}, request = fetch, clock = () => performance.now() }) {
   let seekSequence = 0, generation = 0, abort = null, timer = null, context = '', engine = '', job = '', scope = 'job', ctrl = null, overlays = null
   let pages = new Map(), pending = null, renderedPage = null, metadataPending = false
   let state = empty(), lastStep = 0
@@ -83,6 +83,7 @@ export function createVRSimulationTrajectory({ api, controller, ensureFull, comp
       if (current !== generation) return null
       const payload = parseOxdnaTrajectoryBin(buffer)
       if (!payload || payload.frames.length !== end - start + 1) throw new Error('Incomplete trajectory page')
+      payload.frame_start = first; payload.frame_step = selection.interval; payload.scope = scope
       const page = { start, payload }; pages.set(start, page)
       while (pages.size > 2) pages.delete(pages.keys().next().value)
       return page
@@ -99,14 +100,17 @@ export function createVRSimulationTrajectory({ api, controller, ensureFull, comp
         const source = state.first - 1 + i * state.interval
         const result = initial ? await ctrl.showTrajectory(job, null, { autoplay: false, frame: source }) : await ctrl.seekFullTrajectoryFrame(source)
         if (current !== generation || seekId !== seekSequence) return false
-        if (!result?.ok) throw new Error(result?.reason || 'Could not prepare Full trajectory')
+        if (!result?.ok) throw new Error(result?.reason || 'Could not prepare trajectory')
+        state.message = 'Preparing selected representation'; state.progress = -1; changed()
+        await prepareFrame()
+        if (current !== generation || seekId !== seekSequence) return false
         state.index = i; state.source = source + 1; state.phase = 'ready'; state.progress = 1; state.message = 'Ready'; renderedPage = true; changed(true); return true
       }
       const page = await pageFor(i, current)
       if (!page || current !== generation || seekId !== seekSequence) return false
       if (initial) {
         const result = await ctrl.loadFullTrajectoryPage(job, page.payload)
-        if (!result?.ok) throw new Error(result?.reason || 'Could not prepare Full trajectory')
+        if (!result?.ok) throw new Error(result?.reason || 'Could not prepare trajectory')
       }
       if (current !== generation || seekId !== seekSequence) return false
       if (overlays) {
@@ -119,7 +123,9 @@ export function createVRSimulationTrajectory({ api, controller, ensureFull, comp
         if (current !== generation || seekId !== seekSequence) return false
         if (!ready) throw new Error('Could not load ions or periodic cell; retry Load')
       }
-      if (!ctrl.showFullTrajectoryFrame(page.payload, i - page.start)) throw new Error('Switch to Full representation to continue')
+      state.message = 'Preparing selected representation'; state.progress = -1; changed()
+      if (!await ctrl.showFullTrajectoryFrame(page.payload, i - page.start)) throw new Error('Could not display the selected frame')
+      if (current !== generation || seekId !== seekSequence) return false
       overlays?.showFrame(state.first - 1 + i * state.interval)
       renderedPage = page; state.index = i; state.source = state.first + i * state.interval; state.phase = 'ready'; state.progress = 1
       state.message = `${state.count} selected frames · 16 maximum buffered`; changed(true)
@@ -131,7 +137,7 @@ export function createVRSimulationTrajectory({ api, controller, ensureFull, comp
   }
   async function load() {
     if (!trajectorySelection(state.first, state.last, state.interval, state.available) || metadataPending) return false
-    cancel(); const current = generation; state.phase = 'loading'; state.message = 'Preparing Full representation'; changed()
+    cancel(); const current = generation; state.phase = 'loading'; state.message = 'Preparing representation'; changed()
     try { await ensureFull() }
     catch (error) { if (current === generation) { state.phase = 'error'; state.message = error.message; changed() } return false }
     if (current !== generation) return false
@@ -155,7 +161,7 @@ export function createVRSimulationTrajectory({ api, controller, ensureFull, comp
     if (current === generation && state.playing) await seek(next)
     if (state.playing) timer = setTimeout(step, Math.max(0, 1000 / 12 - (clock() - lastStep)))
   }
-  function toggle() { if (!state.playing && state.phase === 'ready' && state.index === state.count - 1 && state.count > 1) { const current = generation; void seek(0).then(ok => { if (ok && current === generation) toggle() }); return } if (state.playing) pause(); else if (state.phase === 'ready' && state.count > 1) { state.playing = true; timer = setTimeout(step, 0) } changed() }
+  function toggle() { if (!state.playing && state.phase === 'ready' && state.index === state.count - 1 && state.count > 1) { const current = generation; void seek(0).then(ok => { if (ok && current === generation) toggle() }); return } if (state.playing) pause(); else if (state.phase === 'ready' && state.count > 1) { state.playing = true; ctrl?.setPlaying?.(true); timer = setTimeout(step, 0) } changed() }
   return { select, configure, load, cancel, pause, toggle, seek, refreshCompanions() { pause(); return seek(state.index) }, smooth() { state.smooth = !state.smooth; changed() }, snapshot: () => ({ ...state }),
     reset() { cancel(); context = ''; state = empty() }, dispose() { cancel() },
     get active() { return !!renderedPage }, get busy() { return !!pending || metadataPending } }

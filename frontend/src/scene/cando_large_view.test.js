@@ -17,6 +17,24 @@ export function packedView(kind = 'flex') {
 }
 
 describe('compact CanDo visualization', () => {
+  it('projects compact frames into the selected representation and retains scalar recoloring', () => {
+    const scene = new THREE.Scene(), view = initCandoLargeView(scene)
+    const renderer = { applyFemPositions: vi.fn(), applyScalarColors: vi.fn() }
+    view.update(decodeCandoView(packedView()))
+    expect(view.materialize(renderer)).toBe(true)
+    expect(scene.children[0].visible).toBe(false)
+    expect(renderer.applyFemPositions.mock.lastCall[0][1]).toMatchObject({ copy: 2, direction: 'REVERSE', backbone_position: [4,5,6] })
+    const colors = renderer.applyScalarColors.mock.lastCall[0]
+    view.recolor(0, 10, 'viridis')
+    expect(renderer.applyScalarColors.mock.lastCall[0]).not.toEqual(colors)
+    const next = decodeCandoView(packedView()); next.positions[0] = 25
+    view.updatePositions(next)
+    expect(renderer.applyFemPositions.mock.lastCall[0][0].backbone_position).toEqual([25,2,3])
+    view.clear()
+    view.update(next)
+    expect(view.materialized()).toBe(false)
+    expect(scene.children[0].visible).toBe(true)
+  })
   it('retains every coordinate and exact direction/loop-copy identity without copying columns', () => {
     const buffer = packedView(), data = decodeCandoView(buffer)
     expect([...data.positions]).toEqual([1,2,3,4,5,6])

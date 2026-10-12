@@ -57,7 +57,8 @@ def _index(source, stamp, path):
                     break
         if end is None:
             raise ValueError("Trajectory key table exceeds the visualization budget")
-        count = len(orjson.loads(data[start:end]))
+        nucleotide_keys = orjson.loads(data[start:end])
+        count = len(nucleotide_keys)
         if not 0 < count <= MAX_FRAME_BYTES // 24:
             raise ValueError("Trajectory frame exceeds the visualization budget")
         offsets = []
@@ -82,8 +83,8 @@ def _index(source, stamp, path):
             pos = end + 1
         if not offsets or not closed:
             raise ValueError("No trajectory frames available")
-    result = dict(stamp=stamp, count=count, offsets=offsets)
-    for old in path.parent.glob("trajectory-view-v1-*.bin"):
+    result = dict(stamp=stamp, count=count, offsets=offsets, keys=nucleotide_keys)
+    for old in path.parent.glob("trajectory-view-v2-*.bin"):
         old.unlink()
     _write(path, orjson.dumps(result))
     return result
@@ -96,10 +97,10 @@ def trajectory_frame(job_dir, frame):
         if not st.st_size:
             raise ValueError("Empty trajectory")
         stamp = [st.st_mtime_ns, st.st_size]
-        index = _index(source, stamp, job_dir / "trajectory-index-v1.json")
+        index = _index(source, stamp, job_dir / "trajectory-index-v2.json")
         if frame < 0 or frame >= len(index["offsets"]):
             raise ValueError("Trajectory frame out of range")
-        target = job_dir / f"trajectory-view-v1-{frame}.bin"
+        target = job_dir / f"trajectory-view-v2-{frame}.bin"
         if target.exists() and target.stat().st_mtime_ns >= st.st_mtime_ns:
             return target.read_bytes()
         start, end = index["offsets"][frame]
@@ -108,12 +109,16 @@ def trajectory_frame(job_dir, frame):
             values = np.asarray(orjson.loads(f.read(end - start)), dtype="<f4")
         if values.ndim != 1 or len(values) != index["count"] * 6:
             raise ValueError("Trajectory frame does not match nucleotide keys")
+        names = list(dict.fromkeys(key[0] for key in index["keys"]))
+        name_index = {name: i for i, name in enumerate(names)}
+        identities = [[name_index[k[0]], k[1], int(k[2] == "REVERSE"), k[3] if len(k) > 3 else 0] for k in index["keys"]]
         payload = pack_view(
             dict(
-                kind="deform", frame=frame, frames=len(index["offsets"]), min=0, max=0
+                kind="deform", frame=frame, frames=len(index["offsets"]), min=0, max=0, helix_ids=names
             ),
             values.reshape(-1, 6)[:, :3],
             np.full(index["count"], -1, dtype="<f4"),
+            identities,
         )
         _write(target, payload)
         return payload
@@ -124,5 +129,5 @@ def trajectory_meta(job_dir):
     source = job_dir / "trajectory.json"
     with _BUILD_LOCK:
         st = source.stat()
-        index = _index(source, [st.st_mtime_ns, st.st_size], job_dir / "trajectory-index-v1.json")
+        index = _index(source, [st.st_mtime_ns, st.st_size], job_dir / "trajectory-index-v2.json")
         return {"ready": True, "n_frames": len(index["offsets"])}

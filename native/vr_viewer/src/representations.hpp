@@ -17,6 +17,12 @@ inline size_t representationSourceIndex(Representation rep) {
     return static_cast<size_t>(rep);
 }
 
+inline bool simulationRepresentationAllowed(Representation rep) {
+    return rep==Representation::full || rep==Representation::vdw || rep==Representation::ballstick ||
+        rep==Representation::stick || rep==Representation::oxdna ||
+        rep==Representation::mrdnaCoarse || rep==Representation::mrdnaFine;
+}
+
 inline bool validRepresentation(std::string_view name) {
     for (auto candidate : kRepresentationNames) if (name == candidate) return true;
     return false;

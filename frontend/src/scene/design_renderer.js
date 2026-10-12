@@ -35,6 +35,9 @@ import { sameConnectionTopology, sameCrossoverTopology, sameForcedLigationTopolo
  * @returns {{ setMode, getBackboneEntries, setStrandColor, getHelixCtrl, dispose }}
  */
 export function initDesignRenderer(scene, storeRef) {
+  const simulationListeners = new Set()
+  let simulationGeometry = null, simulationDesign = null
+  const notifySimulation = () => { for (const fn of simulationListeners) fn() }
   let _helixCtrl        = null
   let _femArcUpdater    = null   // unfold_view.applyFemArcs — keeps arcs synced with applyFemPositions
   let _scalarArcUpdater = null   // unfold_view.applyFemArcColors — recolours arcs with the RMSF scalar map
@@ -548,6 +551,7 @@ export function initDesignRenderer(scene, storeRef) {
   // ── Geometric scene rebuild ───────────────────────────────────────────────
 
   function _rebuild(geometry, design, helixAxes) {
+    simulationGeometry = geometry; simulationDesign = design
     _clearStructuralOverlay()
     markOperationTiming('scene-rebuild-start', { nucleotides: geometry?.length ?? 0 })
     _rebuildSerial++
@@ -1512,7 +1516,13 @@ export function initDesignRenderer(scene, storeRef) {
       // replacing currentGeometry. Refresh position-backed overlays on every frame;
       // the store subscriber cannot observe these playback/scrub mutations.
       this.refreshAllGlow()
+      notifySimulation()
     },
+
+    subscribeSimulation(fn) { simulationListeners.add(fn); return () => simulationListeners.delete(fn) },
+    hasFemPositions() { return !!_activeFemUpdates?.length },
+    getSimulationGeometry() { return simulationGeometry },
+    getSimulationDesign() { return simulationDesign },
 
     /** Snapshot of the simulation/FEM positions currently driving the model. */
     getFemPositions() {
@@ -1548,6 +1558,7 @@ export function initDesignRenderer(scene, storeRef) {
      */
     applyScalarColors(colorByKey) {
       _activeScalarColors = colorByKey || null
+      notifySimulation()
       _scalarSerial = _rebuildSerial
       _helixCtrl?.applyScalarColors(colorByKey)
       _scalarArcUpdater?.(colorByKey)

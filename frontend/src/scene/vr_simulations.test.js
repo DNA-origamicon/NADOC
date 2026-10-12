@@ -82,14 +82,14 @@ it('keeps shared overlays with the active mode and mirrors native progress value
  expect(simulationControls(document, 'namd').find(c => c.element.id === 'ions').group).toBe('traj')
  expect(simulationProgress(document, 'namd')).toEqual([{label:'Loading ions',fraction:.75,busy:true}])
 })
-it('disables visualization choices while Full preparation owns an action', async () => {
+it('disables visualization choices while representation preparation owns an action', async () => {
  mount(); let release, state
  const bridge = createVRSimulations({ jobs: { getSelected: () => ({id:'complete'}) }, engineSelector: {getSelected: () => 'cando'}, ensureFull: () => new Promise(resolve => {release=resolve}), request: async (_,init) => {state=JSON.parse(init.body);return {ok:true}} })
  await bridge.publish()
  const pending=bridge.activate({sequence:1,version:state.version,id:state.controls.find(c=>c.label==='Predicted shape').id})
  await vi.waitFor(()=>expect(release).toBeTypeOf('function'))
  expect(bridge.snapshot().controls.every(c=>!c.enabled)).toBe(true)
- expect(bridge.snapshot().progress.at(-1).label).toBe('Preparing Full visualization')
+ expect(bridge.snapshot().progress.at(-1).label).toBe('Preparing visualization')
  release();await pending
  expect(bridge.snapshot().controls.find(c=>c.label==='Predicted shape').enabled).toBe(true)
 })

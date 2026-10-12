@@ -5724,6 +5724,7 @@ class Viewer {
                     if(action=="extrude:plane") return toolConfig_.targetSelectionKind()=="none";
                     return true;
                 }
+                if(action.starts_with("repr:") && (viewTools_.flags&2048) && !simulationRepresentationAllowed(static_cast<Representation>(std::stoi(action.substr(5)))))return false;
                 if(action=="repr:11" && !browserPrompt_.detailAllowed)return false;
                 if(action.starts_with("repr:") && representationLoading_.enabled)return true;
                 if(action.starts_with("repr:")) return glScene_->supportsRepresentation(static_cast<Representation>(std::stoi(action.substr(5))));
@@ -7438,6 +7439,7 @@ class Viewer {
     }
 
     void requestRepresentation(Representation representation, Coloring coloring) {
+        if((viewTools_.flags&2048) && !simulationRepresentationAllowed(representation))return;
         if(representation==Representation::surfaceDetail && !browserPrompt_.detailAllowed)return;
         if(representation==Representation::surfaceDetail && glScene_ &&
            !glScene_->supportsRepresentation(representation) &&
