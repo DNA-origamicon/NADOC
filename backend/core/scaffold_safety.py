@@ -67,8 +67,16 @@ def safe_scaffold_route(result_type):
                 from backend.core.scaffold_continuations import route_continuations
 
                 candidate = design.model_copy(deep=True)
-                continued = route_continuations(candidate, lambda d: fn(d, *args, **kwargs),
-                                                close_cycle=kwargs.get("close_cycle", True))
+                joined = None
+                if fn.__name__ in {"auto_scaffold_seamed", "auto_scaffold_seamless"}:
+                    from backend.core.join_scaffold_router import route_joined_scaffold
+                    joined = route_joined_scaffold(
+                        candidate, result_type, lambda d: fn(d, *args, **kwargs),
+                        seams=fn.__name__ == "auto_scaffold_seamed",
+                    )
+                continued = joined if joined is not None else route_continuations(
+                    candidate, lambda d: fn(d, *args, **kwargs),
+                    close_cycle=kwargs.get("close_cycle", True))
                 out, result = continued if continued is not None else fn(candidate, *args, **kwargs)
                 if not result.valid:
                     raise RoutingIntegrityError("; ".join(result.errors))

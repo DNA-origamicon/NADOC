@@ -137,6 +137,21 @@ After joining, select either rigid cluster in **Move/Rotate** and choose
 in the free-until-taut motion constraint, including connectors that belong to
 neither rigid cluster. Unmarked rigid connections still block this option.
 
+After Join, **Tools → Routing → Autoscaffold** completes the internal scaffold
+routing. Both Seamed and Seamless routing preserve the actual Join ligations,
+connector nucleotides, cluster poses, staples, and assigned nucleotide sequences.
+Each connected joined component becomes one linear scaffold. Constrained movement
+remains available because flexible marks follow their nucleotides into the new
+route. Autoscaffold is a separate undoable operation.
+
+The joined-component router protects bonds rather than freezing entire scaffold
+strands. It uses lattice-valid crossovers, reciprocal interior seams in Seamed
+mode, and end turns with at least three bases of ssDNA clearance from staples.
+If no complete route is found within the bounded search, the original design is
+retained; a fragmented partial result is not reported as successful. Whole-helix
+clusters are supported; domain-level cluster membership requires a separate
+membership remapping workflow.
+
 Legacy saved join constraints remain readable and can still be realized by an
 explicit Auto scaffold operation.
 
@@ -144,7 +159,12 @@ The distance-ranking and non-reuse behavior is informed
 by MagicDNA's `SortDist` assembly workflow in
 [`class/hyperbundle.m`](https://github.com/cmhuang2011/MagicDNA/blob/0c574bad121c260c04589fc050db63ab90250a36/class/hyperbundle.m#L7645).
 
-Run `uv run pytest tests/test_cluster_join_free.py tests/test_cluster_join_constraints.py` for multi-connection routing,
+Run `uv run pytest tests/test_cluster_join_free.py tests/test_cluster_join_constraints.py tests/test_join_scaffold_router.py` for multi-connection routing,
 export, exact-pose and undo/redo checks. Run
 `cd frontend && npx playwright test --config playwright.join.config.js` for the
 isolated point-picking, free-movement gizmo and T-junction browser workflows.
+
+To check a local saved design without changing it, set
+`NADOC_JOIN_VERIFY_DESIGN=/absolute/path/T-junction.nadoc` when running
+`tests/test_join_scaffold_router.py` or the Playwright `cluster_join_document.spec.js`
+tests. Both workflows open temporary copies; no user design is committed.
