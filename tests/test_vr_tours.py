@@ -240,3 +240,24 @@ def test_deformation_selection_check_is_discoverable_and_headset_independent(cli
     assert tour['runnable']
     assert 'No headset required' in tour['description']
     assert arguments(tour, True) == ['-m', 'tools.vr_workflows.deformation_selection_check', '--validate']
+
+
+def test_simulation_menu_study_is_desktop_only(client, monkeypatch):
+    study = next(t for t in catalog()['tours'] if t['id'] == 'simulation-menu-gallery')
+    assert study['modes'] == ['desktop']
+    assert study['command'].endswith('--desktop')
+    entry = next(t for t in client.get('/api/vr/tours').json()['tours'] if t['id'] == study['id'])
+    assert entry['validation_command'] is None
+    process = Mock(pid=987654)
+    process.poll.return_value = None
+    popen = Mock(return_value=process)
+    monkeypatch.setattr(tours.subprocess, 'Popen', popen)
+    monkeypatch.setattr(tours, '_viewer_active', lambda: True)
+    for mode in ('demo', 'validate'):
+        assert client.post('/api/vr/tours/start', json={'tour': study['id'], 'mode': mode}).status_code == 400
+    popen.assert_not_called()
+    result = client.post('/api/vr/tours/start', json={'tour': study['id'], 'mode': 'desktop'})
+    assert result.status_code == 200, result.text
+    argv = popen.call_args.args[0]
+    assert '--desktop' in argv
+    assert argv[argv.index('--component')+1] == 'simulations'

@@ -2,6 +2,8 @@
 #include <fstream>
 #include <array>
 #include <vector>
+#include <future>
+#include <chrono>
 
 // Included after GL helpers: one native stereo display stream plus the exact
 // desktop-icon tablet. No desktop window capture or emulated mouse input.
@@ -29,19 +31,9 @@ class VRViewTools {
     std::vector<V> triangles,lines;std::vector<Sprite> sprites;
     static constexpr std::array<const char*,8> keys{"lengthHeatmap","sequences","undefinedBases","loopSkips","grid","overhangNames","clashes","deform"};
     GLuint program=0,vao=0,vbo=0,triangleVbo=0,lineVbo=0,texture=0;unsigned frames=0;
+    std::optional<nadoc_vr::BoundsSummary> cachedSceneBounds;
     size_t instanceCount() const {size_t n=0;for(const auto& b:batches)n+=b.instances.size();return n;}
-    std::optional<nadoc_vr::BoundsSummary> sceneBounds() const {
-        nadoc_vr::BoundsAccumulator bounds;
-        for(const auto* vertices:{&triangles,&lines})for(const auto& v:*vertices)bounds.includePoint(v.p,0);
-        for(const auto& batch:batches) {
-            glm::vec3 lo(1e30F),hi(-1e30F);
-            for(const auto& v:batch.vertices){lo=glm::min(lo,v.p);hi=glm::max(hi,v.p);}
-            for(const auto& instance:batch.instances)for(int i=0;i<8;++i)
-                bounds.includePoint(glm::vec3(instance.matrix*glm::vec4(i&1?hi.x:lo.x,i&2?hi.y:lo.y,i&4?hi.z:lo.z,1)),0);
-        }
-        for(const auto& sprite:sprites)bounds.includePoint(sprite.p,glm::length(sprite.size)*.5F);
-        return bounds.summary(glm::mat4(1));
-    }
+    std::optional<nadoc_vr::BoundsSummary> sceneBounds() const {return cachedSceneBounds;}
     bool inspectionLayout() const {return overrideScene() && !(flags&256);}
     bool overrideScene() const {return version && flags!=256;}
     void initialize() {
@@ -82,7 +74,7 @@ void main(){
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
     }
     void clearBatches(){for(auto& b:batches){if(b.vertexBuffer)glDeleteBuffers(1,&b.vertexBuffer);if(b.instanceBuffer)glDeleteBuffers(1,&b.instanceBuffer);}batches.clear();}
-    void shutdown(){clearBatches();if(triangleVbo)glDeleteBuffers(1,&triangleVbo);if(lineVbo)glDeleteBuffers(1,&lineVbo);if(texture)glDeleteTextures(1,&texture);if(vbo)glDeleteBuffers(1,&vbo);if(vao)glDeleteVertexArrays(1,&vao);if(program)glDeleteProgram(program);}
+    void shutdown(){cancelStaging();clearBatches();if(triangleVbo)glDeleteBuffers(1,&triangleVbo);if(lineVbo)glDeleteBuffers(1,&lineVbo);if(texture)glDeleteTextures(1,&texture);if(vbo)glDeleteBuffers(1,&vbo);if(vao)glDeleteVertexArrays(1,&vao);if(program)glDeleteProgram(program);}
     void close() {
         open=false;hover={-1,-1};closeHover={};
         placement.openDocked(placement.position(),placement.orientation());
@@ -137,45 +129,7 @@ void main(){
             if(clicked[h]&&hover[h]>=0&&!waiting&&version){requested=hover[h];waiting=true;++sequence;commit(h);}
         }
     }
-    bool poll(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin) {
-        if(path.empty()||++frames%15)return false;
-        const double started=glfwGetTime();
-        std::ifstream in(path+".viewtools",std::ios::binary);char magic[8];std::array<uint32_t,10> h{};
-        if(!in.read(magic,8)||std::string(magic,8)!="NADOCVT1"||!in.read((char*)h.data(),40)||(h[0]!=4&&h[0]!=5)||h[1]==version)return false;
-        if((h[2]>=4096 || (h[2]&(128|512|1024)))||h[3]+uint64_t(h[4])>4000000||h[3]%3||h[4]%2||h[5]>100000||h[6]!=2048||h[7]!=2048||h[8]>10000)return false;
-        std::vector<V> t(h[3]),l(h[4]);std::vector<Sprite> s(h[5]);std::vector<unsigned char> rgba(2048*2048*4);
-        static_assert(sizeof(V)==48 && sizeof(Sprite)==60 && sizeof(Instance)==80);
-        auto readVertices=[&](std::vector<V>& values){
-            if(h[0]==5)return bool(in.read((char*)values.data(),values.size()*sizeof(V)));
-            for(auto& v:values)if(!in.read((char*)&v,36))return false;
-            return true;
-        };
-        if(!readVertices(t)||!readVertices(l)||!in.read((char*)s.data(),s.size()*sizeof(Sprite)))return false;
-        std::vector<Batch> next;uint64_t vertices=t.size()+l.size(),instances=0;
-        const auto normalization=glm::translate(glm::mat4(1),origin)*glm::scale(glm::mat4(1),glm::vec3(scale))*glm::translate(glm::mat4(1),-center);
-        for(uint32_t i=0;i<h[8];++i) {
-            std::array<uint32_t,2> counts{};if(!in.read((char*)counts.data(),8))return false;
-            vertices+=counts[0];instances+=counts[1];
-            if(!counts[0]||counts[0]%3||!counts[1]||vertices>4000000||instances>1000000)return false;
-            Batch b;b.vertices.resize(counts[0]);b.instances.resize(counts[1]);
-            if(!readVertices(b.vertices)||!in.read((char*)b.instances.data(),b.instances.size()*sizeof(Instance)))return false;
-            for(auto& instance:b.instances)instance.matrix=normalization*instance.matrix;
-            next.push_back(std::move(b));
-        }
-        if(!in.read((char*)rgba.data(),rgba.size())||in.peek()!=std::char_traits<char>::eof())return false;
-        const double uploading=glfwGetTime();parseMs=(uploading-started)*1000;
-        clearBatches();batches=std::move(next);
-        for(auto& b:batches) {
-            glGenBuffers(1,&b.vertexBuffer);glBindBuffer(GL_ARRAY_BUFFER,b.vertexBuffer);glBufferData(GL_ARRAY_BUFFER,b.vertices.size()*sizeof(V),b.vertices.data(),GL_STATIC_DRAW);
-            glGenBuffers(1,&b.instanceBuffer);glBindBuffer(GL_ARRAY_BUFFER,b.instanceBuffer);glBufferData(GL_ARRAY_BUFFER,b.instances.size()*sizeof(Instance),b.instances.data(),GL_STATIC_DRAW);
-        }
-        for(auto* list:{&t,&l})for(auto& v:*list)v.p=(v.p-center)*scale+origin;
-        for(auto& v:s){v.p=(v.p-center)*scale+origin;v.size*=scale;}
-        triangles=std::move(t);lines=std::move(l);sprites=std::move(s);version=h[1];flags=h[2];acknowledged=h[9];if(acknowledged>=sequence)waiting=false;
-        glBindBuffer(GL_ARRAY_BUFFER,triangleVbo);glBufferData(GL_ARRAY_BUFFER,triangles.size()*sizeof(V),triangles.data(),GL_STATIC_DRAW);
-        glBindBuffer(GL_ARRAY_BUFFER,lineVbo);glBufferData(GL_ARRAY_BUFFER,lines.size()*sizeof(V),lines.data(),GL_STATIC_DRAW);
-        glBindTexture(GL_TEXTURE_2D,texture);glPixelStorei(GL_UNPACK_ALIGNMENT,1);glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,2048,2048,0,GL_RGBA,GL_UNSIGNED_BYTE,rgba.data());glBindTexture(GL_TEXTURE_2D,0);uploadMs=(glfwGetTime()-uploading)*1000;return true;
-    }
+#include "view_tools_stream.inc"
     void draw(const glm::mat4& vp,const std::vector<V>& data,GLenum mode,bool glass=false,const glm::mat4& worldModel=glm::mat4(1)){
         if(data.empty()||!version)return;
         glUseProgram(program);FrostedGlass::bind(program,glass);glUniformMatrix4fv(glGetUniformLocation(program,"vp"),1,GL_FALSE,&vp[0][0]);

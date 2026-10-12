@@ -55,10 +55,10 @@ export function initSnupiTrajectoryPlayer({ api, view, onPrepare, onStop }) {
     if (el('controls')) el('controls').style.display = 'none'
     view?.clear(); onStop?.()
   }
-  async function show(jobId, onProgress) {
+  async function show(jobId, onProgress, { autoplay = true, frame = 0 } = {}) {
     stop(); job = jobId; wire()
-    const result = await seek(0, onProgress)
-    if (result.ok) { if (el('controls')) el('controls').style.display = 'flex'; play() }
+    const result = await seek(frame, onProgress)
+    if (result.ok) { if (el('controls')) el('controls').style.display = 'flex'; if (autoplay) play() }
     return result
   }
   return { show, stop, pause, play, seek, cancelPending: () => { ++epoch; abort?.abort(); busy = false; pause() }, info: () => count ? { frame: index + 1, total: count } : null }

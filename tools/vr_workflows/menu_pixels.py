@@ -17,6 +17,9 @@ def check(directory, evidence):
             up = control["hit_half_up"]
             # Sample the interior, excluding outlines and the small section heading.
             vertical = control["id"].startswith("tab:")
+            simulation = control["id"].startswith("sim:")
+            scrubber = control["id"] == "sim:local:t:311"
+            range_wheel = control["id"] in ("sim:local:t:300", "sim:local:t:301", "sim:local:t:302")
             scrollbar = control["id"] == "scrollbar" or control["id"].startswith("sim:scroll:")
             footer = control["id"] == "scrollbar" or control["id"] in (
                 "close",
@@ -44,9 +47,12 @@ def check(directory, evidence):
                           else np.zeros((1, 3), dtype=np.uint8))
                 return in_frame, pixels
 
+            # Simulation buttons put their label at the top inset, including
+            # the tall side Play button. Inspect that interior as well as the
+            # lower half; this is not a separate card section heading.
             valid, pixels = samples(
-                np.linspace(-0.5 if scrollbar else -0.98, 0.5 if scrollbar else 0.9, 180),
-                np.linspace(-0.98 if scrollbar else -0.80, 0.98 if scrollbar else 0.80 if vertical or footer else 0.15, 36),
+                np.linspace(-1.08 if scrubber else -0.5 if scrollbar else -0.98, 1.08 if scrubber else 0.5 if scrollbar else 0.9, 180),
+                np.linspace(-0.98 if scrollbar or scrubber else -0.80, 0.98 if scrollbar or scrubber else 0.80 if vertical or footer or simulation else 0.15, 36),
                 )
             # A scrollbar has a thumb rather than a text label. Disabled thumbs
             # use the desktop muted border color; demand visible neutral pixels.
@@ -55,6 +61,14 @@ def check(directory, evidence):
             neutral = (pixels.min(axis=1)>100) & (np.ptp(pixels.astype(int),axis=1)<40)
             if scrollbar:
                 neutral = (pixels.min(axis=1)>(100 if control["enabled"] else 50)) & (np.ptp(pixels.astype(int),axis=1)<40)
+            if scrubber:
+                # The raised scrubber has a cyan draggable handle, no text inside
+                # its hit target. Demand colored foreground across the full track.
+                neutral = ((pixels[:, 2].astype(int)-pixels[:, 0]>35) & (pixels[:, 1]>100)) if control["enabled"] else (pixels.min(axis=1)>45)
+            if range_wheel:
+                # These controls are ribbed cyan cylinders; their numeric labels
+                # sit beside, rather than inside, the physical hit surface.
+                neutral = ((pixels[:, 2].astype(int)-pixels[:, 0]>25) & (pixels[:, 1]>70)) if control["enabled"] else (pixels.min(axis=1)>30)
             text = int(neutral.sum())
             gray = True
             if not control["enabled"]:

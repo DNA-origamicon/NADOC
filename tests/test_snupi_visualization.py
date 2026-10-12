@@ -63,6 +63,13 @@ def test_trajectory_bounds(tmp_path, frame):
         trajectory_frame(tmp_path, frame)
 
 
+def test_trajectory_metadata_indexes_without_materializing_coordinates(tmp_path):
+    from backend.core.snupi_visualization import trajectory_meta
+    _trajectory(tmp_path)
+    assert trajectory_meta(tmp_path) == {'ready': True, 'n_frames': 2}
+    assert not list(tmp_path.glob('trajectory-view-*.bin'))
+
+
 def test_trajectory_size_and_shape_guards(tmp_path, monkeypatch):
     import backend.core.snupi_visualization as module
 

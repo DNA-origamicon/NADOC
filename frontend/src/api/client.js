@@ -3368,6 +3368,8 @@ export const getSnupiDisplayBin = (id, { signal, onProgress } = {}) =>
 export const getSnupiVisualizationBin = (id, mode, { signal, onProgress } = {}) =>
   _oxdnaBin('GET', `/snupi/jobs/${id}/visualization-bin?mode=${encodeURIComponent(mode)}`, undefined,
     { signal, onProgress, maxBytes: 256 * 1024 * 1024 })
+export const getSnupiTrajectoryMeta = id => _oxdnaJSON('GET', `/snupi/jobs/${id}/trajectory-meta`)
+export const getLammpsTrajectoryMeta = id => _oxdnaJSON('GET', `/lammps/jobs/${id}/trajectory-meta`)
 export const getSnupiTrajectoryFrameBin = (id, frame, { signal, onProgress } = {}) =>
   _oxdnaBin('GET', `/snupi/jobs/${id}/trajectory-frame-bin?frame=${frame}`, undefined,
     { signal, onProgress, maxBytes: 256 * 1024 * 1024 })

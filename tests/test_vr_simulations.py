@@ -6,9 +6,9 @@ from backend.api.vr_simulations import Snapshot, encode, parse_event
 def test_snapshot_keeps_job_specific_availability_and_quotes_labels():
     snapshot = Snapshot(version=1, acknowledged=0, engine='cando', selected='job', engines=[], jobs=[], controls=[dict(id='v:1', label='RMSF "map"', enabled=False, active=False)])
     text = encode(snapshot)
-    assert text.startswith('NADOC_SIMULATIONS_1 1 0 0 0 1 1\n')
+    assert text.startswith('NADOC_SIMULATIONS_2 1 0 0 0 1 1 ""\n')
     assert 'RMSF \\"map\\"' in text
-    assert text.endswith('0 0\n')
+    assert text.endswith('0\n0\n0\n')
     with pytest.raises(ValidationError):
         Snapshot(**{**snapshot.model_dump(), 'version': 0})
 

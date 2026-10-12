@@ -211,6 +211,15 @@ export function initLammpsDisplay({ designRenderer = null, api = client } = {}) 
   }
 
   return {
+    loadFullTrajectoryPage(jobId, payload) {
+      if (!designRenderer || !payload?.frames?.length) return {ok:false,reason:'No Full trajectory frames'}
+      _cancelLoad();_traj=payload;_jobId=jobId;_mode='trajectory';_align=true
+      designRenderer.clearScalarColors?.();showFrame(0);return {ok:true}
+    },
+    showFullTrajectoryFrame(payload, index) {
+      if (_mode !== 'trajectory') return false
+      _traj=payload;interpolationFrame=null;showFrame(index);return true
+    },
     displayJob, displayRmsf, displayDeviation, recolorRmsf, recolorDeviation, loadTrajectory, showFrame, showInterpolatedFrame, stopAndRestore,
     mode: () => _mode, activeJobId: () => _jobId, isActive: () => _mode !== null,
     alignment: () => _align,

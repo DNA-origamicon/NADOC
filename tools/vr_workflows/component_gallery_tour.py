@@ -1,6 +1,7 @@
 """Isolated native component gallery; desktop uses identical meshes and controls."""
 import argparse
 import json
+import os
 import subprocess
 import tempfile
 import time
@@ -115,14 +116,26 @@ def validate(live, output):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--component',choices=['thumbwheel','buttons','cards','lists'],default='thumbwheel')
+    parser.add_argument('--component',choices=['thumbwheel','buttons','cards','lists','simulations'],default='thumbwheel')
     parser.add_argument('--desktop',action='store_true')
     parser.add_argument('--validate',action='store_true')
     parser.add_argument('--output',type=Path)
     args=parser.parse_args()
+    if args.component == 'simulations' and not args.desktop:
+        parser.error('Simulation menu studies are desktop-only; pass --desktop.')
     if args.desktop and args.validate:
         parser.error('Use the native unit/render tests for desktop validation.')
-    from backend.api.routes_vr import _build_environment, _ensure_viewer_built, _start_steamvr
+    if args.component == 'simulations':
+        archive = Path('/media/jojo/Archive')
+        storage = (ROOT/'.development-artifacts/vr-simulation-menu-round1').resolve()
+        if not archive.is_mount() or (ROOT/'.development-artifacts').resolve().stat().st_dev != archive.stat().st_dev:
+            raise RuntimeError('Simulation study build and captures require mounted Archive storage.')
+        scratch = storage/'tmp'
+        scratch.mkdir(parents=True, exist_ok=True)
+        os.environ.setdefault('NADOC_VR_BUILD_DIR', str(storage/'build'))
+        os.environ['TMPDIR'] = str(scratch)
+        tempfile.tempdir = str(scratch)
+    from backend.api.routes_vr import _build_environment, _ensure_viewer_built, _start_steamvr, _VIEWER
     output=(args.output or ROOT/'.development-artifacts/vr-component-gallery'/uuid.uuid4().hex[:10]).resolve()
     output.mkdir(parents=True,exist_ok=True)
     _ensure_viewer_built()
@@ -132,7 +145,7 @@ def main():
         _start_steamvr()
     with tempfile.TemporaryDirectory(prefix='nadoc-gallery-') as temp:
         socket=str(Path(temp)/'viewer.sock')
-        command=[str(ROOT/'native/vr_viewer/build/nadoc-vr-viewer'),
+        command=[str(_VIEWER),
                  str(ROOT/'native/vr_viewer/examples/empty_authoring.nadocvr'),
                  '--component-gallery',args.component,'--gallery-output',str(output)]
         if args.desktop:command+=['--gallery-desktop','on']

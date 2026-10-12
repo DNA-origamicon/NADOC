@@ -6546,7 +6546,7 @@ async function main() {
   setNativePromptHandler(opts => vrPrompts.ask(opts))
   const vrRouting = createVRRouting({ onError: message => showToast(message, { severity: 'error' }) })
   const vrFeatureLog = createVRFeatureLog({ panel: () => _partFeatureLogPanel, store, api, onError: message => showToast(message, { severity: 'error' }) })
-  const vrSimulations = createVRSimulations({ jobs: simulateJobs, engineSelector, onError: message => showToast(message, { severity: 'error' }) })
+  const vrSimulations = createVRSimulations({ jobs: simulateJobs, engineSelector, api, companion: engine => engine === 'namd' ? mdPanel?.trajectorySolvent : null, controller: engine => ({ namd: mdViz, oxdna: oxdnaDisplay, lammps: lammpsDisplay, snupi: snupiDisplay })[engine], ensureFull: () => _currentRepr === 'full' ? undefined : _setRepresentation('full'), scale: () => flexScale, onFrame: () => vrViewTools.refresh(), onError: message => showToast(message, { severity: 'error' }) })
   const vrShare = createVRShare({})
   const vrViewTools = createVRViewTools({scene,getState:store.getState,onError:message=>showToast(message,{severity:'error'})})
   const vrLigation = createVRLigation({ getState: store.getState, api,
@@ -6911,7 +6911,7 @@ async function main() {
     // Full contains coarse cylinders/slabs whose orientation cannot be reconstructed
     // from atom XYZ alone. Keep that mode correct with a coalesced authoritative
     // snapshot until it gains its own compact coordinate/orientation protocol.
-    if (coordinatesReady && !atomistic) void vrSession.publishNativeState?.()
+    if (coordinatesReady && !atomistic) { vrViewTools.refresh(); void vrSession.publishNativeState?.() }
   })
 
   document.getElementById('menu-help-fjc-sim')?.addEventListener('click', async () => {

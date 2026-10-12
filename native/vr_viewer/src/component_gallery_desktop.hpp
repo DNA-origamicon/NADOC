@@ -1,7 +1,7 @@
 #pragma once
 #include "component_gallery.hpp"
 
-inline int runComponentGalleryDesktop(const std::string& output,bool buttons=false,bool cards=false,bool lists=false) {
+inline int runComponentGalleryDesktop(const std::string& output,bool buttons=false,bool cards=false,bool lists=false,bool simulations=false) {
     if(!glfwInit())throw std::runtime_error("Could not initialize the desktop display");
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,3);glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,3);
     glfwWindowHint(GLFW_OPENGL_PROFILE,GLFW_OPENGL_CORE_PROFILE);glfwWindowHint(GLFW_SAMPLES,4);
@@ -11,10 +11,11 @@ inline int runComponentGalleryDesktop(const std::string& output,bool buttons=fal
     if(buttons)glfwSetWindowTitle(window,"NADOC VR Component Gallery - Buttons | Click: select | F: front | O: angled | Space: demo | R: reset | S: capture | Esc: close");
     if(cards)glfwSetWindowTitle(window,"NADOC VR Component Gallery - Cards and lists | Click: expand/select | F: front | O: angled | Space: demo | R: reset | Esc: close");
     if(lists)glfwSetWindowTitle(window,"NADOC VR Component Gallery - Scrollable sets | Click: row/action | Drag rail: scroll | F: front | O: angled | Space: demo | R: reset | Esc: close");
-    ComponentGallery gallery;gallery.listMode=lists;gallery.cardMode=cards;gallery.buttonMode=buttons;gallery.active=true;gallery.posed=true;gallery.desktop=true;
+    if(simulations)glfwSetWindowTitle(window,"NADOC Simulation Menu Studies | Round 5 | A: Flat scrubber | B: Raised scrubber | F: front | O: angled | R: reset | S: capture | Esc: close");
+    ComponentGallery gallery;gallery.simulationMode=simulations;gallery.listMode=lists;gallery.cardMode=cards;gallery.buttonMode=buttons;gallery.active=true;gallery.posed=true;gallery.desktop=true;
     gallery.placement.openDocked({0,0,0},{1,0,0,0});
     struct View {float yaw=.30F,pitch=.14F,distance=1.25F;};
-    View view;glfwSetWindowUserPointer(window,&view);
+    View view;if(simulations){view.yaw=view.pitch=0;}glfwSetWindowUserPointer(window,&view);
     glfwSetScrollCallback(window,[](GLFWwindow* w,double,double y){auto& v=*static_cast<View*>(glfwGetWindowUserPointer(w));v.distance=std::clamp(v.distance-float(y)*.08F,.65F,2.5F);});
     std::array<bool,GLFW_KEY_LAST+1> previousKeys{};
     bool previousPressed=false,previousOrbit=false;double oldX=0,oldY=0,last=glfwGetTime();
@@ -22,11 +23,16 @@ inline int runComponentGalleryDesktop(const std::string& output,bool buttons=fal
     while(!gStopRequested && !glfwWindowShouldClose(window)) {
         glfwPollEvents();
         auto key=[&](int k){bool down=glfwGetKey(window,k)==GLFW_PRESS;bool clicked=down&&!previousKeys[k];previousKeys[k]=down;return clicked;};
-        if(key(GLFW_KEY_ESCAPE))glfwSetWindowShouldClose(window,true);
+        if(key(GLFW_KEY_ESCAPE) && !(simulations && gallery.simulationStyles.escape()))glfwSetWindowShouldClose(window,true);
         if(key(GLFW_KEY_F)){view.yaw=view.pitch=0;view.distance=1.25F;}
         if(key(GLFW_KEY_O)){view.yaw=.48F;view.pitch=.20F;view.distance=1.25F;}
         if(key(GLFW_KEY_SPACE))gallery.toggleDemo();
         if(key(GLFW_KEY_R)){gallery.reset();gallery.demo=false;}
+        if(simulations){
+            for(int n=0;n<10;++n)if(key(GLFW_KEY_0+n) || key(GLFW_KEY_KP_0+n))gallery.simulationStyles.digit(n);
+            if(key(GLFW_KEY_BACKSPACE))gallery.simulationStyles.eraseDigit();
+            if(key(GLFW_KEY_ENTER) || key(GLFW_KEY_KP_ENTER))gallery.simulationStyles.applyNumber();
+        }
         const bool save=key(GLFW_KEY_S)||first;
         double x,y;glfwGetCursorPos(window,&x,&y);
         const bool orbit=glfwGetMouseButton(window,GLFW_MOUSE_BUTTON_RIGHT)==GLFW_PRESS;
@@ -43,6 +49,10 @@ inline int runComponentGalleryDesktop(const std::string& output,bool buttons=fal
         std::array<nadoc_vr::HandPose,2> hands{};
         hands[1]={true,false,eye,glm::rotation(glm::vec3(0,0,-1),glm::normalize(glm::vec3(far)-eye))};
         const bool pressed=glfwGetWindowAttrib(window,GLFW_FOCUSED) && glfwGetMouseButton(window,GLFW_MOUSE_BUTTON_LEFT)==GLFW_PRESS;
+        if(simulations){
+            gallery.simulationStyles.desktopPad(glfwGetWindowAttrib(window,GLFW_FOCUSED) && glfwGetKey(window,GLFW_KEY_SPACE)==GLFW_PRESS);
+            if(!glfwGetWindowAttrib(window,GLFW_FOCUSED))gallery.simulationStyles.focusLost();
+        }
         const double now=glfwGetTime();
         gallery.update(hands,{false,pressed&&!previousPressed},{false,pressed},float(now-last),eye,rotation);
         // Recenter in desktop mode restores the panel, without changing its scale.

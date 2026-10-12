@@ -1339,6 +1339,7 @@ export function initSimulateJobs({
   // nadoc:left-tab-change event. Closed Simulations tabs do no disk/job scan.
 
   return { refresh, selectJob, setActiveEngine, getSelected: () => ({ ..._sel }),
+    getJobDetails: id => _nodes.find(node => node.job_id === id) ?? null,
     getSelectedDetails: () => {
       const node = _selectedNode()
       return node ? { ..._sel, name: _rowCtx(_nodes).displayName(node, _nodes.indexOf(node)), createdAt: node.created_at } : null

@@ -1061,8 +1061,13 @@ def reassemble_to_posed_reference(
         shift = np.zeros_like(dc)
         for k in range(3):
             if box[k] > 0:
-                shift[:, k] = np.round(dc[:, k] / box[k]) * box[k]
-                shift[:, k] = np.repeat(_run_medians(shift[:, k]), run_lengths)
+                shift[:, k] = np.round(dc[:, k] / box[k])
+                # Even-length strands can tie between two lattice indices. The
+                # median then lies halfway between images: round the INDEX before
+                # scaling, otherwise this changes physical inter-strand distances.
+                shift[:, k] = np.repeat(
+                    np.rint(_run_medians(shift[:, k])), run_lengths
+                ) * box[k]
         candidate = p_box - shift
         if snap_mask is not None:
             keep = ~np.asarray(snap_mask, dtype=bool)
@@ -1085,11 +1090,19 @@ def reassemble_to_posed_reference(
         delta = (mob - mob_c) @ fit_r.T - (tgt - tgt_c)
         return float(np.sqrt(np.mean(np.sum(delta * delta, axis=1))))
 
-    p_corr = (
-        translated
-        if _aligned_rms(translated) + 1e-9 < _aligned_rms(posed)
-        else posed
-    )
+    # NAMD wrapAll-off trajectories often already contain the intact assembly.
+    # A narrow cell can fold its circular-centroid pose even when the recorded
+    # strands need no relative shift (2hb_1xT P1 RunPod). Preserve that legitimate
+    # zero-shift candidate; choosing only the two snapped poses forced a strand
+    # into a wrong image and polluted both RMSD and RMSF. All three candidates
+    # retain the measured local conformation; only lattice translations differ.
+    p_corr = posed
+    best_rms = _aligned_rms(posed)
+    for candidate in (translated, p_box):
+        rms = _aligned_rms(candidate)
+        if rms + 1e-9 < best_rms:
+            p_corr = candidate
+            best_rms = rms
 
     # 6. Free ssDNA was restored inside each candidate and therefore never gets
     # snapped to equilibrium.  Return the PBC centroid used by the caller's final

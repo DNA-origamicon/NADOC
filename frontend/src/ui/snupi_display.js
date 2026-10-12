@@ -299,11 +299,11 @@ export function initSnupiDisplay({
 
   const player = initSnupiTrajectoryPlayer({ api, view: largeView,
     onPrepare: () => { _clearAll(); _nativeVisible(false) } })
-  async function showTrajectory(jobId, onProgress) {
+  async function showTrajectory(jobId, onProgress, options) {
     const { epoch } = _beginLoad()
     if (!largeView) return { ok: false, reason: 'Trajectory renderer unavailable' }
     _nativeVisible(false)
-    const result = await player.show(jobId, onProgress)
+    const result = await player.show(jobId, onProgress, options)
     if (epoch !== _epoch) return { ok: false }
     if (result.ok) {
       _jobId = jobId; _mode = 'trajectory'
@@ -343,6 +343,8 @@ export function initSnupiDisplay({
     showDeviation,
     showCandoStyle,
     showTrajectory,
+    seekFullTrajectoryFrame: (frame, progress) => player.seek(frame, progress),
+    pauseTrajectory: () => player.pause(),
     stopTrajectory,
     refresh,
     stopDeform,

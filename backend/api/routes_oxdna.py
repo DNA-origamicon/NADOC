@@ -2976,7 +2976,7 @@ async def get_oxdna_trajectory(
 @router.get("/oxdna/jobs/{job_id}/trajectory-bin")
 async def get_oxdna_trajectory_bin(
     job_id: str, request: Request, align: bool = True, scope: str = "lineage",
-    frame_start: int | None = None, frame_end: int | None = None
+    frame_start: int | None = None, frame_end: int | None = None, frame_step: int = 1
 ) -> Response:
     """Compact binary sibling of ``/trajectory`` for the interactive scrubber.
 
@@ -2987,6 +2987,8 @@ async def get_oxdna_trajectory_bin(
     """
     from backend.core.oxdna_health import pack_composite_trajectory_bin
 
+    if not 1 <= frame_step <= 100_000_000:
+        raise HTTPException(422, "Invalid frame interval")
     job = _load_job(job_id)
     design, stages, ref = _composite_inputs(job, scope)
     if not stages:
@@ -3023,7 +3025,7 @@ async def get_oxdna_trajectory_bin(
                 align,
                 _capture_bead_count(job),
                 _capture_strand_length(job),
-                frame_start, frame_end,
+                frame_start, frame_end, frame_step,
             )
         )
         while not task.done():

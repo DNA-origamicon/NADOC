@@ -279,3 +279,8 @@ def test_trajectory_binary_route_uses_ntrj_packer(monkeypatch):
     assert response.media_type == "application/octet-stream"
     assert response.headers["x-nadoc-uncompressed-length"] == str(len(payload))
     assert calls[0][0][3] == 200
+    response = asyncio.run(routes_lammps.get_lammps_trajectory_bin('job', stride=1,
+        frame_start=50000, frame_end=99999, frame_step=500))
+    assert response.body == payload
+    assert calls[1][0][3] == 0
+    assert calls[1][1] == dict(frame_start=50000, frame_end=99999, frame_step=500)

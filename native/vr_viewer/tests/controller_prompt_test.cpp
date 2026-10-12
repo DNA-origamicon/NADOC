@@ -1,10 +1,19 @@
 #include "controller_prompt.hpp"
 #include "browser_prompt.hpp"
+#include "simulation_colour_scale.hpp"
 #include <filesystem>
 #include <chrono>
 #include <cassert>
 #include <limits>
 using nadoc_vr::ControllerPrompt;
+struct GradientProbe {
+    struct Vertex {glm::vec3 position,colour;};
+    std::vector<Vertex> vertices;
+    void triangle(glm::vec3 a,glm::vec3 b,glm::vec3 c,glm::vec3 colour){
+        for(auto p:{a,b,c})vertices.push_back({p,colour});
+    }
+    // No text API: a gradient-only popup must not require labels or titles.
+};
 int main() {
     nadoc_vr::HandPose hand{true,false,{0,1,-.5F},{1,0,0,0}};
     for(size_t n=1;n<=4;++n)for(size_t choice=0;choice<n;++choice) {
@@ -31,6 +40,42 @@ int main() {
         assert(answers==1 && answer==std::to_string(choice) && !p.active());
         update(false,{},14);assert(answers==1 && pulses==3);
     }
+    // The simulation palette shares the prompt lifecycle with an explicit six-item
+    // capacity. Browser dialogs keep their original four-option guard below.
+    for(size_t choice=0;choice<6;++choice){
+        nadoc_vr::PaletteControllerPrompt palette;int pulses=0,answer=-1;
+        nadoc_vr::PaletteControllerPrompt::Request request{"Colour map","",{},[&](auto id){answer=std::stoi(id);}};
+        for(int i=0;i<6;++i)request.options.push_back({std::to_string(i),simulation_study::paletteNames[i]});
+        palette.show(request);
+        auto tick=[&](bool held,glm::vec2 axis,double t){palette.update(held,axis,hand,t,[&](float){++pulses;});};
+        const auto axis=nadoc_vr::PaletteControllerPrompt::direction(choice,6);
+        tick(true,axis,0);tick(false,{},.1);assert(answer==-1);
+        tick(false,{},5);tick(false,{},5.01);assert(pulses==2);
+        tick(false,{},5.2);assert(pulses==3);
+        tick(true,axis,6);tick(true,{},6.1);tick(false,axis,6.2);assert(answer==-1);
+        tick(true,axis,7);tick(false,{},7.1);assert(answer==int(choice) && !palette.active());
+    }
+    simulation_study::ScaleState scale;
+    simulation_study::ColourScaleGallery gallery;gallery.open(scale);
+    GradientProbe gradient;
+    gallery.prompt.drawGradients(gradient,simulation_study::paletteColour,0);
+    assert(gradient.vertices.empty());
+    gallery.prompt.update(false,{},hand,0,[](float){});
+    gallery.prompt.drawGradients(gradient,simulation_study::paletteColour,0);
+    assert(!gradient.vertices.empty());
+    for(const auto& vertex:gradient.vertices)
+        assert(glm::distance(vertex.position,gallery.prompt.worldPoint({0,0,.01F}))<.176F);
+    for(int map=0;map<6;++map)for(float t:{0.F,1.F})
+        assert(std::any_of(gradient.vertices.begin(),gradient.vertices.end(),[&](const auto& v){return glm::distance(v.colour,simulation_study::paletteColour(map,t))<1e-6F;}));
+    gallery.prompt.suspend();gallery.prompt.drawGradients(gradient,simulation_study::paletteColour,0);
+    assert(gradient.vertices.empty());
+    simulation_study::scaleBound(scale,200,.4F);assert(std::abs(scale.low-.4F)<1e-5F);
+    simulation_study::scaleBound(scale,201,-5);assert(scale.high>scale.low);
+    simulation_study::scaleBound(scale,200,5);assert(scale.low<scale.high);
+    simulation_study::scaleBound(scale,201,5);assert(scale.high==1);
+    assert(glm::distance(simulation_study::paletteColour(0,0),glm::vec3(68,1,84)/255.F)<1e-6F);
+    assert(simulation_study::ColourScaleGallery::value(0,6)=="-1.00");
+    assert(simulation_study::ColourScaleGallery::value(1,6)=="1.00");
     ControllerPrompt p;int answers=0;
     p.show({"One","Queued",{{"ok","OK"}},[&](auto){++answers;p.show({"Three","Callback",{{"ok","OK"}}, {}});}});
     p.show({"Two","Queued",{{"ok","OK"}}, {}});assert(p.queued()==2);

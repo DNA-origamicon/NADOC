@@ -4,6 +4,7 @@ import struct
 from pathlib import Path
 import numpy as np
 from fastapi import APIRouter, Request, HTTPException
+from fastapi.concurrency import run_in_threadpool
 
 router=APIRouter()
 MAX_BYTES=256*1024*1024
@@ -13,7 +14,7 @@ def validate_and_rotate(data, rotation):
     if len(data)<48 or data[:8]!=b'NADOCVT1':
         raise HTTPException(422,detail='Invalid VR display header')
     schema,version,flags,triangles,lines,sprites,width,height,batches,ack=struct.unpack_from('<10I',data,8)
-    if schema not in (4,5) or version<1 or (flags>=4096 or flags&(128|512|1024)) or triangles%3 or lines%2 or triangles+lines>4000000 or sprites>100000 or batches>10000 or width!=2048 or height!=2048 or len(data)>MAX_BYTES:
+    if schema not in (4,5,6) or version<1 or (flags>=4096 or flags&(128|512|1024)) or triangles%3 or lines%2 or triangles+lines>4000000 or sprites>100000 or batches>10000 or width!=(0 if schema==6 else 2048) or height!=(0 if schema==6 else 2048) or len(data)>MAX_BYTES:
         raise HTTPException(422,detail='Invalid VR display dimensions')
     r=np.asarray(rotation,dtype=float)
     if r.shape!=(3,3) or not np.isfinite(r).all():raise HTTPException(422,detail='Invalid VR view rotation')
@@ -26,9 +27,9 @@ def validate_and_rotate(data, rotation):
         offset=end
         if not np.isfinite(a).all() or np.max(np.abs(a),initial=0)>1e9:raise HTTPException(422,detail='Invalid VR display values')
         return a
-    stride=12 if schema==5 else 9
+    stride=12 if schema>=5 else 9
     vertices=values(triangles+lines,stride);vertices[:,:3]=vertices[:,:3]@r.T
-    if schema==5:vertices[:,9:12]=vertices[:,9:12]@r.T
+    if schema>=5:vertices[:,9:12]=vertices[:,9:12]@r.T
     labels=values(sprites,15);labels[:,:3]=labels[:,:3]@r.T
     total_vertices=triangles+lines;total_instances=0
     for _ in range(batches):
@@ -57,7 +58,11 @@ async def publish(request:Request):
     with vr._FEEDBACK_LOCK:
         state=vr._read_state()
         if not state or state.get('doc_id')!=get_current_doc():raise HTTPException(409,detail='VR belongs to another document or is unavailable')
-        result=validate_and_rotate(data,state.get('view_rotation'))
+    result=await run_in_threadpool(validate_and_rotate,data,state.get('view_rotation'))
+    with vr._FEEDBACK_LOCK:
+        current=vr._read_state()
+        if not current or current.get('event_path')!=state.get('event_path') or current.get('doc_id')!=get_current_doc():
+            raise HTTPException(409,detail='VR session changed during upload')
         path=Path(state['event_path']+'.viewtools');temp=Path(str(path)+'.next')
         temp.write_bytes(result);temp.chmod(0o600);os.replace(temp,path)
     return {'published':True,'bytes':len(result)}

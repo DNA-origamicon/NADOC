@@ -1996,6 +1996,28 @@ export function initOxdnaDisplay({
     return { ok: true, n_frames: resp.total_n_frames ?? resp.n_frames, markers: resp.markers || [], stages: resp.stages || [] }
   }
 
+  // Native Full playback supplies bounded, already sampled coordinate pages. Reuse
+  // the same measured-base/FEM application and companions as the desktop trajectory.
+  async function loadFullTrajectoryPage(jobId, payload) {
+    if (_repKind() !== 'cg' || !payload?.frames?.length) return { ok: false, reason: 'Full representation required' }
+    const epoch = ++_epoch, signal = _beginLoad()
+    _stream = null
+    _traj = { ...payload, frame_start: 0, total_n_frames: payload.frames.length }
+    _active = true; _mode = 'trajectory'; _jobId = jobId; _align = true
+    _trajScope = 'job'; _trajStride = 1; _trajRange = {}
+    designRenderer.clearScalarColors?.()
+    if (!await _applyJobCompanions(jobId, true, epoch, signal) || epoch !== _epoch) return { ok: false, reason: 'superseded' }
+    showFrame(0, { heavy: false })
+    return { ok: true }
+  }
+  function showFullTrajectoryFrame(payload, index) {
+    if (_repKind() !== 'cg' || _mode !== 'trajectory') return false
+    if (_traj?.frames !== payload.frames) { _interpolationPair = null; _interpolationCg = null }
+    _traj = { ...payload, frame_start: 0, total_n_frames: payload.frames.length }
+    showFrame(index, { heavy: false })
+    return true
+  }
+
   /** Deform the model to composite-trajectory frame i (clamped). No-op off mode. */
   function showFrame(i, { heavy = true } = {}) {
     if (_mode !== 'trajectory' || !_traj || !designRenderer) return
@@ -2243,6 +2265,7 @@ export function initOxdnaDisplay({
     setStrainDsdnaOnly,
     strainDsdnaOnly: () => _strainDsOnly,
     loadTrajectory,
+    loadFullTrajectoryPage, showFullTrajectoryFrame,
     ensureTrajectoryFrame,
     bufferTrajectory: onProgress => _stream?.fill(onProgress),
     isProgressiveTrajectory: () => !!_stream && _mode === 'trajectory',

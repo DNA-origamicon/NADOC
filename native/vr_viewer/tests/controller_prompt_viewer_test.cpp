@@ -50,6 +50,30 @@ struct LiveViewerTest {
         v.glScene_=std::make_unique<GlScene>(std::move(cached));v.browserPrompt_.detailAllowed=true;
         v.requestRepresentation(Representation::surfaceDetail,Coloring::strand);
         assert(!v.controllerPrompt_.active());
+        {
+            simulation_study::ScaleState scale;
+            simulation_study::ColourScaleGallery gallery;gallery.open(scale);
+            gallery.prompt.update(false,{},hand,0,[](float){});
+            SolidUi ui;gallery.prompt.drawGradients(ui,simulation_study::paletteColour,0);
+            const auto orientation=nadoc_vr::MenuPlacement::controllerOrientation(hand.orientation);
+            const auto center=gallery.prompt.worldPoint({0,0,0});
+            const auto vp=glm::ortho(-.21F,.21F,-.21F,.21F,.01F,10.F)*
+                glm::lookAt(center+orientation*glm::vec3(0,0,2),center,orientation*glm::vec3(0,1,0));
+            glViewport(0,0,700,700);glClearColor(.015F,.02F,.03F,1);
+            glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);ui.render(vp);glFinish();
+            std::vector<uint8_t> rgb(700*700*3);glReadPixels(0,0,700,700,GL_RGB,GL_UNSIGNED_BYTE,rgb.data());
+            for(int map=0;map<6;++map)for(float t:{.15F,.5F,.85F}) {
+                const auto direction=nadoc_vr::PaletteControllerPrompt::direction(map,6);
+                const auto point=direction*(.04F+.129F*t);
+                const int x=int((point.x/.42F+.5F)*700),y=int((point.y/.42F+.5F)*700);
+                const size_t at=(y*700+x)*3;
+                const auto expected=simulation_study::paletteColour(map,t)*255.F;
+                assert(glm::distance(glm::vec3(rgb[at],rgb[at+1],rgb[at+2]),expected)<35.F);
+            }
+            const auto png=nadoc_vr::scrywrite::encodeActorEyePng(rgb,700,700);
+            std::ofstream out(output/"palette-gradients.png",std::ios::binary);
+            out.write(reinterpret_cast<const char*>(png.data()),png.size());ui.shutdown();
+        }
         for(size_t count=1;count<=4;++count) {
             nadoc_vr::ControllerPrompt prompt;
             nadoc_vr::ControllerPrompt::Request request{"Controller prompt", "Read the explanation here. Press the left touchpad, slide toward an option, then release to choose.",{}, {}};

@@ -177,12 +177,13 @@ export function initMdSolventControls({
   let _meta = null              // /solvent-meta for _jobId
   let _measuredSpecies = null   // real ion census, once a frame has landed
   let _cache = new Map()        // frame index → parsed frame
+  let _deferDraw = false, _batchPage = false, _cachedSignature = null
   let _frameIdx = 0
   let _interpolationPair = null
   let _inflight = null
   let _generation = 0
-  let _frameStart = 0, _frameEnd = null
-  const selectedFrames = () => Array.from({ length: Math.max(0, Math.min(_nFrames, (_frameEnd ?? (_nFrames - 1)) + 1) - _frameStart) }, (_, i) => i + _frameStart)
+  let _frameStart = 0, _frameEnd = null, _frameIndices = null
+  const selectedFrames = () => _frameIndices ?? Array.from({ length: Math.max(0, Math.min(_nFrames, (_frameEnd ?? (_nFrames - 1)) + 1) - _frameStart) }, (_, i) => i + _frameStart)
   const preparationListeners = new Set()
   let preparationStarted = 0
   const reportPreparation = () => {
@@ -241,7 +242,7 @@ export function initMdSolventControls({
     const mode = _repMode()
     return [_jobId, _live || mode === 'off' ? mode : 'sphere',
             _waterOn() ? _scope() : null, _waterOn() ? _shellAng() : null, _stride,
-            _waterOn(), !!ionsToggle?.checked, !!boxToggle?.checked].join('|')
+            _waterOn(), !!ionsToggle?.checked, _request().box].join('|')
   }
 
   function _setStatus(text, color = '#8b949e') {
@@ -347,10 +348,10 @@ export function initMdSolventControls({
     if (_inflight) return _inflight
     // Show and measure one frame first, then prepare all remaining frames in
     // byte-bounded batches, amortizing the backend's per-request topology setup.
-    const foreground = !_cache.has(i)
+    const foreground = !_batchPage && !_cache.has(i)
     const want = foreground ? [i]
       : selectedFrames().filter(k => !_cache.has(k))
-        .slice(0, Math.max(1, Math.floor(128 * 1024 * 1024 / Math.max(1, _frameBytes))))
+        .slice(0, Math.max(1, Math.floor(128 * 1024 * 1024 / Math.max(1, _frameBytes || _plan().bytesPerFrame))))
     if (!want.length) return
     const generation = _generation
     const task = _fetchBatch(want, generation)
@@ -396,6 +397,7 @@ export function initMdSolventControls({
         _setStatus(`Ion/box trajectory needs ${formatBytes(_frameBytes * selectedFrames().length)}. Increase the frame interval to fit memory.`, '#d29922')
         return false
       }
+      _cachedSignature = sig
       for (const [id, f] of parsed.frames) _cache.set(id, f)
       if (first) _measuredWater = first.nWater
       _renderCount()
@@ -456,7 +458,7 @@ export function initMdSolventControls({
 
   // ── draw ──────────────────────────────────────────────────────────────────
   function _draw(i) {
-    return _drawData(_cache.get(i))
+    return !_deferDraw && _drawData(_cache.get(i))
   }
 
   function _drawData(f) {
@@ -499,6 +501,12 @@ export function initMdSolventControls({
       // one frame in flight.
       _setStatus('Solvent on next frame…', '#58a6ff')
       _pushLive()
+      return
+    }
+    // Ions already include cell corners. Changing only cell visibility must
+    // not reparse a multi-million-atom topology or discard a prepared page.
+    if (_cachedSignature === _requestSig() && _cache.has(_frameIdx)) {
+      _draw(_frameIdx)
       return
     }
     _invalidate()
@@ -562,7 +570,9 @@ export function initMdSolventControls({
       _refresh()
     },
     /** Point the controls at a job + its trajectory density. */
-    async setJob(jobId, { stride = null, nFrames = 0, frameIdx = null, frameStart = 0, frameEnd = null, keyframeOptions = null } = {}) {
+    async setJob(jobId, { stride = null, nFrames = 0, frameIdx = null, frameStart = 0, frameEnd = null, frameIndices = null, deferDraw = false, keyframeOptions = null } = {}) {
+      _deferDraw = deferDraw
+      _batchPage = Array.isArray(frameIndices) && frameIndices.length <= 8
       const changed = jobId !== _jobId
       const optionsChanged = keyframeOptions && (!_keyframeOptions ||
         !!ionsToggle?.checked !== !!keyframeOptions.ions || !!boxToggle?.checked !== !!keyframeOptions.box)
@@ -572,11 +582,13 @@ export function initMdSolventControls({
         if (ionsToggle) ionsToggle.checked = !!keyframeOptions.ions
         if (boxToggle) boxToggle.checked = !!keyframeOptions.box
       }
-      const reset = optionsChanged || changed || stride !== _stride || nFrames !== _nFrames || frameStart !== _frameStart || frameEnd !== _frameEnd
+      const indices = frameIndices == null ? null : [...new Set(frameIndices)].filter(i => Number.isSafeInteger(i) && i >= 0 && i < nFrames)
+      const reset = JSON.stringify(indices) !== JSON.stringify(_frameIndices) || optionsChanged || changed || stride !== _stride || nFrames !== _nFrames || frameStart !== _frameStart || frameEnd !== _frameEnd
       if (reset) _invalidate()
       _jobId = jobId
       _stride = stride
       _nFrames = nFrames
+      _frameIndices = indices
       _frameStart = frameStart ?? 0
       _frameEnd = frameEnd ?? null
       if (reset && frameIdx === null) _frameIdx = 0
@@ -664,6 +676,7 @@ export function initMdSolventControls({
 
     /** Draw frame `i`; prepare missing companions without displaying stale ones. */
     showFrame(i) {
+      _deferDraw = false
       _frameIdx = i | 0
       if (!_enabled || !_anyOn() || _repMode() === 'off') return
       if (!_draw(_frameIdx)) { _clearScene(); void prepareAll() }

@@ -61,7 +61,7 @@ export function initVrTours({ headers = () => ({}), request = fetch, store = {},
       for (const group of catalog.groups.filter(g => !groupFilter || g.id === groupFilter)) {
         const children = el('div', { className: 'submenu vr-tours-menu vr-tours-leaves', attrs: { role: 'menu' } })
         for (const tour of catalog.tours.filter(t => t.group === group.id)) {
-          for (const mode of modes) {
+          for (const mode of (tour.modes || modes)) {
             children.append(el('button', {
               className: 'dropdown-item', text: `${tour.title} ${mode === 'desktop' ? 'desktop demo' : mode === 'demo' ? (groupFilter ? 'VR demo' : 'demo') : 'validation'}`,
               dataset: { start: tour.id, mode, runnable: String(tour.runnable) },

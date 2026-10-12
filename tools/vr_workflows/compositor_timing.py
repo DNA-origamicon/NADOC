@@ -17,6 +17,9 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--seconds', type=float, default=300)
     args = parser.parse_args()
+    from tools.vr_workflows.audit_runtime import resources
+    resource_output = args.output.with_name("host-resources.jsonl").open("x")
+    resource_time = 0
     running = True
 
     def stop(*_):
@@ -41,6 +44,8 @@ def main():
             while running and time.monotonic() < deadline:
                 count, values = compositor.getFrameTimings(frames)
                 now = time.time() * 1000
+                if now - resource_time >= 1000:
+                    resource_output.write(json.dumps(resources()) + "\n"); resource_output.flush(); resource_time = now
                 for frame in values[:count]:
                     if frame.m_nFrameIndex <= previous:
                         continue
@@ -52,6 +57,7 @@ def main():
                 output.flush()
                 time.sleep(.1)
     finally:
+        resource_output.close()
         openvr.shutdown()
 
 

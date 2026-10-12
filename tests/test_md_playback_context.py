@@ -12,9 +12,10 @@ def test_dna_tables_preserve_serials_termini_and_bonds(tmp_path, monkeypatch):
     psf = tmp_path / 'a.psf'
     # Two bases and solvent: sparse heavy serials, phosphate-free 5' terminus.
     names = ["O5'", 'H5', "C1'", 'N1', 'C2', 'N3', 'C4', 'C5', 'C6',
-             'P', "C1'", 'N1', 'C2', 'N3', 'C4', 'C5', 'C6', 'OH2']
-    psf.write_text('PSF\n18 !NATOM\n' + ''.join(
-        f'{i+1} A {1 if i<9 else 2} {"DA" if i<17 else "TIP3"} {n} C 0 12 0\n'
+             'P', "C1'", 'N1', 'C2', 'N3', 'C4', 'C5', 'C6', 'OH2', 'SOD', 'MG', 'OH2', 'CA', 'C']
+    resnames = ['DA'] * 17 + ['TIP3', 'SOD', 'MGH', 'MGH', 'ALA', 'GRP']
+    psf.write_text('PSF\n23 !NATOM\n' + ''.join(
+        f'{i+1} A {1 if i<9 else 2} {resnames[i]} {n} C 0 12 0\n'
         for i, n in enumerate(names)) + '\n3 !NBOND\n1 2 1 3 10 11\n')
     keys = [('h', 0, 'FORWARD'), ('h', 1, 'FORWARD')]
     monkeypatch.setattr(mapping, 'load_segid_chain_map', lambda _: {'A':'A'})
@@ -28,8 +29,14 @@ def test_dna_tables_preserve_serials_termini_and_bonds(tmp_path, monkeypatch):
     assert ctx['heavy_bonds'].tolist() == [[0,2],[9,10]]
     assert ctx['term_specs'] == [(keys[0],0,2,0)]
     assert ctx['p_order'] == [keys[1]]
+    assert ctx['p_strand_ids'].tolist() == [0]
     assert {m['strand_id'] for m in ctx['atom_meta']} == {'strand'}
     assert ctx['full_base_layout'][0].tolist() == [9,0]
+    solvent = ctx['solvent_ctx']
+    assert solvent['ion_rows'].tolist() == [18,19]
+    assert solvent['ion_species'].tolist() == [0,2]
+    assert solvent['graphene_rows'].tolist() == [22]
+    assert solvent['n_waters_total'] == 2
 
 
 def test_binary_frames_keep_float64_coordinates_and_composite_indices(monkeypatch):

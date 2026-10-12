@@ -12,6 +12,17 @@ overlays, alignment, and atomistic/surface representations. Detailed incident hi
 
 ## Current state
 
+- P1 RunPod periodic-image correction (2026-10-12): shared reassembly includes
+  the intact, sequentially unwrapped assembly as a scored candidate and rounds
+  strand-median lattice indices before scaling. Previously the circular-centroid
+  pose could split an already intact 2HB across images; even-length ties could
+  move strands by half a cell. Analysis/playback contexts now pass exact PSF
+  segment IDs, including cached lightweight tables (version 5). On all 1,226
+  frames of `7d5937e569c6`, mean phosphate RMSF is 1.038 → 0.288 nm and maximum
+  design RMSD 2.886 → 0.870 nm. Integer shifts and within-strand displacements
+  compare exactly; source data/topology unchanged. Reload/regenerate browser
+  results computed before this fix. See `docs/audits/vr_palette_pbc_20261012.md`.
+
 - Figure quality probe control (2026-09-26): the temporary eight-iteration
   comparison has been removed. Figure quality starts at 0.14 nm with an enabled
   probe slider; standard and figure presets remember independent radius values.

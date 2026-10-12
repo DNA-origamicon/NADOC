@@ -53,3 +53,19 @@ def test_lit_display_rotates_normals_without_translation():
     assert np.allclose(posed[:,:3],[[3,2,-1]]*3)
     assert np.allclose(posed[:,9:],[[0,0,-1]]*3)
     assert np.array_equal(posed[:,3:9],vertices[:,3:9])
+
+
+def test_trajectory_update_reuses_atlas_and_still_rotates_normals():
+    vertices = np.array([[1,2,3,1,.5,.2,1,-1,-1,1,0,0]]*3,dtype='<f4')
+    data = b'NADOCVT1' + struct.pack('<10I',6,11,2048,3,0,0,0,0,0,0) + vertices.tobytes()
+    result = validate_and_rotate(data, [[0,0,1],[0,1,0],[-1,0,0]])
+    posed = np.frombuffer(result,dtype='<f4',offset=48).reshape(3,12)
+    assert np.allclose(posed[:,:3], [[3,2,-1]]*3)
+    assert np.allclose(posed[:,9:], [[0,0,-1]]*3)
+    assert len(result) == 48 + 3*12*4
+    with pytest.raises(HTTPException):
+        validate_and_rotate(data[:-4], np.eye(3))
+    invalid = bytearray(data)
+    struct.pack_into('<I', invalid, 32, 2048)
+    with pytest.raises(HTTPException):
+        validate_and_rotate(invalid, np.eye(3))

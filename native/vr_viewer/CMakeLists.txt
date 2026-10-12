@@ -39,6 +39,10 @@ install(TARGETS nadoc-vr-viewer nadoc-vr-scrywrite nadoc-vr-scrywrite-export
 
 include(CTest)
 if(BUILD_TESTING)
+  add_executable(nadoc-vr-simulation-trajectory-test tests/simulation_trajectory_test.cpp)
+  target_include_directories(nadoc-vr-simulation-trajectory-test PRIVATE src)
+  target_compile_options(nadoc-vr-simulation-trajectory-test PRIVATE -Wall -Wextra -Wpedantic -UNDEBUG)
+  add_test(NAME nadoc-vr-simulation-trajectory COMMAND nadoc-vr-simulation-trajectory-test)
   add_executable(nadoc-vr-controller-prompt-viewer-test tests/controller_prompt_viewer_test.cpp)
   target_link_libraries(nadoc-vr-controller-prompt-viewer-test PRIVATE PkgConfig::OPENXR PkgConfig::GLFW PkgConfig::X11 OpenGL::GL ZLIB::ZLIB ${CMAKE_DL_LIBS})
   target_compile_options(nadoc-vr-controller-prompt-viewer-test PRIVATE -UNDEBUG)

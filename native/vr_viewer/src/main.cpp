@@ -55,6 +55,7 @@
 #include "jobs.hpp"
 #include "menu_layout.hpp"
 #include "sidebar_menu.hpp"
+#include "simulation_viz_gallery.hpp"
 #include "simulation_panel.hpp"
 #include "feature_log_panel.hpp"
 #include "routing_panel.hpp"
@@ -5668,6 +5669,8 @@ class Viewer {
         routingPopup_.menus[1].available=[this](const std::string& action){return routingPanel_.available(action);};
         routingPopup_.menus[1].isActive=[this](const std::string& action){return routingPanel_.active(action);};
         simulationPanel_.bind(sidebarMenus_.menus[0], &sidebarMenus_.menus[1]);
+        sidebarMenus_.menus[0].customSimulationDraw=[this]{return sidebarMenus_.menus[0].dynamicActive() && sidebarMenus_.menus[0].tab().key=="dynamics";};
+        sidebarMenus_.simulationDraw=[this](size_t hand,auto& ui){if(hand==0)simulationPanel_.draw(ui);};
         featureLogPanel_.bind(sidebarMenus_.menus[0]);
         for(auto& sidebar:sidebarMenus_.menus) {
             sidebar.label=[this](const std::string& action,const std::string& fallback) {
@@ -6208,6 +6211,7 @@ class Viewer {
         }
         if(action.starts_with("routing:")) {if(routingPanel_.activate(action))publishEventState();return;}
         if(action.starts_with("history:")) {if(featureLogPanel_.activate(action)){publishEventState();if(action.ends_with(":edit"))desktopPanel_.show(hands_[hand].position,hands_[hand].orientation);}return;}
+        if(action=="simulation:local:frame"){activateSidebarAction("recenter",hand);return;}
         if(action.starts_with("simulation:")) {if(simulationPanel_.activate(action))publishEventState();return;}
         if(action=="qr:calibrate") {qrCalibration_.start();return;}
         if(action=="qr:cube") {qrCalibration_.start(true);return;}
@@ -7628,7 +7632,7 @@ class Viewer {
         identity(publishedHoverIdentity_);
         output << ",\"share_control\":{\"sequence\":" << shareSequence_ << ",\"action\":\"" << shareAction_ << "\"}";
         output << ",\"feature_log\":{\"sequence\":" << featureLogPanel_.sequence << ",\"version\":" << featureLogPanel_.requestedVersion << ",\"id\":\"" << featureLogPanel_.requested << "\"}";
-        output << ",\"simulation\":{\"sequence\":" << simulationPanel_.sequence << ",\"version\":" << simulationPanel_.requestedVersion << ",\"id\":\"" << simulationPanel_.requested << "\"}";
+        output << ",\"simulation\":{\"sequence\":" << simulationPanel_.sequence << ",\"version\":" << simulationPanel_.requestedVersion << ",\"id\":\"" << simulationPanel_.requested << "\",\"value\":" << simulationPanel_.requestedValue << ",\"first\":" << simulationPanel_.requestedFirst << ",\"last\":" << simulationPanel_.requestedLast << ",\"interval\":" << simulationPanel_.requestedInterval << "}";
         output << ",\"prompt\":{\"sequence\":" << browserPrompt_.sequence << ",\"version\":" << browserPrompt_.answerVersion << ",\"id\":\"" << browserPrompt_.answer << "\"}";
         output << ",\"routing\":{\"sequence\":" << routingPanel_.sequence << ",\"version\":" << routingPanel_.requestedVersion << ",\"id\":\"" << routingPanel_.requested << "\"}";
         output << ",\"view_tool\":{\"sequence\":" << viewTools_.sequence << ",\"index\":" << viewTools_.requested << "}";
@@ -8336,6 +8340,7 @@ class Viewer {
             << ",\"parse_ms\":" << viewTools_.parseMs << ",\"upload_ms\":" << viewTools_.uploadMs << ",\"instances\":" << viewTools_.instanceCount() << ",\"lines\":" << viewTools_.lines.size()/2 << ",\"sprites\":" << viewTools_.sprites.size() << ",\"hover\":[" << viewTools_.hover[0] << ',' << viewTools_.hover[1] << "],\"items\":[";
         for(size_t i=0;i<VRViewTools::keys.size();++i){if(i)out<<',';out<<"{\"key\":"<<quote(VRViewTools::keys[i])<<",\"active\":"<<((viewTools_.flags&(1<<(i<7?i:i+1)))?"true":"false")<<",\"center\":"<<point(viewTools_.world(VRViewTools::cell(i)))<<'}';}
         out << "]}";
+        simulationPanel_.describe(out);
         out << ",\"trajectory\":{\"panel_open\":" << (trajectoryPanel_.active && sidebarMenus_.menus[0].open?"true":"false")
             << ",\"active\":" << (trajectoryState_.active?"true":"false")
             << ",\"playing\":" << (trajectoryState_.playing?"true":"false")
@@ -8769,6 +8774,7 @@ class Viewer {
 
     void suspendControllerInput() {
         controllerPrompt_.suspend();
+        simulationPanel_.mapper.prompt.suspend();
         remotePanels_.cancel();
         neutralLiveInput();
         triggerValues_.fill(0);triggerPartial_.fill(false);triggerPressed_.fill(false);triggerClicked_.fill(false);
@@ -8796,7 +8802,8 @@ class Viewer {
         if (liveControlsEnabled() && (sessionState_ != XR_SESSION_STATE_FOCUSED ||
             std::chrono::steady_clock::now() > liveInputDeadline_))
             neutralLiveInput(sessionState_ != XR_SESSION_STATE_FOCUSED);
-        const bool promptOwnsInput=controllerPrompt_.active();
+        const bool browserPromptOwnsInput=controllerPrompt_.active();
+        const bool promptOwnsInput=browserPromptOwnsInput || simulationPanel_.mapper.prompt.active();
         triggerClicked_.fill(false);
         gripClicked_.fill(false);
         if (sessionState_ != XR_SESSION_STATE_FOCUSED) {
@@ -8960,8 +8967,10 @@ class Viewer {
                 "xrGetActionStateVector2f(trackpad axis)");
             const glm::vec2 navigationAxis=liveControlsEnabled()?liveTrackpadAxis_[hand]:glm::vec2(trackpadAxis.currentState.x,trackpadAxis.currentState.y);
             if(promptOwnsInput) {
-                if(hand==0)controllerPrompt_.update(trackpadPressed,navigationAxis,hands_[0],glfwGetTime(),
-                    [&](float strength){pulse(0,strength);});
+                if(hand==0 && browserPromptOwnsInput) {
+                    simulationPanel_.mapper.prompt.suspend();
+                    controllerPrompt_.update(trackpadPressed,navigationAxis,hands_[0],glfwGetTime(),[&](float strength){pulse(0,strength);});
+                } else if(hand==0)simulationPanel_.pad(trackpadPressed,navigationAxis,hands_[0],glfwGetTime(),[this](float strength){pulse(0,strength);},[this]{publishEventState();});
                 continue;
             }
             if(hand==0)selectionWheel_.input(trackpadPressed,navigationAxis,hands_[0],
@@ -9036,7 +9045,7 @@ class Viewer {
             manipulator_.update(hands_);
             triggerClicked_.fill(false);gripClicked_.fill(false);
             liveInputOwner_.fill("controller-prompt");
-            if(!controllerPrompt_.active())inputResumeBlocked_.fill(true);
+            if(!controllerPrompt_.active() && !simulationPanel_.mapper.prompt.active())inputResumeBlocked_.fill(true);
             updateControllerGuides();return;
         }
         if(componentGallery_.active) {
@@ -9160,6 +9169,7 @@ class Viewer {
                 [&](const std::string& action,size_t hand){activateSidebarAction(action,hand);});
             sidebarBlocked.fill(true);
         }
+        simulationPanel_.input(hands_,triggerClicked_,triggerPressed_,sidebarBlocked,frameDeltaSeconds_,[this]{publishEventState();});
         auto sidebarTargeted = sidebarMenus_.input(hands_, triggerClicked_, triggerPressed_, sidebarBlocked, foregroundDistance,glfwGetTime(),
             [&](const std::string& action, size_t hand) { activateSidebarAction(action,hand); });
         std::array<bool, 2> menuControlTargeted = sidebarTargeted;
@@ -9839,6 +9849,10 @@ class Viewer {
         solidWheels_.render(viewProjection);
         controllerPrompt_.draw(promptSurface_);
         promptSurface_.render(viewProjection);
+        if(!controllerPrompt_.active()) {
+            simulationPanel_.mapper.prompt.drawGradients(promptSurface_,simulation_study::paletteColour,simulationPanel_.snapshot.scale.palette);
+            promptSurface_.render(viewProjection);
+        }
         menuGlass_.capture();
         sidebarMenus_.render(viewProjection);
         routingPopup_.render(viewProjection);
@@ -11394,7 +11408,7 @@ int main(int argc, char** argv) {
     std::string witnessPath;
     std::string mirrorDiagnosticsPath;
     std::string controllerPath;
-    bool componentGallery=false, galleryDesktop=false, galleryButtons=false, galleryCards=false,galleryLists=false;
+    bool componentGallery=false, galleryDesktop=false, galleryButtons=false, galleryCards=false,galleryLists=false,gallerySimulations=false;
     std::string galleryOutput;
     std::string witnessCaptureDirectory;
     std::string witnessVisualExpectationDirectory;
@@ -11417,8 +11431,8 @@ int main(int argc, char** argv) {
         const std::string option(argv[index]);
         if(option=="--component-gallery") {
             const std::string component=argv[index+1];
-            if(component!="thumbwheel" && component!="buttons" && component!="cards" && component!="lists") {std::cerr<<"Unknown gallery component\n";return 2;}
-            galleryButtons=component=="buttons";galleryCards=component=="cards";galleryLists=component=="lists";
+            if(component!="thumbwheel" && component!="buttons" && component!="cards" && component!="lists" && component!="simulations") {std::cerr<<"Unknown gallery component\n";return 2;}
+            galleryButtons=component=="buttons";galleryCards=component=="cards";galleryLists=component=="lists";gallerySimulations=component=="simulations";
             componentGallery=true;
         }
         else if(option=="--gallery-desktop") {
@@ -11588,9 +11602,10 @@ int main(int argc, char** argv) {
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
     try {
+        if(gallerySimulations && !galleryDesktop)throw std::runtime_error("Simulation menu studies are desktop-only; use --gallery-desktop on");
         if(galleryDesktop) {
             if(!componentGallery)throw std::runtime_error("Desktop gallery requires --component-gallery thumbwheel");
-            return runComponentGalleryDesktop(galleryOutput,galleryButtons,galleryCards,galleryLists);
+            return runComponentGalleryDesktop(galleryOutput,galleryButtons,galleryCards,galleryLists,gallerySimulations);
         }
         const auto processStarted = std::chrono::steady_clock::now();
         std::cout << "VR_METRIC event=process_start mode=openxr_viewer rss_mib="

@@ -3544,7 +3544,7 @@ export function initMdJobsPanel({ mdDisplayController = null, getOccupancyOverla
     // is deliberately excluded: an RMSF map is a time-mean structure, so there is
     // no single frame's solvent to draw.
     solvent?.setEnabled(
-      !!_trajJobId || !!displayToggle?.checked,
+      !!_trajJobId || !!displayToggle?.checked || (trajToggle?.checked && document.documentElement.dataset.vrSimulationTrajectory === 'true'),
       displayToggle?.checked ? 'live' : 'traj')
     if (hasJob) _freeRamBytes()      // prime the shared budget for the readout
     // Interval row only means anything for a job with frames on disk; its readout needs

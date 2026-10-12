@@ -48,3 +48,13 @@ it('opens the component gallery with VR and headset-free desktop launchers', asy
   desktop.click();await flush()
   expect(JSON.parse(request.mock.calls.find(([url])=>url.endsWith('/start'))[1].body)).toEqual({tour:'thumbwheel-gallery',mode:'desktop'})
 })
+
+it('offers only desktop for simulation menu studies in either Debug menu', async () => {
+  document.body.innerHTML='<div id="menu-debug-vr-tours"></div>'
+  const request=vi.fn(async () => ({ok:true,json:async()=>({groups:[{id:'components',label:'Components'}],
+    tours:[{id:'simulation-menu-gallery',group:'components',title:'Simulation menus A/B',runnable:true,modes:['desktop']}]})}))
+  ui=initVrTours({request});await ui.open()
+  const buttons=document.querySelectorAll('[data-start=simulation-menu-gallery]')
+  expect(buttons).toHaveLength(1)
+  expect(buttons[0].dataset.mode).toBe('desktop')
+})

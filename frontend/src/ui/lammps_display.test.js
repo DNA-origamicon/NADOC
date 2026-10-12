@@ -1,6 +1,16 @@
 import { describe, it, expect, vi } from 'vitest'
 import { initLammpsDisplay } from './lammps_display.js'
 
+it('applies bounded Full trajectory pages without triggering another download', () => {
+  const deps=makeDeps(), ctrl=initLammpsDisplay(deps)
+  const page={keys:[['h0',0,'FORWARD']],frames:[[1,2,3,1,0,0],[4,5,6,1,0,0]]}
+  expect(ctrl.loadFullTrajectoryPage('j',page)).toEqual({ok:true})
+  expect(ctrl.showFullTrajectoryFrame(page,1)).toBe(true)
+  expect(deps.designRenderer.applyFemPositions.mock.calls.at(-1)[0][0].backbone_position).toEqual([4,5,6])
+  expect(deps.api.getLammpsTrajectory).not.toHaveBeenCalled()
+  ctrl.stopAndRestore();expect(ctrl.showFullTrajectoryFrame(page,0)).toBe(false)
+})
+
 // A ready /lammps display response (last aligned frame → applyFemPositions updates).
 const displayResp = () => ({
   ready: true,

@@ -695,3 +695,13 @@ def get_snupi_trajectory_frame_bin(job_id: str, frame: int = 0):
         media_type="application/octet-stream",
         headers={"X-NADOC-Uncompressed-Length": str(len(payload))},
     )
+
+
+@router.get("/snupi/jobs/{job_id}/trajectory-meta")
+def get_snupi_trajectory_meta(job_id: str):
+    from backend.core.snupi_visualization import trajectory_meta
+    job = _load_job(job_id)
+    try:
+        return trajectory_meta(job.job_dir(_workspace()))
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(422, str(exc)) from exc

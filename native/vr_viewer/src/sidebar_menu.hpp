@@ -38,6 +38,7 @@ class SidebarMenu {
         }
         offsets.resize(tabs.size());
     }
+    std::function<bool()> customSimulationDraw=[]{return false;};
     std::function<bool()> dynamic = []{return false;};
     std::function<std::vector<SidebarControl>(bool)> dynamicControls;
     std::function<MenuPanelBounds()> dynamicBounds;
@@ -614,6 +615,7 @@ class SidebarMenu {
         const auto listControls=controls();
         drawSidebarSets(listControls,line,fill);
         for(const auto& c:listControls) {
+            if(customSimulationDraw() && c.id.starts_with("sim:")){audit.addControl(c.id,c.bounds,c.bounds);continue;}
             clip=c.viewport;
             audit.addSpacing(c.id,raisedAction(c)&&!c.id.starts_with("sim:j:")?ui_style::raisedEnvelope(c.bounds):c.bounds,
                 ui_style::gripRail+ui_style::contentPadding,ui_style::controlGap);

@@ -609,6 +609,23 @@ describe('ion legend precedence', () => {
     expect(api.getMdFramesSolventBin).not.toHaveBeenCalled()
   })
 
+  it('batches a sparse VR page and defers drawing until DNA advances', async () => {
+    await boot({ nFrames: 100000 })
+    api.getMdFramesSolventBin.mockImplementation(async (_job, ids) => packIonFrame([0], ids))
+    await made.setJob('job-1', { stride: 1, nFrames: 100000, frameIndices: [50000, 50500, 51000], frameIdx: 50000, deferDraw: true, keyframeOptions: { ions: true } })
+    expect(await made.prepareAll()).toBe(true)
+    expect(api.getMdFramesSolventBin).toHaveBeenCalledTimes(1)
+    expect(api.getMdFramesSolventBin.mock.calls[0][1]).toEqual([50000, 50500, 51000])
+    expect(overlay.setFrame).not.toHaveBeenCalled()
+    made.showFrame(50500)
+    expect(overlay.setFrame.mock.calls.at(-1)[0].ions[0]).toBe(50501)
+    const box = document.getElementById('md-jobs-box-toggle')
+    box.checked = true
+    box.dispatchEvent(new Event('change'))
+    expect(await made.prepareAll()).toBe(true)
+    expect(api.getMdFramesSolventBin).toHaveBeenCalledTimes(1)
+  })
+
   it('holds Play until all companions are ready, then DNA and ions pass frame 17 together', async () => {
     await boot({ nFrames: 70 })
     let release

@@ -31,6 +31,10 @@ def catalog():
         'Seek backward and forward through a temporary part using native history event dispatch. Checks desktop geometry and the current design/revision sent to VR. Isolated browser with intercepted VR transport; keeps the physical headset session running.', module='history_refresh_check')
     add('production-lists', 'interaction', 'Feature history and production lists',
         'Review sweep rails, dimension tables, simulation job cards and the feature-history scrub rail. Runs bounded native interaction checks and retains production-rendered state images.', module='list_components_check')
+    add('simulation-menu-gallery', 'components', 'Simulation menus A/B',
+        'Desktop-only round 5: compact split and horizontal colour scale, with flat or raised trajectory scrubbers, explicit range/interval Load gate, exact frame entry and large-load confirmation.',
+        ['--component', 'simulations'], module='component_gallery_tour')
+    tours[-1]['modes'] = ['desktop']
     add('list-gallery', 'components', 'Scrollable sets',
         'Six bounded lists with independent row actions, selection, draggable scroll rails and persistent set headers. Dimensions, sweep points and simulation job samples.', ['--component', 'lists'], module='component_gallery_tour')
     add('card-gallery', 'components', 'Cards and lists',
@@ -49,10 +53,12 @@ def catalog():
         'Switch the open design between all eleven desktop representations, including Hull, Surface, mrDNA and oxDNA. Reuses cached exports for unchanged designs. Validation tests all four controller profiles.', module='representation_tour')
     add('representation-colors', 'right', 'Representation colors',
         'Quick pass through all eleven styles and both coloring pages. Checks enabled/gray controls and rendered pixels; not the full switching matrix.', ['--cycle'], module='representation_tour')
-    add('simulations', 'left', 'Simulation results · 2hb_1xT',
-        'Desktop engine tabs, pointer job/result navigation and existing static visualizations for 2hb_1xT. Copies job metadata/caches into a temporary workspace; trajectories are excluded. Validation runs all four motion profiles.', module='simulation_tour')
+    add('simulations', 'left', 'Simulation jobs · Full + trajectory',
+        'Curved engine tabs, focused jobs, gradient-only controller touchpad colour maps and shallow speed-sensitive frame-range thumbwheels with explicit-load raised trajectory playback in Full. Checks slow/fast drags, bounds, desktop acknowledgement and wheel pixels. Private result copies; optional 24HB benchmark. Validation runs all four motion profiles.', module='simulation_tour')
     add('backend-lifetime', 'interaction', 'Backend shutdown closes VR',
         'Launch an isolated backend and empty VR viewer; terminate only that backend and require viewer exit and sidecar cleanup.', module='backend_lifecycle_check')
+    add('simulations-24hb', 'left', '24HB simulations · Full performance benchmark',
+        'Temporary benchmark using a private copy of completed 24HB NAMD results. Raised scrubber, range/load gate, static views, frame/GPU timing and four motion profiles; never starts a simulation.', module='simulation_24hb_tour')
     add('tool-frame-audit', 'authoring', 'Tools across representations · frame audit',
         'Long isolated campaign: existing authoring fixtures in Full, Stick, Ball & Stick and Quick Surface. Includes Nick, Ligate, Bend, Twist and Sweep commit latency, CPU calculation counts and compositor timing; retains failures. Input-to-ready timing excludes reaching Confirm when available. Nick frame audits focus on edits while its ordinary tour retains quiver checks. Validation uses all four motion profiles. Desktop drawing defaults off with browser trace evidence (--desktop-rendering on overrides it); Move workflows also check the Desktop 3D during VR toggle and automatic desktop restoration.', module='tool_frame_audit')
     add('frame-audit', 'interaction', 'VR frame calculation audit',
@@ -157,4 +163,6 @@ def arguments(tour, validate=False):
 
 def command(tour, validate=False):
     args = ['uv', 'run', 'python', *arguments(tour, validate)]
+    if tour.get('modes') == ['desktop'] and not validate:
+        args += ['--desktop']
     return shlex.join(args)

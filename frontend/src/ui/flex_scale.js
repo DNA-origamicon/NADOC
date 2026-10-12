@@ -276,6 +276,16 @@ export function initFlexScale() {
     },
     hide() { _closePopup(); if (root) root.style.display = 'none' },
     isVisible: () => !!root && root.style.display !== 'none',
+    snapshot: () => root && root.style.display !== 'none' ? { title: titleEl?.textContent || '', minimum: _dataMin, maximum: _dataMax, low: _lo, high: _hi,
+      palette: Math.max(0, ['viridis','magma','turbo','jet','devramp','coolwarm'].indexOf(_colormap)) } : null,
+    applyVR(action, value) {
+      if (!root || root.style.display === 'none') return false
+      if (action === 'palette' && Number.isInteger(value) && value >= 0 && value < 6) _setColormap(['viridis','magma','turbo','jet','devramp','coolwarm'][value])
+      else if (action === 'reset') _setBounds(_dataMin, _dataMax, { emit: true })
+      else if (Number.isFinite(value) && ['low','high'].includes(action)) _setBounds(action === 'low' ? value : _lo, action === 'high' ? value : _hi, { emit: true })
+      else return false
+      return true
+    },
     getBounds: () => ({ lo: _lo, hi: _hi }),
     getColormap: () => _colormap,
     getChimeraxPalette: () => chimeraxPalette(_colormap),

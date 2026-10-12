@@ -79,6 +79,25 @@ describe('initFlexScale', () => {
     expect(cb).toHaveBeenLastCalledWith(0.2, 0.6, 'viridis')
   })
 
+  it('shares live VR bounds and six palette choices with the desktop recolor callback', () => {
+    const onRecolor = vi.fn(), fs = initFlexScale()
+    fs.show({ title: 'RMSF (nm)', min: 0, max: 2, mapType: 'flex', onRecolor })
+    expect(fs.snapshot()).toEqual({ title: 'RMSF (nm)', minimum: 0, maximum: 2, low: 0, high: 2, palette: 0 })
+    expect(fs.applyVR('low', .25)).toBe(true)
+    expect(fs.applyVR('high', 1.5)).toBe(true)
+    for (const [i, name] of ['viridis','magma','turbo','jet','devramp','coolwarm'].entries()) {
+      expect(fs.applyVR('palette', i)).toBe(true)
+      expect(fs.getColormap()).toBe(name)
+      expect(onRecolor).toHaveBeenLastCalledWith(.25, 1.5, name)
+    }
+    expect(fs.applyVR('palette', 6)).toBe(false)
+    fs.applyVR('reset')
+    expect(fs.getBounds()).toEqual({lo: 0, hi: 2})
+    fs.hide()
+    expect(fs.snapshot()).toBeNull()
+    expect(fs.applyVR('low', 1)).toBe(false)
+  })
+
   it('reset restores the data min→max and re-emits', () => {
     const cb = vi.fn()
     const fs = initFlexScale()

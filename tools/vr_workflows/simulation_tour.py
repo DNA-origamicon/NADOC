@@ -35,7 +35,9 @@ def prepare_workspace(destination):
         os.environ['NADOC_VR_SIM_ENGINES']='namd'
     selected_engines=set()
     design['metadata']['name'] = '__e2e__VR Simulation '+design_path.stem
-    (destination / design_path.name).write_text(json.dumps(design))
+    fixture_name = '__e2e__' + design_path.name
+    design['metadata']['identity_last_known_path'] = fixture_name
+    (destination / fixture_name).write_text(json.dumps(design))
     inventory = []
     for kind in ('cando', 'snupi', 'mrdna', 'oxdna', 'md', 'lammps'):
         folder = source / (kind + '_jobs')
@@ -50,6 +52,7 @@ def prepare_workspace(destination):
             data = json.loads(manifest.read_text())
             if data.get('design_source_path') != design_path.name or data.get('status') != 'completed':
                 continue
+            if kind == 'md' and os.environ.get('NADOC_VR_SIM_JOB') and identifier != os.environ['NADOC_VR_SIM_JOB']:continue
             if os.environ.get('NADOC_VR_AUDIT_DESIGN') and kind in selected_engines:continue
             selected_engines.add(kind)
             target = destination / (kind + '_jobs') / identifier
@@ -60,7 +63,15 @@ def prepare_workspace(destination):
                     Path(dst).symlink_to(Path(src).resolve())
                 else:
                     shutil.copy2(src, dst)
+                    # Do not charge gigabytes of fixture-copy page cache to the
+                    # guarded viewer run. Release only our newly written private
+                    # file; source data and global caches remain untouched.
+                    if hasattr(os, 'posix_fadvise'):
+                        with open(dst, 'rb') as copied:
+                            os.fsync(copied.fileno())
+                            os.posix_fadvise(copied.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
             shutil.copytree(path, target, copy_function=copy_file)
+            data['design_source_path'] = fixture_name
             data['archived'] = False
             data['archive_path'] = None
             def relocate(value):

@@ -90,6 +90,7 @@ export function buildJobRowModel(job, ctx, { depth = 0, index = 0, listIndex = 0
     restartEvents: job.restart_events || [],
     restartHistoryOnly: !!job.restart_snapshot,
     title: isChild && ctx.childTitle ? ctx.childTitle(job) : null,
+    progressFraction: Number.isFinite(job.progress_fraction) ? job.progress_fraction : null,
     timeStr: ctx.formatTime ? ctx.formatTime(job.created_at) : '',
     sizeStr: ctx.sizeLabel
       ? ctx.sizeLabel(job, sizeBytes)

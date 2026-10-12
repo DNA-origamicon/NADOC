@@ -99,6 +99,7 @@ int main() {
         extrude.refresh(menus,1000000,-1,"EXTRUDE FROM YZ","SCAFFOLD",true,16641,true,false,std::string(250,'W'));
         pages(menus[1]);extrude.exit(menus);
         MovePanel move;move.enter(menus);move.refresh(menus,"cluster",std::string(250,'W'));pages(menus[1]);move.exit(menus);
+        move.joining=true;move.connectionStatus=std::string(250,'W');move.enter(menus);move.refresh(menus,"cluster","READY");pages(menus[1]);move.exit(menus);
         for(bool twist:{false,true}) {
             BendPanel bend;bend.twist=twist;bend.enter(menus);
             ToolConfigurationDraft config;(void)config.bind(twist?ToolMode::twist:ToolMode::bend,"cluster:1","cluster",{"owner:1"});

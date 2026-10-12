@@ -9,7 +9,6 @@ from frontend.scrywrite.mcp_bridge import Bridge
 from tools.vr_motion.session import LiveSession
 from tools.vr_workflows.menu_tour import click, find_control, scroll_page, enlarge_mirror
 from tools.vr_motion.metrics import rotate
-from tools.vr_workflows.sidebar_pointer_scroll import reveal_result
 from tools.vr_workflows.demo_view import reveal, hold
 from tools.vr_workflows.menu_pixels import check
 
@@ -60,7 +59,7 @@ def run(socket, output, identifier):
             live.button('menu', hand=0);live.frame()
             click(live, 0, 'tab:dynamics', preset, trials)
             panel = live.state['sidebars'][0]
-            edge = np.array(panel['grip_targets'][0])-rotate(q,[0,0,-.12]);delta = head+rotate(q,[-.52,-.18,-1.35])-panel['position']
+            edge = np.array(panel['grip_targets'][0])-rotate(q,[0,0,-.12]);delta = head+rotate(q,[-.36,-.05,-.75])-panel['position']
             live.send('pose', hand=1, position=edge.tolist(), orientation=q);live.frame()
             live.send('button', hand=1, button='grip', pressed=True);live.frame()
             assert live.state['sidebars'][0]['grip_state']=='moving'
@@ -72,18 +71,25 @@ def run(socket, output, identifier):
             # Frame result is a footer action, outside the list navigation path.
             # Use the ordinary profile-driven ray click; keep prior touchpad
             # failures as separate evidence, without changing native focus rules.
-            click(live,0,'sim:frame',preset,trials)
+            click(live,0,'sim:local:frame',preset,trials)
             anchor,_=live.capture_to(out/'fit',files=['evidence.json'],discard_source=True)
             head=np.mean([e['position'] for e in anchor['eyes']],axis=0);q=anchor['eyes'][0]['orientation_xyzw']
             center=head+rotate(q,[0,0,-1.3]);target=head+rotate(q,[.63,.22,-1.3])
             # Move the fitted result beside the menu through the normal scene grip.
             for h in (0,1):
-                live.send('pose',hand=h,position=(head+rotate(q,[0,-1,0])).tolist(),orientation=[0,0,0,1])
+                live.send('pose',hand=h,position=(head+rotate(q,[0,-1,0])).tolist(),orientation=[0,1,0,0])
             live.frame()
-            live.send('pose',hand=1,position=center.tolist(),orientation=[0,0,0,1]);live.frame()
+            # A point near the fitted model can coincide with a menu grip edge.
+            # Scene manipulation is global; acquire it clear of all menu handles.
+            grab=head+rotate(q,[.85,.65,-.9])
+            before_move=np.asarray(live.state['presentation']['model_to_tracking_rows'])
+            live.send('pose',hand=1,position=grab.tolist(),orientation=[0,0,0,1]);live.frame()
             live.send('button',hand=1,button='grip',pressed=True);live.frame()
-            live.send('pose',hand=1,position=target.tolist(),orientation=[0,0,0,1]);live.frame()
+            live.send('pose',hand=1,position=(grab+target-center).tolist(),orientation=[0,0,0,1]);live.frame()
             live.send('button',hand=1,button='grip',pressed=False);live.frame()
+            after_move=np.asarray(live.state['presentation']['model_to_tracking_rows'])
+            (out/'placement.json').write_text(json.dumps({'before':before_move.tolist(),'after':after_move.tolist(),'target_delta':(target-center).tolist(),'hands':live.state['hands'],'remote':live.state['remote_border']},indent=2))
+            assert np.linalg.norm((after_move-before_move)[:3,3]-(target-center))<.02, 'Result translation did not acquire the scene grip'
             # Enlarge the fitted result with the ordinary two-hand grip. This is
             # observation setup, outside the measured navigation reaches.
             for h,sign in ((0,-1),(1,1)):
@@ -99,10 +105,14 @@ def run(socket, output, identifier):
             assert after_scale > before_scale*1.8, 'Observation enlargement did not acquire the model grips'
             for h in (0,1):live.send('button',hand=h,button='grip',pressed=False)
             live.frame()
-            for h in (0,1):live.send('pose',hand=h,position=(head+rotate(q,[0,-1,0])).tolist(),orientation=[0,0,0,1])
+            for h in (0,1):live.send('pose',hand=h,position=(head+rotate(q,[0,-1,0])).tolist(),orientation=[0,1,0,0])
             live.frame()
             hold(live,'Fitted static result')
             evidence, _ = live.capture_to(out/'after', files=['left.png','right.png','mirror.png','left.classes.u8','right.classes.u8','evidence.json'], discard_source=True)
+            menu_state = evidence['state'].get('simulation_menu', {})
+            if menu_state.get('phase') == 'buffering':
+                frame_control = next(c for c in evidence['state']['controls'] if c['id'] == 'sim:local:t:306')
+                assert f"FRAME {menu_state['frame']} /" in frame_control['label'], 'Buffering hid the displayed source frame'
             for eye in evidence['eyes']:
                 classes=np.fromfile(out/'after'/(eye['eye']+'.classes.u8'),dtype=np.uint8)
                 assert (classes==1).sum()>100, 'Static result missing in '+eye['eye']
@@ -124,9 +134,27 @@ def run(socket, output, identifier):
         if not live.state['sidebars'][0]['open']: live.button('menu', hand=0)
         live.frame()
         if live.state['sidebars'][0]['tab'] != 'dynamics': click(live, 0, 'tab:dynamics', preset, trials)
+        if identifier == 'range-wheels':
+            from tools.vr_workflows.simulation_range_probe import run as range_probe
+            range_probe(live, out, preset, trials)
+            return
+        if identifier == 'palette':
+            from tools.vr_workflows.simulation_palette_probe import run as palette_probe
+            palette_probe(live, out, preset, trials)
+            return
         target = 'sim:' + identifier
         if identifier.startswith(('j:', 'v:')):
-            reveal_result(live, target)
+            if identifier.startswith('j:') and any(c['id']=='sim:local:back' for c in live.state['controls']):
+                click(live,0,'sim:local:back',preset,trials);live.frame()
+            for _ in range(50):
+                if any(c['id']==target for c in live.state['controls']):break
+                candidates=['sim:local:modesnext','sim:local:next'] if identifier.startswith('v:') else ['sim:local:next']
+                next_control=next((c for key in candidates for c in live.state['controls'] if c['id']==key and c['enabled']),None)
+                if not next_control:break
+                click(live,0,next_control['id'],preset,trials);live.frame()
+            deadline=time.monotonic()+30
+            while not find_control(live,0,target)['enabled'] and time.monotonic()<deadline:
+                live.frame();time.sleep(.05)
             assert find_control(live, 0, target)['enabled'], target
             click(live, 0, target, preset, trials)
         else:

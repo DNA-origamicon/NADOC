@@ -117,3 +117,12 @@ def trajectory_frame(job_dir, frame):
         )
         _write(target, payload)
         return payload
+
+
+def trajectory_meta(job_dir):
+    """Index existing immutable frames without loading their coordinates."""
+    source = job_dir / "trajectory.json"
+    with _BUILD_LOCK:
+        st = source.stat()
+        index = _index(source, [st.st_mtime_ns, st.st_size], job_dir / "trajectory-index-v1.json")
+        return {"ready": True, "n_frames": len(index["offsets"])}

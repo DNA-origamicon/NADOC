@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import orjson
+import pytest
 
 
 def test_md_binary_trajectory_matches_full_json_path(monkeypatch, tmp_path):
@@ -61,7 +62,7 @@ def test_md_binary_trajectory_matches_full_json_path(monkeypatch, tmp_path):
     frames = np.frombuffer(payload, dtype="<f4", offset=body_offset).reshape(
         n_frames, (n_p + n_term) * 12
     )
-    assert header == {k: legacy[k] for k in ("keys", "stages", "markers", "frame_start", "total_n_frames", "frame_format")}
+    assert header == {k: legacy[k] for k in ("keys", "stages", "markers", "frame_start", "frame_step", "total_n_frames", "frame_format")}
     assert np.allclose(frames, legacy["frames"], rtol=1e-6, atol=2e-5)
     assert len(payload) < len(orjson.dumps(legacy)) * 0.45
     assert json.loads(progress.read_text()) == {
@@ -71,7 +72,8 @@ def test_md_binary_trajectory_matches_full_json_path(monkeypatch, tmp_path):
     }
 
 
-def test_range_extracts_only_selected_composite_frames(monkeypatch, tmp_path):
+@pytest.mark.parametrize('step,expected', [(1,[6,8,10,12]), (2,[6,10]), (3,[6,12])])
+def test_range_extracts_only_selected_composite_frames(monkeypatch, tmp_path, step, expected):
     from backend.core import md_trajectory as mt
     monkeypatch.setitem(sys.modules, "MDAnalysis", SimpleNamespace(
         Universe=lambda *_: SimpleNamespace(trajectory=range(10))))
@@ -85,10 +87,14 @@ def test_range_extracts_only_selected_composite_frames(monkeypatch, tmp_path):
     monkeypatch.setattr(mt, "_extract_md_full_frame", extract)
     segments = [("a", "md", tmp_path / "a.dcd"), ("b", "md", tmp_path / "b.dcd")]
     payload = mt.md_composite_trajectory_bin("x.psf", segments, "x.pdb", object(),
-        stride=2, frame_start=3, frame_end=6)
+        stride=2, frame_start=3, frame_end=6, frame_step=step)
     _, _, count, _, header_len = struct.unpack_from("<5I", payload)
     header = json.loads(payload[20:20 + header_len])
-    assert count == 4
+    assert count == len(expected)
     assert header["frame_start"] == 3
     assert header["total_n_frames"] == 10
-    assert seen == [6, 8, 10, 12]
+    assert header['frame_step'] == step
+    assert seen == expected
+    frames = np.frombuffer(payload, dtype='<f4', offset=(20 + header_len + 3) & ~3).reshape(count, 12)
+    assert np.allclose(frames[:,0], expected)
+    assert np.allclose(frames[:,9], np.array(expected) + .4)

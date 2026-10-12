@@ -94,3 +94,27 @@ def test_scrollbar_requires_visible_thumb(tmp_path):
     ImageDraw.Draw(image).rectangle((80, 82, 120, 118), fill=(63, 70, 79))
     image.save(tmp_path / "left.png")
     assert check(tmp_path, evidence)["passed"]
+
+
+def test_simulation_range_wheel_requires_coloured_cylinder(tmp_path):
+    evidence = fixture(tmp_path)
+    evidence['state']['controls'][0].update(id='sim:local:t:300', enabled=True)
+    # Old label text alone cannot establish the new wheel is visible.
+    assert not check(tmp_path, evidence)['passed']
+    image = Image.new('RGB', (200, 200), (22, 27, 34))
+    ImageDraw.Draw(image).rectangle((65, 90, 135, 112), fill=(75, 164, 188))
+    image.save(tmp_path/'left.png')
+    assert check(tmp_path, evidence)['passed']
+    evidence['state']['controls'][0]['position'] = [1000, 0, -1]
+    assert not check(tmp_path, evidence)['passed']
+
+
+def test_simulation_button_observes_top_inset_label(tmp_path):
+    evidence = fixture(tmp_path)
+    evidence['state']['controls'][0].update(id='sim:local:t:305', enabled=True)
+    image = Image.new('RGB', (200, 200), (22, 27, 34))
+    ImageDraw.Draw(image).rectangle((60, 88, 130, 93), fill=(230, 240, 250))
+    image.save(tmp_path/'left.png')
+    assert check(tmp_path, evidence)['passed']
+    Image.new('RGB', (200, 200), (22, 27, 34)).save(tmp_path/'left.png')
+    assert not check(tmp_path, evidence)['passed']

@@ -455,6 +455,7 @@ async def get_md_job_trajectory(
     stride: int | None = None,
     frame_start: int | None = None,
     frame_end: int | None = None,
+    frame_step: int = 1,
 ) -> dict:
     """Composite scrub-able NAMD trajectory (every written segment, CG/nadoc beads)
     for an animation trajectory keyframe — SAME payload shape as the oxDNA
@@ -466,6 +467,8 @@ async def get_md_job_trajectory(
     segment (VMD's DCD stride).  OMITTING it keeps the legacy behaviour — at most 200
     frames total, split proportionally — which is what the animation panel's
     trajectory keyframes still rely on, so don't give it a non-None default here."""
+    if not 1 <= frame_step <= 100_000_000:
+        raise HTTPException(422, "Invalid frame interval")
     stride = _traj_stride(stride)
     job = _load_job(job_id)
     package_dir = job.package_dir(_workspace())
@@ -494,7 +497,7 @@ async def get_md_job_trajectory(
             job_id,
             "trajectory",
             "md_composite_trajectory",
-            (psf, segments, ref, design, 200, stride, str(progress_path), frame_start, frame_end),
+            (psf, segments, ref, design, 200, stride, str(progress_path), frame_start, frame_end, frame_step),
             timeout_s=180.0 if stride is None else 900.0,
         )
     finally:
@@ -523,8 +526,11 @@ async def get_md_job_trajectory_bin(
     stride: int | None = None,
     frame_start: int | None = None,
     frame_end: int | None = None,
+    frame_step: int = 1,
 ) -> Response | dict:
     """Typed-array sibling of the composite NAMD trajectory for interactive display."""
+    if not 1 <= frame_step <= 100_000_000:
+        raise HTTPException(422, "Invalid frame interval")
     stride = _traj_stride(stride)
     job = _load_job(job_id)
     package_dir = job.package_dir(_workspace())
@@ -546,7 +552,7 @@ async def get_md_job_trajectory_bin(
             job_id,
             "trajectory",
             "md_composite_trajectory_bin",
-            (psf, segments, ref, design, 200, stride, str(progress_path), frame_start, frame_end),
+            (psf, segments, ref, design, 200, stride, str(progress_path), frame_start, frame_end, frame_step),
             timeout_s=180.0 if stride is None else 900.0,
         )
     finally:

@@ -2,11 +2,14 @@
 #include "button_gallery.hpp"
 #include "card_gallery.hpp"
 #include "list_gallery.hpp"
+#include "simulation_gallery.hpp"
 
 class ComponentGallery {
  public:
     bool active=false, posed=false, demo=false, desktop=false;
     bool buttonMode=false, cardMode=false, listMode=false;
+    bool simulationMode=false;
+    SimulationGallery simulationStyles;
     ListGallery listStyles;
     CardGallery cardStyles;
     ButtonGallery buttonStyles;
@@ -31,7 +34,7 @@ class ComponentGallery {
         return nadoc_vr::thumbwheelPreset(maximum,exposures[i%3]);
     }
     void reset() {
-        buttonStyles.reset();cardStyles.reset();listStyles.reset();
+        simulationStyles.reset();buttonStyles.reset();cardStyles.reset();listStyles.reset();
         for(size_t i=0;i<wheels.size();++i) {
             wheels[i]={};wheels[i].maximum=i/3==0?10:i/3==1?100:1000;
             wheels[i].value=wheels[i].maximum/2;
@@ -39,6 +42,7 @@ class ComponentGallery {
         demoTime=0;demoWheel=-1;
     }
     void toggleDemo() {
+        if(simulationMode)return;
         if(listMode){listStyles.toggleDemo();demo=listStyles.demo;return;}
         if(cardMode){cardStyles.toggleDemo();demo=cardStyles.demo;return;}
         if(buttonMode){buttonStyles.toggleDemo();demo=buttonStyles.demo;return;}
@@ -68,6 +72,7 @@ class ComponentGallery {
         if(!active)return;
         if(!posed)show(head,orientation);
         dt=std::clamp(dt,0.F,.05F);beam.fill(std::nullopt);buttonHover.fill(false);
+        if(simulationMode){simulationStyles.update(placement,hands,clicked,pressed,beam,dt);return;}
         if(listMode){listStyles.update(placement,hands,clicked,pressed,dt,beam);demo=listStyles.demo;footerInput(hands,clicked,head,orientation);return;}
         if(cardMode){cardStyles.update(placement,hands,clicked,pressed,dt,beam);demo=cardStyles.demo;footerInput(hands,clicked,head,orientation);return;}
         if(buttonMode) {
@@ -107,7 +112,7 @@ class ComponentGallery {
         }
         for(size_t i=0;i<wheels.size();++i)step(i,wheels[i].control.updateMomentum(dt));
     }
-    int footerCount() const {return (buttonMode||cardMode||listMode)?4:3;}
+    int footerCount() const {return simulationMode?0:(buttonMode||cardMode||listMode)?4:3;}
     float footerX(int i) const {return -.73F+i*((buttonMode||cardMode||listMode)?.37F:.49F);}
     float footerWidth() const {return (buttonMode||cardMode||listMode)?.34F:.44F;}
     void footerInput(const std::array<nadoc_vr::HandPose,2>& hands,const std::array<bool,2>& clicked,
@@ -131,8 +136,9 @@ class ComponentGallery {
         if(!active || !posed)return;
         ui.vertices.clear();
         const glm::vec3 text(.89F,.93F,.98F),muted(.53F,.64F,.75F),accent(.42F,.77F,1.F);
-        ui.rect(-.79F,-.67F,1.58F,1.32F,{.035F,.048F,.067F},0);
-        if(listMode)listStyles.render(ui);
+        ui.rect(simulationMode?-.66F:-.79F,-.67F,simulationMode?1.32F:1.58F,1.32F,{.035F,.048F,.067F},0);
+        if(simulationMode)simulationStyles.render(ui);
+        else if(listMode)listStyles.render(ui);
         else if(cardMode)cardStyles.render(ui);
         else if(buttonMode)buttonStyles.render(ui);
         else {
@@ -161,7 +167,7 @@ class ComponentGallery {
             ui.rect(x,-.61F,footerWidth(),.07F,buttonHover[button]?glm::vec3(.20F,.31F,.42F):glm::vec3(.10F,.18F,.25F));
             ui.text(button==0?(demo?"STOP DEMO":"PLAY DEMO"):button==1?"RESET":button==2?"RECENTER":(listMode?listStyles.disabled:cardMode?cardStyles.disabled:buttonStyles.disabled)?"ENABLE":"DISABLE",x+.035F,-.565F,.004F,text);
         }
-        if(desktop)ui.text("F FRONT / O ANGLED / RIGHT DRAG ORBIT / SCROLL ZOOM / S CAPTURE",-.73F,-.635F,.003F,muted);
+        if(desktop)ui.text("F FRONT / O ANGLED / RIGHT DRAG ORBIT / SCROLL ZOOM / S CAPTURE",simulationMode?-.61F:-.73F,-.635F,simulationMode?.0024F:.003F,muted);
         const auto model=glm::translate(glm::mat4(1),placement.position())*glm::mat4_cast(placement.orientation())*glm::scale(glm::mat4(1),glm::vec3(placement.scale()));
         ui.render(vp*model);
     }
@@ -169,6 +175,7 @@ class ComponentGallery {
         if(active)for(size_t h=0;h<2;++h)if(beam[h])line(hands[h].position,*beam[h],glm::vec3(.4F,.9F,1));
     }
     std::string observation() const {
+        if(simulationMode)return "{\"component\":\"simulations\",\"study\":"+simulationStyles.observation(placement)+"}";
         std::ostringstream out;out<<"{\"component\":\""<<(listMode?"lists":cardMode?"cards":buttonMode?"buttons":"thumbwheel")<<"\",\"samples\":"<<(listMode?listStyles.observation(placement):cardMode?cardStyles.observation(placement):buttonStyles.observation(placement))<<",\"active\":"<<(active?"true":"false")<<",\"demo\":"<<(demo?"true":"false")<<",\"orientation_xyzw\":["<<placement.orientation().x<<','<<placement.orientation().y<<','<<placement.orientation().z<<','<<placement.orientation().w<<"],\"wheels\":[";
         for(size_t i=0;i<wheels.size();++i) {
             if(i)out<<',';

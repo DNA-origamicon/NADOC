@@ -2056,7 +2056,6 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
     // The whole point of reading host memory: a big origami's atomistic trajectory can
     // exceed what is actually free, and finding that out by exhausting it is not a plan.
     mdApi.getSystemResources.mockResolvedValue({ ram_available_mb: 512, ram_total_mb: 8192 })
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     viz.trajectoryInfo = () => ({ frame: 1, total: 991, atomSerials: 469_350, nNucleotides: 14_774 })
     viz.prebuildHeavy = vi.fn(async () => ({ ok: true, n: 1, frames: 1, trajFrames: 991 }))
     await openWithJob()
@@ -2064,14 +2063,16 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
     t.checked = true
     t.dispatchEvent(new Event('change'))
     await flushMicro(40)
-    expect(confirm).toHaveBeenCalled()
-    const msg = confirm.mock.calls.at(-1)[0]
+    const dialog = document.querySelector('[role="dialog"]')
+    expect(dialog).not.toBeNull()
+    const msg = dialog.textContent
     // Must be the MEMORY warning, not the frame-count one — they are different gates and
     // this test would pass on the wrong one if it only checked that *a* confirm fired.
     expect(msg).toMatch(/free on this machine/i)
     expect(msg, 'quotes what it needs and what is free').toMatch(/GB|MB/)
+    ;[...dialog.querySelectorAll('button')].find(b => b.textContent === 'Cancel').click()
+    await flushMicro()
     expect(viz.prebuildHeavy, 'declining must not start the build').not.toHaveBeenCalled()
-    confirm.mockRestore()
   })
 
   it('does not warn about memory when the prebuild comfortably fits', async () => {
@@ -2101,23 +2102,25 @@ describe('initMdJobsPanel — trajectory frame interval', () => {
     iv.dispatchEvent(new Event('input'))
     expect(stridedFrameCount([20_000], 1)).toBeGreaterThanOrEqual(TRAJ_FRAME_CONFIRM)
 
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const t = $('md-jobs-traj-toggle')
     t.checked = true
     t.dispatchEvent(new Event('change'))
     await flushMicro()
-    expect(confirm).toHaveBeenCalled()
+    const dialog = document.querySelector('[role="dialog"]')
+    expect(dialog?.textContent).toContain('Load large trajectory?')
     expect(viz.loadTrajectory).not.toHaveBeenCalled()
+    ;[...dialog.querySelectorAll('button')].find(b => b.textContent === 'Cancel').click()
+    await flushMicro()
     expect(t.checked, 'a cancelled load must leave the radio off').toBe(false)
 
-    confirm.mockReturnValue(true)                     // …and proceeds when accepted
     t.checked = true
     t.dispatchEvent(new Event('change'))
+    await flushMicro()
+    ;[...document.querySelector('[role="dialog"]').querySelectorAll('button')].find(b => b.textContent === 'Load').click()
     await flushMicro()
     expect(viz.loadTrajectory).toHaveBeenCalledWith(
       'J9', true, 'lineage', 1, expect.any(Function),
     )
-    confirm.mockRestore()
   })
 
   it('does not ask for an ordinary load', async () => {

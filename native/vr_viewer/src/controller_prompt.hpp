@@ -9,7 +9,7 @@
 namespace nadoc_vr {
 // Small modal desktop dialogs map to this asynchronous, controller-docked asset.
 // No default action: every answer requires a fresh directional press/release.
-class ControllerPrompt {
+template<size_t MaxOptions=4> class BasicControllerPrompt {
  public:
     struct Option { std::string id, label; };
     struct Request {
@@ -19,8 +19,8 @@ class ControllerPrompt {
         std::string key{}; // Optional owner key for withdrawing stale browser decisions.
     };
     void show(Request request) {
-        if(request.options.empty() || request.options.size()>4)
-            throw std::invalid_argument("Controller prompts require 1 to 4 options");
+        if(request.options.empty() || request.options.size()>MaxOptions)
+            throw std::invalid_argument("Controller prompt option count exceeds its capacity");
         for(size_t i=0;i<request.options.size();++i) {
             const auto& o=request.options[i];
             if(o.id.empty() || o.label.empty())throw std::invalid_argument("Prompt options need IDs and labels");
@@ -74,6 +74,29 @@ class ControllerPrompt {
         if(!pressed)hover_.reset();
     }
     glm::vec3 worldPoint(glm::vec3 p) const {return position_+orientation_*p;}
+    // Same controller dock and sectors as ordinary prompts, with colour-only
+    // radial swatches. Selection still uses the shared fresh-press/pulse lifecycle.
+    template<class Ui,class Colour> void drawGradients(Ui& ui,Colour colour,size_t selected) const {
+        ui.vertices.clear();if(!active() || !visible_)return;
+        const size_t count=request().options.size();
+        for(size_t i=0;i<count;++i) {
+            const auto dir=direction(i,count);
+            const float center=std::atan2(dir.x,dir.y),half=glm::pi<float>()/float(count)-.035F;
+            auto p=[&](float angle,float radius){return worldPoint({std::sin(angle)*radius,std::cos(angle)*radius,.01F});};
+            for(int a=0;a<24;++a) {
+                const float lo=center-half+2*half*a/24,hi=center-half+2*half*(a+1)/24;
+                for(int r=0;r<32;++r) {
+                    const float inner=.04F+.129F*r/32,outer=.04F+.129F*(r+1)/32;
+                    const auto c=colour(i,float(r)/31);
+                    ui.triangle(p(lo,inner),p(lo,outer),p(hi,outer),c);
+                    ui.triangle(p(lo,inner),p(hi,outer),p(hi,inner),c);
+                }
+                const auto edge=hover_==i?glm::vec3(1,.75F,.18F):selected==i?glm::vec3(.85F,.96F,1):glm::vec3(.12F,.20F,.28F);
+                ui.triangle(p(lo,.170F),p(lo,.175F),p(hi,.175F),edge);
+                ui.triangle(p(lo,.170F),p(hi,.175F),p(hi,.170F),edge);
+            }
+        }
+    }
     // UI is the viewer's SolidUi asset (also usable by its desktop evaluator).
     template<class Ui> void draw(Ui& ui) const {
         ui.vertices.clear();if(!active() || !visible_)return;
@@ -135,4 +158,6 @@ class ControllerPrompt {
     std::optional<size_t> hover_;
     glm::vec3 position_{};glm::quat orientation_{1,0,0,0};
 };
+using ControllerPrompt=BasicControllerPrompt<4>;
+using PaletteControllerPrompt=BasicControllerPrompt<6>;
 }

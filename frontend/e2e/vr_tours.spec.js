@@ -139,3 +139,18 @@ test('Bend and Twist multi-selection validation is discoverable', async ({ page 
   expect((await requested).postDataJSON()).toEqual({ tour: 'deformation-selection', mode: 'validate' })
   await expect(page.getByText('Test launch captured').first()).toBeVisible()
 })
+
+test('Join distinguishes physical controller validation from its routing regression', async ({ page }) => {
+  await page.goto('/?doc=__e2e__vr-join-tour-menu')
+  await page.locator('#menu-item-debug > button').click()
+  await page.locator('#menu-debug-vr-tours').hover()
+  const group = page.locator('[data-category="authoring"]')
+  await group.hover()
+  await expect(group.locator('[data-start="join"][data-mode="validate"]')).toHaveAttribute('title', /all four motion profiles/)
+  const bridge = group.locator('[data-start="join-bridge"][data-mode="validate"]')
+  await expect(bridge).toHaveAttribute('title', /No headset required/)
+  await page.route('**/api/vr/tours/start', route => route.fulfill({ json: { detail: 'Test launch captured' }, status: 409 }))
+  const requested = page.waitForRequest(request => request.url().endsWith('/api/vr/tours/start'))
+  await bridge.click()
+  expect((await requested).postDataJSON()).toEqual({ tour: 'join-bridge', mode: 'validate' })
+})

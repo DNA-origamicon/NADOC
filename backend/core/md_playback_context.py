@@ -1,4 +1,4 @@
-"""Static, DNA-only playback tables; no geometry reconstruction or solvent topology.
+"""Static playback tables; no geometry reconstruction or whole-solvent topology.
 
 The cache contains derived display metadata only. File identities and the complete
 active design key it; trajectories are reopened and counted on every request.
@@ -36,7 +36,7 @@ def playback_context(topology, paths, coordinate, design):
     if root.stat().st_uid != os.getuid() or root.stat().st_mode & 0o077:
         raise ValueError('playback cache directory must be private')
     key = hashlib.sha256(repr((
-        3, _identity(topology), _identity(coordinate),
+        5, _identity(topology), _identity(coordinate),
         tuple(_identity(p) if p.exists() else (str(p.resolve()), None)
               for p in (Path(topology).parent / 'charge_audit.json',
                         Path(topology).parent / 'manifest.json')),
@@ -99,6 +99,9 @@ def _build_tables(topology, coordinate, design):
     }
     residues = {}
     heavy, meta, heavy_res = [], [], []
+    from backend.core.md_solvent import ION_ISH_RESNAMES, WATER_ISH_RESNAMES, ion_rows
+    ion_indices, ion_names, ion_resnames, graphene_indices = [], [], [], []
+    n_waters = 0
     with Path(topology).open() as fh:
         for line in fh:
             if '!NATOM' in line:
@@ -110,6 +113,15 @@ def _build_tables(topology, coordinate, design):
             fields = next(fh).split()
             if int(fields[0]) != expected + 1:
                 raise ValueError('nonsequential PSF atom numbering')
+            resname, atom_name = fields[3], fields[4]
+            if resname in ION_ISH_RESNAMES or resname == 'MGH':
+                ion_indices.append(expected)
+                ion_names.append(atom_name)
+                ion_resnames.append(resname)
+            if resname in WATER_ISH_RESNAMES and atom_name.startswith('O'):
+                n_waters += 1
+            if resname == 'GRP':
+                graphene_indices.append(expected)
             if fields[3] not in _GRO_DNA_RESNAMES:
                 continue
             segid, resid, name = fields[1], int(fields[2]), fields[4]
@@ -190,7 +202,14 @@ def _build_tables(topology, coordinate, design):
     centroid = eq[rigid].mean(axis=0)
     centered = eq - centroid
     centered[~rigid] = 0
-    return dict(p_order=order, dna_p_idx=pidx, c1p_idx=c1,
+    selected_ions, species = ion_rows(ion_names, ion_resnames)
+    ion_indices = np.asarray(ion_indices, dtype=np.int64)[selected_ions]
+    solvent = dict(ion_rows=ion_indices, ion_species=species, n_ions=len(ion_indices),
+                   n_waters_total=n_waters, graphene_rows=np.asarray(graphene_indices, dtype=np.int64),
+                   water_o=np.zeros(0, dtype=np.int64), water_h1=np.zeros(0, dtype=np.int64),
+                   water_h2=np.zeros(0, dtype=np.int64))
+    return dict(solvent_ctx=solvent, p_order=order, dna_p_idx=pidx, c1p_idx=c1,
+                p_strand_ids=p_segment.copy(),
                 centroid_T=np.zeros(3), eq_positions=eq, eq_valid=valid,
                 rigid_mask=rigid, snap_mask=md_snap_mask(order, valid, rigid),
                 eq_centroid=centroid, eq_centered=centered,

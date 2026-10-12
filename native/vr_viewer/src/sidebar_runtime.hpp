@@ -8,6 +8,7 @@ class SidebarRuntime {
     std::array<nadoc_vr::SidebarMenu,2> menus{nadoc_vr::SidebarMenu(0),nadoc_vr::SidebarMenu(1)};
     std::array<MenuPanelSurface,2> surfaces;
     std::array<SolidUi,2> raised;
+    std::function<void(size_t,SolidUi&)> simulationDraw;
     std::array<bool,2> openedBefore{};
     std::array<nadoc_vr::SidebarMenu*,2> historyGrab{};
     void initialize() { for(auto& s:surfaces) s.initialize(); }
@@ -189,7 +190,7 @@ class SidebarRuntime {
             menus[i].draw(line,fill);
             auto& ui=raised[i];ui.vertices.clear();
             const auto& menu=menus[i];
-            for(const auto& c:menu.controls())if(menu.raisedAction(c)) {
+            for(const auto& c:menu.controls())if(menu.raisedAction(c) && !(menu.customSimulationDraw() && c.id.starts_with("sim:"))) {
                 const auto b=c.bounds;const auto size=b.maximum-b.minimum;
                 const bool hover=menu.hovered==c.id || (menu.focus.active && menu.focus.id==c.id);
                 const float z=menu.controlDepth(c);
@@ -217,6 +218,7 @@ class SidebarRuntime {
                     }
                 }
             }
+            if(menu.customSimulationDraw() && simulationDraw)simulationDraw(i,ui);
             surfaces[i].update(lines,menus[i].bounds(),false,triangles);
         }
     }

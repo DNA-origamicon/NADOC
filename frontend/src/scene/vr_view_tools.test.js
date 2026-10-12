@@ -27,3 +27,11 @@ it('encodes lit surfaces with normals and unlit lines as schema 5',async()=>{
   expect([...header.slice(0,5)]).toEqual([5,10,257,3,0])
   expect([...new Float32Array(buffer,48+9*4,3)]).toEqual([0,1,0])
 })
+
+it('encodes trajectory geometry with normals while reusing the native atlas',async()=>{
+  const blob=encodeVRView({schema:6,flags:2048,triangles:new Float32Array(36),lines:new Float32Array(),sprites:new Float32Array(),pixels:new Uint8Array(),width:0,height:0},11)
+  const buffer=await new Promise(resolve=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.readAsArrayBuffer(blob)})
+  const header=new Uint32Array(buffer,8,10)
+  expect([...header.slice(0,8)]).toEqual([6,11,2048,3,0,0,0,0])
+  expect(blob.size).toBe(48+36*4)
+})

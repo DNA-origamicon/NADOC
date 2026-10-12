@@ -57,7 +57,7 @@ router = APIRouter(tags=["vr"])
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _VIEWER_DIR = _REPO_ROOT / "native" / "vr_viewer"
-_BUILD_DIR = _VIEWER_DIR / "build"
+_BUILD_DIR = Path(os.environ.get("NADOC_VR_BUILD_DIR", str(_VIEWER_DIR / "build"))).expanduser().resolve()
 _VIEWER = _BUILD_DIR / "nadoc-vr-viewer"
 _USER_ID = os.getuid() if hasattr(os, "getuid") else "local"
 _STATE_PATH = Path(tempfile.gettempdir()) / f"nadoc-vr-{_USER_ID}.json"

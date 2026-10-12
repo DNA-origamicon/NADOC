@@ -1,4 +1,6 @@
 import { disconnectedStorageIcon } from './job_storage.js'
+const rowMetadata = new WeakMap()
+export const simulationJobMetadata = row => rowMetadata.get(row)
 /**
  * jobs_panel_render.js — the CANONICAL job-list DOM renderer (U3). Turns the
  * pure row models from jobs_panel_model.js into the exact DOM the oxDNA jobs
@@ -22,6 +24,7 @@ export function renderJobRow(m, { doc = document, onClick, onAction, onWarning, 
   onContextMenu } = {}) {
   const row = doc.createElement('div')
   row.dataset.jobId = m.jobId
+  rowMetadata.set(row, { name: m.label, time: m.timeStr, summary: m.sizeStr, status: m.statusKey, progress: m.progressFraction })
   row.style.cssText =
     `display:flex;align-items:center;gap:6px;padding:4px 6px;cursor:pointer;border-radius:4px;` +
     `font-size:11px;${m.indentPx ? `padding-left:${m.indentPx}px;` : ''}` +

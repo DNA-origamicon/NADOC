@@ -300,9 +300,14 @@ async def get_lammps_trajectory(job_id: str, align: bool = True) -> dict:
 
 
 @router.get("/lammps/jobs/{job_id}/trajectory-bin")
-async def get_lammps_trajectory_bin(job_id: str, align: bool = True) -> Response:
+async def get_lammps_trajectory_bin(job_id: str, align: bool = True, stride: int | None = None,
+                                   frame_start: int | None = None, frame_end: int | None = None,
+                                   frame_step: int = 1) -> Response:
     """Compact float32 NTRJ sibling of the JSON trajectory player payload."""
     from backend.core.oxdna_health import pack_composite_trajectory_bin
+
+    if stride not in (None, 1) or not 1 <= frame_step <= 100_000_000:
+        raise HTTPException(422, "Invalid trajectory sampling interval")
 
     inputs, _not_ready = _traj_inputs(job_id)
     if inputs is None:
@@ -313,9 +318,12 @@ async def get_lammps_trajectory_bin(job_id: str, align: bool = True) -> Response
         design,
         [("lammps", "production", dat)],
         ref,
-        200,
+        0 if stride == 1 else 200,
         None,
         align,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        frame_step=frame_step,
     )
     if not buf:
         return Response(status_code=204)
@@ -324,6 +332,16 @@ async def get_lammps_trajectory_bin(job_id: str, align: bool = True) -> Response
         media_type="application/octet-stream",
         headers={"X-NADOC-Uncompressed-Length": str(len(buf))},
     )
+
+
+@router.get("/lammps/jobs/{job_id}/trajectory-meta")
+async def get_lammps_trajectory_meta(job_id: str) -> dict:
+    from backend.core.oxdna_health import composite_trajectory_meta
+    inputs, not_ready = _traj_inputs(job_id)
+    if inputs is None:
+        return not_ready
+    design, dat, _ = inputs
+    return await run_in_threadpool(composite_trajectory_meta, design, [("lammps", "production", dat)], 0)
 
 
 @router.get("/lammps/jobs/{job_id}/display")

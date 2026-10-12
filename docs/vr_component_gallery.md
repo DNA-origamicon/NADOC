@@ -7,6 +7,68 @@ No design is needed or edited. Both modes run the same native geometry,
 controller state and renderer. Desktop opens a separate Linux window on this
 machine, suitable for remote desktop; it does not initialize OpenXR or SteamVR.
 
+## Simulation menu review — current round 5 (2026-10-12)
+
+**Debug → VR Component Gallery → Component evaluations → Simulation menus A/B
+desktop demo** now compares trajectory controls. Both retain the accepted compact
+split, narrow engine tabs, larger left buttons and **horizontal colour scale**.
+
+- **A — Flat scrubber:** a thin filled slider with a simple handle, a full-width
+  Load button, and Previous / Play-Pause / Next / Smooth in a row below.
+- **B — Raised scrubber:** a recessed rail in a bevelled housing, ridged raised
+  handle, ticks and endpoint labels. Play/Pause sits beside the rail; stepping
+  buttons are below. Load sits beside Smooth in the setup area.
+
+Choose **Trajectory**, **Chain trajectory** or **Full trajectory** under SNUPI,
+oxDNA or NAMD. Selecting the mode does not load frames. Set **Start**, **End** and
+**Every** (frame interval), inspect the selected count, then press **Load**.
+Playback, frame stepping, exact seeking and scrubbing remain disabled until the
+three-second sample Download/Prepare sequence finishes. **Cancel Load** returns
+to setup. Editing a range or interval invalidates prepared frames and requires a
+new explicit Load; applying an unchanged value preserves the prepared frames.
+A/B retains configuration, loading progress, position and playback state. Leaving
+the job or trajectory mode pauses playback and cancels an unfinished load.
+
+Every numeric field opens a keypad popup that also accepts desktop digits,
+Backspace, Enter and Esc. Clicking the current frame opens **Go to source frame**,
+which snaps to the nearest loaded sample. Source frame numbers are one-based;
+counts use the inclusive requested range. The sample source has 100000 frames.
+Invalid values and reversed ranges cannot load. Full trajectory defaults to every
+frame; the other sample trajectories begin with 200 selected frames.
+
+At **500 or more selected frames**, Load opens a confirmation popup using the
+existing desktop threshold (`TRAJ_FRAME_CONFIRM` in `md_trajectory_presentation.js`).
+It shows the exact count, range and interval, with **Edit range / Cancel**,
+**Use about 200 frames**, and **Load N frames**. Reducing the count returns to setup
+without loading automatically. Large source frame IDs alone do not trigger this
+warning: the count of frames to load does. **All frames** makes this flow easy to
+review. Background clicks are blocked while either popup is open.
+
+Drag the scrubber to pause and seek; its hover readout shows the full source frame
+number. Playback stops at the last sample. These are isolated menu/frame-counter
+mockups: no real trajectory download, molecular rendering or simulation action.
+
+The round 4 colour mapper remains horizontal in both A/B variants. It retains
+hover-highlighted draggable bounds, per-map ranges, six desktop palettes and the
+triple-pulse prompt with desktop Space/mouse emulation. Engine order, job metadata,
+occupancy/scope and other visualization suboptions remain unchanged.
+
+**F** front; **O** angled; right-drag orbit; **S** capture. Launcher:
+
+```bash
+uv run python -m tools.vr_workflows.component_gallery_tour --component simulations --desktop
+```
+
+Round 5 evidence lives under `.development-artifacts/vr-simulation-menu-round5/`.
+Earlier rounds are historical. Native build and trajectory model tests passed,
+including count/stride arithmetic, the 499/500 confirmation boundary, exact seeking,
+invalid input, cancellation and preserving prepared frames on unchanged settings.
+Real desktop input passed for both scrubbers, loading gates, playback/stepping,
+large-number entry and warning choices, A/B state retention, and horizontal colour
+scale retention. All 47 launcher tests and scoped lint passed. Front and oblique
+captures were inspected. The review opens at NAMD / R2 Alpine / Trajectory,
+awaiting the explicit Load action. `frontend/src/main.js` gained 0 lines in this round.
+
 ## Thumbwheel comparison
 
 Columns expose 20%, 35%, or 50% of the cylinder circumference. Rows compare
@@ -289,3 +351,71 @@ The final desktop review window is intentionally left open; **Esc** closes it.
 Its launch record and initial capture are under `vr-list-gallery/review/`.
 The extended menu-render-audit target also builds successfully. Retained evidence
 is about 2.8 MB; no disposable designs were created in `workspace/`.
+
+## Simulation menu design round 1 (2026-10-12)
+
+Open **Debug → VR Component Gallery → Component evaluations → Simulation menus
+A/B desktop demo**. The same desktop-only entry appears in VR Tours & Tests.
+This study runs in the established native desktop gallery without initializing
+OpenXR or SteamVR. It uses isolated sample data; its options change menu state,
+not a live simulation or molecular rendering.
+
+- **A — Inline expansion:** engine buttons select a job list; selecting a job
+  expands visualization options immediately beneath it. Neighboring jobs remain
+  visible, and selecting the open job closes it.
+- **B — Focused detail:** selecting a job replaces the list with its options.
+  **< Jobs** returns to the same list page. The engine remains visible.
+
+A/B switching preserves the selected job and per-job visualization settings.
+Both offer representation choices, colour cycling, input-reference and RMSF
+overlay toggles. These are layout placeholders, not an engine capability matrix.
+Names such as **R2 Alpine** appear with date/time. Running jobs show percentage;
+completed production jobs show total ns; completed relaxation jobs show a
+checkmark. The second page includes queued and failed states with no viewable
+result. Reset clears the sample selections while retaining the chosen layout.
+
+```bash
+uv run python -m tools.vr_workflows.component_gallery_tour --component simulations --desktop
+```
+
+The study builds under `.development-artifacts/vr-simulation-menu-round1/build`
+(unless `NADOC_VR_BUILD_DIR` is explicitly supplied), with Archive scratch.
+Use **F** for front, **O** for angled, right-drag to orbit, wheel to zoom,
+**S** to capture state/image, and **Esc** to close.
+
+First-review questions: Which layout makes selecting a job and returning to the
+list clearer? Should the focused view keep any additional job context visible?
+Which representation, colour or overlay controls belong in the next iteration?
+Desktop review covers navigation and appearance; headset legibility and reach
+remain for a later VR round.
+
+Round 1 verification: native build and real X11 mouse checks pass for both
+layouts, selection, representation/colour/overlays, A/B state retention, return,
+pagination, queued/failed states, per-job persistence and release-outside cancel.
+Final front/angled images and state are in
+`.development-artifacts/vr-simulation-menu-round1/desktop-final/`; the intentionally
+open review window uses `review/` and closes with Esc. No headset was started.
+All **47** tour-launcher tests and **24** browser menu/smoke tests pass. Browser
+teardown removed its six test artifacts and one project history; post-run checks
+found no prefixed designs, new project stores, browser output or credentials.
+`frontend/src/main.js` gained **0 lines** for this task.
+
+Broader repository checks are not green: frontend **7,858 passed, 2 failed,
+1 skipped** (trajectory warning assertions in the untouched MD jobs panel);
+backend **FAST: 10,685 passed, 30 failed, 8 errors, 93 skipped**. The backend run's
+initial shell lacked Node; other failures include unavailable scientific assets
+and executable permissions. No failure was in the tour-launcher tests. Scoped
+lint passes; repository lint reports five unused imports outside changed files.
+Full logs are retained in the same evidence directory. The selector reported:
+
+```text
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+```
+
+Timing triage: the placement-report subprocess test dropped from 17.22 s to
+0.62 s call / 1.12 s setup in isolation. The worker-process check dropped from
+5.01 s to 4.25 s using short Archive scratch paths; all eight worker tests pass.
+These exercise tiny synthetic data and process lifecycle, not heavy scientific
+work. No budgets or classifications changed. Disposable test/compiler/browser
+scratch was removed; captures, logs, build and active review scratch are retained.

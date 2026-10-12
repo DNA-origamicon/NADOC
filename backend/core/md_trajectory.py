@@ -229,6 +229,7 @@ def _build_fast_md_metrics_ctx(
         "universe": None,
         "p_order": p_order,
         "dna_p_idx": dna_p_idx,
+        "p_strand_ids": np.asarray([row[2][0] for row in p_rows], dtype=object),
         "n_frames": int(prefix.ends[-1]),
         "centroid_T": np.zeros(3),
         "eq_positions": eq_positions,
@@ -573,6 +574,7 @@ def _build_md_nadoc_ctx(
         "universe": u,
         "p_order": p_order,
         "dna_p_idx": dna_p_sel.indices,
+        "p_strand_ids": np.asarray(dna_p_sel.segids, dtype=object),
         "n_frames": n_frames,
         "centroid_T": T,
         "eq_positions": eq_positions,
@@ -836,7 +838,7 @@ def _extract_md_nadoc_frame(
 
     if dims is not None and dims[0] > 0:
         box_nm = dims[:3] / 10.0
-        p_box = _unwrap_min_image(p_raw, box_nm)
+        p_box = _unwrap_min_image(p_raw, box_nm, ctx.get("p_strand_ids"))
         # POSE-FIRST PBC reassembly — mirror ws.py's live path (:657).  The old translation-
         # only design-eq snap placed the reference by shifting the design centroid to the box
         # centroid, WITHOUT rotating it, then nearest-image-snapped every atom.  When the box
@@ -853,7 +855,8 @@ def _extract_md_nadoc_frame(
             and len(eq_pos) == len(p_box)
         ):
             p_box_corr, _c_box = reassemble_to_posed_reference(
-                p_box, box_nm, eq_pos, eq_centroid, rigid_mask, snap_mask
+                p_box, box_nm, eq_pos, eq_centroid, rigid_mask, snap_mask,
+                ctx.get("p_strand_ids"),
             )
             _T_dyn = eq_centroid - _c_box
             p_nm = p_box_corr + _T_dyn
@@ -1054,7 +1057,7 @@ def _extract_md_atoms_frame(
         # selected these indices; avoid scanning millions of solvent atoms again.
         if dims is not None and dims[0] > 0 and len(p_raw) == len(p_order):
             box_nm = dims[:3] / 10.0
-            p_box = _unwrap_min_image(p_raw, box_nm)
+            p_box = _unwrap_min_image(p_raw, box_nm, ctx.get("p_strand_ids"))
             # POSE-FIRST PBC reassembly — same fix as the bead path (mirror ws.py :657): pose
             # the design reference into the (possibly ~180°-rotated) box frame BEFORE the
             # nearest-image snap, else a large rotated bundle's rod ends get mis-imaged a full
@@ -1066,7 +1069,8 @@ def _extract_md_atoms_frame(
                 and len(eq_pos) == len(p_box)
             ):
                 p_box_corr, c_box = reassemble_to_posed_reference(
-                    p_box, box_nm, eq_pos, eq_centroid, rigid_mask, snap_mask
+                    p_box, box_nm, eq_pos, eq_centroid, rigid_mask, snap_mask,
+                    ctx.get("p_strand_ids"),
                 )
                 T_dyn = eq_centroid - c_box
                 p_pre = p_box_corr + T_dyn
@@ -1481,13 +1485,11 @@ def md_frames_solvent(
             )
         return pack_solvent_bin(frames) if frames else empty_solvent_bin()
 
-    ctx = _build_md_nadoc_ctx(
-        topology_path, seg_paths, coordinate_path, design, with_atoms=True,
-        atom_metadata=include_dna,
-        alignment_only=not include_dna and not bool(o.get("water", True)),
+    from backend.core.md_companion_context import companion_context
+
+    ctx, u, sctx, companion_reader = companion_context(
+        topology_path, seg_paths, coordinate_path, design, o,
     )
-    u = ctx["universe"]
-    sctx = build_solvent_ctx(u, water=bool(o.get("water", True)))
     n = ctx["n_frames"]
     raw_of = composite_raw_frame_map(segments, max_frames, stride)
 
@@ -1498,51 +1500,62 @@ def md_frames_solvent(
             + 1
         )
 
-    frames: dict[int, dict] = {}
-    for idx in sorted(set(int(i) for i in frame_indices)):
-        if idx < 0 or idx >= len(raw_of):
-            continue
-        gidx = raw_of[idx]
-        if gidx >= n:
-            continue
-        fo: dict = {}
-        atoms = _extract_md_atoms_frame(ctx, gidx, frame_out=fo, emit_atoms=include_dna)
-        if not fo:
-            continue  # no periodic box on this frame → nothing to draw
-        xf = DisplayXform.build(
-            T_dyn=fo["T_dyn"],
-            c_box=fo["c_box"],
-            box_nm=fo["box_nm"],
-            mob_c=fo["mob_c"],
-            eq_centroid=fo["eq_centroid"],
-            R=fo["R_align"],
-        )
-        frames[idx] = extract_solvent_frame_for(
-            u,
-            sctx,
-            fo,
-            xf,
-            water=bool(o.get("water", True)),
-            ions=bool(o.get("ions", True)),
-            box=bool(o.get("box", True)),
-            shell_nm=None if shell_ang is None else float(shell_ang) / 10.0,
-            atomistic=bool(o.get("atomistic")),
-            max_waters=o.get("max_waters"),
-        )
-        if include_dna:
-            flat = np.zeros(n_serials * 3, dtype=np.float32)
-            for a in atoms:
-                s = int(a["serial"]) * 3
-                flat[s] = a["x"]
-                flat[s + 1] = a["y"]
-                flat[s + 2] = a["z"]
-            frames[idx]["dna"] = flat
+    try:
+        frames: dict[int, dict] = {}
+        for idx in sorted(set(int(i) for i in frame_indices)):
+            if idx < 0 or idx >= len(raw_of):
+                continue
+            gidx = raw_of[idx]
+            if gidx >= n:
+                continue
+            fo: dict = {}
+            atoms = _extract_md_atoms_frame(ctx, gidx, frame_out=fo, emit_atoms=include_dna)
+            if not fo:
+                continue  # no periodic box on this frame → nothing to draw
+            xf = DisplayXform.build(
+                T_dyn=fo["T_dyn"],
+                c_box=fo["c_box"],
+                box_nm=fo["box_nm"],
+                mob_c=fo["mob_c"],
+                eq_centroid=fo["eq_centroid"],
+                R=fo["R_align"],
+            )
+            direct_coordinates = {}
+            if companion_reader is not None:
+                xyz, dimensions = companion_reader.frame(gidx)
+                direct_coordinates = dict(positions_ang=xyz, dimensions_ang=dimensions)
+            frames[idx] = extract_solvent_frame_for(
+                u,
+                sctx,
+                fo,
+                xf,
+                water=bool(o.get("water", True)),
+                ions=bool(o.get("ions", True)),
+                box=bool(o.get("box", True)),
+                shell_nm=None if shell_ang is None else float(shell_ang) / 10.0,
+                atomistic=bool(o.get("atomistic")),
+                max_waters=o.get("max_waters"),
+                **direct_coordinates,
+            )
+            if include_dna:
+                flat = np.zeros(n_serials * 3, dtype=np.float32)
+                for a in atoms:
+                    s = int(a["serial"]) * 3
+                    flat[s] = a["x"]
+                    flat[s + 1] = a["y"]
+                    flat[s + 2] = a["z"]
+                frames[idx]["dna"] = flat
 
-    if not frames:
-        return empty_solvent_bin()
-    return pack_solvent_bin(
-        frames, meta={"n_serials": n_serials} if include_dna else None
-    )
+        if not frames:
+            return empty_solvent_bin()
+        return pack_solvent_bin(
+            frames, meta={"n_serials": n_serials} if include_dna else None
+        )
+    finally:
+        if companion_reader is not None:
+            companion_reader.close()
+        if ctx.get("dcd_prefix") is not None:
+            ctx["dcd_prefix"].close()
 
 
 def extract_solvent_frame_for(u, sctx, frame_out: dict, xf, **kw) -> dict:
@@ -2460,6 +2473,7 @@ def md_composite_trajectory(
     progress_path: str | None = None,
     frame_start: int | None = None,
     frame_end: int | None = None,
+    frame_step: int = 1,
 ) -> dict:
     """JSON-compatible composite retained for API compatibility and exports."""
     return _md_composite_trajectory_data(
@@ -2470,7 +2484,7 @@ def md_composite_trajectory(
         max_frames,
         stride,
         progress_path,
-        binary=False, frame_start=frame_start, frame_end=frame_end,
+        binary=False, frame_start=frame_start, frame_end=frame_end, frame_step=frame_step,
     )
 
 
@@ -2484,6 +2498,7 @@ def md_composite_trajectory_bin(
     progress_path: str | None = None,
     frame_start: int | None = None,
     frame_end: int | None = None,
+    frame_step: int = 1,
 ) -> bytes:
     """Pack the interactive NAMD scrub trajectory as float32 typed-array data.
 
@@ -2504,10 +2519,10 @@ def md_composite_trajectory_bin(
         max_frames,
         stride,
         progress_path,
-        binary=True, frame_start=frame_start, frame_end=frame_end,
+        binary=True, frame_start=frame_start, frame_end=frame_end, frame_step=frame_step,
     )
     frames = result.pop("frames")
-    header = orjson.dumps({k: result[k] for k in ("keys", "stages", "markers", "frame_start", "total_n_frames", "frame_format")})
+    header = orjson.dumps({k: result[k] for k in ("keys", "stages", "markers", "frame_start", "frame_step", "total_n_frames", "frame_format")})
     prefix = struct.pack(
         "<5I",
         _TRAJECTORY_BIN_MAGIC,
@@ -2537,6 +2552,7 @@ def _md_composite_trajectory_data(
     binary: bool,
     frame_start: int | None = None,
     frame_end: int | None = None,
+    frame_step: int = 1,
 ) -> dict:
     """Composite scrub-able NAMD trajectory for a trajectory keyframe.
 
@@ -2555,15 +2571,8 @@ def _md_composite_trajectory_data(
             )
 
     def select_range(picked):
-        total = sum(len(v) for v in picked)
-        start = min(max(0, frame_start or 0), max(0, total - 1))
-        end = min(total, max(start + 1, frame_end + 1)) if frame_end is not None else total
-        offset = 0
-        selected = []
-        for indices in picked:
-            selected.append(indices[max(0, start - offset):max(0, end - offset)])
-            offset += len(indices)
-        return selected, start, total
+        from backend.core.trajectory_selection import select_composite_range
+        return select_composite_range(picked, frame_start, frame_end, frame_step)
 
     write_phase("initialize", 0, 1)
 
@@ -2598,7 +2607,7 @@ def _md_composite_trajectory_data(
         write_phase("initialize", 1, 1)
         frames = np.empty((n_out, 0), dtype="<f4") if binary else [[] for _ in range(n_out)]
         return {
-            "n_frames": n_out, "frame_start": range_start, "total_n_frames": range_total,
+            "n_frames": n_out, "frame_start": range_start, "frame_step": frame_step, "total_n_frames": range_total,
             "frame_format": "namd-measured-bases",
             "n_nucleotides": 0,
             "keys": [],
@@ -2628,7 +2637,7 @@ def _md_composite_trajectory_data(
     total = sum(seg_counts)
     if total == 0:
         return {
-            "n_frames": 0, "frame_start": 0, "total_n_frames": 0,
+            "n_frames": 0, "frame_start": 0, "frame_step": frame_step, "total_n_frames": 0,
             "frame_format": "namd-measured-bases",
             "n_nucleotides": len(key_list),
             "keys": key_list,
@@ -2691,7 +2700,7 @@ def _md_composite_trajectory_data(
 
     return {
         "n_frames": picked_total if binary else len(out_frames),
-        "frame_start": range_start, "total_n_frames": range_total,
+        "frame_start": range_start, "frame_step": frame_step, "total_n_frames": range_total,
         "frame_format": "namd-measured-bases",
         "n_nucleotides": len(key_list),
         "keys": key_list,

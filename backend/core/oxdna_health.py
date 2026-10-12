@@ -2909,6 +2909,7 @@ def _aligned_downsampled_frames(
     frame_transform=None,
     frame_start=None,
     frame_end=None,
+    frame_step=1,
 ):
     """Shared core for the composite trajectory: per stage, downsample to a ≤
     ``max_frames`` budget FIRST (cheap header count → stride), then PBC-unwrap +
@@ -2933,7 +2934,7 @@ def _aligned_downsampled_frames(
         _ALIGNED_CACHE = OrderedDict()
     cache_key = (
         _aligned_cache_key(stages, reference_conf_path, max_frames, copies),
-        frame_start, frame_end,
+        frame_start, frame_end, frame_step,
         bool(align),
         int(n_trailing_extra),
         int(trailing_extra_strand_length),
@@ -3074,6 +3075,7 @@ def _aligned_downsampled_frames(
     if n_trailing_extra > 0 and trailing_extra_strand_length != 0:
         total_kept += 1  # raw frame 0 supplies capture coordinates for the design seed
     total_kept = max(0, min(total_kept, frame_end + 1 if frame_end is not None else total_kept) - (frame_start or 0))
+    total_kept = (total_kept + frame_step - 1) // frame_step
     composite_offset = 0
     done = 0
     if progress:
@@ -3095,8 +3097,10 @@ def _aligned_downsampled_frames(
         )  # positions into this stage's eff list
 
         sampled_count = len(picked)
-        picked = picked[max(0, (frame_start or 0) - composite_offset):
-                        max(0, frame_end + 1 - composite_offset) if frame_end is not None else None]
+        lo = max(0, (frame_start or 0) - composite_offset)
+        lo += ((frame_start or 0) - composite_offset - lo) % frame_step
+        hi = max(0, frame_end + 1 - composite_offset) if frame_end is not None else None
+        picked = picked[lo:hi:frame_step]
         composite_offset += sampled_count
         if not picked:
             continue
@@ -3383,6 +3387,7 @@ def pack_composite_trajectory_bin(
     trailing_extra_strand_length: int = 0,
     frame_start=None,
     frame_end=None,
+    frame_step=1,
 ) -> bytes:
     """Build the View-trajectory payload in a compact typed-array wire format.
 
@@ -3418,7 +3423,7 @@ def pack_composite_trajectory_bin(
         stages,
         reference_conf_path,
         max_frames,
-        copies=True, frame_start=frame_start, frame_end=frame_end,
+        copies=True, frame_start=frame_start, frame_end=frame_end, frame_step=frame_step,
         progress=_align_progress,
         align=align,
         n_trailing_extra=n_trailing_extra,
@@ -3441,6 +3446,7 @@ def pack_composite_trajectory_bin(
     header = orjson.dumps(
         {
             "frame_start": frame_start or 0,
+            "frame_step": frame_step,
             "total_n_frames": composite_trajectory_meta(design, stages, max_frames)["n_frames"],
             "keys": [list(k) for k in key_list],
             "stages": out_stages,

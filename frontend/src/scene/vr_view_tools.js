@@ -19,8 +19,13 @@ function displayFlags(doc) {
 
 // Snapshot the actual displayed Three.js geometry, including instance colours,
 // alpha, posed meshes and canvas labels. Native VR retains its own stereo camera.
-export async function captureVRView(scene, doc = document, message = '', panelOnly = false) {
+export async function captureVRView(scene, doc = document, message = '', panelOnly = false, reuseAtlas = null) {
   scene.updateMatrixWorld(true)
+  if (reuseAtlas) {
+    const revision = reuseAtlas.revision
+    const view = await captureVRGeometry(scene, doc, reuseAtlas)
+    return revision === reuseAtlas.revision ? view : { ...view, schema:5, pixels:reuseAtlas.pixels(), width:2048, height:2048 }
+  }
   const atlas = doc.createElement('canvas');atlas.width=2048;atlas.height=2048
   const ctx=atlas.getContext('2d'), textures=new Map()
   let x=0,y=0,row=0
@@ -62,9 +67,17 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
   const menu=allocate(panel)
   const mapUV=map=>{
     if(!map?.image)return null
-    if(!textures.has(map.uuid))textures.set(map.uuid,allocate(map.image))
+    if(!textures.has(map.uuid)){textures.set(map.uuid,allocate(map.image));atlasState.revision++}
     return textures.get(map.uuid)
   }
+  const atlasState = { mapUV, menu, revision:0, pixels:()=>ctx.getImageData(0,0,2048,2048).data }
+  const geometry = await captureVRGeometry(scene, doc, atlasState, panelOnly)
+  return { ...geometry, schema:5, pixels:ctx.getImageData(0,0,2048,2048).data, width:2048, height:2048, atlasState }
+}
+
+async function captureVRGeometry(scene, doc, atlasState, panelOnly = false) {
+  const { mapUV, menu } = atlasState
+  const flags=displayFlags(doc), desktopOnlyLayout=['expanded','unfold','cadnano2d'].some(key=>doc.querySelector(`[data-vt="${key}"]`)?.classList.contains('active'))
   const triangles=[],lines=[],sprites=[],batches=[]
   const pos=new THREE.Vector3(),m=new THREE.Matrix4(),inst=new THREE.Matrix4(),col=new THREE.Color(),scale=new THREE.Vector3(),quat=new THREE.Quaternion()
   const sphere=new THREE.SphereGeometry(1,24,16)
@@ -145,12 +158,12 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
     for(const child of o.children)visit(child)
   }
   if(!panelOnly&&!desktopOnlyLayout&&flags!==256)visit(scene);sphere.dispose()
-  return {schema:5,flags,menu,batches,triangles:new Float32Array(triangles),lines:new Float32Array(lines),sprites:new Float32Array(sprites),pixels:ctx.getImageData(0,0,2048,2048).data,width:2048,height:2048}
+  return {schema:6,flags,menu,batches,triangles:new Float32Array(triangles),lines:new Float32Array(lines),sprites:new Float32Array(sprites),pixels:new Uint8Array(),width:0,height:0,atlasState}
 }
 
 export function encodeVRView(view,version,requestSequence=0) {
   const batches=view.batches??[]
-  const schema=view.schema??4,stride=schema===5?12:9
+  const schema=view.schema??4,stride=schema>=5?12:9
   const header=new Uint32Array([schema,version,view.flags,view.triangles.length/stride,view.lines.length/stride,view.sprites.length/15,view.width,view.height,batches.length,requestSequence])
   const parts=[new TextEncoder().encode('NADOCVT1'),header,view.triangles,view.lines,view.sprites]
   for(const b of batches)parts.push(new Uint32Array([b.vertices.length/stride,b.instances.length/20]),b.vertices,b.instances)
@@ -168,14 +181,14 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
     // Actual overlay/layout streams still follow every geometry/design change.
     const carriesScene=displayFlags(doc)!==256
     if(!carriesScene)stamp=''
-    else if(now-lastStampAt>700){stamp=broadcastFingerprint({scene});lastStampAt=now}
+    else if(doc.documentElement?.dataset.vrSimulationTrajectory !== 'true' && now-lastStampAt>700){stamp=broadcastFingerprint({scene});lastStampAt=now}
     const key=fingerprint()+simulationViewActive(doc)+stamp
     if(key!==last || (carriesScene&&(geometry!==s.currentGeometry || design!==s.currentDesign))){if(!dirty||!last)settle=now+1200;last=key;dirty=true}
     geometry=s.currentGeometry;design=s.currentDesign
     if(busy||!dirty||performance.now()<settle)return
     busy=true;dirty=false;const generation=epoch,requestSequence=appliedSequence
     try {
-      await nextFrame();const view=await captureVRView(scene,doc,message)
+      await nextFrame();const view=await captureVRView(scene,doc,message,false,doc.documentElement?.dataset.vrSimulationTrajectory === 'true' ? lastGood?.atlasState : null)
       if(generation!==epoch)return
       const response=await fetch('/api/vr/view-tools',{method:'POST',headers:{...docHeaders(),'Content-Type':'application/octet-stream'},body:encodeVRView(view,++version,requestSequence)})
       if(!response.ok)throw new Error(await response.text())
@@ -191,15 +204,15 @@ export function createVRViewTools({scene,getState,onError=console.error,doc=docu
         const panel=await captureVRView(scene,doc,'View unavailable: '+error.message+'. Previous view retained.',true)
         let fallback={...panel,flags:256}
         if(lastGood) {
-          const pixels=new Uint8Array(lastGood.pixels)
+          const pixels=new Uint8Array(lastGood.pixels.length ? lastGood.pixels : lastGood.atlasState.pixels())
           for(let y=0;y<768;y++)pixels.set(panel.pixels.subarray(y*2048*4,(y*2048+768)*4),y*2048*4)
-          fallback={...lastGood,pixels}
+          fallback={...lastGood,pixels,schema:5,width:2048,height:2048}
         }
         if(generation===epoch)await fetch('/api/vr/view-tools',{method:'POST',headers:{...docHeaders(),'Content-Type':'application/octet-stream'},body:encodeVRView(fallback,++version,requestSequence)})
       }catch{/* Retry after reconnect; the quiver can still stow the panel. */}
     }finally{busy=false}
   }
-  return {publish,async activate(index,sequence=0){
+  return {publish,refresh(){dirty=true;settle=0;},async activate(index,sequence=0){
     appliedSequence=sequence
     const key=VR_VIEW_KEYS[index];if(!key)return
     message=viewToolUnavailable(key,getState())

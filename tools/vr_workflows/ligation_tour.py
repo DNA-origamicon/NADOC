@@ -32,7 +32,13 @@ def main(kind="ligation", prepare_workspace=None):
         if prepare_workspace:
             fixtures=prepare_workspace(Path(temporary))
             (output/'fixtures.json').write_text(json.dumps(fixtures,indent=2))
+        # Global Playwright teardown removes prefixed test documents after each
+        # profile. Restore the prepared private input before the next profile;
+        # job/cache files remain private in the same temporary workspace.
+        prepared_documents = {p.name: p.read_bytes() for p in Path(temporary).glob('__e2e__*.nadoc')}
         for profile in profiles:
+            for name, content in prepared_documents.items():
+                (Path(temporary) / name).write_bytes(content)
             with socket.socket() as backend, socket.socket() as frontend:
                 backend.bind(('127.0.0.1', 0))
                 frontend.bind(('127.0.0.1', 0))

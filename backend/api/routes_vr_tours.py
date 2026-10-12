@@ -62,7 +62,7 @@ def list_tours(request: Request):
     _require_local(request, check_platform=False)
     data = catalog()
     for tour in data['tours']:
-        tour['validation_command'] = command(tour, validate=True)
+        tour['validation_command'] = command(tour, validate=True) if 'validate' in tour.get('modes', ['validate']) else None
     with _lock:
         return {**data, 'run': _snapshot()}
 
@@ -81,6 +81,8 @@ def start(body: StartTour, request: Request):
     tour = next((t for t in catalog()['tours'] if t['id'] == body.tour), None)
     if not tour or not tour['runnable']:
         raise HTTPException(400, 'Choose a supported direct-launch tour.')
+    if tour.get('modes') and body.mode not in tour['modes']:
+        raise HTTPException(400, 'This component study is desktop-only.')
     if body.mode == 'desktop' and tour['module'] != 'component_gallery_tour':
         raise HTTPException(400, 'Desktop mode is only available for component galleries.')
     with _lock:
