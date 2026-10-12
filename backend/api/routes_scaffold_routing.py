@@ -56,6 +56,12 @@ def _run_auto_scaffold_with_feature_log(
     def _fn(d):
         try:
             updated, result = runner(d)
+            if not hasattr(result, "valid") or result.valid:
+                from backend.core.cluster_join_constraints import realize_join_constraints
+                pending_count = len(updated.cluster_join_constraints)
+                updated = realize_join_constraints(updated)
+                if pending_count and hasattr(result, "warnings"):
+                    result.warnings.append(f"Realized all {pending_count} saved Join connections; {len(updated.scaffolds())} linear scaffold paths remain.")
         except HTTPException:
             raise
         except Exception as exc:

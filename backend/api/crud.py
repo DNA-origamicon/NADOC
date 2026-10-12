@@ -7868,6 +7868,10 @@ def _filter_removed_ids_from_design(design: Design, removed_ids: set) -> Design:
             p for p in design.photoproduct_junctions if p.id not in removed_ids
         ],
         forced_ligations=[f for f in design.forced_ligations if fl_survives(f)],
+        cluster_join_constraints=[c for c in design.cluster_join_constraints
+            if c.id not in removed_ids and all(
+                p.cluster_id not in removed_clusters and p.source.helix_id not in removed_helices
+                and p.target.helix_id not in removed_helices for p in (c.first, c.second))],
         cluster_transforms=new_cts,
         lattice_frames=[
             frame for frame in design.lattice_frames
@@ -8962,6 +8966,7 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
         photoproduct_junctions=snap_design.photoproduct_junctions,
         forced_ligations=snap_design.forced_ligations,
         cluster_joints=snap_design.cluster_joints,
+        cluster_join_constraints=snap_design.cluster_join_constraints,
         flexible_segment_marks=snap_design.flexible_segment_marks,
         flexible_connections=snap_design.flexible_connections,
         nanoparticles=snap_design.nanoparticles,

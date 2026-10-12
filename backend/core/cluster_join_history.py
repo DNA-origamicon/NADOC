@@ -47,7 +47,7 @@ def restore_join_history_poses(
             c.id: c for c in after.cluster_transforms
             if c.id in previous and _pose(c) != _pose(previous[c.id])
         }
-        requested = entry.params.get("second", {}).get("cluster_id")
+        requested = (entry.params.get("second", {}).get("cluster_id") or entry.params.get("moving_cluster_id"))
         if requested in previous:
             donor = next((c for c in after.cluster_transforms if c.id == requested), None)
             if donor is not None:
@@ -110,7 +110,7 @@ def rebase_join_snapshots_after_move_delete(
             continue
         moves_cluster = (
             _pose(pre_pose) != _pose(post_pose)
-            or entry.params.get("second", {}).get("cluster_id") == cluster_id
+            or (entry.params.get("second", {}).get("cluster_id") or entry.params.get("moving_cluster_id")) == cluster_id
         )
         before = before.copy_with(cluster_transforms=[
             c.model_copy(update=_pose(pose)) if c.id == cluster_id else c

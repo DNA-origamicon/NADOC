@@ -3,7 +3,7 @@
 Open **Tools → Join…** or the **join** button in the desktop tool row while
 editing a part. Join uses the shared draggable tool popup and the native 3D view.
 
-1. Hover near a scaffolded cluster. Diamonds mark available side attachments;
+1. Hover near a cluster. Diamonds mark available side attachments;
    spheres mark end attachments. Click the point that should stay fixed.
 2. Hover over a different cluster and click its moving attachment. Join previews
    a rigid transform of that entire cluster, shown in translucent cyan. Amber
@@ -60,7 +60,7 @@ preview token. Rejected or stale requests do not move a cluster or alter routing
 Undo, redo, history navigation, reverting/deleting Join, and save/reload restore
 the pose and scaffold together.
 
-Join currently requires disjoint whole-helix clusters. The moving cluster needs
+Join currently requires disjoint whole-helix clusters. For immediate routed joins, the moving cluster needs
 one scaffold with a closable adjacent nick and no existing external routing
 connections or kinematic joint. Joined structures can stay fixed while further
 independent clusters are attached. Hierarchical, domain-only, overlapping,
@@ -83,3 +83,68 @@ accounting, and history restoration. Frontend controller coverage is in
 `frontend/src/scene/cluster_join_tool.test.js`. The isolated browser workflow in
 `frontend/e2e/cluster_join.spec.js` uses actual hover/click selection, preview,
 Apply, undo, redo, and both tool entry points.
+
+## Free movement and multiple connections
+
+The **Selection** box has independently clearable **Fixed** and **Moving**
+fields. In point-picking mode, clearing either field keeps the other selection
+and invalidates its old preview. Click a field to replace that selection.
+
+Choose **Free movement**, then click a cluster body. A cyan preview
+and translate gizmo appear. Use **Translate** / **Rotate**, or **Tab** while the
+canvas is focused, to change gizmo modes. The authored design stays unchanged
+until **Apply join**. Cancel, closing the tool, changing documents, or clearing
+the moving selection discards the temporary pose.
+
+Leave Fixed empty to search nearby eligible clusters, or click its field and
+choose a particular fixed cluster. **Connection reach** sets the maximum
+attachment-center separation (0.3–10 nm). While dragging, dashed gray lines
+provide immediate proximity feedback. Colored, directed bridges and the
+connection count appear when the current pose passes backend routing and
+clearance checks. Gray hints are not promises of valid connections.
+
+**Apply join** preserves the exact previewed position and rotation and commits
+all colored connections as one undoable edit. There is no alignment snap and no
+fixed connection-count limit. Each attachment pair creates two native ssDNA
+bridges. Undo/redo restores the whole pose and route together.
+
+The search examines every usable side edge and exposed end attachment within
+reach across eligible fixed clusters. An integer optimizer selects the maximum
+number of connections that can coexist, preferring shorter connections among
+maximum sets. It enforces nucleotide attachment capacity, connector clearance,
+and (for already routed clusters) complete linear scaffold paths. Conflicting
+alternatives are excluded; compatible joins are not thinned to a sparse sample
+or restricted to one fixed scaffold.
+
+### Unrouted clusters
+
+Scaffold precursors do not need a completed route before Join. Preview checks
+all proposed nicks and ligations against the existing scaffold strands. **Apply
+join** immediately creates every previewed connection as real ssDNA connector
+domains and scaffold ligations, preserving the exact pose. The connectors render
+as native DNA and are included in simulation exports; no later routing command
+is needed to make the joins.
+
+All original nucleotides, staples, and unaffected strands are preserved. If a
+connection set closes a cycle, an ordinary native backbone edge receives a nick
+so every scaffold remains linear. Several scaffold paths may remain: Join makes
+the selected inter-cluster connections without completing unrelated internal
+routing. Changed scaffold sequences are cleared. The pose, nicks, connectors,
+and ligations form one undoable edit and survive save/reload.
+
+After joining, select either rigid cluster in **Move/Rotate** and choose
+**Constrained (tethers)**. All Join-created flexible ssDNA bridges participate
+in the free-until-taut motion constraint, including connectors that belong to
+neither rigid cluster. Unmarked rigid connections still block this option.
+
+Legacy saved join constraints remain readable and can still be realized by an
+explicit Auto scaffold operation.
+
+The distance-ranking and non-reuse behavior is informed
+by MagicDNA's `SortDist` assembly workflow in
+[`class/hyperbundle.m`](https://github.com/cmhuang2011/MagicDNA/blob/0c574bad121c260c04589fc050db63ab90250a36/class/hyperbundle.m#L7645).
+
+Run `uv run pytest tests/test_cluster_join_free.py tests/test_cluster_join_constraints.py` for multi-connection routing,
+export, exact-pose and undo/redo checks. Run
+`cd frontend && npx playwright test --config playwright.join.config.js` for the
+isolated point-picking, free-movement gizmo and T-junction browser workflows.

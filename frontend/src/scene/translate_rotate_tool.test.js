@@ -732,3 +732,17 @@ it('arms Move with cluster picking, retains the target, and resets the picker af
   await tool.cancel()
   expect(store.getState().selection.level).toBe('default')
 })
+
+it('refreshes tether options when a cluster is selected after opening Move/Rotate', async () => {
+  const cluster = { id: 'C1', translation: [0,0,0], rotation: [0,0,0,1], helix_ids: ['h1'] }
+  const ctx = makeDeps({ state: { currentDesign: { id: 'joined', cluster_transforms: [cluster], cluster_joints: [] } } })
+  ctx.clusterGizmo.attach.mockImplementation(id => ctx.store.setState({ activeClusterId: id }))
+  const tool = initTranslateRotateTool(ctx.deps)
+  await tool.activate()
+  const previous = ctx.store.getState()
+  const item = { kind: 'cluster', id: 'C1' }
+  ctx.store.setState({ selection: { context: 'design', level: 'cluster', items: [item], primary: item } })
+  await tool.handleSelectionChange(ctx.store.getState(), previous)
+  expect(ctx.deps.flexRelax.refreshFlexGates).toHaveBeenCalled()
+  expect(ctx.deps.setPivotOptions).toHaveBeenLastCalledWith([], 'C1')
+})

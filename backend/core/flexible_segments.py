@@ -249,31 +249,46 @@ def _gate(cluster_id, adj, bead_domain, marked, owner, duplex_ids=frozenset()) -
     for u in adj:
         if owner(u) != cluster_id:
             continue
-        for v in adj[u]:
-            ov = owner(v)
-            if ov is None or ov == cluster_id:
-                continue
-            # An overhang-DUPLEX child cluster is a movable connector that rides with its
-            # parts (it has its own free-until-taut "Constrained (taut bonds)" mode), NOT a
-            # rigid pin. Treat it as transparent to the ssDNA gate — skip the overhang-junction
-            # crossing entirely so materializing a duplex doesn't disable a parent cluster's
-            # "ssDNA constrained" option. (Before duplex clusters existed, these overhang beads
-            # belonged to the parent and the junction was intra-cluster.)
-            if ov in duplex_ids or cluster_id in duplex_ids:
-                continue
-            ekey = frozenset((u, v))
-            if ekey in seen_edges:
-                continue
-            seen_edges.add(ekey)
-            crossings += 1
-            if not (u in marked or v in marked):
-                # Direct rigid bond between the two clusters — blocks free motion.
-                rigid_blocking.append(
-                    {
-                        "a": _anchor(u, bead_domain).model_dump(),
-                        "b": _anchor(v, bead_domain).model_dump(),
-                    }
-                )
+        for neighbour in adj[u]:
+            # Join's connector helices deliberately belong to neither rigid arm.
+            # Follow unowned beads to the next owned endpoint instead of dropping
+            # the entire connection at the first unowned bead. An unowned path
+            # must be marked throughout to resolve as an inter-cluster tether;
+            # otherwise an unrepresented rigid portion would escape the solver.
+            flexible = (neighbour in marked if owner(neighbour) is None
+                        else u in marked or neighbour in marked)
+            pending = [(neighbour, flexible)]
+            visited = set()
+            while pending:
+                v, flexible = pending.pop()
+                state = (v, flexible)
+                if state in visited:
+                    continue
+                visited.add(state)
+                ov = owner(v)
+                if ov is None:
+                    pending.extend(
+                        (n, flexible and (owner(n) is not None or n in marked))
+                        for n in adj[v]
+                    )
+                    continue
+                if ov == cluster_id:
+                    continue
+                # Duplex children are movable connectors, not fixed rigid pins.
+                if ov in duplex_ids or cluster_id in duplex_ids:
+                    continue
+                ekey = (frozenset((u, v)), flexible)
+                if ekey in seen_edges:
+                    continue
+                seen_edges.add(ekey)
+                crossings += 1
+                if not flexible:
+                    rigid_blocking.append(
+                        {
+                            "a": _anchor(u, bead_domain).model_dump(),
+                            "b": _anchor(v, bead_domain).model_dump(),
+                        }
+                    )
     return {
         "cluster_id": cluster_id,
         "gate": crossings > 0 and not rigid_blocking,

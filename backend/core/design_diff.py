@@ -45,6 +45,7 @@ _DIFF_FIELDS: tuple[str, ...] = (
     "overhang_connections",
     "photoproduct_junctions",
     "cluster_joints",
+    "cluster_join_constraints",
 )
 
 
@@ -53,6 +54,7 @@ def _model_classes() -> dict[str, type]:
     import-time coupling)."""
     from backend.core.models import (
         ClusterJoint,
+        ClusterJoinConstraint,
         Crossover,
         CrossoverConstraint,
         ForcedLigation,
@@ -75,6 +77,7 @@ def _model_classes() -> dict[str, type]:
         "overhang_connections": OverhangConnection,
         "photoproduct_junctions": PhotoproductJunction,
         "cluster_joints": ClusterJoint,
+        "cluster_join_constraints": ClusterJoinConstraint,
     }
 
 

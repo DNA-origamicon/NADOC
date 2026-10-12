@@ -733,6 +733,16 @@ export function initTranslateRotateTool(deps) {
     canvas.addEventListener('pointerdown', _onToolPickPointerDown)   // dedup by the browser
     await _refreshClusterPivotForAttach(clusterId)
     clusterGizmo.attach(clusterId, scene, camera, canvas)
+    // The menu can open in waiting mode, which has never fetched tether gates.
+    // Retargeting must refresh them too; the active-cluster subscriber above
+    // attach only sees the previous cache when it rebuilds the dropdown.
+    const designId = store.getState().currentDesign?.id
+    await _flexRelax.refreshFlexGates()
+    const current = store.getState()
+    if (!getActive() || current.activeClusterId !== clusterId ||
+        current.currentDesign?.id !== designId || clusterGizmo.isGroupActive?.()) return
+    const joints = current.currentDesign?.cluster_joints?.filter(j => j.cluster_id === clusterId) ?? []
+    _mrSetPivotOptions(joints, clusterId)
   }
 
   // Selection→tool bridge: opening/re-targeting/closing the tool in response to cluster

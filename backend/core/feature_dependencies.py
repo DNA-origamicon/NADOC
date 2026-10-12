@@ -61,6 +61,7 @@ _ID_COLLECTIONS = (
     "overhangs",
     "cluster_transforms",
     "cluster_joints",
+    "cluster_join_constraints",
     "flexible_segment_marks",
     "flexible_connections",
     "protein_assets",
@@ -166,6 +167,9 @@ def _object_refs(item, design=None) -> set:
     elif name == "ClusterRigidTransform":
         for ref in item.domain_ids or []:
             _add(ref.strand_id, out)
+    elif name == "ClusterJoinConstraint":
+        for port in (item.first, item.second):
+            out.update((port.cluster_id, port.source.helix_id, port.target.helix_id))
     elif name == "ClusterJoint":
         _add(item.cluster_id, out)
     elif name == "FlexibleSegmentMark":

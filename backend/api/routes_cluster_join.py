@@ -8,6 +8,7 @@ from backend.core.cluster_join import (
     propose_cluster_join,
     join_preview_token,
 )
+from backend.core.cluster_join_free import FreeClusterJoinRequest, propose_free_cluster_join
 from backend.core.cluster_reconcile import MutationReport
 
 router = APIRouter()
@@ -31,13 +32,13 @@ def candidates(cluster_id: str | None = None):
 
 
 @router.post("/design/cluster-join/preview")
-def preview(body: ClusterJoinRequest):
+def preview(body: ClusterJoinRequest | FreeClusterJoinRequest):
     design, revision = state.copy_for_persist()
     if design is None:
         raise HTTPException(404, detail="No active design.")
     _guard(design, revision, body)
     try:
-        _, report = propose_cluster_join(design, body)
+        _, report = (propose_free_cluster_join if isinstance(body, FreeClusterJoinRequest) else propose_cluster_join)(design, body)
         return report
     except ValueError as exc:
         return dict(
@@ -50,7 +51,7 @@ def preview(body: ClusterJoinRequest):
 
 
 @router.post("/design/cluster-join/apply")
-def apply(body: ClusterJoinRequest):
+def apply(body: ClusterJoinRequest | FreeClusterJoinRequest):
     from backend.api.crud import _design_response_with_geometry
 
     report = None
@@ -65,11 +66,11 @@ def apply(body: ClusterJoinRequest):
                 409, detail="Join preview is stale or missing; preview again."
             )
         try:
-            result, report = propose_cluster_join(design, body)
+            result, report = (propose_free_cluster_join if isinstance(body, FreeClusterJoinRequest) else propose_cluster_join)(design, body)
         except ValueError as exc:
             raise HTTPException(422, detail=str(exc)) from exc
         return result, MutationReport(
-            new_helix_origins={b["helix_id"]: None for b in report["bridges"]}
+            new_helix_origins={b["helix_id"]: None for b in report["bridges"] if "helix_id" in b}
         )
 
     updated, validation, entry = state.mutate_with_feature_log(

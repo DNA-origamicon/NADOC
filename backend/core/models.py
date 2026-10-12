@@ -3085,6 +3085,26 @@ class NanoparticleConnectionVersion(BaseModel):
     constraint_radius_nm: Optional[float] = None
 
 
+class JoinEndpoint(BaseModel):
+    helix_id: str
+    bp_index: int
+    direction: Direction
+
+
+class JoinAttachment(BaseModel):
+    cluster_id: str
+    source: JoinEndpoint
+    target: JoinEndpoint
+
+
+class ClusterJoinConstraint(BaseModel):
+    """A requested two-way attachment, realized only by explicit scaffold routing."""
+    id: str
+    first: JoinAttachment
+    second: JoinAttachment
+    reach_nm: float = Field(ge=0.3, le=10)
+
+
 class Design(BaseModel):
     """
     Top-level design object.  This is the ground truth for a DNA origami
@@ -3102,6 +3122,7 @@ class Design(BaseModel):
     cluster_transforms: List[ClusterRigidTransform] = Field(default_factory=list)
     nucleotide_transforms: List[NucleotideTransform] = Field(default_factory=list)
     cluster_joints: List[ClusterJoint] = Field(default_factory=list)
+    cluster_join_constraints: List[ClusterJoinConstraint] = Field(default_factory=list)
     overhangs: List[OverhangSpec] = Field(default_factory=list)
     overhang_connections: List[OverhangConnection] = Field(default_factory=list)
     overhang_bindings: List[OverhangBinding] = Field(default_factory=list)

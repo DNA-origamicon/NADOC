@@ -229,7 +229,7 @@ def _scope_reason(design, cluster):
     return None
 
 
-def _ports(design, cluster, geo):
+def _ports(design, cluster, geo, *, dense=False):
     ids = set(cluster.helix_ids)
     helices = {h.id: h for h in design.helices}
     records = {
@@ -247,8 +247,6 @@ def _ports(design, cluster, geo):
     ports = []
     for strand in design.scaffolds():
         if strand.is_reference or not strand.domains:
-            continue
-        if strand.routing_seed:
             continue
 
         def add(a, b, kind, di, bp):
@@ -319,7 +317,7 @@ def _ports(design, cluster, geo):
             # one per roughly one DNA turn for a readable native picker.
             last = -100
             for j in range(3, len(bps) - 4):
-                if j - last < 7:
+                if not dense and j - last < 7:
                     continue
                 count = len(ports)
                 add(_key(dm, bps[j]), _key(dm, bps[j + 1]), "side", di, bps[j])
@@ -349,7 +347,25 @@ def _ports(design, cluster, geo):
                         if k[0] in helices
                     ):
                         add(a, b, "end", di, dm.end_bp)
-    return ports
+        if strand.routing_seed:
+            dm = strand.domains[-1]
+            a = _key(dm, dm.end_bp)
+            for other in design.scaffolds():
+                if not other.routing_seed or other.id == strand.id:
+                    continue
+                nxt = other.domains[0]
+                b = _key(nxt, nxt.start_bp)
+                if a in geo and b in geo and b[0] in ids and dm.direction != nxt.direction:
+                    # Potential blunt turns between adjacent precursor helices.
+                    if abs(a[1] - b[1]) <= 3 and np.linalg.norm(geo[a][1] - geo[b][1]) <= 3.5:
+                        add(a, b, "end", len(strand.domains)-1, dm.end_bp)
+    reserved = set()
+    for constraint in design.cluster_join_constraints:
+        for port in (constraint.first, constraint.second):
+            reserved.add((port.source.helix_id, port.source.bp_index, port.source.direction.value, "out"))
+            reserved.add((port.target.helix_id, port.target.bp_index, port.target.direction.value, "in"))
+    return [p for p in ports if not any(tuple(p[side][k] for k in ("helix_id", "bp_index", "direction")) + (role,) in reserved
+            for side, role in (("from", "out"), ("to", "in")))]
 
 
 def cluster_join_candidates(design: Design, cluster_id: str | None = None):
@@ -362,7 +378,7 @@ def cluster_join_candidates(design: Design, cluster_id: str | None = None):
         ports = [] if reason else _ports(design, c, _geometry(design, set(c.helix_ids)))
         if not reason and not ports:
             reason = (
-                "No exposed routed scaffold edges; route a scaffold before joining."
+                "No available exposed scaffold attachment sites."
             )
         public = [{k: v for k, v in p.items() if not k.startswith("_")} for p in ports]
         clusters.append(
@@ -419,46 +435,8 @@ def join_preview_token(design, body):
     ).hexdigest()
 
 
-def propose_cluster_join(design: Design, body: ClusterJoinRequest | dict):
-    if isinstance(body, dict):
-        body = ClusterJoinRequest.model_validate(body)
-    if body.expected_design_id != design.id:
-        raise ValueError("Active design changed.")
-    if body.first.cluster_id == body.second.cluster_id:
-        raise ValueError("Choose two different clusters.")
-    clusters = {c.id: c for c in design.cluster_transforms}
-    try:
-        first, second = (
-            clusters[body.first.cluster_id],
-            clusters[body.second.cluster_id],
-        )
-    except KeyError as exc:
-        raise ValueError("Selected cluster no longer exists.") from exc
-    for c in (first, second):
-        reason = _scope_reason(design, c)
-        if reason:
-            raise ValueError(reason)
+def _validate_moving_cluster(design, host, donor, second):
     donor_ids = set(second.helix_ids)
-    if donor_ids & set(first.helix_ids):
-        raise ValueError("Selected clusters overlap.")
-    geo = _geometry(design)
-    chosen = []
-    for c, selection in ((first, body.first), (second, body.second)):
-        port = next(
-            (p for p in _ports(design, c, geo) if p["id"] == selection.port_id), None
-        )
-        if port is None:
-            raise ValueError(
-                "Attachment site is stale or unavailable; select a new exposed site."
-            )
-        chosen.append(port)
-    p, q = chosen
-    strands = {s.id: s for s in design.strands}
-    host, donor = strands[p["strand_id"]], strands[q["strand_id"]]
-    if host.id == donor.id:
-        raise ValueError(
-            "These clusters already share a scaffold; this join would split its route."
-        )
     for x in [
         *(forced_edge(f) for f in design.forced_ligations),
         *((half_slot(x.half_a), half_slot(x.half_b)) for x in design.crossovers),
@@ -525,6 +503,52 @@ def propose_cluster_join(design: Design, body: ClusterJoinRequest | dict):
         h = next(h for h in design.helices if h.id == k[0])
         if any(ls.bp_index == k[1] for ls in h.loop_skips):
             raise ValueError("The donor nick includes a loop or deleted base.")
+    return dfirst, dlast
+
+
+def propose_cluster_join(design: Design, body: ClusterJoinRequest | dict):
+    if isinstance(body, dict):
+        body = ClusterJoinRequest.model_validate(body)
+    if body.expected_design_id != design.id:
+        raise ValueError("Active design changed.")
+    if body.first.cluster_id == body.second.cluster_id:
+        raise ValueError("Choose two different clusters.")
+    clusters = {c.id: c for c in design.cluster_transforms}
+    try:
+        first, second = (
+            clusters[body.first.cluster_id],
+            clusters[body.second.cluster_id],
+        )
+    except KeyError as exc:
+        raise ValueError("Selected cluster no longer exists.") from exc
+    for c in (first, second):
+        reason = _scope_reason(design, c)
+        if reason:
+            raise ValueError(reason)
+    donor_ids = set(second.helix_ids)
+    if donor_ids & set(first.helix_ids):
+        raise ValueError("Selected clusters overlap.")
+    geo = _geometry(design)
+    chosen = []
+    for c, selection in ((first, body.first), (second, body.second)):
+        port = next(
+            (p for p in _ports(design, c, geo) if p["id"] == selection.port_id), None
+        )
+        if port is None:
+            raise ValueError(
+                "Attachment site is stale or unavailable; select a new exposed site."
+            )
+        chosen.append(port)
+    p, q = chosen
+    strands = {s.id: s for s in design.strands}
+    host, donor = strands[p["strand_id"]], strands[q["strand_id"]]
+    if host.id == donor.id:
+        raise ValueError(
+            "These clusters already share a scaffold; this join would split its route."
+        )
+    deferred = any(s.routing_seed for s in design.scaffolds() if any(d.helix_id in set(first.helix_ids + second.helix_ids) for d in s.domains))
+    if not deferred:
+        dfirst, dlast = _validate_moving_cluster(design, host, donor, second)
     a = tuple(p["from"][k] for k in ("helix_id", "bp_index", "direction"))
     b = tuple(p["to"][k] for k in ("helix_id", "bp_index", "direction"))
     c = tuple(q["from"][k] for k in ("helix_id", "bp_index", "direction"))
@@ -546,6 +570,14 @@ def propose_cluster_join(design: Design, body: ClusterJoinRequest | dict):
     translation = (
         fixed_center + np.asarray(p["normal"]) * body.gap_nm - rot @ moving_center
     )
+    if deferred:
+        from backend.core.cluster_join_free import FreeClusterJoinRequest, propose_free_cluster_join
+        free_body = FreeClusterJoinRequest(moving_cluster_id=second.id, fixed_cluster_id=first.id,
+            world_translation=translation.tolist(), world_rotation=Rotation.from_matrix(rot).as_quat().tolist(),
+            reach_nm=10, expected_design_id=body.expected_design_id, expected_revision=body.expected_revision)
+        result, report = propose_free_cluster_join(design, free_body, selected_ports=(p, q))
+        report.update(token=join_preview_token(design, body), preview_token=join_preview_token(design, body), mode="manual")
+        return result, report
     result = design.model_copy(deep=True)
     moved = next(x for x in result.cluster_transforms if x.id == second.id)
     oldrot = Rotation.from_quat(second.rotation).as_matrix()

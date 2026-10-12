@@ -18,7 +18,7 @@ from backend.core.sequences import domain_bp_range, strand_nucleotide_count
 from backend.physics.oxdna_interface import topology_rows, _walk_strand_nucleotides, write_topology
 
 
-def make_join_design(n_clusters=3, n_helices=6):
+def make_join_design(n_clusters=3, n_helices=6, *, routed=True):
     """Use the real default scaffold router, including its one buried nick.
 
     This fixture is also used by the real-canvas Playwright test. It never
@@ -28,9 +28,10 @@ def make_join_design(n_clusters=3, n_helices=6):
     parts = []
     for index in range(n_clusters):
         part = make_bundle_design(cells, 96, lattice_type=LatticeType.SQUARE)
-        part, result = (auto_scaffold_seamless if n_helices == 2 else auto_scaffold_seamed)(part)
-        assert result.valid, result.errors
-        assert len(part.scaffolds()) == 1
+        if routed:
+            part, result = (auto_scaffold_seamless if n_helices == 2 else auto_scaffold_seamed)(part)
+            assert result.valid, result.errors
+            assert len(part.scaffolds()) == 1
         names = {obj.id: f"{obj.id}_join{index}" for obj in [*part.helices, *part.strands]}
         def rename(value):
             if isinstance(value, dict): return {k: rename(v) for k, v in value.items()}
@@ -44,7 +45,7 @@ def make_join_design(n_clusters=3, n_helices=6):
             helix.grid_pos = cell
             helix.lattice_frame_id = frame.id
         for strand in part.strands:
-            if strand.is_scaffold:
+            if strand.is_scaffold and routed:
                 strand.id = f"scaffold_join{index}"
                 strand.routing_seed = []
             strand.sequence = ("A" if strand.is_scaffold else "T") * strand_nucleotide_count(strand, part)
@@ -157,12 +158,12 @@ def assert_original_bases_preserved(before, after, added):
     assert all(count == 1 for key, count in new.items() if key not in old)
 
 
-def assert_exported_join(before, after, added, tmp_path):
+def assert_exported_join(before, after, added, tmp_path, *, strand_reduction=1):
     old_rows, _ = topology_rows(before)
     rows, nstrands = topology_rows(after)
     steps = list(_walk_strand_nucleotides(after))
     assert len(rows) == len(old_rows) + added == len(steps)
-    assert nstrands == len(after.strands) == len(before.strands) - 1
+    assert nstrands == len(after.strands) == len(before.strands) - strand_reduction
     assert len({step.key for step in steps}) == len(steps)
     for i, (sid, base, n3, n5) in enumerate(rows):
         if n3 != -1:

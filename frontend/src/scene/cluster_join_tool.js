@@ -1,5 +1,6 @@
 /** Native cluster Join: backend-owned ports, pose preview and atomic scaffold splice. */
 import * as THREE from 'three'
+import { createJoinMovement } from './cluster_join_movement.js'
 import { createClusterJoinPanel } from '../ui/cluster_join_panel.js'
 
 const OTHER_TOOLS = ['forceXoverActive', 'sweepActive', 'deformToolActive', 'translateRotateActive', 'nucleotideTransformActive']
@@ -9,7 +10,7 @@ const describe = value => typeof value === 'string' ? value : value?.message || 
 // Save acknowledgements, history payload backfills and display metadata replace
 // the design object too. Only native placement/routing changes retire this tool.
 const JOIN_NATIVE_FIELDS = ['lattice_type', 'lattice_frames', 'helices', 'strands', 'deformations', 'cluster_transforms',
-  'nucleotide_transforms', 'cluster_joints', 'overhangs', 'overhang_connections', 'overhang_bindings', 'duplexes',
+  'nucleotide_transforms', 'cluster_joints', 'cluster_join_constraints', 'overhangs', 'overhang_connections', 'overhang_bindings', 'duplexes',
   'flexible_segment_marks', 'flexible_connections', 'extensions', 'photoproduct_junctions', 'crossovers',
   'crossover_constraints', 'forced_ligations', 'protein_assets', 'protein_attachments', 'nanoparticles', 'nanoparticle_conjugations']
 const nativeSignature = design => JSON.stringify(JOIN_NATIVE_FIELDS.map(key => design?.[key] ?? null))
@@ -55,12 +56,35 @@ export function initClusterJoinTool({
   isSiteVisible = () => true,
   panelFactory = createClusterJoinPanel,
   previewDelay = 120,
+  movementFactory = createJoinMovement,
 } = {}) {
   const root = new THREE.Group(); root.name = 'cluster-join-preview'; root.visible = false
   const markers = new THREE.Group(); markers.name = 'cluster-join-markers'
   const ghost = new THREE.Group(); ghost.name = 'cluster-join-ghost'
   const bridges = new THREE.Group(); bridges.name = 'cluster-join-bridges'
   root.add(markers, ghost, bridges); scene.add(root)
+  const savedJoins = new THREE.Group(); savedJoins.name = 'cluster-join-constraints'; scene.add(savedJoins)
+  function refreshSavedJoins(state) {
+    disposeLayer(savedJoins)
+    if (state.assemblyActive) return
+    const constraints = state.currentDesign?.cluster_join_constraints ?? []
+    if (!constraints.length) return
+    const key = e => `${e.helix_id}:${e.bp_index}:${e.direction}`
+    const positions = new Map((state.currentGeometry ?? []).map(n => [key(n), n.backbone_position]))
+    const hidden = new Set(state.currentDesign?.visibility_state?.hidden_cluster_ids ?? [])
+    for (const c of constraints) {
+      if (hidden.has(c.first.cluster_id) || hidden.has(c.second.cluster_id)) continue
+      for (const [a, b] of [[c.first.source, c.second.target], [c.second.source, c.first.target]]) {
+        const points = [positions.get(key(a)), positions.get(key(b))]
+        if (points.every(finitePoint)) {
+          const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points.map(p => new THREE.Vector3(...p))),
+            new THREE.LineDashedMaterial({ color: 0xffc35a, dashSize: 0.45, gapSize: 0.2 }))
+          line.computeLineDistances(); savedJoins.add(line)
+        }
+      }
+    }
+  }
+  refreshSavedJoins(store.getState())
   const markerGeometry = new THREE.SphereGeometry(0.55, 12, 8)
   const sideGeometry = new THREE.OctahedronGeometry(0.65)
   const markerMaterials = Object.fromEntries(Object.entries({ normal: 0x55cfff, hover: 0xffd36f, fixed: 0x59e38f, moving: 0xcc9fff }).map(([key, color]) => [key, new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.95, wireframe: key === 'fixed' || key === 'moving' })]))
@@ -68,9 +92,17 @@ export function initClusterJoinTool({
   let lifecycle = 0, sitesEpoch = 0, previewEpoch = 0, timer = null, siteAbort = null, previewAbort = null
   let bound = null, resyncPin = null, clusters = [], sites = [], first = null, second = null, preview = null, previewBody = null
   let status = '', lastPointer = null, visible = [], hovered = null, pendingPick = null, consumedPointer = null, listenedControls = null
-  let params = { gap_nm: 0.8, roll_deg: 0, tilt_deg: 0 }
-  const panel = panelFactory({ onApply: apply, onReset: reset, onCancel: deactivate, onParameters: updateParameters, onRefresh: refreshSites })
+  let freeMovement = false, selectionTarget = 'second', hintCount = 0
+  let freePose = { world_translation: [0, 0, 0], world_rotation: [0, 0, 0, 1] }
+  let params = { gap_nm: 0.8, roll_deg: 0, tilt_deg: 0, reach_nm: 3 }
+  const panel = panelFactory({ onApply: apply, onReset: reset, onCancel: deactivate, onParameters: updateParameters, onRefresh: refreshSites, onClearSelection: clearSelection, onFreeMovement: toggleFreeMovement, onMovementMode: setMovementMode, onSelectField: selectField })
   const liveCamera = () => getCamera?.() ?? camera
+  const movement = movementFactory({ scene, canvas, getCamera: liveCamera, getControls: () => getControls?.() ?? controls,
+    getAxes: () => store.getState().currentHelixAxes ?? {}, getClusters: () => clusters,
+    getSites: () => sites.filter(isSiteVisible), onChange: pose => {
+      if (!active || !freeMovement || applying) return
+      freePose = pose; schedulePreview()
+    } })
   const documentMatches = pin => !!pin && getDocumentToken() === pin.token && store.getState().currentDesign === pin.design
   const revisionCurrent = pin => {
     const watermark = api.currentRevisionWatermark?.()
@@ -78,7 +110,8 @@ export function initClusterJoinTool({
   }
   const eligibleSites = () => sites.filter(site => (!first || site.cluster_id !== first.cluster_id) && isSiteVisible(site))
   function renderPanel() {
-    panel.render({ first, second, clusters, loading, applying, previewLoading, status, params, preview, needsResync,
+    movement.setEnabled(!applying && !loading && !needsResync)
+    panel.render({ first, second, clusters, loading, applying, previewLoading, status, params, preview, needsResync, freeMovement, selectionTarget, hintCount, movementMode: movement.getMode(),
       canApply: !!preview?.valid && !!preview.preview_token && !!previewBody && documentMatches(bound) && revisionCurrent(bound) })
   }
   function clearPreview() {
@@ -93,8 +126,8 @@ export function initClusterJoinTool({
   function refreshMarkers() {
     markers.clear()
     const picked = new Map(visible.map(item => [siteKey(item.site), item.site]))
-    if (first && isSiteVisible(first)) picked.set(siteKey(first), first)
-    if (second && isSiteVisible(second)) picked.set(siteKey(second), second)
+    if (first?.position && isSiteVisible(first)) picked.set(siteKey(first), first)
+    if (second?.position && isSiteVisible(second)) picked.set(siteKey(second), second)
     for (const site of picked.values()) {
       const role = first && siteKey(first) === siteKey(site) ? 'fixed' : second && siteKey(second) === siteKey(site) ? 'moving' : hovered && siteKey(hovered) === siteKey(site) ? 'hover' : 'normal'
       const point = new THREE.Vector3(...site.position)
@@ -109,6 +142,7 @@ export function initClusterJoinTool({
   }
   function updateHover(event = lastPointer) {
     if (!active || !event || applying || loading) return
+    if (freeMovement) { movement.syncCamera(); return }
     if (!needsResync && !revisionCurrent(bound)) { void refreshSites({ preserveSelection: true }); return }
     lastPointer = { clientX: event.clientX, clientY: event.clientY }
     visible = nearbyJoinSites(eligibleSites(), { camera: liveCamera(), rect: canvas.getBoundingClientRect(), ...lastPointer, isVisible: isSiteVisible })
@@ -123,7 +157,7 @@ export function initClusterJoinTool({
     const native = store.getState().currentDesign?.cluster_transforms?.find(cluster => cluster.id === second?.cluster_id)
     const ids = result.donor_helix_ids ?? donor?.helix_ids ?? native?.helix_ids ?? []
     const axes = store.getState().currentHelixAxes ?? {}
-    for (const id of ids) {
+    for (const id of freeMovement ? [] : ids) {
       const axis = axes[id]
       if (!axis) continue
       const points = axis.samples?.length > 1 ? axis.samples : [axis.start, axis.end]
@@ -190,10 +224,13 @@ export function initClusterJoinTool({
       if (!revisionCurrent(bound)) throw new Error('The design changed while sites were loading. Refresh sites.')
       // Rebind the current intent, not the request-start snapshot: Reset or
       // Escape may have cancelled either pick while this read was in flight.
-      first = first ? sites.find(site => siteKey(site) === siteKey(first) && isSiteVisible(site)) ?? null : null
-      second = first && second ? sites.find(site => siteKey(site) === siteKey(second) && isSiteVisible(site)) ?? null : null
+      const rebind = value => !value ? null : freeMovement
+        ? clusters.some(c => c.cluster_id === value.cluster_id && c.eligible) ? value : null
+        : sites.find(site => siteKey(site) === siteKey(value) && isSiteVisible(site)) ?? null
+      first = rebind(first); second = rebind(second)
+      if (freeMovement && !second) movement.detach()
       const count = new Set(sites.map(site => site.cluster_id)).size
-      status = first ? 'Fixed point selected. Choose an attachment on a different cluster.' : count >= 2 ? `${sites.length} attachment sites in ${count} clusters. Hover near a cluster, then click a marker.` : 'Join needs two eligible clusters with separate scaffold paths. See cluster eligibility below.'
+      status = first ? 'Fixed point selected. Choose an attachment on a different cluster.' : count >= 2 ? `${sites.length} attachment sites in ${count} clusters. Hover near a cluster, then click a marker.` : 'Join needs two eligible clusters with available attachment sites. See cluster eligibility below.'
       loaded = true
       return true
     } catch (error) {
@@ -202,27 +239,30 @@ export function initClusterJoinTool({
     } finally {
       if (active && session === lifecycle && version === sitesEpoch) {
         loading = false; renderPanel(); refreshMarkers()
-        if (loaded && first && second) schedulePreview()
+        if (loaded && (first || freeMovement) && second) schedulePreview()
         if (loaded && pendingPick) { const intent = pendingPick; pendingPick = null; pickSite(intent.id, intent.cluster_id) }
         if (loaded && lastPointer) updateHover()
       }
     }
   }
   function requestBody() {
-    return { first: { cluster_id: first.cluster_id, port_id: first.id }, second: { cluster_id: second.cluster_id, port_id: second.id }, ...params,
+    if (freeMovement) return { mode: 'free', moving_cluster_id: second.cluster_id, fixed_cluster_id: first?.cluster_id ?? null, ...freePose, reach_nm: params.reach_nm, expected_design_id: bound.design.id, expected_revision: bound.revision }
+    return { first: { cluster_id: first.cluster_id, port_id: first.id }, second: { cluster_id: second.cluster_id, port_id: second.id }, gap_nm: params.gap_nm, roll_deg: params.roll_deg, tilt_deg: params.tilt_deg,
       expected_design_id: bound.design.id, expected_revision: bound.revision }
   }
   function validParameters() {
+    if (freeMovement) return Number.isFinite(params.reach_nm) && params.reach_nm >= 0.3 && params.reach_nm <= 10
     return Number.isFinite(params.gap_nm) && params.gap_nm >= 0.3 && params.gap_nm <= 10 && Number.isFinite(params.roll_deg) && Math.abs(params.roll_deg) <= 180 && Number.isFinite(params.tilt_deg) && Math.abs(params.tilt_deg) <= 60
   }
   function schedulePreview() {
     cancelPreviewRequest(); clearPreview(); refreshMarkers()
-    if (!active || !first || !second || applying) { renderPanel(); return }
+    if (!active || (!first && !freeMovement) || !second || applying) { renderPanel(); return }
     if (needsResync) { status = 'The previous join result is unknown. Refresh the design before continuing.'; renderPanel(); return }
-    if (!validParameters()) { status = 'Enter a gap from 0.3–10 nm, roll from −180–180°, and tilt from −60–60°.'; renderPanel(); return }
+    if (freeMovement) hintCount = movement.showHints(params.reach_nm, first?.cluster_id)
+    if (!validParameters()) { movement.clearHints(); status = freeMovement ? 'Enter a connection reach from 0.3–10 nm.' : 'Enter a gap from 0.3–10 nm, roll from −180–180°, and tilt from −60–60°.'; renderPanel(); return }
     if (!documentMatches(bound)) { status = 'The design changed. Refresh attachment sites before joining.'; renderPanel(); return }
     if (!revisionCurrent(bound)) { void refreshSites({ preserveSelection: true }); return }
-    previewLoading = true; status = 'Checking placement and scaffold routing…'; renderPanel()
+    previewLoading = true; status = 'Checking all nearby attachments and clearance…'; renderPanel()
     const version = previewEpoch
     timer = setTimeout(() => fetchPreview(version), previewDelay)
   }
@@ -239,7 +279,8 @@ export function initClusterJoinTool({
       previewBody = result.valid && result.preview_token ? request : null
       if (result.valid) {
         drawPreview(result)
-        status = 'Cyan shows the moved cluster. Amber and green arrows show the two scaffold bridges. Apply joins them in one undoable edit.'
+        if (freeMovement) movement.clearHints()
+        status = freeMovement ? `${result.connection_count ?? 1} compatible connections. Apply commits this pose and all colored bridges in one undoable edit.` : 'Cyan shows the moved cluster. Amber and green arrows show the two scaffold bridges. Apply joins them in one undoable edit.'
       } else status = (result.errors ?? []).map(describe).join(' · ') || 'These attachment points cannot be joined. Choose another point or adjust placement.'
       refreshMarkers()
     } catch (error) {
@@ -249,24 +290,67 @@ export function initClusterJoinTool({
     }
   }
   function pickSite(id, clusterId = null) {
-    if (!active || applying || loading || !documentMatches(bound)) return false
+    if (!active || applying || loading || freeMovement || !documentMatches(bound)) return false
     const site = typeof id === 'object' ? sites.find(item => siteKey(item) === siteKey(id)) : sites.find(item => item.id === id && (!clusterId || item.cluster_id === clusterId))
     if (!site || !isSiteVisible(site)) return false
     if (!first) {
+      if (site.cluster_id === second?.cluster_id) return false
       first = site; status = 'Fixed point selected. Choose an attachment on a different cluster.'
-      visible = []; hovered = null; refreshMarkers(); renderPanel(); return true
+      visible = []; hovered = null; refreshMarkers(); renderPanel(); if (second) schedulePreview(); return true
     }
     if (site.cluster_id === first.cluster_id) return false
     second = site; visible = []; hovered = null; schedulePreview(); return true
+  }
+  function selectField(which) {
+    if (!active || applying || !['first', 'second'].includes(which)) return
+    if (freeMovement) { selectionTarget = which; status = `Click the ${which === 'first' ? 'fixed' : 'moving'} cluster.`; renderPanel() }
+    else clearSelection(which)
+  }
+  function setMovementMode(mode) { if (active && freeMovement && !applying) { movement.setMode(mode); renderPanel() } }
+  function toggleFreeMovement() {
+    if (!active || applying || loading || needsResync) return false
+    cancelPreviewRequest(); clearPreview(); movement.detach(); hintCount = 0
+    freeMovement = !freeMovement; selectionTarget = 'second'; visible = []; hovered = null; pendingPick = null
+    first = freeMovement && first ? { cluster_id: first.cluster_id } : null
+    second = freeMovement && second ? { cluster_id: second.cluster_id } : null
+    if (second && !movement.attach(second.cluster_id)) second = null
+    status = freeMovement ? 'Choose the moving cluster. Clear Fixed to search all nearby clusters.' : 'Choose a fixed attachment point.'
+    renderPanel(); refreshMarkers(); return true
+  }
+  function pickCluster(id) {
+    if (!active || !freeMovement || applying || loading || needsResync || !documentMatches(bound)) return false
+    const selected = clusters.find(c => c.cluster_id === id && c.eligible)
+    if (!selected || !sites.some(s => s.cluster_id === id && isSiteVisible(s))) return false
+    if (selectionTarget === 'first') {
+      if (id === second?.cluster_id) return false
+      first = { cluster_id: id }; selectionTarget = 'second'; schedulePreview()
+    } else {
+      if (id === first?.cluster_id) return false
+      second = { cluster_id: id }
+      if (!movement.attach(id)) { second = null; status = 'Cluster geometry is unavailable.'; renderPanel(); return false }
+    }
+    renderPanel(); return true
   }
   function updateParameters(next) {
     if (!active || applying) return
     params = { ...params, ...next }; schedulePreview()
   }
+  function clearSelection(which) {
+    if (!active || applying || !['first', 'second'].includes(which)) return false
+    cancelPreviewRequest(); clearPreview(); pendingPick = null
+    if (which === 'first') first = null
+    else { second = null; if (freeMovement) movement.detach() }
+    hintCount = 0; movement.clearHints()
+    visible = []; hovered = null
+    status = which === 'first' ? 'Choose a fixed attachment point.' : 'Choose a moving attachment point.'
+    if (freeMovement && second) schedulePreview()
+    renderPanel(); refreshMarkers(); return true
+  }
   function reset() {
     if (!active || applying) return false
     cancelPreviewRequest(); clearPreview(); first = null; second = null; pendingPick = null; visible = []; hovered = null
-    status = 'Hover near a cluster and choose a fixed attachment point.'
+    movement.detach(); hintCount = 0; selectionTarget = 'second'
+    status = freeMovement ? 'Choose a moving cluster.' : 'Hover near a cluster and choose a fixed attachment point.'
     renderPanel(); refreshMarkers(); return true
   }
   async function apply() {
@@ -274,7 +358,7 @@ export function initClusterJoinTool({
     if (!documentMatches(bound)) { clearPreview(); status = 'The preview is stale. Refresh attachment sites.'; renderPanel(); return false }
     if (!revisionCurrent(bound)) { void refreshSites({ preserveSelection: true }); return false }
     applying = true; const pin = bound, request = { ...previewBody, preview_token: preview.preview_token }
-    status = 'Joining clusters and reconnecting the scaffold…'; renderPanel()
+    status = 'Applying all previewed joins…'; renderPanel()
     let committed = false, unknownOutcome = false
     try {
       let response
@@ -309,6 +393,13 @@ export function initClusterJoinTool({
   function onMove(event) { if (!event.buttons) updateHover(event) }
   function onDown(event) {
     if (!active || event.button !== 0 || applying || needsResync) return
+    if (freeMovement) {
+      movement.syncCamera()
+      if (movement.ownsPointer()) return
+      const id = movement.pickCluster(event)
+      if (id) { event.preventDefault(); event.stopImmediatePropagation(); consumedPointer = event.pointerId; canvas.setPointerCapture?.(event.pointerId); pickCluster(id) }
+      return
+    }
     const hit = nearbyJoinSites(eligibleSites(), { camera: liveCamera(), rect: canvas.getBoundingClientRect(), clientX: event.clientX, clientY: event.clientY, isVisible: isSiteVisible, radius: 18, limit: 1 })[0]?.site
     if (!hit) return
     event.preventDefault(); event.stopImmediatePropagation(); consumedPointer = event.pointerId
@@ -330,19 +421,20 @@ export function initClusterJoinTool({
   }
   function onLeave() { if (consumedPointer == null) { lastPointer = null; visible = []; hovered = null; canvas.style.cursor = ''; refreshMarkers() } }
   function onKey(event) {
+    if (active && freeMovement && event.key === 'Tab' && !/INPUT|TEXTAREA|SELECT/.test(event.target?.tagName)) { event.preventDefault(); event.stopImmediatePropagation(); setMovementMode(movement.getMode() === 'translate' ? 'rotate' : 'translate'); return }
     if (!active || event.key !== 'Escape') return
     event.preventDefault(); event.stopImmediatePropagation()
     if (applying) return
     pendingPick = null
-    if (second) { cancelPreviewRequest(); clearPreview(); second = null; status = 'Choose another moving attachment point.'; renderPanel(); refreshMarkers() }
+    if (second) { movement.detach(); hintCount = 0; cancelPreviewRequest(); clearPreview(); second = null; status = 'Choose another moving attachment point.'; renderPanel(); refreshMarkers() }
     else if (first) reset()
     else deactivate()
   }
-  function onControlsChange() { if (active && lastPointer) updateHover() }
+  function onControlsChange() { if (active) movement.syncCamera(); if (active && lastPointer) updateHover() }
   async function activate() {
     if (disposed || active || opening || applying) return active
     const initial = store.getState()
-    if (!initial.currentDesign || initial.assemblyActive) { showToast('Open a part with two scaffolded clusters to join.'); return false }
+    if (!initial.currentDesign || initial.assemblyActive) { showToast('Open a part with two clusters to join.'); return false }
     opening = true; const version = ++lifecycle, token = getDocumentToken()
     try {
       const allowed = await onActivate?.()
@@ -352,7 +444,7 @@ export function initClusterJoinTool({
       needsResync = !!resyncPin && documentMatches(resyncPin)
       if (!needsResync) resyncPin = null
       bound = { token: getDocumentToken(), design, signature: nativeSignature(design), revision: null }
-      active = true; root.visible = true; first = null; second = null; sites = []; clusters = []; params = { gap_nm: 0.8, roll_deg: 0, tilt_deg: 0 }
+      active = true; root.visible = true; first = null; second = null; sites = []; clusters = []; params = { gap_nm: 0.8, roll_deg: 0, tilt_deg: 0, reach_nm: 3 }; freeMovement = false; selectionTarget = 'second'; hintCount = 0
       store.setState({ joinActive: true })
       canvas.addEventListener('pointermove', onMove, true)
       canvas.addEventListener('pointerdown', onDown, true)
@@ -368,7 +460,7 @@ export function initClusterJoinTool({
   function deactivate(force = false) {
     if (applying && force !== true) return false
     lifecycle++; opening = false; siteAbort?.abort(); siteAbort = null; sitesEpoch++
-    cancelPreviewRequest(); clearPreview()
+    cancelPreviewRequest(); clearPreview(); movement.detach()
     const wasActive = active; active = false; loading = false; first = null; second = null; pendingPick = null; visible = []; hovered = null; lastPointer = null
     root.visible = false; markers.clear(); panel.hide(); canvas.style.cursor = ''
     canvas.removeEventListener('pointermove', onMove, true); canvas.removeEventListener('pointerdown', onDown, true)
@@ -382,6 +474,7 @@ export function initClusterJoinTool({
     return true
   }
   const unsubscribe = store.subscribe((next, previous) => {
+    if (next.currentDesign !== previous.currentDesign || next.currentGeometry !== previous.currentGeometry || next.assemblyActive !== previous.assemblyActive) refreshSavedJoins(next)
     if (!active) return
     if (next.assemblyActive || !next.currentDesign || getDocumentToken() !== bound?.token) { deactivate(true); return }
     if (next.joinActive === false || OTHER_TOOLS.some(key => next[key] && !previous[key])) { deactivate(true); return }
@@ -404,15 +497,18 @@ export function initClusterJoinTool({
       isVisible: isSiteVisible, radius: Infinity, limit: Infinity,
     }).map(item => ({ ...item.site, x: item.x, y: item.y, z: item.depth }))
   }
-  const getState = () => ({ active, opening, busy: applying, loading, previewLoading, needsResync, sites, clusters, first, second, preview, status, params: { ...params }, visibleSiteIds: visible.map(item => item.site.id), hoveredSiteId: hovered?.id ?? null, revision: bound?.revision })
+  const getState = () => ({ active, opening, busy: applying, loading, previewLoading, needsResync, freeMovement, freePose, hintCount, movementMode: movement.getMode(), sites, clusters, first, second, preview, status, params: { ...params }, visibleSiteIds: visible.map(item => item.site.id), hoveredSiteId: hovered?.id ?? null, revision: bound?.revision })
   return {
     activate, deactivate, reset, apply, refreshSites, updateParameters, getState,
     isActive: () => active, isBusy: () => applying,
-    testApi: { getState, getSiteScreenPositions, pickSite, updateParameters, refreshSites, apply, reset },
+    testApi: { projectWorld(point) {
+      const rect = canvas.getBoundingClientRect(), p = new THREE.Vector3(...point).project(liveCamera())
+      return { x: rect.left + (p.x + 1) * rect.width / 2, y: rect.top + (1 - p.y) * rect.height / 2 }
+    }, getState, getSiteScreenPositions, pickSite, updateParameters, refreshSites, apply, reset, clearSelection, toggleFreeMovement, pickCluster, setMovementMode, setFreePose: movement.setPose },
     dispose() {
       if (disposed) return
-      disposed = true; deactivate(true); unsubscribe?.(); panel.dispose()
-      markerGeometry.dispose(); sideGeometry.dispose(); Object.values(markerMaterials).forEach(material => material.dispose()); root.removeFromParent()
+      disposed = true; deactivate(true); unsubscribe?.(); panel.dispose(); movement.dispose()
+      markerGeometry.dispose(); sideGeometry.dispose(); Object.values(markerMaterials).forEach(material => material.dispose()); root.removeFromParent(); disposeLayer(savedJoins); savedJoins.removeFromParent()
     },
   }
 }

@@ -1,0 +1,30 @@
+#cluster-join-panel .join-selection-row input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+#cluster-join-panel .join-selection-row label { min-width: 46px; }
+#cluster-join-panel .join-selection-row button { flex: 0 0 auto; }
+#cluster-join-panel [aria-pressed="true"] {
+  border-color: var(--accent, #55cfff);
+  background: rgba(85, 207, 255, .14);
+}
+#cluster-join-panel [data-join-free] { width: 100%; margin: 6px 0; }
+#cluster-join-panel [data-join-movement] { margin-top: 8px; }
+#cluster-join-panel .join-selection-row input {
+  box-sizing: border-box;
+  min-height: var(--control-sm);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-bg-canvas) 70%, transparent);
+  color: var(--color-text-primary);
+  font: var(--text-sm)/var(--leading-normal) var(--font-ui);
+}
+#cluster-join-panel .join-selection-row label { flex: 0 0 46px; }
+#cluster-join-panel .join-selection-row input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
