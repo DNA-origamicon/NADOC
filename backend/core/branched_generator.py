@@ -20,12 +20,15 @@ from backend.core.two_np_generator import RodCandidate, gold_particles, scaffold
 QUALIFICATION = (
     "Experimental planar lattice branches, not angled 6HB arms. Ranked by a geometric "
     "bending proxy; junction mechanics are not optimized. Actual routing is budgeted. "
-    "Attachment fitting and CanDo validation run during generation."
+    "Routing and attachment fitting are checked during generation."
 )
 
 
 def branch_seed(lattice, summary):
     """Build sparse duplex tracks; gaps contain neither scaffold nor staples."""
+    if summary.get("branch_geometry") == "join":
+        from backend.core.joined_branches import joined_seed
+        return joined_seed(lattice, summary)
     seed = make_bundle_design(
         summary["cells"],
         summary["nominal_length_bp"],
@@ -65,6 +68,9 @@ def branch_seed(lattice, summary):
 
 
 def route_branches(seed, summary):
+    if summary.get("branch_geometry") == "join":
+        from backend.core.joined_branches import route_joined_branches
+        return route_joined_branches(seed, summary)
     from backend.core.section_router import route_sections
     from backend.core.validator import validate_design
 
@@ -176,7 +182,7 @@ def _layout(local, lattice, rows, trunk_cols, band_periods, trunk_fraction):
     if occupied > 0.88 * rectangle:
         raise ValueError("The attachment bands merge into a platform at this spacing.")
     # Approximate weak-axis rectangular-section bending. Used only to order a
-    # finite search; CanDo evaluates the actual crosslinked duplex core later.
+    # finite search; mechanical refinement remains a separate step.
     thickness = float(np.ptp(xy[:, 1]) + 2)
     spine_width = trunk_cols * pitch
     axial = float(np.ptp(local[:, 2]))
@@ -206,6 +212,9 @@ def _layout(local, lattice, rows, trunk_cols, band_periods, trunk_fraction):
 
 
 def plan_branches(source, settings):
+    if settings.branch_geometry == "join":
+        from backend.core.joined_branches import plan_joined_branches
+        return plan_joined_branches(source, settings)
     if settings.branch_geometry == "curved":
         from backend.core.curved_branches import plan_curved_branches
         return plan_curved_branches(source, settings)

@@ -95,7 +95,6 @@ def test_custom_sections_are_bounded_and_not_silently_replaced():
 def test_screened_i_uses_full_scaffold_and_closes_three_connections_per_particle():
     from backend.api.branch_optimization import plan_for_generation
     from backend.api.generated_history import build_recorded
-    from backend.core.generator_validation import check_generated_structure
 
     original = source()
     settings = GeneratorSettings(
@@ -115,11 +114,9 @@ def test_screened_i_uses_full_scaffold_and_closes_three_connections_per_particle
     assert validate_design(generated).passed
     for p, q in zip(original.nanoparticles, generated.nanoparticles):
         np.testing.assert_array_equal(p.pose.to_array(), q.pose.to_array())
-    assert report["search"]["structural_candidates"] > 1
-    assert report["selected"]["sizing_validation"]["connected_components"] == 1
-    screen = check_generated_structure(generated, placement["generated_helix_ids"])
-    assert screen["status"] == "passed"
-    assert screen["max_rmsf_nm"] < 3.66  # Original 6HB I fixture.
+    assert report["search"]["routing_candidates"] >= 1
+    assert report["selected"]["sizing_validation"]["scaffold_count"] == 1
+    assert "max_rmsf_nm" not in report["selected"]["sizing_validation"]
 
 
 @pytest.mark.parametrize("better", [7249, 8064])
@@ -214,7 +211,7 @@ def test_screened_sizing_rejects_unreachable_attachments_before_selection(monkey
 
     def screen(lattice, serialized):
         s = json.loads(serialized)
-        s["sizing_validation"] = {"max_rmsf_nm": s["bending_proxy"]}
+        s["sizing_validation"] = {"status": "passed", "scaffold_count": 1}
         return s, Design().model_dump_json()
 
     monkeypatch.setattr(api, "_screen", screen)
@@ -236,3 +233,48 @@ def test_screened_sizing_rejects_unreachable_attachments_before_selection(monkey
         report["search"]["attachment_rejected"][0]["section"] == "stiff but unreachable"
     )
     assert original == before
+
+
+def test_auto_join_keeps_first_feasible_route_per_budget_without_fem_ranking(monkeypatch):
+    import json
+    from backend.api import branch_optimization as api
+    from backend.core.models import Design
+    from backend.core.two_np_generator import RodCandidate
+
+    def summary(budget, proxy):
+        return dict(
+            section=f"{budget}-{proxy}",
+            branch_geometry="join",
+            join_curved=True,
+            scaffold_size=budget,
+            unused_scaffold_nt=0,
+            bending_proxy=proxy,
+        )
+
+    first = summary(7249, 3)
+    alternatives = [summary(7249, 4), summary(8064, 1), summary(8064, 2)]
+    monkeypatch.setattr(
+        api, "plan_generated",
+        lambda *args, **kwargs: (
+            RodCandidate(Design(), {**first, "sizing_candidates": alternatives}),
+            {"search": {}},
+        ),
+    )
+    checked = []
+
+    def screen(lattice, serialized):
+        s = json.loads(serialized)
+        checked.append(s["section"])
+        s["sizing_validation"] = {"status": "passed", "scaffold_count": 1}
+        return s, Design().model_dump_json()
+
+    monkeypatch.setattr(api, "_screen", screen)
+    monkeypatch.setattr(api, "_attachment_fit", lambda *args: {"passed": True})
+    selected, report = api.plan_for_generation(
+        source(), GeneratorSettings(shape="branched", branch_geometry="join")
+    )
+    assert selected.summary["scaffold_size"] == 8064
+    assert checked == ["7249-3", "8064-1"]
+    assert report["search"]["routing_candidates"] == 2
+    assert [s["scaffold_size"] for s in report["alternatives"]] == [7249, 8064]
+    assert all(s["feasible"] for s in report["alternatives"])

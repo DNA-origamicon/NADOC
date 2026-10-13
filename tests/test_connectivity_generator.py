@@ -14,6 +14,17 @@ from backend.api.generated_history import build_recorded
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def no_automatic_cando(monkeypatch):
+    def unexpected(*args, **kwargs):
+        pytest.fail("Connectivity generation must not run automatic CanDo screening")
+
+    monkeypatch.setattr(
+        "backend.core.generator_validation.check_generated_structure", unexpected
+    )
+    monkeypatch.setattr("backend.physics.fem_solver.predict_shape", unexpected)
+
+
 @pytest.fixture
 def inputs():
     source = Design.model_validate_json(
@@ -30,7 +41,8 @@ def test_reviewed_psi_routes_staples_and_preserves_source(inputs):
     source, settings = inputs
     before = source.model_dump_json()
     candidate, report = plan_for_generation(source, settings)
-    assert report["selected"]["sizing_validation"]["connected_components"] == 1
+    assert "sizing_validation" not in report["selected"]
+    assert report["search"]["routing_candidates"] == 1
     assert (
         0
         < report["selected"]["scaffold_used_nt"]
@@ -101,4 +113,4 @@ def test_simple_arrangements_route(name, inputs):
     )
     assert len(candidate.design.scaffolds()) == 1
     assert validate_design(candidate.design).passed
-    assert report["selected"]["sizing_validation"]["connected_components"] == 1
+    assert "sizing_validation" not in report["selected"]

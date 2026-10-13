@@ -168,3 +168,37 @@ To check a local saved design without changing it, set
 `NADOC_JOIN_VERIFY_DESIGN=/absolute/path/T-junction.nadoc` when running
 `tests/test_join_scaffold_router.py` or the Playwright `cluster_join_document.spec.js`
 tests. Both workflows open temporary copies; no user design is committed.
+
+## Generate Design
+
+In **Generate design**, choose **Branched (experimental)**, then **Join branches
+(particle-directed)** under **Branch geometry**. The generator searches planar
+layouts with a solid stem and continuous bundles, curved where needed so their
+terminal helical axes point toward their nanoparticles. For four particles, two bundles
+each serve one particle pair and attach to the middle stem with one Join apiece.
+This retains two opposed T-like junctions, as in the opposed-split Connectivity
+previews, with only two Joins. For three particles, one nanoparticle terminates
+the stem and one continuous bundle serves the other pair through a single Join.
+Straight crossbars remain eligible when their axes already point toward both
+particles; curvature is introduced when the particle arrangement requires it.
+Branch directions follow the particle arrangement automatically, so this mode
+has no rotation control. Each bundle is routed independently and connected with
+native pose-preserving Join. The search favors larger continuous bundles and
+short ssDNA bridges; several bridge pairs can restrain a junction more than a
+single pair.
+
+**Branch scaffold** selects 7249 or 8064 bases; **Automatic** compares both.
+Cross-sections and short bundle end extensions use the entire chosen scaffold.
+The routed total includes curvature insertions/deletions and every Join bridge
+base. The calculation reports the number of Joins, total bridge bases and longest
+bridge, alongside scaffold utilization.
+Each Join is recorded as its own feature history step. Particle centers remain
+fixed; routing, scaffold accounting and attachment fitting must pass before
+construction is committed. Generation uses these first-pass checks without
+running automatic CanDo analysis or ranking candidates by simulated flexibility.
+Optional simulation jobs remain available to assess the resulting design.
+
+This option supports honeycomb and square lattices. It is a bounded planar
+layout search, not an arbitrary spatial branch optimizer. Join's flexible ssDNA
+connections do not guarantee rigid branch angles. Existing curved and straight
+lattice branch modes remain available.

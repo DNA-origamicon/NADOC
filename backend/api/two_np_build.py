@@ -380,6 +380,8 @@ def materialize(
     particles, centers, distance = gold_particles(source)
     curved = candidate.summary.get("shape") == "curved-rod"
     branched = candidate.summary.get("shape") == "branched"
+    joined = branched and candidate.summary.get("branch_geometry") == "join"
+    join_curved = joined and candidate.summary.get("join_curved", False)
     forked = branched and candidate.summary.get("branch_geometry") == "curved"
     lateral = curved and settings.pathing != "colocalized"
     platform = len(particles) > 2 and not curved
@@ -388,7 +390,7 @@ def materialize(
         history,
         "rod-pose",
         {"roll_deg": settings.roll_deg},
-        () if curved else ("roll_deg",),
+        () if curved or joined else ("roll_deg",),
     )
     roll = GeneratorSettings(roll_deg=pose_params["roll_deg"]).roll_deg
     frame = (
@@ -443,12 +445,20 @@ def materialize(
             candidate.summary["cells"], bp["length_bp"],
             name=f"Generated {len(particles)}-NP {shape}", lattice_type=source.lattice_type)
     rod = rod.copy_with(nanoparticles=particles)
+    if joined:
+        # Native move entries must own the initial poses as well as later global
+        # placement, so seeking a Join cannot reset the fixed stem to identity.
+        initial_join_poses = rod.cluster_transforms
+        rod = rod.copy_with(cluster_transforms=[
+            c.model_copy(update={"rotation": [0, 0, 0, 1], "translation": [0, 0, 0]})
+            for c in initial_join_poses
+        ])
     _record(
         history,
         before,
         rod,
         "generate-design" if branched else "sweep" if swept else "extrude-segment" if standard else "bundle-create",
-        "Create curved branched sections" if forked else "Create branched lattice sections" if branched else "Sweep nanoparticle path" if swept else "Extrude segment" if standard else f"Create {shape} bundle",
+        "Create independent Join branches" if joined else "Create curved branched sections" if forked else "Create branched lattice sections" if branched else "Sweep nanoparticle path" if swept else "Extrude segment" if standard else f"Create {shape} bundle",
         request.model_dump(mode="json") if swept else {
             **bp,
             "cells": candidate.summary["cells"],
@@ -457,6 +467,11 @@ def materialize(
         "branched-sections" if branched else "sweep" if swept else "bundle",
         () if swept or branched else ("length_bp",),
     )
+    if joined:
+        before = rod
+        rod = rod.copy_with(cluster_transforms=initial_join_poses)
+        _record(history, before, rod, "cluster-pose", "Position independent branch bundles",
+                {}, "branch-initial-poses")
     before = rod
     if candidate.summary.get("section_profile"):
         from backend.core.generator_reinforcement import resize_profile
@@ -465,7 +480,12 @@ def materialize(
                 {"entries": entries}, "section-profile", ())
         before = rod
     progress("Route scaffold", "Seamed scaffold routing", .15)
-    if branched:
+    if joined:
+        from backend.core.joined_branches import route_joined_branches
+        rod, routing = route_joined_branches(rod, candidate.summary,
+            record=lambda *args: _record(history, *args))
+        before = rod  # Routing and each Join already have separate history entries.
+    elif branched:
         from backend.core.branched_generator import route_branches
         rod, routing = route_branches(rod, candidate.summary)
     else:
@@ -561,7 +581,7 @@ def materialize(
     budget = {"M13mp18": 7249, "p8064": 8064}.get(sequence_params["scaffold_name"])
     if budget is None:
         raise ValueError("Choose M13mp18 or p8064 for generation.")
-    if forked and settings.branch_sizing == "optimized":
+    if (forked and settings.branch_sizing == "optimized") or join_curved:
         from backend.core.generated_sweep import encode_sweep
         from backend.core.branch_optimizer import trim_to_budget
         before = rod
@@ -571,7 +591,8 @@ def materialize(
         _record(history, before, rod, "generate-design", "Fit scaffold ends to selected budget",
                 {"trim_nt": candidate.summary.get("budget_trim_nt", 0), "scaffold_size": budget}, "branch-budget", ())
     from backend.core.curved_rod_generator import physical_scaffold_nt
-    if budget is None or (physical_scaffold_nt(rod) if forked else scaffold_nt(rod)) > budget:
+    pre_staple_budget = candidate.summary.get("budget_pre_staple_nt", budget) if join_curved else budget
+    if (physical_scaffold_nt(rod) if forked or join_curved else scaffold_nt(rod)) > pre_staple_budget:
         raise ValueError(
             "The routed bundle exceeds the selected 7249/8064 scaffold budget."
         )
@@ -580,7 +601,7 @@ def materialize(
     with scratch_session(source.lattice_type):
         state.set_design(rod)
         rod = full_autostaple(sequence_params["scaffold_name"]).model_copy(deep=True)
-    rod = rod.copy_with(feature_log=[], cluster_transforms=rod.cluster_transforms if swept else [])
+    rod = rod.copy_with(feature_log=[], cluster_transforms=rod.cluster_transforms if swept or joined else [])
     _record(
         history,
         before,
@@ -591,7 +612,7 @@ def materialize(
         "autostaple",
         ("scaffold_name",),
     )
-    if curved or forked:
+    if curved or forked or join_curved:
         from backend.core.curved_rod_generator import (
             encode_curvature,
             physical_scaffold_nt,
@@ -600,7 +621,7 @@ def materialize(
 
         before = rod
         progress("Insert loops/skips", "Apply the selected manual insertion/deletion positions", .50)
-        if swept or forked:
+        if swept or forked or join_curved:
             from backend.core.generated_sweep import encode_sweep
             rod = encode_sweep(rod)
         else:
@@ -623,7 +644,7 @@ def materialize(
             state.set_design(rod)
             rod = full_sequence(sequence_params["scaffold_name"]).model_copy(deep=True)
             sequenced_entries = rod.feature_log[-2:]
-        rod = rod.copy_with(feature_log=[], cluster_transforms=rod.cluster_transforms if swept else [])
+        rod = rod.copy_with(feature_log=[], cluster_transforms=rod.cluster_transforms if swept or joined else [])
         if history and history.standard:
             # full_sequence is two existing commands: scaffold sequence, then
             # staple complements. Retain both original command boundaries.
@@ -633,14 +654,26 @@ def materialize(
                     entry.label, entry.params, f"curve-sequences:{j}")
         else:
             _record(history, before, rod, "assign-staple-sequences", "Resequence curved rod", {}, "curve-sequences")
-    if forked and candidate.summary.get("budget_trim_nt") and physical_scaffold_nt(rod) != budget:
+    if (join_curved or (forked and candidate.summary.get("budget_trim_nt"))) and physical_scaffold_nt(rod) != budget:
         raise ValueError("Staple routing changed the full-budget scaffold count; this candidate needs replanning.")
     if forked:
         from backend.core.curved_branches import validate_fork_junctions
         validate_fork_junctions(rod)
-    rod_ids = {h.id for h in rod.helices}
+    rod_ids = {h.id for h in rod.helices if not joined or h.grid_pos is not None}
     starts = np.array([h.axis_start.to_array() for h in rod.helices])
     ends = np.array([h.axis_end.to_array() for h in rod.helices])
+    core_top_y = float(np.max(starts[:, 1]))
+    if joined:
+        from backend.core.deformation import deformed_helix_axes
+
+        # Join sections can center their cross-sections through their poses.
+        # Clearance must use those placed axes, not their canonical lattice Y.
+        core_top_y = max(
+            axis[endpoint][1]
+            for axis in deformed_helix_axes(rod)
+            if axis["helix_id"] in rod_ids
+            for endpoint in ("start", "end")
+        )
     center_local = (
         np.minimum(starts.min(0), ends.min(0)) + np.maximum(starts.max(0), ends.max(0))
     ) / 2
@@ -670,11 +703,41 @@ def materialize(
             else targets[particle_index, 2]
         )
         attachment_ids = rod_ids
+        target_x = (
+            center_local[0] + (targets[particle_index, 0] if platform else 0.0)
+            if platform or (settings.connections_per_particle > 1 and not lateral)
+            else None
+        )
         if forked:
             station = candidate.summary["fork_stations"][particle_index]
             cells = set(map(tuple, candidate.summary["fork_faces"][station["face"]]))
             attachment_ids = {h.id for h in rod.helices if h.id in rod_ids and h.grid_pos in cells}
             target_z = station["bp"] * BDNA_RISE_PER_BP
+            target_x = station.get("target_x")
+        if joined:
+            station = candidate.summary["join_attachments"][particle_index]
+            attachment_cluster = next(
+                c for c in rod.cluster_transforms if c.id == station["cluster_id"]
+            )
+            attachment_ids = rod_ids.intersection(attachment_cluster.helix_ids)
+            if join_curved:
+                from backend.core.deformation import _bundle_centroid_and_tangent
+
+                arm = [h for h in rod.helices if h.id in attachment_ids]
+                centroid, tangent = _bundle_centroid_and_tangent(arm)
+                local_bp = station["bp"] - min(h.bp_start for h in arm)
+                target_z = (centroid + tangent * local_bp * BDNA_RISE_PER_BP)[2]
+                target_x = station["target_x"]
+            else:
+                # Straight joined arms keep canonical Z axes; select the root
+                # before carrying the new overhang into the arm's rigid pose.
+                rotation = Rotation.from_quat(attachment_cluster.rotation).as_matrix()
+                pivot = np.asarray(attachment_cluster.pivot)
+                local_particle = rotation.T @ (
+                    center_local + targets[particle_index]
+                    - pivot - np.asarray(attachment_cluster.translation)
+                ) + pivot
+                target_z, target_x = local_particle[2], local_particle[0]
         length = _params(
             history, f"overhang:{index}", {"length_bp": len(sequence)}, ("length_bp",)
         )["length_bp"]
@@ -702,9 +765,8 @@ def materialize(
             # Extra roots must stay near the particle's transverse station as
             # well as its axial station. Otherwise the third root can jump to a
             # low outer helix and make the common fixed-center offset impossible.
-            target_x=station.get("target_x") if forked else (center_local[0] + (targets[particle_index, 0] if platform else 0.0))
-            if platform or (settings.connections_per_particle > 1 and not lateral) else None,
-            independent_carriers=curved or forked or settings.connections_per_particle > 1,
+            target_x=target_x,
+            independent_carriers=curved or forked or joined or settings.connections_per_particle > 1,
             excluded_sites=root_sites,
             particle_number=particle_index + 1,
             attachment_side=attachment_side,
@@ -715,7 +777,44 @@ def materialize(
         embedded = [d for d in carrier_strand.domains if not d.overhang_id]
         adjacent = embedded[0] if owner.attach_end == "3p" else embedded[-1]
         root_sites.append((adjacent.helix_id, adjacent.start_bp if owner.attach_end == "3p" else adjacent.end_bp))
-        if curved or forked:
+        if joined:
+            before = rod
+            carrier_rotation = Rotation.from_quat(attachment_cluster.rotation).as_matrix()
+            carrier_translation = np.asarray(attachment_cluster.translation)
+            carrier_pivot = np.asarray(attachment_cluster.pivot)
+            if join_curved:
+                from backend.core.deformation import _frame_at_bp, _bundle_centroid_and_tangent
+
+                arm = [h for h in rod.helices if h.id in attachment_ids]
+                centroid, tangent = _bundle_centroid_and_tangent(arm)
+                local_bp = root_sites[-1][1] - min(h.bp_start for h in arm)
+                spine, rotation, _ = _frame_at_bp(rod, local_bp, arm)
+                anchor = centroid + tangent * local_bp * BDNA_RISE_PER_BP
+                # Compose the sweep frame inside its rigid section pose. The
+                # carrier remains a separate parent for duplex attachment fits.
+                carrier_translation = carrier_rotation @ (
+                    spine - rotation @ anchor - carrier_pivot
+                ) + carrier_pivot + carrier_translation
+                carrier_rotation = carrier_rotation @ rotation
+                carrier_pivot = np.zeros(3)
+            carrier = ClusterRigidTransform(
+                name=f"Join attachment {index + 1}",
+                helix_ids=[added_spec.helix_id],
+                rotation=Rotation.from_matrix(carrier_rotation).as_quat().tolist(),
+                translation=carrier_translation.tolist(),
+                pivot=carrier_pivot.tolist(),
+            )
+            rod = rod.copy_with(cluster_transforms=[*rod.cluster_transforms, carrier])
+            _record(
+                history,
+                before,
+                rod,
+                "cluster-pose",
+                f"Orient nanoparticle {particle_index + 1} overhang with its joined branch",
+                {},
+                f"path-root:{index}",
+            )
+        elif curved or forked:
             progress(f"Orient attachment {index + 1}/{len(handles)}", "Transport the overhang carrier along the curved rod", .58 + .16 * index / len(handles))
             from backend.core.deformation import (
                 _frame_at_bp,
@@ -826,7 +925,7 @@ def materialize(
         f"Align {shape} with nanoparticle centers",
         pose_params,
         "rod-pose",
-        () if curved else ("roll_deg",),
+        () if curved or joined else ("roll_deg",),
     )
     progress("Align and connect", "Apply cluster poses and pair complementary handles", .76)
     unpaired = rod
@@ -869,7 +968,7 @@ def materialize(
     geometry = attachment_geometry(rod)
     upper = float("inf")
     lower = (
-        float(np.max(starts[:, 1]) - center_local[1])
+        float(core_top_y - center_local[1])
         + max(p.diameter_nm / 2 - targets[i, 1] for i, p in enumerate(particles))
         + 1.2
     )
@@ -1066,6 +1165,8 @@ def materialize(
     # Pose patches invalidate cached staple sequences; rederive the final
     # sequenced topology, including all complementary attachment domains.
     rod = assign_staple_sequences(rod)
+    if join_curved and physical_scaffold_nt(rod) != budget:
+        raise ValueError("The generated Join design must use the entire selected scaffold.")
     _record(
         history,
         before,

@@ -398,5 +398,5 @@ def plan_curved_branches(source, settings):
         alternatives=[public],
         settings=settings.model_dump(),
         reason="Shortest routed supported curved fork; 6HB trunk, straight 12HB junction regions and separate swept 6HB arms.",
-        qualification="Experimental planar 6HB forks. Curvature uses loop/skips; crossover constraints protect each split. Attachment fitting and CanDo validation run during generation.",
+        qualification="Experimental planar 6HB forks. Curvature uses loop/skips; crossover constraints protect each split. Routing and attachment fitting are checked during generation.",
     )

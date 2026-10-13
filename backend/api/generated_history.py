@@ -118,7 +118,9 @@ class GeneratedHistory:
                 after.model_dump(exclude={"feature_log", "loadouts"})
             ):
                 if identifier not in self.source_ids:
-                    prefix = "__np__" if identifier.startswith("__np__") else ""
+                    # Join routers recognize connector identities after history
+                    # composition, just as particle-owned helices keep __np__.
+                    prefix = next((p for p in ("__np__", "join_") if identifier.startswith(p)), "")
                     self.renames.setdefault(
                         identifier, f"{prefix}gen_{self.group_id}_{identifier}"
                     )

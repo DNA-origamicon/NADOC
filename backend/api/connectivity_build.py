@@ -25,7 +25,6 @@ def _prepare(serialized_source, serialized_settings):
     from backend.core.generated_sweep import encode_sweep
     from backend.core.curved_branches import validate_fork_junctions
     from backend.core.curved_rod_generator import physical_scaffold_nt
-    from backend.core.generator_validation import check_generated_structure
     from backend.core.validator import validate_design
 
     source = Design.model_validate_json(serialized_source)
@@ -106,15 +105,11 @@ def _prepare(serialized_source, serialized_settings):
                         raise ValueError(
                             "Generated DNA intersects a gold nanoparticle."
                         )
-                screen = check_generated_structure(
-                    complete, [h.id for h in complete.helices]
-                )
                 summary.update(
                     scaffold_size=budget,
                     scaffold_name=scaffold,
                     scaffold_used_nt=used,
                     unused_scaffold_nt=budget - used,
-                    sizing_validation=screen,
                     junction_bp=junction_bp,
                     attachment_mode="blunt-end-assumed",
                     connections_per_particle=settings.connections_per_particle,
@@ -152,7 +147,7 @@ def plan_connectivity(source, settings):
         selected=public,
         alternatives=[public],
         settings=settings.model_dump(mode="json"),
-        search={"structural_candidates": 1, "geometry_candidates": evaluated},
+        search={"routing_candidates": 1, "geometry_candidates": evaluated},
         center_distance_nm=max(np.linalg.norm(a - b) for a in centers for b in centers),
         reason="Reviewed bundle-tree topology compiled to one scaffold with staple-supported shared junctions.",
         qualification=f"Junctions shifted {summary['junction_retreat_nm']:g} nm toward the root to accommodate routing and blunt-end duplex space. Uniform sections are preserved; unused scaffold is not padded. Blunt-end attachments are assumed, not chemically fitted or bound.",

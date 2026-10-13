@@ -1,4 +1,4 @@
-"""Screen every generated core with CanDo; prepare optional detailed validation jobs.
+"""Provide explicit CanDo screening and optional detailed validation jobs.
 
 These jobs validate a snapshot, never silently rewrite the generated geometry.
 A launched job is not a converged result or experimental calibration.
@@ -8,7 +8,7 @@ import json
 
 
 def check_generated_structure(design, helix_ids):
-    """Screen the new duplex core before commit; existing disconnected parts are out of scope.
+    """Screen a selected duplex core; existing disconnected parts are out of scope.
 
     CanDo pins every disconnected component, so a successful solve alone cannot
     establish connectivity. Check the mesh explicitly before solving. This is an
