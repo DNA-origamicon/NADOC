@@ -39,6 +39,9 @@ int main(){
     t.seekSource(1005);assert(t.sourceFrame()==1001);
     t.step(-10000);assert(t.index==0);t.step(10000);assert(t.index==199);
     t.playing=true;t.update(.2F);assert(!t.playing); // Stop at final loaded frame.
+    ui.action(t,312);assert(t.loop);
+    t.playing=true;t.update(.2F);assert(t.playing && t.index==0);
+    t.seek(1);ui.action(t,312);t.playing=true;t.update(.2F);assert(!t.playing && t.index==199);
     ui.edit(t,302);ui.digit(0);ui.apply(t);assert(ui.popup==1 && t.phase==2);
     ui.digits="1";ui.apply(t);assert(ui.popup==0 && t.interval==1 && t.phase==0);
     t.last=499;ui.load(t);assert(t.phase==1 && ui.popup==0);
@@ -56,6 +59,11 @@ int main(){
     t.first=1;t.last=100000;t.interval=1;ui.load(t);ui.action(t,362);assert(t.phase==1 && !ui.popup);
     ui.action(t,304);t.update(20);assert(t.phase==0 && !t.playing);
     for(bool detailed:{false,true}){
+        TrajectoryState one;one.first=one.last=1;
+        for(const auto& c:ui.controls(one,detailed))if(c.id==312)assert(!c.enabled);
+        t.buffering=true;
+        for(const auto& c:ui.controls(t,detailed))if(c.id==312)assert(c.enabled);
+        t.buffering=false;
         for(const auto& c:ui.controls(t,detailed))if(c.id==305 || c.id==311)assert(!c.enabled);
         t.start();t.update(3);for(const auto& c:ui.controls(t,detailed))if(c.id==305 || c.id==311)assert(c.enabled);
         const auto bar=ui.scrubber(detailed);

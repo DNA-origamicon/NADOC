@@ -14,7 +14,7 @@ struct TrajectoryState {
     static constexpr int confirmFrames=500;
     int first=1,last=4000,interval=20,index=0,phase=0; // 0 unprepared, 1 loading, 2 ready
     int loadedFirst=1,loadedLast=4000,loadedInterval=20;
-    float progress=0,elapsed=0;bool playing=false,smooth=true,buffering=false;
+    float progress=0,elapsed=0;bool playing=false,smooth=true,loop=false,buffering=false;
     bool hasFrame() const {return phase==2 || buffering;}
     bool valid() const {return first>=1 && last<=available && first<=last && interval>=1 && interval<=available;}
     int count() const {return valid()?(last-first)/interval+1:0;}
@@ -28,7 +28,7 @@ struct TrajectoryState {
     void seekSource(int frame){if(phase==2){playing=false;index=std::clamp(int(std::round(float(frame-loadedFirst)/loadedInterval)),0,loadedCount()-1);}}
     void update(float dt){
         if(phase==1){progress=std::min(1.F,progress+dt/3.F);if(progress>=1){phase=2;playing=false;}}
-        if(phase==2 && playing){elapsed+=dt;if(elapsed>=.125F){elapsed=0;if(index<loadedCount()-1)++index;else playing=false;}}
+        if(phase==2 && playing){elapsed+=dt;if(elapsed>=.125F){elapsed=0;if(index<loadedCount()-1)++index;else if(loop && loadedCount()>1)index=0;else playing=false;}}
     }
 };
 class TrajectoryGallery {
@@ -67,11 +67,12 @@ class TrajectoryGallery {
         if(id==306){edit(t,id);return;}
         if(id==303)load(t);
         if(id==304)t.invalidate();
-        if(id==305 && t.phase==2){if(t.index==t.loadedCount()-1)t.index=0;t.playing=!t.playing;}
+        if(id==305 && t.phase==2){if(!t.playing && t.index==t.loadedCount()-1)t.index=0;t.playing=!t.playing;}
         if(id==307)t.step(-1);
         if(id==308)t.step(1);
         if(id==309){t.first=1;t.last=t.available;t.interval=1;t.invalidate();}
         if(id==310)t.smooth=!t.smooth;
+        if(id==312)t.loop=!t.loop;
     }
     static glm::vec4 scrubber(bool detailed){return detailed?glm::vec4(-.025F,-.310F,.405F,.06F):glm::vec4(-.025F,-.314F,.600F,.055F);}
     static float fraction(bool detailed,glm::vec3 p){auto b=scrubber(detailed);return (p.x-b.x)/b.z;}
@@ -91,9 +92,10 @@ class TrajectoryGallery {
             {301,.164F,-.083F,.100F,.068F,"END "+std::to_string(t.last),false,editable},
             {302,.378F,-.083F,.100F,.068F,"EVERY "+std::to_string(t.interval),false,editable},
             {309,.395F,-.113F,.205F,.034F,"ALL FRAMES",false,editable}};
-        c.push_back({t.phase==1?304:303,detailed?.398F:-.05F,-.184F,detailed?.202F:.65F,.055F,
+        c.push_back({t.phase==1?304:303,detailed?.398F:-.05F,-.184F,detailed?.202F:.313F,.055F,
             t.phase==1?"CANCEL LOAD":ready?"RELOAD":"LOAD",false,t.valid()});
-        if(detailed)c.push_back({310,-.05F,-.184F,.432F,.055F,t.smooth?"SMOOTH: ON":"SMOOTH: OFF",t.smooth});
+        if(detailed)c.push_back({310,-.05F,-.184F,.207F,.055F,t.smooth?"SMOOTH ON":"SMOOTH OFF",t.smooth});
+        c.push_back({312,detailed?.174F:.280F,-.184F,detailed?.208F:.320F,.055F,t.loop?"LOOP ON":"LOOP OFF",t.loop,t.available>1 && t.count()>1});
         c.push_back({306,-.05F,-.245F,.65F,.044F,t.hasFrame()?"FRAME "+std::to_string(t.sourceFrame())+" / "+std::to_string(t.finalFrame()):"FRAME -- / LOAD TO ENABLE",false,ready});
         const auto b=scrubber(detailed);c.push_back({311,b.x,b.y,b.z,b.w,"SCRUBBER",false,ready});
         if(detailed){

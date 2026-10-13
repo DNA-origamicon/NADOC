@@ -32,6 +32,7 @@ class Trajectory(BaseModel):
     phase: str = Field(max_length=24)
     playing: bool
     smooth: bool = False
+    loop: bool = False
     progress: float = Field(ge=-1, le=1)
     message: str = Field(max_length=4096)
 
@@ -71,13 +72,13 @@ def encode(snapshot):
         import unicodedata
         text = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode()
         return json.dumps(' '.join(text.split())[:250])
-    lines = [f'NADOC_SIMULATIONS_2 {snapshot.version} {snapshot.acknowledged} {len(snapshot.engines)} {len(snapshot.jobs)} {len(snapshot.controls)} {int(bool(snapshot.selected))} {quoted(snapshot.mode)}']
+    lines = [f'NADOC_SIMULATIONS_3 {snapshot.version} {snapshot.acknowledged} {len(snapshot.engines)} {len(snapshot.jobs)} {len(snapshot.controls)} {int(bool(snapshot.selected))} {quoted(snapshot.mode)}']
     for row in [*snapshot.engines, *snapshot.jobs, *snapshot.controls]:
         lines.append(f'{quoted(row.id)} {quoted(row.label)} {quoted(row.detail)} {int(row.enabled)} {int(row.active)} {quoted(row.kind)} {quoted(row.group)} {row.value} {row.minimum} {row.maximum} {row.step}')
     t = snapshot.trajectory
     lines.append(str(int(t is not None)))
     if t:
-        lines.append(f'{t.available} {t.first} {t.last} {t.interval} {t.count} {t.index} {quoted(t.phase)} {int(t.playing)} {int(t.smooth)} {t.progress} {quoted(t.message)}')
+        lines.append(f'{t.available} {t.first} {t.last} {t.interval} {t.count} {t.index} {quoted(t.phase)} {int(t.playing)} {int(t.smooth)} {t.progress} {quoted(t.message)} {int(t.loop)}')
     lines.append(str(len(snapshot.progress)))
     for progress in snapshot.progress:
         lines.append(f'{quoted(progress.label)} {progress.fraction} {int(progress.busy)}')

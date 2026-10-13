@@ -6,7 +6,7 @@ from backend.api.vr_simulations import Snapshot, encode, parse_event
 def test_snapshot_keeps_job_specific_availability_and_quotes_labels():
     snapshot = Snapshot(version=1, acknowledged=0, engine='cando', selected='job', engines=[], jobs=[], controls=[dict(id='v:1', label='RMSF "map"', enabled=False, active=False)])
     text = encode(snapshot)
-    assert text.startswith('NADOC_SIMULATIONS_2 1 0 0 0 1 1 ""\n')
+    assert text.startswith('NADOC_SIMULATIONS_3 1 0 0 0 1 1 ""\n')
     assert 'RMSF \\"map\\"' in text
     assert text.endswith('0\n0\n0\n')
     with pytest.raises(ValidationError):
@@ -42,3 +42,15 @@ def test_snapshot_is_local_document_bound_and_event_survives_envelope(tmp_path, 
     event = dict(sequence=1, version=1, id='e:cando')
     event_path.write_text(json.dumps(dict(sequence=4, level_sequence=1, selection_level='base', simulation=event)))
     assert vr._event_payload(dict(event_path=str(event_path)))['simulation'] == event
+
+
+def test_trajectory_loop_round_trip_and_default():
+    body = dict(version=1, acknowledged=0, engine='namd', selected='job', engines=[], jobs=[], controls=[],
+                trajectory=dict(available=100, first=7, last=21, interval=5, count=3, index=2,
+                                phase='ready', playing=True, progress=1, message='Ready'))
+    for loop in (False, True):
+        snapshot = Snapshot(**{**body, 'trajectory': {**body['trajectory'], 'loop': loop}})
+        assert encode(snapshot).splitlines()[2].endswith(f'"Ready" {int(loop)}')
+    assert Snapshot(**body).trajectory.loop is False
+    event = dict(sequence=1, version=1, id='t:loop')
+    assert parse_event(event) == event

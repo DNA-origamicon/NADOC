@@ -835,3 +835,22 @@ legibility and sustained delivery remain a human review item. Reusable entry:
 Simulation jobs · representations + trajectory, with
 `NADOC_VR_SIM_REPRESENTATIONS=1`. See
 `docs/audits/vr_simulation_representations_20261012.md`.
+
+Trajectory-loop follow-up to MV-43 (2026-10-12): review the new Loop On/Off
+button beside Smooth using the physical controller. Confirm the active highlight,
+readability at the compact menu scale, and Pause after the selected range wraps.
+Automated source-frame, stereo and desktop checks do not establish worn-headset
+comfort. Reusable coverage: Debug → VR Tours & Tests → Left sidebar → Simulation
+jobs · representations + trajectory loops; `NADOC_VR_SIM_LOOPS=1` focuses the tour.
+
+Loop-campaign popup limit (2026-10-12): after fixing modal hit ordering (ISSUE-74),
+both steady profiles passed exact-frame entry. Variable-fast missed numeric key 1;
+variable-deliberate missed the source-frame popup opener. Keep their three-attempt
+failures in `vr-trajectory-loop-20261012/final/`. The separate focused loop campaign
+plays the range to its end and does not clear this popup pointer-tolerance debt.
+
+Final direct-loop validation: steady-fast, steady-deliberate and variable-fast
+passed. Variable-deliberate remains unverified after a 155 ms setup input stall,
+before simulation controls were reached (`vr-trajectory-loop-20261012/focused-final`).
+No timing thresholds or motion presets were relaxed. Re-run this profile under a
+quiet host condition before claiming complete four-profile coverage.

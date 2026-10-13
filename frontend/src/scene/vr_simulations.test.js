@@ -100,3 +100,21 @@ it('removes completed status text from the loading indicators', () => {
  document.getElementById('md-solvent-status').textContent = 'Preparing ions / box · 0/8 frames…'
  expect(simulationProgress(document, 'namd')).toEqual([{label:'Preparing ions / box · 0/8 frames…',fraction:-1,busy:true}])
 })
+
+it('publishes and acknowledges the native loop toggle exactly once', async () => {
+ mount();let state
+ const bridge=createVRSimulations({jobs:{getSelected:()=>({id:'complete',engine:'cando'})},
+  engineSelector:{getSelected:()=> 'cando'},api:{getSnupiTrajectoryMeta:async()=>({n_frames:8})},
+  controller:()=>({}),request:async(_,init)=>{state=JSON.parse(init.body);return {ok:true}}})
+ await bridge.publish()
+ await bridge.activate({sequence:1,version:state.version,id:state.controls.find(c=>c.label==='Trajectory').id})
+ await vi.waitFor(()=>expect(bridge.snapshot().trajectory?.available).toBe(8))
+ await bridge.publish()
+ const event={sequence:2,version:state.version,id:'t:loop'}
+ await bridge.activate(event)
+ expect(state.trajectory.loop).toBe(true)
+ expect(state.acknowledged).toBe(2)
+ await bridge.activate(event)
+ expect(bridge.snapshot().trajectory.loop).toBe(true)
+ bridge.reset()
+})

@@ -1458,3 +1458,13 @@ record: `.development-artifacts/build-animation/sweep-validation.json`.
 - Regression evidence: native panel tests, representation/trajectory/fallback
   tests, and the reusable dual-menu simulation tour with submitted stereo review.
   See `.development-artifacts/vr-simulation-representations-20261012/`.
+
+## ISSUE-74 — Disabled transport controls intercept trajectory number-popup hits (2026-10-12, FIXED)
+
+- Repro: open the source-frame popup in the focused VR trajectory menu and point
+  at digit 2. Disabled frame/scrubber rows below the raised popup can win the hit.
+- Root cause: SidebarMenu returns the first overlapping control; SimulationPanel
+  listed the disabled background before the modal controls.
+- [x] Order popup controls first, matching their visual foreground ownership.
+- [x] Regression sends actual rays to all ten digit centers through SidebarMenu.
+- Failed live evidence: `.development-artifacts/vr-trajectory-loop-20261012/initial/`.

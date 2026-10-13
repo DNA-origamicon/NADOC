@@ -93,3 +93,26 @@ it('publishes a range edit atomically, without an acknowledged old range', async
  expect(observed[0].message).toBe('Load cancelled')
  t.dispose()
 })
+
+it('reloads an evicted first page at wrap and never interpolates end to start', async () => {
+ vi.useFakeTimers()
+ const drawn=[], fetched=[], interpolated=[]
+ const t=createVRSimulationTrajectory({api:{getMdTrajectoryMeta:async()=>({total_raw:100})},
+  controller:()=>({loadFullTrajectoryPage:async()=>({ok:true}),
+   showFullTrajectoryFrame:(page,i)=>{drawn.push(page.frame_start+i*page.frame_step);return true},
+   ensureInterpolationFrames:async(from,to)=>{interpolated.push([from,to])}}),
+  ensureFull:async()=>{},request:async url=>{
+   const u=new URL(url,'http://local'),first=+u.searchParams.get('frame_start'),last=+u.searchParams.get('frame_end'),step=+u.searchParams.get('frame_step')
+   fetched.push(first)
+   return {ok:true,headers:{get:()=>null},arrayBuffer:async()=>binary(Math.floor((last-first)/step)+1)}
+  }})
+ try {
+  await t.select('namd','job');t.configure({first:5,last:37,interval:2});await t.load()
+  t.loop();t.smooth();t.toggle()
+  await vi.advanceTimersByTimeAsync(1420)
+  t.pause()
+  expect(drawn.slice(0,18)).toEqual([...Array.from({length:17},(_,i)=>4+2*i),4])
+  expect(fetched.filter(i=>i===4)).toHaveLength(2)
+  expect(interpolated.every(([from,to])=>to===from+1)).toBe(true)
+ } finally { t.dispose();vi.useRealTimers() }
+})

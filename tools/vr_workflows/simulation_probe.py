@@ -146,6 +146,16 @@ def run(socket, output, identifier):
             from tools.vr_workflows.simulation_palette_probe import run as palette_probe
             palette_probe(live, out, preset, trials)
             return
+        if identifier == 'trajectory-near-end':
+            # Use the production exact-frame popup, keeping range and interval.
+            state = live.state['simulation_menu']
+            frame = state['first'] + max(0, (state['last']-state['first'])//state['interval']-1)*state['interval']
+            click(live, 0, 'sim:local:t:306', preset, trials)
+            for digit in str(frame):
+                click(live, 0, f'sim:local:t:{340+int(digit)}', preset, trials)
+            click(live, 0, 'sim:local:t:352', preset, trials)
+            (out/'seek.json').write_text(json.dumps({'source': frame}))
+            return
         target = 'sim:' + identifier
         if identifier.startswith(('j:', 'v:')):
             if identifier.startswith('j:') and any(c['id']=='sim:local:back' for c in live.state['controls']):

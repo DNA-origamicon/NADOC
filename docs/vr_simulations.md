@@ -34,7 +34,11 @@ and End cannot cross; Every stays between one and the source-frame count. Range
 edits survive desktop heartbeat updates while dragging and awaiting acknowledgement.
 The frame readout still opens exact source-frame entry. Requests for 500 or more
 selected frames retain the native confirmation. The raised scrubber, side Play/Pause and lower Previous/Next
-buttons operate on the selected source frames. Editing the range invalidates the
+buttons operate on the selected source frames. **Loop On/Off**, beside Smooth,
+repeats that selected range at its chosen interval; Off stops on the last sampled
+frame. Loop starts Off for each job, survives range edits/reloads, and can be
+changed while playing or buffering. Single-frame ranges disable it. The end-to-start
+jump uses exact frames, without smoothing across the boundary. Editing the range invalidates the
 prepared frames. **Overlays** exposes the trajectory's visualization suboptions.
 Buffering retains the displayed frame number and scrubber position.
 Loading and buffering keep a progress indicator visible; unknown totals animate
@@ -64,7 +68,7 @@ acknowledgement before submitting another result action.
 
 ## Demo and validation
 
-**Debug → VR Tours & Tests → Left sidebar → Simulation results · 2hb_1xT**
+**Debug → VR Tours & Tests → Left sidebar → Simulation jobs · representations + trajectory loops**
 launches a private copy of the existing completed results. No simulation is launched.
 The original design, metadata and result caches remain untouched. Immutable
 DCD/XTC/TRR inputs are linked into a temporary workspace; writable files are copied.
@@ -82,7 +86,9 @@ profiles. Navigation, activation, desktop state, native result delivery and subm
 stereo captures are retained beneath `.development-artifacts/vr-simulations` (or the
 Debug launcher's output directory). The tour records unavailable modes per job and
 activates available static modes, tests slow/fast drags on all three range wheels,
-and exercises the explicit trajectory load/playback path. It repositions the menu and
+and exercises explicit loading, playback, stopping at the selected end, and looping
+back to the selected start. `NADOC_VR_SIM_LOOPS=1` skips the range-wheel campaign
+for a focused playback check. It repositions the menu and
 uses normal model grips to fit/enlarge results for observation. Those presentation
 adjustments are outside measured navigation reaches.
 

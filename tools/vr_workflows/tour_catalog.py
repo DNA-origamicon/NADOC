@@ -53,8 +53,8 @@ def catalog():
         'Switch the open design between all eleven desktop representations, including Hull, Surface, mrDNA and oxDNA. Reuses cached exports for unchanged designs. Validation tests all four controller profiles.', module='representation_tour')
     add('representation-colors', 'right', 'Representation colors',
         'Quick pass through all eleven styles and both coloring pages. Checks enabled/gray controls and rendered pixels; not the full switching matrix.', ['--cycle'], module='representation_tour')
-    add('simulations', 'left', 'Simulation jobs · representations + trajectory',
-        'Curved engine tabs, focused jobs, gradient-only controller touchpad colour maps and shallow speed-sensitive frame-range thumbwheels with explicit-load raised trajectory playback in Full. Checks slow/fast drags, bounds, desktop acknowledgement and wheel pixels. Set NADOC_VR_SIM_REPRESENTATIONS=1 to test simultaneous menus, supported styles and native-position restoration. Private result copies; optional 24HB benchmark. Validation runs all four motion profiles.', module='simulation_tour')
+    add('simulations', 'left', 'Simulation jobs · representations + trajectory loops',
+        'Curved engine tabs, focused jobs, gradient-only controller touchpad colour maps and shallow speed-sensitive frame-range thumbwheels with explicit-load raised trajectory playback in Full. Checks slow/fast drags, bounds, desktop acknowledgement, wheel pixels and Loop Off/On at the selected end. Set NADOC_VR_SIM_LOOPS=1 to focus on playback loop controls. Set NADOC_VR_SIM_REPRESENTATIONS=1 to test simultaneous menus, supported styles and native-position restoration. Private result copies; optional 24HB benchmark. Validation runs all four motion profiles.', module='simulation_tour')
     add('backend-lifetime', 'interaction', 'Backend shutdown closes VR',
         'Launch an isolated backend and empty VR viewer; terminate only that backend and require viewer exit and sidecar cleanup.', module='backend_lifecycle_check')
     add('simulations-24hb', 'left', '24HB simulations · Full performance benchmark',

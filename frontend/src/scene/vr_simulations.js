@@ -64,6 +64,7 @@ export function createVRSimulations({ jobs, engineSelector, doc = document, requ
       else if (action === 'configure') trajectory.configure(event)
       else if (action === 'play') trajectory.toggle()
       else if (action === 'smooth') trajectory.smooth()
+      else if (action === 'loop') trajectory.loop()
       else if (action === 'seek') { trajectory.pause(); void trajectory.seek(event.value) }
       await publish(); return
     }

@@ -32,10 +32,16 @@ test(`${process.env.NADOC_VR_AUDIT_DESIGN ? path.basename(process.env.NADOC_VR_A
   // The discoverable demo/validation defaults still cover every available mode.
   const modeLimit = Number(process.env.NADOC_VR_SIM_MODE_LIMIT || Infinity)
   let snapshot
+  const playbackFrames = []
   let phaseStart, previousPhase
   page.on('request', request => {
     if (request.url().endsWith('/api/vr/simulations')) {
       snapshot = request.postDataJSON()
+      if (snapshot.trajectory) {
+        const frame = {index:snapshot.trajectory.index, source:snapshot.trajectory.source, phase:snapshot.trajectory.phase, playing:snapshot.trajectory.playing, loop:snapshot.trajectory.loop}
+        playbackFrames.push(frame)
+        fs.appendFileSync(info.outputPath('playback-frames.jsonl'), JSON.stringify(frame)+'\n')
+      }
       const phase = snapshot.trajectory?.phase
       if (phase !== previousPhase) {
         if (phaseStart && ['loading','buffering','metadata'].includes(previousPhase)) fs.appendFileSync(info.outputPath('intervals.jsonl'), JSON.stringify({name:`phase-${previousPhase}`,start_ms:phaseStart,end_ms:Date.now()})+'\n')
@@ -136,7 +142,7 @@ test(`${process.env.NADOC_VR_AUDIT_DESIGN ? path.basename(process.env.NADOC_VR_A
         await probe(choice.id)
         await expect.poll(() => snapshot?.trajectory?.available ?? 0, { timeout: 60000 }).toBeGreaterThan(0)
         expect(snapshot.trajectory.phase).toBe('idle')
-        if (process.env.NADOC_VR_SIM_REPRESENTATIONS !== '1') await probe('range-wheels')
+        if (process.env.NADOC_VR_SIM_REPRESENTATIONS !== '1' && process.env.NADOC_VR_SIM_LOOPS !== '1') await probe('range-wheels')
         const initialCount = snapshot.trajectory.count
         const loadStart = Date.now()
         await probe('local:t:303')
@@ -181,6 +187,34 @@ test(`${process.env.NADOC_VR_AUDIT_DESIGN ? path.basename(process.env.NADOC_VR_A
         fs.appendFileSync(info.outputPath('intervals.jsonl'),JSON.stringify({name:'playback-unobserved',start_ms:quietStart,end_ms:Date.now()})+'\n')
         if (snapshot.trajectory.playing) await probe('local:t:305')
         fs.appendFileSync(info.outputPath('intervals.jsonl'),JSON.stringify({name:'trajectory-playback',start_ms:playStart,end_ms:Date.now()})+'\n')
+        if (snapshot.trajectory.count > 1) {
+          // The focused loop campaign plays its bounded default selection to
+          // the end; the general tour uses exact entry for potentially huge ranges.
+          const nearEnd = async () => {
+            if (process.env.NADOC_VR_SIM_LOOPS === '1') return
+            await probe('trajectory-near-end')
+            await expect.poll(() => snapshot.trajectory.index, {timeout:120000}).toBe(snapshot.trajectory.count-2)
+          }
+          if (snapshot.trajectory.loop) await probe('local:t:312')
+          await nearEnd()
+          if (snapshot.trajectory.index < snapshot.trajectory.count-1) await probe('local:t:305')
+          await expect.poll(() => snapshot.trajectory.index, {timeout:120000}).toBe(snapshot.trajectory.count-1)
+          await expect.poll(() => snapshot.trajectory.playing, {timeout:60000}).toBe(false)
+          await probe('local:t:312')
+          await expect.poll(() => snapshot.trajectory.loop).toBe(true)
+          await nearEnd()
+          // Snapshot publication coalesces while a page loads; exact frame zero
+          // is covered by the player regression. Here require a real wrap
+          // from the final selected frame into the same sampled source range.
+          const start = playbackFrames.length
+          await probe('local:t:305')
+          await expect.poll(() => playbackFrames.slice(start).some((frame, i, frames) =>
+            i > 0 && frames[i-1].playing && frames[i-1].loop && frames[i-1].index === snapshot.trajectory.count-1 && frame.index < frames[i-1].index &&
+            frame.source === snapshot.trajectory.first + frame.index*snapshot.trajectory.interval && frame.playing && frame.loop), {timeout:120000}).toBe(true)
+          await probe('local:t:305')
+          await expect.poll(() => snapshot.trajectory.playing).toBe(false)
+          fs.writeFileSync(info.outputPath('loop-playback.json'),JSON.stringify(playbackFrames.slice(start),null,2))
+        }
         if (process.env.NADOC_VR_SIM_REPRESENTATIONS !== '1') await probe('capture')
         if (process.env.NADOC_VR_SIM_REPRESENTATIONS === '1') {
           const off = snapshot.controls.find(c => c.kind === 'mode' && c.group === 'off')

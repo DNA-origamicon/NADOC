@@ -14,7 +14,7 @@ export function createVRSimulationTrajectory({ api, controller, ensureFull, prep
   let seekSequence = 0, generation = 0, abort = null, timer = null, context = '', engine = '', job = '', scope = 'job', ctrl = null, overlays = null
   let pages = new Map(), pending = null, renderedPage = null, metadataPending = false
   let state = empty(), lastStep = 0
-  function empty() { return { available: 0, first: 1, last: 0, interval: 1, count: 0, index: 0, phase: 'idle', playing: false, smooth: false, progress: -1, message: 'Select Load to prepare frames', source: 1 } }
+  function empty() { return { available: 0, first: 1, last: 0, interval: 1, count: 0, index: 0, phase: 'idle', playing: false, smooth: false, loop: false, progress: -1, message: 'Select Load to prepare frames', source: 1 } }
   function pause() { state.playing = false; clearTimeout(timer); timer = null; ctrl?.setPlaying?.(false); ctrl?.pauseTrajectory?.() }
   function cancel(notify = true) { ++generation; ++seekSequence; abort?.abort(); abort = null; pending = null; metadataPending = false; pause(); overlays?.setEnabled(false); overlays?.clear?.(); pages.clear(); renderedPage = null; state.phase = 'idle'; state.progress = -1; state.message = 'Load cancelled'; ctrl?.cancelPendingLoad?.(); if (notify) changed() }
   async function select(nextEngine, nextJob, nextScope = 'job') {
@@ -145,9 +145,9 @@ export function createVRSimulationTrajectory({ api, controller, ensureFull, prep
   }
   async function step() {
     if (!state.playing) return
-    if (state.index >= state.count - 1) { pause(); changed(); return }
+    if (state.count < 2 || (state.index >= state.count - 1 && !state.loop)) { pause(); changed(); return }
     lastStep = clock()
-    const next = state.index + 1, current = generation
+    const next = (state.index + 1) % state.count, current = generation
     if (state.smooth && engine !== 'snupi' && next % 8 !== 0 && renderedPage) {
       const from = state.index - renderedPage.start, to = next - renderedPage.start
       await ctrl.ensureInterpolationFrames?.(from, to)
@@ -159,10 +159,10 @@ export function createVRSimulationTrajectory({ api, controller, ensureFull, prep
       }
     }
     if (current === generation && state.playing) await seek(next)
-    if (state.playing) timer = setTimeout(step, Math.max(0, 1000 / 12 - (clock() - lastStep)))
+    if (current === generation && state.playing) timer = setTimeout(step, Math.max(0, 1000 / 12 - (clock() - lastStep)))
   }
   function toggle() { if (!state.playing && state.phase === 'ready' && state.index === state.count - 1 && state.count > 1) { const current = generation; void seek(0).then(ok => { if (ok && current === generation) toggle() }); return } if (state.playing) pause(); else if (state.phase === 'ready' && state.count > 1) { state.playing = true; ctrl?.setPlaying?.(true); timer = setTimeout(step, 0) } changed() }
-  return { select, configure, load, cancel, pause, toggle, seek, refreshCompanions() { pause(); return seek(state.index) }, smooth() { state.smooth = !state.smooth; changed() }, snapshot: () => ({ ...state }),
+  return { select, configure, load, cancel, pause, toggle, seek, refreshCompanions() { pause(); return seek(state.index) }, smooth() { state.smooth = !state.smooth; changed() }, loop() { state.loop = !state.loop; changed() }, snapshot: () => ({ ...state }),
     reset() { cancel(); context = ''; state = empty() }, dispose() { cancel() },
     get active() { return !!renderedPage }, get busy() { return !!pending || metadataPending } }
 }

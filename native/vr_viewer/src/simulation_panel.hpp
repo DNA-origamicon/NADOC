@@ -69,7 +69,13 @@ class SimulationPanel {
   if(snapshot.hasTrajectory&&!overlayOptions){
    auto ui=trajectoryUi;if(modal())ui.popup=0;
    for(const auto& c:ui.controls(trajectory,true))add("local:t:"+std::to_string(c.id),c.label,c.x,c.y,c.w,c.h,available&&(c.enabled||(c.id==305&&trajectory.playing))&&trajectory.available>0,c.selected);
-   if(trajectoryUi.popup)for(const auto& c:trajectoryUi.controls(trajectory,true))add("local:t:"+std::to_string(c.id),c.label,c.x,c.y,c.w,c.h,c.enabled,c.selected);
+   if(trajectoryUi.popup){
+    const auto background=out.size();
+    for(const auto& c:trajectoryUi.controls(trajectory,true))add("local:t:"+std::to_string(c.id),c.label,c.x,c.y,c.w,c.h,c.enabled,c.selected);
+    // Sidebar hit testing uses the first overlapping control. The raised popup
+    // must own its pixels, including where disabled transport rows sit below it.
+    std::rotate(out.begin(),out.begin()+background,out.end());
+   }
   }else{
    const auto opts=optionsList();const size_t n=snapshot.hasScale?3:7;
    for(size_t i=viewOffset;i<std::min(viewOffset+n,opts.size());++i){const auto& r=opts[i];std::string text=r.label;if(r.kind=="number")text+=" "+std::to_string(r.value);
@@ -109,6 +115,7 @@ class SimulationPanel {
    if(key==305)return send("t:play");
    if(key==307||key==308)return send("t:seek",std::clamp(trajectory.index+(key==307?-1:1),0,trajectory.loadedCount()-1));
    if(key==310)return send("t:smooth"); // native Full currently advances exact sampled frames
+   if(key==312)return send("t:loop");
    const int field=trajectoryUi.field;trajectoryUi.action(trajectory,key);
    if(key==352&&!trajectoryUi.popup)return field==306?send("t:seek",trajectory.index):send("t:configure");
    if(key==309||key==361)return send("t:configure");

@@ -443,3 +443,8 @@ missing switcher helper export; the export and regression were added. Another
 capture attempt was invalidated by a development reload while source was edited;
 subsequent live validation freezes the source. Evidence and limits are retained in
 `docs/audits/vr_simulation_representations_20261012.md`. `main.js` delta −12.
+
+ISSUE-74 (2026-10-12): simulation trajectory popup controls now precede disabled
+background rows in hit testing. All ten numeric keys have real-ray regression
+coverage. The initial live loop check exposed this while seeking the selected
+range end; its failed evidence is retained under `vr-trajectory-loop-20261012/initial`.
