@@ -35,6 +35,7 @@ Format per entry: short title → one-paragraph what-went-wrong → "How to avoi
 - **B2** — Re-centering native `.nadoc` on load — `/design/load` silently moved everyone's saved positions. [detail](LESSONS_archive.md#b2)
 
 ## C. Stale state / API misuse
+- **C13** — UI polling orphans a living headless simulation because the polling process has no local thread handle. Ownership must span processes and inter-stage work; stale stop/status writes must be execution-generation scoped. [detail](LESSONS_archive.md#c13)
 - **C1** — uvicorn `--reload` keeps stale server state — Python test passes but the API returns wrong output; restart first. [detail](LESSONS_archive.md#c1)
 - **C2** — Wrong mutation path — `set_design_silent` doesn't push undo; the op becomes wrongly (non-)undoable. [detail](LESSONS_archive.md#c2)
 - **C3** — Wrong undo response shape — cluster-only vs full-geometry seek responses; don't invent a third shape. [detail](LESSONS_archive.md#c3)

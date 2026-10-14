@@ -1,0 +1,84 @@
+{
+  "at": "2026-10-12T00:38:34+00:00",
+  "event": "94a499f7-4aa6-4f32-a392-faae5331cb73 complete",
+  "acknowledgement": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/water-core-curves-v1-service/completion_wake_ack.json",
+    "sha256": "76a9239398f4641d63d851f62cdf7ecbe54bd5e2146fdfa938d0670448984f45"
+  },
+  "completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/water-core-curves-v1/completion_audit.json",
+    "sha256": "2e234316ebc5b27d2f72eb49ff107110854755652b85e3371e1b0a878df1c40b"
+  },
+  "water_summary": {
+    "service_minutes": 13.696664651234945,
+    "records": 44,
+    "new_scf": 39,
+    "reused_records": 5,
+    "curves": 6,
+    "all_bracketed": true,
+    "all_attractive": true,
+    "ordered_base_comparison": [
+      {
+        "atom": "O2",
+        "maximum_raw_difference_kcal_mol": 5.220001778960537e-05,
+        "rms_raw_difference_kcal_mol": 2.899939481226887e-05
+      },
+      {
+        "atom": "O4",
+        "maximum_raw_difference_kcal_mol": 0.00022963179565493874,
+        "rms_raw_difference_kcal_mol": 0.00011376268603173896
+      },
+      {
+        "atom": "H3",
+        "maximum_raw_difference_kcal_mol": 3.404909156978775e-05,
+        "rms_raw_difference_kcal_mol": 2.15586513589728e-05
+      }
+    ],
+    "more_water_qm_admitted": false
+  },
+  "charge_policy": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/charge-core-fit-v1/policy.json",
+    "sha256": "46bef65c7ca3426d248da514358022393b8dc10dc939e66e9bbecca34a82bf3b"
+  },
+  "charge_dataset": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/charge-core-fit-v1/dataset.json",
+    "sha256": "0505f948f4e62e426c58c64cd684cb07b30569d5a996e9e0f534285efbc7e0e7"
+  },
+  "active_handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/charge-core-fit-v1/handoff.json",
+    "sha256": "52235615a76417bf0f26383806013e75a33b5c44b38133f184dd9c8091e0605f"
+  },
+  "preflight": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/charge-core-fit-v1/preflight.json",
+    "sha256": "4793a183bd97e08361ea6c6c42507f6a6e541a30be8d035457b4cc522ec97c10"
+  },
+  "independent_review": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/charge-core-fit-v1/independent_prelaunch_review.json",
+    "sha256": "86db0182ddda258385b8aa0c79e649b37236030418748be19f1551f7dde5834f"
+  },
+  "tests": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/charge-core-fit-v1/test_receipt.json",
+    "sha256": "41ced3e0a5a4843fafd0ac6fe1982cd4e21fce7dc52c7eaa21c4444447f86a3a"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/charge-core-fit-v1/launch_verification.json",
+    "sha256": "a14ca4799c6d47d22017c56131f7bc7d94cf9d6b3d9e9fa0fd2aa70b3ec65f1e"
+  },
+  "limits": {
+    "fit_round": 1,
+    "maximum_rounds": 2,
+    "hard_seconds": 900,
+    "optimizer_seconds": 600,
+    "maximum_iterations": 300,
+    "threads": 1,
+    "service_memory_gib": 4,
+    "new_qm": 0
+  },
+  "completion_audit_queued": true,
+  "wake_token": "7b3f2472-7066-4b7c-9498-5149e31c7393",
+  "fit_quality_audit_pending": true,
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0,
+  "existing_data_moved_or_deleted": false
+}

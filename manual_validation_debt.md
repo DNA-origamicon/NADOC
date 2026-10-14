@@ -724,7 +724,7 @@ clear head/grip motion comfort. Review original framing, Stick and Ball & Stick,
 head turns and grip translation/rotation without changing detail or motion
 settings. [Evidence](docs/audits/vr_motion_regression_20260929.md).
 
-- **MV-VR-GALLERY — PENDING — Component gallery in-headset comparison (2026-10-01).** Open Debug → VR Component Gallery → Component evaluations → VR demo. User selected 0–1000 / 35% for Extrude and 0–100 / 35% for Bend; those presets are applied. Compare the six Button styles, six Cards and lists styles, and six Scrollable sets styles (added 2026-10-08; also check rail dragging, row actions and persistent selection) for through-lens readability, press feedback, target comfort and aesthetic preference. Desktop render/input checks do not establish headset comfort. Reproduction: `docs/vr_component_gallery.md`.
+- **MV-VR-GALLERY — PENDING — Component gallery in-headset comparison (2026-10-01).** Open Debug → VR Component Gallery → Component evaluations → VR demo. User selected 0–1000 / 35% for Extrude and 0–100 / 35% for Bend; those presets are applied. Compare the six Button styles, six Cards and lists styles, and six Scrollable sets styles (added 2026-10-08; also check rail dragging, row actions and persistent selection) for through-lens readability, press feedback, target comfort and aesthetic preference. Desktop render/input checks do not establish headset comfort. Reproduction: `docs/vr_component_gallery.md`. Simulation menu round 5 (2026-10-12) is desktop-only by request. User accepted compact split, narrowed layout, curved tabs and horizontal colour mapper. Compare flat scrubber/inline transport A against raised ridged rail/side Play-Pause B. Review Start/End/Every, explicit Load gate, preparation/cancel, numeric entry and 500+ frame confirmation. Playback style preference remains pending; no headset comfort claim follows from this desktop review. Long-label tab variant B was approved on 2026-10-13 and applied to production VR sidebar tabs. The desktop A/B gallery remains available as a reference. Matched synthetic controller-profile measurements are documented in `docs/vr_sidebar_menus.md`; through-lens readability and human comfort remain pending.
 
 ## MV-VR-MOTION-QUALITY — through-lens transition review (2026-10-03)
 
@@ -812,6 +812,43 @@ establish through-lens legibility or physical controller comfort. Evidence:
 
 - **MV-42 — PENDING — Production VR list components and history rail (2026-10-08).** In-headset check Sweep's grouped point markers/XYZ targets, the Dimensions table with long labels and visibility/delete, and job-card text/selection at the normal tablet scale. Scrub Feature Log across more than six entries, release at F0 and a routing sub-step, verify scene readiness, and use edit/revert/delete including cancellation on the in-headset desktop surface. Check assembly/part target changes, tracking loss and both controllers. Automated native layout/actions, production pixels and isolated browser handlers are separate evidence; through-lens comfort and physical controller profiles remain open. Reusable checks: Debug → VR Tours & Tests → Controls & layout → Feature history and production lists.
 
+## MV-VR-JOIN — PENDING (2026-10-11)
+
+Retention update (October 13): completed Join bulk validation data was deleted at
+the user's request. Compact result/timing/failure summaries remain; raw evidence
+paths below are historical. Future physical review should capture temporarily
+and clean up after summarizing, rather than accumulating recordings.
+
+Review Tools → Join through the headset: automatic Cluster selection, trigger
+selection and pointer translation, grip rotation, regrabbing the cyan preview,
+1 nm / 15° thumbwheel detents, Position/Rotation fieldsets, pointer beams and
+frosted panel legibility. Check provisional dashed connections while moving,
+checked bridges before Apply, Cancel restoring the entire original pose, and one
+Join history entry with routing and Undo/Redo. Review physical acquisition,
+comfort and sustained submission cadence separately from software and offscreen
+pixel checks. Reusable entries: Debug → VR Tours & Tests → Tools · Authoring →
+Join clusters · move, rotate and connect and Join clusters · routing regression.
+See `docs/vr_join.md`.
+
+Software controller playback and submitted stereo captures are retained under
+`.development-artifacts/vr-join-20261011/`. The variable-deliberate profile missed
+a small +1 arrow during redundant fixture preparation; wheel dragging/snapping
+is checked separately. Include small-arrow acquisition in human review. Apply
+refresh windows showed compositor repeats/drops; smooth preview timings do not
+establish uninterrupted 90 Hz delivery throughout the whole operation.
+
+October 13 follow-up: also review the 0.3–10 nm Reach controls. ISSUE-78's
+Cancel/reselection/Apply failure is fixed. All four unchanged physical-runtime
+profiles pass, producing one routed scaffold with unchanged staples and exact
+Undo. CPU maximum is 4.85 ms across 20 Join intervals, with zero compositor drops;
+Apply still shows 1–2 repeats per profile. Final compositor recordings save 806
+stereo frames, with every eye marker exactly joined, no unknown/reused/gapped
+images, and the Apply scene refresh inside the clip. This does not establish
+through-lens comfort or a strict uninterrupted-90-Hz guarantee. The post-restart
+focus issue was the open dashboard and was resolved remotely through its normal
+hide command; physical headset wake was unnecessary.
+See `.development-artifacts/vr-join-20261013/verification-summary.json`.
+
 - **MV-43 — PENDING — Live Full simulation menu (2026-10-12).** Wear the headset and review curved engine tabs, focused job/back navigation, compact options, horizontal min/max handles and all six gradient-only palette choices now docked around the left touchpad. Confirm the physical left-touchpad triple pulse, shallow Start/End/Every wheels (single-frame control, speed transitions to 10/100 and release stopping), source-frame popup and 500-frame warning, raised scrubber hover/drag, Load cancellation, Play/Pause and ion/cell alignment. The four-profile campaign passed steady-deliberate and variable-fast; steady-fast encountered an input stall, and variable-deliberate missed the compact Overlays tab. Review that tab’s pointer tolerance and the remaining loading/page-transition stalls. Submitted stereo and software-generated controller trials do not establish through-lens comfort or physical haptics. Benchmark timing and fixture coverage: `docs/audits/vr_simulations_20261012.md`. Atomistic is explicitly deferred by the user. The follow-up P1 RunPod campaign passed both steady profiles; variable-fast selected one map then missed the small palette opener on reopen, while variable-deliberate missed the initial opener. All three reached-wheel captures pass exact gradient checks in both eyes and desktop delivery. Preserve this pointer-tolerance debt; see `docs/audits/vr_palette_pbc_20261012.md`.
 
 Range-wheel follow-up to MV-43 (2026-10-12): both steady profiles passed the
@@ -854,3 +891,31 @@ passed. Variable-deliberate remains unverified after a 155 ms setup input stall,
 before simulation controls were reached (`vr-trajectory-loop-20261012/focused-final`).
 No timing thresholds or motion presets were relaxed. Re-run this profile under a
 quiet host condition before claiming complete four-profile coverage.
+
+- **MV-44 — IMPROVED, OPEN — Timing-related physical double vision (2026-10-13).**
+  The user reports substantially reduced doubling after the normal optimized
+  viewer deployment, with remaining lag/frame drops when menus enter view or the
+  other controller aims, hovers or vibrates. The speed-dependent monocular symptom
+  during model movement and coupled torso/head/controller motion remains the
+  validation target. New final recording 962531370889719 saved 179 presentations
+  with zero capture drops; exact stereo identities show 144 distinct submitted
+  images and 35 reused-image pairs per eye. This is renewed application-image reuse,
+  not proof of the exact percept or of haptics as its cause. ISSUE-77 is open.
+  The browser is reattached to the new physical-inspect diagnostic viewer. A later
+  closed-menu recording validates the new telemetry with zero UI activity; actual
+  hover/haptic dispatch tests passed separately and a worn-controller reproduction
+  with the new fields remains due. The reload closed the sidebars and did not
+  restore their prior positions: reopen/place them before the menu comparison.
+  In 24hb_0xT/P1 Alpine Aug 7 Flex/Stick, use right Tools → Record final output 2s,
+  wait until recording starts after preparation, perform the motion, and wait for
+  Saved. Record menus open and closed; inspect each eye separately. Retain final
+  compositor pixels, encoded image IDs, viewer binary identity, synchronized pose
+  journal, all missing frames/failed matches, and capture overhead. Single-frame
+  clarity never excludes temporal doubling; physical panel/optical evidence remains
+  separate. Normal configured launches retain physical controllers in inspect mode.
+  Use the bounded journal hover/haptic/menu counters and summarize-interactions
+  review without treating host GL-call spans as GPU time, draw counts as visibility,
+  or a haptic dispatch as independently observed vibration. Old journals lack these
+  fields; missing telemetry must not become zero activity.
+  Reusable workflow: Debug → VR Tours & Tests → Controls & layout → SteamVR final
+  output · capture and calibration; original manual recordings remain preserved.

@@ -1,6 +1,27 @@
 # Assembly loading and first Full display — 2026-10-13
 
-**Status: PARTIAL (ISSUE-76): implementation and validation complete; cold loading and Full GPU performance remain below target.** Final release measurements on unchanged application/test source are:
+**2026-10-14 merge provenance.** Pushing this work required integration with
+upstream `76451452`. The upstream exact scaffold-length readiness step is retained
+and shares the same per-projection loop/skip map as sequence checks. All 150
+focused backend readiness/length/sequence tests and 52 frontend API,
+representation-save and VR Join integration tests pass. The hardware measurements,
+8,075-test frontend run and smoke results below describe the pre-merge implementation;
+they were not repeated after integration. Local issue IDs 75/76 became 79/80 to
+preserve upstream issue IDs. No scientific placement rules were changed by the
+conflict resolution.
+
+Post-merge `just test-smart` selected **FAST**: **11,019 passed, 23 failed,
+21 skipped, eight errors**, in 192.73 s pytest / 212 s guard. FULL remains deferred
+under the notice recorded below. The retained `merge-test-smart.log` shows three
+newly imported VR failures rejected by the existing WSL platform guard, and four
+CPD preview setup errors from the upstream corrected cis-anti-I chemistry; those
+VR/preview implementations and tests are unchanged from `origin/master`. This is
+not a green aggregate run. The slow-test triage report has zero individual
+violators; the 212 s aggregate exceeds 90 s without a single heavy culprit, so no
+budgets or test classifications were changed. Focused integration checks above
+are green. Logs remain under `.development-artifacts/benchy-load-performance/`.
+
+**Status: PARTIAL (ISSUE-80): implementation and validation complete; cold loading and Full GPU performance remain below target.** Final release measurements on unchanged application/test source are:
 
 | Workload | Navigation → paint | Import → paint | First Full choice → frame | Steady Full FPS, first/restored |
 | --- | ---: | ---: | ---: | ---: |

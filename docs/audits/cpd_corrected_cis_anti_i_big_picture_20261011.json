@@ -1,0 +1,456 @@
+{
+  "at": "2026-10-12T03:34:32.839464+00:00",
+  "scope": "Corrected cis-anti-I campaign only; legacy anti campaigns and user designs excluded.",
+  "completed_service_attempts": 35,
+  "completed_service_wall_hours": 16.639820610748398,
+  "failed_service_attempts": 5,
+  "failed_service_wall_minutes": 11.752087736129761,
+  "service_wall_hours_by_group": {
+    "alternate_sugar_pilot_and_fixed_core_optimization": 0.9168514846430884,
+    "bonded_fit_and_mm_diagnostics": 0.005315983560350206,
+    "electrostatic_references_and_charge_fit": 0.5344353439410527,
+    "corrected_core_reference_and_curvature": 4.2962478344308,
+    "coupled_ring_references": 0.06979424483246273,
+    "glycosidic_profile": 9.050318395892779,
+    "endpoint_initial_optimization": 1.7668573234478633
+  },
+  "services": [
+    {
+      "job": "alternate-sugar-qm-closure-v1-service",
+      "group": "alternate_sugar_pilot_and_fixed_core_optimization",
+      "state": "complete",
+      "wall_seconds": 2486.3861343860626,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1-service/status.json",
+        "sha256": "8f8e9cba6d0bffc5a7a70104b9d2b73570ce14479d189f7b2de64d71901d51ab"
+      }
+    },
+    {
+      "job": "alternate-sugar-qm-closure-v2-service",
+      "group": "alternate_sugar_pilot_and_fixed_core_optimization",
+      "state": "complete",
+      "wall_seconds": 619.3798089027405,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2-service/status.json",
+        "sha256": "e2006d0c3a9d56ad9280cb6cd7d800460517ca2ce4218471708d64ad51f747ba"
+      }
+    },
+    {
+      "job": "alternate-sugar-qm-pilot-v1-service",
+      "group": "alternate_sugar_pilot_and_fixed_core_optimization",
+      "state": "complete",
+      "wall_seconds": 194.8994014263153,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1-service/status.json",
+        "sha256": "9d062d639976a391f0625d56c6e77d5f2d153e8254fdb1b10c13f36f2eda6b8f"
+      }
+    },
+    {
+      "job": "bonded-baseline-v1-service",
+      "group": "bonded_fit_and_mm_diagnostics",
+      "state": "complete",
+      "wall_seconds": 0.9502878189086914,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/bonded-baseline-v1-service/status.json",
+        "sha256": "0b24af480be250b43f2d7082b397685a69f506efe9864c3cfb0ffe101d68bedf"
+      }
+    },
+    {
+      "job": "charge-core-fit-v1-service",
+      "group": "electrostatic_references_and_charge_fit",
+      "state": "complete",
+      "wall_seconds": 0.3208353519439697,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/charge-core-fit-v1-service/status.json",
+        "sha256": "e1aa89e0e1de69cf2a9d4ab97634ea0fb68d5839610e10b7eea65bc5b420fff4"
+      }
+    },
+    {
+      "job": "conditioned-directional-check-v1-service",
+      "group": "corrected_core_reference_and_curvature",
+      "state": "failed",
+      "wall_seconds": 69.87641620635986,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/conditioned-directional-check-v1-service/status.json",
+        "sha256": "934ef34450f54606be7c5d7cc644f6a8bcfbd43b25bf440d40ae8eae9c5dd148"
+      }
+    },
+    {
+      "job": "core-bonded-fit-v1-service",
+      "group": "bonded_fit_and_mm_diagnostics",
+      "state": "complete",
+      "wall_seconds": 0.43947458267211914,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core-bonded-fit-v1-service/status.json",
+        "sha256": "8736059043b50fcc4fc855edde0b62baf3258d267e01101c824b145d7f181801"
+      }
+    },
+    {
+      "job": "coupled-ring-training-v1-service",
+      "group": "coupled_ring_references",
+      "state": "complete",
+      "wall_seconds": 251.25928139686584,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/coupled-ring-training-v1-service/status.json",
+        "sha256": "5078fb2f8ca9b4c8b8fe6e43c98c79dab174883fcf4fa7506e9ba71a3e35c83d"
+      }
+    },
+    {
+      "job": "electrostatic-core-pilot-v1-service",
+      "group": "electrostatic_references_and_charge_fit",
+      "state": "failed",
+      "wall_seconds": 378.4849202632904,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-core-pilot-v1-service/status.json",
+        "sha256": "3aee1b8af65b95fcca53e529058bedc3f239bc7e697b45ebd43684760e38be04"
+      }
+    },
+    {
+      "job": "electrostatic-core-pilot-v2-service",
+      "group": "electrostatic_references_and_charge_fit",
+      "state": "complete",
+      "wall_seconds": 613.479706287384,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-core-pilot-v2-service/status.json",
+        "sha256": "33c74def75515fa5aaad3499f2b9322fe92e54c2c755e4e0fe65243e05075b6b"
+      }
+    },
+    {
+      "job": "electrostatic-endpoint-transfer-v1-service",
+      "group": "electrostatic_references_and_charge_fit",
+      "state": "complete",
+      "wall_seconds": 109.88189721107483,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-endpoint-transfer-v1-service/status.json",
+        "sha256": "e9abc9eed47be61be1e40c31fe1101e2493ef34264fd6a20fc88672bf7537c7f"
+      }
+    },
+    {
+      "job": "endpoint-1-glyco-branch-minus30-v1-service",
+      "group": "glycosidic_profile",
+      "state": "complete",
+      "wall_seconds": 3309.602870941162,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-minus30-v1-service/status.json",
+        "sha256": "69bd474db1ea77bf2fa3e9f1e6e83214e769e61c898f2c8d2bb6b6479c903fba"
+      }
+    },
+    {
+      "job": "endpoint-1-glyco-branch-plus15-v1-service",
+      "group": "glycosidic_profile",
+      "state": "complete",
+      "wall_seconds": 4134.106721878052,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus15-v1-service/status.json",
+        "sha256": "80014d1180b57c60b4f8ee13e1efedc86c8752f1c0bedae0ecd283f64cd09a9e"
+      }
+    },
+    {
+      "job": "endpoint-1-glyco-branch-plus30-v1-service",
+      "group": "glycosidic_profile",
+      "state": "complete",
+      "wall_seconds": 4185.296508550644,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v1-service/status.json",
+        "sha256": "71020867631c5ce90c4264e7fd79a9c65e8f7cc3642043ecc1c6802cbb066d15"
+      }
+    },
+    {
+      "job": "endpoint-1-glyco-branch-plus30-v2-service",
+      "group": "glycosidic_profile",
+      "state": "complete",
+      "wall_seconds": 4177.682054281235,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v2-service/status.json",
+        "sha256": "014b893effffc4d68488eb3b8e0f9ad8ba29b431d8706352e7e0ee6576f35818"
+      }
+    },
+    {
+      "job": "endpoint-1-glyco-branch-plus30-v3-service",
+      "group": "glycosidic_profile",
+      "state": "complete",
+      "wall_seconds": 1037.8144586086273,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v3-service/status.json",
+        "sha256": "967ffd609556d3f410c312c551650844358b54206f48436052a8c5ad18033737"
+      }
+    },
+    {
+      "job": "endpoint-1-glyco-branchzero-v1-service",
+      "group": "glycosidic_profile",
+      "state": "complete",
+      "wall_seconds": 4042.665058851242,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1-service/status.json",
+        "sha256": "3b52ce3b430a9315e0c7510788713372ed702922c4fb2f787f5534e04deb6927"
+      }
+    },
+    {
+      "job": "endpoint-1-glyco-minus15-v1-service",
+      "group": "glycosidic_profile",
+      "state": "complete",
+      "wall_seconds": 3898.153304338455,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v1-service/status.json",
+        "sha256": "da77e328d09f510c3a271a41efe6ac35a02de7503ab77c822acb1162a1673a24"
+      }
+    },
+    {
+      "job": "endpoint-1-glyco-minus15-v2-service",
+      "group": "glycosidic_profile",
+      "state": "complete",
+      "wall_seconds": 4101.276801109314,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v2-service/status.json",
+        "sha256": "7f26feab03189c807d7f621c8e8c181a459184fa37ecda1a96d5a6256e9f8e72"
+      }
+    },
+    {
+      "job": "endpoint-1-glyco-minus15-v3-service",
+      "group": "glycosidic_profile",
+      "state": "complete",
+      "wall_seconds": 3694.5484466552734,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v3-service/status.json",
+        "sha256": "c7cf8438fec76aea8e5ffa318f9460840167487099489bf29b687101fdb33e2b"
+      }
+    },
+    {
+      "job": "endpoint-1-optimization-v1-service",
+      "group": "endpoint_initial_optimization",
+      "state": "complete",
+      "wall_seconds": 5773.852984905243,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-optimization-v1-service/status.json",
+        "sha256": "f435feb4ffae928ebe5ced36e8c6eb78fcca22f332e3e33fac11e02bdc41db60"
+      }
+    },
+    {
+      "job": "endpoint-1-optimization-v2-service",
+      "group": "endpoint_initial_optimization",
+      "state": "complete",
+      "wall_seconds": 389.3851583003998,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-optimization-v2-service/status.json",
+        "sha256": "1424335ef171b46fd121208a20807da80a1c7ab1b5b98269ee6a302ee21e9854"
+      }
+    },
+    {
+      "job": "endpoint-1-pilot-v1-service",
+      "group": "endpoint_initial_optimization",
+      "state": "failed",
+      "wall_seconds": 197.44822120666504,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-pilot-v1-service/status.json",
+        "sha256": "d9a2cecf8bf142cc21b4b064dfc86f8b68145946f623c6cab0e19ba253ce5945"
+      }
+    },
+    {
+      "job": "fixed-core-boundary-v1-service",
+      "group": "bonded_fit_and_mm_diagnostics",
+      "state": "complete",
+      "wall_seconds": 4.842797756195068,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/fixed-core-boundary-v1-service/status.json",
+        "sha256": "95f961007a02f003c3af1b6139f30bf73acf0f8bdc8e7fc14c7b31648da9f795"
+      }
+    },
+    {
+      "job": "hessian-stage2-v1/batch-1-service",
+      "group": "corrected_core_reference_and_curvature",
+      "state": "failed",
+      "wall_seconds": 59.131699562072754,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v1/batch-1-service/status.json",
+        "sha256": "c9ddac16c608495045e3bf2e6af78ff6a902628291fbf347ae2342967b2be126"
+      }
+    },
+    {
+      "job": "hessian-stage2-v3/batch-1-service",
+      "group": "corrected_core_reference_and_curvature",
+      "state": "complete",
+      "wall_seconds": 6109.182341098785,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/batch-1-service/status.json",
+        "sha256": "3d5bb2e83eabcd5ccf4505de2007241e0351df98f0b29720f2ff145d18b2e65d"
+      }
+    },
+    {
+      "job": "hessian-stage2-v3/batch-2-service",
+      "group": "corrected_core_reference_and_curvature",
+      "state": "complete",
+      "wall_seconds": 6265.923668146133,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/batch-2-service/status.json",
+        "sha256": "6391590438e8dd2703826307d88998e0137295f4cb98431e9ccd8b41d63472ea"
+      }
+    },
+    {
+      "job": "low-mode-check-v1-service",
+      "group": "corrected_core_reference_and_curvature",
+      "state": "complete",
+      "wall_seconds": 915.9443726539612,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/low-mode-check-v1-service/status.json",
+        "sha256": "1e469970de24bd51429ffc164dc676fff7864db5bb2d51715785c4c64c97afa2"
+      }
+    },
+    {
+      "job": "mm-endpoint-profile-v2-service",
+      "group": "bonded_fit_and_mm_diagnostics",
+      "state": "complete",
+      "wall_seconds": 12.904980659484863,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/mm-endpoint-profile-v2-service/status.json",
+        "sha256": "eee7f4f01157227f71790afc8d56efd3ef3fdab7a9fadadc8273e8b7442b367b"
+      }
+    },
+    {
+      "job": "optimization-service",
+      "group": "corrected_core_reference_and_curvature",
+      "state": "complete",
+      "wall_seconds": 1736.837072134018,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/optimization-service/status.json",
+        "sha256": "fc248b566e3e45d20778ff22a7f65427bc6b4afc972eff7ae99f442dfde2b1c0"
+      }
+    },
+    {
+      "job": "original-method-curvature-pilot-v1-service",
+      "group": "corrected_core_reference_and_curvature",
+      "state": "complete",
+      "wall_seconds": 227.59490656852722,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/original-method-curvature-pilot-v1-service/status.json",
+        "sha256": "c7dca008f0dfb926a7d1bc2098784f4abc46b3feb937b242092738b09e6341dc"
+      }
+    },
+    {
+      "job": "pilot-service",
+      "group": "corrected_core_reference_and_curvature",
+      "state": "failed",
+      "wall_seconds": 0.184006929397583,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/pilot-service/status.json",
+        "sha256": "4f12b7c110ef43b1f89dd72a4f6f4635eee89d0c33d9aed62329f5a342ce19d6"
+      }
+    },
+    {
+      "job": "pilot-v2-service",
+      "group": "corrected_core_reference_and_curvature",
+      "state": "complete",
+      "wall_seconds": 59.03325867652893,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/pilot-v2-service/status.json",
+        "sha256": "5530223423c5385eecd273dede1b8b250bbf295c0067099aaa0e48695274f02d"
+      }
+    },
+    {
+      "job": "reference-conditioning-diagnostic-v2-service",
+      "group": "corrected_core_reference_and_curvature",
+      "state": "complete",
+      "wall_seconds": 22.784461975097656,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/reference-conditioning-diagnostic-v2-service/status.json",
+        "sha256": "7a12b0a3d0900c087d36b8164f0779df23777a8a637ba50768597fcd555eee34"
+      }
+    },
+    {
+      "job": "water-core-curves-v1-service",
+      "group": "electrostatic_references_and_charge_fit",
+      "state": "complete",
+      "wall_seconds": 821.7998790740967,
+      "status": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/water-core-curves-v1-service/status.json",
+        "sha256": "050148fd7946b623132ef169a0543bcdbc5d8b9b0cb9f21dd533063261fd54ff"
+      }
+    }
+  ],
+  "accounting_limits": "Service wall time, not CPU-hours or calendar time. Includes finished failed services; excludes active release job and preparation/audit/intervention time. Not all failures are service failures.",
+  "active_run_snapshot": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/big-picture-audit-20261011/active_run_snapshot.json",
+    "sha256": "55ff07d8ba01ddd4c395d21568cbd515308e405d7507d9030c56598a2c99e599"
+  },
+  "evidence": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core_local_minimum_assessment.json",
+      "sha256": "a7a8a905de89bb2c0ffb3433b820b04efdea423ac441124e2c8ab64f1960e81f"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/glycosidic-branch-profile-v1/completed_profile_review.json",
+      "sha256": "f195c5f8b77c71f3011e3387ef1c8f0bdb31cc107a4ab77d8578f500e6a7ad8a"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/charge-core-fit-v1/completion_audit.json",
+      "sha256": "f2366398d21f3bf9d58ac0ddb6355f1c0146680cf7068a32435d16ee4a9b838c"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-endpoint-transfer-v1/completion_audit.json",
+      "sha256": "32345cdf83c96463112024f7b7977bc2114d1a468e297d32c7339af922ff66cc"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core-bonded-fit-v1/completion_audit.json",
+      "sha256": "3dabfcc2f3942c184565d80b3320792609ef7f8301edec739ccc0777305c82a9"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/fixed-core-boundary-v1/completion_audit.json",
+      "sha256": "10543f59eeee05e9e3cf699f9d419d4881863f7b8f8a651cd59f0eda99c48eb0"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1/completion_audit.json",
+      "sha256": "ad56db419d7b958a992887379d7dd12baf2168b2957481048cebfa80b0ff3505"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/completion_audit.json",
+      "sha256": "7047dc0200db1cc57deded93f5c10aaa3b9132e5bff61238ca4e85cefc007d6a"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/completion_audit.json",
+      "sha256": "2f0afd5019533ee5bd858bba02a9cbee172957dd8983edc31b316490375c2544"
+    }
+  ],
+  "approved_plan": {
+    "path": "/home/jojo/Work/NADOC/docs/audits/cpd_corrected_cis_anti_i_refinement_plan_20261010.json",
+    "sha256": "c5588401f3acd81fd6382e423e061952476ab23f3385ebc1b6401b98c5292df5"
+  },
+  "authorization": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/campaign_authorization_20261010.json",
+    "sha256": "c39e549edd30e31ec183cd8094ed5cf0bd29ea34b26736f87f71d867eafd98d5"
+  },
+  "conclusion": "Recent calculations make strong numerical and diagnostic progress. They have not completed corrected-candidate qualification or NAMD context validation. Management has emphasized chunk completion more than a bounded route to those outcomes.",
+  "meaningful_findings": [
+    "Corrected core local QM minimum certified within its exact model/method.",
+    "Five-point glycosidic profile,4ring distortions and bounded electrostatic inventory acquired.",
+    "First charge/bonded candidates exist, with partial improvements and unresolved qualification.",
+    "Alternate fixed-core stationary QM conformer lies2.433kcal/mol below original reference and close to alternate MM seed; enforcing original geometry alone would be unjustified.",
+    "Active release snapshot: max projected force40.48fold lower after7newgradients, but still10.51times max-force criterion."
+  ],
+  "bottlenecks": [
+    "Conformer correspondence and candidate residual decision.",
+    "Complete candidate freeze and finite prospective checks.",
+    "NAMD export/energy-force/restart checks and representative corrected-weld DNA-context validation."
+  ],
+  "scheduling_assessment": {
+    "twelve_gradients": "Operational pilot allocation, not literature limit or user requirement; about41minutes native work at measured speed.",
+    "optimizer_restart": "Exact geometry/gradient retained but Hessian/history discarded. Counterfactual reinitialization cost not measured.",
+    "retrospective": "The fixed-core detour gave causal separation; direct matched-angle all-atom relaxation was another plausible route. Do not default to this detour for every branch. Early inexpensive MM/QM correspondence checks should precede full profile acquisition."
+  },
+  "future_operating_decisions": {
+    "active_job": "Leave current release job and its completion/failure/deadline triggers unchanged.",
+    "next_review": "At completion/boundary, audit native evidence and perform one consolidated review of existing original/alternate QM and MM geometry, force, energy and target residuals. Further QM must identify an unresolved decision and the smallest acquisition that could change it.",
+    "expansion": "No automatic extra endpoint Hessian, sugar-rotamer search, angular grid or second fit merely because a job completed. Stationarity is not a minimum certificate; preserve that limitation.",
+    "routine_chunk_sizing": "Future established optimizations should use roughly2hour manifests (~30gradients at measured205seconds each), within each scientific stage budget and15hour service ceiling. Small pilots remain appropriate for changed methods. Keep convergence stops/native timeouts; do not mutate the active plan.",
+    "restart": "Preserve optimizer history only through a validated restart mechanism. Current restarts retain exact geometry/gradient but discard Sella history; avoid needless short boundaries.",
+    "engineering": "Prepare and check provisional NAMD topology/full-precision exports using existing candidates where dependencies permit. Engineering validation does not qualify physical parameters.",
+    "scope": "Preliminary welded/unwelded thermal-stability studies: prioritize weld identity, parameter coverage, bounded local mechanics and representative DNA-context behavior. Do not silently add global capped-sugar conformer searches or absolute melting-temperature validation as prerequisites."
+  },
+  "formal_gates_unchanged": true,
+  "new_qm_evaluations_for_audit": 0,
+  "new_services_launched": 0,
+  "active_plan_modified": false,
+  "cloud_spending_usd": 0,
+  "handoff_at_start": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v1/handoff.json",
+    "sha256": "8dbfdaf39fcc85316f729abbe29525eafc19f5f0958948ef8dcd928f3f18ea14"
+  }
+}

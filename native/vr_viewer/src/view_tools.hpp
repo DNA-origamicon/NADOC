@@ -12,7 +12,8 @@ class VRViewTools {
     struct V {glm::vec3 p;glm::vec4 color;glm::vec2 uv;glm::vec3 normal{};};
     struct Sprite {glm::vec3 p;glm::vec2 size;glm::vec4 color;glm::vec4 uv;glm::vec2 center;};
     struct Instance {glm::mat4 matrix;glm::vec4 color;};
-    struct Batch {std::vector<V> vertices;std::vector<Instance> instances;GLuint vertexBuffer=0,instanceBuffer=0;};
+    static_assert(sizeof(glm::mat4)==64 && sizeof(Instance)==80 && offsetof(Instance,color)==64,"Grouped texture view requires exact matrix+color wire layout");
+    struct Batch {std::vector<V> vertices,groupedVertices;std::vector<Instance> instances;GLuint vertexBuffer=0,instanceBuffer=0,groupedVertexBuffer=0,instanceTexture=0;nadoc_vr::view_groups::Plan groupPlan;};
     std::vector<Batch> batches;
     bool open=false,waiting=false;
     uint32_t version=0,flags=256,acknowledged=0;
@@ -32,39 +33,69 @@ class VRViewTools {
     static constexpr std::array<const char*,8> keys{"lengthHeatmap","sequences","undefinedBases","loopSkips","grid","overhangNames","clashes","deform"};
     GLuint program=0,vao=0,vbo=0,triangleVbo=0,lineVbo=0,texture=0;unsigned frames=0;
     std::optional<nadoc_vr::BoundsSummary> cachedSceneBounds;
+    bool opaqueRequested=false;
+    nadoc_vr::view_opaque::Eligibility opaqueEligibility;
+    GLuint legacyProgram=0,opaqueProgram=0,groupedLegacyProgram=0,groupedOpaqueProgram=0;
+    bool groupsRequested=false;nadoc_vr::view_groups::Limits groupLimits;
+    const char* opaqueSelectionSource="default";const char* groupsSelectionSource="default";
+    const char* opaqueProgramReason="disabled";const char* groupsProgramReason="disabled";
+    bool groupsAvailable()const{return nadoc_vr::view_programs::groupsAvailable(groupsRequested,legacyProgram,opaqueProgram,groupedLegacyProgram,groupedOpaqueProgram);}
+    uint64_t groupedBatchDraws=0,legacyBatchDraws=0,groupedLogicalInstances=0,groupedHardwareInstances=0;
+    std::string instanceGroupsJson()const {
+        size_t eligible=0,bytes=0;for(const auto& b:batches){eligible+=b.groupPlan.eligible;bytes+=b.groupedVertices.size()*sizeof(V);}
+        std::string reasons="[";for(size_t i=0;i<batches.size();++i){if(i)reasons+=",";reasons+='"';reasons+=batches[i].groupPlan.reason;reasons+='"';}reasons+="]";
+        return "{\"requested\":"+std::string(groupsRequested?"true":"false")+",\"default_enabled\":true,\"selection_source\":\""+groupsSelectionSource+"\",\"program_available\":"+(groupsAvailable()?"true":"false")+",\"program_reason\":\""+groupsProgramReason+"\",\"group_size\":8,\"eligible_batches\":"+std::to_string(eligible)+
+            ",\"total_batches\":"+std::to_string(batches.size())+",\"texture_texel_limit\":"+std::to_string(groupLimits.textureTexels)+
+            ",\"expanded_cpu_bytes\":"+std::to_string(bytes)+",\"expanded_gpu_bytes\":"+std::to_string(bytes)+
+            ",\"grouped_batch_draws\":"+std::to_string(groupedBatchDraws)+",\"legacy_batch_draws\":"+std::to_string(legacyBatchDraws)+
+            ",\"grouped_logical_instances\":"+std::to_string(groupedLogicalInstances)+",\"grouped_hardware_instances\":"+std::to_string(groupedHardwareInstances)+
+            ",\"batch_eligibility_reasons\":"+reasons+",\"primitive_order\":\"original batch then instance then triangle\",\"shadow_batches\":\"legacy\"}";
+    }
+    uint64_t opaqueSceneCalls=0,legacyColorSceneCalls=0,ineligibleColorSceneCalls=0,unavailableProgramColorSceneCalls=0,legacyShadowSceneCalls=0;
+    bool lastColorOpaque=false;
+    bool opaqueActive(bool shadow=false)const{return nadoc_vr::view_opaque::active(opaqueRequested && opaqueProgram,opaqueEligibility,shadow);}
+    void selectSceneProgram(bool shadow,bool grouped=false){program=grouped?(opaqueActive(shadow)?groupedOpaqueProgram:groupedLegacyProgram):(opaqueActive(shadow)?opaqueProgram:legacyProgram);}
+    template<class Bind> void bindSceneLighting(Bind bind){selectSceneProgram(false);bind(legacyProgram);if(program!=legacyProgram)bind(program);if(groupsAvailable())bind(opaqueActive()?groupedOpaqueProgram:groupedLegacyProgram);}
+    std::string opaqueShaderJson()const {
+        return "{\"requested\":"+std::string(opaqueRequested?"true":"false")+",\"default_enabled\":true,\"selection_source\":\""+opaqueSelectionSource+"\",\"program_available\":"+(opaqueProgram?"true":"false")+",\"program_reason\":\""+opaqueProgramReason+"\",\"eligible\":"+(opaqueEligibility.eligible?"true":"false")+
+            ",\"eligibility_reason\":\""+opaqueEligibility.reason+"\",\"last_color_opaque\":"+(lastColorOpaque?"true":"false")+
+            ",\"opaque_color_scene_calls\":"+std::to_string(opaqueSceneCalls)+",\"legacy_color_scene_calls\":"+std::to_string(legacyColorSceneCalls)+
+            ",\"ineligible_color_scene_calls\":"+std::to_string(ineligibleColorSceneCalls)+",\"program_unavailable_color_scene_calls\":"+std::to_string(unavailableProgramColorSceneCalls)+",\"legacy_shadow_scene_calls\":"+std::to_string(legacyShadowSceneCalls)+
+            ",\"lines_sprites_panels\":\"always_legacy\",\"primitive_order\":\"unchanged\"}";
+    }
     size_t instanceCount() const {size_t n=0;for(const auto& b:batches)n+=b.instances.size();return n;}
     std::optional<nadoc_vr::BoundsSummary> sceneBounds() const {return cachedSceneBounds;}
     bool inspectionLayout() const {return overrideScene() && !(flags&256);}
     bool overrideScene() const {return version && flags!=256;}
     void initialize() {
-        const auto vs=compileShader(GL_VERTEX_SHADER,R"(#version 330 core
-layout(location=0) in vec3 p;layout(location=1) in vec4 color;layout(location=2) in vec2 uv;
-layout(location=3) in mat4 instanceMatrix;layout(location=7) in vec4 instanceColor;
-layout(location=8) in vec3 normal;
-uniform mat4 vp,worldModel;uniform bool instanced;
-out vec4 c;out vec2 t;out vec3 vNormal;out vec3 vWorldPosition;
-out vec3 vColor;flat out int vTwoSided;flat out uint vSelection;flat out uint vObjectId;
-void main(){mat4 m=instanced?instanceMatrix:mat4(1);vec4 point=m*vec4(p,1);
-gl_Position=vp*point;c=color*(instanced?instanceColor:vec4(1));t=uv;
-vWorldPosition=(worldModel*point).xyz;vNormal=transpose(inverse(mat3(worldModel*m)))*normal;
-vColor=c.rgb;vTwoSided=1;vSelection=0u;vObjectId=0u;})");
-        // Share the canonical diffuse/shadow function and coefficients. Atlas
-        // text and lines remain unlit; recolored molecular surfaces stay lit.
-        std::string fragment=kLitFragmentSource;
-        fragment.resize(fragment.find("    void main() {"));
-        fragment+=std::string("in vec4 c;in vec2 t;uniform sampler2D atlas;uniform bool shadowPass;\n")+frostedGlassShader+R"(
-void main(){
-    vec4 tex=t.x<0?vec4(1):texture(atlas,t);
-    float alpha=c.a*tex.a;if(alpha<.02)discard;
-    if(shadowPass){if(dot(vNormal,vNormal)<1e-12)discard;outColor=vec4(1);outObjectId=0u;return;}
-    vec3 color=pow(max(c.rgb,vec3(0)),vec3(1.0/2.2))*tex.rgb;
-    if(dot(vNormal,vNormal)>1e-12){vec3 n=normalize(vNormal)*(gl_FrontFacing?1.0:-1.0);
-        color*=sceneLighting(n);}
-    outColor=frostedMenu(vec4(color,alpha));outObjectId=0u;
-})";
-        const auto fs=compileShader(GL_FRAGMENT_SHADER,fragment.c_str());
-        program=glCreateProgram();glAttachShader(program,vs);glAttachShader(program,fs);glLinkProgram(program);glDeleteShader(vs);glDeleteShader(fs);
-        GLint ok;glGetProgramiv(program,GL_LINK_STATUS,&ok);if(!ok)throw std::runtime_error("VR view tools shader failed");
+        opaqueRequested=nadoc_vr::view_opaque::requestedFromEnvironment();
+        groupsRequested=nadoc_vr::view_groups::requestedFromEnvironment();
+        opaqueSelectionSource=nadoc_vr::view_programs::selectionSource(std::getenv("NADOC_VR_OPAQUE_VIEW_SHADER"));
+        groupsSelectionSource=nadoc_vr::view_programs::selectionSource(std::getenv("NADOC_VR_GROUPED_VIEW_INSTANCES"));
+        if(groupsRequested){GLint texels=0,vertexSamplers=0,units=0;glGetIntegerv(GL_MAX_TEXTURE_BUFFER_SIZE,&texels);glGetIntegerv(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS,&vertexSamplers);glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS,&units);groupLimits={uint64_t(std::max(0,texels)),vertexSamplers>0,units>int(nadoc_vr::view_groups::textureUnit)};}
+        struct Driver {
+            GLuint compile(bool vertex,const char* source){return compileShader(vertex?GL_VERTEX_SHADER:GL_FRAGMENT_SHADER,source);}
+            GLuint create(){return glCreateProgram();}
+            void attach(GLuint p,GLuint shader){glAttachShader(p,shader);}
+            void link(GLuint p){glLinkProgram(p);}
+            bool linked(GLuint p){GLint ok=0;glGetProgramiv(p,GL_LINK_STATUS,&ok);return ok!=0;}
+            void deleteShader(GLuint shader){glDeleteShader(shader);}
+            void deleteProgram(GLuint p){glDeleteProgram(p);}
+        } driver;
+        auto makeProgram=[&](bool opaque,bool grouped=false) {
+            const auto vertex=grouped?nadoc_vr::view_groups::vertexShader(nadoc_vr::view_opaque::vertexSource):std::string(nadoc_vr::view_opaque::vertexSource);
+            const auto source=nadoc_vr::view_opaque::fragment(kLitFragmentSource,frostedGlassShader,opaque);
+            return nadoc_vr::view_programs::build(driver,vertex.c_str(),source.c_str());
+        };
+        legacyProgram=makeProgram(false);program=legacyProgram;
+        if(opaqueRequested){const auto result=nadoc_vr::view_programs::optional([&]{return makeProgram(true);});opaqueProgram=result.program;opaqueProgramReason=result.reason;}
+        if(groupsRequested){groupsProgramReason="texture_sampler_unavailable";
+            if(groupLimits.vertexSampler && groupLimits.textureUnitAvailable && groupLimits.textureTexels){
+                const auto result=nadoc_vr::view_programs::optional([&]{return makeProgram(false,true);});groupedLegacyProgram=result.program;groupsProgramReason=result.reason;
+                if(groupedLegacyProgram && opaqueProgram){const auto opaqueResult=nadoc_vr::view_programs::optional([&]{return makeProgram(true,true);});groupedOpaqueProgram=opaqueResult.program;groupsProgramReason=opaqueResult.reason;}
+                if(!groupsAvailable()){if(groupedLegacyProgram)glDeleteProgram(groupedLegacyProgram);if(groupedOpaqueProgram)glDeleteProgram(groupedOpaqueProgram);groupedLegacyProgram=groupedOpaqueProgram=0;}
+            }
+        }
         glGenBuffers(1,&triangleVbo);glGenBuffers(1,&lineVbo);glGenVertexArrays(1,&vao);glGenBuffers(1,&vbo);glBindVertexArray(vao);glBindBuffer(GL_ARRAY_BUFFER,vbo);
         glEnableVertexAttribArray(0);glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(V),(void*)offsetof(V,p));
         glEnableVertexAttribArray(1);glVertexAttribPointer(1,4,GL_FLOAT,GL_FALSE,sizeof(V),(void*)offsetof(V,color));
@@ -73,8 +104,8 @@ void main(){
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
     }
-    void clearBatches(){for(auto& b:batches){if(b.vertexBuffer)glDeleteBuffers(1,&b.vertexBuffer);if(b.instanceBuffer)glDeleteBuffers(1,&b.instanceBuffer);}batches.clear();}
-    void shutdown(){cancelStaging();clearBatches();if(triangleVbo)glDeleteBuffers(1,&triangleVbo);if(lineVbo)glDeleteBuffers(1,&lineVbo);if(texture)glDeleteTextures(1,&texture);if(vbo)glDeleteBuffers(1,&vbo);if(vao)glDeleteVertexArrays(1,&vao);if(program)glDeleteProgram(program);}
+    void clearBatches(){for(auto& b:batches){if(b.vertexBuffer)glDeleteBuffers(1,&b.vertexBuffer);if(b.instanceTexture)glDeleteTextures(1,&b.instanceTexture);if(b.groupedVertexBuffer)glDeleteBuffers(1,&b.groupedVertexBuffer);if(b.instanceBuffer)glDeleteBuffers(1,&b.instanceBuffer);}batches.clear();}
+    void shutdown(){cancelStaging();clearBatches();if(triangleVbo)glDeleteBuffers(1,&triangleVbo);if(lineVbo)glDeleteBuffers(1,&lineVbo);if(texture)glDeleteTextures(1,&texture);if(vbo)glDeleteBuffers(1,&vbo);if(vao)glDeleteVertexArrays(1,&vao);if(legacyProgram)glDeleteProgram(legacyProgram);if(opaqueProgram)glDeleteProgram(opaqueProgram);if(groupedLegacyProgram)glDeleteProgram(groupedLegacyProgram);if(groupedOpaqueProgram)glDeleteProgram(groupedOpaqueProgram);program=legacyProgram=opaqueProgram=groupedLegacyProgram=groupedOpaqueProgram=0;}
     void close() {
         open=false;hover={-1,-1};closeHover={};
         placement.openDocked(placement.position(),placement.orientation());
@@ -130,9 +161,9 @@ void main(){
         }
     }
 #include "view_tools_stream.inc"
-    void draw(const glm::mat4& vp,const std::vector<V>& data,GLenum mode,bool glass=false,const glm::mat4& worldModel=glm::mat4(1)){
+    void draw(const glm::mat4& vp,const std::vector<V>& data,GLenum mode,bool glass=false,const glm::mat4& worldModel=glm::mat4(1),bool opaqueScene=false){
         if(data.empty()||!version)return;
-        glUseProgram(program);FrostedGlass::bind(program,glass);glUniformMatrix4fv(glGetUniformLocation(program,"vp"),1,GL_FALSE,&vp[0][0]);
+        program=opaqueScene?opaqueProgram:legacyProgram;glUseProgram(program);FrostedGlass::bind(program,glass);glUniformMatrix4fv(glGetUniformLocation(program,"vp"),1,GL_FALSE,&vp[0][0]);
         glUniform1i(glGetUniformLocation(program,"instanced"),0);glUniformMatrix4fv(glGetUniformLocation(program,"worldModel"),1,GL_FALSE,&worldModel[0][0]);
         glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,texture);glUniform1i(glGetUniformLocation(program,"atlas"),1);
         glEnable(GL_DEPTH_TEST);glDisable(GL_CULL_FACE);glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
@@ -165,25 +196,41 @@ void main(){
         draw(vp,border,GL_LINES);
     }
     void renderScene(const glm::mat4& vp,const glm::mat4& model,glm::quat camera,bool shadow=false){
+        selectSceneProgram(shadow);const bool useOpaque=opaqueActive(shadow);
+        if(shadow)++legacyShadowSceneCalls;
+        else {lastColorOpaque=useOpaque;if(useOpaque)++opaqueSceneCalls;else {++legacyColorSceneCalls;if(opaqueRequested){if(!opaqueProgram)++unavailableProgramColorSceneCalls;else if(!opaqueEligibility.eligible)++ineligibleColorSceneCalls;}}}
         glUseProgram(program);glUniform1i(glGetUniformLocation(program,"shadowPass"),shadow);
-        draw(vp*model,triangles,GL_TRIANGLES,false,model);if(!shadow)draw(vp*model,lines,GL_LINES,false,model);
+        draw(vp*model,triangles,GL_TRIANGLES,false,model,useOpaque);if(!shadow)draw(vp*model,lines,GL_LINES,false,model);
         if(!batches.empty()) {
-            glUseProgram(program);FrostedGlass::bind(program,false);const auto matrix=vp*model;
+            selectSceneProgram(shadow);glUseProgram(program);FrostedGlass::bind(program,false);const auto matrix=vp*model;
             glUniformMatrix4fv(glGetUniformLocation(program,"vp"),1,GL_FALSE,&matrix[0][0]);
             glUniformMatrix4fv(glGetUniformLocation(program,"worldModel"),1,GL_FALSE,&model[0][0]);
             glUniform1i(glGetUniformLocation(program,"instanced"),1);
             glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,texture);glUniform1i(glGetUniformLocation(program,"atlas"),1);
             glEnable(GL_DEPTH_TEST);glDisable(GL_CULL_FACE);glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
             glBindVertexArray(vao);
+            bool boundGrouped=false;
             for(const auto& b:batches) {
-                glBindBuffer(GL_ARRAY_BUFFER,b.vertexBuffer);
+                const bool grouped=!shadow && groupsAvailable() && b.groupPlan.eligible && b.groupedVertexBuffer && b.instanceTexture;
+                if(grouped!=boundGrouped){selectSceneProgram(shadow,grouped);glUseProgram(program);FrostedGlass::bind(program,false);
+                    glUniformMatrix4fv(glGetUniformLocation(program,"vp"),1,GL_FALSE,&matrix[0][0]);glUniformMatrix4fv(glGetUniformLocation(program,"worldModel"),1,GL_FALSE,&model[0][0]);
+                    glUniform1i(glGetUniformLocation(program,"instanced"),1);glUniform1i(glGetUniformLocation(program,"shadowPass"),shadow);glUniform1i(glGetUniformLocation(program,"atlas"),1);boundGrouped=grouped;}
+                glBindBuffer(GL_ARRAY_BUFFER,grouped?b.groupedVertexBuffer:b.vertexBuffer);
                 glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(V),(void*)offsetof(V,p));
                 glVertexAttribPointer(1,4,GL_FLOAT,GL_FALSE,sizeof(V),(void*)offsetof(V,color));
                 glVertexAttribPointer(2,2,GL_FLOAT,GL_FALSE,sizeof(V),(void*)offsetof(V,uv));
                 glVertexAttribPointer(8,3,GL_FLOAT,GL_FALSE,sizeof(V),(void*)offsetof(V,normal));
-                glBindBuffer(GL_ARRAY_BUFFER,b.instanceBuffer);
-                for(GLuint a=3;a<=7;++a){glEnableVertexAttribArray(a);glVertexAttribDivisor(a,1);glVertexAttribPointer(a,4,GL_FLOAT,GL_FALSE,sizeof(Instance),(void*)(uintptr_t)((a-3)*sizeof(glm::vec4)));}
-                glDrawArraysInstanced(GL_TRIANGLES,0,b.vertices.size(),b.instances.size());
+                if(grouped){
+                    for(GLuint a=3;a<=7;++a){glVertexAttribDivisor(a,0);glDisableVertexAttribArray(a);}
+                    glActiveTexture(GL_TEXTURE0+nadoc_vr::view_groups::textureUnit);glBindTexture(GL_TEXTURE_BUFFER,b.instanceTexture);glActiveTexture(GL_TEXTURE1);
+                    glUniform1i(glGetUniformLocation(program,"uGroupedInstances"),nadoc_vr::view_groups::textureUnit);glUniform1i(glGetUniformLocation(program,"uGroupBaseVertices"),int(b.vertices.size()));
+                    for(const auto& call:nadoc_vr::view_groups::draws(b.vertices.size(),b.instances.size()))if(call.instances){glUniform1i(glGetUniformLocation(program,"uGroupFirstInstance"),call.firstInstance);glDrawArraysInstanced(GL_TRIANGLES,0,call.vertices,call.instances);groupedHardwareInstances+=call.instances;}
+                    ++groupedBatchDraws;groupedLogicalInstances+=b.instances.size();
+                }else{
+                    glBindBuffer(GL_ARRAY_BUFFER,b.instanceBuffer);
+                    for(GLuint a=3;a<=7;++a){glEnableVertexAttribArray(a);glVertexAttribDivisor(a,1);glVertexAttribPointer(a,4,GL_FLOAT,GL_FALSE,sizeof(Instance),(void*)(uintptr_t)((a-3)*sizeof(glm::vec4)));}
+                    glDrawArraysInstanced(GL_TRIANGLES,0,b.vertices.size(),b.instances.size());++legacyBatchDraws;
+                }
             }
             for(GLuint a=3;a<=7;++a){glVertexAttribDivisor(a,0);glDisableVertexAttribArray(a);}
             glBindVertexArray(0);glUseProgram(0);glDisable(GL_BLEND);

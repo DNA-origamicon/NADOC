@@ -31,6 +31,12 @@ def catalog():
         'Seek backward and forward through a temporary part using native history event dispatch. Checks desktop geometry and the current design/revision sent to VR. Isolated browser with intercepted VR transport; keeps the physical headset session running.', module='history_refresh_check')
     add('production-lists', 'interaction', 'Feature history and production lists',
         'Review sweep rails, dimension tables, simulation job cards and the feature-history scrub rail. Runs bounded native interaction checks and retains production-rendered state images.', module='list_components_check')
+    add('compact-tabs', 'interaction', 'Compact tabs · controller hit/miss comparison',
+        'Production expanding sidebar tabs. Matched seeds for all four profiles, no retries, acquisition and correct activation counts, stereo pixels. Isolated empty Part fixture.', module='compact_tabs_tour')
+    add('tab-gallery', 'components', 'Long-label tabs A/B',
+        'Desktop-only comparison: fixed tabs with larger fading and scrolling labels, and compact tabs that expand on hover or selection.',
+        ['--component', 'tabs'], module='component_gallery_tour')
+    tours[-1]['modes'] = ['desktop']
     add('simulation-menu-gallery', 'components', 'Simulation menus A/B',
         'Desktop-only round 5: compact split and horizontal colour scale, with flat or raised trajectory scrubbers, explicit range/interval Load gate, exact frame entry and large-load confirmation.',
         ['--component', 'simulations'], module='component_gallery_tour')
@@ -112,6 +118,14 @@ def catalog():
         'Real guest receives native menu labels, desktop icons, controller guides and scissors; checks closing panels and hiding presence.', module='presence_ui_tour')
     add('avatar', 'left', 'VR presenter model',
         'Real local guest sees tracked headset, estimated arms, gestures, inverse model scaling and the Show VR model toggle. No public hosting.', module='avatar_tour')
+    add('origami-tracking', 'interaction', 'Origami tracking · pixels, poses and frame identity',
+        'Terminal workflow: measure origami landmarks and expected application positions. Optional submitted-eye markers identify exact session/eye/frame IDs in final SteamVR output and join the bounded pose journal, reporting unreadable IDs, repeats and skips explicitly. Interaction timing reviews correlate exact image reuse with input/submission intervals and recording-only menu hover, texture updates and haptic calls, retaining unavailable diagnostics. GPU pass summaries locate shadow/eye cost with missing-measurement accounting. Distorted pixel projection still requires lens calibration; optical scanout remains separate evidence.',
+        module='origami_tracking_check', runnable=False)
+    add('compositor-capture', 'interaction', 'SteamVR final output · capture and calibration',
+        'Terminal workflow: record the prepared SteamVR final direct-display swapchain with presentation IDs, lossless pixels, explicit omissions and measured overhead. Includes accounting and frame review. Requires a process-scoped capture-layer launch; never silently restarts SteamVR. Submitted images, compositor output, refresh association and optical evidence have separate verdicts.',
+        module='compositor_capture_check', runnable=False)
+    add('stereo-recording', 'interaction', 'Tools · five-second stereo recording',
+        'Select Record through ordinary controller input, move the model with menus open/closed, and verify distinct full-resolution eye videos, real timestamps and skipped-pair accounting. Validation uses all four motion profiles; physical headset scanout is outside this capture.', ['--recording-checks'])
     add('qr-calibration', 'left', 'Calibrate QR code · Vive camera',
         'Real edge-filtered camera preview and cancellation through Share controls. Software validates QR pose and origin snapping separately; physical target alignment requires on-site review.', ['--qr-checks'])
     add('share', 'left', 'Share presenter controls',
@@ -128,6 +142,12 @@ def catalog():
         'Isolated part: trigger-held plane picking, both end handles, angle/direction/radius wheels, Confirm, desktop feature log, save/reopen and Undo. Validation runs all four motion profiles in one viewer session.', module='bend_tour')
     add('deformation-selection', 'authoring', 'Bend / Twist · multi-selection regression',
         'No headset required: real VR selection and confirmation bridge for multiple clusters, strands, domains and mixed sets; exact scope, plane bounds, persistence, stale-target rejection and Undo.', module='deformation_selection_check')
+    add('join', 'authoring', 'Join clusters · move, rotate and connect',
+        'Private generated part: select Join and a cluster, trigger translate and grip rotate with live connection hints, test snapped position/angle wheels, Cancel, Apply and Undo. Retains native stereo and frame evidence; validation uses all four motion profiles.', module='join_tour')
+    add('join-bridge', 'authoring', 'Join clusters · routing regression',
+        'No headset required: real VR tool and cluster selection events, reversible pose preview, Cancel, desktop connection routing, one Apply, Undo and Redo. Intercepts viewer transport and creates only temporary parts; does not measure headset frame rate.', ['--browser'], module='join_tour')
+    add('join-capture', 'authoring', 'Join clusters · final output and release',
+        'Requires the configured live compositor recorder: two-second motion clips and five-second Apply/refresh capture, exact pose journals and released-pose validation. Isolated fixture; validation runs all four motion profiles. Offline frame decoding determines image reuse.', ['--capture-final'], module='join_tour')
     add('end-resize', 'authoring', 'Resize selected ends',
         'Trigger grab selected end arrows, extend and shorten, retain selection, and verify independent desktop Undo. Validation uses all four controller profiles; the frame audit accepts an imported design and records commit latency and stereo frame timing.', module='end_resize_tour')
     add('move-preview-renderer', 'authoring', 'Move / Rotate · renderer regression',
@@ -155,7 +175,7 @@ def arguments(tour, validate=False):
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
     elif tour['module'] == 'view_volumes_check':
         args += ['--validate'] if validate else ['--demo']
-    elif tour['module'] in ('quiver_tour', 'tablet_controls_tour', 'quiver_reactivation_check', 'history_refresh_check', 'list_components_check', 'menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'deformation_selection_check', 'lattice_compatibility_check', 'representation_tour', 'extrude_tour', 'sweep_tour', 'bend_tour', 'twist_tour', 'move_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'edit_wheel_history_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
+    elif tour['module'] in ('compact_tabs_tour', 'quiver_tour', 'tablet_controls_tour', 'quiver_reactivation_check', 'history_refresh_check', 'list_components_check', 'menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'deformation_selection_check', 'lattice_compatibility_check', 'representation_tour', 'extrude_tour', 'sweep_tour', 'bend_tour', 'twist_tour', 'move_tour', 'join_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'edit_wheel_history_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
         if validate:
             args += ['--validate']
     return args

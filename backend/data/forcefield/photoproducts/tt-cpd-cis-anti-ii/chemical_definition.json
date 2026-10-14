@@ -205,19 +205,19 @@
         "1:C6",
         "1:C7"
       ],
-      "expected_signed_volume": "positive",
-      "authority": "Taylor 2023 ordered assignment"
+      "expected_signed_volume": "negative",
+      "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
     },
     {
       "atom": "1:C6",
-      "ccd_configuration": "R",
+      "ccd_configuration": "S",
       "signed_volume_reference_atoms": [
         "1:N1",
         "1:C5",
         "1:H6"
       ],
       "expected_signed_volume": "positive",
-      "authority": "suprafacial candidate derivation; independent review required"
+      "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
     },
     {
       "atom": "2:C5",
@@ -228,7 +228,7 @@
         "2:C7"
       ],
       "expected_signed_volume": "negative",
-      "authority": "Taylor 2023 ordered assignment"
+      "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
     },
     {
       "atom": "2:C6",
@@ -239,69 +239,69 @@
         "2:H6"
       ],
       "expected_signed_volume": "positive",
-      "authority": "suprafacial candidate derivation; independent review required"
+      "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
     }
   ],
   "source_ring_coordinates_angstrom": {
     "1:C4": [
-      2.616366690914,
-      -0.208274442036,
-      -0.293388105995
+      0.35169676003741335,
+      0.9274812489204468,
+      -1.654768164667672
     ],
     "1:C5": [
-      1.148201088278,
-      -0.00742833667,
-      -0.500831706721
+      -0.45128869059857574,
+      0.09988147476541513,
+      -0.7361217492467113
     ],
     "1:C6": [
-      0.453544146578,
-      -1.192090013343,
-      0.163008072244
+      -1.098358132445092,
+      0.8800180160601433,
+      0.3834490100997508
     ],
     "1:C7": [
-      0.909881052817,
-      0.135436879655,
-      -2.007621926546
+      -1.3745418715900943,
+      -0.8851755365145642,
+      -1.4118246736807951
     ],
     "1:H6": [
-      0.884350527292,
-      -1.314483527425,
-      1.176443713926
+      -1.8734011805301072,
+      0.24375222419635306,
+      0.8610497280664106
     ],
     "1:N1": [
-      0.659839310198,
-      -2.401197097543,
-      -0.590748346659
+      -1.5393949557857285,
+      2.18574155795591,
+      -0.013629897829976255
     ],
     "2:C4": [
-      -1.82909683277,
-      -0.244863402634,
-      -0.689640697938
+      1.2003232118558675,
+      1.826092870657614,
+      0.8648627690619686
     ],
     "2:C5": [
-      -0.799622377367,
-      -0.310692686961,
-      0.412718808921
+      0.2032491119222932,
+      0.7644564021553525,
+      1.1156726100621495
     ],
     "2:C6": [
-      0.202827758454,
-      0.882972615149,
-      0.356546978338
+      0.436938372132002,
+      -0.4982440256446804,
+      0.32886117843729207
     ],
     "2:C7": [
-      -1.550822697095,
-      -0.53572119369,
-      1.720820871694
+      0.08610726350900291,
+      0.4734611289497187,
+      2.5983425781534826
     ],
     "2:H6": [
-      0.633769610339,
-      1.060102982318,
-      1.351551839947
+      -0.08619513066286542,
+      -1.3362666425137912,
+      0.8369716833300213
     ],
     "2:N1": [
-      -0.276903474756,
-      2.130337081106,
-      -0.163287540589
+      1.8058146294699449,
+      -0.7349307347886647,
+      -0.009386938767697537
     ]
   },
   "model_compounds": {
@@ -309,7 +309,7 @@
       "id": "n1-methyl-tt-cpd-cis-anti-ii",
       "purpose": "joint product charge, water-interaction, and base-ring bonded targets",
       "construction": "retain both complete TTD bases and replace each deoxyribose at N1 by a methyl group",
-      "source_asset": "hash-linked passed QM minimum; chemical-definition review still pending",
+      "source_asset": "Static stereochemical construction only; corrected model has no certified QM minimum",
       "source_atom_table": "PDB-CCD-TTD-CIF",
       "charge": 0,
       "multiplicity": 1,
@@ -366,63 +366,6 @@
         "glycosidic and sugar-coupled torsion targets"
       ],
       "release_rule": "construct and review a product-specific ordered DNA boundary model; the cis-syn 1N4E fragment is not a coordinate template for this isomer"
-    }
-  },
-  "minimum_geometry_evidence": {
-    "kind": "direct_candidate_harmonic_minimum",
-    "frequency_audit": {
-      "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-ii/frequency_audit.json",
-      "sha256": "43c3884639f8bfc4f15ed8ebe7b363a38b501dbf43809be0d711a03d6a0cd3d5"
-    },
-    "optimized_xyz": {
-      "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-ii/provenance/source_geometry.xyz",
-      "sha256": "bee8eaa1aedee97353040a4ec2bcf8d177367dd429073703adc3236e0e90cba2"
-    },
-    "optimized_model_audit": {
-      "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-ii/provenance/optimized_model_parent.json",
-      "sha256": "a940127a48ac3bd93076a1bea944a3bd2aee88e3f5bf219f13e51c7e373326bb"
-    },
-    "frequency_job_manifest": {
-      "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-ii/job_manifest.json",
-      "sha256": "731cbec7e443e3d71cb1e97b1ee05313abfe3ddb4736f03578c0ae8461893b8c"
-    },
-    "model_id": "n1-methyl-tt-cpd-cis-anti-ii",
-    "imaginary_mode_count": 0,
-    "lowest_frequency_cm_inverse": 57.2628,
-    "chirality_audit": {
-      "schema": "nadoc.photoproduct-chirality-audit.v1",
-      "product_id": "tt-cpd-cis-anti-ii",
-      "passed": true,
-      "centers": [
-        {
-          "atom": "1:C5",
-          "ccd_configuration": "R",
-          "signed_volume": 2.6443358722012382,
-          "expected_sign": "positive",
-          "passed": true
-        },
-        {
-          "atom": "1:C6",
-          "ccd_configuration": "R",
-          "signed_volume": 1.8766721992589612,
-          "expected_sign": "positive",
-          "passed": true
-        },
-        {
-          "atom": "2:C5",
-          "ccd_configuration": "R",
-          "signed_volume": -2.417785907164895,
-          "expected_sign": "negative",
-          "passed": true
-        },
-        {
-          "atom": "2:C6",
-          "ccd_configuration": "S",
-          "signed_volume": 1.6738216982196288,
-          "expected_sign": "positive",
-          "passed": true
-        }
-      ]
     }
   },
   "source_assets": [
@@ -518,5 +461,83 @@
         ]
       }
     }
-  ]
+  ],
+  "superseded_minimum_geometry_evidence": {
+    "applies_to": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/before/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-ii/chemical_definition.json",
+      "sha256": "8668cfeaaa85d70f920f81f425dff79cb0de29228ddb62532352e4e0092e52c8"
+    },
+    "reason": "Pre-correction stereochemistry only; not evidence for this definition",
+    "evidence": {
+      "kind": "direct_candidate_harmonic_minimum",
+      "frequency_audit": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-ii/frequency_audit.json",
+        "sha256": "43c3884639f8bfc4f15ed8ebe7b363a38b501dbf43809be0d711a03d6a0cd3d5"
+      },
+      "optimized_xyz": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-ii/provenance/source_geometry.xyz",
+        "sha256": "bee8eaa1aedee97353040a4ec2bcf8d177367dd429073703adc3236e0e90cba2"
+      },
+      "optimized_model_audit": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-ii/provenance/optimized_model_parent.json",
+        "sha256": "a940127a48ac3bd93076a1bea944a3bd2aee88e3f5bf219f13e51c7e373326bb"
+      },
+      "frequency_job_manifest": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-ii/job_manifest.json",
+        "sha256": "731cbec7e443e3d71cb1e97b1ee05313abfe3ddb4736f03578c0ae8461893b8c"
+      },
+      "model_id": "n1-methyl-tt-cpd-cis-anti-ii",
+      "imaginary_mode_count": 0,
+      "lowest_frequency_cm_inverse": 57.2628,
+      "chirality_audit": {
+        "schema": "nadoc.photoproduct-chirality-audit.v1",
+        "product_id": "tt-cpd-cis-anti-ii",
+        "passed": true,
+        "centers": [
+          {
+            "atom": "1:C5",
+            "ccd_configuration": "R",
+            "signed_volume": 2.6443358722012382,
+            "expected_sign": "positive",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "ccd_configuration": "R",
+            "signed_volume": 1.8766721992589612,
+            "expected_sign": "positive",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "ccd_configuration": "R",
+            "signed_volume": -2.417785907164895,
+            "expected_sign": "negative",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "ccd_configuration": "S",
+            "signed_volume": 1.6738216982196288,
+            "expected_sign": "positive",
+            "passed": true
+          }
+        ]
+      }
+    }
+  },
+  "stereochemistry_correction": {
+    "date": "2026-10-10",
+    "status": "automated_identity_checks_passed_release_review_pending",
+    "previous_definition": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/before/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-ii/chemical_definition.json",
+      "sha256": "8668cfeaaa85d70f920f81f425dff79cb0de29228ddb62532352e4e0092e52c8"
+    },
+    "construction_audit": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-cis-anti-ii/construction_audit.json",
+      "sha256": "99a08092c766d2790aaca536b43f3015a8b987c842ec2349263d139aa07912f4"
+    },
+    "scope": "Setup and geometric detection only; old anti QM/MM/MD evidence is not transferred",
+    "minimum_certified": false
+  }
 }

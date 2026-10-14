@@ -122,7 +122,9 @@ historical only and should move to `issues_ledger_archive.md` during the next ar
 | 11 | **ISSUE-1** Context-menu consolidation remains a large multi-phase UX program. | UX / debt | large | decisions banked |
 | 12 | **ISSUE-59** Creating an all-helix cluster drops the lattice placement cluster and produces a saved design that cannot reload. | persistence / cluster correctness | triage | no |
 | 13 | **ISSUE-60** Extrusion into fresh cells leaves new helices outside the default placement cluster; moving that cluster moves only the original cells. | geometry / cluster correctness | triage | no |
-| 14 | **ISSUE-76** Assembly cold loading and Full frame rates remain costly; validated prepared CG switches are fast, but load/GPU targets remain unmet. | performance / responsiveness | medium | no; load/FPS targets unmet |
+| 14 | **ISSUE-70** Free Join can reject an otherwise attachable brace when the maximum precursor connection set contains a connector-only cycle. | Join correctness | triage | attachment policy |
+| 15 | **ISSUE-71** Native import can reverse derived flexible-connector anchor order and change connector nucleotide positions. | persistence / geometry | triage | geometry review |
+| 16 | **ISSUE-80** Assembly cold loading and Full frame rates remain costly; validated prepared CG switches are fast, but load/GPU targets remain unmet. | performance / responsiveness | medium | no; load/FPS targets unmet |
 | done | ~~**ISSUE-16**~~ ✅ FIXED — all relevant `eigsh()` calls now pass deterministic `_eigsh_v0(...)`; focused verification still owed before archival. | reproducibility | — | — |
 
 ISSUE-8 and ISSUE-11 remain decision-gated. Closed ISSUE-9/14/15/16/17 belong in the archive, not in
@@ -1271,6 +1273,26 @@ individual over-budget test, so no classifications or budget changes were made.
 Evidence: `.development-artifacts/linear-pattern-custom-smart.log`.
 
 
+Headless parity follow-up (2026-10-11): final `test-smart` decision **FAST**;
+10,529 passed, 90 skipped, one archive timeout and four CPD fixture errors
+(121.62 s). **FULL DEFERRED**, recorded in `.nadoc-slow-pending`. The CPD preview
+fixture rejects `cis-anti-I` after separate working-tree chemistry-definition
+changes; those scientific assets were left untouched. The archive test's path
+does not call the new runtime; its retry passed in 0.32 s. All six timing-flagged
+tests passed in an isolated 6.06 s run (individual calls 0.23–0.85 s); no genuine
+heavy work or reclassification. An earlier run's three IPC failures were caused
+by overlong AF_UNIX paths under the archive TMPDIR; a shorter test-owned path
+resolved them. The earlier native review-gate timing flag fell from 10.4 s to
+0.30 s on retry. Polling responsiveness tests now bind a temporary workspace for
+every engine catalog, avoiding real workspace scans; all ten pass in 1.31 s.
+No test budgets or guards changed.
+
+Frontend validation: 7,796 passed, one skipped, two unchanged
+`md_jobs_panel.test.js` RAM-confirmation failures (lines 2067/2109), reproduced
+in isolation. Readiness app exercise: two passed; smoke: 23 passed. Lint has five
+unrelated unused-import findings in VR prompts and CPD tests. Evidence and exact
+failure names: `.development-artifacts/headless-api-parity-20261010/`.
+
 ## ISSUE-54 — Pattern confirmation treated rejected requests as success (2026-10-04, FIXED)
 
 [x] `createCircularPattern` previously passed `_request`'s null failure through the
@@ -1432,6 +1454,88 @@ or classification changes. Native placement review gate clear. Test artifacts
 removed. Decoded sweep video has exactly 76 frames / 9.5s at 8fps. Full validation
 record: `.development-artifacts/build-animation/sweep-validation.json`.
 
+## ISSUE-68 — UI polling falsely stops live headless simulations (2026-10-11, FIXED)
+
+- **Repro:** start native CanDo from a separate process and poll its job through
+  the UI API. The polling process's empty thread registry previously classified
+  the live job as orphaned. The interrupted Benchy run exposed this defect.
+- **User specification:** headless simulation operations must share the ordinary
+  user lifecycle; private workspaces must not be necessary to keep a job alive.
+- **Root cause:** process-local registries and child PIDs did not establish
+  ownership across processes or across preparation, inter-stage and publication
+  work; stale stop/recovery writes could also overwrite a new execution.
+- **Fix:** `simulation_runtime.py` owns a persistent-inode kernel lease and
+  generation-scoped control mailbox. All seven local native engines share it;
+  start, stop and orphan writes are serialized. Workspace scope is context-local.
+  Detached workers inherit ownership through a publication gate. Read-only
+  legacy completed NAMD planning creates no runtime files.
+- **Pinned by:** `test_simulation_runtime.py` and `test_simulation_runtime_api.py`
+  cover separate processes, HTTP polling, stop/resume, actual owner death,
+  workspace isolation, stale generations and detached launch/stop races. Native
+  CanDo and SNUPI solver launch checks passed. Scope and limitations are in
+  `docs/simulation_runtime.md`; evidence is under
+  `.development-artifacts/headless-api-parity-20261010/`.
+
+## ISSUE-69 — Native menu-spacing gate fails on existing Extrude layout (2026-10-11, OPEN)
+
+- Repro: build/run `nadoc-vr-menu-spacing-test`; it throws `extrude: row does not align to content rails` before reaching Join.
+- The identical failure occurs with untouched HEAD headers and test source at `d6e10e23aeb7149580575fa4699caf04296340c5`; retained proof: `.development-artifacts/vr-join-20261011/native-spacing-baseline.log`.
+- Scope: existing Extrude layout versus the spacing oracle; root cause and intended rail alignment are not yet established. No Extrude behavior or spacing assertion was changed during Join development.
+- [ ] Determine whether the layout or oracle is stale, then restore this broad native gate. Join-specific layout, footer and production GL checks pass independently.
+
+## ISSUE-70 — Extra precursor Join connections prevent an otherwise valid brace (2026-10-11, OPEN)
+
+- Repro: `.development-artifacts/braced-corner-20261011/braced-rounded-corner-v3/baseline.nadoc`
+  plus `join-request.json`: a rounded 90-degree 1x6 Sweep and separate flat 1x6 brace,
+  both ends within the requested 3 nm reach. Native preview rejects atomically with
+  `Saved joins form a cycle with no native backbone available for a scaffold nick.`
+- Captured root cause: the precursor matcher selects four of seven candidates.
+  The two desired end attachments are compatible. Two additional adjacent side
+  attachments form a 14-nt cycle containing two original nucleotides and twelve
+  connector nucleotides, with no surviving native bond available to nick.
+  `maximum_connections(..., routes=None)` optimizes attachment/clearance only;
+  `realize_join_constraints` subsequently rejects this selected set correctly.
+- Evidence: `validation/cycle-diagnosis.json` records the exact directed cycle.
+  Isolated unchanged realization accepts the desired two-pair subset and either
+  of two three-pair alternatives. These diagnostic alternatives are not product
+  changes. The public workflow succeeds at a narrower reach; Seamed routing
+  preserves all Join bonds and produces one scaffold.
+- [ ] Make precursor matching respect realizability before final selection;
+  retain strict rejection of cycles without a permitted native nick. A braced
+  corner primitive also needs explicit two-arm/two-end coverage validation.
+- No routing, placement, polarity, phase constant, or validation rule was changed
+  during this feasibility investigation. This does not establish that arbitrary
+  braced corners are routable in either routing mode.
+
+## ISSUE-71 — Flexible connector geometry changes on native import (2026-10-11, OPEN)
+
+- Repro: the braced-corner fixture at
+  `.development-artifacts/braced-corner-20261011/final/routed-seamed.nadoc` passes
+  topology and Join-preserving Seamed routing. Ordinary export/import via
+  `tests.automation_harness.roundtrip_nadoc` changes `flexible_connections` and
+  resolved connector nucleotide positions by 1.16348546 nm in the first process
+  and up to 1.97979197 nm in a second process. Plain model
+  JSON serialization preserves the original records and does not expose this.
+- All original nucleotides, staple strands, forced bonds, rigid cluster poses,
+  deformations and lattice frames remain unchanged. Both reciprocal brace-end
+  attachments remain present and every exported strand remains a complete
+  linear chain. The stricter geometry-preserving persistence audit fails.
+  The detailed second probe moves eight connector nucleotides and zero
+  nonconnector nucleotides.
+- Evidence: `final/independent-validation-detailed.json` and the same-frame
+  before/imported models under `final/import-drift/`. One observed connection
+  swaps anchors A/B and reverses its bead order; its nucleotide identity and
+  contour length are unchanged.
+- Suspected mechanism: load/import recomputes the derived cache through
+  `derive_flexible_connections`, which discovers marked components and anchors
+  through sets. Anchor reversal changes the resolved arc in this fixture.
+  Inspect deterministic ownership/ordering and reversal behavior before choosing
+  a repair; do not treat arbitrary set order as molecular placement intent.
+- [ ] Pin native import and cross-process ordering with a regression, review
+  concrete before/after geometry, then restore geometry-preserving persistence.
+  No molecular geometry formula, phase constant or topology rule was changed
+  during this investigation.
+
 ## ISSUE-72 — VR range acknowledgement briefly restores old frame bounds (2026-10-12, FIXED)
 
 - Repro: the slow/fast live range-wheel tour changes End 1225 → 515; the native
@@ -1470,7 +1574,180 @@ record: `.development-artifacts/build-animation/sweep-validation.json`.
 - [x] Regression sends actual rays to all ten digit centers through SidebarMenu.
 - Failed live evidence: `.development-artifacts/vr-trajectory-loop-20261012/initial/`.
 
-## ISSUE-75 — Selecting assembly parts writes animations and rebuilds large Full assemblies (2026-10-13, FIXED)
+## ISSUE-75 — Large exported Flex Stick renders at half headset cadence (2026-10-13, FIXED for the measured workload)
+
+The retained `24hb_0xT` P1 Alpine Aug 7 Flex Stick workload renders about 44.763
+new images/s while the compositor presents about 89.526/s. Session/eye/frame/CRC
+markers decode all 179 baseline presentations in both eyes: 90 distinct application
+images and 89 repeated pairs. Independently tracked molecular features hold on
+reused IDs and jump up to 12 pixels on advanced IDs. Applied hand/model translation
+agrees within 7.1e-8 m. Rendering cadence explains these software jumps; the user's
+monocular optical symptom remains separate physical validation debt MV-44.
+
+Same-map Full/oxDNA and small 2HB Stick render at about 90 Hz. The first exported
+Full trial was stationary because recorder preparation expired the two-second
+scripted-input lease. Its replacement verifies 15 cm model movement and 179 unique
+consecutive IDs in both eyes. The harness now requires fresh post-ACK grip, measured
+model span, pose coherence, capture-window containment and successful cleanup.
+
+Two eye passes dominate the original dense Stick GPU interval (about 5.4 ms each),
+plus about 2.1 ms shadows. Exact body/cap batch merging was slower; precomputed
+normal transforms did not improve cadence. Those attempts remain preserved.
+An eligible opaque fragment specialization saves about 2.6 ms but remains at 45 Hz.
+Grouping eight tiny instances while preserving batch/instance/triangle order brings
+moving total GPU time to 5.64 ms and restores 90 Hz. On the same binary, disabling
+grouping gives 11.17 ms and 45 Hz. Shadow time stays about 2.1 ms; eye passes fall
+to about 1.3 ms each. This locates the demonstrated cost in the exported eye path.
+
+The optimized final capture decodes 179 consecutive right-eye IDs and 177 left-eye
+IDs, with two left-eye component-limit rejections retained as unknown. The disabled
+control decodes both eyes completely and reproduces 89 repeated pairs. Original
+molecular geometry, colors, draw order and instance data are preserved. Native GL
+comparisons cover exact color/depth/object IDs and ordered vertex outputs.
+Both optimizations are now defaults for eligible geometry, with explicit environment
+`=0` rollback and safe legacy fallback. Final default-path validation passed fast
+15 cm movement and all four unchanged human-motion presets for marked/unmarked
+large Stick, same-map exported Full, and small 2HB exported Stick. All remain near
+90 Hz. The physical double-image symptom remains open as MV-44.
+
+Evidence: Archive `vr-output-capture-20261012/frame-identity-20261013/index.html`.
+Reusable entry: Debug → VR Tours & Tests → Controls & layout → Origami tracking.
+No scientific geometry/topology changes or global SteamVR configuration changes.
+
+## ISSUE-76 — Normal VR launch reopened the original renderer and recorder (2026-10-13, FIXED for normal-launch integration)
+
+Normal API launch now selects the versioned optimized native build and final-output
+recorder through owner-controlled Archive configuration. It provides an inspect
+socket, pose journal, recording-only markers and executable provenance. Journal
+failure prevents a complete-diagnostics claim; configured recorder failure is
+explicit rather than silently using application-eye capture. Fresh status probes
+retain the original launch readiness snapshot separately.
+
+The real Tools action saved 179 final images with zero accounting drops; a second
+recording on the final physical inspect viewer also saved 179. All-frame pixel
+audits verified both clips and durable direct-I/O persistence. Final calibrated
+decoding joins all 716 eye images to exact CRC/session/eye/frame records: 179 unique
+consecutive IDs per eye per clip, matching both eyes, with zero repeats, gaps or
+regressions. The wide ROI and first tight-ROI failures remain recorded. The fix
+ignores already subminimum components before the unchanged 64-candidate cap;
+other acceptance thresholds are unchanged. ROI calibration used menu frame 0 only;
+178 later menu frames and all 179 physical-inspect frames were held out.
+These stationary checks validate integration, not the user's torso bug.
+
+Integration checkpoint proof: normal-managed viewer 378253/start 96081361, native SHA256
+1e830a7fd2e8c273cec04aba917e64903ccc3b166a692659158314cac8c53b76;
+original Stick/Flex placement restored within 2.4e-7 m, scientific export unchanged,
+default grouped/opaque programs active, pass timing off. Physical inspect preserves
+haptics, desktop pointer/click and touch scrolling; controllers were untracked at
+the snapshot. The original NADOC browser tab then reattached to the same PID/session:
+real visualization and view-tools sequence publications advanced, with exact
+presentation/scientific content and geometry payload preserved; Help shows Exit VR
+enabled. This verifies the poller beyond mere events-path presence. NADOC is now
+foreground; the original desktop-3D-during-VR preference remains true, and the prior
+capture does not certify the combined foreground workload. The one-shot restore
+binding was removed, all four global VR config hashes match, and SteamVR was not restarted.
+
+Validation: 101 focused backend tests, four readiness cases and five native v2
+checks passed; 175 tracking/decoder checks plus 24 subtests passed. The initial broad FAST run retained 14 failures, 8 errors, 10,830
+passes, 92 skips and 2,500 warnings. After three Unix-socket fixture failures were
+resolved by shorter Archive paths, final FAST reports 10,832 passes, 11 failures,
+8 errors, 92 skips and 2,500 warnings; five timing overruns remain. psfgen path and
+CPD stereochemistry failures are documented. No broad-green, clean-worktree,
+optical-equivalence or subjective-resolution claim.
+
+Evidence: [integration handoff](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/launch-handoff.json),
+[recording review](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/recording-validation/index.html),
+[calibrated identity proof](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/recording-validation/postfix-summary.json),
+[final configuration/document verification](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/final-config-document-verification.json),
+[browser reattachment](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/browser-reconnect/verification.json).
+Worn-headset doubling remains MV-44.
+
+Historical intake (retained):
+The private optimized diagnostic viewer exited; ordinary browser launch still selected
+the original executable and application-eye recorder. The user’s new torso clip
+therefore was not a controlled post-fix recording. Integrate the tested native
+renderer/tools into the main checkout and bind normal launch to a pinned Archive
+build/layer, private inspect socket, recording-only image markers and pose journal.
+Save executable provenance in every new recording; never claim full diagnostic
+completion after journal failure. Keep active user design/Flex presentation and
+existing VR editing/Join behavior. Validation evidence is in
+`.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/`.
+Worn-headset doubling remains MV-44.
+
+## ISSUE-77 — Menus/hover coincide with renewed VR lag after the dense Stick fix (2026-10-13, OPEN)
+
+The user reports that doubling is substantially reduced, but lag/frame drops
+remain as menus enter view or the other controller aims, hovers or vibrates while
+moving the model. Request 962531370889719 saves all 179 final presentations with
+zero capture drops. Complete CRC/session/eye/frame decoding joins all 358 eye
+images: 144 distinct submitted images and 35 two-presentation runs in each eye
+(19.55% of presentations reuse the previous image), matching both eyes, with no
+unknowns, forward gaps or regressions. A retrospective bounded ROI-follow trial
+improves observation coverage; the original fixed-ROI result 313/358 with 22 proven
+pairs per eye and 45 unknowns is preserved. Acceptance thresholds were unchanged.
+
+The journal has 143 predicted-in-window application rows; its 144 distinct decoded
+images use a different boundary and must not be conflated with that count. All 242
+journal rows report head/hand tracking flags 15: no flagged tracking dropout is
+shown, which does not exclude pose jitter. Both menus stay logically open, while
+original images show changing visible coverage. The longest input/actions stage
+is 1.61 ms; xrEndFrame reaches 20.88 ms with mixed 11/22 ms application intervals. This
+locates a long host wait, not its GPU/menu/haptic cause. The old journal lacks
+per-frame hover and haptic telemetry.
+
+Exact-ID grouping gives median host/xrEndFrame durations of 22.242/20.259 ms
+for reused-image frames, versus 11.104/2.347 ms for single-presentation frames.
+This is a correlation with application-image reuse, not a causal haptic/menu test.
+
+Native inspection found event-triggered synchronous xrApplyHapticFeedback calls,
+not an unconditional vibration loop; vibration duration is not the API call's
+blocking duration. Sidebar hover can invalidate cached textures before the
+existing total GPU timer starts. Visible menu rendering includes backdrop copies
+and frosted-glass sampling. These are candidates to measure, not established
+causes, and no rendering or haptic behavior fix was applied.
+
+The normal viewer now records bounded capture-only hover, actual haptic dispatch
+results/durations, texture/cache counters, and per-eye menu/backdrop host spans.
+The offline summarize-interactions reader retains unavailable old telemetry and
+performs optional exact identity joins. Six native checks passed, including actual
+GL hover/cache changes and OpenXR dispatch/result spies; 45 reader checks and 69
+marker checks passed. A normal closed-menu recording 963838453284914 saved 179
+frames and 288 journal rows with diagnostics enabled, zero clock errors/overflow
+and zero UI clock calls, as expected. The initial incorrect expectation of positive
+UI clocks is retained as a failed verification; no native change or recapture was
+needed. This check does not exercise a physical hover or establish a performance fix.
+
+Current deployment: physical-inspect viewer 545874, session 545874-963676394554697,
+native SHA256 65bcd41e1de02d1d6271c19a1aa7d04683087358eb0dd78a17d4eb282cb8a4d3;
+existing compositor 2783034. The actual browser reattached, scientific export is
+unchanged, and placement normalization differs by at most 1.0547e-7. The reload
+closed the menus and did not restore their old positions. Reopen/place them and
+capture the reported physical menu/hover motion with the new telemetry; compare a
+menus-closed condition. MV-44 remains improved but open. No optical-equivalence,
+clean-worktree or broad-green claim is made.
+
+Evidence: [native pathway audit](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/native-audit.json),
+[complete identity follow trial](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/recording-analysis/identity-follow-summary.json),
+[frozen native build](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/native-freeze.json),
+[interaction findings](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/interaction-timing-findings.json),
+[final deployment verification](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/deployment/final-verification.json),
+[browser attachment](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/deployment/browser-connected.png).
+
+## ISSUE-78 — VR Join remains checking after Cancel and reselection (2026-10-13, FIXED)
+
+The physical Join tour selected the donor again after Cancel, received valid
+connection feedback, then could not Apply. A duplicate tool-preview event for
+the unchanged pose made `loadTarget` publish checking; `queuePose` deduplicated
+the already-validated transform and scheduled no replacement result.
+
+The controller now republishes the cached valid result for that exact pose or
+schedules validation when none exists. The event-order regression failed before
+the fix and passes afterward. The physical steady-fast tour subsequently
+completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
+`.development-artifacts/vr-join-20261013/reselection-repro.log`,
+`reselection-fixed.log`, and `physical-fixed/steady_fast/`.
+
+## ISSUE-79 — Selecting assembly parts writes animations and rebuilds large Full assemblies (2026-10-13, FIXED)
 
 - Repro: open the seven-part native Benchy, select previously unanimated parts,
   and wait. A hidden animation panel seeds a default animation by PATCHing the
@@ -1488,9 +1765,9 @@ record: `.development-artifacts/build-animation/sweep-validation.json`.
   remain expensive and are measured separately in the audit.
 - Validation is recorded in `docs/audits/benchy_full_performance_20261013.md`.
 
-## ISSUE-76 — Assembly cold loading and Full frame rates remain costly (2026-10-13, PARTIAL)
+## ISSUE-80 — Assembly cold loading and Full frame rates remain costly (2026-10-13, PARTIAL)
 
-- **Status:** `[~]` PARTIAL for measured cold-load/GPU limits. Implementation, final frontend, post-fix smoke, hardware measurements and cleanup are complete. This follows ISSUE-75's resolved selection/recoloring defects and does not reopen them. Sub-five-second cold loading and historical 2,000/5,000-instance targets remain unmet.
+- **Status:** `[~]` PARTIAL for measured cold-load/GPU limits. Implementation, final frontend, post-fix smoke, hardware measurements and cleanup are complete. This follows ISSUE-79's resolved selection/recoloring defects and does not reopen them. Sub-five-second cold loading and historical 2,000/5,000-instance targets remain unmet.
 - **Baseline / scope:** this session's Benchy has seven distinct sources and 462,002 nucleotides; hinge500 is 500 copies of one source. The earlier hardware workflow measured 69.71 s opening and 22.60 s first Full, with different opening boundaries. Do not substitute repeated-instance performance for unique-source cost.
 - **Implemented:** bounded native compact production, lossless NDGB/default-JSON cache interchange, versioned renderer readiness and base/display Design separation, hidden library/panel deferral, semantic backend readiness, exact hull-work reuse, prepared CG primitives and lazy indexes. Ordered optimistic CG saves preserve source versions, rollback and accepted API provenance; atomistic/surface confirmation remains. Inactive volumes/warnings, semantic panel/joint reuse and lazy connectors avoid repeated UI work. Autosave is quiet; manual Save retains progress.
 - **Final Benchy measurement:** one document/browser/source-cold run, `release_benchy_766e00d2745c`: 34.203 s navigation→paint / **29.669 s import→paint**; first Full **33.0 ms**, Beads 93.8 ms, Cylinders 76.4 ms, restored Full 35.4 ms. All seven close, 462,002 nucleotides, 91,752,688 triangles/35 calls; steady Full **21.075/21.597 FPS**, Cylinders 59.460. Only startup geometry busy; no errors, Design PATCHes or context loss; hashes/cleanup pass.

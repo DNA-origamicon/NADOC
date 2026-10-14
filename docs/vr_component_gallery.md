@@ -7,6 +7,44 @@ No design is needed or edited. Both modes run the same native geometry,
 controller state and renderer. Desktop opens a separate Linux window on this
 machine, suitable for remote desktop; it does not initialize OpenXR or SteamVR.
 
+## Long-label tab studies (2026-10-13)
+
+**Compact variant B is approved and implemented in the production VR sidebar
+tabs.** See [VR sidebar menus](vr_sidebar_menus.md#compact-tab-controller-comparison-2026-10-13)
+for the matched controller-profile comparison. The desktop gallery remains an
+isolated A/B reference.
+
+Open **Debug → VR Component Gallery → Component evaluations → Long-label tabs
+A/B desktop demo**. Both studies appear together with identical labels and
+independent selections:
+
+- **A — Fixed tabs:** larger label text within fixed-width surfaces. Overflow
+  fades at the edges. Hover or selection scrolls the label back and forth at a
+  constant speed, pausing at each end; leaving an unselected tab restores its start.
+- **B — Expanding tabs:** compact buttons and text at rest. Hover or selection
+  smoothly enlarges the button and font to reveal the whole label. A selected tab
+  stays expanded when another tab is hovered. The two expanded tabs fit inside
+  the original panel width.
+
+Selection occurs on mouse release; releasing outside cancels. **R** resets both
+rows, **F/O** switch front/angled views, **S** captures, and **Esc** closes.
+This is an isolated desktop study using the native renderer; it does not start
+OpenXR or change production menu tabs. Visual preference and headset readability
+remain for user review.
+
+```bash
+uv run python -m tools.vr_workflows.component_gallery_tour --component tabs --desktop
+```
+
+Validation: native build, ray-input behavior, per-tab front/oblique label pixels
+and offscreen negative checks pass. All **49** launcher tests and scoped lint pass.
+Actual X11 input verifies hover, scroll endpoints/reversal, persistent selection,
+both expanded long labels fitting inside the panel, release-outside cancellation
+and reset. The delivered 1920×1080 desktop was inspected; the review window is left
+open in front view. Close with **Esc**. Compact results and retry reasons are in
+`.development-artifacts/vr-tab-gallery/summary.json`; temporary captures and state
+dumps were removed after review. `frontend/src/main.js` gained **0 lines**.
+
 ## Simulation menu review — current round 5 (2026-10-12)
 
 **Debug → VR Component Gallery → Component evaluations → Simulation menus A/B

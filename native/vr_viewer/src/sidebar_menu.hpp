@@ -6,6 +6,7 @@
 #include "ui_style.hpp"
 #include "menu_grip_frame.hpp"
 #include "sidebar_scroll.hpp"
+#include "compact_tabs.hpp"
 #include "extrude_wheels.hpp"
 #include <functional>
 #include <optional>
@@ -63,12 +64,24 @@ class SidebarMenu {
     MenuPlacement placement;
     GripFrameState gripState=GripFrameState::idle;
     std::array<bool,2> gripNearby{};
+    CompactTabs compactTabs;
+    void animateTabs(float dt) {
+        int hot=-1;
+        const auto& id=focus.active?focus.id:hovered;
+        for(size_t i=0;i<tabs.size();++i)if(id=="tab:"+kSidebarTabs[tabs[i]].key)hot=int(i);
+        compactTabs.step(tabs.size(),selected,hot,std::clamp(dt,0.F,.05F));
+    }
+    float tabFont(const std::string& id) const {
+        for(size_t i=0;i<tabs.size();++i)if(id=="tab:"+kSidebarTabs[tabs[i]].key)return compactTabs.font(i);
+        return CompactTabs::idleFont;
+    }
     std::string hovered;
     MenuFocus focus;
     std::string pressed;
     double pressedUntil=0;
     MenuLayoutAudit audit;
     std::function<std::string(const std::string&,const std::string&)> label = [](const auto&,const auto& fallback){return fallback;};
+    std::function<bool(const std::string&)> visible = [](const auto&){return true;};
     std::function<bool(const std::string&)> available = [](const auto&){return true;};
     std::function<std::optional<std::pair<float,std::string>>(const std::string&)> loadingProgress=[](const auto&){return std::optional<std::pair<float,std::string>>{};};
     std::function<bool(const std::string&)> spinning=[](const auto&){return false;};
@@ -78,6 +91,7 @@ class SidebarMenu {
     std::vector<const SidebarRow*> visibleRows() const {
         std::vector<const SidebarRow*> rows;
         for(const auto& row:tab().rows) {
+            if(!visible(row.action))continue;
             // Both surface presets share the final representation row.
             if(row.id=="menu-view-surface-detail") continue;
             if(std::none_of(row.parents.begin(),row.parents.end(),[&](const auto& id){return collapsed.contains(id);})) rows.push_back(&row);
@@ -85,16 +99,16 @@ class SidebarMenu {
         return rows;
     }
     bool toolFooter() const {
-        return customTab && (tab().key=="extrude" || tab().key=="sweep" || tab().key=="move" || tab().key=="bend" || tab().key=="twist");
+        return customTab && (tab().key=="extrude" || tab().key=="sweep" || (tab().key=="move" || tab().key=="join") || tab().key=="bend" || tab().key=="twist");
     }
     bool sweepPath() const {
         return customTab && tab().key=="sweep" && std::any_of(tab().rows.begin(),tab().rows.end(),[](const auto& r){return r.id=="sweep:free-draw";});
     }
     bool raisedAction(const SidebarControl& c) const {
-        return c.id.starts_with("sim:j:") || (toolFooter() && (c.id==tab().key+":back" || c.id==tab().key+":confirm" || c.id=="move:apply"));
+        return c.id.starts_with("sim:j:") || (toolFooter() && (c.id==tab().key+":back" || c.id==tab().key+":confirm" || c.id==tab().key+":apply"));
     }
     float footerY() const {
-        return sweepPath()?-.52F:tab().key=="extrude" || tab().key=="sweep"?-.425F:tab().key=="move"?-.54F:tab().key=="bend"?-.54F:-.51F;
+        return sweepPath()?-.52F:tab().key=="extrude" || tab().key=="sweep"?-.425F:(tab().key=="move" || tab().key=="join")?-.54F:tab().key=="bend"?-.54F:-.51F;
     }
     std::vector<const SidebarRow*> contentRows() const {
         auto rows=visibleRows();
@@ -109,7 +123,7 @@ class SidebarMenu {
         return rows;
     }
     size_t total() const { if(dynamicActive())return dynamicTotal();if(customTab && tab().key=="sweep")return contentRows().size();return visibleRows().size()-(customTab && tab().key=="extrude"?5:toolFooter()?2:customTab?3:0); }
-    size_t pageRows() const { if(customTab && tab().key=="sweep")return sweepPath()?2:6;if(customTab && (tab().key=="move" || tab().key=="bend" || tab().key=="twist"))return total();return dynamicActive()?dynamicPage():customTab?5:kSidebarPageRows; }
+    size_t pageRows() const { if(customTab && tab().key=="sweep")return sweepPath()?2:6;if(customTab && ((tab().key=="move" || tab().key=="join") || tab().key=="bend" || tab().key=="twist"))return total();return dynamicActive()?dynamicPage():customTab?5:kSidebarPageRows; }
     MenuPanelBounds bounds() const {
         if(dynamicActive()) return dynamicBounds();
         auto b=kSidebarBounds;
@@ -237,7 +251,7 @@ class SidebarMenu {
     }
     std::vector<SidebarControl> controls(bool animated=true) const {
         auto out=layoutControls(animated);
-        if(toolFooter() && tab().key!="move") {
+        if(toolFooter() && tab().key!="move" && tab().key!="join") {
             std::erase_if(out,[&](const auto& c){return raisedAction(c);});
             const float left=-ui_style::toolHalfWidth,right=ui_style::toolHalfWidth,middle=0;
             const float gap=ui_style::raisedColumnGap*.5F;
@@ -247,10 +261,10 @@ class SidebarMenu {
             for(auto& c:out)if(c.id==tab().key+":cancel")
                 c.bounds.maximum.x=middle-gap;
             for(bool back:{false,true}) {
-                const std::string id=tab().key+":"+(back?"back":tab().key=="move"?"apply":"confirm");
+                const std::string id=tab().key+":"+(back?"back":(tab().key=="move" || tab().key=="join")?"apply":"confirm");
                 const auto row=std::find_if(tab().rows.begin(),tab().rows.end(),[&](const auto& r){return r.id==id;});
                 if(row==tab().rows.end())continue;
-                out.push_back({id,back?"BACK":tab().key=="move"?"APPLY":tab().key=="sweep"?row->label:"CONFIRM","",row->action,
+                out.push_back({id,back?"BACK":(tab().key=="move" || tab().key=="join")?"APPLY":tab().key=="sweep"?row->label:"CONFIRM","",row->action,
                     {{back?left:middle+gap,footerY()-ui_style::footerHalfHeight},{back?middle-gap:right,footerY()+ui_style::footerHalfHeight}},available(row->action)});
             }
         }
@@ -265,10 +279,15 @@ class SidebarMenu {
         std::vector<SidebarControl> out;
         const float tx=hand==0 ? -.397F : .397F;
         const float cx=toolFooter()?0.F:hand==0 ? .058F : -.058F;
+        float tabTop=.647F;
         for(size_t i=0;!customTab && i<tabs.size();++i) {
-            float y=.558F-static_cast<float>(i)*.189F;
             const auto& t=kSidebarTabs[tabs[i]];
-            out.push_back({"tab:"+t.key,t.label,"","tab:"+std::to_string(i),{{tx-.05F,y-.0885F},{tx+.05F,y+.0885F}},true,i==selected,true});
+            const float length=compactTabs.length(i,t.label.size());
+            const float width=.09F;
+            const float left=hand==0?tx+.05F-width:tx-.05F;
+            const float right=hand==0?tx+.05F:left+width;
+            out.push_back({"tab:"+t.key,t.label,"","tab:"+std::to_string(i),{{left,tabTop-length},{right,tabTop}},true,i==selected,true});
+            tabTop-=length+CompactTabs::gap;
         }
         if(dynamicActive()) {
             const auto extra=dynamicControls(animated);out.insert(out.end(),extra.begin(),extra.end());
@@ -325,16 +344,20 @@ class SidebarMenu {
             if(total()>pageRows())out.push_back({"scrollbar","Scroll points","","",scrollBounds(),true});
             return out;
         }
-        if(customTab && tab().key=="move") {
+        if(customTab && (tab().key=="move" || tab().key=="join")) {
             auto add=[&](const char* id,float y,float left,float right,float height=.09F,const char* icon="") {
-                const auto r=std::find_if(tab().rows.begin(),tab().rows.end(),[&](const auto& row){return row.id==std::string("move:")+id;});
+                const auto r=std::find_if(tab().rows.begin(),tab().rows.end(),[&](const auto& row){return row.id==tab().key+":"+id;});
                 if(r==tab().rows.end())return;
                 out.push_back({r->id,r->label,r->section,r->action,{{left,y-height*.5F},{right,y+height*.5F}},available(r->action),isActive(r->action),false,icon});
             };
             const float left=-ui_style::toolHalfWidth,right=ui_style::toolHalfWidth;
             add("back",.463F,left,right);
             add("selection",.333F,left,right,.12F);
-            add("snap",.197F,left,right,.12F);
+            if(tab().key=="join") {
+                add("reach",.211F,left,.015F,.10F);
+                add("reach:less",.211F,.027F,.195F,.10F);
+                add("reach:more",.211F,.207F,right,.10F);
+            } else add("snap",.197F,left,right,.12F);
             for(int i=0;i<6;++i) {
                 const float x=i<3?left:.012F,y=.060F-float(i%3)*.16F;
                 const auto id=std::to_string(i);
@@ -614,6 +637,7 @@ class SidebarMenu {
             {-ui_style::toolHalfWidth,.301F},.002F,{.53F,.74F,.72F},{{-ui_style::toolHalfWidth,.283F},{ui_style::toolHalfWidth,.305F}});
         const auto listControls=controls();
         drawSidebarSets(listControls,line,fill);
+        if(tab().key=="join")drawJoinSets(line,fill,text);
         for(const auto& c:listControls) {
             if(customSimulationDraw() && c.id.starts_with("sim:")){audit.addControl(c.id,c.bounds,c.bounds);continue;}
             clip=c.viewport;
@@ -655,7 +679,7 @@ class SidebarMenu {
                 const auto color=focus.active && c.id==focus.id?ui_style::focus:ui_style::selectedBorder;
                 ui_style::rounded({lo,hi},bg,color,line,[](MenuPanelBounds,glm::vec3){},ui_style::cornerRadius-.004F,.003F);
             }
-            if(!clip || menuLayoutContains(*clip,b)) audit.addControl(c.id,b,b,c.id.starts_with("dimension:value:")?glm::vec2(.14F,.065F):c.id.starts_with("sweep:axis:")?glm::vec2(.07F,.065F):c.id.ends_with("-wheel")?glm::vec2(.05F,.065F):(!c.icon.empty() || c.id.starts_with("volume:enabled:"))?glm::vec2(.09F,.065F):scrollbar?glm::vec2(.06F,.15F):c.vertical?glm::vec2(.09F,.15F):glm::vec2(.15F,.065F));
+            if(!clip || menuLayoutContains(*clip,b)) audit.addControl(c.id,b,b,c.id.starts_with("dimension:value:")?glm::vec2(.14F,.065F):c.id.starts_with("sweep:axis:")?glm::vec2(.07F,.065F):c.id.ends_with("-wheel")?glm::vec2(.05F,.065F):(!c.icon.empty() || c.id.starts_with("volume:enabled:"))?glm::vec2(.09F,.065F):scrollbar?glm::vec2(.06F,.15F):c.vertical?glm::vec2(.09F,CompactTabs::idleLength):glm::vec2(.15F,.065F));
             if(scrollbar) {
                 const auto thumb=dynamicActive()?dynamicThumb(c.id):scrollThumb();
                 const auto color=c.enabled?ui_style::disabledText:glm::vec3(.55F);
@@ -704,10 +728,23 @@ class SidebarMenu {
                 continue;
             }
             if(c.vertical) {
-                const auto fitted=boundedMenuStrokeText(c.label,b.maximum.y-b.minimum.y-.010F,.0033F);
-                const float s=fitted.scale;
-                text(c.id,fitted.text,{(b.minimum.x+b.maximum.x)*.5F+(hand==0?-3:3)*s,(b.minimum.y+b.maximum.y+(hand==0?-1:1)*strokeTextWidth(fitted.text.size(),s))*.5F},s,fg,
-                    {b.minimum+glm::vec2(.005F),b.maximum-glm::vec2(.005F)},true);
+                const float s=tabFont(c.id),full=strokeTextWidth(c.label.size(),s);
+                const MenuPanelBounds content{b.minimum+glm::vec2(.005F),b.maximum-glm::vec2(.005F)};
+                const float available=content.maximum.y-content.minimum.y;
+                const bool overflow=full>available;
+                // Clockwise lettering reads from the top of either tab column down.
+                const float start=content.maximum.y-std::max(0.F,(available-full)*.5F);
+                const float x=(b.minimum.x+b.maximum.x)*.5F+3*s;
+                audit.addTextBounds(c.id,c.label,{{x-6*s,std::max(content.minimum.y,start-full)},{x,start}},s,content);
+                for(size_t n=0;n<c.label.size();++n){const auto shape=glyph(static_cast<char>(std::toupper(static_cast<unsigned char>(c.label[n]))));
+                    for(size_t row=0;row<shape.size();++row)for(int col=0;col<5;++col)if(shape[row]&(1U<<(4-col))){
+                        glm::vec3 a{x-float(row)*s,start-float(n*6+col)*s,.002F};
+                        auto end=a;end.y-=s*.82F;
+                        if(!clipSidebarLine(a,end,content))continue;
+                        const float edge=end.y-content.minimum.y;
+                        line(a,end,overflow?glm::mix(bg,fg,std::clamp(edge/.030F,0.F,1.F)):fg);
+                    }
+                }
             } else {
                 const bool sweepValue=c.id.starts_with("sweep:axis:") && c.id.ends_with(":value");
                 const float padding=sweepValue?.010F:.012F;

@@ -45,7 +45,7 @@ test('readiness commands, shared views, resizing and simulation navigation', asy
   })
   expect(added.ok()).toBe(true)
   await refreshDesign(page, doc)
-  await expect(trigger(page)).toContainText('2/4 readiness')
+  await expect(trigger(page)).toContainText('2/5 readiness')
   await expect(badge(page)).toHaveAttribute('data-state', 'incomplete')
   await expectAnchored(page, '#canvas-area')
   await page.locator('#right-tab-toggle').click()
@@ -61,16 +61,32 @@ test('readiness commands, shared views, resizing and simulation navigation', asy
   await page.locator('[data-action="scaffold_sequence"]').click()
   await expect(page.locator('#assign-scaffold-modal-body')).toBeVisible()
   await page.getByRole('button', { name: 'Apply', exact: true }).click()
-  await expect(trigger(page)).toContainText('3/4 readiness')
+  await expect(trigger(page)).toContainText('3/5 readiness')
+  // A short route does not consume an entire library scaffold. Assigning its
+  // prefix supplies bases, but must not make the exact-length check pass.
+  await trigger(page).hover()
+  await expect(page.locator('[data-step-id="scaffold_length"]')).toHaveAttribute('data-complete', 'false')
+  await expect(page.locator('[data-step-id="scaffold_length"]')).toContainText('200')
+  await expect(badge(page)).toHaveAttribute('data-state', 'incomplete')
+  // Declare an actual custom source through the same UI command a user uses.
+  // The completed sequence row is no longer actionable; its native hotkey
+  // remains available for choosing a different source.
+  await page.keyboard.press('5')
+  await expect(page.locator('#assign-scaffold-modal-body')).toBeVisible()
+  await page.locator('#asc-custom-seq').fill('ACGT'.repeat(50))
+  await page.getByRole('button', { name: 'Apply', exact: true }).click()
+  await expect(trigger(page)).toContainText('4/5 readiness')
+  await trigger(page).hover()
+  await expect(page.locator('[data-step-id="scaffold_length"]')).toHaveAttribute('data-complete', 'true')
 
   // Complete the last real command in the separate cadnano host.
   const pathview = await context.newPage()
   const pathErrors = trackConsoleErrors(pathview)
   await pathview.goto(`/cadnano-editor.html?doc=${doc}`)
-  await expect(trigger(pathview)).toContainText('3/4 readiness')
+  await expect(trigger(pathview)).toContainText('4/5 readiness')
   await trigger(pathview).hover()
   await pathview.locator('[data-action="staple_sequences"]').click()
-  await expect(trigger(pathview)).toContainText('4/4 readiness')
+  await expect(trigger(pathview)).toContainText('5/5 readiness')
   await expect(badge(pathview)).toHaveAttribute('data-state', 'simulation_recommended')
   await expect(trigger(pathview)).toContainText('Sim recommended')
   await expectAnchored(pathview, '#pathview-container')
@@ -171,7 +187,7 @@ test('extrusion needs scaffold and staple routing before readiness passes', asyn
   await expect(page.locator('[data-step-id="scaffold_routing"]')).toContainText('Autoscaffold')
   await expect(page.locator('[data-step-id="staple_routing"]')).toContainText('Full Autostaple')
   await expect(page.locator('[data-step-id="topology"]')).toHaveCount(0)
-  await expect(trigger(page)).toContainText('0/4 readiness')
+  await expect(trigger(page)).toContainText('0/5 readiness')
 
   // Backend tests cover actual integrity failures; substitute the report here
   // to verify the negative score and the issue-only row in the browser.
@@ -185,9 +201,9 @@ test('extrusion needs scaffold and staple routing before readiness passes', asyn
     } })
   })
   await refreshDesign(page, doc)
-  await expect(trigger(page)).toContainText('-1/4 readiness')
+  await expect(trigger(page)).toContainText('-1/5 readiness')
   await trigger(page).hover()
   await expect(page.locator('[data-step-id="topology"]')).toContainText('−1 point')
-  await page.locator('[data-action="validation"]').click()
+  await page.locator('[data-step-id="topology"] [data-action="validation"]').click()
   await expect(page.locator('[data-readiness-issues]')).toContainText('Extension references a missing strand.')
 })

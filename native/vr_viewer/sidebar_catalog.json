@@ -1,22 +1,22 @@
 {
   "version": 2,
   "sourceHashes": {
-    "frontend/index.html": "3be4ad8bcf7c500435022cc77d9f822c79c322390276b55d16e81dd4f17c3fc1",
-    "frontend/scripts/generate-vr-sidebar-catalog.mjs": "899ebc0e707f1d200cf51f537d095c2942ad09d7755cce1e87a6e1e79a076f68",
+    "frontend/index.html": "1f6a42e4e75242ce892c118fc52cfbb28c080fdef38d704e9bc4ddb047e34499",
+    "frontend/scripts/generate-vr-sidebar-catalog.mjs": "29adb3d88b49eb670220e015f7402e8dd27ecc1711f5367ced6ac4d62e9b5b33",
     "frontend/scripts/vr-sidebar-sections.mjs": "263f383abf0572352d6e5fd36406618a4e87e12961a005fe50de108391387e55",
     "frontend/src/scene/coloring_modes.js": "38b8f278e205a935a63413a0aa0d32d89762759d0b77c7da7eaba28c7d802bae",
     "frontend/src/scene/view_volumes.js": "8cb5f50859a2394fa47cf78b1d60ffd6aaf3e6319dc8cae4585ee452f3f24c9b",
     "frontend/src/scene/vr_representations.js": "cc3ce5e23239209acc9255ba07bc53688320fccdac54b8925590199210fc60c7",
     "frontend/src/scene/vr_share.js": "16721aa0cacc45bf65f8b5c74e00a297a3678d57f8c4e150d95e74de0bef8ab4",
     "frontend/src/ui/annotation_panel.js": "c4555b987b01a80f1e900f21945a38c0a93758352e5fa4702bb9b7f2678e68ad",
-    "frontend/src/ui/assembly_panel.js": "66d96d1bc91ce4440dd541b0ea57219f41440598f24ce2d54d52f3b121880097",
+    "frontend/src/ui/assembly_panel.js": "e9ac3b882878bfd7c812343413116dc4794df28f2471d514105f61b6168c658b",
     "frontend/src/ui/cluster_panel.js": "15370c04b46579d01fcc9a26a17b79663d9f88e302a0e52d6864771b42fe4235",
     "frontend/src/ui/engine_selector.js": "fd02c24efd621426ffbfd84c66bbcb5eb22f4972aa88cca76c498df359f87488",
-    "frontend/src/ui/feature_log_panel.js": "28f3eb8e072afcf6f2bfec1380fdeafa340cb9d0e0c617d97baae3e1c858720e",
+    "frontend/src/ui/feature_log_panel.js": "fbfe28be1a95cabcdafb83548d6c9466a745e5ab21f204d2cfd15017d3ee1d4b",
     "frontend/src/ui/jobs_panel_base.js": "6062e22fb1881a79f576267311216455f7ea1e3de3a7e07d050277905558540b",
     "frontend/src/ui/multi_overlay.js": "567f177c9f8f267e7a45883bf782d776f5263af5ebb1a2abca4098fc4265b310",
     "frontend/src/ui/multi_view.js": "d897f8b8f2bbe22a6ec27c5fb049e3710a3d5ff86733c6546f52f2461f2c9ab2",
-    "frontend/src/ui/overhang_connections_panel.js": "21bc3e08cc2345d013c2bfe87b97c6e3b31ca942a3d9d9e65f519912a16eb304",
+    "frontend/src/ui/overhang_connections_panel.js": "c38f7ba1dfcc75597aba229796e16dc3dbf9e95b7d892906b96bb5548161c3b3",
     "frontend/src/ui/plate_view.js": "47b0a22b46e0f086005660cf2ef584c15852a78914ee850a778f40d537fa819c",
     "frontend/src/ui/right_sidebar_tabs.js": "731f16e100ccce83c36ad53f5f2b1198305d51ef5a9dd74ea12b572c9a10fdc5",
     "frontend/src/ui/simulation_card_order.js": "b6029b02f5d7a852a81ed7491f8fb00e4f3e50608318b0a09cd8b4a105650aff"
@@ -3480,6 +3480,32 @@
           "reason": "Not supported in VR yet"
         },
         {
+          "id": "exp-run",
+          "parents": [
+            "section:dynamics:simulate-heading"
+          ],
+          "label": "Run",
+          "section": "Simulations",
+          "kind": "button",
+          "options": [],
+          "action": "",
+          "source": "frontend/index.html",
+          "reason": "Not supported in VR yet"
+        },
+        {
+          "id": "exp-viz",
+          "parents": [
+            "section:dynamics:simulate-heading"
+          ],
+          "label": "Display prediction (Full)",
+          "section": "Simulations",
+          "kind": "input",
+          "options": [],
+          "action": "",
+          "source": "frontend/index.html",
+          "reason": "Not supported in VR yet"
+        },
+        {
           "id": "snupi-jobs-coarse-btn",
           "parents": [
             "section:dynamics:simulate-heading"
@@ -3960,7 +3986,7 @@
           "reason": ""
         },
         {
-          "id": "dynamics:control:182",
+          "id": "dynamics:control:184",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:snupi-display-toggle"
@@ -3974,7 +4000,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:183",
+          "id": "dynamics:control:185",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:snupi-display-toggle"
@@ -3988,7 +4014,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:184",
+          "id": "dynamics:control:186",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:snupi-display-toggle"
@@ -4002,7 +4028,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:185",
+          "id": "dynamics:control:187",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:snupi-display-toggle"
@@ -4016,7 +4042,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:186",
+          "id": "dynamics:control:188",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:snupi-display-toggle"
@@ -4030,7 +4056,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:187",
+          "id": "dynamics:control:189",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:snupi-display-toggle"
@@ -4433,7 +4459,7 @@
           "reason": ""
         },
         {
-          "id": "dynamics:control:207",
+          "id": "dynamics:control:209",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:blade-display-toggle"
@@ -4447,7 +4473,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:208",
+          "id": "dynamics:control:210",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:blade-display-toggle"
@@ -4461,7 +4487,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:209",
+          "id": "dynamics:control:211",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:blade-display-toggle"
@@ -4614,7 +4640,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:218",
+          "id": "dynamics:control:220",
           "parents": [
             "section:dynamics:simulate-heading"
           ],
@@ -4627,7 +4653,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:219",
+          "id": "dynamics:control:221",
           "parents": [
             "section:dynamics:simulate-heading"
           ],
@@ -4640,7 +4666,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:220",
+          "id": "dynamics:control:222",
           "parents": [
             "section:dynamics:simulate-heading"
           ],
@@ -4653,7 +4679,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:221",
+          "id": "dynamics:control:223",
           "parents": [
             "section:dynamics:simulate-heading"
           ],
@@ -4666,7 +4692,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:222",
+          "id": "dynamics:control:224",
           "parents": [
             "section:dynamics:simulate-heading"
           ],
@@ -4679,7 +4705,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:223",
+          "id": "dynamics:control:225",
           "parents": [
             "section:dynamics:simulate-heading"
           ],
@@ -6149,7 +6175,7 @@
           "reason": ""
         },
         {
-          "id": "dynamics:control:280",
+          "id": "dynamics:control:282",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:md-surface-toggle",
@@ -6164,7 +6190,7 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "dynamics:control:281",
+          "id": "dynamics:control:283",
           "parents": [
             "section:dynamics:simulate-heading",
             "section:dynamics:md-surface-toggle",
@@ -11185,10 +11211,34 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "mr-frame-sel",
+          "id": "section:properties:mr-current-selection",
+          "label": "Selection",
+          "section": "",
+          "kind": "section",
+          "options": [],
+          "action": "section:properties:mr-current-selection",
           "parents": [],
+          "source": "frontend/index.html",
+          "reason": ""
+        },
+        {
+          "id": "section:properties:mr-frame-sel",
+          "label": "Reference",
+          "section": "",
+          "kind": "section",
+          "options": [],
+          "action": "section:properties:mr-frame-sel",
+          "parents": [],
+          "source": "frontend/index.html",
+          "reason": ""
+        },
+        {
+          "id": "mr-frame-sel",
+          "parents": [
+            "section:properties:mr-frame-sel"
+          ],
           "label": "Frame",
-          "section": "Properties",
+          "section": "Reference",
           "kind": "select",
           "options": [
             {
@@ -11206,9 +11256,11 @@
         },
         {
           "id": "mr-frame-sel:option:world",
-          "parents": [],
+          "parents": [
+            "section:properties:mr-frame-sel"
+          ],
           "label": "Frame: Global",
-          "section": "Properties",
+          "section": "Reference",
           "kind": "option",
           "options": [],
           "action": "",
@@ -11217,9 +11269,11 @@
         },
         {
           "id": "mr-frame-sel:option:local",
-          "parents": [],
+          "parents": [
+            "section:properties:mr-frame-sel"
+          ],
           "label": "Frame: Local",
-          "section": "Properties",
+          "section": "Reference",
           "kind": "option",
           "options": [],
           "action": "",
@@ -11227,164 +11281,12 @@
           "reason": "Not supported in VR yet"
         },
         {
-          "id": "mr-tx",
-          "parents": [],
-          "label": "Properties: X",
-          "section": "Properties",
-          "kind": "input",
-          "options": [],
-          "action": "",
-          "source": "frontend/index.html",
-          "reason": "Not supported in VR yet"
-        },
-        {
-          "id": "mr-ty",
-          "parents": [],
-          "label": "Properties: Y",
-          "section": "Properties",
-          "kind": "input",
-          "options": [],
-          "action": "",
-          "source": "frontend/index.html",
-          "reason": "Not supported in VR yet"
-        },
-        {
-          "id": "mr-tz",
-          "parents": [],
-          "label": "Properties: Z",
-          "section": "Properties",
-          "kind": "input",
-          "options": [],
-          "action": "",
-          "source": "frontend/index.html",
-          "reason": "Not supported in VR yet"
-        },
-        {
-          "id": "mr-rx-dec",
-          "parents": [],
-          "label": "−45",
-          "section": "Properties",
-          "kind": "button",
-          "options": [],
-          "action": "",
-          "source": "frontend/index.html",
-          "reason": "Not supported in VR yet"
-        },
-        {
-          "id": "mr-rx",
-          "parents": [],
-          "label": "Properties: X",
-          "section": "Properties",
-          "kind": "input",
-          "options": [],
-          "action": "",
-          "source": "frontend/index.html",
-          "reason": "Not supported in VR yet"
-        },
-        {
-          "id": "mr-rx-inc",
-          "parents": [],
-          "label": "+45",
-          "section": "Properties",
-          "kind": "button",
-          "options": [],
-          "action": "",
-          "source": "frontend/index.html",
-          "reason": "Not supported in VR yet"
-        },
-        {
-          "id": "mr-ry-dec",
-          "parents": [],
-          "label": "−45",
-          "section": "Properties",
-          "kind": "button",
-          "options": [],
-          "action": "",
-          "source": "frontend/index.html",
-          "reason": "Not supported in VR yet"
-        },
-        {
-          "id": "mr-ry",
-          "parents": [],
-          "label": "Properties: Y",
-          "section": "Properties",
-          "kind": "input",
-          "options": [],
-          "action": "",
-          "source": "frontend/index.html",
-          "reason": "Not supported in VR yet"
-        },
-        {
-          "id": "mr-ry-inc",
-          "parents": [],
-          "label": "+45",
-          "section": "Properties",
-          "kind": "button",
-          "options": [],
-          "action": "",
-          "source": "frontend/index.html",
-          "reason": "Not supported in VR yet"
-        },
-        {
-          "id": "mr-rz-dec",
-          "parents": [],
-          "label": "−45",
-          "section": "Properties",
-          "kind": "button",
-          "options": [],
-          "action": "",
-          "source": "frontend/index.html",
-          "reason": "Not supported in VR yet"
-        },
-        {
-          "id": "mr-rz",
-          "parents": [],
-          "label": "Properties: Z",
-          "section": "Properties",
-          "kind": "input",
-          "options": [],
-          "action": "",
-          "source": "frontend/index.html",
-          "reason": "Not supported in VR yet"
-        },
-        {
-          "id": "mr-rz-inc",
-          "parents": [],
-          "label": "+45",
-          "section": "Properties",
-          "kind": "button",
-          "options": [],
-          "action": "",
-          "source": "frontend/index.html",
-          "reason": "Not supported in VR yet"
-        },
-        {
-          "id": "mr-ja",
-          "parents": [],
-          "label": "Properties: °",
-          "section": "Properties",
-          "kind": "input",
-          "options": [],
-          "action": "",
-          "source": "frontend/index.html",
-          "reason": "Not supported in VR yet"
-        },
-        {
-          "id": "mr-snap-45",
-          "parents": [],
-          "label": "Snap rotation to 45°",
-          "section": "Properties",
-          "kind": "input",
-          "options": [],
-          "action": "",
-          "source": "frontend/index.html",
-          "reason": "Not supported in VR yet"
-        },
-        {
           "id": "mr-pivot-sel",
-          "parents": [],
+          "parents": [
+            "section:properties:mr-frame-sel"
+          ],
           "label": "Pivot",
-          "section": "Properties",
+          "section": "Reference",
           "kind": "select",
           "options": [
             {
@@ -11398,10 +11300,238 @@
         },
         {
           "id": "mr-pivot-sel:option:centroid",
-          "parents": [],
+          "parents": [
+            "section:properties:mr-frame-sel"
+          ],
           "label": "Pivot: Centroid",
-          "section": "Properties",
+          "section": "Reference",
           "kind": "option",
+          "options": [],
+          "action": "",
+          "source": "frontend/index.html",
+          "reason": "Not supported in VR yet"
+        },
+        {
+          "id": "section:properties:mr-tx",
+          "label": "Translation (nm)",
+          "section": "",
+          "kind": "section",
+          "options": [],
+          "action": "section:properties:mr-tx",
+          "parents": [],
+          "source": "frontend/index.html",
+          "reason": ""
+        },
+        {
+          "id": "mr-tx",
+          "parents": [
+            "section:properties:mr-tx"
+          ],
+          "label": "Translation X (nm)",
+          "section": "Translation (nm)",
+          "kind": "input",
+          "options": [],
+          "action": "",
+          "source": "frontend/index.html",
+          "reason": "Not supported in VR yet"
+        },
+        {
+          "id": "mr-ty",
+          "parents": [
+            "section:properties:mr-tx"
+          ],
+          "label": "Translation Y (nm)",
+          "section": "Translation (nm)",
+          "kind": "input",
+          "options": [],
+          "action": "",
+          "source": "frontend/index.html",
+          "reason": "Not supported in VR yet"
+        },
+        {
+          "id": "mr-tz",
+          "parents": [
+            "section:properties:mr-tx"
+          ],
+          "label": "Translation Z (nm)",
+          "section": "Translation (nm)",
+          "kind": "input",
+          "options": [],
+          "action": "",
+          "source": "frontend/index.html",
+          "reason": "Not supported in VR yet"
+        },
+        {
+          "id": "section:properties:mr-rotation-section",
+          "label": "Rotation (°)",
+          "section": "",
+          "kind": "section",
+          "options": [],
+          "action": "section:properties:mr-rotation-section",
+          "parents": [],
+          "source": "frontend/index.html",
+          "reason": ""
+        },
+        {
+          "id": "mr-rx-dec",
+          "parents": [
+            "section:properties:mr-rotation-section"
+          ],
+          "label": "−45",
+          "section": "Rotation (°)",
+          "kind": "button",
+          "options": [],
+          "action": "",
+          "source": "frontend/index.html",
+          "reason": "Not supported in VR yet"
+        },
+        {
+          "id": "mr-rx",
+          "parents": [
+            "section:properties:mr-rotation-section"
+          ],
+          "label": "Rotation X (degrees)",
+          "section": "Rotation (°)",
+          "kind": "input",
+          "options": [],
+          "action": "",
+          "source": "frontend/index.html",
+          "reason": "Not supported in VR yet"
+        },
+        {
+          "id": "mr-rx-inc",
+          "parents": [
+            "section:properties:mr-rotation-section"
+          ],
+          "label": "+45",
+          "section": "Rotation (°)",
+          "kind": "button",
+          "options": [],
+          "action": "",
+          "source": "frontend/index.html",
+          "reason": "Not supported in VR yet"
+        },
+        {
+          "id": "mr-ry-dec",
+          "parents": [
+            "section:properties:mr-rotation-section"
+          ],
+          "label": "−45",
+          "section": "Rotation (°)",
+          "kind": "button",
+          "options": [],
+          "action": "",
+          "source": "frontend/index.html",
+          "reason": "Not supported in VR yet"
+        },
+        {
+          "id": "mr-ry",
+          "parents": [
+            "section:properties:mr-rotation-section"
+          ],
+          "label": "Rotation Y (degrees)",
+          "section": "Rotation (°)",
+          "kind": "input",
+          "options": [],
+          "action": "",
+          "source": "frontend/index.html",
+          "reason": "Not supported in VR yet"
+        },
+        {
+          "id": "mr-ry-inc",
+          "parents": [
+            "section:properties:mr-rotation-section"
+          ],
+          "label": "+45",
+          "section": "Rotation (°)",
+          "kind": "button",
+          "options": [],
+          "action": "",
+          "source": "frontend/index.html",
+          "reason": "Not supported in VR yet"
+        },
+        {
+          "id": "mr-rz-dec",
+          "parents": [
+            "section:properties:mr-rotation-section"
+          ],
+          "label": "−45",
+          "section": "Rotation (°)",
+          "kind": "button",
+          "options": [],
+          "action": "",
+          "source": "frontend/index.html",
+          "reason": "Not supported in VR yet"
+        },
+        {
+          "id": "mr-rz",
+          "parents": [
+            "section:properties:mr-rotation-section"
+          ],
+          "label": "Rotation Z (degrees)",
+          "section": "Rotation (°)",
+          "kind": "input",
+          "options": [],
+          "action": "",
+          "source": "frontend/index.html",
+          "reason": "Not supported in VR yet"
+        },
+        {
+          "id": "mr-rz-inc",
+          "parents": [
+            "section:properties:mr-rotation-section"
+          ],
+          "label": "+45",
+          "section": "Rotation (°)",
+          "kind": "button",
+          "options": [],
+          "action": "",
+          "source": "frontend/index.html",
+          "reason": "Not supported in VR yet"
+        },
+        {
+          "id": "section:properties:mr-joint-angle-section",
+          "label": "Joint rotation (°)",
+          "section": "",
+          "kind": "section",
+          "options": [],
+          "action": "section:properties:mr-joint-angle-section",
+          "parents": [],
+          "source": "frontend/index.html",
+          "reason": ""
+        },
+        {
+          "id": "mr-ja",
+          "parents": [
+            "section:properties:mr-joint-angle-section"
+          ],
+          "label": "Joint rotation (degrees)",
+          "section": "Joint rotation (°)",
+          "kind": "input",
+          "options": [],
+          "action": "",
+          "source": "frontend/index.html",
+          "reason": "Not supported in VR yet"
+        },
+        {
+          "id": "section:properties:mr-session-hint",
+          "label": "Info",
+          "section": "",
+          "kind": "section",
+          "options": [],
+          "action": "section:properties:mr-session-hint",
+          "parents": [],
+          "source": "frontend/index.html",
+          "reason": ""
+        },
+        {
+          "id": "mr-snap-45",
+          "parents": [
+            "section:properties:mr-session-hint"
+          ],
+          "label": "Snap rotation to 45°",
+          "section": "Info",
+          "kind": "input",
           "options": [],
           "action": "",
           "source": "frontend/index.html",
@@ -11411,7 +11541,7 @@
           "id": "mr-reset-btn",
           "parents": [],
           "label": "Reset",
-          "section": "Properties",
+          "section": "Selection",
           "kind": "button",
           "options": [],
           "action": "",
@@ -11422,7 +11552,7 @@
           "id": "mr-cancel-btn",
           "parents": [],
           "label": "Cancel",
-          "section": "Properties",
+          "section": "Selection",
           "kind": "button",
           "options": [],
           "action": "",
@@ -11433,7 +11563,7 @@
           "id": "mr-apply-btn",
           "parents": [],
           "label": "Apply",
-          "section": "Properties",
+          "section": "Selection",
           "kind": "button",
           "options": [],
           "action": "",
@@ -12879,9 +13009,29 @@
           "reason": ""
         },
         {
+          "id": "tool-join",
+          "label": "Join",
+          "action": "tool:join",
+          "section": "Tools",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
+          "reason": ""
+        },
+        {
           "id": "tool-extrude",
           "label": "Extrude",
           "action": "tool:extrude",
+          "section": "Tools",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
+          "reason": ""
+        },
+        {
+          "id": "tool-sweep",
+          "label": "Sweep",
+          "action": "tool:sweep",
           "section": "Tools",
           "kind": "button",
           "options": [],
@@ -12902,6 +13052,46 @@
           "id": "tool-bend",
           "label": "Bend",
           "action": "tool:bend",
+          "section": "Tools",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
+          "reason": ""
+        },
+        {
+          "id": "vr-record",
+          "label": "Record app eyes 5s",
+          "action": "recording:start",
+          "section": "Tools",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
+          "reason": ""
+        },
+        {
+          "id": "vr-record-duration",
+          "label": "Duration: 2 seconds",
+          "action": "recording:duration",
+          "section": "Tools",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
+          "reason": ""
+        },
+        {
+          "id": "vr-record-status",
+          "label": "Both eyes - 2 second countdown",
+          "action": "recording:status",
+          "section": "Tools",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
+          "reason": ""
+        },
+        {
+          "id": "vr-record-folder",
+          "label": "Open recordings folder",
+          "action": "recording:folder",
           "section": "Tools",
           "kind": "button",
           "options": [],

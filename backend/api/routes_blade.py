@@ -37,6 +37,8 @@ Display note: relaxed coordinates are Physical-layer only; they never mutate top
 
 from __future__ import annotations
 
+from backend.core import simulation_runtime
+
 from backend.api.startup_cache import coalesce_job_reads
 
 import logging
@@ -70,7 +72,7 @@ router = APIRouter(tags=["blade"])
 
 
 def _workspace() -> Path:
-    return _WORKSPACE_DIR
+    return simulation_runtime.workspace(_WORKSPACE_DIR)
 
 
 def _load_job(job_id: str) -> BladeJob:
@@ -357,6 +359,7 @@ async def get_blade_error_log(job_id: str) -> dict:
 
 
 @router.post("/blade/jobs/{job_id}/start")
+@simulation_runtime.start_request(lambda: _workspace(), "blade_jobs")
 async def start_blade_job(job_id: str) -> dict:
     job = _load_job(job_id)
     if is_running(job_id, _workspace()):
@@ -383,12 +386,9 @@ async def start_blade_job(job_id: str) -> dict:
 
 @router.post("/blade/jobs/{job_id}/stop")
 async def stop_blade_job(job_id: str) -> dict:
-    job = _load_job(job_id)
+    _load_job(job_id)  # validate existence; native runner owns every status write
     stopped = stop_job(job_id, _workspace())
     if not stopped:
-        if job.status == BladeStatus.running:
-            job.status = BladeStatus.stopped
-            job.save(_workspace())
         return {"ok": True, "message": "Job was not actively running"}
     return {"ok": True, "job_id": job_id, "status": "stopping"}
 

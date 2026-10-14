@@ -1,0 +1,546 @@
+{
+  "schema": "nadoc.cpd-isomer-priority-review.v1",
+  "date": "2026-10-10",
+  "counts_report": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-isomer-priority-v1/opportunity_counts.json",
+    "sha256": "dd63e13fa2f598a387d303770d374a447ecf5cc2d70e86ccddf7ff3396283a05"
+  },
+  "script": {
+    "path": "/home/jojo/Work/NADOC/experiments/cpd_isomer_formation/rank_opportunities.py",
+    "sha256": "188aadf3469528c34f14447aedfa0aab33c21292d73eb603d48d8a886dfde3ad"
+  },
+  "registry": {
+    "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproduct_registry.json",
+    "sha256": "9db1c690b9955f923c3c7d64b451cec3a4142495eb76b95cdd4b1d0b0c751665"
+  },
+  "scope": "Three corrected unwelded pilot jobs, 200 sampled frames each; includes competing thymine pairs.",
+  "primary_window": {
+    "max_both_forming_distances_ang": 4,
+    "min_forming_distance_ang": 2.5,
+    "max_abs_mapped_twist_deg": 45,
+    "minimum_face_margin": 0.25
+  },
+  "all_counts": {
+    "tt-cpd-cis-syn": {
+      "all": {
+        "pair_frame_count": 5909,
+        "distinct_pairs": 615
+      },
+      "intended": {
+        "pair_frame_count": 2,
+        "distinct_pairs": 2
+      },
+      "competing": {
+        "pair_frame_count": 5907,
+        "distinct_pairs": 613
+      },
+      "competing_interstrand": {
+        "pair_frame_count": 253,
+        "distinct_pairs": 15
+      },
+      "competing_intrastrand_adjacent": {
+        "pair_frame_count": 5649,
+        "distinct_pairs": 594
+      },
+      "competing_intrastrand_nonadjacent": {
+        "pair_frame_count": 5,
+        "distinct_pairs": 4
+      }
+    },
+    "tt-cpd-cis-syn-ii": {
+      "all": {
+        "pair_frame_count": 262,
+        "distinct_pairs": 20
+      },
+      "intended": {
+        "pair_frame_count": 10,
+        "distinct_pairs": 7
+      },
+      "competing": {
+        "pair_frame_count": 252,
+        "distinct_pairs": 13
+      },
+      "competing_interstrand": {
+        "pair_frame_count": 153,
+        "distinct_pairs": 10
+      },
+      "competing_intrastrand_adjacent": {
+        "pair_frame_count": 0,
+        "distinct_pairs": 0
+      },
+      "competing_intrastrand_nonadjacent": {
+        "pair_frame_count": 99,
+        "distinct_pairs": 3
+      }
+    },
+    "tt-cpd-trans-syn-i": {
+      "all": {
+        "pair_frame_count": 14,
+        "distinct_pairs": 3
+      },
+      "intended": {
+        "pair_frame_count": 1,
+        "distinct_pairs": 1
+      },
+      "competing": {
+        "pair_frame_count": 13,
+        "distinct_pairs": 2
+      },
+      "competing_interstrand": {
+        "pair_frame_count": 0,
+        "distinct_pairs": 0
+      },
+      "competing_intrastrand_adjacent": {
+        "pair_frame_count": 13,
+        "distinct_pairs": 2
+      },
+      "competing_intrastrand_nonadjacent": {
+        "pair_frame_count": 0,
+        "distinct_pairs": 0
+      }
+    },
+    "tt-cpd-trans-syn-ii": {
+      "all": {
+        "pair_frame_count": 27,
+        "distinct_pairs": 16
+      },
+      "intended": {
+        "pair_frame_count": 17,
+        "distinct_pairs": 8
+      },
+      "competing": {
+        "pair_frame_count": 10,
+        "distinct_pairs": 8
+      },
+      "competing_interstrand": {
+        "pair_frame_count": 2,
+        "distinct_pairs": 2
+      },
+      "competing_intrastrand_adjacent": {
+        "pair_frame_count": 5,
+        "distinct_pairs": 3
+      },
+      "competing_intrastrand_nonadjacent": {
+        "pair_frame_count": 3,
+        "distinct_pairs": 3
+      }
+    },
+    "tt-cpd-cis-anti-i": {
+      "all": {
+        "pair_frame_count": 601,
+        "distinct_pairs": 51
+      },
+      "intended": {
+        "pair_frame_count": 514,
+        "distinct_pairs": 37
+      },
+      "competing": {
+        "pair_frame_count": 87,
+        "distinct_pairs": 14
+      },
+      "competing_interstrand": {
+        "pair_frame_count": 64,
+        "distinct_pairs": 9
+      },
+      "competing_intrastrand_adjacent": {
+        "pair_frame_count": 0,
+        "distinct_pairs": 0
+      },
+      "competing_intrastrand_nonadjacent": {
+        "pair_frame_count": 23,
+        "distinct_pairs": 5
+      }
+    },
+    "tt-cpd-cis-anti-ii": {
+      "all": {
+        "pair_frame_count": 36,
+        "distinct_pairs": 3
+      },
+      "intended": {
+        "pair_frame_count": 1,
+        "distinct_pairs": 1
+      },
+      "competing": {
+        "pair_frame_count": 35,
+        "distinct_pairs": 2
+      },
+      "competing_interstrand": {
+        "pair_frame_count": 35,
+        "distinct_pairs": 2
+      },
+      "competing_intrastrand_adjacent": {
+        "pair_frame_count": 0,
+        "distinct_pairs": 0
+      },
+      "competing_intrastrand_nonadjacent": {
+        "pair_frame_count": 0,
+        "distinct_pairs": 0
+      }
+    },
+    "tt-cpd-trans-anti-i": {
+      "all": {
+        "pair_frame_count": 3,
+        "distinct_pairs": 3
+      },
+      "intended": {
+        "pair_frame_count": 0,
+        "distinct_pairs": 0
+      },
+      "competing": {
+        "pair_frame_count": 3,
+        "distinct_pairs": 3
+      },
+      "competing_interstrand": {
+        "pair_frame_count": 3,
+        "distinct_pairs": 3
+      },
+      "competing_intrastrand_adjacent": {
+        "pair_frame_count": 0,
+        "distinct_pairs": 0
+      },
+      "competing_intrastrand_nonadjacent": {
+        "pair_frame_count": 0,
+        "distinct_pairs": 0
+      }
+    },
+    "tt-cpd-trans-anti-ii": {
+      "all": {
+        "pair_frame_count": 0,
+        "distinct_pairs": 0
+      },
+      "intended": {
+        "pair_frame_count": 0,
+        "distinct_pairs": 0
+      },
+      "competing": {
+        "pair_frame_count": 0,
+        "distinct_pairs": 0
+      },
+      "competing_interstrand": {
+        "pair_frame_count": 0,
+        "distinct_pairs": 0
+      },
+      "competing_intrastrand_adjacent": {
+        "pair_frame_count": 0,
+        "distinct_pairs": 0
+      },
+      "competing_intrastrand_nonadjacent": {
+        "pair_frame_count": 0,
+        "distinct_pairs": 0
+      }
+    }
+  },
+  "priority_order": [
+    {
+      "rank": 1,
+      "isomer": "tt-cpd-cis-anti-i",
+      "action": "Repair/requalify the corrected core and DNA model first; earlier anti fitting/MD cannot be adopted as corrected identity evidence.",
+      "reason": "514 intended pair-frame samples across 37 ordered TT pairs (34 crossover-pair groups) in two pilot designs. Dominates intended-weld opportunities under all 27 windows."
+    },
+    {
+      "rank": 2,
+      "isomer": "tt-cpd-cis-syn-ii",
+      "action": "Audit reuse of the existing endpoint-exchanged capped core, then build and check its own ordered DNA boundary/template.",
+      "reason": "262 samples across 20 TT pairs, in every temporal quarter and every window. Covers intended welds plus competing interstrand and nonadjacent products. Existing capped-core equivalence offers a possible cost saving, not automatic full-DNA parameter transfer."
+    },
+    {
+      "rank": 3,
+      "isomer": "tt-cpd-trans-syn-ii",
+      "action": "Prioritize as the next trans candidate; inspect existing trajectory windows/site placement before a full refinement campaign.",
+      "reason": "17 intended samples across 8 TT pairs (7 crossover-pair groups), spanning all four temporal quarters. Stronger intended-weld signal than cis-syn-II at the primary window, but disappears at the strict distance cutoff. Archived capped QM minimum exists."
+    },
+    {
+      "rank": 4,
+      "isomer": "tt-cpd-cis-anti-ii",
+      "action": "Confirm the competing interstrand hotspot with more existing frames/lineages before expensive refinement.",
+      "reason": "36 samples; 34 belong to one native/native interstrand pair, all signal in the latter half. Only one primary intended-weld sample. Corrected identity has no transferred minimum."
+    },
+    {
+      "rank": 5,
+      "isomer": "tt-cpd-trans-syn-i",
+      "action": "Keep as a lower-priority competitor; defer dedicated refinement unless broader screening strengthens the signal.",
+      "reason": "14 samples across 3 TT pairs; 13 are adjacent intrastrand competitors and one is intended. Archived capped QM minimum exists."
+    },
+    {
+      "rank": 6,
+      "isomer": "tt-cpd-trans-anti-i",
+      "action": "Defer full refinement; retain in screening.",
+      "reason": "Three isolated competing samples at three pairs; no intended-weld samples in any tested window."
+    },
+    {
+      "rank": 7,
+      "isomer": "tt-cpd-trans-anti-ii",
+      "action": "Defer full refinement; retain in screening.",
+      "reason": "No primary samples; at most four all-pair samples and no intended-weld samples in the permissive sensitivity grid. Zero does not establish impossibility."
+    }
+  ],
+  "existing_reference": "cis-syn-I has a preliminary adjacent-intrastrand additive model; retain as reference, not a universally released force field. Its large total here mostly comes from adjacent native T pairs.",
+  "refinement_status": {
+    "tt-cpd-cis-syn": {
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-syn/chemical_definition.json",
+        "sha256": "b583ce20398dff5bb6e1fa167f99842ed3e3947973f8d79ea41238f04ef14c55"
+      },
+      "release_gates": {
+        "chemical_definition": "passed",
+        "qm_reference_data": "pending",
+        "parameter_fit": "pending",
+        "topology_patch": "pending",
+        "coordinate_templates": "pending",
+        "static_topology_audit": "pending",
+        "namd_smoke": "pending",
+        "solution_validation": "pending",
+        "release_review": "pending"
+      },
+      "registered_assets": [
+        "chemical_definition",
+        "patch_charge_scope",
+        "topology",
+        "parameters",
+        "coordinate_template",
+        "topology_audit_spec",
+        "preliminary_review"
+      ],
+      "current_definition_capped_minimum_evidence_kind": null,
+      "verified_minimum_evidence_pins": [],
+      "corrected_anti_prior_evidence_superseded": false
+    },
+    "tt-cpd-cis-syn-ii": {
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-syn-ii/chemical_definition.json",
+        "sha256": "cdcf91558952d1b0a6dd3c0df8ddd9ff5a8b5418a97cb4108b5d0765adc27a37"
+      },
+      "release_gates": {
+        "chemical_definition": "passed",
+        "qm_reference_data": "pending",
+        "parameter_fit": "pending",
+        "topology_patch": "pending",
+        "coordinate_templates": "pending",
+        "static_topology_audit": "pending",
+        "namd_smoke": "pending",
+        "solution_validation": "pending",
+        "release_review": "pending"
+      },
+      "registered_assets": [
+        "chemical_definition",
+        "patch_charge_scope"
+      ],
+      "current_definition_capped_minimum_evidence_kind": "audited_endpoint_exchange_equivalent_minimum",
+      "verified_minimum_evidence_pins": [
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/cis-syn-ii-equivalent-hessian-reference-v1.json",
+          "sha256": "88288721500520b0d2df747e8981a543493b7ca36baa2fae0b2e0a652d463ac4"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/frequency-v1.4/provenance/source_geometry.xyz",
+          "sha256": "386e92995e9421d69d4952a5c1060bdbe8fbbdbe4d0a80c3ed1469c6409d2b3c"
+        }
+      ],
+      "corrected_anti_prior_evidence_superseded": false
+    },
+    "tt-cpd-trans-syn-i": {
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-syn-i/chemical_definition.json",
+        "sha256": "674efb301b06c3ceb85f481d31481acf0a102182a4816d34297c921ab285852b"
+      },
+      "release_gates": {
+        "chemical_definition": "passed",
+        "qm_reference_data": "pending",
+        "parameter_fit": "pending",
+        "topology_patch": "pending",
+        "coordinate_templates": "pending",
+        "static_topology_audit": "pending",
+        "namd_smoke": "pending",
+        "solution_validation": "pending",
+        "release_review": "pending"
+      },
+      "registered_assets": [
+        "chemical_definition",
+        "patch_charge_scope"
+      ],
+      "current_definition_capped_minimum_evidence_kind": "direct_candidate_harmonic_minimum",
+      "verified_minimum_evidence_pins": [
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/frequency_audit.json",
+          "sha256": "7787eb8cf9be6a7365eaab85016d2a69f180c434c51a4a0f3da206e30182220c"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/provenance/source_geometry.xyz",
+          "sha256": "518b3b4856fc45d1d72b20396936d881c0287fa7f9a07635ecc06e2a622e140d"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/provenance/optimized_model_parent.json",
+          "sha256": "967b09c004c8b02b3cd9c42f09d5b849b1f09088b0e80811addc9e428c52c439"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/job_manifest.json",
+          "sha256": "066c66cfbe97ae5ad416bbaba5402333bae7a93e3a1362148aac87bb40f088eb"
+        }
+      ],
+      "corrected_anti_prior_evidence_superseded": false
+    },
+    "tt-cpd-trans-syn-ii": {
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-syn-ii/chemical_definition.json",
+        "sha256": "ef2412a9ffc7133d353301c2fb62f47108ef9ec4fe04d14d36ba46e1e3d6ab29"
+      },
+      "release_gates": {
+        "chemical_definition": "passed",
+        "qm_reference_data": "pending",
+        "parameter_fit": "pending",
+        "topology_patch": "pending",
+        "coordinate_templates": "pending",
+        "static_topology_audit": "pending",
+        "namd_smoke": "pending",
+        "solution_validation": "pending",
+        "release_review": "pending"
+      },
+      "registered_assets": [
+        "chemical_definition",
+        "patch_charge_scope"
+      ],
+      "current_definition_capped_minimum_evidence_kind": "direct_candidate_harmonic_minimum",
+      "verified_minimum_evidence_pins": [
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/frequency_audit.json",
+          "sha256": "56e06b6bdabf80ffaea0369282d742d4c438e26a780a425b0b74b02b827f74ac"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/provenance/source_geometry.xyz",
+          "sha256": "f65aa32dcc5926517bb21604210d2570422dbabbf3d4fae81b3a594626f4e7e6"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/provenance/optimized_model_parent.json",
+          "sha256": "af904c5fc60e018e6d94518303c4ece26028d1fd5acdf6a436bd2d23da37614a"
+        },
+        {
+          "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/job_manifest.json",
+          "sha256": "5719419eb1e33ad148707236e18beb6df1409c273af3ea6abfade52b32c01674"
+        }
+      ],
+      "corrected_anti_prior_evidence_superseded": false
+    },
+    "tt-cpd-cis-anti-i": {
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-i/chemical_definition.json",
+        "sha256": "dd8dbecbb0a6349233d7b7f260d2b4f41dc34d3635568afd72cb72620a865e63"
+      },
+      "release_gates": {
+        "chemical_definition": "pending",
+        "qm_reference_data": "pending",
+        "parameter_fit": "pending",
+        "topology_patch": "pending",
+        "coordinate_templates": "pending",
+        "static_topology_audit": "pending",
+        "namd_smoke": "pending",
+        "solution_validation": "pending",
+        "release_review": "pending"
+      },
+      "registered_assets": [
+        "chemical_definition",
+        "patch_charge_scope"
+      ],
+      "current_definition_capped_minimum_evidence_kind": null,
+      "verified_minimum_evidence_pins": [],
+      "corrected_anti_prior_evidence_superseded": true
+    },
+    "tt-cpd-cis-anti-ii": {
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-ii/chemical_definition.json",
+        "sha256": "c2d7fc2b0b0ec3d46ab58553d3826bf4b6e4164a9b9c64f36c3d996d66f16520"
+      },
+      "release_gates": {
+        "chemical_definition": "pending",
+        "qm_reference_data": "pending",
+        "parameter_fit": "pending",
+        "topology_patch": "pending",
+        "coordinate_templates": "pending",
+        "static_topology_audit": "pending",
+        "namd_smoke": "pending",
+        "solution_validation": "pending",
+        "release_review": "pending"
+      },
+      "registered_assets": [
+        "chemical_definition",
+        "patch_charge_scope"
+      ],
+      "current_definition_capped_minimum_evidence_kind": null,
+      "verified_minimum_evidence_pins": [],
+      "corrected_anti_prior_evidence_superseded": true
+    },
+    "tt-cpd-trans-anti-i": {
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-anti-i/chemical_definition.json",
+        "sha256": "a1db9e139fbdb6ef7e7d7659249fb355f4d9be9932d22c7583961bd0e0beee46"
+      },
+      "release_gates": {
+        "chemical_definition": "pending",
+        "qm_reference_data": "pending",
+        "parameter_fit": "pending",
+        "topology_patch": "pending",
+        "coordinate_templates": "pending",
+        "static_topology_audit": "pending",
+        "namd_smoke": "pending",
+        "solution_validation": "pending",
+        "release_review": "pending"
+      },
+      "registered_assets": [
+        "chemical_definition",
+        "patch_charge_scope"
+      ],
+      "current_definition_capped_minimum_evidence_kind": null,
+      "verified_minimum_evidence_pins": [],
+      "corrected_anti_prior_evidence_superseded": true
+    },
+    "tt-cpd-trans-anti-ii": {
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-anti-ii/chemical_definition.json",
+        "sha256": "862116a0883d908876df182013f196862e10e8ac338e64f9d6d4a286d67a48c7"
+      },
+      "release_gates": {
+        "chemical_definition": "pending",
+        "qm_reference_data": "pending",
+        "parameter_fit": "pending",
+        "topology_patch": "pending",
+        "coordinate_templates": "pending",
+        "static_topology_audit": "pending",
+        "namd_smoke": "pending",
+        "solution_validation": "pending",
+        "release_review": "pending"
+      },
+      "registered_assets": [
+        "chemical_definition",
+        "patch_charge_scope"
+      ],
+      "current_definition_capped_minimum_evidence_kind": null,
+      "verified_minimum_evidence_pins": [],
+      "corrected_anti_prior_evidence_superseded": true
+    }
+  },
+  "primary_intended_cis_anti_i_share": 0.9431192660550459,
+  "24hb_intended_cis_anti_i_share_range_over_27_windows": [
+    0.8057803468208092,
+    0.96875
+  ],
+  "interpretation": "Practical prioritization, not statistical significance or calibrated formation likelihood. Priorities 2 and 3 would swap for a campaign restricted to intended welds only.",
+  "no_new_simulations": true,
+  "cloud_spending": 0,
+  "limits": [
+    "Snapshots and sites within a design are correlated; no p-values or confidence interval from frame counts.",
+    "Only one screened 24HB lineage; different designs and durations cannot be pooled as exchangeable replicates.",
+    "Equal photochemical factors across isomers have not been established.",
+    "Counts use fixed ordered endpoints; I/II names can change on endpoint relabeling.",
+    "No reactions, independent encounter lifetimes, simultaneous weld yields, or melting shifts inferred.",
+    "All old anti QM/MM/MD evidence requires corrected-identity requalification."
+  ],
+  "literature_context": [
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2292369/",
+      "use": "Geometric-occupancy precedent with experimental dinucleotide calibration, not validation of this eight-isomer screen."
+    },
+    {
+      "url": "https://www.nature.com/articles/s41467-026-71955-2",
+      "use": "Isomer-dependent cis-syn/trans-syn reaction-yield context; no common eight-isomer photochemical factor inferred."
+    }
+  ]
+}

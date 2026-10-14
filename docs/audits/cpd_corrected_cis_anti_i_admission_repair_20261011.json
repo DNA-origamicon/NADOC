@@ -1,0 +1,46 @@
+{
+  "at": "2026-10-12T04:09:09.867039+00:00",
+  "event": "failed",
+  "token": "677f42af-107e-4e3e-a31d-33d2b58c8ae4",
+  "status": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v2-deferred-admission/status.json",
+    "sha256": "fc33e2b93de0da945572061f103161628edb03ed8686ea37a6d5c9d737d7e977"
+  },
+  "acknowledgement": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v2-deferred-admission/completion_wake_ack.json",
+    "sha256": "1f4f5217127ea153623fe809ebf728ced8ec9a3b769f0dc19ddd032110f8031e"
+  },
+  "launch_stderr": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v2-deferred-admission/launch_stderr.txt",
+    "sha256": "4ef5a03f1eb867b9a3faf71dfccaa1efa1a888eedea9de3f97324f4851c2cb2a"
+  },
+  "native_calculation_failed": false,
+  "native_calculation_started": false,
+  "new_qm_evaluations": 0,
+  "failed_stage": "prelaunch_exclusive_job_check",
+  "failure_preserved": true,
+  "cause": "The original launch guard searched complete systemctl rows, including Description. The deferred helper Description contained the cpd- campaign path, so the helper itself satisfied the conflict predicate. Journal confirms that description. No native service or receipt was created.",
+  "launch_repair": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v2/launch_repair_review.json",
+    "sha256": "de00cf719186fb4d5447876283e723226df2a416c8f07221a69aa2721bdf48f1"
+  },
+  "memory_snapshot": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v2-deferred-admission/failure_review_snapshot.json",
+    "sha256": "0f2efd5a515144f8c490b490eb482d081af138ba9399bdf18b5751ece41b6054"
+  },
+  "available_memory_gib": 11.23516845703125,
+  "minimum_available_memory_gib": 12,
+  "resource_limits_unchanged": true,
+  "timer_consumed": true,
+  "further_retry_armed": false,
+  "decision": "Prepared checkpoint waits for adequate resources. No periodic retries or lower memory threshold. Original scientific nonstationarity/provisional verdicts unchanged.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0,
+  "archive_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1",
+  "current_handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v2/resource_wait_handoff.json",
+    "sha256": "3c8c6a4468e55a4621fb4ced512e0809f26f2371be59016c0777213de23edd14"
+  },
+  "launch_repair_tests_passed": 6
+}

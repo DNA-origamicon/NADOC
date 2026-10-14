@@ -14,10 +14,11 @@ def coalesce_job_reads(fn):
     async def wrapped(*args, **kwargs):
         from backend.api import assembly, state
         from backend.api.doc_context import get_current_doc
+        from backend.core.simulation_runtime import workspace
 
         pending = loops.setdefault(asyncio.get_running_loop(), {})
         revision = await run_in_threadpool(state.revision)
-        key = (str(assembly._WORKSPACE_DIR), get_current_doc(), revision, args, tuple(sorted(kwargs.items())))
+        key = (str(workspace(assembly._WORKSPACE_DIR).resolve()), get_current_doc(), revision, args, tuple(sorted(kwargs.items())))
         task = pending.get(key)
         if task is None:
             task = asyncio.create_task(fn(*args, **kwargs))

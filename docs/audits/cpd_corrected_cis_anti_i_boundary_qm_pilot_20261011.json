@@ -1,0 +1,91 @@
+{
+  "schema": "nadoc.corrected-cis-anti-i-boundary-qm-pilot.v1",
+  "at": "2026-10-12T01:48:53.523868+00:00",
+  "stage": "fixed-core-boundary-audited-alternate-sugar-qm-pilot-running",
+  "authorization": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/campaign_authorization_20261010.json",
+    "sha256": "c39e549edd30e31ec183cd8094ed5cf0bd29ea34b26736f87f71d867eafd98d5"
+  },
+  "latest_audited_wake": {
+    "token": "7bc78462-5dba-4224-8e76-10ea143f641d",
+    "event": "complete",
+    "ack": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/fixed-core-boundary-v1-service/completion_wake_ack.json",
+      "sha256": "7b54007d467f44ac9b26d4b26c3c4f83fdabba47c73a968cf41f1ba234aeb597"
+    }
+  },
+  "boundary_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/fixed-core-boundary-v1/completion_audit.json",
+    "sha256": "10543f59eeee05e9e3cf699f9d419d4881863f7b8f8a651cd59f0eda99c48eb0"
+  },
+  "retained_initial_audit_failure": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/fixed-core-boundary-v1/audit_initial_failure.json",
+    "sha256": "c2f7e0016fe8453482cf6b112bd56cb092611243aab3165673df307c4fb6e85e"
+  },
+  "archived_auditor": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/fixed-core-boundary-v1/executed_completion_audit.py",
+    "sha256": "5370b83e673825a999e192132e2e6348bfd78a284a213f069a5da6219785f585"
+  },
+  "pilot_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1/plan.json",
+    "sha256": "021de6ca5b024a042c8843255b70cf707815bff3bb26df703f7acbda003ad9ba"
+  },
+  "preflight": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1/preflight.json",
+    "sha256": "e8ba5a94bcbac4f6b329aebd95312043fb1ca8488d12a0d67f7178b5adcdc2c7"
+  },
+  "admission": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1/admission.json",
+    "sha256": "6447860e6cf706be220e362545b1aa5051b821f29837d804923a16f346c22f62"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1/launch_verification.json",
+    "sha256": "e10c327dbb2f4d9f465f6f75721a8a80998e900939b8c7d0f14e9ac13deb9286"
+  },
+  "status_at_single_startup_check": {
+    "state": "running",
+    "pid": 722732,
+    "records": [],
+    "started_at": 1791769625.1835232,
+    "simulation_ready": false
+  },
+  "completion_wake_token": "1aea941e-e6fa-4e19-ac9d-6058d4bf524a",
+  "completion_watcher_armed": true,
+  "expected_finish_epoch": 1791769925.1835232,
+  "audit_deadline_epoch": 1791770345.1500955,
+  "hard_deadline_epoch": 1791770525.1500955,
+  "active_calculation_at_startup": "One alternate-sugar MP2 gradient; no optimization",
+  "next_action": "On completion/failure/deadline trigger, acknowledge wake and reopen native electronic settings, basis, geometry, energy and gradient. Compare vertical energy and50-dimensional free projected forces against the exact existing central QM conformer. Measure actual cost; admit at most a separately budgeted QM branch-closure chunk if justified. Preserve failures and partial outputs. No automatic second fit or new scan.",
+  "new_qm_gradients_admitted": 1,
+  "qm_optimization_admitted": false,
+  "bonded_fit_rounds_consumed": 1,
+  "bonded_fit_rounds_max": 2,
+  "second_fit_admitted": false,
+  "heldout_accessed": false,
+  "full_candidate_hash_lock": false,
+  "minimum_certified": false,
+  "basin_closure_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0,
+  "storage_policy": "All bulk files and native scratch on mounted Archive; no existing-data relocation/deletion.",
+  "periodic_polling": false,
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1/handoff.json",
+    "sha256": "1f62ab382cc3da44870f37e2406e99b10297dbb1d796eb488ca857ac4ed11437"
+  },
+  "summary": {
+    "native_states_replayed": 61,
+    "central_exocyclic_change_degrees": -128.74793574941663,
+    "central_5OH_change_degrees": 158.7820023146263,
+    "plus30_exocyclic_change_degrees": -2.3205780485115213,
+    "central_sugar_proper_energy_change_kcal_mol": -5.20130943812464,
+    "central_sugar_nonbonded_energy_change_kcal_mol": -8.05437091096155,
+    "central_boundary_nonbonded_energy_change_kcal_mol": 3.243061241692017,
+    "new_native_gradient_limit": 1,
+    "native_timeout_seconds": 600,
+    "service_seconds": 900,
+    "cpu_limit": 4,
+    "memory_limit_gib": 8,
+    "no_swap": true
+  }
+}

@@ -13,6 +13,26 @@ REPO = Path(os.environ.get("NADOC_REPO_ROOT", Path(__file__).resolve().parents[2
 sys.path.insert(0, str(REPO))
 from experiments.cpd_published_comparator.trigger_dna_review import save
 from experiments.cpd_anti_additive.watch import process_identity
+from experiments.cpd_published_comparator.completion_events import CompletionEvents
+
+
+def wait_for_watcher(root, timeout=15):
+    """Wait for the atomic arming receipt using filesystem events and one deadline."""
+    events = CompletionEvents(root)
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            receipt = root / "completion_wake.json"
+            if receipt.exists():
+                wake = json.loads(receipt.read_text())
+                if wake["state"] == "armed" and process_identity(wake["watcher_pid"]):
+                    return wake
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise RuntimeError("External watcher failed to arm; command not started")
+            events.wait(remaining)
+    finally:
+        events.close()
 
 
 def supervise(root):
@@ -46,18 +66,7 @@ def supervise(root):
         check=True,
     )
     try:
-        deadline = time.monotonic() + 15
-        while True:
-            wp = root / "completion_wake.json"
-            if wp.exists():
-                w = json.loads(wp.read_text())
-                if w["state"] == "armed" and process_identity(w["watcher_pid"]):
-                    break
-            if time.monotonic() > deadline:
-                raise RuntimeError(
-                    "External watcher failed to arm; command not started"
-                )
-            time.sleep(0.1)
+        wait_for_watcher(root)
         state["state"] = "running"
         save(root / "status.json", state)
         with (root / "run.log").open("w") as log:

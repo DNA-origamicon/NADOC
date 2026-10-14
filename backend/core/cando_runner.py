@@ -25,6 +25,8 @@ FEM output is Physical-layer only — never written back into Design topology.
 
 from __future__ import annotations
 
+from backend.core import simulation_runtime as runtime
+
 import json
 import logging
 import struct
@@ -51,12 +53,12 @@ class _RunningHandle:
     cancelled: bool = False
 
 
-_RUNNING: dict[str, _RunningHandle] = {}
+_RUNNING: dict[str, _RunningHandle] = runtime.Registry()
 
 
 def is_running(job_id: str) -> bool:
     handle = _RUNNING.get(job_id)
-    return handle is not None and handle.thread.is_alive()
+    return (handle is not None and handle.thread.is_alive()) or runtime.owned_job("cando_jobs", job_id)
 
 
 # ── Prepare: write the self-contained job dir ─────────────────────────────────
@@ -832,29 +834,32 @@ def _run_autorefine_job(job: CandoJob, workspace_dir: Path) -> None:
         _RUNNING.pop(job.job_id, None)
 
 
+@runtime.in_workspace
 def start_job(job: CandoJob, workspace_dir: Path) -> None:
     """Launch the job's runner in a background daemon thread. Idempotent if running.
     Dispatches by kind: ``autorefine`` refines + auto-applies + caches; else plain predict."""
     if is_running(job.job_id):
         return
     target = _run_autorefine_job if job.kind == "autorefine" else _run_job
-    handle = _RunningHandle(
-        thread=threading.Thread(
-            target=target,
-            args=(job, workspace_dir),
-            name=f"cando-runner-{job.job_id}",
-            daemon=True,
-        )
+    runtime.launch_thread(
+        job.job_dir(workspace_dir), job.job_id, lambda: target(job, workspace_dir),
+        _RUNNING, _RunningHandle, lambda: stop_job(job.job_id, workspace_dir),
+        name=f"cando-runner-{job.job_id}",
     )
-    _RUNNING[job.job_id] = handle
-    handle.thread.start()
 
 
+@runtime.in_workspace
+@runtime.idle_stop_guard("cando_jobs")
 def stop_job(job_id: str, workspace_dir: Path) -> bool:
     """Stop a running CanDo job.  Sets the cancel flag; a running scipy solve can't
     be interrupted mid-way; cancellation is checked at the next phase/frame or
     cache progress boundary, discarding results and marking the job stopped.  If no thread is alive, marks a
     stray ``running`` job stopped directly.  Returns True if a live job was found."""
+    local = _RUNNING.get(job_id)
+    requested = runtime.request_stop(Path(workspace_dir) / "cando_jobs" / job_id)
+    if not (local and local.thread.is_alive()) and requested:
+        return True
+
     handle = _RUNNING.get(job_id)
     live = handle is not None and handle.thread.is_alive()
     if handle is not None:
@@ -873,14 +878,18 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
     return live
 
 
+@runtime.reconcile_guard
 def reconcile_cando_status(job: CandoJob, workspace_dir: Path) -> CandoJob:
     """Recover a detached job's status after the runner thread died (e.g. a
     ``uvicorn --reload`` restart mid-solve).  If the cached ``display.json`` exists
     the solve finished → ``completed``; otherwise the thread died without caching →
     ``stopped``.  No-op unless the job is an orphaned ``running`` one."""
+    if runtime.is_owned(job.job_dir(workspace_dir)):
+        return job
+
     if job.status != CandoStatus.running:
         return job
-    if is_running(job.job_id):
+    if is_running(job.job_id) or runtime.is_owned(job.job_dir(workspace_dir)):
         return job
     jd = job.job_dir(workspace_dir)
     if (jd / "display.json").exists():

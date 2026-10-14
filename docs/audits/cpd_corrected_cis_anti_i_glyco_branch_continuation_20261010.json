@@ -1,0 +1,62 @@
+{
+  "at": "2026-10-11T04:58:57+00:00",
+  "acknowledgement": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v1-service/completion_wake_ack.json",
+    "sha256": "d7ce887cc1bdcc43a7212412845bb3a369894882dde09d219ca7b992c4e4a71d"
+  },
+  "completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v1/completion_audit.json",
+    "sha256": "f6c124b8d48262c968862710a659677b890a24a06bc17ba48783361c23439f91"
+  },
+  "completed_chunk_summary": {
+    "new_gradients": 20,
+    "service_seconds": 3898.153304338455,
+    "native_gradient_components": 2940,
+    "native_geometry_tables": 40,
+    "trajectory_frames_verified": 20,
+    "last_gradient_metrics": {
+      "max_atom_gradient_au": 0.00372654392312974,
+      "rms_atom_gradient_au": 0.0009447222298884677,
+      "torsion_degrees": 90.65946347940348,
+      "torsion_error_degrees": 4.8771653382573277e-11,
+      "force_scope": "Cartesian gradient projected tangent to the single fixed glycosidic torsion",
+      "passed": false
+    },
+    "constrained_stationary": false,
+    "allocation_boundary": "Gradient allocation exhausted; audit before continuation",
+    "mean_gradient_seconds": 194.2031846787955,
+    "max_gradient_seconds": 208.19473943603225,
+    "energy_change_hartree": -0.00744936618821157
+  },
+  "conformational_review": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v1/conformational_progress_review.json",
+    "sha256": "1fa26469fc5f3e6e296f824015a61a466fe812fe4f8e9e67168ac012f9cfe970"
+  },
+  "observed_changes": {
+    "energy_relative_to_stationary_reference_kcal_mol": -2.3146144457403164,
+    "cap_5OH_change_degrees": 52.91157045578166,
+    "max_sugar_ring_torsion_change_degrees": 14.517827200163282,
+    "max_scan_torsion_error_degrees": 3.1208713835439994e-06
+  },
+  "decision": "Continue the same constrained relaxation for one bounded chunk to resolve the observed conformational change; exclude unfinished response from fitting. Preserve the stationary reference and review matched-basin controls before new scan targets.",
+  "active_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v2/plan.json",
+    "sha256": "ddcca20a3e13f0cc2557536d27a50f1eb3d6e23b1f02b67dc425fed5ff896e18"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v2/handoff.json",
+    "sha256": "ea8c3db77f1840c4218bc21b1c3102d8ba762b3072bd3383ceef3eddd31b13fe"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v2/launch_verification.json",
+    "sha256": "445825c14c10ce11781679f2fca8682a7f5ce28d4d8768a5f96c9fd2a11a394a"
+  },
+  "validation": {
+    "focused_tests_passed": 21,
+    "installed_sella_restart_preflight_passed": true,
+    "new_qm_during_tests": 0
+  },
+  "endpoint_minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

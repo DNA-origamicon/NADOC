@@ -116,16 +116,16 @@ def validate(live, output):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--component',choices=['thumbwheel','buttons','cards','lists','simulations'],default='thumbwheel')
+    parser.add_argument('--component',choices=['thumbwheel','buttons','cards','lists','simulations','tabs'],default='thumbwheel')
     parser.add_argument('--desktop',action='store_true')
     parser.add_argument('--validate',action='store_true')
     parser.add_argument('--output',type=Path)
     args=parser.parse_args()
-    if args.component == 'simulations' and not args.desktop:
-        parser.error('Simulation menu studies are desktop-only; pass --desktop.')
+    if args.component in ('simulations', 'tabs') and not args.desktop:
+        parser.error('Menu studies are desktop-only; pass --desktop.')
     if args.desktop and args.validate:
         parser.error('Use the native unit/render tests for desktop validation.')
-    if args.component == 'simulations':
+    if args.component in ('simulations', 'tabs'):
         archive = Path('/media/jojo/Archive')
         storage = (ROOT/'.development-artifacts/vr-simulation-menu-round1').resolve()
         if not archive.is_mount() or (ROOT/'.development-artifacts').resolve().stat().st_dev != archive.stat().st_dev:

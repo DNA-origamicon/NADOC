@@ -1,0 +1,21 @@
+{
+  "schema": "nadoc.corrected-core-conditioning-handoff.v1",
+  "at": "2026-10-10T20:58:06+00:00",
+  "passed_fixed_geometry_reproducibility": true,
+  "gradient_difference_au": 4.346694296164522e-09,
+  "gradient_limit_au": 1e-08,
+  "df_fitting_condition": 1e-07,
+  "stationary_under_revised_settings": false,
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "full_evidence": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/conditioned_directional_handoff_20261010.json",
+    "sha256": "569293c088ee8645351a171d47278b1446976bef3b4e0d0023a41174c157eb28"
+  },
+  "next_step": "Four bounded energy-only directional probes with completion/deadline trigger; fresh optimization remains conditional on their audit.",
+  "preserved_failures": [
+    "Original Hessian reference mismatch",
+    "Fitting-condition 1e-8 reproducibility failure"
+  ],
+  "cloud_spending_usd": 0
+}

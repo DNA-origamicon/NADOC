@@ -2,6 +2,7 @@
 #include "sidebar_grips.hpp"
 #include "solid_ui.hpp"
 #include "job_card.hpp"
+#include "capture_ui_diagnostics.hpp"
 // Included after the native GL surface types; owns both sidebar panels.
 class SidebarRuntime {
  public:
@@ -10,6 +11,7 @@ class SidebarRuntime {
     std::array<SolidUi,2> raised;
     std::function<void(size_t,SolidUi&)> simulationDraw;
     std::array<bool,2> openedBefore{};
+    double lastTabFrame=0;
     std::array<nadoc_vr::SidebarMenu*,2> historyGrab{};
     void initialize() { for(auto& s:surfaces) s.initialize(); }
     void shutdown() { for(auto& s:surfaces) s.shutdown(); for(auto& s:raised)s.shutdown(); }
@@ -129,6 +131,8 @@ class SidebarRuntime {
                 activate(*target,*c,h,hands,now,action);
             }
         }
+        const float dt=lastTabFrame>0?float(now-lastTabFrame):0.F;lastTabFrame=now;
+        for(auto& m:menus)m.animateTabs(dt);
         return blocked;
     }
     bool scrollAt(const nadoc_vr::HandPose& hand,int direction=0) {
@@ -179,8 +183,9 @@ class SidebarRuntime {
         }
         return out;
     }
-    void draw() {
+    void draw(nadoc_vr::CaptureUiDiagnostics* diagnostics=nullptr) {
         for(size_t i=0;i<2;++i) if(menus[i].open) {
+            nadoc_vr::CaptureUiDiagnostics::Scope timing(diagnostics,nadoc_vr::CaptureUiDiagnostics::Kind::sidebarDraw,int(i));
             std::vector<Vertex> lines,triangles;
             auto line=[&](glm::vec3 a,glm::vec3 b,glm::vec3 color){lines.push_back({a,color,1});lines.push_back({b,color,1});};
             auto fill=[&](nadoc_vr::MenuPanelBounds b,glm::vec3 color){
@@ -197,13 +202,13 @@ class SidebarRuntime {
                 if(c.id.starts_with("sim:j:")){drawJobCard(ui,c,hover,z);continue;}
                 const bool back=c.id.ends_with(":back");
                 const bool spinning=menu.spinning(c.action);
-                const bool green=c.id=="sweep:confirm" || c.id=="move:apply";
+                const bool green=c.id=="sweep:confirm" || c.id=="move:apply" || c.id=="join:apply";
                 const auto face=(c.enabled || green)?(back?glm::vec3(.64F,.16F,.18F):glm::vec3(.12F,.49F,.37F))+(hover?glm::vec3(.10F):glm::vec3(0)):glm::vec3(.12F,.15F,.19F);
                 const auto border=(c.enabled || green)?(hover?glm::vec3(1,.74F,.30F):(back?glm::vec3(1.F,.43F,.43F):glm::vec3(.35F,.90F,.65F))):glm::vec3(.22F,.26F,.31F);
                 ui.raisedSlate(b.minimum.x,b.minimum.y,size.x,size.y,z,face,border);
                 const auto ink=c.enabled?glm::vec3(.89F,.93F,.98F):glm::vec3(.53F,.64F,.75F);
                 ui.text(c.label,(b.minimum.x+b.maximum.x-nadoc_vr::strokeTextWidth(c.label.size(),.0045F))*.5F,(b.minimum.y+b.maximum.y)*.5F+.0135F,.0045F,ink,z+.002F);
-                if(c.id!="move:back")ui.text(c.section,b.minimum.x+.025F,b.minimum.y+.027F,.0028F,ink,z+.002F);
+                if(c.id!="move:back" && c.id!="join:back")ui.text(c.section,b.minimum.x+.025F,b.minimum.y+.027F,.0028F,ink,z+.002F);
                 if(spinning) {
                     // An animated ring overlays Confirm while the acknowledged
                     // generation request is pending; input remains disabled.
@@ -219,7 +224,9 @@ class SidebarRuntime {
                 }
             }
             if(menu.customSimulationDraw() && simulationDraw)simulationDraw(i,ui);
-            surfaces[i].update(lines,menus[i].bounds(),false,triangles);
+            const auto updateStart=diagnostics?diagnostics->stamp():0;
+            const bool updated=surfaces[i].update(lines,menus[i].bounds(),false,triangles);
+            if(diagnostics)diagnostics->texture(i,updated,updateStart);
         }
     }
     void render(const glm::mat4& projection) {

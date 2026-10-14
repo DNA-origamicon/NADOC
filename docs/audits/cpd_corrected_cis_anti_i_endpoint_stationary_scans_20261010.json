@@ -1,0 +1,74 @@
+{
+  "at": "2026-10-11T03:51:59.582287+00:00",
+  "wake": {
+    "token": "fd45703a-6ab2-4d89-b545-18e30bd42eaa",
+    "event": "complete",
+    "received_at": "2026-10-11T03:41:33.901380+00:00"
+  },
+  "completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-optimization-v2/completion_audit.json",
+    "sha256": "e2d8b2620670b4b94adc52966f405c46406ef906bd1ac01ea77ecb8ff80afed8"
+  },
+  "endpoint_summary": {
+    "new_gradients": 2,
+    "service_seconds": 389.3851583003998,
+    "native_gradient_components": 441,
+    "native_geometry_tables": 6,
+    "trajectory_frames_verified": 3,
+    "last_gradient_metrics": {
+      "max_atom_gradient_au": 1.4684164964813648e-05,
+      "rms_atom_gradient_au": 5.411366103914323e-06
+    },
+    "stationary": true,
+    "optimizer_converged": true,
+    "energy_change_hartree": 8.162714948412031e-09,
+    "minimum_certified": false
+  },
+  "preserved_auditor_failure": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-optimization-v2/completion_audit_attempt1_failure.json",
+    "sha256": "af1204a77a03be4155b9d4ddd5d2a127e736627f9ff01f8a04a308c8e11d2ad4"
+  },
+  "decision": "Stop unconstrained optimization after unchanged stationarity criteria pass. Proceed to preregistered constrained glycosidic training response while retaining uncertified endpoint minimum status.",
+  "scope": "Capped core local minimum supported; single-sugar endpoint stationary. Neither implies force-field or full NAMD readiness.",
+  "training_design": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/glycosidic-training-v1/design.json",
+    "sha256": "08ca518d3c0586b1a033c2fd89866f7547ac30460848a149718423b09baad688"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v1/handoff.json",
+    "sha256": "bfde85566e0f1b9913fa07c2c548f3c69c4ff2325e66da7788ba676e7fd3a603"
+  },
+  "active_job": {
+    "unit": "cpd-corrected-anti1-glyco-minus15-v1",
+    "constraint": {
+      "indices": [
+        3,
+        7,
+        8,
+        9
+      ],
+      "atoms": [
+        "1:O4'",
+        "1:C1'",
+        "1:N1",
+        "1:C2"
+      ],
+      "target_degrees": 90.65946347935471,
+      "offset_degrees": -15,
+      "tolerance_degrees": 0.01
+    },
+    "max_new_gradients": 20,
+    "hard_seconds": 5400,
+    "wake_token": "6a78c90a-0029-4b56-8a55-ef396577668b",
+    "audit_deadline_local": "2026-10-10T23:07:53.914596-06:00",
+    "hard_deadline_local": "2026-10-10T23:17:53.914596-06:00"
+  },
+  "validation": {
+    "focused_tests_passed": 15,
+    "synthetic_driver_preflight_passed": true,
+    "preflight_qm_evaluations": 0,
+    "startup_verified": true
+  },
+  "cloud_spending_usd": 0,
+  "simulation_ready": false
+}

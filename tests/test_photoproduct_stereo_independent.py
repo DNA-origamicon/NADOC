@@ -1,5 +1,7 @@
 import hashlib
 import json
+
+import pytest
 from pathlib import Path
 
 from backend.core.photoproduct_registry import photoproduct_registry
@@ -8,7 +10,8 @@ from backend.parameterization.photoproduct_stereo_independent import (
 )
 
 
-def test_openbabel_stereo_audit_is_gate_neutral_and_hash_linked(tmp_path, monkeypatch):
+@pytest.mark.parametrize("legacy_wrong_symmetry", [False, True])
+def test_openbabel_stereo_audit_is_gate_neutral_and_hash_linked(tmp_path, monkeypatch, legacy_wrong_symmetry):
     registry = photoproduct_registry()
     records = []
     candidate_results = []
@@ -80,7 +83,7 @@ def test_openbabel_stereo_audit_is_gate_neutral_and_hash_linked(tmp_path, monkey
             "tt-cpd-cis-anti-i": "DDDD",
             "tt-cpd-cis-anti-ii": "EEEE",
             "tt-cpd-trans-anti-i": "FFFF",
-            "tt-cpd-trans-anti-ii": "GGGG",
+            "tt-cpd-trans-anti-ii": "GGGG" if legacy_wrong_symmetry else "FFFF",
         }[product_id]
         return Completed(f"ANTIBLOCKABCDE-{stereo}-N\n")
 
@@ -91,7 +94,10 @@ def test_openbabel_stereo_audit_is_gate_neutral_and_hash_linked(tmp_path, monkey
         openbabel_executable=executable,
         output_path=tmp_path / "report.json",
     )
-    assert report["passed"] is True
-    assert report["status"] == "software_crosscheck_passed_human_review_required"
+    assert report["passed"] is (not legacy_wrong_symmetry)
+    if legacy_wrong_symmetry:
+        assert any("trans-anti I/II" in e for e in report["errors"])
+    else:
+        assert report["status"] == "software_crosscheck_passed_human_review_required"
     assert report["gate_effect"] == "none"
     assert len(report["records"]) == 8

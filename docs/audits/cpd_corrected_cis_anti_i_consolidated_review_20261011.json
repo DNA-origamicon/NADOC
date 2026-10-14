@@ -1,0 +1,111 @@
+{
+  "schema": "nadoc.corrected-cis-anti-i-consolidated-review.v1",
+  "at": "2026-10-12T03:56:26.973460+00:00",
+  "archive_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1",
+  "completion_acknowledgement": {
+    "token": "29f7da0c-7627-492a-ae9d-703632ba9b59",
+    "event": "complete",
+    "received_at": "2026-10-12T03:44:39.779359+00:00"
+  },
+  "evidence": {
+    "alternate-sugar-qm-release-v1/completion_audit.json": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v1/completion_audit.json",
+      "sha256": "8d4074df26eebd28333cc463f0961df3027148b5e4c8440bea86760207007e60"
+    },
+    "alternate-sugar-qm-release-v1/consolidated_candidate_review.json": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v1/consolidated_candidate_review.json",
+      "sha256": "14a5edfb865b5d6b331fc82b430f47b79b47ccc088ba4a3add7d862264e5ddf9"
+    },
+    "alternate-sugar-qm-release-v1/consolidated_mm_evaluations.json": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v1/consolidated_mm_evaluations.json",
+      "sha256": "97741b4339c7c74c924bea590628cc680451e92a4440ca3b4ef4feab347902d6"
+    },
+    "alternate-sugar-qm-release-v2/plan.json": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v2/plan.json",
+      "sha256": "d4c4f18d12c3516702afe1265b45843b2eb6139ae07260fa8677954d88dc3535"
+    },
+    "alternate-sugar-qm-release-v2/preflight.json": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v2/preflight.json",
+      "sha256": "f57bf6129e815006859e2ecf0f366f8c02e8619de89338980ab7b3b8d0a3ee65"
+    },
+    "alternate-sugar-qm-release-v2/admission.json": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v2/admission.json",
+      "sha256": "603e7fe33eb700f21b3806fcf1934d1cb889d76f155d46fc1f77b04b0bb5844b"
+    },
+    "alternate-sugar-qm-release-v2/initial_admission_failure.json": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v2/initial_admission_failure.json",
+      "sha256": "339e3f7f17dc843656612ab31f5a5c14cb17fc6211af7c9b99f1d57f60d5d0ff"
+    },
+    "alternate-sugar-qm-release-v2-deferred-admission/timer_receipt.json": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v2-deferred-admission/timer_receipt.json",
+      "sha256": "b3edfec57214a1dfd5ee63602f4ec30483b2579170a51c615ff7550a056b7e6a"
+    },
+    "alternate-sugar-qm-release-v2-deferred-admission/test_receipt.json": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v2-deferred-admission/test_receipt.json",
+      "sha256": "40bc836a59f3731289a662bd640dee45adb4f2211a9fef4e257fee998ca601d5"
+    }
+  },
+  "native_evidence_passed": true,
+  "evaluated_states": 13,
+  "new_gradients": 12,
+  "service_minutes": 42.375185855229695,
+  "progress": {
+    "force_reduction_factor": 149.5517590786985,
+    "energy_change_kcal_mol": -0.29164448926190234,
+    "last_five_force_reduction_fraction": 0.8514400686788998,
+    "last_five_energy_change_kcal_mol": -0.0014437988505616875,
+    "maximum_force_limit_ratio": 2.8454137622170528,
+    "rms_force_limit_ratio": 1.6809393926809055,
+    "uphill_accepted_energy_changes_kcal_mol": [
+      0.49130018544873033
+    ]
+  },
+  "final_energy_relative_to_original_qm_kcal_mol": -2.724679092663583,
+  "final_projected_max_gradient_au": 4.268120643325579e-05,
+  "final_projected_rms_gradient_au": 1.6809393926809058e-05,
+  "constrained_stationary": false,
+  "optimizer_converged": false,
+  "geometry_comparison": {
+    "original_qm": {
+      "heavy_atom_rmsd_angstrom": 0.4532503297386812,
+      "maximum_heavy_proper_change_degrees": 128.41784115010466,
+      "descriptor_match": false
+    },
+    "alternate_qm": {
+      "heavy_atom_rmsd_angstrom": 0.21815861187283758,
+      "maximum_heavy_proper_change_degrees": 18.697406377377888,
+      "descriptor_match": true
+    }
+  },
+  "mm_energy_comparison": {
+    "parent": {
+      "alternate_minus_original_vertical_kcal_mol": -10.066047191829462,
+      "error_vs_observed_qm_difference_kcal_mol": -7.341368099165878
+    },
+    "core_round1": {
+      "alternate_minus_original_vertical_kcal_mol": -9.878749588133527,
+      "error_vs_observed_qm_difference_kcal_mol": -7.154070495469943
+    }
+  },
+  "comparison_scope": "Six static OpenMM Reference energy/gradient evaluations. Existing QM and accepted MM coordinates only. No new relaxation, QM, fit, or target-grid acquisition.",
+  "candidate_decision": "Keep round1 parameters provisional and unmodified. Do not spend the second fit on forcing the original sugar conformer. Finish this single existing chi-constrained QM target, then evaluate the smallest candidate correction justified by the consolidated residuals. Existing reference/failed cases remain exposed development evidence.",
+  "continuation_admitted": true,
+  "continuation_target": "Only current alternate zero-offset endpoint; same single chi,49atoms,method,thresholds and exact accepted seed/gradient.",
+  "continuation_max_new_gradients": 30,
+  "continuation_hard_seconds": 7200,
+  "native_running_at_record": false,
+  "status": "one_timer_admission_armed",
+  "timed_admission": "2026-10-12T04:05:32.317327+00:00",
+  "additional_angular_grid_admitted": false,
+  "endpoint_hessian_admitted": false,
+  "second_fit_admitted": false,
+  "heldout_accessed": false,
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0,
+  "current_handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v2/queued_handoff.json",
+    "sha256": "d1861bc3a9326e85b5058cf92a1fde236d50f466632fff6d4906914959c1e2cf"
+  },
+  "next_after_stationarity": "Stop QM optimization; compare the stationary matched conformer against existing MM and core-response data before a finite remaining fit decision. Address provisional NAMD export/energy-force engineering separately. No automatic extra endpoint Hessian or profile."
+}

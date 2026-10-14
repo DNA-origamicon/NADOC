@@ -25,3 +25,15 @@ void drawSidebarSets(const std::vector<SidebarControl>& controls,Line line,Fill 
             ui_style::rounded({{x-.006F,y-.006F},{x+.006F,y+.006F}},color,color,line,fill,.006F,.001F);
     }
 }
+
+// Join shares the established rounded fieldsets and stroke-font text renderer.
+template<class Line,class Fill,class Text>
+void drawJoinSets(Line line,Fill fill,Text text) {
+    for(int column=0;column<2;++column) {
+        const float left=column==0?-ui_style::toolHalfWidth:.012F;
+        const MenuPanelBounds bounds{{left-.004F,-.329F},{left+.367F,.123F}};
+        ui_style::rounded(bounds,{.027F,.041F,.055F},{.18F,.29F,.35F},line,fill,.006F,.001F);
+        text(column==0?"join:position-set":"join:rotation-set",column==0?"POSITION / NM":"ROTATION / DEG",
+            {left+.005F,.149F},.0025F,ui_style::text,{{left,.130F},{left+.363F,.154F}});
+    }
+}

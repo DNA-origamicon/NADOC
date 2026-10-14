@@ -35,7 +35,11 @@ def context_catalog(catalog, state):
         if t["key"] == "assembly" and (t["side"], "tab:assembly") not in visible
     ]
     excluded = {(t["side"], t["tab"]) for t in skipped}
-    return {**catalog, "tabs": [t for t in catalog["tabs"]
+    # Duration selection is present only for opt-in final-compositor capture.
+    final_capture = state.get("recording", {}).get("source") == "final_compositor_swapchain"
+    return {**catalog, "tabs": [{**t, "rows":[r for r in t["rows"]
+                               if final_capture or r["id"] != "vr-record-duration"]} if "rows" in t else t
+                               for t in catalog["tabs"]
                                if (t["side"], t["key"]) not in excluded]}, skipped
 
 
@@ -400,6 +404,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--action-checks", action="store_true", help="Check current tool, selection and trajectory routes")
+    mode.add_argument("--recording-checks", action="store_true", help="Record both eyes for five seconds with menus open and closed")
     mode.add_argument("--qr-checks", action="store_true", help="Check Share-tab Vive camera preview and cancellation")
     mode.add_argument("--room-checks", action="store_true", help="Check frosted menus and the calibrated SteamVR floor")
     mode.add_argument("--dimension-checks", action="store_true", help="Check live dimensions, pinning, entry controls and model transforms")
@@ -443,7 +448,7 @@ def main():
     )
     catalog = json.loads((root / "native/vr_viewer/sidebar_catalog.json").read_text())
     if args.tab:
-        if args.edit_checks or args.selection_checks or args.action_checks or args.remote_checks or args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks:
+        if args.edit_checks or args.selection_checks or args.action_checks or args.remote_checks or args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks or args.recording_checks:
             parser.error('--tab is only supported by the sidebar page tour')
         tabs = [t for t in catalog['tabs'] if f"{t['side']}:{t['key']}" == args.tab]
         if not tabs:
@@ -467,7 +472,7 @@ def main():
                 socket = str(Path(temp) / "viewer.sock")
                 command = [
                     str(root / "native/vr_viewer/build/nadoc-vr-viewer"),
-                    str(root / ("native/vr_viewer/examples/scrywrite_simple_origami.nadocvr" if args.room_checks or args.depth_checks or args.qr_checks else "native/vr_viewer/examples/empty_authoring.nadocvr")),
+                    str(root / ("native/vr_viewer/examples/scrywrite_simple_origami.nadocvr" if args.room_checks or args.depth_checks or args.qr_checks or args.recording_checks else "native/vr_viewer/examples/empty_authoring.nadocvr")),
                     "--scrywrite-live",
                     socket,
                     "--scrywrite-live-mode",
@@ -555,6 +560,8 @@ def main():
                 from tools.vr_workflows.remote_border_check import run as focus_run
             elif args.depth_checks:
                 from tools.vr_workflows.menu_depth_check import run as focus_run
+            elif args.recording_checks:
+                from tools.vr_workflows.stereo_recording_check import run as focus_run
             elif args.qr_checks:
                 from tools.vr_workflows.qr_calibration_check import run as focus_run
             elif args.room_checks:
@@ -573,7 +580,7 @@ def main():
                         "preset": preset,
                         **(
                             focus_run(live, catalog, destination, preset)
-                            if args.edit_checks or args.selection_checks or args.action_checks or args.remote_checks or args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks
+                            if args.edit_checks or args.selection_checks or args.action_checks or args.remote_checks or args.focus_checks or args.grip_checks or args.dimension_checks or args.room_checks or args.depth_checks or args.qr_checks or args.recording_checks
                             else run_tour(
                                 live,
                                 catalog,
@@ -589,7 +596,7 @@ def main():
                 (output / "result.json").write_text(
                     json.dumps(results, indent=2) + "\n"
                 )
-            if not args.edit_checks and not args.selection_checks and not args.action_checks and not args.remote_checks and not args.tab and not args.room_checks and not args.depth_checks and not args.qr_checks:
+            if not args.edit_checks and not args.selection_checks and not args.action_checks and not args.remote_checks and not args.tab and not args.room_checks and not args.depth_checks and not args.qr_checks and not args.recording_checks:
                 check_actions(live, output, args.preset)
             from tools.vr_motion.desktop_check import run as check_desktop
 

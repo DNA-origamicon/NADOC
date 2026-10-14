@@ -568,6 +568,10 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # Starts three real pytest processes to verify failure persistence, explicit
+    # acknowledgment, and a green rerun (33.75 s in the October 13 fast sweep).
+    # The other placement-review unit checks remain in the fast suite.
+    "test_failure_report_survives_a_green_rerun",
     # October 9 sweep-edit validation: these compile native C++ adapters
     # (33.6 s module fixture / 8.6 s standalone) or build a complete electrode
     # qualification package (8.5 s). Keep lightweight sibling oracles fast.
@@ -1003,6 +1007,7 @@ def _slow_area_for(module: str) -> str:
     # reconstruction stack as the atomistic tests, so its slow tests belong there.
     if (
         "atomistic" in module
+        or module == "test_native_placement_review_gate"
         or module == "test_cpd_design"
         or module == "test_vr_representation_loading"
         or module == "test_vr_extra_representations"

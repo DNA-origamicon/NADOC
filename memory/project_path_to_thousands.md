@@ -36,7 +36,7 @@ refreshes remain valid. Historical descriptions of unconditional whole-assembly
 refetch/dispose and invalidation-triggered rebuilds below are superseded.
 See `docs/audits/benchy_full_performance_20261013.md` and source-reuse regressions.
 
-Loading follow-up (ISSUE-76, **PARTIAL for cold-load/GPU limits; validation complete**):
+Loading follow-up (ISSUE-80, **PARTIAL for cold-load/GPU limits; validation complete**):
 native geometry negotiates lossless Float64 NDGB (`?format=ndgb1`); default JSON
 reuses the compact cache and native placement authority. Both decoders bound
 malformed expansion. Hidden cluster/overhang panels and readiness await versioned

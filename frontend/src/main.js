@@ -47,6 +47,7 @@ import { initNamdPegReview } from './ui/namd_peg_review.js'
 import { initSectionView } from './scene/section_view.js'
 import { initScene }                 from './scene/scene.js'
 import { initVRSession }             from './scene/vr_session.js'
+import { createVRJoin }              from './scene/vr_join.js'
 import { initVRDesktopDisplay }      from './ui/vr_desktop_display.js'
 import { buildVRVisualizationSnapshot } from './scene/vr_visualization_snapshot.js'
 import { initialVRToolShellState, reduceVRToolShell } from './scene/vr_tool_shell.js'
@@ -6535,6 +6536,11 @@ async function main() {
   const vrSimulations = createVRSimulations({ jobs: simulateJobs, engineSelector, api, companion: engine => engine === 'namd' ? mdPanel?.trajectorySolvent : null, controller: engine => ({ namd: mdViz, oxdna: oxdnaDisplay, lammps: lammpsDisplay, snupi: snupiDisplay })[engine], ensureFull: () => _reprSwitcher.ensureSimulationRepresentation(), prepareFrame: () => _currentRepr === 'full' ? undefined : simulationRepresentations.prepare().then(() => simulationRepresentations.refresh()), scale: () => flexScale, onFrame: () => vrViewTools.refresh(), onError: message => showToast(message, { severity: 'error' }) })
   const vrShare = createVRShare({})
   const vrViewTools = createVRViewTools({scene,getState:store.getState,onError:message=>showToast(message,{severity:'error'})})
+  const vrJoin = createVRJoin({ api, getState: store.getState, transaction: _vrToolTransaction, sendFeedback: _sendVRToolExecution,
+    getDocumentToken: () => `${getDocId() ?? ''}:${store.getState().currentDesign?.id ?? ''}`,
+    resolveTarget: target => selectionManager.resolveVRToolTargetSnapshot?.(target),
+    setSelectionLevel: level => selectionManager.setSelectionLevel?.(level), clearSelection: () => selectionManager.clearSelection?.(),
+    onError: message => showToast(message, { severity: 'error' }) })
   const vrLigation = createVRLigation({ getState: store.getState, api,
     clearSelection: () => selectionManager.clearSelection?.(),
     onOutcome: message => showToast(message, { severity: 'error' }),
@@ -6554,7 +6560,7 @@ async function main() {
   }
   const vrSession = initVRSession({
     onNativeActiveChange: active => { vrDesktopDisplay.setActive(active); vrPrompts.setActive(active) },
-    onNativePoll: () => { void vrPrompts.publish(); void publishVREnds(); void vrLigation.publish(); void vrViewTools.publish(); void vrShare.publish(); void vrSimulations.publish(); void vrFeatureLog.publish(); void vrRouting.publish() },
+    onNativePoll: () => { void vrJoin.publish(); void vrPrompts.publish(); void publishVREnds(); void vrLigation.publish(); void vrViewTools.publish(); void vrShare.publish(); void vrSimulations.publish(); void vrFeatureLog.publish(); void vrRouting.publish() },
     renderer,
     scene,
     camera,
@@ -6617,6 +6623,7 @@ async function main() {
     },
     onNativeEvent: (_handleNativeVREvent = event => {
       _recordScrywriteBrowser('native_event', event)
+      if (vrJoin.handle(event)) return
       if (event?.type === 'prompt') { vrPrompts.activate(event); return }
       if (event?.type === 'native_session_end') { vrPrompts.reset(); vrEndPublished = ''; vrLigation.reset(); vrViewTools.reset(); vrShare.reset(); vrSimulations.reset(); vrFeatureLog.reset(); vrRouting.reset() }
       const button = document.getElementById('menu-help-view-vr')
@@ -7164,6 +7171,7 @@ async function main() {
           shell: _vrToolShellState,
           transaction: _vrToolTransaction.snapshot(),
           ligationVersion: vrLigation.catalog().version,
+          join: vrJoin.getState(),
           trace: _scrywriteBrowserTrace,
           selection: store.getState().selection,
           clusterTransforms: store.getState().currentDesign?.cluster_transforms ?? [],

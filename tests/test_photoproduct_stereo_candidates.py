@@ -27,10 +27,10 @@ def test_all_eight_ordered_isomers_have_explicit_face_and_graph_recipes():
         "cis-syn-II": ("syn", [True, True]),
         "trans-syn-I": ("syn", [True, False]),
         "trans-syn-II": ("syn", [False, True]),
-        "cis-anti-I": ("anti", [True, False]),
-        "cis-anti-II": ("anti", [False, True]),
-        "trans-anti-I": ("anti", [False, False]),
-        "trans-anti-II": ("anti", [True, True]),
+        "cis-anti-I": ("anti", [False, True]),
+        "cis-anti-II": ("anti", [True, False]),
+        "trans-anti-I": ("anti", [True, True]),
+        "trans-anti-II": ("anti", [False, False]),
     }
     recipes = {
         stereo: tt_cpd_candidate_recipe(stereo) for stereo in expected

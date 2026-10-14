@@ -10,6 +10,8 @@ Mounted in ``backend/api/main.py`` via ``app.include_router(..., prefix="/api")`
 
 from __future__ import annotations
 
+from backend.core import simulation_runtime
+
 from backend.api.startup_cache import coalesce_job_reads
 
 from pathlib import Path
@@ -34,7 +36,7 @@ router = APIRouter(tags=["lammps"])
 
 
 def _workspace() -> Path:
-    return _WORKSPACE_DIR
+    return simulation_runtime.workspace(_WORKSPACE_DIR)
 
 
 class CreateLammpsJobRequest(BaseModel):

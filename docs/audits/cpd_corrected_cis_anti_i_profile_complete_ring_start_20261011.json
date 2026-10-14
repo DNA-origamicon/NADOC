@@ -1,0 +1,62 @@
+{
+  "at": "2026-10-11T23:31:08+00:00",
+  "token": "340c50e7-03d5-417f-94ab-9504f5b46859",
+  "event": "complete",
+  "acknowledgement": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v3-service/completion_wake_ack.json",
+    "sha256": "93c72aed7c1351dfdc4c2afb0e3ec1521f6b88c294b04deef38042857a9fcdcd"
+  },
+  "completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v3/completion_audit.json",
+    "sha256": "f829afad84370d5a0ee66dab2d63cf0b290382bcb56b39c6bea6208deb83d5fd"
+  },
+  "completed_plus30": {
+    "result": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v3/evaluation-005/result.json",
+      "sha256": "d5ccfb05046b159fbcdb6cf6a7b5c676a343150ab9261d4451b924128fea22bc"
+    },
+    "new_gradients": 5,
+    "reused_gradients": 1,
+    "wall_minutes": 17.296907643477123,
+    "projected_gradient": {
+      "max_atom_gradient_au": 7.261532576330582e-06,
+      "rms_atom_gradient_au": 3.5422655573759546e-06,
+      "torsion_degrees": 135.65946341864176,
+      "torsion_error_degrees": 6.071294933462923e-08,
+      "force_scope": "Cartesian gradient projected tangent to the single fixed glycosidic torsion",
+      "passed": true
+    },
+    "constrained_stationary": true,
+    "unconstrained_stationary": false,
+    "minimum_certified": false
+  },
+  "profile_review": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/glycosidic-branch-profile-v1/completed_profile_review.json",
+    "sha256": "f195c5f8b77c71f3011e3387ef1c8f0bdb31cc107a4ab77d8578f500e6a7ad8a"
+  },
+  "active_handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/coupled-ring-training-v1/handoff.json",
+    "sha256": "0a4d1b768b776d817bd52470df47561441914eebfbcbadc482d68f8ea55b40f9"
+  },
+  "active_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/coupled-ring-training-v1/plan.json",
+    "sha256": "ff62be34dcfe14196e43a7182e136c5f48ccf2f4659d562bfc9b922d342e1f8a"
+  },
+  "admission": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/coupled-ring-training-v1/admission.json",
+    "sha256": "fc4bb37113b8fbde07cb493ac692e82008aefbecabbad7b9d684633e9c317589"
+  },
+  "test_receipt": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/coupled-ring-training-v1/test_receipt.json",
+    "sha256": "8daa40e9ebe03928488aa8d80baaace5dd68fa8c260f046cf97a0befc3f91dc4"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/coupled-ring-training-v1/launch_verification.json",
+    "sha256": "1073c03d65371134fc0bdd8ac0167305465f8df70958332c5e260ac6bcc2c85a"
+  },
+  "endpoint_minimum_certified": false,
+  "fit_target_accepted": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0,
+  "cleanup_actions": 0
+}

@@ -140,6 +140,8 @@ Files are `project_<name>.md`. Bold = read before touching that area.
 
 **MD job system / runners:** [md_job_system](project_md_job_system.md)·[md_prep_relaxation](project_md_prep_relaxation.md)·[oxdna_metrics_card](project_oxdna_metrics_card.md)
 
+**Managed simulation lifecycle:** [simulation_runtime](project_simulation_runtime.md) — shared UI/headless ownership, stop/resume, worker handoff and workspace isolation.
+
 **Simulate-panel overhaul:** [simulate_panel_overhaul](project_simulate_panel_overhaul.md) (P1; C half done — mrDNA+CanDo lack Run/Stop/Resume)
 
 **MD visualization / overlay:** [md_viz_tools](project_md_viz_tools.md)·[md_panel_status](project_md_panel_status.md)·[md_sidebar_audit](project_md_sidebar_audit.md)·[md_live_model_cache](project_md_live_model_cache.md) ·

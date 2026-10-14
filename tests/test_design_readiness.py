@@ -10,7 +10,7 @@ from backend.core.models import (
 )
 from backend.core.oxdna_staleness import design_build_fingerprint
 from backend.core.readiness_jobs import completed_simulation, completed_simulation_kind
-from backend.core.sequences import strand_sequence_length
+from backend.core.sequences import assign_custom_scaffold_sequence, strand_sequence_length
 from tests.conftest import make_minimal_design
 
 
@@ -18,6 +18,9 @@ def sequenced_design(**kwargs):
     design = make_minimal_design(**kwargs)
     for strand in design.strands:
         strand.sequence = "A" * strand_sequence_length(design, strand)
+    for strand in list(design.strands):
+        if strand.is_scaffold:
+            design, _, _ = assign_custom_scaffold_sequence(design, strand.sequence, strand_id=strand.id)
     return design
 
 
@@ -54,11 +57,11 @@ def test_standard_steps_and_simulation_are_separate_and_read_only():
     before = design.model_dump()
     report = standard_readiness(design)
     assert report["completed_steps"] == 2
-    assert report["total_steps"] == 4
+    assert report["total_steps"] == 5
     assert report["state"] == "incomplete"
     assert design.model_dump() == before
     ready = standard_readiness(sequenced_design())
-    assert ready["completed_steps"] == 4
+    assert ready["completed_steps"] == 5
     assert ready["state"] == "simulation_recommended"
     assert finish_readiness(ready, {"complete": True})["state"] == "ready"
     assert finish_readiness(report, {"complete": True})["state"] == "incomplete"
@@ -91,6 +94,7 @@ def test_native_oligos_have_no_scaffold_obligation():
     assert report["total_steps"] == 2
     assert report["state"] == "simulation_recommended"
     assert not steps(report)["scaffold_routing"]["applicable"]
+    assert not steps(report)["scaffold_length"]["applicable"]
 
 
 def test_insertions_deletions_and_terminal_extensions_use_sequence_contract():
@@ -99,10 +103,13 @@ def test_insertions_deletions_and_terminal_extensions_use_sequence_contract():
     assert not steps(standard_readiness(design))["scaffold_sequence"]["complete"]
     for strand in design.strands:
         strand.sequence = "A" * strand_sequence_length(design, strand)
+    assert not steps(standard_readiness(design))["scaffold_length"]["complete"]
+    design, _, _ = assign_custom_scaffold_sequence(design, design.scaffold().sequence)
     assert standard_readiness(design)["state"] == "simulation_recommended"
     design.helices[0].loop_skips = [LoopSkip(bp_index=5, delta=-1)]
     for strand in design.strands:
         strand.sequence = "A" * strand_sequence_length(design, strand)
+    design, _, _ = assign_custom_scaffold_sequence(design, design.scaffold().sequence)
     design.extensions = [StrandExtension(strand_id="stap", end="five_prime", modification="biotin")]
     assert standard_readiness(design)["state"] == "simulation_recommended"
     design.extensions[0].sequence = "AN"
@@ -317,6 +324,8 @@ def test_readiness_provenance_does_not_change_simulation_fingerprint():
     assert design_build_fingerprint(design) == fingerprint
     design.strands[0].routing_seed = []
     assert design_build_fingerprint(design) == fingerprint
+    design.strands[0].custom_scaffold_length = 999
+    assert design_build_fingerprint(design) == fingerprint
 
 
 def test_placement_remapping_does_not_route_precursors():
@@ -338,25 +347,25 @@ def test_placement_remapping_does_not_route_precursors():
 def test_integrity_only_subtracts_one_point_and_repair_restores_it():
     design = sequenced_design()
     clean = standard_readiness(design)
-    assert clean['total_steps'] == clean['completed_steps'] == clean['score'] == 4
+    assert clean['total_steps'] == clean['completed_steps'] == clean['score'] == 5
     assert clean['integrity_penalty'] == 0
     design.extensions = [
         StrandExtension(strand_id='missing', end='five_prime', modification='biotin'),
         StrandExtension(strand_id='also-missing', end='three_prime', modification='biotin'),
     ]
     broken = standard_readiness(design)
-    assert broken['completed_steps'] == broken['total_steps'] == 4
+    assert broken['completed_steps'] == broken['total_steps'] == 5
     assert broken['integrity_penalty'] == -1
-    assert broken['score'] == 3
+    assert broken['score'] == 4
     assert broken['state'] == 'incomplete'
     # Recalculation, including completed simulation evidence, never compounds or
     # bypasses the single integrity penalty.
     repeated = finish_readiness(broken, {'complete': True})
-    assert repeated['score'] == 3
+    assert repeated['score'] == 4
     assert repeated['state'] == 'incomplete'
     design.extensions = []
     fixed = standard_readiness(design)
-    assert fixed['score'] == 4
+    assert fixed['score'] == 5
     assert fixed['integrity_penalty'] == 0
     assert fixed['state'] == 'simulation_recommended'
 
@@ -365,5 +374,5 @@ def test_integrity_penalty_can_make_the_score_negative():
     design = make_minimal_design(with_scaffold=False, with_staple=False)
     report = standard_readiness(design)
     assert report['completed_steps'] == 0
-    assert report['total_steps'] == 4
+    assert report['total_steps'] == 5
     assert report['score'] == report['integrity_penalty'] == -1

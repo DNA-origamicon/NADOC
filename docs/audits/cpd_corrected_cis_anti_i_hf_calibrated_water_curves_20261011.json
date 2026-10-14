@@ -1,0 +1,64 @@
+{
+  "at": "2026-10-12T00:13:36+00:00",
+  "event": "754def1a-8a36-4a8c-9fbe-692d73d251b7 complete",
+  "acknowledgement": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-core-pilot-v2-service/completion_wake_ack.json",
+    "sha256": "ab6d5ee553ea827761c8e8de99b1c367ad981d191a3a276ef357c00027e058fe"
+  },
+  "completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-core-pilot-v2/completion_audit.json",
+    "sha256": "37377969757d8cf568f34c6c75f1eaac5c3ecec74984e5f7f00b67223d2e0cf3"
+  },
+  "calibration_summary": {
+    "passed": true,
+    "service_minutes": 10.2246617714564,
+    "raw_error_range_kcal_mol": [
+      0.0018882901217658343,
+      0.004617465185953407
+    ],
+    "df_speedup_range": [
+      8.07622420339016,
+      11.18903336125267
+    ]
+  },
+  "active_handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/water-core-curves-v1/handoff.json",
+    "sha256": "b5ae8b559ec9170968cfb14a460bd0686e7d210d3349b0f1a5c1afdbadd7c5d8"
+  },
+  "preflight": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/water-core-curves-v1/preflight.json",
+    "sha256": "96957088ac40601832e2a15accda4807f31545a004ae2714eff42eade2a57270"
+  },
+  "geometry_review": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/water-core-curves-v1/independent_prelaunch_review.json",
+    "sha256": "3cf166dacb147f0ed098281af015b91e00dfa02a8bdd54c8e93b0871e89e5474"
+  },
+  "test_receipt": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/water-core-curves-v1/test_receipt.json",
+    "sha256": "336878b1967adb4d71560aa28a889aafe1aaccc52ebfb3dceb535c69280c492e"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/water-core-curves-v1/launch_verification.json",
+    "sha256": "d87082166e467e149321add940433f30041fecab7f7b9ccf54b2316f5633d91f"
+  },
+  "limits": {
+    "maximum_new_scf": 39,
+    "hard_seconds": 3600,
+    "task_timeout_seconds": 180,
+    "threads": 4,
+    "psi4_memory_gib": 4,
+    "service_memory_gib": 8
+  },
+  "reused_contact_points": 3,
+  "reused_isolated_references": 2,
+  "wake_token": "94a499f7-4aa6-4f32-a392-faae5331cb73",
+  "expected_finish_local": "2026-10-11T18:32:38.050271-06:00",
+  "audit_deadline_local": "2026-10-11T19:02:23.844740-06:00",
+  "hard_deadline_local": "2026-10-11T19:12:23.844740-06:00",
+  "full_curve_acquisition_admitted": true,
+  "curve_fitting_admitted": false,
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0,
+  "existing_data_moved_or_deleted": false
+}

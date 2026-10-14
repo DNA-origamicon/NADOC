@@ -52,7 +52,15 @@ View tool panels use the same tilt at their existing viewing distances;
 attached tool panels inherit their sidebar pose. Both touchpad wheels use the
 same 30° tilt while following their controllers. Menus have opaque dark backgrounds that obscure the scene
 behind them, with sharp text and blue active styling. Tabs preserve desktop order
-and labels; their text runs vertically on the outside edge. Controls are
+and labels; their text is rotated clockwise, reading from top to bottom in the outside column. Tabs use the
+approved compact expanding design: idle labels fade at the clipped end, and hover,
+trackpad focus or selection expands the surface and font over 200 ms. The selected
+tab stays expanded while another is hovered. Expansion follows the rotated text from top to bottom only;
+tab thickness and column position stay fixed. Following tabs shift down with fixed
+gaps, within the original panel bounds. Drawing, ray hits and inspector targets all
+use the animated geometry.
+There is no invisible hit padding or added hover delay. Trigger activation retains
+the existing VR press behavior. Controls are
 larger for ray selection. The wide framed border has textured corner handles and
 side grip marks. Intersect an edge with the selection sphere 12 cm along the
 controller pointer; its current radius and the visible rail width determine
@@ -108,7 +116,10 @@ Unsupported controls are gray and consume clicks without executing an action.
 Implemented controls include representation, coloring, recentering, job and
 trajectory panels, and existing native tools. Tool availability follows the
 current selection; trajectory playback requires a loaded trajectory. Tools contains
-Inspect, Extrude, Twist, Bend and Move / Rotate. Selection is on the left touchpad.
+Inspect, Extrude, Twist, Bend, Move / Rotate and Join. Selection is on the left touchpad.
+Join fixes selection to Cluster and reuses the Move / Rotate gesture and panel
+components, with 1 nm / 15° thumbwheel detents and explicit Cancel / Apply.
+See [VR Join](vr_join.md) for connection preview and routing behavior.
 Tool settings, Confirm, Cancel and Undo live in their dedicated sidebar panels.
 Recenter is in Visualization; the desktop window is in the left VR tab.
 
@@ -678,3 +689,142 @@ transport/scene publication is stubbed only in the browser scenario; desktop
 operations use the actual backend. Cleanup verification found no prefixed designs,
 new revision stores or test credentials. Final native screenshots and the review
 atlas are in `.development-artifacts/vr-production-lists/render-reviewed/`.
+## Five-second stereo recording
+
+Right **Tools → Record 5 seconds** starts a two-second countdown, then records
+both full-resolution application eye buffers for five seconds of wall time.
+Leave menus open or close them during the countdown; recording never changes
+their visibility. The button shows the countdown, recording and saving states,
+and remains disabled until export finishes. **Open recordings folder** opens
+`.development-artifacts/vr-recordings` (override with `NADOC_VR_RECORDINGS_DIR`).
+
+Each recording contains `left.mp4`, `right.mp4`, an `index.html` review page and
+`timeline.json` with actual sample timestamps, predicted display times, eye poses,
+menu visibility and skipped-pair counts. Numbered `.rgbz` files retain lossless
+RGB24 stereo pairs: left then right, each bottom-up. Video uses variable timestamps
+and holds frames across gaps without motion interpolation. The first sample covers
+the short initial gap; the lossless frames and JSON are authoritative.
+
+The recorder samples submitted application frames, so a scene rendering at 45 Hz
+produces approximately 45 unique stereo pairs per second even on a 90 Hz headset.
+It does not capture compositor reprojection or physical display persistence.
+GPU readback uses a bounded three-buffer ring and a bounded compression queue;
+pressure skips entire stereo pairs and reports the reason. Compression, disk writes
+and video export run away from the render thread. Capture still has overhead;
+compare identical scenes with recording off/on before interpreting artifacts.
+The manifest reports total CPU time in readback calls and their maximum duration.
+Python 3 and ffmpeg provide video export; on export failure the original frames
+remain and the menu reports failure. Re-export with
+`python3 tools/vr_recording.py RECORDING_DIRECTORY`.
+
+Reusable checks: **Debug → VR Tours & Tests → Controls & layout → Tools ·
+five-second stereo recording**, or `uv run python -m tools.vr_workflows.menu_tour
+--recording-checks --validate --hold 0 --exit`. This exercises ordinary menu inputs
+and grip motion under all four profiles with menus open and closed. GPU integration
+also uses different left/right colors and both eye rendering orders. Headset
+double-image perception still requires physical review or a through-lens recording.
+
+
+## Compact-tab controller comparison (2026-10-13)
+
+**Debug → VR Tours & Tests → Controls & layout → Compact tabs · controller hit/miss
+comparison** runs the production sidebars in an isolated empty Part session.
+The validation entry runs steady_fast, steady_deliberate, variable_fast and
+variable_deliberate in that order, with five identical seeds per tab/profile.
+
+```sh
+uv run python -m tools.vr_workflows.compact_tabs_tour --validate
+```
+
+Each measured reach starts from the same parked hand pose and deterministic
+baseline selected tab. Setup uses ordinary pointer input outside the measurement;
+the measured profile receives no pose correction or retry. A hit requires the
+unchanged reaction-interval stable-hover criterion and correct trigger activation.
+The report also gives correct-selection hits independently of stable acquisition,
+so brief successful clicks are not confused with settled aim. Wrong-tab activations
+count as selection misses; non-tab endpoints receive no trigger, count as misses,
+and cannot accidentally activate unrelated content. The same seed and target
+order are used for every profile. These synthetic stress profiles
+are uncalibrated and do not estimate human success rates.
+
+The menu is centered 0.65 m ahead of the observed eye for visibility, using normal
+controller spawning and observed placement feedback. Default 30° tablet tilt and
+0.45 panel scale remain in place; physical HMD tracking is untouched. Each profile
+covers seven left and six right tabs (65 trials). Assembly-only navigation is not
+present in this Part fixture; native tests cover its layout and animated geometry.
+Stereo checks include both sidebars and blank-image negatives. Temporary captures
+are removed after inspection; compact trial, pixel and cleanup summaries remain.
+
+
+Original vertical-expansion results (65 trials per profile, no corrective retries):
+
+| Profile | Correct selections : misses | Selection hit rate | Stable acquisition + selection : misses | Wrong-tab selections | Non-tab endpoints |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| steady_fast | 53 : 12 | 81.5% | 53 : 12 | 12 | 0 |
+| steady_deliberate | 47 : 18 | 72.3% | 47 : 18 | 18 | 0 |
+| variable_fast | 37 : 28 | 56.9% | 0 : 65 | 16 | 12 |
+| variable_deliberate | 33 : 32 | 50.8% | 1 : 64 | 15 | 17 |
+
+Target starting positions and dimensions matched exactly across all profiles.
+The variable profiles frequently selected a tab during brief contact without
+sustaining the required hover interval. Neighbor-tab activations also occurred
+with the steady profiles. This supports caution about the moving layout; no
+static-tab baseline was run, so these results do not isolate the causal effect
+of expansion from target size and profile variability.
+
+Native tests cover all 98 selected/hovered pairs across both seven-tab layouts
+(including Assembly), animated containment, full expanded names, visible glyphs,
+and ray/drawing agreement. All 947 existing controls still pass layout checks.
+All 50 launcher/reporting tests and scoped lint pass. Stereo pixels pass for
+104 tab regions across all four profiles; blank-image negatives reject all 104.
+The delivered desktop mirror was inspected. The tested executable was installed
+at the normal native viewer path. No production document or simulation was edited.
+
+Compact results: `.development-artifacts/vr-compact-tabs/final/summary.json`,
+per-profile `trials.json` and pixel summaries. `cleanup-summary.json` records
+initial setup/rendering failures and pruning of raw captures and frame logs.
+The isolated viewer was stopped; SteamVR was left running. Physical through-lens
+readability and actual human accuracy remain unevaluated.
+
+### Fixed-thickness follow-up (2026-10-14)
+
+The clarified design keeps lettering rotated clockwise on both sidebars, reading
+from the first letter at the top toward the last at the bottom. Tabs expand only
+along that lettering. Their thickness stays at 0.09 panel units rather than growing
+from 0.09 to 0.10. The column position stays fixed; following tabs still move down
+to make room. Font enlargement, clipping/fade, 200 ms animation, selected/hovered
+behavior, panel scale and trigger semantics remain unchanged.
+
+The same 65 seeded attempts per profile were repeated through production OpenXR
+input. Every attempted tab and seed matches the original comparison above. There
+were no measured retries or endpoint corrections. A preliminary horizontal-label
+prototype was stopped after the user clarified the intended orientation; its
+results are excluded here.
+
+| Profile | Correct selections : misses | Hit rate | Previous rate | Stable acquisition + selection : misses | Wrong-tab selections | Non-tab endpoints |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| steady_fast | 53 : 12 | 81.5% | 81.5% | 53 : 12 | 12 | 0 |
+| steady_deliberate | 47 : 18 | 72.3% | 72.3% | 47 : 18 | 18 | 0 |
+| variable_fast | 37 : 28 | 56.9% | 56.9% | 0 : 65 | 14 | 14 |
+| variable_deliberate | 34 : 31 | 52.3% | 50.8% | 1 : 64 | 14 | 17 |
+
+The first three profiles have identical per-trial selection outcomes to the
+original run. Variable-deliberate gains one correct selection (+1.5 percentage
+points). Stable-hover success is unchanged for every profile. This provides little
+evidence of a practical improvement from fixed thickness alone; targets still
+shift along the column as tabs expand. These are uncalibrated synthetic controller
+trials, not measured human success rates.
+
+All 98 selected/hovered layout pairs pass fixed-thickness, downward-flow, full-label,
+visible-glyph and ray-geometry checks; 947 existing controls pass layout checks.
+All 104 stereo tab regions pass pixel checks, and blank images fail all 104 negative
+regions. Both tab columns and the delivered desktop mirror were inspected. Initial
+target geometry matches exactly across the four profiles; maximum playback lag
+was 8.61 ms, below the unchanged 150 ms abort threshold. Physical through-lens
+legibility and comfort remain unverified.
+
+The tested binary is installed at `native/vr_viewer/build/nadoc-vr-viewer`.
+Compact results, per-trial misses, comparison and cleanup records are in
+`.development-artifacts/vr-sideways-tabs/corrected-final/`; source/destination hash
+verification is in `../installed.json`. Temporary captures and frame traces were
+removed after inspection, and the isolated test viewer was stopped.

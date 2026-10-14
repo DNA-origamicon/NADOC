@@ -2,7 +2,10 @@
 #include "interaction.hpp"
 #include <fstream>
 #include <optional>
-#include <future>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
+#include <thread>
 #include <chrono>
 
 namespace nadoc_vr {
@@ -42,10 +45,19 @@ class Ligation {
         std::vector<End> ends;
         std::vector<Bond> bonds;
     };
-    std::future<std::optional<Targets>> pending_;
-    std::string pendingPath_;
-    glm::vec3 pendingCenter_{}, pendingOrigin_{};
-    float pendingScale_=0;
+    struct Context {
+        std::string path;
+        glm::vec3 center{},origin{};
+        float scale=0;
+        bool operator==(const Context&) const=default;
+    };
+    struct Snapshot {Context context;Targets targets;};
+    std::mutex targetsMutex_;
+    std::condition_variable targetsWake_;
+    bool targetsStopped_=false;
+    Context requested_;
+    std::unique_ptr<Snapshot> ready_,retired_;
+    std::thread targetsWorker_;
     static std::optional<Targets> loadTargets(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin) {
         std::ifstream input(path+".ligation");
         std::string magic,nextStatus;uint64_t next;size_t count;
@@ -77,27 +89,51 @@ class Ligation {
         return Targets{next,std::move(nextStatus),std::move(loaded),std::move(newBonds)};
     }
  public:
-    void poll(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin) {
-        if(pending_.valid()) {
-            if(pending_.wait_for(std::chrono::seconds(0))!=std::future_status::ready)return;
+    Ligation():targetsWorker_([this] {
+        Context previous;uint64_t previousVersion=0;
+        for(;;) {
+            Context context;std::unique_ptr<Snapshot> retired;
+            {
+                std::unique_lock lock(targetsMutex_);
+                targetsWake_.wait_for(lock,std::chrono::milliseconds(25),[&]{return targetsStopped_;});
+                if(targetsStopped_)return;
+                context=requested_;retired=std::move(retired_);
+            }
+            // Retire large old tables, probe disk and parse replacements only
+            // on this persistent worker. No thread creation or I/O per frame.
+            retired.reset();
+            if(context.path.empty())continue;
             try {
-                auto loaded=pending_.get();
-                if(loaded && path==pendingPath_ && center==pendingCenter_ &&
-                    scale==pendingScale_ && origin==pendingOrigin_) {
-                    bonds=std::move(loaded->bonds);ends=std::move(loaded->ends);
-                    cancel();waiting=false;version=loaded->version;status=std::move(loaded->status);
-                }
+                std::ifstream input(context.path+".ligation");
+                std::string magic,nextStatus;uint64_t next;size_t count;
+                if(!(input>>magic>>next>>nextStatus>>count) || magic!="NADOC_LIGATION_1" || count>32768 ||
+                   (context==previous && next==previousVersion))continue;
+                auto loaded=loadTargets(context.path,context.center,context.scale,context.origin);
+                if(!loaded)continue;
+                auto snapshot=std::make_unique<Snapshot>(Snapshot{context,std::move(*loaded)});
+                std::lock_guard lock(targetsMutex_);
+                if(context!=requested_)continue;
+                previous=context;previousVersion=snapshot->targets.version;
+                ready_=std::move(snapshot);
             } catch(const std::exception&) { /* Keep the last complete targets. */ }
         }
-        if(path.empty())return;
-        // Probe only the header on the frame thread. Large bond tables are
-        // parsed into private vectors while the old targets remain usable.
-        std::ifstream input(path+".ligation");
-        std::string magic,nextStatus;uint64_t next;size_t count;
-        if(!(input>>magic>>next>>nextStatus>>count) || magic!="NADOC_LIGATION_1" || count>32768 || next==version)return;
-        pendingPath_=path;pendingCenter_=center;pendingScale_=scale;pendingOrigin_=origin;
-        try {pending_=std::async(std::launch::async,[path,center,scale,origin]{return loadTargets(path,center,scale,origin);});}
-        catch(const std::exception&) { /* Retry on a later frame. */ }
+    }){}
+    ~Ligation() {
+        {std::lock_guard lock(targetsMutex_);targetsStopped_=true;}
+        targetsWake_.notify_one();targetsWorker_.join();
+    }
+    void poll(const std::string& path,glm::vec3 center,float scale,glm::vec3 origin) {
+        // Never wait for the reader. Adoption swaps containers in constant time;
+        // their previous storage returns to the worker for destruction.
+        std::unique_lock lock(targetsMutex_,std::try_to_lock);
+        if(!lock.owns_lock())return;
+        if(requested_.path!=path || requested_.center!=center || requested_.scale!=scale || requested_.origin!=origin)
+            requested_=Context{path,center,origin,scale};
+        if(!ready_ || retired_ || ready_->context!=requested_)return;
+        auto& loaded=ready_->targets;
+        bonds.swap(loaded.bonds);ends.swap(loaded.ends);status.swap(loaded.status);
+        cancel();waiting=false;version=loaded.version;
+        retired_=std::move(ready_);
     }
     glm::vec3 point(size_t i,const glm::mat4& model) const {
         const auto& e=ends[i];return glm::vec3(model*glm::vec4(e.position,1));

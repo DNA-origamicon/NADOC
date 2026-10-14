@@ -1,0 +1,317 @@
+{
+  "schema": "nadoc.corrected-cis-anti-refinement-plan.v1",
+  "created_at": "2026-10-10T19:25:40+00:00",
+  "status": "proposed_for_user_review",
+  "product_id": "tt-cpd-cis-anti-i",
+  "scope": "Fresh corrected additive CHARMM/NAMD candidate for preliminary welded-versus-unwelded thermal-stability studies; qualify the candidate in a finite local DNA context before proposing a temperature campaign.",
+  "authorization": {
+    "planning_and_preflight": "Authorized and performed; current user requested approval and compute scheduling first.",
+    "first_compute_tranche": "Proposed; awaiting user approval of this plan before launch.",
+    "qm_or_md_jobs_launched_by_this_plan": 0,
+    "later_compute": "Conditional design below, not a runnable queue or authorization receipt. After pilot audit, present measured remaining cost and a finite target manifest for approval.",
+    "technical_audits": "One job at a time. Within an approved finite tranche, a passed audit permits the next listed job without another routine permission question; failures, exhausted caps or changed scope require a revised plan.",
+    "cloud_spending_usd": 0,
+    "automatic_registry_promotion": false
+  },
+  "identity": {
+    "ordered_centers": [
+      "1:C5",
+      "1:C6",
+      "2:C5",
+      "2:C6"
+    ],
+    "full_dna_graph_cip": [
+      "S",
+      "R",
+      "S",
+      "R"
+    ],
+    "signed_reference_sentinels": [
+      "positive",
+      "negative",
+      "positive",
+      "negative"
+    ],
+    "new_crosslinks": [
+      [
+        "1:C5",
+        "2:C6"
+      ],
+      [
+        "1:C6",
+        "2:C5"
+      ]
+    ],
+    "preserve": "Both intrabase C5-C6 bonds, glycosidic and backbone connectivity, all atoms and formal charge.",
+    "initial_model": "36-atom neutral N1-methyl capped core; static ETKDG construction, not a QM minimum.",
+    "minimum_certified": false,
+    "chemical_definition_gate": "pending; current static construction and this compute plan do not constitute human identity approval.",
+    "reuse": "Reuse algorithms, audited parent DNA terms, diagnostics and potentially eligible unwelded controls. Prior anti QM, charges, fits and MD do not certify this corrected stereoisomer.",
+    "preservation": "Keep all historical native successes, failures, pauses and receipts byte-intact, scoped to their original hashes."
+  },
+  "source_pins": [
+    {
+      "path": "backend/data/forcefield/photoproducts/tt-cpd-cis-anti-i/chemical_definition.json",
+      "sha256": "dd8dbecbb0a6349233d7b7f260d2b4f41dc34d3635568afd72cb72620a865e63"
+    },
+    {
+      "path": "backend/data/forcefield/photoproduct_registry.json",
+      "sha256": "9db1c690b9955f923c3c7d64b451cec3a4142495eb76b95cdd4b1d0b0c751665"
+    },
+    {
+      "path": "backend/data/forcefield/tt_cpd_patch_charge_scope_v2.json",
+      "sha256": "d79aafa6394b1094b196dc13eb0c16df7b0189f5a0742c62207a76a091e29db0"
+    },
+    {
+      "path": "backend/data/forcefield/photoproducts/anti_definition_correction_20261010.json",
+      "sha256": "34d529c7cc9ea0f7e2c14b77ca847c49fa51b0d0d173ce9a0a8f0eb471287c7f"
+    },
+    {
+      "path": "docs/audits/cpd_anti_detection_correction_20261010.json",
+      "sha256": "55f3f3a5e1393cc535bdddd5493d19cef40783626184842a2f1d8c1211d43630"
+    },
+    {
+      "path": "docs/audits/cpd_isomer_priority_20261010.json",
+      "sha256": "091a5614a264b83aab7c84f978a92f22599d4c937bd455bd9e43ea4295c3461e"
+    },
+    {
+      "path": "docs/photoproduct_parameterization_workflow.md",
+      "sha256": "d009f4a70533adc5bfd3e86e62a7e1033aab4d19eb82ea7a68e555dceb745045"
+    },
+    {
+      "path": "docs/photoproduct_human_review_checklist.md",
+      "sha256": "6dd232003b84b80bab024bf281506e1137f72614bd84e88f19dad687cad7a991"
+    },
+    {
+      "path": "experiments/cpd_anti_additive/preliminary_policy_v2.json",
+      "sha256": "3453074d661e33ce065c9d637371cdad456566ce9069fbf2d54c85011749f3c4"
+    },
+    {
+      "path": "docs/cpd_anti_validation_closeout_20261010.md",
+      "sha256": "6a231b14b980a9c82c65ec76d4ba5244d42fee4a45700d983509ec77edf5cbe3"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-cis-anti-i/construction.sdf",
+      "sha256": "3fb1cb8acd0d17aae0d63b344eb3a6a9ff7da6d7647473af0302e8d46747a795"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-cis-anti-i/coordinates.json",
+      "sha256": "30711145493c1b763f324e0f7e1fa60295c26d81b9bc89261b3c72dbcdfc9f70"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-cis-anti-i/atom_map.json",
+      "sha256": "958415256f7c84c4666ad047e3b633107670eeeb9aabe4c650094ad9c8631e5a"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-cis-anti-i/construction_audit.json",
+      "sha256": "f62933e698b4147c7e4d971394284b69811db99cba3705d2ef32184e52aca1e0"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/legacy_campaign_identity_audit.json",
+      "sha256": "76fe30c04ce40a03fe6f24c4d05b2e3aebc38a6c2be5675ee27fc879bee0d64f"
+    }
+  ],
+  "resources_observed": {
+    "cpu": "AMD Ryzen 9 9950X; 16 physical cores / 32 logical CPUs",
+    "memory": {
+      "MemTotal_bytes": 32753086464,
+      "MemAvailable_bytes": 13315878912,
+      "SwapTotal_bytes": 4294963200,
+      "SwapFree_bytes": 1916928
+    },
+    "disk_available_bytes": {
+      "/": 2116329472,
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts": 4175054626816
+    },
+    "gpu": "NVIDIA GeForce RTX 3080 Ti, 12288 MiB, 877 MiB, 5 %",
+    "active_cpd_user_services": [],
+    "observation_scope": "Read running user service list; this is not an assertion that all CPU/GPU workloads are absent."
+  },
+  "scheduler_proposal": {
+    "concurrent_native_jobs": 1,
+    "initial_cpu_threads": 4,
+    "initial_psi4_memory_GiB": 4,
+    "initial_service_memory_max_GiB": 8,
+    "service_swap_max_bytes": 0,
+    "minimum_available_memory_before_launch_GiB": 12,
+    "resource_action": "Recheck memory, CPU/GPU occupancy and disk before every job. If headroom is insufficient, defer or reduce the reservation with a recorded audit; do not stop unrelated workloads.",
+    "new_runtime_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1",
+    "scratch": "All scratch, native outputs, temporary files and large logs on Archive, including explicit Psi4 IO-manager path and TMPDIR; verify actual file locations in the pilot.",
+    "maximum_service_wall_hours": 15,
+    "normal_chunk_hours": "1-4 for QM; 2 for NAMD. The per-stage cap below applies even though the global ceiling is 15 h.",
+    "checkpoint": "Save every completed QM evaluation and accepted optimizer geometry with hashes; Hessian displacement tasks independently checkpointed. MD writes coor/vel/XSC every 100 ps.",
+    "restart_limit": "An interrupted SCF/gradient may need rerunning. Continue from the last validated geometry if optimizer state cannot be restored; no bitwise-continuity promise. Do not restart a long indivisible calculation blindly.",
+    "boundary_admission": "Reserve output/checkpoint grace inside the cap; launch a further evaluation only if its conservative measured duration fits before the stop boundary.",
+    "audit_each_chunk": [
+      "native termination and completed work",
+      "input/method/hash identity",
+      "stereochemistry and graph integrity",
+      "electronic and geometry convergence",
+      "checkpoint usability",
+      "peak RSS, wall time and scratch growth",
+      "necessity of the next task",
+      "cheaper adequate alternatives or sequential thread benchmark",
+      "remaining approved allocation"
+    ],
+    "stop_conditions": [
+      "user pause",
+      "stereochemistry or graph failure",
+      "nonfinite or unconverged electronic result",
+      "resource limit",
+      "no usable progress",
+      "runtime cap",
+      "unexplained performance regression",
+      "missing or mismatched restart evidence"
+    ],
+    "automation": "Fresh versioned job plans and wake tokens only; no unchanged old launcher, blind service chain, automatic cloud offload or automatic retry loop."
+  },
+  "first_compute_tranche": {
+    "maximum_total_native_wall_hours": 5,
+    "meaning": "Maximum reservation summed across sequential jobs, not an estimate of completion time and not five core-hours. At four threads this reserves up to 20 allocated core-hours.",
+    "method": "Psi4 MP2/6-31G(d), density fitting, frozen core; pin engine/version, auxiliary basis and options before execution. Preserve prior E/D 1e-12 and response 1e-10 tolerances.",
+    "preparation": [
+      "Recheck current definition/SDF/map pins and accurate CIP plus signed-coordinate identity.",
+      "Prepare a fresh gate-neutral diagnostic job and a product-scoped atom-mapped review packet; do not attach or approve a registry asset.",
+      "Adapt old runners to current definition checks, Archive scratch, resource caps and checkpoint behavior; run targeted preflight checks before native QM."
+    ],
+    "jobs": [
+      {
+        "id": "pilot-gradient",
+        "maximum_wall_hours": 1,
+        "task": "One analytic gradient on the corrected 36-atom core, with finite energy/gradient, units and identity checks; record wall time, peak RSS and scratch footprint.",
+        "proceed_if": "Result passes, memory is safe, and measured evaluation cost allows useful bounded optimization."
+      },
+      {
+        "id": "core-optimization-1",
+        "maximum_wall_hours": 4,
+        "maximum_new_gradients": 60,
+        "task": "Unconstrained geometry optimization from the pinned corrected seed; keep electronic state and all four product centers under audit.",
+        "proceed_if": "Only after pilot review. Stop at the earlier wall/evaluation limit or convergence. No automatic continuation or second seed in this tranche."
+      }
+    ],
+    "stationarity_candidate_max_gradient_au": 1.5e-05,
+    "stationarity_candidate_rms_gradient_au": 1e-05,
+    "final_review": "Check native convergence and independent final gradient, geometry identity, resource use and progress. A stopped or converged optimizer is not harmonic-minimum certification. Report a data-based Hessian/remaining-QM schedule before further compute."
+  },
+  "subsequent_stages_proposed": [
+    {
+      "id": "minimum-certification",
+      "requires": "Stationary corrected core and approved post-pilot manifest.",
+      "work": "Finite differences of analytic gradients at one exact pinned stationary geometry; assemble and independently audit the Hessian, translation/rotation projection and 102 internal modes for this nonlinear 36-atom model. Resolve substantive imaginary modes or numerical ambiguity instead of clipping them.",
+      "chunk_wall_hours": 4,
+      "total_wall_hours": null,
+      "sizing": "Generated displacement count times measured gradient cost; checkpoint completed tasks, audit after each batch. A second seed/basin is a separate finite decision, not an automatic search.",
+      "output_claim": "Local harmonic minimum at the specified method; not a global-minimum proof."
+    },
+    {
+      "id": "identity-and-target-review",
+      "requires": "New corrected geometry evidence.",
+      "work": "Generate the current product-only exact-geometry identity packet. Rebuild and review both sugar-bearing endpoint boundary models (historically 49 atoms each); verify their actual caps, charge, valences, sugar stereochemistry and term coverage. Freeze the finite training and held-out target membership before acquisition.",
+      "compute": "Primarily preparation/audit; no inherited approval and no old boundary coordinates reused as validated corrected models.",
+      "review": "Formal chemical-definition, coupled-conformer and boundary-model review receipts required by the relevant workflow before its curated jobs. User compute approval is separate from these evidence gates."
+    },
+    {
+      "id": "qm-reference-and-fit",
+      "requires": "Approved atom-mapped models, exact target manifest, method/objective and measured total budget.",
+      "work": "MP2/6-31G(d) reference geometry, changed-bond/angle response, glycosidic scans and coupled ring distortions; HF/6-31G(d) water interactions and dipoles. Fit changed charges and bonded terms while retaining justified parent DNA and LJ terms.",
+      "initial_design_envelope": {
+        "endpoint_models": 2,
+        "glycosidic_targets_per_endpoint": 5,
+        "coupled_ring_training_distortions": 4,
+        "representative_electrostatic_conformers_max": 3,
+        "water_curves_per_conformer_max": 6,
+        "prospective_glycosidic_holdouts": 4,
+        "fit_rounds_max": 2
+      },
+      "envelope_status": "Starting design only; exact geometries, torsions, curve distances, cap coverage and held-out membership must be pinned before launch. Add targets only after residual diagnosis and a revised finite budget. Do not replay the old 94-record contract.",
+      "qm_chunk_wall_hours": 4,
+      "fit_wall_hours_per_round": 2,
+      "objective_decision": "Resolve prior policy discrepancy explicitly: general workflow scales neutral HF dipole vectors by 1.3, whereas preliminary anti policy v2 targets unscaled vectors. Freeze one justified convention and its water/distance/charge constraints before new charge fitting; never mix objectives silently.",
+      "modeling_rule": "Use coupled conformers/normal-mode displacements for cyclobutane response, not an independent torsion scan through a ring bond. Positive MM curvature alone does not validate force constants."
+    },
+    {
+      "id": "prospective-parameter-check",
+      "requires": "Frozen parameter candidate hash before held-out QM targets are exposed.",
+      "work": "Check independent conformer energies/geometries and hydration residuals, with matching QM/MM basin identities. Retain failed targets. A refit turns exposed holdouts into development data and needs a fresh validation design.",
+      "proposed_local_acceptance": {
+        "changed_bond_error_A": 0.03,
+        "changed_angle_error_deg": 3.0,
+        "relative_energy_rmse_kcal_mol": 1.0,
+        "relative_energy_max_abs_kcal_mol": 2.0,
+        "water_minimum_energy_max_abs_error_kcal_mol": 0.5,
+        "water_minimum_distance_max_abs_error_A": 0.2
+      },
+      "acceptance_scope": "Explicit proposed local criteria from prior preliminary policy, not universal literature sufficiency or full release. Freeze eligible target membership and energy reference before scoring.",
+      "chunk_wall_hours": 4
+    },
+    {
+      "id": "namd-engine-validation",
+      "requires": "Explicit corrected topology/parameters/templates and passed target checks for preliminary scientific interpretation.",
+      "work": "Audit full term coverage, charge, crosslinks, ordered product and sugar stereochemistry, clashes, strand/ring piercing, periodic clearance and CPU/NAMD energy-force agreement. Run bounded minimization then 100 ps smoke and a restart check.",
+      "maximum_minimization_steps": 10000,
+      "maximum_timestep_fs": 2,
+      "hydrogen_mass_repartitioning": false,
+      "chunk_wall_hours": 2,
+      "output_claim": "Engine-testable corrected candidate; smoke success is not thermal equilibration."
+    },
+    {
+      "id": "matched-context-validation",
+      "requires": "Approved candidate and context specification, successful engine audit and a measured GPU pilot.",
+      "default_context": "Same 2hb_1xT_CPD junction used for the historical controlled comparison, with corrected product placement rebuilt from the unwelded parent; freeze exact endpoints/system protocol before launch. Formation-screen prevalence and model-validation context are separate questions.",
+      "temperature_K": 300,
+      "salt_mM": 150,
+      "corrected_weld_replicas": 3,
+      "ns_per_replica": 10,
+      "control_policy": "Reuse the three existing undamaged 10 ns controls only after exact site, forcefield, solvent/ion, cell/preparation, sampling protocol and observable comparability audit. Otherwise propose new matched controls, up to another three times 10 ns. Preserve preparation differences and all outcomes.",
+      "ns_per_job": 1,
+      "job_wall_cap_hours": 2,
+      "checkpoint_ps": 100,
+      "historical_speed_ns_day_approx": 27,
+      "conditional_corrected_30ns_native_gpu_hours_approx": 27,
+      "conditional_new_control_30ns_native_gpu_hours_approx": 27,
+      "forecast_scope": "Historical same-machine context rate only; preparation, queue waits and audit time excluded. Rebenchmark with smoke run before accepting this schedule.",
+      "output_claim": "Preliminary finite-context structural support; no absolute melting temperature, equilibrium or stiffness validation."
+    },
+    {
+      "id": "temperature-campaign-handoff",
+      "requires": "Audited corrected candidate, restartable NAMD package and completed finite-context comparison.",
+      "work": "Propose the actual temperature grid, weld occupancy/placement, sizes, replicas, observables and time limits for welded/unwelded studies.",
+      "authorization": "Separate concrete schedule; not automatically launched by refinement. Broad registry/app release remains evidence-gated."
+    }
+  ],
+  "approval_checkpoints": [
+    {
+      "id": "A",
+      "decision": "Approve only the initial <=5 h native CPU tranche and method/resource/checkpoint policy.",
+      "status": "pending_user_plan_review"
+    },
+    {
+      "id": "B",
+      "decision": "After measured pilot audit, approve finite Hessian and reference-data allocations; finalize model reviews and fitting objective before dependent jobs.",
+      "status": "not_yet_ready"
+    },
+    {
+      "id": "C",
+      "decision": "Review frozen candidate, prospective results and exact DNA-context/control reuse audit; approve the bounded GPU allocation.",
+      "status": "not_yet_ready"
+    },
+    {
+      "id": "D",
+      "decision": "Review validation package and a separate temperature-campaign design.",
+      "status": "not_yet_ready"
+    }
+  ],
+  "review_rule_sources": [
+    {
+      "path": "docs/photoproduct_human_review_checklist.md",
+      "quote": "A correction to any ordered endpoint, atom map, graph bond, signed stereocenter, or source coordinate is a revision and requires regenerated candidate evidence and a new packet.",
+      "application": "The corrected anti graph/stereochemistry invalidates transfer of old exact-geometry reviews. New product-scoped evidence and decisions are needed; do not repeat unrelated isomer work."
+    },
+    {
+      "path": "docs/photoproduct_parameterization_workflow.md",
+      "rule": "Human review can pass only the chemical_definition identity gate; later passes require metric evidence.",
+      "application": "No user plan approval or successful optimizer exit is recorded as a QM/minimum/parameter or production-readiness pass."
+    }
+  ],
+  "total_campaign_duration": "Not yet estimated reliably. After the gradient pilot, report displacement/scan task counts and measured per-task cost; retain limits and distinguish reservations from runtime estimates."
+}

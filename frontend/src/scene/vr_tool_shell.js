@@ -6,7 +6,7 @@
  */
 
 export const VR_TOOL_MODES = Object.freeze([
-  'inspect', 'move_rotate', 'extrude', 'sweep', 'twist', 'bend',
+  'inspect', 'move_rotate', 'join', 'extrude', 'sweep', 'twist', 'bend',
 ])
 
 export const VR_TOOL_ACTIONS = Object.freeze([
@@ -41,6 +41,7 @@ export function vrToolSelectionCapability(mode, selectedRef) {
   if (mode === 'move_rotate' && DIRECT_MOVE_ROTATE_KINDS.has(selectedRef.kind)) {
     return VR_TOOL_CAPABILITIES.directPreview
   }
+  if (mode === 'join' && selectedRef.kind === 'cluster') return VR_TOOL_CAPABILITIES.directPreview
   if (CONFIGURATION_KINDS[mode]?.has(selectedRef.kind)) {
     return VR_TOOL_CAPABILITIES.configurationRequired
   }

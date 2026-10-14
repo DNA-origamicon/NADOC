@@ -147,6 +147,45 @@ does. See
 `headless_build.build_bundle(...)`, NOT the raw `backend.core.lattice` functions
 (those skip the feature log + clustering). Tests: `tests/test_headless_build.py`.
 
+## Sweep exploration and native inspection (2026-10-10)
+
+`headless_sweep_build.py`, re-exported through `headless_build`, supplies
+`sweep(cells, points_nm, **options)`, `preview_sweep(...)`,
+`preview_sweep_edit(feature_index, **changes)` and
+`edit_sweep(feature_index, **changes)`. All `SweepRequest` fields are accepted
+and natively validated, including point orientations, movable/detached origins,
+explicit sweep identity, and expected design/revision guards. The former wrapper
+accepted only the older fixed-origin subset. No geometry or topology formulas
+are implemented in these adapters.
+
+These wrappers return native response dictionaries (the existing `hb.sweep`
+contract); read the active Design from `state.get_or_404()`. Preview leaves the
+document, revision and history unchanged. Edit patches retain omitted authored
+fields and use native history replay, stable identities, downstream attachment
+handling and Undo/Redo. `include_geometry=False` selects a lightweight creation
+preview. See the [Sweep exploration example](../docs/vr_sweep.md#headless-exploration).
+Focused coverage lives in `tests/test_headless_sweep_build.py`: actual handler
+parity, evaluated nucleotide geometry, source detachment, roundtrip/history,
+preview/commit agreement and atomic stale-guard rejection.
+
+For design exploration, use the existing native inspectors and retained captures:
+[inspection workflow](../docs/scrywrite_inspector.md) documents desktop
+`window.__nadocInspect.toggle()` and browser inspection; the
+[live-agent runbook](../docs/scrywrite_live_agent.md) documents VR
+`scrywrite_observe`/`scrywrite_capture`, session discovery and capture provenance.
+Load an isolated design copy, inspect the actual rendered shape after each
+meaningful operation, and compare preview with committed output. Native preview
+metrics are useful feedback but do not substitute for visible geometry or
+simulation evidence.
+
+The adjacent extrusion wrappers also forward native options: `extrude` accepts
+`source_frame_id`, paired `expected_design_id` / `expected_revision` guards and
+`separate_fresh_extrusions`; segment, circle and deformed-continuation wrappers
+accept `separate_fresh_extrusions`. Defaults remain native defaults. Explicit
+frame selection disambiguates identical cell addresses in independently placed
+bundles. Focused geometry/ownership, roundtrip and stale-guard regressions:
+`tests/test_headless_extrude_options.py`.
+
 ## Test-design builders — `tests/conftest.py`
 
 `make_teeth_design` / `make_6hb_design` / `make_18hb_design` /

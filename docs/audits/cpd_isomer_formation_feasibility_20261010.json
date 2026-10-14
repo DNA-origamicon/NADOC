@@ -1,0 +1,460 @@
+{
+  "schema": "nadoc.cpd-isomer-formation-feasibility.v1",
+  "created_at": "2026-10-10T18:35:16.870742+00:00",
+  "conclusion": "Isomer-resolved reactant geometry analysis is feasible, but current anti stereo mapping fails independent suprafacial precursor checks. Do not interpret pilot anti zero counts as rarity or use the current eight-isomer classification for compute allocation.",
+  "scope": "Read-only analysis prototype and mapping audit. No new MD, QM, force-field fitting, chemical-definition edits, registry promotion, or cloud spending.",
+  "implemented": [
+    "Both syn/anti bond pairings",
+    "Ordered four-neighbor face classification against all eight definitions",
+    "All intra/interstrand competing TT pairs plus intended sites",
+    "Exact thymine C7/CHARMM C5M alias",
+    "Periodic local imaging",
+    "27-window sensitivity grid",
+    "Time-weighted geometry fractions with ambiguous channels retained",
+    "Per-frame coordinate/provenance cache",
+    "Default preflight rejection on the discovered mapping inconsistency"
+  ],
+  "catalog": [
+    {
+      "id": "tt-cpd-cis-syn",
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-syn/chemical_definition.json",
+        "sha256": "b583ce20398dff5bb6e1fa167f99842ed3e3947973f8d79ea41238f04ef14c55"
+      }
+    },
+    {
+      "id": "tt-cpd-cis-syn-ii",
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-syn-ii/chemical_definition.json",
+        "sha256": "cdcf91558952d1b0a6dd3c0df8ddd9ff5a8b5418a97cb4108b5d0765adc27a37"
+      }
+    },
+    {
+      "id": "tt-cpd-trans-syn-i",
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-syn-i/chemical_definition.json",
+        "sha256": "674efb301b06c3ceb85f481d31481acf0a102182a4816d34297c921ab285852b"
+      }
+    },
+    {
+      "id": "tt-cpd-trans-syn-ii",
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-syn-ii/chemical_definition.json",
+        "sha256": "ef2412a9ffc7133d353301c2fb62f47108ef9ec4fe04d14d36ba46e1e3d6ab29"
+      }
+    },
+    {
+      "id": "tt-cpd-cis-anti-i",
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-i/chemical_definition.json",
+        "sha256": "2ad8acdded5633ea84bf33c48cd7decbd3a1b6fab46f97bc54f0e9ca54a6e1c4"
+      }
+    },
+    {
+      "id": "tt-cpd-cis-anti-ii",
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-ii/chemical_definition.json",
+        "sha256": "8668cfeaaa85d70f920f81f425dff79cb0de29228ddb62532352e4e0092e52c8"
+      }
+    },
+    {
+      "id": "tt-cpd-trans-anti-i",
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-anti-i/chemical_definition.json",
+        "sha256": "27139365d5cfb64d2b90b2172c13c94eac02d5357dd46c4e1a8e686f00c3539f"
+      }
+    },
+    {
+      "id": "tt-cpd-trans-anti-ii",
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-anti-ii/chemical_definition.json",
+        "sha256": "f6933a888a07ed850dd469ab9f81f4d0dcbdf489924bfac5470092f46880b5c8"
+      }
+    }
+  ],
+  "independent_planar_reactant_audit": {
+    "passed": false,
+    "family_pass": {
+      "syn": true,
+      "anti": false
+    },
+    "cases": [
+      {
+        "family": "syn",
+        "face_rotations": [
+          -1,
+          -1
+        ],
+        "matched_products": [
+          "tt-cpd-cis-syn-ii"
+        ],
+        "unique": true
+      },
+      {
+        "family": "syn",
+        "face_rotations": [
+          -1,
+          1
+        ],
+        "matched_products": [
+          "tt-cpd-trans-syn-i"
+        ],
+        "unique": true
+      },
+      {
+        "family": "syn",
+        "face_rotations": [
+          1,
+          -1
+        ],
+        "matched_products": [
+          "tt-cpd-trans-syn-ii"
+        ],
+        "unique": true
+      },
+      {
+        "family": "syn",
+        "face_rotations": [
+          1,
+          1
+        ],
+        "matched_products": [
+          "tt-cpd-cis-syn"
+        ],
+        "unique": true
+      },
+      {
+        "family": "anti",
+        "face_rotations": [
+          -1,
+          -1
+        ],
+        "matched_products": [],
+        "unique": false
+      },
+      {
+        "family": "anti",
+        "face_rotations": [
+          -1,
+          1
+        ],
+        "matched_products": [],
+        "unique": false
+      },
+      {
+        "family": "anti",
+        "face_rotations": [
+          1,
+          -1
+        ],
+        "matched_products": [],
+        "unique": false
+      },
+      {
+        "family": "anti",
+        "face_rotations": [
+          1,
+          1
+        ],
+        "matched_products": [],
+        "unique": false
+      }
+    ]
+  },
+  "counterfactual": {
+    "change": "Flip only expected endpoint-1 C6 sign in all four anti definitions IN MEMORY. This is a localization diagnostic, not a corrected release or parameterization.",
+    "audit": {
+      "passed": true,
+      "family_pass": {
+        "syn": true,
+        "anti": true
+      },
+      "cases": [
+        {
+          "family": "syn",
+          "face_rotations": [
+            -1,
+            -1
+          ],
+          "matched_products": [
+            "tt-cpd-cis-syn-ii"
+          ],
+          "unique": true
+        },
+        {
+          "family": "syn",
+          "face_rotations": [
+            -1,
+            1
+          ],
+          "matched_products": [
+            "tt-cpd-trans-syn-i"
+          ],
+          "unique": true
+        },
+        {
+          "family": "syn",
+          "face_rotations": [
+            1,
+            -1
+          ],
+          "matched_products": [
+            "tt-cpd-trans-syn-ii"
+          ],
+          "unique": true
+        },
+        {
+          "family": "syn",
+          "face_rotations": [
+            1,
+            1
+          ],
+          "matched_products": [
+            "tt-cpd-cis-syn"
+          ],
+          "unique": true
+        },
+        {
+          "family": "anti",
+          "face_rotations": [
+            -1,
+            -1
+          ],
+          "matched_products": [
+            "tt-cpd-cis-anti-i"
+          ],
+          "unique": true
+        },
+        {
+          "family": "anti",
+          "face_rotations": [
+            -1,
+            1
+          ],
+          "matched_products": [
+            "tt-cpd-trans-anti-ii"
+          ],
+          "unique": true
+        },
+        {
+          "family": "anti",
+          "face_rotations": [
+            1,
+            -1
+          ],
+          "matched_products": [
+            "tt-cpd-trans-anti-i"
+          ],
+          "unique": true
+        },
+        {
+          "family": "anti",
+          "face_rotations": [
+            1,
+            1
+          ],
+          "matched_products": [
+            "tt-cpd-cis-anti-ii"
+          ],
+          "unique": true
+        }
+      ]
+    }
+  },
+  "candidate_generator_mechanism": {
+    "source": {
+      "path": "/home/jojo/Work/NADOC/backend/parameterization/photoproduct_stereo_candidates.py",
+      "sha256": "2190089cab2ff5b21f8dec748c36f0c188e9ace00f929b17831bb3c0682dcbb2"
+    },
+    "function": "_candidate_full_molecule",
+    "observation": "RemoveBond/AddBond changes neighbor ordering by odd permutations at C6, C5T and C6T while retaining RDKit chiral tags. This can change physical handedness independently of the subsequent paired endpoint flips.",
+    "replay": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-isomer-formation-pilot-v3/anti_neighbor_order_audit.json",
+      "sha256": "7604b27654b1272aa71cc0ee0562d519bf6dbe73926df209d37a13799bf50a34"
+    },
+    "records": [
+      {
+        "atom": "C5",
+        "source_neighbor_order": [
+          "C4",
+          "C5A",
+          "C6",
+          "C5T"
+        ],
+        "expected_order_after_partner_substitution": [
+          "C4",
+          "C5A",
+          "C6",
+          "C6T"
+        ],
+        "actual_order_after_bond_edit": [
+          "C4",
+          "C5A",
+          "C6",
+          "C6T"
+        ],
+        "odd_neighbor_permutation": false,
+        "chiral_tag_retained": true
+      },
+      {
+        "atom": "C6",
+        "source_neighbor_order": [
+          "N1",
+          "C5",
+          "C6T",
+          "H6"
+        ],
+        "expected_order_after_partner_substitution": [
+          "N1",
+          "C5",
+          "C5T",
+          "H6"
+        ],
+        "actual_order_after_bond_edit": [
+          "N1",
+          "C5",
+          "H6",
+          "C5T"
+        ],
+        "odd_neighbor_permutation": true,
+        "chiral_tag_retained": true
+      },
+      {
+        "atom": "C5T",
+        "source_neighbor_order": [
+          "C5",
+          "C4T",
+          "C5M",
+          "C6T"
+        ],
+        "expected_order_after_partner_substitution": [
+          "C6",
+          "C4T",
+          "C5M",
+          "C6T"
+        ],
+        "actual_order_after_bond_edit": [
+          "C4T",
+          "C5M",
+          "C6T",
+          "C6"
+        ],
+        "odd_neighbor_permutation": true,
+        "chiral_tag_retained": true
+      },
+      {
+        "atom": "C6T",
+        "source_neighbor_order": [
+          "C6",
+          "N1T",
+          "C5T",
+          "H6T"
+        ],
+        "expected_order_after_partner_substitution": [
+          "C5",
+          "N1T",
+          "C5T",
+          "H6T"
+        ],
+        "actual_order_after_bond_edit": [
+          "N1T",
+          "C5T",
+          "H6T",
+          "C5"
+        ],
+        "odd_neighbor_permutation": true,
+        "chiral_tag_retained": true
+      }
+    ]
+  },
+  "references": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1/references/tt-cpd-cis-syn/TTD.cif",
+      "sha256": "4f81c5c192683b3381596f599e89504419d54a473f9765cec458157c86811f5a"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1/references/tt-cpd-cis-syn/TTD_ideal.sdf",
+      "sha256": "e9402af214dc99e5c477d8f11f1e9942fa54b78dd0167b65b69a03f713acb4d2"
+    }
+  ],
+  "pilots": [
+    {
+      "job": "29c5b267380f",
+      "summary": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-isomer-formation-pilot-v3/29c5b267380f/summary.json",
+        "sha256": "e8b69513ce58874aebece9412cb44137602a60e4f9b8517beffd14053c0f287a"
+      },
+      "sampled_frames": 200,
+      "candidate_pairs": 5,
+      "represented_time_ns": 200.00000059628115,
+      "analysis_seconds": 0.5008893630001694,
+      "formation_ranking_qualified": false
+    },
+    {
+      "job": "029a76c6a59f",
+      "summary": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-isomer-formation-pilot-v3/029a76c6a59f/summary.json",
+        "sha256": "e5fa4dfbee4c8b0dab9458e0a91edf4b91a9287414d5562dd6c6feb834cbf806"
+      },
+      "sampled_frames": 200,
+      "candidate_pairs": 12,
+      "represented_time_ns": 1000.0000029814055,
+      "analysis_seconds": 4.127647730987519,
+      "formation_ranking_qualified": false
+    },
+    {
+      "job": "fc12195d0636",
+      "summary": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-isomer-formation-pilot-v3/fc12195d0636/summary.json",
+        "sha256": "146ead6387718ba087073fc11d6b30ee6e90af4baee1a10d74a69c29a506eda7"
+      },
+      "sampled_frames": 200,
+      "candidate_pairs": 2217,
+      "represented_time_ns": 215.5000006424929,
+      "analysis_seconds": 117.1663079840364,
+      "formation_ranking_qualified": false
+    }
+  ],
+  "preserved_failed_attempts": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-isomer-formation-pilot-v1/29c5b267380f/failure.json",
+      "reason": "Missing scanner progress argument; no scientific results."
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-isomer-formation-pilot-v2/29c5b267380f/failure.json",
+      "reason": "CHARMM thymine C5M alias absent in initial prototype; no scientific results."
+    }
+  ],
+  "interpretation_of_prior_anti_campaign": "Prior native execution, restart, and finite-context stability results remain evidence for the stored model. They do not resolve this newly identified product-identity/precursor mapping discrepancy. Hold new anti formation rankings and further anti production qualification until chemical identity is independently audited.",
+  "next_required_work": [
+    "Reconstruct anti products from explicit atom-mapped planar reactants or an independent trusted structure; verify all four centers including C6.",
+    "Repair the candidate generator with neighbor-order-aware stereochemistry and independently verify ordered C5 identities.",
+    "Compare corrected identity with existing anti topology, coordinates, impropers and fitted terms; preserve and mark any affected historical calculations.",
+    "Only then complete the all-lineage geometry census and assess wavelength-dependent photochemical-factor sensitivity before compute prioritization."
+  ],
+  "rate_model": "At low conversion, effective rate for an exclusive channel is the reactant-ensemble average of its geometry-dependent excitation rate times conditional product branching. A separated occupancy_s * factor_s is an explicit approximation. A shared factor yields only a geometry ranking; rates/yields remain unset.",
+  "literature": [
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2292369/",
+      "use": "Primary precedent for geometry-population based estimates calibrated to dinucleotide photodimer yields."
+    },
+    {
+      "url": "https://www.nature.com/articles/s41467-026-71955-2",
+      "use": "Primary KIMMDY paper reports cis-syn and trans-syn products and a heuristic calibrated on small systems; not an all-eight-isomer origami calibration."
+    }
+  ],
+  "analysis_sources": [
+    {
+      "path": "/home/jojo/Work/NADOC/experiments/cpd_isomer_formation/geometry.py",
+      "sha256": "f8da6eddc7ef5ed550512686273244e5ebe1f3df74a0fea64bd873ac5d767501"
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/experiments/cpd_isomer_formation/run.py",
+      "sha256": "4732145342dbff6d5939eeb4bcdefb0ac82767947bf7bc112e9fe9ee256d007a"
+    },
+    {
+      "path": "/home/jojo/Work/NADOC/tests/test_cpd_isomer_formation_geometry.py",
+      "sha256": "a10528ba81c5fdc28d938d0b268d94c3f203362aab17c50cf5cab07e95b60e97"
+    }
+  ]
+}

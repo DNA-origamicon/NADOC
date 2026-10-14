@@ -1,0 +1,49 @@
+{
+  "at": "2026-10-11T23:57:57+00:00",
+  "event": "aae6da15-f444-410e-b7b7-ff6e4482c4e7 failed",
+  "acknowledgement": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-core-pilot-v1-service/completion_wake_ack.json",
+    "sha256": "0c1122d538e26d23290f60ed8cef04c0be4acb936636e679f1b931d87e6f0982"
+  },
+  "failure_review": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-core-pilot-v1/failure_review.json",
+    "sha256": "eb4f49b50d364a607a94e564ccc2c5450e45406c94a955d75493d0bdb3fb10d6"
+  },
+  "native_successes_reused": 7,
+  "fresh_direct_tasks": 3,
+  "failed_raw_iterate_excluded": true,
+  "original_inputs_and_thresholds_unchanged": true,
+  "source_and_reuse_preflight": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-core-pilot-v2/independent_prelaunch_review.json",
+    "sha256": "ce79f1d6f2f19d2884adadc16077fdb4b0298d008ee5adfcd78c18477fa8d8c7"
+  },
+  "tests": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-core-pilot-v2/test_receipt.json",
+    "sha256": "b67965ed655a1c53a5e59729486bc425bc21ffd5702af348ec5aa41cba3affa7"
+  },
+  "active_handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-core-pilot-v2/handoff.json",
+    "sha256": "cb20abf323d71131b0c065e6bcf9c5378783a8eeb2ba519b697a0bdcb4395c32"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-core-pilot-v2/launch_verification.json",
+    "sha256": "91b4fd3d25143c839ebd58fd55a19789841294909296b786b839af5b89c42179"
+  },
+  "limits": {
+    "maximum_new_scf": 3,
+    "hard_seconds": 2100,
+    "task_timeout_seconds": 600,
+    "threads": 4,
+    "psi4_memory_gib": 4,
+    "service_memory_gib": 8
+  },
+  "wake_token": "754def1a-8a36-4a8c-9fbe-692d73d251b7",
+  "expected_finish_local": "2026-10-11T18:06:52.864741-06:00",
+  "audit_deadline_local": "2026-10-11T18:26:52.828839-06:00",
+  "hard_deadline_local": "2026-10-11T18:31:52.828839-06:00",
+  "minimum_certified": false,
+  "full_curves_admitted": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0,
+  "existing_files_deleted_or_moved": false
+}

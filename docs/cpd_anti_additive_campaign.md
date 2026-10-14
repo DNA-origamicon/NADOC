@@ -1,6 +1,2482 @@
 # Cis-anti-I additive parity campaign
 
-**PAUSED BY USER — 2026-10-08. Explicit resume required.**
+**Admission helper misidentified as a calculation; ready pending RAM — 2026-10-11 Denver.**
+Acknowledged failed wake `677f42af-107e-4e3e-a31d-33d2b58c8ae4`.
+The single timed attempt failed at the exclusive-job check, **before the memory
+check or native launch**. The old guard searched entire `systemctl` rows.
+The admission helper's default Description contained its `cpd-` Archive path,
+so it matched its own helper as an active calculation. The preserved systemd
+journal confirms this description; the traceback identifies the guard. No
+QM service, launch receipt or new gradient was created. This is an admission
+software failure, not an optimizer failure or new scientific result.
+
+Prepared a separate pinned `alternate-sugar-qm-release-v2/repaired_launcher.py`
+that checks **service identifiers only**, exempts watcher service identifiers,
+and still rejects real CPD/native jobs. Six focused tests pass, including the
+observed description false positive, real jobs whose descriptions contain
+`-watch`, and unchanged resource boundaries. The original optimizer worker,
+scientific plan, checkpoint, tolerances, 30-gradient/two-hour allocation and
+resource limits remain unchanged. Historical sources/failures are preserved.
+
+The one diagnostic snapshot found **11.235 GiB available RAM**, below the
+unchanged **12 GiB** requirement, with about **0.97 MiB swap free**. No native
+calculation was active. The admission timer is consumed; **no further retry
+is armed and no periodic polling is running**. Restore memory headroom before
+one reviewed resume using the repaired launcher. No user application was
+terminated and no admission threshold was lowered. Archive storage and zero
+cloud spending remain in force.
+
+Current handoff: `current_handoff.json` →
+`alternate-sugar-qm-release-v2/resource_wait_handoff.json`, with the exact resume
+command and required startup verification. Failure audit:
+`alternate-sugar-qm-release-v2-deferred-admission/failure_audit.json`.
+Portable audit: `docs/audits/cpd_corrected_cis_anti_i_admission_repair_20261011.json`.
+
+**Released-core audit and consolidated candidate decision — 2026-10-11 Denver.**
+Acknowledged completion token `29f7da0c-7627-492a-ae9d-703632ba9b59`.
+All **13 evaluated/accepted states**, including the reused seed, pass independent
+native/hash/chemistry checks. The **12 new gradients took 42.38 service minutes**;
+the service reached its allocation boundary, not convergence. Maximum projected
+atom gradient fell **149.55-fold**, including **85.14% over the last five states**,
+to **4.26812e-5 au**; RMS is **1.68094e-5 au**. These remain **2.85 and 1.68 times**
+the unchanged stationarity thresholds. Energy is **2.72468 kcal/mol below** the
+original same-chi QM reference. The seven stereocenters remain intact. Uphill
+trials and all prior failures are retained. No endpoint minimum is certified.
+
+The requested consolidated review uses **six static MM evaluations** of existing
+geometries, with no additional QM or relaxation. The historical relaxed parent
+MM geometry is closer to the alternate QM geometry: heavy-atom RMSD **0.45325 →
+0.21816 Å**, maximum heavy-atom proper-torsion difference **128.42 → 18.70°**.
+These descriptors support the relevance of the alternate conformation; they
+do not prove common basins or global minima. At the two QM geometries, the first
+core-bonded candidate favors the alternate by **9.87875 kcal/mol**, versus QM's
+**2.72468 kcal/mol**, leaving **7.15407 kcal/mol** excess stabilization. The
+alternate QM point is not yet stationary. Endpoint gradient-component RMSE
+improves only **8.0515 → 7.3555 kcal/mol/Å** between these geometries. The combined
+candidate remains provisional; core-only equilibrium fitting barely changes
+the conformer-energy discrepancy. Preserve the existing ring/charge-transfer
+limitations and prospective holdouts.
+
+This review admits completion of **this same alternate zero-offset target**:
+`alternate-sugar-qm-release-v2`, exact accepted coordinates/gradient reused,
+unchanged electronic method and single chi constraint, **30 new gradients or
+two hours maximum**, stopping immediately at convergence. Four CPUs, 4 GiB
+Psi4/8 GiB service, no swap, 600-second native timeout; expected full-allocation
+cost **107.48 minutes**. Native preflight passes. This implements the larger
+routine allocation from the big-picture audit without expanding scientific scope.
+No additional angular grid, endpoint Hessian or second fit has been admitted.
+
+**Queued, not running:** the direct launch failed before service creation because
+available RAM was **11.876 GiB**, below the unchanged **12 GiB** admission guard.
+The exception and resource snapshot are preserved. One admission timer is armed
+for approximately **22:05:32 Denver** (`nadoc-alternate-release-v2-admit.timer`).
+It attempts launch once; persistent resource failure generates a wake and requires
+review instead of repeated retries. On admission, the native watcher handles
+completion/failure and one **115-minute review deadline**, with a **two-hour hard
+stop**. Five focused tests pass, covering failure notification, cancellation,
+campaign pause scope and startup verification. No periodic polling or user-process
+termination. All large files/scratch remain on Archive; no cloud spending.
+
+Audit and comparison: `alternate-sugar-qm-release-v1/completion_audit.json` and
+`consolidated_candidate_review.json`. Current handoff: `current_handoff.json` →
+`alternate-sugar-qm-release-v2/queued_handoff.json`; the timer promotes the pointer
+to `active_handoff.json` only after verifying native startup and watcher arming.
+Portable audit: `docs/audits/cpd_corrected_cis_anti_i_consolidated_review_20261011.json`.
+
+**Big-picture audit: useful progress, but tighten the route to NAMD — 2026-10-11 Denver.**
+The user requested a campaign-level review of repeated 12-gradient chunks.
+The corrected-isomer campaign has **35 finished service attempts totaling
+16.64 wall hours**, excluding the active release job and preparation/audit time.
+The glycosidic profile accounts for **9.05 hours**, corrected-core reference and
+curvature work **4.30 hours**, and initial endpoint work **1.77 hours**. The five
+failed services account for **11.75 minutes**. Failures are preserved; these
+totals are not CPU-hours, calendar duration or the entire legacy campaign.
+
+Recent work is productive: the alternate-sugar pilot plus fixed-core relaxation
+used **16 distinct gradients and 55.01 service minutes** and reached constrained
+stationarity at a geometry **2.433 kcal/mol below** the original QM reference.
+It remains close to the MM alternative, so enforcing the original geometry
+alone would be unjustified. At the user-requested snapshot, the released-core
+job had seven completed new gradients and an eighth running. Independent native
+replay confirms **40.48-fold** maximum projected-force reduction, another
+**0.2896 kcal/mol** energy decrease and intact chemistry. Its maximum force
+still exceeds the criterion by **10.51-fold**; this is progress, not convergence.
+No later live-status samples were taken for this review.
+
+The production bottleneck is the combined parameter candidate and its transfer
+to DNA context. The corrected core minimum and planned reference inventories
+exist; first charge/bonded candidates are provisional, the bonded improvement
+is partial, and prospective qualification/NAMD context checks remain incomplete.
+Chunk completion has been communicated more prominently than these milestones.
+
+**Operating decisions for subsequent manifests:** finish/audit the current
+admitted job, then consolidate existing original/alternate QM and MM geometry,
+force, energy and target residuals into one candidate decision. Further QM must
+identify the unresolved decision and the smallest acquisition that could change
+it. Do not automatically add endpoint Hessians, rotamer searches, angular grids
+or fit rounds after a service completes. Keep scoped minimum/stationarity claims
+and existing evidence gates intact.
+
+The **12-gradient limit is an operational choice**, not a scientific requirement
+or the user's time ceiling. For established optimization methods, future manifests
+should normally allow about **two hours (~30 gradients at measured cost)** within
+the stage budget and 15-hour service ceiling, with early convergence stops and
+native timeouts. Current restarts retain geometry/gradient but discard Sella
+history; account for this overhead and only preserve history through a validated
+restart mechanism. Small pilots remain appropriate when methods change.
+The active immutable allocation and its triggers remain unchanged.
+
+Prepare/check provisional NAMD topology and full-precision exports where existing
+dependencies permit, while keeping engineering checks distinct from physical
+qualification. Prioritize the intended preliminary welded/unwelded stability
+scope and representative DNA context; exhaustive capped-sugar conformer searches
+and absolute melting-temperature validation are not silently added prerequisites.
+This review launches no new computation and changes no acceptance verdicts.
+
+Audit: `big-picture-audit-20261011/review.json`, with native snapshot evidence.
+Current handoff: `current_handoff.json` → `big-picture-audit-20261011/handoff.json`,
+which preserves the active release-job handoff and adds these management decisions.
+Portable audit: `docs/audits/cpd_corrected_cis_anti_i_big_picture_20261011.json`.
+
+**Alternate sugar stationary with fixed core; matched-angle core release running — 2026-10-11 Denver.**
+Acknowledged completion token `726a3d20-4cc5-4bd1-98fe-ee22d44be1f1`.
+Independent native replay verifies **three new gradients and four accepted
+states**, including the reused checkpoint. Both Sella and the independent
+fixed-core/chi stationarity checks pass: maximum free projected atom gradient
+**1.03312e-5 au**, RMS over the 17 free atoms **5.81052e-6 au**, below the unchanged
+**1.5e-5 / 1e-5 au** limits. Total service time was **10.32 minutes**. Stop this
+completed fixed-core optimization; its unused nine-gradient allowance is not
+a reason to keep running. No curvature or full endpoint minimum is certified.
+
+Final energy is **−1364.542104729633 Eh**, **2.43303 kcal/mol below** the original
+central QM conformer. The latest chunk changes energy by only **+1.58e-6
+kcal/mol** overall; its small uphill steps remain preserved. Heavy-atom RMSD
+from the original conformer is **0.34872 Å**, and the exocyclic sugar torsion
+remains **46.753°**. These are results for the explicitly fixed-core problem.
+
+The same saved native gradient, projected with **only chi constrained**, gives
+maximum atom gradient **0.00638305 au (7.56915 kcal/mol/Å)** and RMS
+**0.00143671 au**. The maximum is **425.5 times** the stationarity limit, with
+largest remaining gradients at 1:C2, 2:C4 and 1:O2. By comparison, the original
+QM reference passes the single-chi criterion. Thus fixed-core convergence does
+not yet permit a stationary comparison under the original endpoint constraints.
+No new QM evaluation was needed to establish this distinction.
+
+`alternate-sugar-qm-release-v1` admits one zero-offset matched-angle diagnostic:
+release all 32 previously fixed core/methyl atoms, let all **49 atoms** move,
+and retain the exact original chi target **105.65946347935468°**. Reuse the last
+accepted geometry and full-precision gradient with fresh Sella order-0/internal
+history. The electronic method, basis and all SCF/response settings are unchanged.
+Four focused tests passed for released-force accounting, constraint scope and
+invalid geometry. Native preflight confirms one independent constraint and
+agreement with the independent projector within **2.55e-13 au**, without QM work.
+
+Launched **21:01:58 Denver**. The single startup observation verified gradient
+reuse, no fixed Cartesian atoms, the original chi target and first new native
+DF-SCF calculation with 449 orbital functions. Allocation is **12 new gradients
+maximum, 600 seconds per gradient, one hour total**; **four CPUs, 4 GiB Psi4 /
+8 GiB service memory, no swap**. Expected finish is approximately **21:45:03**;
+audit trigger **21:51:58**, hard stop **22:01:58**. Completion/failure watcher
+`29f7da0c-7627-492a-ae9d-703632ba9b59` is armed. No periodic polling.
+
+Next: audit native evidence and all-49-atom single-chi stationarity, then assess
+relative energy and core/sugar/OH correspondence. Stop optimization when those
+criteria pass; stationarity still does not certify curvature or global basin
+closure. A further angular profile needs separate preregistration. Original
+references, failures and audit verdicts remain preserved. The second bonded-fit
+round and prospective holdouts remain untouched. All output and scratch are on
+mounted Archive; no cloud spending or existing-data move/delete.
+
+Audit: `alternate-sugar-qm-closure-v2/completion_audit.json`.
+Stage decision: `alternate-sugar-qm-closure-v2/stage_transition_review.json`.
+Current handoff: `current_handoff.json` → `alternate-sugar-qm-release-v1/handoff.json`.
+Portable audit: `docs/audits/cpd_corrected_cis_anti_i_alternate_core_release_20261011.json`.
+
+**Alternate-sugar QM chunk audited; continuation running — 2026-10-11 Denver.**
+Acknowledged completion token `85f479a2-72de-45b7-ade2-83d5ff25bebb`.
+The first chunk reached its **12-new-gradient allocation**, with service exit 0
+and **optimizer convergence false**. Independent replay verifies all **13 native
+evaluations and accepted states**, including the reused pilot, against full
+precision geometry/gradient files, ASE trajectory and Sella energy log.
+All original electronic settings, basis evidence, seven stereocenters and
+fixed-core/chi requirements pass. The early uphill step is retained; the
+trajectory is not described as uniformly downhill.
+
+The last accepted energy is **−1364.5421047321433 Eh**, **2.43304 kcal/mol below**
+the original central QM reference and **3.61168 kcal/mol below** the alternate
+starting point. Maximum free projected atom gradient fell **380.8-fold**, to
+**5.80807e-5 au (0.068873 kcal/mol/Å)**; free-atom RMS is **2.38775e-5 au**.
+These still exceed the respective **1.5e-5 / 1e-5 au** stationarity limits.
+The last five states show a further **74.84% force reduction**, with mean native
+cost **206.33 seconds/gradient**, maximum **217.45 seconds**. Total service time
+was **41.44 minutes**. Progress supports one further bounded chunk.
+
+The relaxed geometry remains close to the alternate MM seed: heavy-atom RMSD
+**0.04886 Å**, versus **0.34866 Å** from the original QM conformer. The exocyclic
+sugar torsion is **46.754°**. This lower observed QM energy supports investigating
+the alternate conformation rather than enforcing correspondence to the original
+reference. It is not a converged relative basin energy, minimum certificate,
+barrier or full basin-closure result. Maximum evaluated fixed-coordinate drift
+was **1.27e-8 Å** and chi error **1.60e-6°**, within unchanged limits.
+
+`alternate-sugar-qm-closure-v2` reuses the exact last accepted native geometry
+and full-precision gradient with fresh Sella history. The original 32 fixed
+reference targets and exact chi target are retained, without snapping the
+restart coordinates or resetting targets to their small solver residuals.
+Preflight independently verifies the 97-constraint projection within
+**9.44e-14 au**. The inherited worker changes only its service name and the
+reuse-reporting label. A preparation path check initially addressed the not-yet
+created output directory; its failed source/report are preserved under
+`alternate-sugar-qm-closure-v2-preparation-failure`. Checking the mounted existing
+parent repaired the setup before any calculation was launched.
+
+Launched **20:46:52 Denver**. The single startup observation verifies reuse of
+the prior gradient, its accepted checkpoint, and the first new native DF-SCF
+calculation with 449 orbital functions. Allocation remains **12 new gradients
+maximum, 600 seconds per gradient, one hour total**, using **four CPUs,
+4 GiB Psi4 / 8 GiB service memory, no swap**. Expected finish is approximately
+**21:30:09**; audit trigger **21:36:52**, hard stop **21:46:52**. Completion/failure
+watcher `726a3d20-4cc5-4bd1-98fe-ee22d44be1f1` is armed. No periodic polling.
+
+Next: replay native and accepted-state evidence, assess stationarity and
+conformer correspondence, and stop further optimization once the audited force
+criteria pass. Any curvature work or further continuation requires a separate
+evidence-based admission. The second bonded-fit round and prospective holdouts
+remain untouched. All bulk output and scratch are on mounted Archive; no cloud
+spending or existing-data move/delete.
+
+Audit: `alternate-sugar-qm-closure-v1/completion_audit.json`.
+Current handoff: `current_handoff.json` → `alternate-sugar-qm-closure-v2/handoff.json`.
+Portable audit: `docs/audits/cpd_corrected_cis_anti_i_alternate_qm_continuation_20261011.json`.
+
+**Alternate-sugar QM pilot audited; bounded QM relaxation running — 2026-10-11 Denver.**
+Acknowledged completion token `1aea941e-e6fa-4e19-ac9d-6058d4bf524a`.
+Native replay confirms the original MP2/6-31G(d) method, basis, occupations,
+SCF/response tolerances and fitting condition. Geometry and binary gradients
+match native output; all seven stereocenters, the 32 exact fixed core coordinates
+and the original chi target are preserved. The alternate MM geometry has QM
+energy **−1364.5363491463504 Eh**, **1.17865 kcal/mol above** the existing central
+QM conformer. Its maximum free projected atom gradient is **26.2253 kcal/mol/Å**,
+with RMS **14.7189 kcal/mol/Å** across the 17 free atoms. It is not stationary.
+This single-point difference cannot rank the relaxed basins or establish a
+force-field defect. Native cost was **194.26 seconds**.
+
+The pilot audit admits one `alternate-sugar-qm-closure-v1` chunk using Sella
+order 0/internal coordinates and the unchanged native gradient worker. It
+**reuses the pilot gradient**, fixes the same 32 core atoms to the original QM
+reference positions, and retains the same chi target: **97 independent
+constraints, 50 free dimensions**. Every evaluated trial and accepted native
+checkpoint is retained. A restart must retain the original fixed targets,
+not install residual-shifted checkpoint coordinates as new targets.
+
+Independent stationarity requires maximum tangent atom gradient below
+1.5e-5 au and RMS below 1e-5 au over only the 17 free atoms, together with native
+Sella convergence and chemistry/constraint checks. Optimizer completion still
+does not certify a minimum. A planned time or gradient-allocation boundary is
+recorded separately from convergence and requires a new audit.
+
+Six focused tests passed for acquisition limits, fixed-target retention, chi
+and nonfinite-geometry rejection, and free-atom RMS semantics. Native preflight
+confirmed the independent projection against the Sella constraint nullspace
+within **5.50e-13 au**, without additional QM work.
+
+Launched **20:00:40 Denver** with **four CPUs, 4 GiB Psi4 / 8 GiB service memory,
+no swap**. The single startup observation verified pilot reuse, its initial
+accepted checkpoint, the first new native DF-SCF calculation and 449-function
+orbital basis. Allocation is **at most 12 new gradients**, **600 seconds per
+gradient**, and **one hour total**. Expected finish is approximately
+**20:41:32**; the audit trigger is **20:50:40**, hard stop **21:00:40**.
+External completion/failure watcher `85f479a2-72de-45b7-ade2-83d5ff25bebb`
+is armed. No periodic polling or concurrent calculation.
+
+Next: audit native results and accepted-state energy/force progress, confirm
+fixed targets/chi/stereochemistry, and compare sugar descriptors with both
+starting conformers before deciding whether another bounded chunk is useful.
+The remaining bonded-fit round, prospective holdouts and full candidate lock
+remain untouched. All output and scratch are on mounted Archive. No cloud
+spending or existing-data move/delete.
+
+Audit: `alternate-sugar-qm-pilot-v1/completion_audit.json`.
+Current handoff: `current_handoff.json` → `alternate-sugar-qm-closure-v1/handoff.json`.
+Portable audit: `docs/audits/cpd_corrected_cis_anti_i_alternate_qm_closure_20261011.json`.
+
+**Fixed-core boundary audit complete; one alternate-sugar QM pilot running — 2026-10-11 Denver.**
+Acknowledged completion token `7bc78462-5dba-4224-8e76-10ea143f641d`.
+Independent replay verifies **all 61 evaluated/accepted states**, native ASE
+trajectory energies/forces, Sella log energies, all final stereocenters and the
+97-constraint tangent forces. Both final states meet the fixed-core/chi and
+projected-force requirements; neither is a certified full endpoint minimum.
+
+| Offset | Maximum projected atom gradient, kcal/mol/Å | Exocyclic change | 5′ OH change | Largest sugar-ring change | MM relaxation energy |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 0° | 0.000813 | −128.75° | +158.78° | 42.19° | −12.315 kcal/mol |
+| +30° | 0.000770 | −2.32° | −5.61° | 6.96° | −4.997 kcal/mol |
+
+Heavy RMSD is **0.3678 Å / 0.0667 Å**. The central conformer still changes
+substantially with the exact QM core held fixed, while +30° stays close to its
+starting descriptors. This excludes core-shape relaxation as the sole cause of
+the central mismatch. It does not establish which conformer QM prefers.
+
+An initial audit incorrectly required a constant parent/candidate energy offset
+to 1e-9 kcal/mol at every intermediate accepted state. The maximum transient
+fixed-coordinate residuals are **7.96e-8 / 2.00e-8 Å**, within the frozen 1e-7 Å
+limit, and induce offsets of **1.55e-6 / 2.28e-7 kcal/mol**. Exact reconstruction
+from the actually changed core harmonic terms accounts for these offsets.
+Parent/candidate free-atom forces are identical throughout; final offsets agree
+within 7e-13 kcal/mol. The failed audit and source are preserved; no numerical
+tolerance, native result or worker was changed.
+
+The independent proper-torsion and nonbonded-pair reconstruction sums to native
+OpenMM energies. At 0°, the changes are:
+
+| Contribution | Energy change, kcal/mol |
+| --- | ---: |
+| Sugar-only proper torsions | −5.201 |
+| Core–sugar boundary proper torsions | −0.174 |
+| Sugar-only nonbonded interactions | −8.054 |
+| Core–sugar boundary nonbonded interactions | +3.243 |
+
+The largest individual torsion contribution is the existing
+O5′–C5′–C4′–C3′ term (**−4.199 kcal/mol**). Thus internal sugar terms favor much
+of the alternate geometry, while its net nonbonded interaction with the core
+becomes less favorable. This is exact MM energy accounting, not a unique
+decomposition of QM error. Do not compensate this mismatch by blindly refitting
+CPD base terms or by changing standard sugar parameters to enforce the original
+conformer. The remaining bonded-fit round is still reserved.
+
+`alternate-sugar-qm-pilot-v1` acquires **one original-method MP2/6-31G(d) gradient**
+at the audited central MM alternative. It restores the 32 fixed atoms exactly
+from the original native QM reference, removing only **4.41e-14 Bohr** of solver
+roundoff; all seven stereocenters and the exact chi target remain intact. The
+source MM Bohr conversion is preserved explicitly. Native reference geometry,
+energy, gradient, occupations and basis evidence were reopened before admission.
+Basis preflight confirms **449 orbital / 2,737 SCF fitting / 1,820 MP2 fitting
+functions**. Electronic settings, frozen core, fitting condition and all
+SCF/response tolerances remain unchanged. No optimizer is running in this pilot.
+
+The pilot compares a vertical QM energy and free projected gradient against the
+existing central QM conformer before a possible separately audited closure
+optimization. A higher-energy single point cannot rule out a lower nearby
+alternate minimum; a lower point would show the original conformer is not the
+lowest in this conditioned domain. Neither outcome alone certifies a basin,
+minimum, barrier, relative formation probability or fitted target.
+
+Launched **19:47:05 Denver**. The single startup check verified native DF-SCF
+entry and 449-function basis, **four CPUs, 4 GiB Psi4 / 8 GiB service memory,
+no swap**. One gradient has a **600-second timeout**, within a **15-minute total
+service bound**. The prior reference gradient took 214 seconds; expected finish
+is around **19:52:05**, audit deadline **19:59:05**, hard stop **20:02:05** Denver.
+External completion/failure watcher `1aea941e-e6fa-4e19-ac9d-6058d4bf524a` is
+armed. No periodic polling or concurrent calculation.
+
+Next: reopen the completed pilot's actual native output, compare energy and
+projected forces/cost, and decide whether a short QM branch-closure chunk is
+necessary. No optimization, second fit, broader scan, prospective holdout,
+candidate lock or product promotion is automatically admitted. All outputs and
+scratch are on mounted Archive. No cloud spending or existing-data move/delete.
+
+Audit: `fixed-core-boundary-v1/completion_audit.json`, with exact energy
+decomposition and accepted torsion histories in each point folder.
+Current handoff: `current_handoff.json` → `alternate-sugar-qm-pilot-v1/handoff.json`.
+Portable audit: `docs/audits/cpd_corrected_cis_anti_i_boundary_qm_pilot_20261011.json`.
+
+**Core bonded fit audited; fixed-core boundary diagnostics complete, audit queued — 2026-10-11 Denver.**
+Acknowledged completion token `feb6b28d-3896-474a-9b13-66447eff9d11`.
+The independent audit reconstructs the frozen objective from native gradients
+and Hessians, verifies bound optimality, and replays **704 evaluated core states
+and 671 accepted checkpoints**. The final geometry is the last accepted state.
+Exact core/endpoint system comparison confirms that only the 54 paired
+bond/angle equilibria changed; masses, force constants, all other terms and
+full-precision charges are unchanged. All ten static core/endpoint records
+reproduce their saved native energies and gradients.
+
+| Core diagnostic | Parent | First bonded correction |
+| --- | ---: | ---: |
+| Gradient-component RMSE at QM geometry, kcal/mol/Å | 12.8563 | 4.4264 |
+| Internal Hessian-component RMSE at QM geometry, kcal/mol/Å² | 24.0816 | 23.8769 |
+| Relaxed heavy-atom RMSD, Å | 0.17536 | 0.17978 |
+| Largest relaxed bond error, Å | 0.03000 | 0.01258 |
+| Largest relaxed angle error | 5.5159° | 3.9964° |
+
+Data objective falls from **171.8282 to 26.0532**, with prior contribution
+**0.16460**. Four angle-equilibrium terms hit the ±8° bounds. The finite ring
+even-energy discrepancies are **−12.82% and −11.19%**, versus −9.06% / −10.88%
+for the parent. This is a useful partial force/bond-length correction, not a
+uniform improvement or qualified candidate. Preserve it without widening
+bounds or automatically consuming the remaining fit round.
+
+The final MM core preserves corrected chemistry and has maximum atom gradient
+**6.456e-6 kcal/mol/Å**. Independently replayed Hessians at 1e-4 and 5e-5 Å
+steps have **102 positive internal eigenvalues**; the lowest is
+**0.268909 kcal/mol/Å²**, while the projected step-difference operator norm is
+**1.581e-5 kcal/mol/Å²**. This supports a **numerically certified local minimum
+of this exact MM core system and saved geometry**. It does not certify the
+sugar endpoint, a shared QM/MM basin, parameter accuracy, global minimum or
+production readiness. Original worker flags remain untouched. The top-level
+campaign minimum flag remains false; the audit scopes the isolated MM evidence
+under `local_mm_minimum`.
+
+Vertical endpoint relative-energy errors at −30, −15, +15 and +30° are
+**+2.785, +0.700, −2.136 and −3.852 kcal/mol**. These use the same acquired QM
+coordinates, not a matched relaxed profile. They do not establish whether
+core correction repairs the sugar/cap conformer mismatch. The historical
+L-BFGS-B core relaxation is retained and independently audited; subsequent
+molecular optimizations follow the user's preferred Sella method.
+
+`fixed-core-boundary-v1` tests **two existing endpoint conformers, 0° and +30°**.
+Each retains its exact chi target while fixing all **32 base/methyl atoms to
+that conformer's QM coordinates**; the 17 sugar/OH-cap atoms have **50 independent
+free dimensions**. Native Sella uses order0/internal coordinates, unchanged
+charges and the first core correction. Every fitted term involves fixed atoms
+only. Preflight confirms the parent and candidate have identical free-atom
+gradients and differ by a constant energy under sugar perturbations, within
+1.8e-14 kcal/mol. Thus these conditioned sugar forces cannot be corrected by
+further changes to the selected base-only equilibrium terms.
+
+Native constraint rank is **97**; the independent masked-coordinate/chi
+projection agrees with the analytic constraint nullspace within **2.0e-11**.
+**Four focused tests pass in 1.14 seconds.** The 0° point probes the prior
+large rotamer change; +30° supplies the less-drifted comparison. Audit actual
+fixed-position drift, tangent forces, all seven stereocenters and cap/sugar
+torsions. A conditioned result is not a full endpoint minimum or qualification
+of the unconstrained glycosidic profile. If drift persists, review the boundary
+and nonbonded interactions before the second fit; if suppressed, reconsider
+coupling to core shape. No automatic additional QM or fit is admitted.
+
+The service started **19:36:28 Denver** and completed both attempts in
+**4.84 seconds**, before the single startup/outcome check. Completion token
+`7bc78462-5dba-4224-8e76-10ea143f641d` is queued for independent audit.
+**No calculation is running.** Requested limits: two sequential workers,
+400 steps / 600 evaluations / 300 seconds each, **15 minutes total**, one CPU,
+4 GiB, no swap. External completion/failure triggers and one audit deadline
+replace periodic polling. Post-exit unit defaults do not measure live limits.
+
+One bonded-fit round remains consumed; no second round, new QM, prospective
+holdout acquisition, full candidate lock, registry promotion, cleanup, move or
+delete. All bulk outputs and scratch remain on mounted Archive; no cloud
+spending. Failed and rejected evidence remains preserved.
+
+Audit: `core-bonded-fit-v1/completion_audit.json`; explicit target-Hessian
+reconstruction: `target_hessian_reconstruction_addendum_v2.json` in that folder.
+The v2 addendum corrects a source locator while preserving the earlier addendum;
+the original completion-audit source hash is restored and archived.
+Current handoff: `current_handoff.json` → `fixed-core-boundary-v1/handoff.json`.
+Portable audit: `docs/audits/cpd_corrected_cis_anti_i_core_fit_boundary_20261011.json`.
+
+**MM profile audited; first core bonded fit complete, audit queued — 2026-10-11 Denver.**
+Acknowledged completion token `ba87ff19-75ed-4388-8a8f-de629cf5d138`.
+Independent OpenMM replay verifies **all 248 evaluated states**, every accepted
+checkpoint, native ASE trajectory energy/force and rounded Sella log energy.
+All five endpoints preserve the corrected CPD and sugar stereochemistry and
+pass independent constrained-stationarity checks. Analytic Sella constraint
+Jacobians agree with the separate finite-difference projection. These are
+constrained stationary states, **not certified minima**.
+
+| Offset | Maximum projected atom gradient, kcal/mol/Å | Heavy RMSD, Å | Sugar exocyclic torsion change |
+| --- | ---: | ---: | ---: |
+| −30° | 0.000326 | 0.6286 | −16.36° |
+| −15° | 0.000599 | 0.3750 | −119.17° |
+| 0° | 0.000310 | 0.4533 | −128.42° |
+| +15° | 0.000708 | 0.5419 | −139.08° |
+| +30° | 0.000671 | 0.2741 | −6.58° |
+
+All five fail the historical conformer descriptor checks; the middle three
+undergo substantial exocyclic rotamer changes, accompanied by sugar-pucker
+and base changes. The −30° state also changes several heavy torsions by
+33–39°. **Reject the mixed-conformer relaxed energies as a glycosidic fitting
+target.** Retain the trajectories and every numerical result. The 0.25 Å / 20°
+flags are diagnostic conventions, not universal basin boundaries.
+
+At the three middle offsets, relaxation lowers angle energy by 7.57–8.79,
+proper-torsion energy by 3.91–7.16 and nonbonded energy by 12.73–16.81 kcal/mol.
+These contributions do not uniquely assign the error to one parameter family.
+The terminal 5′ OH–opposite O4 contact remains near 1.86–2.04 Å in those final
+states, despite the exocyclic rotations; at −30° its distance increases from
+2.01 to 3.89 Å. Distances alone are not hydrogen-bond assignments. Saved
+accepted-state torsion histories include both OH-cap hydrogens and sugar-ring
+descriptors. No additional unchanged-parent scans or QM are justified now.
+
+`core-bonded-fit-v1` makes the **first bounded bonded-fit attempt**, correcting
+only **10 base heavy-bond and 17 heavy-angle equilibrium groups**. Exact
+base-exchange ties preserve equivalent terms; ordered atom roles distinguish
+intrabase C5–C6 bonds from the welds. Force constants, Urey–Bradley terms,
+proper/improper torsions, charges, LJ and every cap/sugar term stay fixed.
+Prospective ordered type aliases are recorded for later CHARMM export; no
+shared parent force-field types or production registry are changed.
+
+The frozen objective uses core gradient RMS /1 kcal/mol/Å, full internal
+Hessian RMS /10 kcal/mol/Å², and the four acquired ring-gradient differences
+RMS /1 kcal/mol/Å, plus `0.1 mean(z²)`. Bond/angle scales are 0.02 Å / 4°,
+with bounds ±0.04 Å / ±8°. These are explicit development choices, not measured
+noise or literature acceptance criteria. No mixed relaxed endpoint energies
+enter the objective. Existing training Hessian/ring data remain exposed;
+prospective finite holdouts remain unacquired.
+
+Preflight finds **27/27 response rank**, scaled condition number **191.16**.
+Native combined-parameter energy/gradient checks agree within **6.4e-14**;
+halving the Cartesian differentiation step changes the baseline Hessian by
+at most 1.04e-5 kcal/mol/Å². Exact core-to-endpoint role transfer is verified.
+**Six focused tests pass in 1.13 seconds**, covering derivatives, units,
+exchange ties, weld isolation, projection and scalar/tensor Hessian assembly.
+
+The service started **19:25:59 Denver**, completed in **0.44 seconds**, and
+queued completion token `feb6b28d-3896-474a-9b13-66447eff9d11` before the single
+startup/outcome check. **No calculation is running.** The first candidate,
+one core relaxation, finite-step core Hessian diagnostics and vertical endpoint
+evaluations are saved; their independent audit is pending. Requested limits:
+**15 minutes total**, 1 CPU, 4 GiB, no swap; core relaxation at most 1,500
+evaluations / 300 seconds. Post-exit unit defaults do not measure live limits.
+External completion/failure triggers and one deadline replace periodic polling.
+
+Next: reconstruct the fit objective and bound activity, replay native candidate
+forces, audit the core geometry/stationarity/Hessian and compare training ring
+responses plus vertical endpoint transfer. Do not infer acceptance from solver
+success. A second fit, additional endpoint relaxations and new QM require that
+evidence review, not renewed routine user permission. No full candidate hash
+lock, minimum certification, transfer validation or production-readiness claim.
+All outputs/scratch remain on mounted Archive; no cloud spending, cleanup,
+existing-data relocation or deletion. Earlier failures remain preserved.
+
+Audit: `mm-endpoint-profile-v2/completion_audit.json`.
+Current handoff: `current_handoff.json` → `core-bonded-fit-v1/handoff.json`.
+Portable audit: `docs/audits/cpd_corrected_cis_anti_i_mm_profile_core_fit_20261011.json`.
+
+**Bonded baseline audited; constrained MM profile complete, audit queued — 2026-10-11 Denver.**
+Acknowledged completion token `1d1071dd-da50-4a47-9477-91cabe4cb3e5`.
+Independent OpenMM replay verifies all 20 fixed-geometry energy/gradient
+records and both final core states. All accepted core frames correspond to
+stored evaluated states. Both optimizers converged, independent checks of
+unconstrained core stationarity pass, and corrected stereochemistry is
+preserved. Neither MM core has a Hessian certification.
+
+| Published-row hypothesis | Core heavy RMSD | Largest bond error | Largest angle error | Maximum atom gradient |
+| --- | ---: | ---: | ---: | ---: |
+| first | 0.3551 Å | 0.03062 Å | 5.1466° | 7.03e-6 kcal/mol/Å |
+| last | 0.1754 Å | 0.03000 Å | 5.5159° | 5.82e-6 kcal/mol/Å |
+
+The largest bond errors involve C2–N3; the largest angle errors involve the
+crosslink carbons and their N1/C4 neighbors. The cores are stationary but do
+not reproduce the target geometry adequately for a readiness claim. At the QM
+core, gradient-component RMSE remains 12.74/12.86 kcal/mol/Å. Finite coupled-ring
+even-energy errors are **−7.71%/−10.65%** for first and **−9.06%/−10.88%** for
+last. These are measured discrepancies, not failures against a universal 5%
+criterion, and they do not certify curvature at an MM stationary point.
+
+For last, vertical endpoint relative-energy errors at −30, −15, +15 and +30°
+are **+3.117, +0.574, −2.530 and −4.671 kcal/mol**. These compare identical QM
+coordinates; their interpretation as relaxed-profile errors requires actual
+conformer checks. No fitting or new QM is admitted from this comparison alone.
+
+`mm-endpoint-profile-v2` independently starts **five constrained MM relaxations**
+from the corresponding acquired QM points, preserving the exact glycosidic
+targets and unchanged full-precision charges/parameters. Last-row is the
+provisional parent because its core heavy RMSD is smaller; first-row evidence
+and source ambiguity remain preserved. Native Sella order0/internal coordinates
+use the audited degree-target helper. Independent tangent-force projection is
+checked against Sella's analytic constraint Jacobian to **1.03e-10**. Every
+evaluated trial and accepted checkpoint is retained. Review all seven centers,
+bond/contact screens, heavy RMSD and **78 ordered heavy proper torsions**.
+Historical 0.25 Å / 20° descriptor flags guide review; passing is not proof of
+basin identity, global-minimum closure or publication validation.
+
+A focused test caught tuple/list atom-index handling in the new descriptor
+caller. Prepared `mm-endpoint-profile-v1` and its failed test receipt are
+preserved; **no v1 native job launched**. The caller was corrected without
+changing the shared pinned helper, and a fresh v2 source/plan was frozen.
+**Eight focused tests pass**, including angular wrap, force projection,
+tuple/list equivalence and descriptor changes.
+
+The v2 service started at **19:11:54 Denver** and completed all five attempts
+in **12.90 seconds**, before the single startup/outcome check. Its completion
+audit is queued as `ba87ff19-75ed-4388-8a8f-de629cf5d138`; **no calculation is
+running**. Requested limits were 500 steps / 750 optimizer evaluations per
+point, 300 seconds per worker, **30 minutes total**, one CPU, 4 GiB, no swap.
+Post-exit properties of the collected unit do not measure live resource use.
+No repeated calculation or periodic polling is needed.
+
+Next: independently verify final accepted states, actual projected forces and
+conformer correspondence before constructing a bonded-fit objective. Preserve
+any failed stationarity or changed basins. No minimum certification, fit-round
+consumption, prospective holdout exposure, cloud spending, existing-data move/
+delete or product promotion. All outputs and scratch remain on mounted Archive.
+
+Baseline audit: `bonded-baseline-v1/completion_audit.json`.
+Current handoff: `current_handoff.json` → `mm-endpoint-profile-v2/handoff.json`.
+Portable audit: `docs/audits/cpd_corrected_cis_anti_i_bonded_baseline_mm_profile_20261011.json`.
+
+**Endpoint electrostatics audited; bonded baseline complete, audit queued — 2026-10-11 Denver.**
+Acknowledged completion token `bd8e64b2-6175-4050-b481-1eff3440b15d`.
+Both fixed-geometry HF calculations pass reopened native method, 449-function
+Cartesian basis, geometry/stereochemistry, energy, dipole and ESP audits.
+Final energy/density residuals meet the unchanged 1e-12 criteria. Independent
+charge-sum/dipole/ESP reconstruction agrees with the saved diagnostics.
+Total service time: **109.88 seconds**; no optimizer or new minimum assessment.
+
+| Endpoint | Initial dipole-vector error | Candidate error | Initial → candidate ESP relative RMSE |
+| --- | ---: | ---: | ---: |
+| −30° | 4.566 D | 1.024 D | 61.12% → 42.51% |
+| +30° | 5.714 D | 2.040 D | 75.33% → 51.47% |
+
+The candidate improves both endpoint dipoles and every reported ESP region,
+but substantial absolute errors remain. Nearest-methyl-cap ESP errors are
+84.68%/89.73%; nearest-sugar errors are 38.35%/58.46%. These geometric regions
+do not uniquely identify electronic error sources. **Electrostatic transfer
+accuracy is not validated.** Retain the unchanged first charge candidate for
+bonded-model diagnostics; no automatic second fit or additional water/HF grid.
+Core plus these two endpoints use all three planned electrostatic conformers.
+
+`bonded-baseline-v1` constructs fresh **36-atom/38-bond core** and
+**49-atom/52-bond endpoint** fixtures from the corrected graph. Both retain
+C5–C6 crosslinks, unchanged candidate charges and standard sugar/LJ terms.
+Four carbonyl impropers are included; no planar C5 improper is imposed on the
+saturated stereocenters. The published SI duplicate torsion rows are retained
+as explicit **first/last hypotheses**, each combined with the same standard
+parent terms. Additional parent Fourier multiplicities remain inherited.
+Neither hypothesis is asserted to reproduce the authors' unavailable stream
+or constitute a validated corrected-anti force field.
+
+Preflight verifies native psfgen atom order, exact graph, all parameter coverage,
+particle charges, graph-derived 1–2/1–3 exclusions and unscaled 1–4 charge
+products. Serialized systems retain full-precision candidate charges; native
+PSF text rounds by at most **4.903e-7 e**, so export precision/equivalence remains
+explicitly pending before NAMD. Twelve component derivatives across the four
+systems agree with independent energy differences within **9.4e-9
+kcal/mol/Å**. Four focused geometry-diagnostic tests pass, including rejection
+of reflected alignment and bond/angle units.
+
+The allocation evaluates **ten acquired training geometries per hypothesis**
+(core, four coupled-ring distortions, five sugar conformers), then performs one
+bounded core relaxation per hypothesis. Endpoint energies are **vertical values
+at QM coordinates**, not independently relaxed profiles or basin-closure evidence.
+No new QM, parameter fitting, heldout exposure or MM Hessian is involved.
+Limits: two sequential hypotheses, 1,500 evaluations / 300 seconds per core,
+360 seconds per hypothesis, **15 minutes total**, one CPU, 4 GiB, no swap.
+
+The service started at **18:58:20 Denver** and completed in **0.95 seconds**,
+before the single startup/outcome check. Completion audit token
+`1d1071dd-da50-4a47-9477-91cabe4cb3e5` is successfully queued. **No native job
+remains running.** Post-exit properties of the collected transient unit do not
+measure live resource use; requested limits remain in the frozen launch source.
+Do not repeat this fast calculation or infer quality from its exit status.
+Next audit must review actual geometry/force/profile/curvature errors, then
+freeze necessary bonded-fit variables and isolated atom-role types. The charge
+fit and these diagnostics are not a full candidate parameter hash lock.
+
+All data and scratch remain on mounted Archive. Earlier failures are preserved;
+no cloud spending, existing-data move/delete, registry promotion or readiness claim.
+Transfer audit: `electrostatic-endpoint-transfer-v1/completion_audit.json`.
+Current handoff: `current_handoff.json` → `bonded-baseline-v1/handoff.json`.
+Portable audit: `docs/audits/cpd_corrected_cis_anti_i_endpoint_transfer_bonded_baseline_20261011.json`.
+
+**Core charge fit audited; two sugar-endpoint diagnostics launched — 2026-10-11 Denver.**
+Acknowledged completion token `7b3f2472-7066-4b7c-9498-5149e31c7393`.
+The first fit passes independent reconstruction of all **1,176 MM grid
+energies**, interpolated minima, objective blocks, charge constraints and the
+saved six OpenMM Reference interaction checks. Both bases and methyl caps
+remain neutral; corresponding base charges are equal; all 16 fixed atoms retain
+their initial charges. The optimizer used 18 iterations; service time was
+0.32 seconds. This supports a provisional core charge candidate, not a complete
+force field, transfer validation or new minimum certification.
+
+| Core diagnostic | Audited result |
+| --- | ---: |
+| Largest water minimum energy error | 0.01320 kcal/mol |
+| Largest water minimum distance error | 0.10490 Å |
+| Unscaled HF dipole-vector error | 0.00390 D |
+| ESP relative RMSE, diagnostic only | 45.86% |
+| Data-only Jacobian condition number | 1.635e6 |
+
+All six wells satisfy the frozen 0.5 kcal/mol / 0.2 Å development limits.
+Objective 0.87504 comprises water-energy 0.002676, water-distance 0.696971,
+dipole 0.0000203 and charge-restraint 0.175371. **O4 reaches its +0.15 e shift
+bound**; the data remain poorly conditioned, with eight directions above the
+relative 1e-6 cutoff. The small water/dipole residuals do not establish unique
+physical charges or erase the ESP discrepancy. Stop core fitting after round
+one; a second round remains unadmitted pending meaningful residual evidence.
+The OpenMM checks are static intermolecular energies at target-nearest grid
+points, not bonded-system or NAMD tests. All previous failures remain preserved.
+
+`electrostatic-endpoint-transfer-v1` freezes **two existing 49-atom endpoint
+conformers at −30°/+30°**, spanning the acquired glycosidic interval. These are
+constrained stationary points, not certified full minima. Two sequential
+HF/6-31G(d) DF property calculations compare unchanged candidate and initial
+charges against unscaled dipoles and ESP. The 28 base charges and opposite
+neutral methyl cap transfer exactly; 17 sugar/OH-cap atoms retain native CHARMM
+NA charges, including **C1′ +0.16 e**. No geometry optimization, water grid,
+parameter fit or prospective holdout is included. The core plus these two
+endpoints exhaust the planned three electrostatic conformers.
+
+Source-pinned native psfgen generated the sugar template. Preflight reopened
+the two MP2 outputs, checked graph/atom order, all seven stereocenters and exact
+glycosidic targets, and verified Psi4 preserves the supplied Bohr coordinates.
+ESP grids contain 1,264/1,253 exposed points; nearest-base/sugar/methyl regions
+form a disjoint geometric partition, not a unique electronic decomposition.
+Eight focused charge-transfer/unit tests pass. No new physical acceptance
+threshold was introduced; review endpoint residuals before admitting further
+water acquisition or a second fit. Core DF/DIRECT calibration is not an
+endpoint-specific numerical error bound.
+
+The service launched at **18:47:56 Denver**. One startup check verified native
+DF entry, four CPUs, **4 GiB Psi4 / 8 GiB service memory**, no swap, and the
+external completion watcher `bd8e64b2-6175-4050-b481-1eff3440b15d`.
+Limits: **two SCFs, 300 seconds per SCF, 15 minutes total**. Expected finish
+18:50:56; audit deadline 18:59:56; hard stop 19:02:56 Denver. Completion/failure
+triggers and one deadline replace polling. All output and scratch remain on
+mounted Archive; no cloud spending or existing-data relocation/deletion.
+
+Next: audit endpoint electrostatics, then assemble the corrected bonded model
+and compare matched conformers against the acquired core/Hessian, ring and
+glycosidic training evidence. Keep prospective ±22.5° and reserved ring-mode
+targets unacquired until full parameter hash lock. Legacy anti fitted data
+cannot serve as corrected-isomer evidence. Production readiness remains false.
+
+Charge audit: `charge-core-fit-v1/completion_audit.json`.
+Current handoff: `current_handoff.json` → `electrostatic-endpoint-transfer-v1/handoff.json`.
+Portable audit: `docs/audits/cpd_corrected_cis_anti_i_charge_fit_transfer_20261011.json`.
+
+**Water acquisition complete; first charge fit finished, audit queued — 2026-10-11 Denver.**
+Acknowledged wake `94a499f7-4aa6-4f32-a392-faae5331cb73` as service `complete`.
+The 39 new DF calculations finished in **13.70 minutes**. All **44 records**
+(42 contact points plus two isolated references, five reused) pass reopened
+native geometry, identity, basis, energy and convergence checks. Every curve
+brackets an attractive well with monotone flanks. No grid extension, repeated
+water points or extra DIRECT calculations are justified.
+
+Raw sampled minima are near **2.1 Å / −4.619 kcal/mol** for O2,
+**2.1 Å / −2.921 kcal/mol** for O4 and **1.9 Å / −6.159 kcal/mol** for H3.
+Local three-point interpolations supply approximate continuous target minima;
+raw values are retained separately from the 1.16 energy / −0.2 Å corrections.
+These are fixed-orientation radial wells, not full water-complex minima.
+Largest corresponding-base difference across the grids is **0.000230 kcal/mol**.
+The corrected 36-atom graph independently admits the exact base-exchange
+permutation with chirality preserved. Corresponding base atoms therefore share
+charges in the first fit; paired curves are not counted as independent replication.
+
+`charge-core-fit-v1/policy.json` freezes ten paired charge groups (**nine
+independent variables after neutrality**), initial charges/types, neutral methyl
+caps, Lennard–Jones parameters, objective and bounds before fitting. Initial
+base values come from the preserved published cis-syn Figure S1 transcription
+as a **starting hypothesis only**; no legacy anti fitted charges or topology
+are reused. Each N1-methyl cap remains CG331 −0.27 e plus three HGA3 +0.09 e.
+Aliphatic H6/methyl-H, caps, LJ and bonded/sugar/phosphate terms remain fixed.
+Each base remains neutral; shifts are limited to **±0.15 e**.
+
+The objective is the sum of mean-square water minimum energy errors divided by
+0.2 kcal/mol, distance errors divided by 0.1 Å and unscaled HF dipole-vector
+errors divided by 0.5 D, plus **0.2 × mean((charge shift / 0.1 e)²)**.
+The penalty coefficient is explicitly in the squared objective; ESP is diagnostic.
+These weights and practical water limits (0.5 kcal/mol / 0.2 Å, bracketed MM
+minima) are local modeling choices. Only one fit is admitted now; a second of
+at most two requires residual review, with no automatic weight sweep.
+
+Five focused fit-helper tests pass. Six MM distance grids (1.1–5.0 Å in 0.02 Å
+steps) match the existing independent scalar interaction implementation. Twelve
+OpenMM Reference cross-interaction checks, covering initial and neutral test
+charges, agree within **7.3e-12 kcal/mol**. This verifies the nonbonded evaluator,
+not a bonded model or NAMD simulation. Initial charges overbind H3-water by
+**3.726 kcal/mol** and miss the HF dipole by **3.921 D**. The unregularized local
+data Jacobian has nine numerical directions, but condition number **1.64e6**
+and only eight above a relative 1e-6 singular-value cutoff. Report its full
+spectrum before/after fitting; restrained numerical uniqueness does not imply
+unique physical charge determination.
+
+The first fitting allocation is **one SLSQP solve, at most 300 iterations /
+ten optimizer minutes, within a 15-minute service**, one CPU and 4 GiB memory,
+no swap. No new QM or held-out targets are involved. The next audit must separate
+optimizer convergence, charge constraints, native MM agreement, water quality,
+identifiability and transfer validation. No minimum certification or production
+readiness follows from this fit. All files remain on mounted Archive; no cloud
+spending or existing-data move/delete.
+
+Water completion audit: `water-core-curves-v1/completion_audit.json`.
+Charge-fit preparation/admission: `charge-core-fit-v1/admission.json`.
+
+`cpd-corrected-anti1-charge-core-fit-v1.service` started at **18:36:47 Denver**
+and finished in **0.32 seconds**, before the single startup/outcome review.
+The watcher successfully queued `7b3f2472-7066-4b7c-9498-5149e31c7393` for its
+completion audit. **No native job remains running.** The transient systemd unit
+had already been collected; its post-exit default properties are not evidence
+about live resource use. Requested limits are preserved in the frozen launch
+source and execution plan. The fit result is saved but its quality/acceptance
+has not yet been audited; do not repeat the fit or infer readiness from exit zero.
+Current handoff: `current_handoff.json` → `charge-core-fit-v1/handoff.json`.
+Portable audit: `docs/audits/cpd_corrected_cis_anti_i_water_complete_charge_fit_20261011.json`.
+
+**HF calibration passes; six core water-distance curves active — 2026-10-11 Denver.**
+Acknowledged wake `754def1a-8a36-4a8c-9fbe-692d73d251b7` as service `complete`.
+The recovery completed three DIRECT complexes in **10.22 minutes**, preserving
+and reusing seven earlier results. All ten native outputs pass reopened
+geometry/identity, method, basis, energy, dipole and ESP checks. Final native
+SCF energy/density residuals meet the unchanged **1e-12** settings. The original
+150-second timeout and its incomplete output/scratch remain preserved.
+
+| Contact at 1.9 Å | DF interaction (kcal/mol) | DIRECT interaction (kcal/mol) | Absolute raw difference |
+| --- | ---: | ---: | ---: |
+| 1:O2 | −4.270601 | −4.267196 | 0.003405 |
+| 2:O4 | −2.327418 | −2.325530 | 0.001888 |
+| 1:H3 | −6.159101 | −6.154484 | 0.004617 |
+
+All three satisfy the existing **0.02 kcal/mol raw interaction** criterion;
+maximum difference after 1.16 scaling is **0.005356 kcal/mol**. DIRECT complexes
+took **187.74–222.71 seconds**, versus **19.90–24.91 seconds** for DF, an observed
+**8.08–11.19-fold speedup**. No extra DIRECT pilot or core calculation is needed.
+This calibration samples three contact types at one distance; it is not a proven
+uniform error bound across every distance or orientation. Review any actual
+curve anomaly before ordering selective additional diagnostics.
+
+`water-core-curves-v1` admits **six fixed-orientation curves**, O2/O4/H3 on each
+ordered base, at **1.5, 1.7, 1.9, 2.1, 2.3, 2.5 and 2.7 Å**. Of 42 contact
+points, **three exact pilot points are reused** and **39 are new DF calculations**.
+Core and isolated rigid TIP3P water references are also reused: 44 records total,
+five reused. Both ordered bases are retained to examine environment equivalence
+before imposing charge symmetry. Coordinates/orientations come from the frozen
+pilot inventory; no global water-orientation optimization is claimed.
+
+Independent preflight reconstructs all 42 contacts, verifies rigid TIP3P,
+non-target steric screening, exact pilot reuse and certified-core coordinates
+within **8.9e-16 bohr** through the installed Psi4 input API. Native worker,
+parser and reuse functions are unchanged from the audited pilot. **Ten focused
+curve-diagnostic tests pass**, covering a known well and rejection/review of
+boundary, tied, flat, nonattractive, nonmonotonic or nonfinite curves. No QM was
+spent during preflight. The completed curves must be reviewed for attractive,
+bracketed minima and mixed contacts before use in charge fitting. Local
+three-point interpolation is diagnostic, not a newly calculated minimum.
+
+`cpd-corrected-anti1-water-core-curves-v1.service` started at **18:12:23 Denver**.
+Limits: **39 new SCFs / one hour**, **180 seconds per SCF**, four threads,
+4 GiB Psi4 / 8 GiB service, no swap. Default memory admission passed with
+**12.27 GiB available**. Expected duration **20.24 minutes** uses the slowest
+measured DF complex time plus 25% scheduling margin. One startup check verified
+isolated-reference reuse, native entry and watcher
+`94a499f7-4aa6-4f32-a392-faae5331cb73`. Expected finish **18:32:38**; audit deadline
+**19:02:23**; hard stop **19:12:23 Denver**. Completion/failure triggers and one
+audit deadline replace periodic polling. All outputs and scratch use mounted
+Archive; no cloud spending or existing-data move/delete.
+
+Current handoff: `current_handoff.json` → `water-core-curves-v1/handoff.json`.
+Native calibration audit: `electrostatic-core-pilot-v2/completion_audit.json`.
+Portable audit: `docs/audits/cpd_corrected_cis_anti_i_hf_calibrated_water_curves_20261011.json`.
+Acquisition is admitted; **charge fitting is not yet admitted**. Exact baseline
+and cap charge vectors, constraints and numerical objective weights must be
+frozen before fitting. Held-out targets remain unacquired until parameter lock.
+No new minimum certification, fit acceptance or production-readiness promotion.
+
+**HF pilot timeout audited; seven successes reused, three DIRECT contacts active — 2026-10-11 Denver.**
+Acknowledged wake `aae6da15-f444-410e-b7b7-ff6e4482c4e7` as service `failed`.
+The first allocation ran **6.31 minutes**, completing seven of ten calculations.
+Reopened native evidence passes for all seven: geometry/identity, strict HF
+settings, energies, dipoles and the two 1,029-point core ESP datasets. DF core
+took **20.88 seconds**, three DF complexes **19.90–24.91 seconds**, DIRECT core
+**138.47 seconds**; isolated water took less than 0.3 seconds per algorithm.
+
+The first DIRECT complex, **1:O2**, hit the **150-second per-task limit** at
+iteration 41. Its density residual had fallen **1.36 millionfold**, from
+4.61730e-6 to **3.38432e-12**, while the last energy change was **−2.27374e-12
+hartree**. Both convergence thresholds remain **1e-12**. This is progressing
+SCF interrupted by an undersized scheduling limit, not a completed calculation
+or evidence of a stalled method. No final energy/properties record exists;
+the last iterate is excluded from targets. Failed output, traceback and
+integral scratch remain intact. There is no saved usable wavefunction restart.
+
+`electrostatic-core-pilot-v1/failure_review.json` pins the seven reusable results
+and native timeout evidence. The core DIRECT dipole is **7.42767 D**;
+DF/DIRECT dipole difference is **0.00218 D**, with ESP RMS difference
+**6.39390e-6 au**. These core diagnostics do not substitute for the three
+water-interaction comparisons. Full curves and fitting remain unadmitted.
+
+Versioned recovery `electrostatic-core-pilot-v2` reuses all seven completed
+results and executes only **1:O2, 2:O4 and 1:H3 DIRECT complexes**. The three
+input files are byte-for-byte identical to v1; geometry, basis, convergence,
+DF preguess behavior and scientific evaluation code are unchanged. Only
+scheduling and evidence reuse change. Failed native/scratch files are not
+overwritten. **Five focused reuse tests pass**; a test-only import-prefix
+collection error was corrected and recorded before the passing run. Independent
+preflight verifies exact input equality, unchanged scientific worker/parser and
+rejection of completed-task execution before entering the native API. No QM was
+spent during preflight.
+
+`cpd-corrected-anti1-electrostatic-core-pilot-v2.service` started at
+**17:56:52 Denver**, with **three new SCFs / 35 minutes**, **ten minutes per SCF**,
+four threads, 4 GiB Psi4 / 8 GiB service and no swap. Default admission passed
+with **12.29 GiB available**. One startup check verified reuse of seven results,
+native entry only for the first remaining complex, resource limits and watcher
+`754def1a-8a36-4a8c-9fbe-692d73d251b7`. Expected finish **18:06:52**, audit
+deadline **18:26:52**, hard stop **18:31:52 Denver**. Completion/failure triggers
+and one audit deadline replace periodic polling. All output/scratch is on
+mounted Archive; no cloud spending or existing-data relocation/deletion.
+
+After completion, reopen all ten native records and evaluate the unchanged
+three-site **0.02 kcal/mol raw DF/DIRECT interaction criterion**. Further timeout
+or plateau requires another evidence-based method review, not automatic
+extension. If calibration supports DF, the inventoried 42-point water grid
+needs at most **39 fresh DF complexes**, reusing three pilot points and isolated
+references. Pilot completion alone does not admit that acquisition. There is
+no new minimum claim, fitted parameter acceptance or production-readiness change.
+
+Current handoff: `current_handoff.json` → `electrostatic-core-pilot-v2/handoff.json`.
+Portable audit:
+`docs/audits/cpd_corrected_cis_anti_i_electrostatic_timeout_recovery_20261011.json`.
+
+**Coupled-ring acquisition audited; HF electrostatic pilot active — 2026-10-11 Denver.**
+Acknowledged wake `472d5d97-3059-4b17-ba8f-9b009009d232` as service `complete`.
+All four MP2 targets pass the reopened native audit: **432 gradient components,
+eight geometry tables**, exact displaced coordinates, unchanged RHF/DF-MP2
+settings, basis/occupation/fitting evidence and stereochemistry. Runtime was
+**4.19 minutes**. Energy and gradient curvatures differ from the existing Hessian
+by at most **0.00320% / 0.03323%** for the two selected directions. These are
+observed discrepancies, not a newly imposed percentage gate. Signed asymmetry
+is retained. The four-target acquisition is sufficient; no repeat calculation
+or new Hessian is admitted. Displaced structures are not minima, and this is
+not a fitted-force-field validation.
+
+The HF dipole convention is resolved as an explicit local choice: **unscaled
+HF/6-31G(d) dipoles**, following the modified-nucleotide charge protocol of
+[Xu et al., 2016](https://pmc.ncbi.nlm.nih.gov/articles/PMC4801715/), with neutral
+water interaction energies scaled by **1.16**, distance adjustment **−0.2 Å**, and
+no counterpoise. That work also motivates a neutral methyl-capped base model.
+Accordingly, the primary charge reference is the **exact certified 36-atom
+N1-methyl core**. Up to two sugar endpoints may later test transfer if justified;
+their full minimum certification remains false. This is an inference from close
+chemical precedent, not CPD-specific validation or a universal dipole rule.
+The general [CGenFF protocol](https://pmc.ncbi.nlm.nih.gov/articles/PMC2888302/)
+and this choice are recorded in `electrostatic-core-pilot-v1/method_choice.json`.
+
+`electrostatic-core-pilot-v1` admits **ten fixed-geometry HF calculations**:
+core dipole/ESP, isolated rigid TIP3P water, and three contacts (1:O2, 2:O4,
+1:H3 at 1.9 Å), each using DF and DIRECT SCF. The inherited numerical calibration
+criterion is **≤0.02 kcal/mol raw interaction error** at all three contacts;
+scaled errors, dipole vectors, ESP differences and measured timings are retained.
+This tolerance is a local numerical criterion, not a literature accuracy claim.
+Core ESP uses 1,029 exposed grid points. All six candidate water sites pass the
+non-target steric screen after comparison of three azimuths; six seven-point
+curves are inventoried but **full-curve acquisition remains unadmitted** pending
+pilot audit. Orientation is fixed per curve, not globally optimized. Later
+curves must bracket their minima and retain mixed-contact diagnostics.
+
+Preflight caught and corrected the campaign/Psi4 Bohr-to-Å conversion difference
+before QM. New HF inputs use Psi4's conversion, retaining the certified Bohr
+coordinates within **8.9e-16 bohr**. The installed-engine input API verifies
+all ten geometries, paired DF/DIRECT identity and rigid TIP3P geometry without
+SCF. **15 focused tests pass** for native method/geometry/units/energy/dipole
+evidence, nonfinite values and duplicated/missing records. Source, policy,
+inventory, geometry and input hashes are frozen. Exact baseline/cap charge
+vectors and objective weights must still be frozen before fitting; no charge
+fit or parameter release occurs in this pilot.
+
+`cpd-corrected-anti1-electrostatic-core-pilot-v1.service` started at
+**17:46:14 Denver**. Limits: **ten SCFs / 30 minutes**, **150 seconds per SCF**,
+four threads, 4 GiB Psi4 / 8 GiB service, no swap. Default memory admission
+passed with **12.29 GiB available**. One startup check verified native entry,
+resource limits and watcher `aae6da15-f444-410e-b7b7-ff6e4482c4e7`.
+Conservative expected finish: **17:56:14**; audit deadline **18:11:14**;
+hard stop **18:16:14 Denver**. Completion/failure triggers and one audit deadline
+replace periodic polling. Outputs and scratch remain on mounted Archive.
+No cloud spending, relocation or deletion of existing data.
+
+Current handoff: `current_handoff.json` → `electrostatic-core-pilot-v1/handoff.json`.
+Portable audit:
+`docs/audits/cpd_corrected_cis_anti_i_ring_complete_electrostatic_pilot_20261011.json`.
+All five glycosidic profile points and four ring targets are acquired; preserve
+all failed attempts. Held-out acquisitions remain deferred until parameter hash
+lock. Endpoint minimum certification, conformer matching, fitting acceptance,
+formal registry review and production readiness remain pending.
+
+**Five-point glycosidic acquisition complete; four coupled-ring references active — 2026-10-11 Denver.**
+Acknowledged wake `340c50e7-03d5-417f-94ab-9504f5b46859` as service `complete`.
+The +30° v3 optimizer stopped on **convergence**, after **five new gradients /
+17.30 minutes**. The independent v4 audit verifies six records including the
+cached seed, **882 native gradient components**, 12 native geometry tables and
+six accepted checkpoints/frames. Maximum/RMS projected gradients are
+**7.26153e-6 / 3.54227e-6 au**; final angle error **6.0713e-8°**. Electronic
+settings and seven stereocenters pass. This is constrained stationarity;
+**unconstrained endpoint stationarity and full endpoint minimum certification
+remain false**. No more optimization at these completed targets is admitted.
+
+All five development offsets now pass their native and constrained convergence
+audits. Relative energies use the preserved lower-branch zero:
+
+| Offset (degrees) | Relative energy (kcal/mol) |
+| --- | ---: |
+| −30 | −1.652114 |
+| −15 | −1.162456 |
+| 0 | 0 |
+| +15 | +1.324736 |
+| +30 | +3.439952 |
+
+`glycosidic-branch-profile-v1/completed_profile_review.json` records exact results,
+all cap/sugar/core torsions, adjacent changes and saved-gradient angle slopes.
+The final +15→+30 change is at most **4.20°** in sugar-ring torsions, **6.08°** in
+the 5′-OH cap and **1.07°** in the cyclobutane descriptor. Across the grid,
+geometries vary gradually; no observed final-profile discontinuity currently
+justifies extra reverse scans. This is a provisional interpretation, not basin
+closure or fitting acceptance. Match QM/MM geometries and conformers before
+fitting; preserve all prior references, original seed-contact evidence and
+wrong-angle failures. Held-out ±22.5° points remain unacquired.
+
+The next planned acquisition is `coupled-ring-training-v1`: **four fixed-geometry
+MP2 gradients**, two signs along each of the two core modes with greatest
+Cartesian displacement participation on the four cyclobutane carbons. The
+existing certified 36-atom core and its Hessian are reused. Saved mode columns
+**46 / 62** have ring participation **25.55% / 19.16%**. Unit-Cartesian steps
+**±0.1 bohr** move every atom by less than **0.020 Å**, with predicted even
+harmonic responses **0.420 / 0.932 kcal/mol**. The complete ranking, sign
+convention, amplitudes and four exact inputs were frozen before acquisition.
+All displaced identities pass and shortest nonbonded contacts remain
+**2.309–2.351 Å**, versus **2.330 Å** at the reference, excluding graph separations
+of one or two bonds. Six focused selection tests pass; independent displacement
+reconstruction and source checks require no new QM.
+
+Third-ranked mode column **32**, at the same two signed amplitudes, is reserved
+for prospective finite-amplitude validation after parameter hash lock. Its
+direction derives from the exposed development Hessian; it is not independent
+structure validation. No held-out coordinates or electronic targets were acquired.
+Two training directions do not span all ring terms. No new Hessian or independent
+ring-bond torsion scan is launched, and these displaced geometries are not minima.
+
+`cpd-corrected-anti1-coupled-ring-training-v1.service` started at **17:30:13 Denver**.
+Limits: **four gradients / 15 minutes**, four threads, 4 GiB Psi4 / 8 GiB service,
+no swap, three minutes per gradient. Default 12 GiB memory admission passed with
+**12.28 GiB available**. One startup check verified the native child, resource
+limits and watcher `472d5d97-3059-4b17-ba8f-9b009009d232`. Expected finish
+**17:34:20**, audit deadline **17:43:13**, hard stop **17:45:13 Denver**.
+Completion/failure events trigger review; no periodic polling. Outputs and
+scratch are on verified mounted Archive. No cloud spending or storage cleanup.
+
+Current handoff: `current_handoff.json` → `coupled-ring-training-v1/handoff.json`.
+Portable audit: `docs/audits/cpd_corrected_cis_anti_i_profile_complete_ring_start_20261011.json`.
+After the finite response audit, prepare the bounded electrostatic inventory and
+resolve the HF dipole convention from primary literature before charge acquisition.
+Fitting acceptance, formal registry review and production readiness remain pending.
+
+**+30° v2 substantially improved but remains unconverged; v3 active — 2026-10-11 Denver.**
+Acknowledged wake `2c10786b-45a0-453b-aa6a-8c34b98acb94` as service `complete`.
+The independent v4 audit passes native evidence and all constrained angles:
+20 new gradients plus one reused gradient, **3,087 components**, **42 geometry
+tables**, and **21 accepted checkpoints/frames**, with electronic settings and
+seven stereocenters preserved. The allocation ended after **69.63 minutes**;
+**optimizer and constrained stationarity remain false**. Maximum/RMS projected
+gradients are **4.86344e-5 / 1.61731e-5 au**, respectively **3.24× / 1.62×** the
+unchanged limits. Maximum projected force fell **207.45-fold** over the chunk
+and **68.08%** over the last five records. Energy fell **2.94665 kcal/mol**;
+the remaining **+3.43999 kcal/mol relative to branch zero is unfinished**, not
+a fitting target. The original clashing H/H pair now separates by **2.1223 Å**.
+Sugar-ring torsions changed by up to **23.23°** during this chunk; record these
+changes for eventual conformer matching rather than assuming basin closure.
+
+The last accepted checkpoint has an angle error of **2.21050e-6°**, below the
+existing **0.01°** acquisition/audit limit (maximum error over the chunk:
+**4.98904e-6°**). Two legacy startup-only checks nevertheless reject it:
+the restart validator's **1e-6°** gate and the installed-constraint check's
+**1e-8-radian** residual gate. Versioned helpers now admit an **audited accepted
+restart** under the existing native angle criterion. Exact coordinates and
+cached gradient remain unchanged; the installed degree target, optimizer
+settings, electronic method and force thresholds remain unchanged. Fresh seeds
+retain the strict residual check. Old helpers, plans and failed checks are
+preserved; three import/call lines differ in the new frozen worker. **Twelve
+focused tests pass**, and the installed Sella integration confirms cached reuse,
+three moving synthetic steps and rejection of double conversion/off-target
+native entry, with **zero new QM evaluations** during these checks.
+
+The continued force reduction justifies one more bounded continuation;
+`cpd-corrected-anti1-glyco-branch-plus30-v3.service` started at **17:05:51 Denver**.
+Limits are **20 new gradients / 90 minutes**, four threads, **4 GiB Psi4 / 8 GiB
+service memory**, no swap and ten minutes per gradient. Default 12 GiB admission
+passed with **12.32 GiB available**. One startup verification confirms exact
+checkpoint-gradient reuse, the correct target and the armed watcher. Expected
+full-allocation finish is **18:15:45**; audit deadline **18:25:51**, hard stop
+**18:35:51 Denver**. Completion/failure events trigger review; no periodic
+polling or automatic extension on stalled progress. Outputs and scratch use the
+verified mounted Archive filesystem. No cloud spending or storage cleanup.
+
+Four profile points remain converged and +30° remains unresolved. Full endpoint
+minimum certification, conformer matching, fitting acceptance, held-out testing
+and production readiness remain pending. Audit:
+`docs/audits/cpd_corrected_cis_anti_i_branch_plus30_v3_20261011.json`;
+native review: `endpoint-1-glyco-branch-plus30-v2/continuation_review.json`;
+resume pointer: `current_handoff.json` → `endpoint-1-glyco-branch-plus30-v3/handoff.json`.
+
+**+30° allocation ended unconverged; seed-contact diagnosis and bounded restart — 2026-10-11 Denver.**
+Acknowledged wake `e71cc400-15c6-4cf3-bea3-fdc6f3ff0af6` as service `complete`.
+**The +30° target is not converged.** Its first chunk exhausted 20 new gradients
+after **69.75 minutes**. The v4 audit passes native evidence and every angle:
+2,940 gradient components, 40 geometry tables and 20 accepted checkpoints/frames,
+with preserved electronic settings and seven stereocenters. Maximum angle error
+is **1.53e-8°**. Final projected maximum/RMS gradients are
+**0.01008910 / 0.00205197 au**, about **673×** the maximum-force limit.
+The profile still has four converged points; the last +30° energy of
+**+6.38664 kcal/mol relative to branch zero is unfinished**, not a fitting target.
+
+The original rigid 30° seed contains a **0.5805 Å nonbonded contact between
+1:HO5′ and 2:H52** and starts **161.22 kcal/mol above branch zero**. Its old
+preflight passed bond/stereochemical identity and angle checks, but **did not
+screen nonbonded seed contacts**. That limitation and original evidence are
+preserved; native evaluations remain valid at their recorded coordinates.
+The accepted checkpoint opens this contact to **1.9275 Å**. A static alternative
+made by rotating the converged +15° structure to the same target still has a
+**1.3068 Å** contact. No QM was spent on that alternative, so its relative
+energy/basin ordering is not known. All distances exclude pairs separated by
+one or two graph bonds. Future seed review must inspect nonbonded contacts
+before spending QM, in addition to existing identity and constraint checks.
+
+Force reduction slowed late in the first chunk, while the final five evaluations
+still lower energy by **0.39059 kcal/mol** and reduce maximum projected force by
+**13.68%**, with continuing cap/sugar motion. The reviewed next attempt therefore
+uses the **exact last accepted geometry and cached full-precision gradient**, with
+fresh Sella history after the large initial deformation. It does not repeat the
+clashing seed or substitute the unevaluated alternative. One bounded restart is
+admitted; persistently stalled force requires another method review, not automatic
+extension. Full history, alternatives and preflight limitation are recorded in
+`endpoint-1-glyco-branch-plus30-v1/continuation_review.json`.
+
+`cpd-corrected-anti1-glyco-branch-plus30-v2.service` started at **15:52:00 Denver**.
+The angle, electronic method, optimizer settings and force limits are unchanged.
+Limits remain **20 new gradients / 90 minutes**, four threads, 4 GiB Psi4/8 GiB
+service memory, no swap and ten minutes per new gradient. The unchanged native
+worker reuses its prior 24-test evidence. A new integration check confirms cached
+gradient dispatch and three moving synthetic steps, and rejects both the historical
+degree-unit error and an off-target native entry before Psi4; zero new QM for tests.
+
+The single startup check verifies the exact seed reuse, fixed angle and resource
+limits. Default memory admission passed with **12.304 GiB** available. Completion/
+failure watcher **`2c10786b-45a0-453b-aa6a-8c34b98acb94`** is armed; estimated
+full-allocation finish **17:02:01**, audit deadline **17:12:00**, hard stop
+**17:22:00**, all October 11 Denver time. No periodic polling or cloud spending.
+All outputs and scratch stay on mounted Archive. The storage-cleanup inventory
+remains pending user review; no candidates were moved or deleted.
+
+Current handoff: `endpoint-1-glyco-branch-plus30-v2/handoff.json`, indexed by
+`current_handoff.json`. Portable record:
+`docs/audits/cpd_corrected_cis_anti_i_branch_plus30_continuation_20261011.json`.
+Held-out targets remain unacquired. Original references and failures remain intact;
+no endpoint minimum certificate, fitting acceptance or NAMD readiness is claimed.
+
+**Lower-conformer +15° converged; final +30° point running — 2026-10-11 Denver.**
+Acknowledged complete wake `bcbc4f01-1e20-474e-9435-a3442bea3224`.
+The +15° target converged on its **20th new gradient**, after **68.90 minutes**;
+the allocation did not end unconverged. The v4 audit verifies 2,940 native gradient
+components, 40 geometry tables and 20 accepted checkpoints/trajectory frames,
+with unchanged electronic settings and all seven stereocenters. Native evidence
+and every evaluated scan angle pass; maximum angle error is **4.57e-6°**.
+Projected maximum/RMS gradients are **9.277482e-6 / 2.645450e-6 au**, meeting the
+unchanged criteria. No further relaxation at +15° is needed. Raw full-dimensional
+stationarity and endpoint minimum certification remain false.
+
+The accepted energy is **−1364.5361163412701 Eh**, **1.324736 kcal/mol above
+the lower-conformer zero**. Relative to that source, the 5′ OH torsion changes
+**−16.71°**, sugar-ring torsions by up to **6.97°**, and the monitored cyclobutane
+torsion by **−0.424°**. The largest adjacent monitored sugar/cap change is
+**3.07°**. These gradual changes support acquisition of the remaining profile
+point without relabeling the conformation; they do not establish basin closure.
+Per-evaluation evidence is in `endpoint-1-glyco-branch-plus15-v1/profile_point_review.json`.
+
+Four exposed profile offsets now have constrained convergence:
+**−30/−15/0/+15°**, with energies **−1.652114/−1.162456/0/+1.324736 kcal/mol**
+relative to the matched zero. Their pinned results and audits are collected in
+`glycosidic-branch-profile-v1/progress-after-plus15.json`. This is development
+coverage, not automatic acceptance for fitting or production.
+
+Only `cpd-corrected-anti1-glyco-branch-plus30-v1.service` is running, started
+at **14:37:44 Denver**. It uses the preregistered matched-zero-derived seed and
+absolute target **135.65946348°**, with no method, seed-policy or threshold change.
+Limits remain **20 new gradients / 90 minutes**, four threads, 4 GiB Psi4/8 GiB
+service memory, no swap and ten minutes per gradient. Source checks, exact seed
+chemistry/constraint checks and a synthetic fresh-gradient dispatch check pass;
+the unchanged worker reuses its existing 24-test regression evidence. Default
+memory admission passed with **12.292 GiB** available.
+
+The single startup check verifies constraint, resource limits, Archive paths and
+completion/failure watcher **`e71cc400-15c6-4cf3-bea3-fdc6f3ff0af6`**.
+Estimated full-allocation finish is **15:46:55**, audit deadline **15:57:44**,
+hard stop **16:07:44**, all October 11 Denver time. No periodic polling or cloud
+spending. Audit +30° before any further work; if converged, review the complete
+five-point profile and conformer matching before choosing the next required stage.
+Held-out ±22.5° targets remain unacquired. All bulk output/scratch stays on mounted
+Archive; the storage-cleanup inventory remains unapproved and untouched.
+
+Current handoff: `endpoint-1-glyco-branch-plus30-v1/handoff.json`, indexed by
+`current_handoff.json`. Portable record:
+`docs/audits/cpd_corrected_cis_anti_i_branch_plus15_20261011.json`.
+Prior failures remain preserved; minimum support is still restricted to the
+exact capped core, with endpoint certification and NAMD readiness pending.
+
+**Lower-conformer −30° converged; +15° running — 2026-10-11, 13:28 Denver.**
+Acknowledged complete wake `98413763-3004-44dd-948a-1e539f7b9c14`.
+The −30° point converged after **16 new gradients / 55.16 minutes**. The v4
+audit independently verifies 2,352 native gradient components, 32 geometry tables,
+16 accepted checkpoints/trajectory frames, all seven stereocenters and the original
+electronic settings. Every evaluated angle passes, with maximum error **4.92e-6°**.
+Final projected maximum/RMS gradients are **1.076146e-5 / 4.516710e-6 au**.
+Native-evidence and scan-target verdicts pass; no further relaxation is needed
+at this fixed angle. Full raw stationarity and endpoint minimum certification
+remain false.
+
+The accepted energy is **−1364.540860253643 Eh**, **0.489658 kcal/mol below
+−15°** and **1.652114 kcal/mol below the lower-conformer zero**. Relative to
+the −15° source, the 5′ OH torsion changes **8.68°**, sugar-ring torsions by up
+to **7.94°**, and the monitored cyclobutane torsion by **0.436°**. The largest
+adjacent monitored sugar/cap change during this chunk is **5.04°**. These measured
+changes support continuing the provisional profile without a new conformer
+relabeling; they do not establish basin closure or a global/local minimum.
+The full per-evaluation review is preserved in
+`endpoint-1-glyco-branch-minus30-v1/profile_point_review.json`.
+
+The next preregistered **+15°** point starts from the frozen matched-zero-derived
+seed at absolute angle **120.65946348°**. No seed, method, convergence criterion,
+profile membership or energy reference changed. The unchanged scientific worker
+reuses its 24-test regression evidence; a new synthetic driver check verifies
+the exact installed constraint and fresh-gradient dispatch without QM.
+`cpd-corrected-anti1-glyco-branch-plus15-v1.service` started at **13:27:26 Denver**,
+with **20 new gradients / 90 minutes**, four threads, 4 GiB Psi4/8 GiB service
+memory, no swap and a ten-minute per-gradient timeout. Default memory admission
+passed with **12.400 GiB** available.
+
+Archive mount/device checks pass for both output and scratch, and `TMPDIR` and
+`PSI_SCRATCH` point there. The user's storage-cleanup inventory remains pending
+review: **nothing from it was moved or deleted**. Earlier failures and their
+native evidence remain preserved.
+
+The single startup verification confirms the angle, resource limits and armed
+completion/failure watcher **`bcbc4f01-1e20-474e-9435-a3442bea3224`**.
+Estimated full-allocation finish is **14:36:39**, audit deadline **14:47:26**,
+hard stop **14:57:26**, all October 11 Denver time. No periodic polling, automatic
+multi-job chaining or cloud spending. Audit +15° before preparing the remaining
+frozen +30° point. Held-out ±22.5° targets remain unacquired; fit acceptance,
+endpoint certification and NAMD production readiness remain pending.
+
+Current handoff: `endpoint-1-glyco-branch-plus15-v1/handoff.json`, indexed by
+`current_handoff.json`. Portable record:
+`docs/audits/cpd_corrected_cis_anti_i_branch_minus30_20261011.json`.
+
+**Matched-angle control audited; lower-conformer −30° point running — 2026-10-11, 12:30 Denver.**
+Acknowledged complete wake `0a491221-1aec-44e3-967e-ca6f16b79f14`.
+The control converged in **19 new gradients / 67.38 minutes**. The independent
+v4 audit passes native evidence and every evaluated scan angle: 2,793 gradient
+components, 38 geometry tables and 19 accepted trajectory frames. Final projected
+maximum/RMS gradients are **9.446998e-6 / 3.846348e-6 au**; maximum angle error
+over the run is **2.48e-6°**. No more relaxation at this target is needed.
+
+At the same **105.65946348°** glycosidic angle, the new conformation is
+**2.79623 kcal/mol below the original reference**. Its 5′ OH cap torsion differs
+by **63.33°**, sugar-ring torsions by up to **29.99°**, and the monitored
+cyclobutane torsion by only **0.217°**. The valid −15° point is **1.16246 kcal/mol
+below this matched-angle control**. Thus the earlier −3.95869 kcal/mol comparison
+to the original zero mixed angle response and cap/sugar conformation. These are
+provisional path-connected conformations; **constrained convergence does not
+establish full-dimensional stationarity, basin closure or an endpoint minimum**.
+Exact sources and comparisons are preserved in
+`endpoint-1-glyco-branchzero-v1/matched_angle_review.json`.
+
+`glycosidic-branch-profile-v1/design.json` freezes a separate provisional profile
+on the same original angle grid: −30, −15, 0, +15, +30°. The inspected −15/0
+observations are reused as exposed development data. Exact new seeds and
+constraints for −30/+15/+30 are frozen before acquisition; the original reference,
+original profile and failures remain intact. Held-out ±22.5° targets remain
+unacquired until candidate parameters are hash-locked. Fitting requires matched
+QM/MM conformations and review of continuity/closure; this acquisition design
+does not automatically accept targets or combine different conformations.
+
+Only `cpd-corrected-anti1-glyco-branch-minus30-v1.service` is running, started
+at **12:29:40 Denver**. It starts from the converged −15° geometry with a further
+15° rigid sugar rotation, fixing the absolute angle at **75.65946348°**.
+The unchanged native worker has **20 new gradients / 90 minutes**, four threads,
+4 GiB Psi4/8 GiB service memory, no swap, and a ten-minute per-gradient timeout.
+All three seeds pass chemistry, bond preservation and installed-constraint checks;
+a synthetic driver check verifies fresh-gradient dispatch with zero QM. Existing
+24-test evidence is reused with verified unchanged sources. Admission passed the
+default 12 GiB floor with **12.530 GiB** available; no resource exception was needed.
+
+The single startup check verifies the target, limits and armed completion/failure
+watcher **`98413763-3004-44dd-948a-1e539f7b9c14`**. Estimated full-allocation
+finish is **13:40:27**, audit deadline **13:49:40**, hard stop **13:59:40**,
+all October 11 Denver time. Audit this point before any continuation or next
+target; no periodic polling, cloud spending, or automatic multi-job chaining.
+Current handoff: `endpoint-1-glyco-branch-minus30-v1/handoff.json`, indexed by
+`current_handoff.json`. Portable record:
+`docs/audits/cpd_corrected_cis_anti_i_matched_control_profile_20261011.json`.
+Minimum support remains limited to the exact capped core; endpoint certification,
+fit acceptance, formal chemical/parameter review and NAMD production readiness
+remain pending.
+
+**Missed admission diagnosed; matched-angle control running — 2026-10-11, 11:17 Denver.**
+The user requested status after the scheduled launch. The timer did fire at
+**01:41:11**, but the deferred runner cancelled against
+`cpd-anti-validation-v1/campaign_pause.json`. That is an **October 5 scientific
+hold on the older MD physical ensemble**, not a pause on this corrected QM
+campaign; its own text preserves bounded research authorization. No current
+corrected-campaign pause file exists, and the October 10 all-stage authorization
+remains active. The deferred runner incorrectly broadened the old hold's scope
+and intentionally suppressed notification after interpreting it as a pause.
+Consequently **no native control ran overnight**. The original cancellation,
+misleading `timer_scheduled` wake receipt and frozen runner are preserved with
+`endpoint-1-glyco-branchzero-v1-deferred-admission/cancellation_review.json`.
+
+The future deferred launcher now follows the same campaign-specific pause file
+as the native worker and records terminal cancelled/skipped wake states. Four
+focused tests cover the unrelated legacy hold, genuine campaign pause, duplicate
+avoidance and single failure notification. The legacy MD hold remains unchanged.
+A direct frozen-file invocation also failed before service/native creation
+because its repository import environment was missing; that attempt is retained,
+and the successful launch explicitly supplies the repository environment.
+
+Memory was initially still below the former 12 GiB floor. A plan-specific review
+retains the hard **8 GiB service cap**, no swap and a **3 GiB reserve** beyond
+that cap, giving an 11 GiB admission floor for this exact job. Comparable valid
+jobs peaked at 6.5 and 3.4 GiB with zero swap; the journal evidence and original
+blocked admissions are retained. Three tests bind this change to the exact
+unchanged 20-gradient/90-minute plan. At successful launch, available memory had
+risen to **12.447 GiB**, also meeting the former threshold. The native worker,
+electronic method, convergence criteria and hard runtime limit are unchanged.
+
+`cpd-corrected-anti1-glyco-branchzero-v1.service` started at **11:16:42 Denver**.
+Its single startup check verifies the intended **105.65946348°** constraint,
+four threads, 4 GiB Psi4/8 GiB service memory and no swap. Completion/failure
+watcher **`0a491221-1aec-44e3-967e-ca6f16b79f14`** is armed. Estimated full
+allocation finish is **12:25:22**, one audit deadline **12:36:42**, and hard stop
+**12:46:42**, all October 11 Denver time. No periodic polling or cloud spending.
+This remains a matched-angle conformational diagnostic, not minimum certification
+or automatic acceptance for fitting.
+
+Current handoff: `endpoint-1-glyco-branchzero-v1/active_handoff.json`, indexed by
+`current_handoff.json`. The consumed deferred timer is no longer active. Portable
+recovery record: `docs/audits/cpd_corrected_cis_anti_i_branchzero_launch_recovery_20261011.json`.
+
+**Corrected −15° response converged; matched-angle control queued — 2026-10-11 Denver.**
+Wake `11e0f9f6-b0b4-4846-9ba0-e3a2ca2d750e` was acknowledged as complete.
+The repaired scan converged after **18 new gradients in 61.58 minutes**.
+The v4 audit independently verifies 2,793 native gradient components (including
+the reused valid seed), 38 geometry tables and 19 accepted checkpoints/trajectory
+frames, with preserved electronic settings and all seven stereocenters.
+Every evaluated angle passes; the largest error is **5.70e-6 degrees**.
+Both native-evidence and scan-target verdicts pass. Final projected maximum/RMS
+gradients are **1.200785e-5 / 4.395124e-6 au**, meeting the unchanged limits.
+No further relaxation at this −15° target is needed.
+
+This is **constrained stationarity**, not full-dimensional stationarity or an
+endpoint minimum certificate. Relative to the original stationary reference,
+the relaxed point is **3.95869 kcal/mol lower**, with an **84.29° 5′ OH cap
+rotation**, sugar-ring torsion shifts up to **23.42°**, and only **−0.087°** change
+in the monitored cyclobutane torsion. The full history is preserved in
+`endpoint-1-glyco-minus15-v3/converged_branch_review.json`. The energy difference
+mixes angle response with cap/sugar conformation; it is not yet an accepted
+glycosidic fitting target. All 20 new wrong-angle v2 evaluations remain excluded.
+
+`endpoint-1-glyco-branchzero-v1/` is prepared as a **matched-angle diagnostic**.
+It starts from the valid converged −15° conformation, rigidly rotating the sugar
+to the original reference angle **105.65946348°**. All covalent bond lengths,
+monitored internal conformer torsions and seven stereocenters pass seed checks.
+Only that original angle is fixed during relaxation; the other coordinates remain
+free. This directly compares conformations at the same angle. It is not an
+unconstrained release, a silent replacement of the original reference, or an
+already admitted second fitting profile. The separate diagnostic design is frozen;
+original training/held-out membership and references remain intact.
+
+The native/optimizer worker and regression-test sources are unchanged, so the
+existing 24-test evidence was reused. One new synthetic fresh-seed smoke test
+confirms the changed coordinates acquire a new gradient rather than reuse the
+source gradient, with no QM performed. The control is bounded to **20 new
+gradients / 90 minutes**, four threads, 4 GiB Psi4/8 GiB service memory, no swap,
+and a ten-minute per-gradient timeout. Estimated allocation cost is 68.68 minutes.
+
+**No native control job has started yet.** Runtime admission stopped before
+service creation because available memory was about **11.78 GiB**, below the
+unchanged **12 GiB** requirement; disk space is adequate. The failed admission
+is preserved in `launch_attempt1_failure.json`. A single timer retry is armed for
+**01:41:11 Denver October 11** under
+`cpd-corrected-anti1-glyco-branchzero-v1-admit.timer`. It rechecks normal resource
+and exclusivity guards. Successful admission performs one startup verification,
+arms the native completion/failure watcher and one audit deadline, and updates
+the current handoff; failed admission queues one review wake. There is no periodic
+memory polling or automatic retry loop. Pause files and an existing launch receipt
+cancel the timer attempt. Three focused timer-runner tests pass. The pinned Codex
+executable directory is supplied explicitly because the user service manager's
+PATH lacks it. The collected transient timer was recreated at the same deadline;
+that harmless rearming failure and its original receipts are preserved.
+
+Current handoff: `endpoint-1-glyco-branchzero-v1/handoff.json`, indexed by
+`current_handoff.json`; deferred status lives in
+`endpoint-1-glyco-branchzero-v1-deferred-admission/`. After a successful timed
+launch, the index points to `active_handoff.json`. To pause before admission,
+stop the listed `-admit.timer` and `-admit.service` as well as setting the campaign
+pause marker. Portable evidence:
+`docs/audits/cpd_corrected_cis_anti_i_glyco_converged_control_20261011.json`.
+No cloud spending. Minimum support remains limited to the exact capped core;
+endpoint minimum certification, fit-target acceptance and NAMD readiness remain
+pending.
+
+**Wrong-angle continuation preserved; repaired retry active — 2026-10-11 Denver.**
+Wake `7e919bf5-7ff3-4028-95bc-2115faa48ef6` was acknowledged with event
+`complete`, matching service termination. **The intended scan failed.**
+The restart code introduced an angle-unit error: Sella's public
+`Constraints.fix_dihedral(target=...)` accepts degrees, but the v2 worker passed
+`np.radians(target_degrees)`. Sella converted the argument again internally.
+The job therefore moved toward **1.582306° instead of 90.659463°**.
+All **20 new evaluations**, acquired in **68.35 minutes**, are outside the
+intended target tolerance and excluded from intended-scan fitting, progression
+and restart selection. The original status, worker, preflight and outputs remain
+intact. `endpoint-1-glyco-minus15-v2/scientific_failure.json` records the failure
+and a reproduction using the installed API with zero new QM.
+
+The native audit verifies 3,087 gradient components (including the reused seed),
+42 geometry tables and 21 accepted checkpoint/trajectory frames, with preserved
+electronic settings and seven stereocenters. Its `passed` field concerns native
+evidence integrity; **it does not accept the wrong-angle scan**. The separate
+scientific failure takes precedence. Independent convergence correctly remained
+false, but that check did not prevent off-target acquisition. The old zero-budget
+preflight checked the correctly angled seed and stopped before any displaced
+step; it failed to inspect the optimizer's actual configured target/residual.
+That earlier preflight verdict is preserved with this documented limitation.
+
+The repair passes degrees directly, verifies Sella's actual target and startup
+residual, and rejects off-target coordinates in the parent calculator, native
+child before Psi4, and accepted checkpoints. The new v4 completion auditor checks
+the angle of every evaluated geometry and separates native-evidence and scan-target
+verdicts. Twenty-four focused tests pass. A test using the installed Sella performs
+three moving steps on a clearly labeled synthetic potential, checks the angle,
+reproduces/rejects the historical double conversion, and rejects a real preserved
+off-target geometry at native entry before importing Psi4. No new QM was used for
+diagnosis or tests; synthetic test values are excluded from scientific evidence.
+
+`endpoint-1-glyco-minus15-v3/` restarts from the **valid v1 evaluation-020**,
+reusing its exact geometry/full-precision gradient and fresh optimizer history.
+No new v2 result is reused. The original v1 cap/sugar rearrangement still requires
+review and a matched reference before fitting; the wrong-angle v2 trajectory
+does not resolve that issue. The repaired job's startup receipt confirms target
+**90.65946347935471°** and initial residual **8.51e-13 radians**.
+
+One job is active with **20 new gradients / 90 minutes**, four threads, 4 GiB
+Psi4/8 GiB service memory, no swap and a ten-minute timeout per gradient.
+Completion/failure watcher `11e0f9f6-b0b4-4846-9ba0-e3a2ca2d750e` is verified.
+Estimated full-allocation finish is **01:16:37 Denver October 11**, one audit
+deadline **01:31:23**, and hard stop **01:41:23**. No intermittent polling or
+cloud spending. Scientific validity, progress and necessity must be reviewed
+before any next job; neither optimizer completion nor constrained stationarity
+certifies an endpoint minimum.
+
+Current handoff: `endpoint-1-glyco-minus15-v3/handoff.json`, indexed by
+`current_handoff.json`. Portable record:
+`docs/audits/cpd_corrected_cis_anti_i_glyco_angle_recovery_20261011.json`.
+Existing minimum support remains limited to the exact capped core; endpoint
+minimum certification, fit-target acceptance and NAMD readiness remain false.
+
+**First glycosidic chunk audited; conformational continuation active — 2026-10-10 Denver.**
+Wake `6a78c90a-0029-4b56-8a55-ef396577668b` was acknowledged as complete.
+The −15° scan stopped cleanly at **20 gradients in 64.97 minutes**, without
+convergence. Independent audit verifies 2,940 native gradient components,
+40 geometry tables, 20 accepted checkpoints/trajectory frames, original electronic
+settings and all seven stereocenters. The prescribed angle stayed within
+3.13e-6 degrees throughout. Final projected maximum/RMS gradients are
+**0.00372654 / 0.000944722 au**, above the unchanged convergence criteria.
+
+Energy decreased by 0.00744937 hartree during this chunk, reaching **2.31461
+kcal/mol below the original stationary reference**. This is ongoing relaxation,
+not a qualified torsion target. The 5′ hydroxyl cap rotated 52.91°, sugar-ring
+torsions shifted by up to 14.52°, and the monitored cyclobutane torsion changed
+only 0.65°. This suggests departure from the original conformation; a distinct
+basin has not yet been established. All product/sugar stereocenters remain intact.
+The original stationary reference and all intermediate states are preserved.
+`endpoint-1-glyco-minus15-v1/conformational_progress_review.json` records the
+full projected-gradient and torsion histories. Before fitting, resolve this
+coupled cap/sugar relaxation and assess a matched zero-offset control; do not
+treat the energy difference as a pure glycosidic contribution or silently replace
+the original zero reference.
+
+One continuation, `endpoint-1-glyco-minus15-v2/`, reuses the exact last accepted
+geometry and full-precision gradient at the same frozen angle. Its purpose is
+to identify the relaxed destination before selecting further reference work.
+Fresh optimizer history follows the recorded restart policy. The continuation
+checks preceding audit, target, method, model, runtime and binary gradient
+identity, and sets the explicit original angle in Sella. Twenty-one focused tests
+pass. A preflight using the installed optimizer and existing gradient confirms
+reuse, accepted checkpoint writing and a clean test-only zero-allocation stop;
+it performs no new QM.
+
+The active chunk is capped at **20 new gradients / 90 minutes**, with four
+threads, 4 GiB Psi4/8 GiB service memory, no swap and a ten-minute timeout per
+gradient. The preceding native mean/max times were 194.20/208.19 seconds;
+systemd reported 6.5G peak memory and no swap. Stable cost and continued descent
+support one further chunk without a new timing benchmark or method change.
+Completion/failure watcher `7e919bf5-7ff3-4028-95bc-2115faa48ef6` passed the
+single startup check. Estimated full-allocation finish is **00:02:46 Denver
+October 11**, one audit deadline is **00:17:32**, and the hard stop is **00:27:32**.
+No intermittent polling or cloud spending. Audit progress and conformational
+changes again before any subsequent job.
+
+Endpoint minimum certification and fit-target acceptance remain false; existing
+minimum support remains limited to the exact capped core. Current handoff:
+`endpoint-1-glyco-minus15-v2/handoff.json`, indexed by `current_handoff.json`.
+Portable record: `docs/audits/cpd_corrected_cis_anti_i_glyco_branch_continuation_20261010.json`.
+All earlier failures and assessments remain preserved.
+
+**Endpoint stationary; first glycosidic training scan active — 2026-10-10 Denver.**
+Wake `fd45703a-6ab2-4d89-b545-18e30bd42eaa` was acknowledged as complete.
+The continuation converged after **two new gradients in 389.39 service seconds
+(6.49 minutes)**. Independent native audit verifies 441 gradient components
+(294 new plus the reused seed), six printed geometry tables, three accepted
+checkpoints/trajectory frames, full-precision binaries, electronic settings and
+all seven stereocenters. Maximum atom-gradient norm is **1.4684165e-5 au**,
+RMS **5.4113661e-6 au**, meeting the unchanged 1.5e-5/1e-5 criteria.
+The tiny net energy increase, 8.16e-9 hartree, is retained in the audit.
+No further unconstrained endpoint optimization is presently justified.
+
+The first read-only auditor failed in its final summary because it indexed a
+ten-record energy window in a three-record chunk. Its source and failure receipt
+are preserved; the versioned auditor handles the available window and passes.
+No QM was rerun. `stationary_endpoint_review-v1/review_packet.json` contains the
+exact stationary geometry and endpoint-exchanged mapping for formal human review.
+Both mappings represent **one distinct QM reference**, not independent data.
+
+The **49-atom endpoint is stationary, not minimum-certified**. Existing local
+minimum support applies only to the exact 36-atom capped core. A full endpoint
+Hessian is deferred: the current method's budget estimate is 288 additional
+gradients, about 15.50 hours at measured cost. Preliminary constrained response
+acquisition does not require claiming a full-dimensional minimum; revisit
+curvature work if scan branches or fitting residuals identify a need.
+Chemical review, parameter qualification and NAMD readiness remain pending.
+
+`glycosidic-training-v1/design.json` freezes the planned training offsets
+−30°, −15°, 0°, +15°, +30° about the stationary O4′–C1′–N1–C2 angle
+105.65946348°. The four displaced seeds preserve the molecular graph, bond
+lengths and all seven stereocenters. Zero offset reuses the audited reference;
+held-out ±22.5° targets remain unacquired until fitted parameters are locked.
+Branch changes must be retained and reviewed, with matching QM/MM constraints
+and reference basin. The electrostatic dipole convention still needs resolution
+before charge-reference acquisition or fitting.
+
+Only the **−15° scan** has launched, at fixed torsion 90.65946348°, with other
+coordinates relaxed. Its allocation is **20 new gradients and 90 minutes**,
+four threads, 4 GiB Psi4/8 GiB service memory, no swap and a ten-minute timeout
+per gradient. Fifteen focused tests pass. A synthetic-potential integration
+preflight verifies the installed constrained optimizer path, fresh gradient
+acquisition at displaced coordinates and accepted checkpoints, with no QM.
+Independent projected-gradient criteria and angle error are checked separately
+from raw forces; constrained convergence is not minimum certification.
+
+`cpd-corrected-anti1-glyco-minus15-v1.service` passed its single startup check.
+Completion/failure watcher `6a78c90a-0029-4b56-8a55-ef396577668b` is armed.
+The allocation estimate is 65.1 minutes; one audit deadline is **23:07:53 Denver**
+on October 10 and the hard stop is **23:17:53**. No intermittent polling or cloud
+spending. On wake, audit native evidence, constrained progress, branch behavior
+and cost before another job. Current handoff: `endpoint-1-glyco-minus15-v1/handoff.json`,
+indexed by `current_handoff.json`. Portable evidence index:
+`docs/audits/cpd_corrected_cis_anti_i_endpoint_stationary_scans_20261010.json`.
+All earlier failures, assessments and historical handoffs remain preserved.
+
+**Endpoint chunk audited; shorter continuation active — 2026-10-10 Denver.**
+Wake `aa576b15-f5c8-46c9-b874-230f0ada295e` was acknowledged as complete.
+This was a clean **allocation-boundary stop**, not optimizer convergence. Thirty
+new gradients completed in 5773.85 service seconds (96.23 minutes); their mean
+native time was 191.84 seconds and maximum 213.86 seconds.
+
+`endpoint-1-optimization-v1/completion_audit.json` independently reopens the
+30 new evaluations plus reused pilot result: 4,557 native gradient components,
+62 printed geometry tables, input/returned binaries, original electronic options,
+actual basis/frozen-core occupations, all seven stereocenters and source hashes.
+All 31 accepted XYZ checkpoints and 31 optimizer trajectory frames have matching
+native coordinates, energies and forces. The last accepted restart is backed by
+a full-precision saved gradient. No task was rerun for this audit.
+
+Maximum atom-gradient norm decreased from 0.0297588 to **2.369859e-5 au**;
+RMS is **9.974772e-6 au**. RMS meets its 1e-5 criterion, while the maximum remains
+above 1.5e-5. Energy fell by 0.0234400 hartree and the final ten evaluations still
+improve force/energy. This is substantial ongoing progress, with no evidence of
+a stall. The limits and electronic method remain unchanged. No endpoint
+stationarity or minimum certification is asserted.
+
+`endpoint-1-optimization-v2/` starts from that exact last accepted geometry and
+reuses its full-precision gradient. Fresh Sella history follows the recorded
+restart policy. The reduced allocation is **15 new gradients and one hour**,
+with a ten-minute per-gradient timeout, four threads, 4 GiB Psi4/8 GiB service
+memory and no swap. The frozen context, seed identity and smaller allocation
+guards were checked without QM. Native-gradient and optimizer behavior are
+unchanged from the previously tested implementation; no redundant test suite
+or timing benchmark ran.
+
+`cpd-corrected-anti1-endpoint1-optimization-v2.service` is active, with verified
+completion/failure watcher `fd45703a-6ab2-4d89-b545-18e30bd42eaa`.
+Estimated full-allocation finish is 22:23 Denver time October 10, one audit
+deadline at 22:25, and hard stop at 22:35. Convergence can end it earlier.
+No intermittent polling, cloud spending or blind continuation. On the wake,
+audit once and distinguish convergence from a chunk boundary before choosing
+curvature/reference work or another justified continuation. All previous failed
+and incomplete verdicts remain preserved. Current handoff:
+`endpoint-1-optimization-v2/handoff.json`, also indexed by `current_handoff.json`.
+
+**Endpoint pilot recovered without rerun; Sella optimization active — 2026-10-10 Denver.**
+Wake `49f5471b-b1bb-4c75-a080-2c735075820f` was acknowledged as **failed**.
+The original service, native output, frozen worker, failed assessment and traceback
+remain intact. The native MP2 calculation completed successfully in about 197
+seconds (197.448 service seconds); the worker then failed a literal whitespace
+check. DiskDFJK prints seven spaces after `Fitting Condition:`, while the check
+expected eight. Every native value is the intended 1e-10.
+
+`endpoint-1-pilot-recovery-v1/completion_audit.json` verifies all 147 gradient
+components, two printed geometry tables, charge/multiplicity, atom order, corrected
+product and sugar stereochemistry, SCF convergence and response residual 3.964e-11.
+It also reconciles the preflight JK count: the standalone builder reported 2396
+spherical functions, while the actual SCF driver uses 2737 Cartesian JK functions
+to match the Cartesian orbital basis. Replaying the installed driver's basis
+construction confirms 449 orbital, 2737 JK and 1820 spherical RI functions, with
+27 frozen core orbitals. No electronic settings changed and no QM reran.
+
+The full-precision in-memory gradient was not saved before the old assertion.
+The recovery explicitly uses the native 12-decimal gradient table, with at most
+5e-13 hartree/bohr rounding per component, and the exact pinned input geometry.
+This is ample precision for the initial Sella state; it is not presented as a
+recovered binary array. The original `new_gradients=0` flag reflects failed worker
+auditing; the supplemental record correctly accounts for one completed native
+gradient. Maximum atom-gradient norm is 0.0297588 au, so the endpoint is not
+stationary and receives no minimum claim.
+
+The repaired parser reads numeric fitting conditions regardless of whitespace
+and rejects missing or changed values. Future workers save full-precision returned
+coordinates and gradients before downstream audits. Seventeen focused tests pass.
+An integration check using the installed Sella and recovered gradient verifies
+seed reuse, an accepted restart checkpoint and a clean allocation-boundary stop,
+with zero new QM calculations.
+
+`cpd-corrected-anti1-endpoint1-optimization-v1.service` is active for a bounded
+Sella chunk: at most **30 new gradients and two hours**, four threads, 4 GiB
+Psi4/8 GiB service memory, no swap, and a ten-minute timeout per gradient. The
+pilot used 3.2G peak memory and no swap. Thirty gradients at its measured cost
+would take 98.5 minutes; no additional benchmark or method change is justified.
+The seed gradient is reused, every evaluated trial is retained, and each accepted
+geometry has a matching-gradient restart checkpoint. A planned chunk boundary is
+reported separately from optimizer convergence and native failure.
+
+Completion/failure watcher `aa576b15-f5c8-46c9-b874-230f0ada295e` is verified
+armed. Estimated allocation finish is 21:35 Denver time, one audit deadline at
+21:45, and hard stop at 21:55 on October 10. No intermittent polling or cloud
+spending. On wake, audit native evidence and progress once before admitting any
+continuation. Optimizer completion remains distinct from local-minimum
+certification. Current handoff: `endpoint-1-optimization-v1/handoff.json`, also
+pointed to by `current_handoff.json`. Broad all-stage authorization remains active.
+
+**Corrected core local minimum supported; sugar endpoint pilot active — 2026-10-10 Denver.**
+Wake `766e12cc-361c-4f96-a1d8-094123680620` was acknowledged. All 16 low-mode
+gradients completed in 915.94 service seconds (15.27 minutes); native work took
+907.54 seconds. The completion audit verifies all 1,728 gradient components, 32
+printed geometry tables, original electronic settings, atom order and corrected
+identity. The initial read-only audit used a Python environment without RDKit;
+that failure is preserved, and the unchanged audit succeeded in the pinned runtime.
+No QM was repeated.
+
+`core_local_minimum_assessment.json` now records a **numerically supported local
+harmonic minimum for the exact 36-atom capped core** at the original frozen-core
+DF-MP2/6-31G(d) settings. This decision combines independent stationarity, all 102
+positive internal Hessian modes, and two-scale checks of the four most sensitive
+modes. Energy-derived and extrapolated gradient curvatures differ by 0.29–0.56%;
+these are observed results, not a new percentage gate.
+
+The retained full Hessian-vector products also measure coupling to the other 98
+internal modes. With their previously audited block held fixed, the coupled
+sensitivity matrices remain positive at both steps and after extrapolation. Their
+lowest frequencies are 57.95987, 57.95835 and 57.95444 cm⁻¹. The largest Schur
+coupling correction is 4.80e-7, compared with a smallest curvature near 1.27e-4
+hartree/(bohr² amu). The full hybrid matrix step difference is 6.29e-5 and its
+extrapolation correction 2.10e-5; these empirical sensitivities are not rigorous
+error bounds or a second independently acquired full Hessian. Raw asymmetry,
+external-mode artifacts and every historical failed verdict remain preserved.
+No additional core QM is warranted by an identified unresolved question.
+The exact-geometry review packet is updated separately; formal human chemical
+review, parameter qualification and NAMD readiness remain outstanding.
+
+`endpoint-seeds-v2/` contains two newly rebuilt neutral 49-atom, 52-bond
+C16H22N4O7 models: complete corrected CPD, one D-deoxyribose with 5′/3′ OH caps,
+and one N1-methyl cap. Only the corrected certified core supplies reused
+coordinates. The TTD graph supplies sugar stereochemistry; its original
+coordinates and all legacy anti boundary coordinates are excluded. Three
+attempts with tight-core embedding failed in `endpoint-seeds-v1/` and are retained.
+Fresh stereochemical embedding followed by proper rotation and fixed-core UFF
+seed relaxation succeeded for both models. UFF is seed preparation only.
+Independent checks verify the exact graph, valences, charge, all seven centers,
+contacts and RDKit/Open Babel identity agreement; six deliberately inverted sugar
+centers are rejected by the audit.
+
+The two isolated one-sugar models have the same stereochemical molecular identity.
+An explicit endpoint permutation preserves every bond/order, element and all
+coordinate stereocenters. Optimize one unique endpoint reference first and derive
+its paired mapping from the same calculation. This saves a duplicate reference
+optimization, but does not create independent validation data or imply equivalent
+endpoint environments in full DNA. Independently embedded seeds can still differ
+in conformation; no conformational equivalence is inferred from the InChIKey.
+Neither model covers phosphate or two-sugar coupled terms.
+
+`endpoint_reference_design_v1.json` freezes the first development reference and
+prospective glycosidic membership: training offsets -30, -15, 0, +15, +30 degrees;
+held-out offsets +/-22.5 degrees acquired only after parameter hash lock. Exact
+scan constraints/geometries must be pinned before acquisition. The legacy dipole
+convention conflict remains explicitly pending before electrostatic acquisition
+or fitting; it does not affect this geometry pilot.
+
+`cpd-corrected-anti1-endpoint1-pilot-v1.service` is active for **one gradient**,
+using four threads, 4 GiB Psi4/8 GiB service memory and no swap. Eight focused tests
+pass, alongside the six sugar-inversion checks. Its completion/failure watcher
+is verified armed with token `49f5471b-b1bb-4c75-a080-2c735075820f`.
+Expected finish is approximately 19:49 Denver time, one audit deadline at 19:57,
+and hard stop at 20:00 on October 10 (15-minute total cap). No polling or cloud
+spending. On the wake, audit native evidence and measured cost once, then admit
+a checkpointed Sella optimization if supported, reusing the exact pilot gradient.
+Broad all-stage authorization continues; no registry gate or production status
+has changed. Current handoff: `endpoint-1-pilot-v1/handoff.json`.
+
+**Full Hessian audited; four-mode numerical check active — 2026-10-10 Denver.**
+Wake `f368588e-b371-421c-bb99-1f95cc5fe9e3` was acknowledged. Batch two
+completed its 106 gradients and assembly in 6265.92 service seconds (104.43
+minutes). Its independent completion audit verifies 11,448 native gradient
+components, 212 printed geometry tables, exact input/returned coordinates,
+stereochemistry, original electronic settings and complete displacement pairs.
+Mean gradient time was 58.49 seconds, maximum 62.49; systemd recorded 4.5G peak
+memory and zero swap. All 210 displaced gradients plus the reused reference are
+now available; no missing task or repeated native calculation.
+
+`hessian-stage2-v3/assembly/independent_completion_audit.json` rechecks all result,
+input and native hashes, reconstructs the Hessian and independently builds the
+six mass-weighted rigid-body directions. Cartesian reconstruction agrees within
+7.56e-13 hartree/bohr²; independent internal-mode frequencies agree within
+1.32e-11 cm⁻¹. There are **102 positive vibrational modes**, lowest 58.5231 cm⁻¹.
+Unprojected external-mode artifacts, including -9.7705 cm⁻¹, remain recorded;
+the audit verifies the six rigid-body directions rather than deleting selected
+negative internal modes. A syntax error in the first read-only audit script is
+preserved; its corrected copy used existing data and no QM rerun.
+
+Minimum certification remains pending numerical sensitivity. The raw Hessian is
+not exactly symmetric; the four lowest modes (58.52, 77.66, 83.92, 100.56 cm⁻¹)
+also have the largest antisymmetric-action/curvature ratios, approximately 50%,
+37%, 28% and 19%. These ratios guide a finite diagnostic allocation; they are
+neither calibrated error bars nor a new universal percentage gate.
+
+`low-mode-check-v1/` now runs 16 gradients: +/-0.04 and +/-0.02 bohr along each
+of those four normalized Cartesian mode directions, with unchanged original QM
+settings. All prepared geometries preserve corrected identity. Existing reference
+gradients are reused. The worker reports energy-derived curvature, two-scale and
+Richardson gradient curvature, and the coupled four-mode matrix; complete
+Hessian-vector products are retained to assess coupling to the remaining modes.
+Completion does not automatically certify a minimum or trigger another job.
+
+`cpd-corrected-anti1-low-modes-v1.service` has a 30-minute total cap, three-minute
+task timeout, complete-pair admission checks, four threads, 4 GiB Psi4/8 GiB
+service memory and no swap. Twenty-six focused tests passed; preparation also
+verified mode mass normalization and correspondence to the source Hessian.
+Completion/failure watcher `766e12cc-361c-4f96-a1d8-094123680620` is verified
+armed. Expected finish is about 19:33 Denver time, with a one-shot audit deadline
+at 19:41 and hard stop at 19:46 on October 10. No intermittent polling or cloud
+spending. All earlier failures and their original verdicts remain preserved.
+
+On completion, acknowledge and audit native outputs once, then assess curvature
+signs, absolute step corrections, energy/gradient consistency, mutual coupling and
+remaining-mode sensitivity. Use that evidence to decide whether a local harmonic
+minimum is sufficiently supported or a specific further calculation is necessary.
+Do not repeat the full Hessian, relax a percentage gate, or run additional probes
+without an identified unresolved question. Parameter and MD qualification remain
+separate from this local QM assessment; broad all-stage authorization continues.
+
+**Hessian batch one audited; batch two active — 2026-10-10.**
+Wake `4feec596-92af-44c7-8057-a4783e22b10b` was acknowledged. Batch one
+completed 104 new gradients plus the reused reference in 6109.18 service seconds
+(101.82 minutes). `hessian-stage2-v3/batch-1/completion_delivery_audit.json`
+independently verifies all hashes, native energies and 11,340 gradient components,
+210 printed geometry tables, exact returned geometry/atom order, corrected identity,
+original basis/convergence settings and all 52 complete displacement pairs.
+Maximum response residual is 9.245e-11. No calculation was repeated for this audit.
+
+New gradients averaged 58.18 seconds, maximum 62.74 seconds, with no sustained
+slowdown. Systemd recorded 2.6G peak memory and zero swap; average CPU utilization
+was about 3.75 cores within the four-core allocation. The remaining work fits the
+existing cap. No measured benefit supports changing the thread count or electronic
+method now; completing the reusable gradient plan followed by targeted uncertain-mode
+checks is the selected next step.
+
+The 52-direction partial Hessian has raw antisymmetry maximum 1.23709e-4 and
+spectral norm 6.22248e-4 hartree/(bohr² amu). Its symmetric subspace eigenvalues
+are positive, but the lowest is 3.01611e-4, so numerical sensitivity matters for
+weak curvature. Antisymmetry is not a rigorous bound on symmetric errors. This
+partial subspace neither represents all vibrational modes nor certifies a minimum.
+The raw matrix is preserved in `batch-1/raw_partial_hessian.npy`.
+
+`batch1_continuation_decision.json` records admission of the remaining 106 gradients
+(53 pairs). `cpd-corrected-anti1-hessian-batch-2-v3.service` is active, using the
+same frozen worker, four threads, 4 GiB Psi4/8 GiB service memory, no swap and a
+three-hour total cap. Expected finish from measured batch-one performance is about
+19:12 Denver time October 10, including assembly margin. The completion/failure
+watcher is verified armed with token `f368588e-b371-421c-bb99-1f95cc5fe9e3`, one
+audit deadline at 20:00 and hard stop at 20:26. No intermittent polling or cloud
+spending. The worker is unchanged from the 28 passing tests; no redundant tests ran.
+
+On completion, acknowledge the token and audit native results and assembly once.
+Preserve raw asymmetry and all modes, verify the independent Hessian reconstruction,
+and inspect rigid-body/internal modes and low-mode numerical sensitivity before
+claiming a minimum. A successful process or assembled Hessian remains diagnostic.
+All prior failures, the original reference-equality failure, and the failed 5%
+directional check remain intact. No fitting, registry promotion or MD was launched.
+
+**Original-method curvature audited; diagnostic Hessian batch one active — 2026-10-10.**
+Wake `3e61db64-8efc-4a53-8617-869211c872a0` was acknowledged. All four native
+gradients completed in 225.33 seconds (227.59 service seconds). The independent
+completion audit verifies native energies, all gradient components, both printed
+geometry tables per task, returned coordinates, corrected stereochemistry, basis
+sizes and original convergence/conditioning settings. An initial audit parser
+expected one geometry table; its failed source/receipt is preserved and the revised
+parser checks both. No scientific calculation was repeated for this audit repair.
+
+Directional gradient curvatures are 0.6377947974 and 0.6376542588 hartree/bohr²
+at Cartesian unit-direction steps 0.02 and 0.01 bohr: 0.0220% difference.
+Richardson curvature is 0.6376074125; the independent energy-based curvature is
+0.6377754145 (0.0263% difference). Both are positive and well resolved in this
+stiff direction. Extrapolated energy slope is 3.46605e-6 hartree/bohr; discrepancies
+from the four original-method reference gradients remain 1.05e-6–1.78e-6. These
+absolute differences are retained. This is useful diagnostic evidence, not exact
+derivative qualification, soft-mode validation, or minimum certification.
+
+`curvature_to_hessian_admission.json` admits diagnostic acquisition with unchanged
+original MP2 settings and a doubled Psi4 displacement size of 0.01. Psi4 uses
+mass-weighted symmetry-adapted Cartesian displacements, so this is not identical
+to the pilot's normalized Cartesian direction. All 211 generated inputs replay
+exactly and pass corrected identity; maximum Cartesian component displacement is
+0.009645 bohr. The original successful QCEngine reference is reused with exact
+analytic-gradient input bytes and independent stationarity verification. Its old
+failed equality-gate verdict remains unchanged.
+
+The active root is `hessian-stage2-v3/`. The preparation-only `hessian-stage2-v2/`
+failure is preserved: Psi4 included its Hessian-only `FINDIF__DISP_SIZE` keyword in
+the analytic-gradient input, preventing exact reference reuse. V3 explicitly strips
+only that generator keyword from gradient tasks while retaining it in the Hessian
+plan and exact displaced geometries. Replay verifies this narrow normalization;
+all physical electronic options are unchanged. Zero QM evaluations were used in
+preparation or recovery. Twenty-eight focused tests pass, including raw Hessian
+reconstruction, mass weighting, pair boundaries and watcher behavior. A synthetic
+test on the actual 105 displacement directions agrees within 4.3e-13; those
+synthetic gradients are software tests, not molecular evidence.
+
+`cpd-corrected-anti1-hessian-batch-1-v3.service` is active with 104 new gradients
+(52 complete pairs) plus the reused reference. Expected native duration is about
+1.6 hours. Each batch has a three-hour total cap, four threads, 4 GiB Psi4/8 GiB
+service memory, no swap, per-task checkpoints and bounded stall detection.
+The completion/failure watcher is armed with token
+`4feec596-92af-44c7-8057-a4783e22b10b`. Expected finish is approximately 17:20
+Denver time October 10, with a one-shot audit deadline at 18:14 and hard stop at
+18:42. No intermittent polling or cloud spending.
+
+On completion, acknowledge the token and audit batch one before admitting the
+remaining 106 gradients in batch two. Review necessity, measured performance,
+resource use and alternatives at that boundary. Final assembly saves the raw
+Hessian asymmetry before Psi4 symmetrization, independently reconstructs the
+Cartesian Hessian, and retains normal modes without clipping. Automatic minimum
+certification is disabled for this diagnostic series. Numerical and low-mode
+review must establish any later minimum claim; parameter fitting and MD readiness
+remain separate. All-stage user authorization remains in force.
+
+**Threshold reassessed; original-method curvature pilot active — 2026-10-10.**
+The user requested a historical review of the 5% rule and the next best attempt.
+`threshold_reassessment_20261010.json` records the decision and native evidence.
+The 5% directional-slope cutoff and 1e-8 reference-gradient equality cutoff were
+local diagnostic heuristics, without a literature-derived or measured uncertainty
+basis for use as blanket campaign gates. The former failed result remains failed
+under its original rule; it has not been relabeled or replaced by a convenient 10%
+rule. The historical numerical-method hold below is superseded for this pilot.
+
+Reanalysis of the existing conditioned results gives a Richardson-extrapolated
+slope discrepancy of 1.27522e-5 hartree/bohr (8.65%). Step halving does not remove
+it, and it is comparable in scale to the atom-gradient stationarity limit, though
+the norms differ. It is neither proven harmless nor an 8.65% thermal-stability
+error. The 1e-7 conditioning change is not adopted for optimization or certification.
+
+All four existing original-method reference gradients were independently checked
+against native tables and remain stationary at the unchanged force limits.
+Historical evidence was rechecked: 19 native gradient files from the earlier
+two-step and soft-mode diagnostics, plus all 20 fresh-Sella result/native hashes.
+Fresh Sella resolved the previous constrained optimizer stall without looser force
+limits; it is already our current optimizer. Larger-step probes and targeted soft
+modes previously separated useful positive-curvature evidence from uncertain
+stiffness. Old misidentified anti geometries supply method history only.
+
+The [FHI-aims numerical-vibration guidance](https://fhi-aims.org/uploads/manual/Ch4/S6.html)
+explains the displacement tradeoff between noise and anharmonicity and calls for
+explicit step-size checks. [Psi4's optimization guidance](https://psicode.org/psi4manual/master/optking.html)
+uses force, displacement and energy convergence criteria; neither provides a
+universal 5% directional-derivative requirement for this campaign.
+
+`original-method-curvature-pilot-v1/` now runs four sequential MP2 gradients at
+displacements +/-0.02 and +/-0.01 bohr along the previous check's unit direction,
+using the original optimized geometry and original electronic settings. This is
+not asserted to be the softest mode. Existing reference gradients are reused.
+The four calculations return both energies and gradients, enabling independent
+curvature estimates and Richardson/step-size comparisons before a full Hessian.
+Reports include absolute slope errors and empirical sensitivity scales; the latter
+are not guaranteed error bounds. Completion means verified acquisition, not a
+numerical-adequacy pass, minimum certificate, or readiness for MD.
+
+Service `cpd-corrected-anti1-original-curvature-v1` has a 15-minute total cap,
+three-minute per-task timeout, four threads, 4 GiB Psi4/8 GiB service memory and
+no swap. Expected duration is about four minutes. Twenty-three targeted tests pass.
+Completion/failure watcher `3e61db64-8efc-4a53-8617-869211c872a0` is verified armed
+with one nine-minute audit deadline. No intermittent polling or cloud spending.
+On its wake, acknowledge the token and audit once. Use the measured curvature,
+step dependence and noise to decide admission and step size for a diagnostic
+Hessian chunk. Full-Hessian and uncertain low-mode checks still precede minimum
+certification. A resolved contradiction calls for a concrete method change, not
+another tolerance sweep. Broad all-stage authorization remains in force.
+
+**Directional consistency failed; numerical-method hold — 2026-10-10.**
+Wake `757ceb1b-d217-4ef7-8678-8e937207215c` was acknowledged. All four native
+energy calculations completed normally in 67.77 seconds (~69.88 service seconds).
+The source-pinned completion audit verifies every native energy and input/output
+geometry, units, atom order, corrected identity, basis sizes, frozen-core count,
+convergence thresholds and declared fitting condition. No task needs rerunning.
+
+The analytic directional slope is 1.47465985e-4 hartree/bohr. Centered energy slopes
+at 0.005/0.0025 bohr are 1.34329559e-4/1.34617744e-4, respectively: errors
+8.9081%/8.7127% fail the unchanged 5% limit. Step halving passes. Thus the improved
+repeatability at fitting threshold 1e-7 is insufficient to qualify its gradient;
+no reoptimization or Hessian was launched. This is a scientific consistency failure,
+not a native crash, optimizer failure, or minimum certificate.
+
+`method-review-v1/method_review.json` records the read-only implementation review,
+rejected automatic continuations and remaining method choices. Official tagged Psi4
+v1.11 sources confirm eigenvalue filtering in the fitting-metric machinery; this
+inspection does not establish the exact installed-binary implementation or prove the
+root cause. A single inexpensive auxiliary-metric preflight (no SCF/MP2 evaluation)
+found DEF2-UNIVERSAL-JKFIT worse conditioned in this Cartesian setup, so no electronic
+calculations were launched with that alternative. No further threshold sweep.
+
+`method-review-v1/reproduction-evidence/` preserves the five existing native outputs
+(reference gradient and four energies), exact inputs/results and a hashed manifest.
+`numerical_method_hold.json` closes further scientific-stage admission pending a
+concrete numerical-method resolution. This is not a user pause or revocation of broad
+compute authorization. The next decision must specify a consistent auxiliary-metric
+or alternative gradient implementation, its comparability, a small frozen diagnostic
+and measured resource limits before restarting refinement. Preserve both successful
+reproducibility and failed derivative checks; do not waive either limit retroactively.
+
+No CPD calculation is active. There is no idle polling or recurring review timer;
+future admitted jobs must arm completion/failure and one-shot deadline triggers.
+No cloud spending, parameter promotion, minimum certification or production-readiness
+claim. This block supersedes the active-probe status below.
+
+**Conditioned gradient reproducibility passed; directional energy check launched — 2026-10-10.**
+Wake `96db8ae9-1954-407c-9dc7-8f2397bbf5a1` was acknowledged. The final
+conditioning diagnostic completed all three native gradients successfully in
+166.71 seconds. Its independent audit reconstructs energies and every gradient
+component from native tables, verifies all geometries/identity and checks the actual
+1e-7 fitting threshold in native output. Pairwise gradient spread 4.3467e-9 au
+passes the unchanged 1e-8 limit; energy spread is 5.1671e-10 hartree.
+
+The revised numerical setting shifts the reference energy by about -0.2361 kcal/mol
+and gives maximum atom gradient 8.7896e-5 au, which is **not stationary** under the
+original 1.5e-5 threshold. Reproducibility is qualified only at this geometry;
+minimum certification, parameters and simulation readiness remain pending. The
+original Hessian failure and both preceding diagnostic outcomes remain preserved.
+
+Provenance correction: Psi4 appended the next case's memory/thread setup lines to
+the earlier still-open output file after its result hash was recorded. The original
+hash matches an exact native prefix; the suffix contains only those setup lines.
+`reference-conditioning-diagnostic-v2/independent_review.json` records this explicitly
+and pins final immutable native snapshots. No native calculation was rerun for this
+logging issue. The new worker closes outputs before hashing them.
+
+`conditioned_method_continuation_decision.json` admits only four energy probes in
+`conditioned-directional-check-v1/`, reusing the qualified `schema-2` gradient.
+The normalized reference-gradient direction and symmetric steps +/-0.005 and
++/-0.0025 bohr are frozen before acquisition; all four geometries pass identity.
+Both centered slopes must agree with the analytic slope within max(1e-6 au, 5%);
+step-halving disagreement must be within max(1e-6 au, 2%). These are explicit local
+derivative checks, not a Hessian or a proof of global force consistency.
+
+The service `cpd-corrected-anti1-conditioned-directional-v1` has a 15-minute total
+cap (14m45s runtime plus 15s shutdown grace), four threads/4 GiB Psi4, 8 GiB service
+memory and no swap. Each energy task has a three-minute stall limit; each result
+is checkpointed. Twenty targeted tests pass. Watcher startup now uses filesystem
+events too. Completion/failure trigger `757ceb1b-d217-4ef7-8678-8e937207215c` is
+verified armed with one nine-minute audit deadline. No intermittent polling.
+
+On completion, acknowledge the new token and audit native results/recorded criteria
+once. `conditioned_directional_handoff_20261010.json` pins the continuation evidence.
+If both slopes and step-halving pass, prepare one bounded fresh optimization under
+the revised options before rebuilding a Hessian plan; broad authorization permits
+that normal continuation. If a criterion fails, preserve it and diagnose the method
+rather than retrying blindly. No more threshold sweep is planned. The original
+Hessian consumed one reference gradient (~59 s) and zero displaced tasks. No cloud
+spending, automatic registry promotion or minimum certification.
+
+**Completion-trigger monitoring; final conditioning diagnostic active — 2026-10-10.**
+The user explicitly requested timers/triggers rather than intermittent polling.
+`event_driven_monitoring_policy_20261010.json` records that standing instruction:
+arm process-exit/file-change completion and failure triggers plus a one-shot audit
+deadline for every native job, including short diagnostics. Re-enter on a delivered
+event, deadline or user request. Audit sufficient completed evidence once; repeat
+checks only for changed evidence or unresolved concerns. Do not poll simulation
+progress from the model between these events.
+
+The 1e-8 fitting-threshold diagnostic completed all three native gradients in
+170.70 seconds. Its largest pairwise gradient difference is 5.0201e-8 au, about
+44 times smaller than the original discrepancy but above the unchanged 1e-8
+consistency limit; the revised forces are also not stationary. Its failed criterion,
+all native outputs and independent review remain preserved. It was not accepted.
+
+One further finite diagnostic, `reference-conditioning-diagnostic-v2/`, tests the
+same three fixed-geometry cases at fitting threshold 1e-7, with the same ten-minute
+hard cap and memory/thread limits. The `reference-conditioning-diagnostic-v2-service/`
+attachment observes native process exit using a blocking pidfd, then publishes status
+for the existing durable campaign watcher. The watcher was verified armed, with
+completion/failure delivery and one audit deadline; it does not launch native work.
+All original and revised scientific outputs remain separate.
+
+On its completion wake: acknowledge the token, review the native tables and all
+three diagnostic results once, and preserve process completion separately from
+`reproducibility_pass`. If the declared limit still fails, stop this automatic
+threshold sequence and prepare a numerical-method review. If it passes, first
+review the method change and energy/gradient consistency, then perform a bounded
+fresh optimization before preparing any revised Hessian inputs. No old stationarity
+or certification transfers to changed numerical settings. The original Hessian
+batch remains failed with zero displaced tasks; the three-hour Hessian allocations
+remain unspent. Broad all-stage user authorization still applies; no cloud spending.
+
+**Hessian reference check stopped; numerical diagnostic active — 2026-10-10.**
+Batch one in `hessian-stage2-v1/` stopped after one successful native reference
+gradient failed the independent consistency audit. No displaced calculation ran.
+The energy difference from optimization is 5.70e-9 hartree, within its 1e-8 limit;
+the largest gradient-component difference is 2.21e-6 hartree/bohr, above the
+1e-8 reproducibility limit. Both gradients satisfy the original stationarity limits.
+The failed assessment, native output and completion acknowledgement are preserved.
+This supersedes the active-batch status below; minimum certification remains pending.
+
+`reference-api-diagnostic-v1/` completed two bounded gradients and an independent
+native-table audit. The energy difference tracks direct-text versus QCSchema molecule
+construction even though geometries differ by less than 9e-16 bohr; repeat-gradient
+noise also exceeds the original 1e-8 consistency limit. The actual Cartesian JK-fit
+metric has condition number about 5.89e11. A separate spherical-metric calculation
+is preserved as a diagnostic and is not substituted for the native Cartesian basis.
+No root cause or numerical waiver is asserted from these observations alone.
+
+`reference-conditioning-diagnostic-v1/` is testing a declared auxiliary fitting
+threshold of 1e-8 with three fixed-geometry gradients (text, schema, schema repeat).
+It has a ten-minute hard cap, four threads, 4 GiB Psi4/8 GiB service memory and no
+swap. Energy/force changes and native convergence will be audited before adopting
+any revised numerical protocol. All original protocols and failures remain intact.
+The full Hessian and downstream work remain unlaunched pending this audit; broad
+user authorization continues to apply. No cloud spending.
+
+**Corrected-core Hessian batch one active — 2026-10-10.**
+The expanded user authorization below is recorded and in force. The exact 211-task
+preview was frozen into `cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v1/`.
+All regenerated task bytes and displaced stereochemistries pass; 24 targeted tests
+passed, including checkpoint-pair, time-boundary, native-table and watcher checks.
+The runner uses the existing Psi4/QCEngine task engine, with an isolated process and
+immutable result per gradient. Reference energy/gradient must match the optimized
+candidate before displaced tasks proceed.
+
+`cpd-corrected-anti1-hessian-batch-1-v1.service` is active. Verified service settings:
+2h59m45s runtime plus 15s shutdown grace inside the three-hour cap; four-core quota;
+8 GiB MemoryMax and no swap. Psi4 tasks use four threads/4 GiB, with existing Archive
+scratch directories before import. Batch one contains indices 0–104 (reference plus
+52 complete displacement pairs). The separate completion watcher is armed. Each
+task is independently audited and checkpointed; a failed task, a five-minute initial
+task stall allowance, sustained >2x baseline slowdown or insufficient boundary time
+stops the batch and preserves evidence. The allowed task timeout adapts to measured
+cost but never exceeds ten minutes. No automatic numerical retries or blind chain.
+
+On batch-one completion: acknowledge its token, inspect native outputs, run the frozen
+`corrected_core_hessian.py review ... --batch batch-1`, and record the actual resource,
+performance, necessity and alternative audit in `batch1_continuation_decision.json`,
+pinning `batch-1/batch_review.json` with `proceed: true` only if warranted. Then launch
+batch two using `prepare_corrected_core_hessian.py launch --batch batch-2`; no new user
+permission is needed for normal progression. Batch two evaluates indices 105–210 and
+assembles/audits the Hessian within its three-hour cap. All input bytes must match on
+reconstruction. Every native gradient table is cross-checked against QCSchema.
+
+Assembly requires all 211 task audits, a symmetric finite 108x108 Hessian and 102
+internal modes after rigid-body projection. Imaginary modes fail minimum certification;
+positive modes below 10 cm^-1 trigger numerical/mode review rather than automatic
+certification. Independently review `assembly/harmonic_audit.json` before downstream
+work. Keep all prior failures, gates and superseded-identity results accurately scoped.
+Continue the authorized campaign as evidence supports; stop for intervention needs or
+stalled progress. No cloud spending.
+
+**All-stage continuation authorized — 2026-10-10.**
+User instruction: `approved. continue through all stages as needed unless something
+clearly requires intervention or shows stalled progress.` This supersedes the
+stage-one-only and routine further-approval restrictions below. Continue corrected
+cis-anti-I through the proposed refinement, validation and preliminary thermal-study
+stages using finite task manifests and audits, without requesting permission at every
+normal stage boundary. Stop for clear intervention needs or stalled progress.
+
+`cpd-corrected-cis-anti-i-refinement-v1/campaign_authorization_20261010.json` records
+the expanded authorization and pins the original design and 211-task Hessian proposal.
+One native job at a time; normal 1–4-hour chunks and a global 15-hour service ceiling,
+with saved checkpoints, native evidence, performance/necessity audits and preserved
+failures. No cloud spending. Scientific evidence gates and honest review records remain
+required; continuation permission is not minimum certification or registry approval.
+The immediate allocation is the two three-hour Hessian batches, 105 then 106 tasks,
+with an audit before the second batch. New execution records will supersede status
+statements below; historical source files and approvals remain unchanged.
+
+**Corrected cis-anti-I stage one passed; Hessian approval pending — 2026-10-10.**
+Wake `ab61b089-2c2a-44d9-bd85-454dce0b2045` was acknowledged. Optimization completed
+with native return 0 in 1736.84 service seconds (28.95 minutes), using 30 new
+gradients plus the reused pilot gradient. The [completion handoff](audits/cpd_corrected_cis_anti_i_stage1_completion_20261010.json)
+pins the full native audit and next-stage proposal. Runtime root remains
+`.development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/`.
+
+`stage1_completion_audit.json` independently verifies every energy and all 3348
+gradient components against native tables, all 31 evaluated geometries, 31 accepted
+checkpoints and 31 ASE trajectory frames. Final maximum/RMS atom gradients are
+6.5408e-6/2.5706e-6 hartree/bohr, below the 1.5e-5/1e-5 limits. All four corrected
+stereocenters and native electronic convergence pass. Final optimized XYZ, binary
+geometry and restart checkpoint agree. Process peak RSS was 4.04 GiB. The initial
+startup failure remains preserved. This is an unconstrained stationary candidate,
+**not a certified minimum**; no Hessian or parameter/MD validation has run.
+
+`stationary_candidate_review/review_packet.json` binds the new exact geometry and
+atom map; the exported SDF agrees between RDKit and Open Babel on capped identity.
+It is pending human review and has no registry effect. Exact binary/XYZ coordinates
+remain authoritative over the rounded viewer SDF.
+
+The planning-only `hessian-preview-v1/` contains 211 generated gradient inputs:
+one reference and 105 +/- displacement pairs, three-point differences at 0.005 bohr.
+The reference exactly matches the optimized binary geometry, every displaced
+geometry retains identity, and pair midpoints match. No QM was executed. An initial
+overstrict keyword-equality check was preserved: Psi4 only disables orbital writing
+on displaced tasks; the subsequent audit verifies identical physical options.
+
+`hessian_stage2_proposal.json` requests two sequential three-hour allocations,
+105 then 106 tasks, keeping displacement pairs together. Measured mean gradient
+time 57.78 seconds predicts 3.39 native hours total; the slowest observed gradient
+with 50% headroom gives 5.33 hours within the six-hour reservation. Retain four
+threads, 4 GiB Psi4/8 GiB service memory and Archive scratch, with checkpoints per
+task and an audit before batch two. Include assembly/audit grace in batch two.
+Resolve imaginary or ambiguous modes explicitly; do not clip them or infer a global
+minimum. Only stage one was approved: **no Hessian job is queued**, and no fitting,
+boundary QM, MD, registry promotion or cloud spending is authorized by this closeout.
+
+**Corrected-core pilot passed; optimization active — 2026-10-10.**
+The corrected `pilot-v2` completed normally with one MP2 gradient in 58.45 native
+seconds. Reopening native output, exact coordinates and current definition passed
+SCF/response convergence and all four stereocenter checks. Response residual
+5.917e-11; maximum/RMS atom gradients 0.0938001/0.0408117 hartree/bohr: the static
+seed is not stationary. Process peak RSS 3.84 GiB; observed service peak 4.50 GiB,
+below its 8 GiB limit. Scratch was verified on Archive. Both pilot wake tokens
+(initial startup failure and subsequent successful gradient) were acknowledged.
+
+`pilot-v2/pilot_review_locked.json` and `pilot_continuation_decision.json` in the
+stage-one runtime root preserve the independent audit and the resource, necessity,
+alternative and performance decision. At the measured rate, 60 gradients project
+to 58.4 native minutes, or about 88 minutes with 50% headroom; neither predicts
+convergence. No extra thread benchmark or preoptimization was needed.
+
+`cpd-corrected-anti1-optimization-v1.service` is active with verified 4-hour,
+four-core-quota, 8 GiB and no-swap limits. The pilot gradient was reused at the
+identical seed geometry; the initial accepted checkpoint and the first new native
+QM evaluation are present. Every completed gradient is preserved; every accepted
+geometry has a hash-pinned checkpoint. Restart from that geometry requires fresh
+optimizer history, so no bitwise continuation is claimed. Hard limit: 60 new
+gradients, one attempt, no automatic continuation or second seed.
+
+On completion, inspect `optimization-service/status.json` and native outputs, then
+run `optimization/corrected_core_stage1.py review` using the pinned Sella runtime
+and `NADOC_REPO_ROOT=/home/jojo/Work/NADOC`. Audit all completed evaluations,
+accepted checkpoints, final native and independent force convergence, and actual
+performance. The separate completion watcher is armed. A user pause is recorded
+in the stage-one root's `pause.json` and honored before the next gradient; preserve
+any in-flight partial output if the service must be stopped. Do not launch a
+Hessian, fit or MD: only stage one is approved. Minimum certification and registry
+gates remain pending. No cloud spending.
+
+**Corrected cis-anti-I stage one authorized and launched — 2026-10-10.**
+User instruction: `Ok, proceed with the first stage.` This authorizes the proposed
+single-gradient pilot (at most 1 hour) followed, only after its audit passes, by one
+unconstrained core optimization (at most 4 hours and 60 new gradients). It does not
+authorize the Hessian, reference-data/fitting or MD stages. The proposal below remains
+an immutable review record; fresh per-job authorizations pin it and the executed code.
+
+Runtime root: `.development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/`.
+`pilot/` and `pilot-service/` preserve an import-time failure: `PSI_SCRATCH` initially
+named a directory not yet created. No native QM evaluation started. The recorded
+`pilot_startup_failure_audit.json` admits a corrected startup in `pilot-v2/`; Psi4
+imports using an existing Archive directory, then uses an explicit job scratch path.
+The failed wake was acknowledged. No native numerical retry or budget expansion.
+
+`cpd-corrected-anti1-pilot-v2.service` is running, with native SCF iterations observed.
+Verified service limits: 1 hour, CPU quota 4 cores, MemoryMax 8 GiB, no service swap.
+Psi4 uses 4 threads/4 GiB. The separate completion watcher is armed for the current
+thread. New source-pinned checks reconstruct full-graph CIP S/R/S/R, verify exact anti
+crosslinks and reject reflected geometry, exchanged H6 atoms and broken bonds.
+The analytic optimizer/unit preflight passed without QM; 19 targeted tests passed.
+
+On pilot wake, inspect `pilot-v2-service/status.json`, native output and
+`pilot-v2/independent_review.json`; re-run the frozen worker's `review` command.
+Record the resource/performance/necessity decision in `pilot_continuation_decision.json`
+before preparing or launching optimization. Preserve all failures. Do not infer a
+minimum from optimizer success, transfer old anti approvals, or start later stages.
+No cloud spending.
+
+**Corrected cis-anti-I refinement proposed — 2026-10-10.**
+The user requested refinement with an approval and compute schedule first. The
+[source-pinned plan](audits/cpd_corrected_cis_anti_i_refinement_plan_20261010.json)
+proposes a fresh corrected 36-atom core pilot: one MP2 gradient capped at 1 hour,
+then one optimization capped at 4 hours/60 new gradients only if the pilot audit
+passes. Initial reservation: at most 5 sequential native CPU hours, four threads,
+4 GiB Psi4 memory and an 8 GiB service limit, subject to current memory headroom.
+All scratch and native outputs go to Archive. No new QM/MD or service was launched;
+the initial compute tranche awaits the requested plan approval.
+
+Subsequent allocations require the measured pilot audit and a finite target manifest:
+local harmonic-minimum certification, fresh atom-mapped identity and boundary-model
+reviews, corrected QM references and fitting, prospective parameter checks, native
+NAMD checks, then a matched finite DNA-context comparison. The plan explicitly flags
+the differing dipole conventions in the generic workflow and old preliminary anti
+policy for resolution before charge fitting. Old anti fits/trajectories remain scoped
+to their superseded identity; undamaged controls are reusable only after a comparability
+audit. Optimizer convergence does not certify a minimum, and neither this plan nor
+compute approval passes a registry gate.
+
+One native job at a time, normally 1–4 hours, with an audit before each continuation;
+the global service ceiling is 15 hours, strictly below the user's 16-hour limit.
+Later MD is proposed as 1 ns/2-hour jobs with 100 ps restart checkpoints. No blind
+retry or service chain. A temperature campaign will receive its own concrete schedule
+after refinement and context validation. No cloud spending.
+
+**Geometric-opportunity priorities — 2026-10-10.**
+The [priority audit](audits/cpd_isomer_priority_20261010.json) uses the three corrected
+200-frame pilots, all competing TT pairs, 27 screening windows and distinct-pair/time-block
+checks. Primary counts (intended/competing): cis-syn-I 2/5907, cis-syn-II 10/252,
+trans-syn-I 1/13, trans-syn-II 17/10, cis-anti-I 514/87, cis-anti-II 1/35,
+trans-anti-I 0/3, trans-anti-II 0/0. Counts are correlated pair-frame opportunities,
+not independent reactions or a pooled equilibrium population.
+
+For the campaign including competing products: corrected cis-anti-I first, cis-syn-II
+second, trans-syn-II third. Cis-anti-I supplies 94.3% of primary intended opportunities
+and 80.6–96.9% across the 24HB sensitivity grid. Cis-syn-II has broader, persistent
+competing-product coverage and a capped-core reuse route. Trans-syn-II is the next trans
+candidate; its intended opportunities exceed cis-syn-II at the primary cutoff, but vanish
+at 3.6 Å. For intended welds alone, swap priorities two and three. Cis-anti-II is mostly
+one late interstrand hotspot; confirm it before full refinement. Trans-syn-I and both
+trans-anti variants are lower priority. Retain cis-syn-I as the existing preliminary
+reference. This is a provisional research ranking, not a new simulation launch, minimum
+certification or release. No new MD/QM or cloud spending.
+
+
+**Anti detection repaired; prior anti identity superseded — 2026-10-10.**
+The [correction audit](audits/cpd_anti_detection_correction_20261010.json) supersedes
+the mapping diagnosis below. Syn-to-anti bond edits now preserve tetrahedral neighbor
+parity, and absolute labels use RDKit's accurate recursive CIP implementation.
+The initial C6-only counterfactual was insufficient: it restores coverage while
+swapping anti cis/trans meanings. Correct registered identities instead change the
+endpoint-1 C5 signed sentinel in all four anti definitions, with freshly constructed
+coordinates and corrected C6 CIP labels. Ordered literature C5 labels are retained.
+
+All eight planar precursor cases now pass unique identity **and methyl cis/trans**
+checks. RDKit/Open Babel agree on static capped structures and six distinct products,
+including trans-anti I/II symmetry collapse. These are identity checks, not minimum
+certification. Corrected anti chemical-definition release gates are pending; old
+human-review and QM minimum receipts remain explicitly attached to the old hashes.
+No charges, parameter values, native simulation files, or historical receipts were changed.
+
+Cached unwelded trajectories were reclassified with all competing T–T pairs retained.
+At the exploratory primary window, the 2HB-2xT pilot has 7 cis-anti-I compatible
+pair-frame samples; the 24HB-2xT pilot has 594 cis-anti-I, 36 cis-anti-II and 3 trans-anti-I
+samples (508 anti samples at intended welds). Syn descriptors are unchanged. These
+are correlated geometric opportunities, not reaction events or calibrated rates.
+Outputs: `.development-artifacts/cpd-isomer-formation-corrected-v1/`.
+
+Read-only inspection of all three archived anti final binary restart states confirms
+that each fails corrected endpoint-1 C5 identity. The v17 package remains preserved
+for the stored model; it must not be presented as corrected cis-anti-I validation.
+Further anti production requires a separate parameter/geometry requalification decision.
+Detection is usable now without new MD/QM. No cloud spending.
+
+
+**Subsequent reactant-to-product mapping audit — 2026-10-10.**
+The user requested isomer-resolved formation screening from unwelded trajectories,
+including competing thymine pairs. A read-only prototype analyzed 200 frames each
+from two 2HB jobs and one 24HB job, then failed an independent planar-precursor
+mapping check: all four syn face combinations map, but none of the four anti face
+combinations does. An isolated endpoint-1 C6 sign reversal in the anti definitions
+makes all eight combinations map. A separate RDKit replay of the original
+syn-to-anti bond edit shows odd neighbor-order permutations at C6/C5T/C6T while
+chiral tags are retained. This is a chemical-identity/precursor-mapping discrepancy,
+not evidence that anti products rarely form. See the
+[source-pinned audit](audits/cpd_isomer_formation_feasibility_20261010.json) and
+[analysis method](kimmdy_design_analysis.md#experimental-isomer-resolved-formation-screen-2026-10-10).
+
+All pilot outputs and initial implementation failures are preserved. Each completed
+pilot has a separate qualification review marking its eight-isomer ranking unusable;
+the new default preflight stops further ranking. No native trajectory, prior receipt,
+chemical definition, parameter file or registry gate was changed. No new MD/QM or
+cloud spending occurred. Prior execution/restart/finite-context checks below remain
+evidence for the stored model, not resolution of this newly found identity issue.
+Before further anti production qualification or formation ranking, independently
+reconstruct/audit all four centers and assess which existing anti assets are affected.
+
+**Six-replica validation and research restart package complete — 2026-10-10.**
+Control3 wake92598d9d-796f-4f2f-8e60-89e5e5579baa acknowledged; native
+return0,10ns,32729.21service seconds (9.09h) within15h. Independentv9auditor
+verified1000cells,100restart triples,30stratified chemistry frames,10binary
+endpoints and1010worker records. Five earlier audits retained:all60ns complete.
+All-six fixed28contact matched mean differences−0.305,+0.071,+0.019 show
+replica/initial-state variability,not consistent causal lesion effect. No selective
+extensions or refit. No more simulations automatically admitted.
+
+`campaign_review_v17.json`,`replicate_comparison_v17.json` and append-only
+`provenance_errata_v17.json` record physical/structural interpretation,actualv3
+SLSQP method,timestamp and source-QM versusMM constraint crosswalk. Historical
+failures,pauses,raw outputs and original metadata remain unchanged.
+Portable `cpd-anti-restart-package-v17.tar.gz` includes allsix final restart states
+and native validation receipts. Allsix relocated static NAMD checks passed;
+zero additional MD. Standalone runner defaults static,allows at most1ns/2h per
+explicit invocation,requires new output and input hashes,and never chains.
+`campaign_closeout_v17.json` pins bundle/manifest/validation. Package review
+field pending in earlier campaign_review is superseded only by this closeout.
+See [final report](cpd_anti_validation_closeout_20261010.md). This completes the
+authorized preliminary validation/packaging endpoint,not full production readiness,
+equilibrium,minimum certification,isoform transfer or app/registry release.
+No cloud spending; further simulation needs a specified scientific question.
+
+**Anti3 aggregate10ns audited — 2026-10-09 MDT; control3 service active.**
+Wakec8c45842-ea4d-4cc6-931a-6780273f2261 acknowledged. Continuation0.96ns
+finished5530000 normally:3064.48native seconds,3314.38service seconds,within2h.
+`audit_cube_anti3_v16.py` verifies prior pins plus996 completed-chunk DCD cells,
+99 checkpoint triples,30 stratified chemistry frames,10 binary endpoints and
+CPU/native restart/endpoint energies. Prior4partial frames and91 checkpoint
+sets revalidated through their pinned audit. Combined1000 unique10ps frames,
+100 distinct periodic checkpoint triples;1006 worker geometry records plus4
+partial audit frames pass. Not independent all-frame chemistry replay. No tail
+beyond paused checkpoint5050000 credited; all original raw evidence preserved.
+
+Late5ns299.223K,+1.313bar,density1.022912g/cm3,149.838mM addedNaCl; density
+halfchange-0.00002698g/cm3. Minimum worker image39.250A,max endpoint void3.456A.
+Crossbond distances~1.55–1.58A. Measured9.96ns31745.50native seconds=27.11ns/day;
+interrupted0.04ns has no terminal WallClock,so no exact full10ns runtime claim.
+
+Fixed28contact anti3 blockretention0.740–0.814,prepared0.786,closer to anti2
+0.744–0.813 thananti1 0.464–0.605. Keep all outcomes and prepared baselines;
+first two pair orderings reverse. No causal lesion,equilibrium,convergence or
+forcefield-quality inference. `replicate_comparison_v16.json` retains five
+completed trajectories. Anti3 `validation/completion_review.json` pins aggregate
+assessment,audit,performancev16 and comparison.
+
+Control3 service `cpd-anti-cube-validation-control-3-v6` is active with verified
+15h systemd cap and separate watcher armed for current thread. Wake token
+92598d9d-796f-4f2f-8e60-89e5e5579baa; service directory
+`cpd-anti-cube-validation-control-3-service-v6`. Worker rechecks inputs before
+native dynamics; running supervisor alone does not establish native progress.
+
+Five of six10ns validations audited. Control3 admitted with15h cap,1ns audits,
+100ps restart triples and unchanged qualified method. Conservative13.93h budget
+fits; no tuning detour justified. Stop on failure,insufficient boundary time or
+>20percent slowdown. Prior anti2bad_any_cast remains unresolved; no retry loop.
+After control3 completion independently audit with `audit_cube_replica_v9.py`
+(casecontrol,replica3),review matchedpair3 and allsix structural/physical/
+performance evidence,then complete provenance errata and portable restartable
+package. No further simulation is automatically justified by completion.
+Minimum certification,full readiness and equilibrium remain false. No cloud.
+
+**Resumed — 2026-10-09; anti3 continuation service active.**
+Latest user instruction `resume` supersedes the pause below. New v15continuation
+will restore checkpoint5050000 for480000steps (0.96ns) to5530000, with fresh2h
+cap,full coor/vel/XSC and declared RNG seed116037. No bitwise Langevin continuity
+claim. Original interrupted output and pause receipts remain unchanged.
+Two targeted tests passed: exact interval,checkpoint-energy rejection before
+dynamics,and refusal to overwrite. Require CPU/native checkpoint potential
+agreement before dynamics, then full aggregate review before control3.
+Pre-resume audit passed:904 DCD cells/observables,91 checkpoint triples,
+27 stratified completed-segment chemistry frames and4 partial frames,plus
+checkpoint geometry. Minimum sampled image41.952A; completed worker gates pass.
+Service `cpd-anti3-resume-v15` active with verified2h cap; separate watcher armed
+for current thread,token c8c45842-ea4d-4cc6-931a-6780273f2261. Archive service
+`cpd-anti3-resume-service-v15` retains worker,launcher,audit and execution plan.
+Plan `anti3_resume_plan_v15.json`; output
+`anti/replica-3/validation-resume-v15/segment-10-remainder`. Worker repeats final
+input checks before native dynamics; running status alone is not MD progress.
+On wake aggregate900 original completed frames,4 retained partial frames and96
+continuation frames. Audit complete native/cell/restart evidence and structural/
+physical/performance results before writing anti3 completion_review and admitting
+control3. Preserve all failures; no cloud spending or readiness promotion.
+
+**Historical pause — 2026-10-09; superseded by explicit resume above.**
+Stopped anti3 completion watcher first,then worker cgroup; both inactive/dead,
+no NAMD remains. This pause supersedes prior continuation/admission instructions;
+delayed wakes do not authorize restart. Nine1ns segments passed worker checks;
+full independent anti3 audit pending. Segment10 interrupted. Verified complete
+checkpoint5050000 =9.04ns;480000steps (0.96ns) remain to5530000. Full coor/vel/
+XSC finite,cell/DCD match and chemistry/water/image gates pass. Last log5073000
+is uncheckpointed tail,retained but uncredited. Hashes and evidence recorded in
+`campaign_pause_20261009.json` and service `user_pause_20261009.json`.
+Historical supervisor running status is stale. Preserve old watcher and output;
+new bounded continuation only after explicit resume and audit.
+See [resume handoff](cpd_resume_handoff_20261009.md). Four complete audited
+replicas retained; no cloud spending,commit or readiness promotion.
+
+**Control2 aggregate10ns audited — 2026-10-09; anti3 service active.**
+Wake2701d3c9-26d0-4c85-9a8b-ad2ae774e821 acknowledged. The0.86ns
+continuation completed normally at5530000:2816.28native seconds,3066.45service
+seconds,within2h cap. CPU checkpoint energy and native restart energy pass.
+Original paused segment10 and its uncredited tail are preserved.
+
+Auditor `audit_cube_control2_v14.py` revalidates pinned9.14ns evidence and
+replays986 completed-chunk DCD cells,98 periodic triples,30 stratified chemistry
+frames and10 binary endpoints. Combined1000 unique10ps frames and100 periodic
+triples,without duplicate endpoints or discarded tail;996 completed worker
+geometry records plus14 partial audit frames pass. Not an independent all-frame
+chemistry replay. Late5ns statistics use200 contiguous50ps blocks across the
+full10ns,avoiding truncated-block bias at the resume boundary. Late5ns299.209K,
++0.898bar,density1.022921g/cm3,149.839mM addedNaCl; density half-change
+-0.00009336g/cm3. Minimum worker image37.018A,max endpoint void3.372A.
+Measured9.86ns native31371.10s=27.16ns/day; interrupted0.14ns has no terminal
+WallClock,so no exact complete10ns runtime claimed.
+
+Matched28contact block retention:control2 0.686–0.726,anti2 0.744–0.813.
+Prepared fractionscontrol2 0.571,anti2 0.821. Ordering reverses pair1; initial
+state and replica variability prevent causal lesion or forcefield conclusions.
+Control2 target cross-distances increase from~5.6A to~12A; retain this structural
+change in final interpretation. No selective reruns,extensions or refitting.
+`matched_pair2_comparison_v14.json` and originalpair1 evidence retained.
+
+Anti3 service `cpd-anti-cube-validation-anti-3-v6` is active with verified15h
+systemd cap and separate completion watcher armed for the current thread.
+Wake token4e06a1c3-608f-4ada-b44a-49942b118ca2; service directory
+`cpd-anti-cube-validation-anti-3-service-v6`. Worker repeats final input checks
+before native dynamics; supervisor running alone is not native progress evidence.
+Four restart-wrapper tests passed.
+
+Control2 `validation/completion_review.json` pins aggregateassessment,audit and
+performancev14. Four of six registered10ns runs now complete. Admit anti3 only,
+then independently audit native outputs and structural/physical/performance
+evidence before control3. Conservative13.93h estimate fits15h hardcap; retain
+p4,2fs,fullXSC,PME144cube,1ns audits,100ps restart sets. Existing worker stops
+on failure,insufficient boundary time or>20percent native slowdown. Earlier
+anti2 bad_any_cast is unresolved; recurrence requires investigation,no retry loop.
+After allsix,complete matched interpretation,provenance errata and restartable
+package; full readiness,minimum and equilibrium claims remain false. No cloud.
+
+**Resumed — 2026-10-09; control2 continuation service active.**
+The user explicitly said `resume.` The October8 pause remains historical evidence.
+Control2 continuation is admitted from checkpoint5100000, for430000steps (0.86ns),
+under a new2h plan and fresh output directory. No old deadline or watcher revived.
+New wrapper `resume_control2_v13.py` checks CPU and native initial energy against
+the saved checkpoint row, preserves full coor/vel/XSC and declares seed105027;
+no bitwise Langevin continuity claim. Tests cover exact continuation interval,
+checkpoint-energy failure stopping before dynamics, and refusal to overwrite.
+Pre-resume audit passed:914 DCD cells/observables,92 periodic restart triples,
+27 stratified completed-segment chemistry frames and all14 partial frames;
+all909 completed worker geometry records pass. Minimum sampled image41.9745A.
+Original audit report retained with explicit correction of its textual checkpoint
+count (91 to measured92); checkpoint records themselves were correct.
+Four targeted tests passed. Service `cpd-control2-resume-v13.service` is active,
+with verified systemd2h cap and external watcher armed for the current thread.
+Service directory `cpd-control2-resume-service-v13` contains archived worker,
+launcher,audit and execution plan. Wake token2701d3c9-26d0-4c85-9a8b-ad2ae774e821.
+Worker performs final pinned-input admission before CPU checkpoint energy check
+and native continuation; service running alone does not establish native progress.
+Plan `control2_resume_plan_v13.json`; new output
+`control/replica-2/validation-resume-v13/segment-10-remainder`. Historical pause,
+old interrupted output,uncredited tail and earlier failures remain preserved.
+After completion, independently aggregate original segments01–09,14 retained
+segment10 frames, and86 continuation frames (1000 unique10ps frames total).
+Review physical/structural/performance and matched28contacts with anti2 before
+writing pinned aggregate assessment/audit/performance and control2 completion
+review; only then admit anti3, followed by control3 with its own review.
+No equilibrium,minimum or full NAMD readiness certification; no cloud spending.
+
+**Historical pause — 2026-10-08; superseded by 2026-10-09 resume above.**
 Stopped control2 completion watcher first,then entire NAMD service. Both units
 inactive/dead; no NAMD remains. This pause supersedes all earlier next-job
 admissions and wake instructions. Do not continue from a delayed completion wake.

@@ -1,0 +1,490 @@
+{
+  "at_local": "2026-10-11T12:51:02.343699-06:00",
+  "scope": "Read-only development storage inventory; excludes main user workspace and all symlink targets.",
+  "filesystems": [
+    {
+      "path": "/",
+      "size_bytes": 234039422976,
+      "available_bytes": 1678069760,
+      "free_bytes": 13641220096,
+      "device": 2050
+    },
+    {
+      "path": "/media/jojo/Archive",
+      "size_bytes": 7937303777280,
+      "available_bytes": 4171179737088,
+      "free_bytes": 4571274674176,
+      "device": 2064
+    }
+  ],
+  "caveats": [
+    "Not a deletion authorization. Recheck active references and hashes at execution time.",
+    "No large-file content hash or duplicate verification performed. Report uses allocated regular-file bytes, not apparent size; directory metadata is excluded.",
+    "Current-user process cwd/exe/open files/maps/arguments checked once. Absence is a snapshot, not proof of all dependencies; other-user processes were not inspected.",
+    "Hardlinks can lower reclaimed space; preserve links on relocation. Git-tracked files must be excluded from bulk relocation unless separately reviewed.",
+    "R groups have design-derived inputs or unclear ownership and are excluded from the strictly unrelated first cleanup batch."
+  ],
+  "inaccessible_own_processes": 3,
+  "preserved_active_paths": [
+    "/tmp/nadoc-steamvr-1000.log",
+    "/tmp/nadoc-alpine-worker-1000-17887adbbaaf"
+  ],
+  "excluded": [
+    "/media/jojo/Archive/NADOC_archive/runtime/workspace",
+    "/home/jojo/Work/NADOC/workspace",
+    "Current CPD calculation, native outputs, pinned interpreter/runtime and checkpoints",
+    "/home/jojo/.cache/nadoc-qm/sella-runtime-v1",
+    "/home/jojo/miniforge3/envs",
+    "Installed toolchains, unrelated applications, personal files, Git object databases"
+  ],
+  "archive_destination_base": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/system-disk-relocation-20261011",
+  "proposed_move_policy": "After approval: copy with metadata, verify file counts and SHA-256, preserve failure/provenance files, repair live references or retain aliases, then remove source. Do not rewrite historical hash manifests.",
+  "no_moves_or_deletions_performed": true,
+  "groups": [
+    {
+      "id": "A1",
+      "recommendation": "Delete disposable scratch after approval",
+      "ownership": "CPD development",
+      "note": "October 3 integral scratch. Keep the two output.default.*.180.npy wavefunction snapshots and all native/failure evidence on Archive. No current process reference found in the snapshot; recheck before action.",
+      "regular_files": 4,
+      "allocated_bytes": 3778637824,
+      "single_link_bytes": 3778637824,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 4,
+      "representative_paths": [
+        "/home/jojo/.cache/nadoc-qm/cpd-anti-competing-qm-v3-20261003/plus30-mm-trial7/psi.1166741.35",
+        "/home/jojo/.cache/nadoc-qm/cpd-anti-competing-qm-v3-20261003/plus30-mm-trial7/psi.1166741.181",
+        "/home/jojo/.cache/nadoc-qm/cpd-anti-competing-qm-v3-20261003/minus22p5-mm-model61/psi.1166742.35"
+      ]
+    },
+    {
+      "id": "A2",
+      "recommendation": "Delete after approval, or archive if trace history is wanted",
+      "ownership": "VR development trace",
+      "note": "Final record is process_end status=ok; last modified October 9. No truncation performed.",
+      "regular_files": 1,
+      "allocated_bytes": 3784814592,
+      "single_link_bytes": 3784814592,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 1,
+      "representative_paths": [
+        "/tmp/nadoc-vr-1000.log"
+      ]
+    },
+    {
+      "id": "A3",
+      "recommendation": "Delete downloaded package archives after approval",
+      "ownership": "Development tooling cache",
+      "note": "Downloaded installers only. Excludes unpacked package directories and live environments.",
+      "regular_files": 507,
+      "allocated_bytes": 3567984640,
+      "single_link_bytes": 3567984640,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 507,
+      "representative_paths": [
+        "/home/jojo/miniforge3/pkgs/libtiff-4.7.2-h9d88235_0.conda",
+        "/home/jojo/miniforge3/pkgs/xorg-libxtst-1.2.5-hb9d3cd8_3.conda",
+        "/home/jojo/miniforge3/pkgs/numpy-2.4.3-py313hf6604e3_0.conda"
+      ]
+    },
+    {
+      "id": "A4",
+      "recommendation": "Delete repodata cache after approval",
+      "ownership": "Development tooling cache",
+      "note": "Conda index cache; recreatable by future package operations. Recheck no package operation is active.",
+      "regular_files": 20,
+      "allocated_bytes": 1719730176,
+      "single_link_bytes": 1719730176,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 1,
+      "representative_paths": [
+        "/home/jojo/miniforge3/pkgs/cache"
+      ]
+    },
+    {
+      "id": "A5",
+      "recommendation": "Delete download/wheel cache after approval",
+      "ownership": "Development tooling cache",
+      "note": "Does not remove installed packages. Keep active runtime environments intact.",
+      "regular_files": 1408,
+      "allocated_bytes": 835518464,
+      "single_link_bytes": 835518464,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 2,
+      "representative_paths": [
+        "/home/jojo/.cache/pip/http-v2",
+        "/home/jojo/.cache/pip/wheels"
+      ]
+    },
+    {
+      "id": "M1",
+      "recommendation": "Archive recovery files; preserve every byte",
+      "ownership": "Git recovery material",
+      "note": "Recovered blobs include large trajectory-sized objects and may contain uncommitted code. Do not delete or run git gc/prune as part of this request. This is separate from .git/objects.",
+      "regular_files": 678,
+      "allocated_bytes": 5150064640,
+      "single_link_bytes": 5150064640,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 1,
+      "representative_paths": [
+        "/home/jojo/Work/NADOC/.git/lost-found"
+      ]
+    },
+    {
+      "id": "M2",
+      "recommendation": "Archive with compatibility paths",
+      "ownership": "PEG development simulation evidence",
+      "note": "Retain native outputs, failures and restarts. Some code/viewer readers reference this tree; update live readers or preserve aliases after verified copy.",
+      "regular_files": 979,
+      "allocated_bytes": 1669132288,
+      "single_link_bytes": 1669132288,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 1,
+      "representative_paths": [
+        "/home/jojo/Work/NADOC/experiments/peg_chudoba/runs"
+      ]
+    },
+    {
+      "id": "M3",
+      "recommendation": "Archive isolated experiment job trees",
+      "ownership": "Synthetic sweep development workspaces",
+      "note": "Experiment driver constructs fresh synthetic bundles. These are separate from the main user workspace. Preserve managed metadata inside the isolated experimental workspaces and repair archive mappings.",
+      "regular_files": 89,
+      "allocated_bytes": 5130031104,
+      "single_link_bytes": 5130031104,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 2,
+      "representative_paths": [
+        "/home/jojo/Work/NADOC/experiments/exp31_skip_twist_curvature_sweep/ws",
+        "/home/jojo/Work/NADOC/experiments/exp31_skip_twist_curvature_sweep/results/ligation/ws"
+      ]
+    },
+    {
+      "id": "M4",
+      "recommendation": "Archive portability-test package if still needed",
+      "ownership": "CPD development restart test",
+      "note": "Retain until compared with the canonical restart package; no assumption of duplicate content.",
+      "regular_files": 60,
+      "allocated_bytes": 190496768,
+      "single_link_bytes": 190496768,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 1,
+      "representative_paths": [
+        "/tmp/cpd relocated package v17"
+      ]
+    },
+    {
+      "id": "R1",
+      "recommendation": "Review scope, then archive retained captures; delete only confirmed redundant captures",
+      "ownership": "Development captures; some use copies of workspace user designs",
+      "note": "Separated from strictly unrelated candidates because campaign manifests reference workspace/24hb_0xT.nadoc. Original designs and main workspace jobs are excluded. Preserve failed-run evidence; no duplicate check yet.",
+      "regular_files": 12900,
+      "allocated_bytes": 18466496512,
+      "single_link_bytes": 18466496512,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 47,
+      "representative_paths": [
+        "/tmp/nadoc-bead-slab-20261006",
+        "/tmp/nadoc-bend-axis-demo-20261008",
+        "/tmp/nadoc-bend-axis-review-20261008"
+      ]
+    },
+    {
+      "id": "R2",
+      "recommendation": "Review scope; archive rather than delete",
+      "ownership": "Design-derived parameterization research",
+      "note": "Memory records the 1T parameterization as abandoned May 6; checkpoint retained. Input is a named user design, so exclude from the first cleanup batch unless this research output is explicitly included.",
+      "regular_files": 485,
+      "allocated_bytes": 13171802112,
+      "single_link_bytes": 13171802112,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 1,
+      "representative_paths": [
+        "/home/jojo/Work/NADOC/runs/3NN_opt2_bundle_params"
+      ]
+    },
+    {
+      "id": "R3",
+      "recommendation": "Review scope; archive rather than delete",
+      "ownership": "Design-derived parameterization research",
+      "note": "Completed 0T parameterization, source for existing stiffness parameters. Preserve provenance, results and restarts; separate from managed workspace jobs.",
+      "regular_files": 303,
+      "allocated_bytes": 4984209408,
+      "single_link_bytes": 4984209408,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 1,
+      "representative_paths": [
+        "/home/jojo/Work/NADOC/runs/10hb_bundle_params"
+      ]
+    },
+    {
+      "id": "R4",
+      "recommendation": "Review scope; archive untracked bulk outputs with aliases",
+      "ownership": "Design-derived parameterization research",
+      "note": "Current disk contains trajectories despite older memory claiming they were deleted. Contains tracked small source/configuration artifacts; do not move the whole tree blindly.",
+      "regular_files": 384,
+      "allocated_bytes": 6287667200,
+      "single_link_bytes": 6287667200,
+      "tracked_files": 70,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 1,
+      "representative_paths": [
+        "/home/jojo/Work/NADOC/runs/crossover_parameterization"
+      ]
+    },
+    {
+      "id": "R5",
+      "recommendation": "Review design association; archive bulk evidence after approval",
+      "ownership": "Isolated development experiment with design-derived or unconfirmed inputs",
+      "note": "Preserve small tracked reports/code, failed outputs, input maps and checkpoints. Review runtime references and retain compatibility paths; exclude main user workspace.",
+      "regular_files": 90,
+      "allocated_bytes": 7163019264,
+      "single_link_bytes": 7163019264,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 1,
+      "representative_paths": [
+        "/home/jojo/Work/NADOC/experiments/exp25_full_origami_relaxation/results/runs"
+      ]
+    },
+    {
+      "id": "R6",
+      "recommendation": "Review design association; archive bulk evidence after approval",
+      "ownership": "Isolated development experiment with design-derived or unconfirmed inputs",
+      "note": "Preserve small tracked reports/code, failed outputs, input maps and checkpoints. Review runtime references and retain compatibility paths; exclude main user workspace.",
+      "regular_files": 630,
+      "allocated_bytes": 1926705152,
+      "single_link_bytes": 1926705152,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 1,
+      "representative_paths": [
+        "/home/jojo/Work/NADOC/experiments/exp49_softstart_obsolescence/runs"
+      ]
+    },
+    {
+      "id": "R7",
+      "recommendation": "Review design association; archive bulk evidence after approval",
+      "ownership": "Isolated development experiment with design-derived or unconfirmed inputs",
+      "note": "Preserve small tracked reports/code, failed outputs, input maps and checkpoints. Review runtime references and retain compatibility paths; exclude main user workspace.",
+      "regular_files": 1263,
+      "allocated_bytes": 1359405056,
+      "single_link_bytes": 1359405056,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 1,
+      "representative_paths": [
+        "/home/jojo/Work/NADOC/experiments/exp29_md_prep_relaxation/runs"
+      ]
+    },
+    {
+      "id": "R8",
+      "recommendation": "Review design association; archive bulk evidence after approval",
+      "ownership": "Isolated development experiment with design-derived or unconfirmed inputs",
+      "note": "Preserve small tracked reports/code, failed outputs, input maps and checkpoints. Review runtime references and retain compatibility paths; exclude main user workspace.",
+      "regular_files": 35,
+      "allocated_bytes": 806748160,
+      "single_link_bytes": 806748160,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 1,
+      "representative_paths": [
+        "/home/jojo/Work/NADOC/experiments/exp33_md_twist_validation/ws"
+      ]
+    },
+    {
+      "id": "R9",
+      "recommendation": "Review design association; archive bulk evidence after approval",
+      "ownership": "Isolated development experiment with design-derived or unconfirmed inputs",
+      "note": "Preserve small tracked reports/code, failed outputs, input maps and checkpoints. Review runtime references and retain compatibility paths; exclude main user workspace.",
+      "regular_files": 129,
+      "allocated_bytes": 504418304,
+      "single_link_bytes": 504418304,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 1,
+      "representative_paths": [
+        "/home/jojo/Work/NADOC/experiments/exp50_vacuum_on_curved/runs"
+      ]
+    },
+    {
+      "id": "R10",
+      "recommendation": "Review design association; archive bulk evidence after approval",
+      "ownership": "Isolated development experiment with design-derived or unconfirmed inputs",
+      "note": "Preserve small tracked reports/code, failed outputs, input maps and checkpoints. Review runtime references and retain compatibility paths; exclude main user workspace.",
+      "regular_files": 396,
+      "allocated_bytes": 485982208,
+      "single_link_bytes": 485982208,
+      "tracked_files": 99,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 1,
+      "representative_paths": [
+        "/home/jojo/Work/NADOC/experiments/exp23_periodic_cell_benchmark/results"
+      ]
+    },
+    {
+      "id": "R11",
+      "recommendation": "Review design association; archive bulk evidence after approval",
+      "ownership": "Isolated development experiment with design-derived or unconfirmed inputs",
+      "note": "Preserve small tracked reports/code, failed outputs, input maps and checkpoints. Review runtime references and retain compatibility paths; exclude main user workspace.",
+      "regular_files": 26,
+      "allocated_bytes": 535556096,
+      "single_link_bytes": 535556096,
+      "tracked_files": 22,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 1,
+      "representative_paths": [
+        "/home/jojo/Work/NADOC/experiments/exp53_extra_base_state_refinement/results"
+      ]
+    },
+    {
+      "id": "R12",
+      "recommendation": "Ownership review first; no blanket deletion",
+      "ownership": "Unconfirmed design-associated simulation export",
+      "note": "scadnano_import_gromacs input ownership is not established. Excluded from the strictly development-only cleanup total.",
+      "regular_files": 470,
+      "allocated_bytes": 803037184,
+      "single_link_bytes": 803037184,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 1,
+      "representative_paths": [
+        "/home/jojo/Work/NADOC/gromacs_run"
+      ]
+    },
+    {
+      "id": "R13",
+      "recommendation": "Ownership review first; archive only if old research output is included",
+      "ownership": "Separate CPD research project",
+      "note": "Outside NADOC; do not infer disposable status or change another project without review.",
+      "regular_files": 181,
+      "allocated_bytes": 2964381696,
+      "single_link_bytes": 2964381696,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 3,
+      "representative_paths": [
+        "/home/jojo/Work/CPD_2xT/Prep",
+        "/home/jojo/Work/CPD_2xT/meta",
+        "/home/jojo/Work/CPD_2xT/outputs_k0"
+      ]
+    },
+    {
+      "id": "R14",
+      "recommendation": "Review inactivity; archive evidence or delete browser cache after approval",
+      "ownership": "Development browser profiles and captures",
+      "note": "Some directories combine evidence with browser caches. No all-/tmp cleanup; active paths are blocked.",
+      "regular_files": 468,
+      "allocated_bytes": 835727360,
+      "single_link_bytes": 835727360,
+      "tracked_files": 0,
+      "active_references": [],
+      "read_errors": [],
+      "approval_status": "pending_user_review",
+      "action_performed": false,
+      "path_count": 305,
+      "representative_paths": [
+        "/tmp/nadoc-scry-3fb7w7ni",
+        "/tmp/nadoc-scry-5kg39ria",
+        "/tmp/nadoc-scry-browser-adBtHz"
+      ]
+    }
+  ],
+  "inventory": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/storage-review-20261011/inventory.json",
+    "sha256": "323432c3dc07e642ccaa2f8a054f0c6b75ee1fa40c65e1939222c8e775d036eb"
+  },
+  "review_table": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/storage-review-20261011/candidates.csv",
+    "sha256": "37437b6b2ba01edaa3026a62af76721f8aa89b01851b9d094c2a8bf79c7fc18a"
+  },
+  "archive_existing_storage": {
+    "development_artifacts_allocated_gib_approx": 839.053,
+    "cpd_trees_allocated_gib_approx": 121.749,
+    "corrected_campaign_allocated_gib_approx": 2.22,
+    "note": "Current run may change scratch usage. Existing archive data are preserved, not primary-disk cleanup candidates."
+  },
+  "additional_excluded_large_location": {
+    "path": "/home/jojo/Work/AutoNAMD/.git/objects",
+    "allocated_gib_approx": 10.745,
+    "reason": "Separate repository history, not a disposable simulation directory; no git pruning proposed."
+  }
+}

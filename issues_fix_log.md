@@ -20,7 +20,8 @@ regress anything).
 
 | # | Date | Issue / phase | What changed (module) | Repro pinned by | Wall-clock | main.js LOC Δ | tests added | edits-to-green | app-validated | regression caught |
 |---|------|---------------|------------------------|-----------------|-----------|---------------|-------------|----------------|---------------|-------------------|
-| 29 | 2026-10-13 | ISSUE-76 — assembly loading / Full GPU limits, PARTIAL | Compact/NDGB transport, readiness/source reuse, prepared CG primitives, semantic/lazy UI work and ordered saves | Exact seven-source parity, final 8,075 frontend/23 smoke, real-frame release benchmarks, frozen source/cleanup proof | completed implementation; limits retained | −2; thin wiring only | focused batches overlap; audit records counts | final frontend/smoke pass; backend retains identical baseline 22/4 failures, zero individual timing violations | Benchy 29.669 s import/33 ms Full; hinge 6.119 s/485 ms Full; load/GPU targets unmet | unique-source CPU, repeated-instance GPU, background readiness and screenshot timing are measured separately |
+| 30 | 2026-10-13 | ISSUE-80 — assembly loading / Full GPU limits, PARTIAL | Compact/NDGB transport, readiness/source reuse, prepared CG primitives, semantic/lazy UI work and ordered saves | Exact seven-source parity, final 8,075 frontend/23 smoke, real-frame release benchmarks, frozen source/cleanup proof | completed implementation; limits retained | −2; thin wiring only | focused batches overlap; audit records counts | final frontend/smoke pass; backend retains identical baseline 22/4 failures, zero individual timing violations | Benchy 29.669 s import/33 ms Full; hinge 6.119 s/485 ms Full; load/GPU targets unmet | unique-source CPU, repeated-instance GPU, background readiness and screenshot timing are measured separately |
+| 29 | 2026-10-11 | ISSUE-68 — shared headless/UI simulation ownership | `simulation_runtime.py` and seven native engine adapters | Separate-process native CanDo + HTTP poll/stop/resume/death; detached-worker and generation races | one headless parity follow-up | 0 | 25 lifecycle regressions | final 26 focused runtime/planning checks passed | native API and actual CanDo/SNUPI launches; readiness browser exercise also passed | yes — read-only legacy completed NAMD planning initially created a lock file; fixed and pinned |
 | 28 | 2026-10-08 | ISSUE-66 — obsolete loop/skip marks survived recomputation | `crud.py` clears active marks inside the revision-checked commit; new sweep strain synthesis uses stored spline intent | HC/SQ API tests seed obsolete end marks, recompute twice, undo/redo and revert | one sweep follow-up | 0 | 14 backend + 1 browser for sweep support and regression | focused suites green; browser reload fixture corrected to use complete export | yes — real Add Loops/Skips menu, undo/redo, full export/reload, screenshot inspected | yes — clearing only the calculation copy left old marks in the committed design |
 | 27 | 2026-10-08 | ISSUE-65 — native cluster history ownership | Optional creation snapshot and extracted replay helper; restore original v2 snapshot cluster baseline | Cluster replay regressions and all 98 saved-design history boundaries | focused generator refactor | 0 | 2 backend | boundary audit caught both ownership loss and missing original group | covered by generator app exercise | root cause: creation entries stored membership without parent/duplex ownership; restoring only generated groups also lost original snapshot membership |
 | 26 | 2026-10-07 | ISSUE-61 — pending-review regression failed on WSL and opened a durable incident | One test in `test_native_placement_vr_failure.py` stubs `_native_platform_reason`; runtime checks and placement code unchanged | Existing pending-review regression failed before / passed after; 18 VR-failure assertions and four platform cases passed | short focused follow-up | 0 | 0; existing regression corrected | first focused assertion run passed; retained gate required separate review | n/a, test-only; explicit review audit clear after recorded acknowledgement | yes — platform rejection occurred before the review check; original report and review retained |
@@ -74,7 +75,8 @@ multi-factor (CLAUDE.md's own warning). If the bug is a *class*, add a `LESSONS.
 
 | Issue | Root cause (5-Whys, one line) | Failed hypothesis (the "obvious fix" that was wrong, if any) | → LESSONS.md |
 |-------|-------------------------------|-------------------------------------------------------------|--------------|
-| ISSUE-76 (partial) | Cold display repeated work across native record expansion, JSON/gzip, hidden source readers, readiness assessment, primitive construction and eager maps → caches/scheduling were scoped to individual consumers instead of one versioned source lifecycle → first Full and representation saves still blocked after selection was fixed | A sub-millisecond CPU representation update was insufficient evidence: retained Full buffers do not prove Full drawing, backend save/readiness can still delay the gesture, and the initial runner omitted curved-cylinder slots; preserve the invalid run and require actual frame/triangle proof | `docs/audits/assembly_loading_performance_20261013.md` |
+| ISSUE-80 (partial) | Cold display repeated work across native record expansion, JSON/gzip, hidden source readers, readiness assessment, primitive construction and eager maps → caches/scheduling were scoped to individual consumers instead of one versioned source lifecycle → first Full and representation saves still blocked after selection was fixed | A sub-millisecond CPU representation update was insufficient evidence: retained Full buffers do not prove Full drawing, backend save/readiness can still delay the gesture, and the initial runner omitted curved-cylinder slots; preserve the invalid run and require actual frame/triangle proof | `docs/audits/assembly_loading_performance_20261013.md` |
+| ISSUE-68 | Process-local thread maps were treated as global ownership → UI polling orphaned live headless runners; child PIDs also missed preparation/inter-stage work, and stale status writes could overwrite a restart → shared kernel lease, workspace scope and generation checks now cover those boundaries | A private workspace hid the original polling symptom; it was not the lifecycle fix | `memory/project_simulation_runtime.md` |
 | ISSUE-66 | Recomputed marks were merged into the original design → its obsolete marks had never been cleared → clearing happened only on the temporary calculation copy; commit now replaces active marks atomically and rejects stale revisions | None; integration assertions exposed the calculation/commit mismatch | — |
 | ISSUE-61 | Gate test depended on the host platform → WSL returned plain-string 503 before the intended review check → structured-detail assertion failed → marked parent failure correctly latched the durable journal; isolate only the test's platform prerequisite and explicitly review the retained incident | Temporary incident-store leakage was considered, but source inspection showed intentional recording of the outer test failure in the runner's durable ledger | n/a; bounded test precondition fix, no placement change |
 | Alpine post-download feedback | Reconciliation saved `verified` and then synchronously scanned a 19.7 GB DCD before saving terminal job state → the UI continued showing the prior synthetic `running`/retry error for minutes → users had no evidence that local CPU-bound bookkeeping was active | Treating byte verification as the terminal UX state; the download was complete, but the job was not yet usable as fully finalized | `memory/project_alpine_cluster_submission.md` |
@@ -429,6 +431,29 @@ path end in Full/Cylinders/atomistic/surface displays; reverse playback retracts
 from the end. Empty initial surface preparation is handled explicitly. Headed
 preview and decoded video verified; source geometry/topology stays unchanged.
 
+2026-10-11 — ISSUE-69 intake: isolated untouched HEAD reproduces the Extrude
+menu-spacing failure seen while validating VR Join. No fix attempted; root cause
+remains the mismatch between Extrude bounds and the existing rail oracle.
+Baseline proof is retained in `.development-artifacts/vr-join-20261011/`; exact
+generated baseline sources/binary were removed after verification.
+
+2026-10-11 — ISSUE-70 intake: the headless braced-corner investigation reproduced
+Free Join selecting extra adjacent side attachments whose connector-only cycle
+cannot be nicked without breaking requested joins. Native realization correctly
+rejects the set; precursor matching lacks that feasibility constraint. Same-pose
+diagnostic subsets and a narrower-reach public Join succeed. No product fix or
+scientific rule change attempted. Evidence and reproducible authored fixtures:
+`.development-artifacts/braced-corner-20261011/`. `main.js` delta 0.
+
+2026-10-11 — ISSUE-71 intake: strict native export/import validation of the braced
+corner preserves topology and rigid poses but changes flexible-connector anchor
+orientation and bead positions (maximum observed 1.97979197 nm across two
+processes; eight connector nucleotides, zero nonconnector nucleotides). Direct model
+serialization had passed; exercising the real import path exposed the defect.
+Before/imported models and per-nucleotide evidence are retained under the same
+artifact root. No geometry repair attempted; native persistence remains an
+explicit failed gate for promoting this prototype to a reusable primitive.
+
 2026-10-12 — ISSUE-72 fixed: range configuration now publishes atomically after
 clearing old playback state. The new acknowledgement can no longer carry the
 previous range. Fifteen focused trajectory/bridge tests pass, including a new
@@ -451,7 +476,7 @@ background rows in hit testing. All ten numeric keys have real-ray regression
 coverage. The initial live loop check exposed this while seeking the selected
 range end; its failed evidence is retained under `vr-trajectory-loop-20261012/initial`.
 
-2026-10-13 — ISSUE-75 fixed: selecting an assembly part no longer seeds an
+2026-10-13 — ISSUE-79 fixed: selecting an assembly part no longer seeds an
 animation or PATCHes its source. Shared versioned Design reads, stable selection
 rows, queued source-aware renderer refreshes and direct color-buffer repainting
 remove redundant work. Backend indexed-sweep axis sampling is batched with exact
@@ -471,7 +496,7 @@ HEAD-reproduced failures are documented, with the deferred FULL notice, in
 App smoke: 23 passed; native placement gate clear; changed-file Ruff clean,
 repository lint delta zero. Original Benchy hashes and test cleanup verified.
 
-2026-10-13 — ISSUE-76 **PARTIAL: implementation and validation complete; cold-load/GPU targets unmet**.
+2026-10-13 — ISSUE-80 **PARTIAL: implementation and validation complete; cold-load/GPU targets unmet**.
 Lossless native compact/NDGB transport, versioned source/readiness reuse, exact
 hull-work reuse, prepared CG primitives/lazy indexes, ordered optimistic saves,
 inactive UI gates and lazy connectors remove repeated work. Base authoring stays
@@ -516,3 +541,102 @@ All 109 frozen app/test hashes match, with no added/removed scoped files. Final
 measurements, controls diagnostic and smoke are complete; earlier runs remain
 checkpoints. Reopen count: 0. PARTIAL reflects remaining performance limits and
 the unresolved screenshot observation, not unfinished acceptance work.
+
+
+2026-10-13 — ISSUE-76 fixed for normal-launch integration. Root cause: the optimized
+viewer and final recorder were validated through a private diagnostic launch, while
+the ordinary backend still selected the pre-work executable without the capture
+binding. The new torso recording therefore exercised the old path. The failed
+assumption was that a private runtime success implied ordinary user launch was
+deployed; exact executable/capture provenance now prevents that confusion.
+
+Owner-controlled configuration selects the versioned Archive build and capture
+layer. Normal launch creates inspect/journal resources, uses markers only while
+journaling, preserves physical haptics/Desktop/touch input, reports fresh recorder
+readiness, and requires valid diagnostics before claiming completion. No scientific
+geometry or current document content changed; Join regression evidence is retained.
+A normal-menu recording and final physical-inspect recording each saved 179 final
+images, zero drops, with full pixel and durable direct-I/O audits. Final calibrated
+decoding joins all 716 eye images to strict CRC/full-session/eye/frame identities:
+179 unique consecutive IDs per eye per clip, no repeats/gaps/regressions, both eyes
+matching. Wide ROI and first tight-ROI failures remain preserved. The bounded
+component filter skips only already subminimum components before the same 64-cap;
+all other thresholds are unchanged. Menu frame 0 alone calibrated the tighter ROIs;
+178 later menu frames and all 179 physical-inspect frames were held out.
+
+Final viewer 378253/start 96081361 uses native v2 hash 1e830a7f...; original Stick/Flex
+source placement restored within 2.4e-7 m, grouped/opaque defaults active, one-shot
+restore setting removed. Both controllers were untracked. Browser reattachment is
+now independently verified: same PID/session and exact presentation, actual feed
+sequence advances, unchanged geometry payload/scientific export, and Help's Exit VR
+toggle enabled. The stale restore dialog was cancelled without reimporting content.
+NADOC is now foreground; desktop 3D during VR retains its original true setting.
+Earlier capture cadence does not certify this combined foreground workload.
+SteamVR process and four saved global VR config hashes are unchanged.
+
+101 focused backend checks, four readiness cases, five native v2 checks and 175
+tracking/decoder checks plus 24 subtests passed. Initial FAST: 10,830 passed, 14 failed, 8 errors, 92 skipped, 2,500 warnings.
+Three Unix-socket failures pass with short Archive paths. Final FAST: 10,832 passed,
+11 failed, 8 errors, 92 skipped, 2,500 warnings; pytest 134.82 seconds, guard 137 seconds,
+five timing overruns. psfgen and CPD failures remain recorded. Focused success does
+not clear broad/full-suite debt. Reopen count: 0.
+ISSUE-76 closes the deployment gap only; worn-headset doubling remains MV-44.
+Evidence and rollback:
+[normal-launch integration](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/launch-handoff.json),
+[recording review](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/recording-validation/index.html),
+[calibrated identity proof](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/recording-validation/postfix-summary.json),
+[test triage](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/test-smart-triage/triage-report.txt),
+[rollback](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/rollback-plan.txt),
+[browser reattachment](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/browser-reconnect/verification.json).
+
+2026-10-13 — ISSUE-77 investigation checkpoint, OPEN. The user reports that
+doubling is substantially reduced, with remaining menu/hover-associated lag.
+Request 962531370889719 retains all 179 final presentations with zero capture
+drops. The complete bounded-follow decode joins all 358 eye images: 144 distinct
+submitted images and 35 reused-image pairs per eye, no unknowns/gaps/regressions.
+The original fixed-ROI 313/358 joins and 22-pair lower bound are retained. The
+retrospective follow trial changed no CRC, contrast or bit/geometry thresholds;
+it does not constitute a separately acquired validation clip.
+
+The longest measured input/actions stage is 1.61 ms versus 20.88 ms inside
+xrEndFrame. All 242 journal rows have head/hand tracking flags 15, which excludes
+no unflagged jitter. Both menus are logically open with varying visible coverage.
+This evidence locates host waiting without proving its cause; older journals
+have no per-frame hover/haptic timings. Native inspection identified synchronous
+event-triggered haptic calls, hover-sensitive texture caching, backdrop copies and
+frosted shading as measurable pathways. No behavior/performance fix was applied.
+
+The new bounded capture-only diagnostics and summarize-interactions reader expose
+actual API dispatch/results, hover changes, texture/cache work and per-eye menu/
+backdrop host spans. Missing legacy fields, truncation, overflow and clock errors
+remain explicit. Haptic dispatch does not independently establish actuator motion;
+host GL time is not GPU time, and draw counts are not on-screen coverage.
+
+Six native checks passed, including actual GL hover/cache changes and OpenXR
+dispatch/result spies; 45 reader tests and 69 marker tests passed. Normal launch
+deployed native SHA256 65bcd41e1de02d1d6271c19a1aa7d04683087358eb0dd78a17d4eb282cb8a4d3
+as physical-inspect viewer 545874 with the existing compositor. The real browser
+reattached; scientific data and restored placement are preserved. Closed-menu
+recording 963838453284914 saved 179 frames, with 288 diagnostic journal rows,
+zero UI clock calls/errors/overflow. The first check mistakenly required positive
+UI clocks; that failed assertion is retained, then corrected without recapture or
+native change. This is a zero-activity integration check, not live physical hover
+validation. The reload closed the menus and did not restore their previous positions.
+Reopen/place them for a new worn-controller reproduction; ISSUE-77 and MV-44 remain
+open. Existing broad-test failures and timing-guard debt are not cleared.
+
+Evidence: [native audit](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/native-audit.json),
+[complete identity proof](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/recording-analysis/identity-follow-summary.json),
+[native freeze](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/native-freeze.json),
+[closed-menu live check](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/live-capture-proof/verification.json),
+[retained initial verification failure](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/live-capture-proof/initial-verification-failure.json).
+
+### ISSUE-78 — VR Join duplicate preview lifecycle (2026-10-13)
+
+Fixed in `vr_join.js`; no `main.js` growth. Root cause: duplicate preview event →
+unconditional checking publication → unchanged transform deduplicated → no new
+validation → Apply stayed disabled. The earlier browser dispatch test omitted
+this native event order; physical playback exposed it. Added a failing regression
+then reused the valid result for an identical current pose. Full frontend suite:
+7,906 passed, one skipped. Broader validation and frame-rate limits are retained
+in `.development-artifacts/vr-join-20261013/verification-summary.json`.

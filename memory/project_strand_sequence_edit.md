@@ -23,6 +23,28 @@ strand directions, loop/skip offsets, round trips and partial assignments.
 
 ## What shipped
 
+### Exact scaffold availability (2026-10-10)
+
+Readiness now includes `scaffold_length`: every active scaffold must exactly equal
+7249, 7560 or 8064 nt, or its explicitly declared custom source length. It is not
+a maximum-budget check, and assigned/truncated `Strand.sequence` never declares
+an available source. `scaffold_length_checks` counts native loop/skip-aware domain
+DNA, extra bases on realized crossover/forced-ligation transitions, and terminal
+DNA sequences; terminal modifications contribute no nucleotides. The shared
+readiness path supplies the same per-scaffold verdict and owning-instance targets
+in assemblies, with reference/native-oligo exclusions unchanged.
+
+`assign_custom_scaffold_sequence` persists the full cleaned input length on
+`Strand.custom_scaffold_length`; preset assignment clears it. The declaration
+survives normal native save/reload and assembly strand projection, is independent
+of sequence completeness, and is excluded from simulation fingerprints. Older
+custom designs without this declaration need their original custom source
+reassigned; readiness reports that remedy rather than guessing from sequence or
+feature-history ownership. No route, molecular placement or simulation is changed
+by the readiness check. Regression files: `test_scaffold_length.py`,
+`test_design_readiness.py`, `test_design_readiness_api.py`, and
+`test_readiness_routing_workflow.py`.
+
 **Backend**
 - `PATCH /design/strand/{id}` now **accepts a real sequence string**. It previously
   declared a `sequence` field but honoured only `null` — a client sending

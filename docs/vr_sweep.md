@@ -152,12 +152,65 @@ positions and are restored by loading and history operations.
 loop/skip adjustments. It excludes source geometry and is not a nucleotide count
 or a prediction of a routed strand's final length.
 
+## Headless exploration
+
+`backend.api.headless_build` exposes the same native create, preview and edit
+transactions. `sweep(cells, points_nm, **options)` accepts every `SweepRequest`
+option, including `orientations_deg`, `detach_source`, `sweep_id`,
+`expected_design_id` and `expected_revision`. Defaults and validation come from
+the native request model. The first point can move; moving an attached origin
+invokes the same source-detachment behavior as the editors.
+
+Explore a draft before creating it, then preview a parameter patch before
+editing the saved feature:
+
+```python
+from uuid import uuid4
+from backend.api import headless_build as hb, state
+
+with hb.scratch_session():
+    draft = dict(
+        cells=[(0, 0), (0, 1)],
+        points_nm=[(0, 0, 0), (0, 0, 10), (6, 2, 18)],
+        orientations_deg=[None, None, (15, 30, 45)],
+        sweep_id=str(uuid4()),
+        ligate_adjacent=False,
+    )
+    preview = hb.preview_sweep(**draft)
+    # Inspect preview['helix_paths_nm'], ['feasibility'] and ['total_new_bp'].
+    hb.sweep(**draft, expected_design_id=state.get_or_404().id,
+             expected_revision=preview['revision'])
+    changes = dict(points_nm=[(0, 0, 0), (0, 0, 10), (8, 3, 20)])
+    preview = hb.preview_sweep_edit(0, **changes)
+    hb.edit_sweep(0, **changes, expected_design_id=state.get_or_404().id,
+                  expected_revision=preview['revision'])
+    design = state.get_or_404().model_copy(deep=True)
+```
+
+The functions return native response dictionaries; use `state.get_or_404()` for
+the committed Design. A scratch session is discarded on exit, so retain or save
+the final design explicitly. `preview_sweep(..., include_geometry=False)` provides
+the native lightweight creation preview. The edit helpers retain omitted saved
+fields, preserve sweep identity, and use the existing downstream routing and
+attachment replay. Preview is read-only; creation and editing retain ordinary
+feature history and Undo/Redo. Guards reject a changed document or revision.
+
+For visual iteration, load an isolated design copy in the existing desktop app,
+inspect it with `window.__nadocInspect.toggle()` and retain browser captures;
+see the [native inspection workflows](scrywrite_inspector.md). For an existing
+VR inspection session, use `scrywrite_observe` followed by `scrywrite_capture`
+with the returned session/sequence as described in the
+[live-agent runbook](scrywrite_live_agent.md). These inspect the native renderers;
+headless preview metrics alone do not establish visible shape or physical
+stability.
+
 ## Focused regression commands
 
 Run these from the repository root after installing the normal dependencies.
 The native commands assume its CMake build directory has been configured.
 
 ```bash
+just test-focused tests/test_headless_sweep_build.py
 uv run python -m pytest tests/test_sweep*.py tests/test_vr_sweep.py -q
 npm --prefix frontend test -- --run src/scene/sweep_warning_markers.test.js src/scene/sweep_preview.test.js src/scene/vr_sweep.test.js src/ui/sweep_panel.test.js src/ui/sweep_points.test.js
 (cd frontend && npx playwright test --config playwright.sweep.config.js sweep_orientation.spec.js sweep.spec.js --workers=1)

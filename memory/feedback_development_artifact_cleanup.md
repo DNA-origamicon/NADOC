@@ -9,11 +9,66 @@ status: active
 User instruction, 2026-09-15/16: delete disposable development/test artifacts;
 retain useful evidence only where it does not clutter the main user workspace.
 
+## Feature-validation cleanup — 2026-10-13
+
+User clarification: “make sure we are cleaning up all data after validation” and
+“We don't want to be saving large capture files after testing each new feature.”
+
+- Treat feature-validation captures as temporary. After reviewing and summarizing
+  the results, delete recordings, extracted frames, depth/object-ID buffers,
+  browser traces, copied fixture designs and detailed frame/pose dumps, including
+  failed attempts. Keep compact pass/fail, timing, failure-reason and cleanup
+  summaries; a failed test does not justify indefinite bulk retention.
+- Complete any necessary pixel/identity analysis before deletion. Retain large
+  evidence beyond the validation task only when the user explicitly requests it.
+- Check active file/mapping references and configured runtime dependencies first.
+  Preserve deployed binaries, active runtimes, authored designs and managed jobs.
+  Verify deletion and report bytes removed; mark prior raw-evidence links as pruned.
+- This instruction authorizes cleanup of completed Join feature-validation data
+  and governs future feature checks. It does not authorize deleting scientific
+  production results or unrelated historical storage-review candidates.
+
+## Archive-first storage and review — 2026-10-11
+
+The user reports the system disk is nearly full and explicitly requires review
+before moving or deleting the existing development artifacts in this inventory.
+The October 11 request takes precedence over the earlier general cleanup rule:
+inventory and propose exact paths/actions first; do not execute this cleanup until
+the user approves a selection. Workspace user designs and their managed jobs are
+excluded. Flag development copies derived from user designs separately rather
+than assuming they fall within that exclusion-free scope.
+
+All future large development files must be created on the mounted Archive drive
+from the first byte, including simulation outputs, native integral scratch,
+temporary simulation packages, frame/profile captures, browser traces, downloads,
+and new large development caches/tool environments. Use
+`.development-artifacts/<task>/` (resolved archive path), and put temporary work
+under that task's `tmp/` or `scratch/`; set `TMPDIR` and engine-specific scratch
+variables before imports/child launches, or pass an explicit archive `dir=` to
+temporary-directory APIs. Do not stage large output in `/tmp`, the checkout,
+`runs/`, or a home-directory cache before archiving it.
+
+Verify `/media/jojo/Archive` is actually mounted and the resolved output/scratch
+paths are on its filesystem before a bulk writer starts. Stop if the mount is
+unavailable; never silently create bulk output on the system filesystem at an
+unmounted archive path. Existing live runtimes, source pins, and managed-job paths
+must stay intact until an approved, verified relocation. Do not redirect a running
+calculation or rewrite frozen historical manifests.
+
+Read-only review inventory:
+`.development-artifacts/storage-review-20261011/candidates.csv` and
+`inventory.json`. No files were moved, deleted, truncated, or compressed during
+the inventory. Current CPD output and scratch already use Archive; old Psi4
+scratch in `~/.cache/nadoc-qm/` is separately listed for review.
+
+## General retention rules
+
 - `workspace/` is for user designs and application-managed state/jobs. Do not
   create top-level campaign, benchmark, literature-download or diagnostic folders
   there. A filename containing “test” is not evidence that a user design is disposable.
 - Use `tempfile.TemporaryDirectory` or pytest `tmp_path` for disposable work, with
-  cleanup on success and failure. Remove empty output folders at task completion.
+  cleanup on success and failure. For large output, explicitly place these on
+  Archive as described above. Remove empty output folders at task completion.
 - Retain necessary raw scientific evidence, checkpoints, source assets and large
   diagnostic outputs under repository-local `.development-artifacts/<task>/`.
   On this workstation it is a gitignored symlink to

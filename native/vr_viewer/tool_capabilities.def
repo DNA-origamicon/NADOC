@@ -17,3 +17,5 @@ NADOC_VR_TOOL_CAPABILITY(bend, selection, configuration_required)
 NADOC_VR_TOOL_CAPABILITY(twist, strand, configuration_required)
 NADOC_VR_TOOL_CAPABILITY(twist, domain, configuration_required)
 NADOC_VR_TOOL_CAPABILITY(twist, selection, configuration_required)
+
+NADOC_VR_TOOL_CAPABILITY(join, cluster, direct_preview)

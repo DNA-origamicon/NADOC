@@ -248,6 +248,7 @@ class Session {
     static ToolMode parseTool(const std::string& token, size_t line) {
         if (token == "inspect") return ToolMode::inspect;
         if (token == "move_rotate") return ToolMode::move_rotate;
+        if (token == "join") return ToolMode::join;
         if (token == "extrude") return ToolMode::extrude;
         if (token == "twist") return ToolMode::twist;
         if (token == "bend") return ToolMode::bend;
@@ -310,7 +311,7 @@ class Session {
     }
 
     [[nodiscard]] bool previewEnabled() const {
-        return shell_.mode() == ToolMode::move_rotate && shell_.previewRequested() &&
+        return (shell_.mode() == ToolMode::move_rotate || shell_.mode() == ToolMode::join) && shell_.previewRequested() &&
                !shell_.executionPending();
     }
 

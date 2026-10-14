@@ -1,0 +1,84 @@
+{
+  "at": "2026-10-11T03:35:32+00:00",
+  "stage": "endpoint-1-sella-continuation-active",
+  "campaign_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1",
+  "authorization": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/campaign_authorization_20261010.json",
+    "sha256": "c39e549edd30e31ec183cd8094ed5cf0bd29ea34b26736f87f71d867eafd98d5"
+  },
+  "core_local_minimum": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core_local_minimum_assessment.json",
+    "sha256": "a7a8a905de89bb2c0ffb3433b820b04efdea423ac441124e2c8ab64f1960e81f"
+  },
+  "pilot_failure": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-pilot-v1/assessment.json",
+    "sha256": "48557f8c44e79d3aafa24f3971378c2222219a66648997da5b266864cf968639"
+  },
+  "pilot_failure_acknowledgement": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-pilot-v1-service/completion_wake_ack.json",
+    "sha256": "70e6a9945bdf144ec3618c771fdef9fc0e46d88ce8b42b32ed318749472224d8"
+  },
+  "pilot_recovery_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-pilot-recovery-v1/completion_audit.json",
+    "sha256": "28acc0cfd08182e6fe129321d61da2c9eef8d1ec0c2d6e1272ca0a8020e54f8d"
+  },
+  "recovered_gradient": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-pilot-recovery-v1/recovered_result.json",
+    "sha256": "9c84bd2d988c42c5bd24b8f9657124eb071f9de5b38afe84b2ea5356ecd00ed8"
+  },
+  "reference_design": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint_reference_design_v1.json",
+    "sha256": "5039b71ee65e0e1c3feb15d580b88c67fbe744e52a1a9b484e6edf37f47f4451"
+  },
+  "endpoint_exchange": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-seeds-v2/endpoint_exchange_audit.json",
+    "sha256": "a990f45666bb387e0781965ea5fc18f9c0bf90eb1d148514e3a971d8e878d4e9"
+  },
+  "active_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-optimization-v2/plan.json",
+    "sha256": "74140bd66e0eefe1870c82fb7a4313390eec8d4ed42def87e5f2bfc8bd05c9d4"
+  },
+  "admission": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-optimization-v2/admission.json",
+    "sha256": "d3746197b4b74dd7e293a3333a6c194b34135742c14480a55504e571134f61e2"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-optimization-v2/launch_verification.json",
+    "sha256": "e8b2be3cd828d1ed42b3d930448a2251bde179011ef2e53e46ba2b48b072c338"
+  },
+  "service": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-optimization-v2-service",
+  "wake_token": "fd45703a-6ab2-4d89-b545-18e30bd42eaa",
+  "limits": {
+    "max_new_gradients": 15,
+    "hard_seconds": 3600,
+    "gradient_timeout_seconds": 600,
+    "threads": 4,
+    "psi4_memory_gib": 4,
+    "service_memory_gib": 8,
+    "cloud_spending_usd": 0
+  },
+  "next_actions": [
+    "On wake acknowledge its token, inspect status and native evidence once. A complete chunk may mean allocation exhausted, not convergence.",
+    "Audit all native energy/147-component gradient tables, both printed Bohr geometry tables, input/returned binaries, exact electronic options/basis/frozen-core occupations, seven product/sugar centers, every accepted checkpoint and source hashes.",
+    "Compare force and energy progress versus native time. If unconverged but progressing, evaluate a bounded continuation from the last accepted geometry and matching gradient with fresh Sella history; preserve rejected trials and old optimizer state. If stalled, identify a specific cause/alternative before new work.",
+    "Stationary endpoint does not by itself certify a local minimum. Decide necessary curvature/reference follow-up from actual use and evidence; do not rerun core Hessian.",
+    "Use exact endpoint exchange for the equivalent mapping, never count it as independent data. Freeze exact training targets and holdout membership before acquisition; lock parameters before prospective holdout access. Resolve dipole convention before charge acquisition/fitting."
+  ],
+  "monitoring": "Verified completion/failure event and one deadline; no intermittent polling.",
+  "minimum_certified_scope": "36-atom capped core only; endpoint still not stationary or minimum certified.",
+  "simulation_ready": false,
+  "registry_gate_effect": "none",
+  "preceding_completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-optimization-v1/completion_audit.json",
+    "sha256": "75105e615629737f01f9e1d8a4ccbcddf71d9d890e0b02bd8b8404f501b37a34"
+  },
+  "preceding_wake_acknowledgement": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-optimization-v1-service/completion_wake_ack.json",
+    "sha256": "0b1fca49324d9c0f3d60584d1cfe808c2f917865e3857cf4c8b85cc4416332fa"
+  },
+  "last_audited_endpoint_forces_au": {
+    "max_atom_gradient_au": 2.369859223355196e-05,
+    "rms_atom_gradient_au": 9.974772310995009e-06
+  },
+  "completion_audit_command": "/home/jojo/.cache/nadoc-qm/sella-runtime-v1/bin/python experiments/cpd_anti_additive/audit_corrected_endpoint_optimization.py /media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-optimization-v2"
+}

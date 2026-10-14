@@ -1,0 +1,46 @@
+{
+  "at": "2026-10-11T17:18:29+00:00",
+  "finding": "Timer ran at 01:41:11 Denver but cancelled against an unrelated older MD hold and sent no wake. No native control started overnight.",
+  "cancellation_review": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1-deferred-admission/cancellation_review.json",
+    "sha256": "f8ba032720174cb699b905d9a058d99a8f04bff25a1215d2f6428025ff80061a"
+  },
+  "resolution": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1-deferred-admission/resolution.json",
+    "sha256": "4f1dac54a951558ab42d48df7ee3c2c23c51f3a412474b81c63c2b7fbeae8bc7"
+  },
+  "changes": "Future deferred launches use campaign-scoped pause state and record terminal cancellation/duplicate state. Exact-plan memory reserve review documented; native cap/method/budget unchanged.",
+  "launch_attempt2": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1/launch_attempt2.json",
+    "sha256": "65d3a438ebda79d4682fb9861f995faa28b04d96a06fd46f939d4339a41fc088"
+  },
+  "launch_attempt2_scope": "Local frozen-file invocation lacked repository import environment; failed before native/service creation. Corrected invocation explicitly sets repository environment.",
+  "resource_review": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1/resource_admission_revision.json",
+    "sha256": "bc2fbd8f16cbf2ecc1eac19f5b68f3bfa3ae02f24382b3216ea7d9a6e8a458b0"
+  },
+  "actual_admitted_available_memory_gib": 12.447410583496094,
+  "launch_attempt3": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1/launch_attempt3.json",
+    "sha256": "29122487b5a4ef0ffce48fbc08dc566e9d066bcc8166e860b5bf8b0028a8af01"
+  },
+  "tests": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1/launch_repair_tests.json",
+    "sha256": "9d2795c57910c863f11424be78c77ef7d6cab79c99aa7f2df3aca567ad4bd77e"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1/launch_verification.json",
+    "sha256": "b917c9135d7561412bb2fe38b2ba7885c5e559cc2681fd0d4982bf8ea50bf18a"
+  },
+  "active_handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1/active_handoff.json",
+    "sha256": "0a6378d26f0fa541c62c84c773f18cd3040cddbc3da3631f7ce35ef10615056a"
+  },
+  "native_job_running_at_startup_verification": true,
+  "expected_finish_local": "2026-10-11T12:25:22.488808-06:00",
+  "audit_deadline_local": "2026-10-11T12:36:41.953456-06:00",
+  "hard_stop_local": "2026-10-11T12:46:41.953456-06:00",
+  "cloud_spending_usd": 0,
+  "minimum_certified": false,
+  "simulation_ready": false
+}

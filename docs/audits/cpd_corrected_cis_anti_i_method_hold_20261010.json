@@ -1,0 +1,30 @@
+{
+  "schema": "nadoc.corrected-core-method-review-handoff.v1",
+  "at": "2026-10-10T21:04:33+00:00",
+  "status": "numerical_method_review_required",
+  "native_calculations_completed": 4,
+  "scientific_directional_criterion_passed": false,
+  "relative_errors": [
+    0.08908105726426438,
+    0.08712681158229996
+  ],
+  "limit": 0.05,
+  "step_halving_passed": true,
+  "method_review": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/method-review-v1/method_review.json",
+    "sha256": "df528edb3131fe61cc45ba478245e54c9eda64b8f268c6158a5a317143f2a4a5"
+  },
+  "hold": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/numerical_method_hold.json",
+    "sha256": "a1155c82b9041892f36bf404fed4397b7ac5e4bce0eedbb0832454ac00837e5a"
+  },
+  "evidence_package": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/method-review-v1/reproduction-evidence/manifest.json",
+    "sha256": "d4f7aaf0d6a784fd4f51adfc81628f75ac99022afc8d7eaf06c8b98a75c23937"
+  },
+  "new_optimizations": 0,
+  "new_hessian_displacements": 0,
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

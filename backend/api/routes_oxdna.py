@@ -26,6 +26,8 @@ oxDNA output is Physical-layer only; it never mutates Design topology.
 
 from __future__ import annotations
 
+from backend.core import simulation_runtime
+
 from backend.api.startup_cache import coalesce_job_reads
 
 import logging
@@ -532,7 +534,7 @@ def capture_run_decision(parent_run_config, requested) -> dict:
 
 
 def _workspace() -> Path:
-    return _WORKSPACE_DIR
+    return simulation_runtime.workspace(_WORKSPACE_DIR)
 
 
 def _design_ref_conf(job_dir: Path, design) -> Path:
@@ -1569,6 +1571,7 @@ async def get_oxdna_progress(job_id: str) -> dict:
 
 
 @router.post("/oxdna/jobs/{job_id}/start")
+@simulation_runtime.start_request(lambda: _workspace(), "oxdna_jobs")
 async def start_oxdna_job(job_id: str) -> dict:
     job = _load_job(job_id)
     if is_running(job_id):
@@ -1669,6 +1672,7 @@ def _prepare_surface_approach_retry(job, specs, workspace_dir: Path):
 
 
 @router.post("/oxdna/jobs/{job_id}/production")
+@simulation_runtime.start_request(lambda: _workspace(), "oxdna_jobs", busy_message="Production requires a completed relaxation job.")
 async def append_oxdna_production(job_id: str, body: ProductionRequest) -> dict:
     """Append an unbiased MD production stage after a completed job.
 
@@ -2306,12 +2310,9 @@ async def preview_oxdna_field_anchors(job_id: str, body: AnchorPreviewRequest) -
 
 @router.post("/oxdna/jobs/{job_id}/stop")
 async def stop_oxdna_job(job_id: str) -> dict:
-    job = _load_job(job_id)
+    _load_job(job_id)  # validate existence; native runner owns every status write
     cancelled = stop_job(job_id, _workspace())
     if not cancelled:
-        if job.status == OxdnaStatus.running:
-            job.status = OxdnaStatus.stopped
-            job.save(_workspace())
         return {"ok": True, "message": "Job was not actively running"}
     return {"ok": True, "job_id": job_id, "status": "stopping"}
 

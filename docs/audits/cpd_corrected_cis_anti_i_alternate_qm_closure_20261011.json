@@ -1,0 +1,330 @@
+{
+  "at": "2026-10-12T02:02:15.179343+00:00",
+  "stage": "alternate-sugar-qm-pilot-audited-fixed-core-qm-closure-running",
+  "authorization": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/campaign_authorization_20261010.json",
+    "sha256": "c39e549edd30e31ec183cd8094ed5cf0bd29ea34b26736f87f71d867eafd98d5"
+  },
+  "latest_audited_wake": {
+    "token": "1aea941e-e6fa-4e19-ac9d-6058d4bf524a",
+    "event": "complete",
+    "ack": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1-service/completion_wake_ack.json",
+      "sha256": "85afbac2f54c3d6408881c7f237f7ae8f140df6a7d0f7ed684da964b751d43bf"
+    }
+  },
+  "pilot_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1/completion_audit.json",
+    "sha256": "ad56db419d7b958a992887379d7dd12baf2168b2957481048cebfa80b0ff3505"
+  },
+  "archived_pilot_auditor": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1/executed_completion_audit.py",
+    "sha256": "ef425f2374c1ee9a234e55664a0a9223915891e53f016e672d4e9e4353515a6a"
+  },
+  "pilot_summary": {
+    "energy_relative_to_reference_kcal_mol": 1.1786484351308832,
+    "max_free_projected_atom_gradient_kcal_mol_A": 26.22532767926501,
+    "native_seconds": 194.2585862299893,
+    "constrained_stationary": false
+  },
+  "closure_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/plan.json",
+    "sha256": "260c16833932504e7e606ea6d76c94ad9ffa1e4e3548a5f364990aa0903c4f5e"
+  },
+  "preflight": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/preflight.json",
+    "sha256": "73b94d21cfec3f8f196d057dd5ac1c829c593676d85e45da9be40e3497e97722"
+  },
+  "admission": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/admission.json",
+    "sha256": "233765add75b4fb98dbb1223d9ad732cb1ab126306e95705c1ebefebbfbd6263"
+  },
+  "tests": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/test_receipt.json",
+    "sha256": "da2fea05ce06f063ebbda6bd4e7369078782b919d0fcfa701f30808af023b65c"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/launch_verification.json",
+    "sha256": "5839332dfb600e9e06ba4a283cf94d53496aa051c5d41619e6dba22754a46899"
+  },
+  "service_directory": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1-service",
+  "status_at_single_startup_check": {
+    "state": "running",
+    "pid": 734200,
+    "records": [],
+    "started_at": 1791770440.4625723,
+    "simulation_ready": false
+  },
+  "completion_wake_token": "85f479a2-72de-45b7-ade2-83d5ff25bebb",
+  "completion_watcher_armed": true,
+  "expected_finish_epoch": 1791772891.565607,
+  "audit_deadline_epoch": 1791773440.424935,
+  "hard_deadline_epoch": 1791774040.424935,
+  "active_calculation_at_startup": "One bounded Sella order0/internal QM optimization,32fixed core atoms plus chi; first new original-method MP2 gradient running after reuse of pilot.",
+  "maximum_new_gradients": 12,
+  "task_timeout_seconds": 600,
+  "hard_seconds": 3600,
+  "restart_policy": "Reuse full-precision pilot gradient at startup; every accepted Sella checkpoint names an actually evaluated native geometry/gradient. All evaluated trials retained. Fresh optimizer history only on a separately audited continuation.",
+  "fixed_target_policy": "Keep original QM reference positions for all32fixed atoms, including accepted restarts; do not reset fixed targets to residual-shifted checkpoints. Exact same chi target. Solver constraint tolerance1e-9; pre-QM fixed-position1e-7A/chi0.01degree checks unchanged.",
+  "next_action": "At completion/failure/deadline, acknowledge wake; reopen each native output/geometry/gradient, replay accepted trajectory, retain all failed/trial states, verify original fixed targets and chi plus all7stereocenters. Assess last accepted energy/force progress and sugar torsions relative to pilot and original QM conformer. Planned budget completion is not convergence. Only admit a new bounded chunk after auditing necessity/cost/progress; no automatic fit, broader grid or minimum certification.",
+  "bonded_fit_rounds_consumed": 1,
+  "bonded_fit_rounds_max": 2,
+  "second_fit_admitted": false,
+  "heldout_accessed": false,
+  "full_candidate_hash_lock": false,
+  "minimum_certified": false,
+  "basin_closure_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0,
+  "storage_policy": "All bulk output/native scratch on mounted Archive; no existing-data move/delete.",
+  "periodic_polling": false,
+  "scope": "Current corrected cis-anti-I campaign, independent of legacy incorrect anti parameters.",
+  "pilot_native_result": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1/result.json",
+    "sha256": "d98c41f1f46f3e59da75799b59c7341928700158c87f326f59f7aaa39f0e3390"
+  },
+  "pilot_completion_audit": {
+    "at": "2026-10-12T01:53:06+00:00",
+    "source": {
+      "path": "/home/jojo/Work/NADOC/experiments/cpd_anti_additive/audit_corrected_alternate_qm_pilot.py",
+      "sha256": "ef425f2374c1ee9a234e55664a0a9223915891e53f016e672d4e9e4353515a6a"
+    },
+    "plan": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1/plan.json",
+      "sha256": "021de6ca5b024a042c8843255b70cf707815bff3bb26df703f7acbda003ad9ba"
+    },
+    "result": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1/result.json",
+      "sha256": "d98c41f1f46f3e59da75799b59c7341928700158c87f326f59f7aaa39f0e3390"
+    },
+    "status": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1-service/status.json",
+      "sha256": "9d062d639976a391f0625d56c6e77d5f2d153e8254fdb1b10c13f36f2eda6b8f"
+    },
+    "acknowledgement": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1-service/completion_wake_ack.json",
+      "sha256": "85afbac2f54c3d6408881c7f237f7ae8f140df6a7d0f7ed684da964b751d43bf"
+    },
+    "passed": true,
+    "native_evidence_passed": true,
+    "native": {
+      "electronic": {
+        "scf_converged": true,
+        "response_residuals": [
+          5.35e-11
+        ],
+        "max_atom_gradient_au": 0.023600638038716988,
+        "rms_atom_gradient_au": 0.00829152127033355
+      },
+      "fitting_conditions": [
+        1e-10,
+        1e-10,
+        1e-10
+      ],
+      "actual_bases": {
+        "6-31G(D)": [
+          449,
+          449,
+          false
+        ],
+        "CC-PVDZ-JKFIT": [
+          2737,
+          2737,
+          false
+        ],
+        "CC-PVDZ-RI": [
+          1820,
+          2112,
+          true
+        ]
+      },
+      "occupations": [
+        27,
+        101,
+        74,
+        348,
+        348,
+        0
+      ],
+      "geometry_tables": 2,
+      "native_geometry_max_rounding_error_bohr": 4.9649173661237e-13,
+      "gradient_components": 147
+    },
+    "reference_native": {
+      "electronic": {
+        "scf_converged": true,
+        "response_residuals": [
+          4.928e-11
+        ],
+        "max_atom_gradient_au": 0.004861503587702362,
+        "rms_atom_gradient_au": 0.0010720252827383587
+      },
+      "fitting_conditions": [
+        1e-10,
+        1e-10,
+        1e-10
+      ],
+      "actual_bases": {
+        "6-31G(D)": [
+          449,
+          449,
+          false
+        ],
+        "CC-PVDZ-JKFIT": [
+          2737,
+          2737,
+          false
+        ],
+        "CC-PVDZ-RI": [
+          1820,
+          2112,
+          true
+        ]
+      },
+      "occupations": [
+        27,
+        101,
+        74,
+        348,
+        348,
+        0
+      ],
+      "geometry_tables": 2,
+      "native_geometry_max_rounding_error_bohr": 4.996003610813204e-13,
+      "gradient_components": 147
+    },
+    "identity": {
+      "passed": true,
+      "signed_centers": [
+        {
+          "atom": "1:C5",
+          "volume_A3": 2.2722432615087182,
+          "passed": true
+        },
+        {
+          "atom": "1:C6",
+          "volume_A3": -1.6919355327377363,
+          "passed": true
+        },
+        {
+          "atom": "2:C5",
+          "volume_A3": 2.245440884499653,
+          "passed": true
+        },
+        {
+          "atom": "2:C6",
+          "volume_A3": -1.681901015511474,
+          "passed": true
+        }
+      ],
+      "coordinate_chiral_tags_match": true,
+      "covalent_ratio_range": [
+        0.8617718690897944,
+        1.0418359949003764
+      ],
+      "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+      "sugar_centers": [
+        {
+          "atom": "1:C1'",
+          "expected_tag": "CHI_TETRAHEDRAL_CCW",
+          "actual_tag": "CHI_TETRAHEDRAL_CCW",
+          "preserved": true
+        },
+        {
+          "atom": "1:C3'",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "actual_tag": "CHI_TETRAHEDRAL_CW",
+          "preserved": true
+        },
+        {
+          "atom": "1:C4'",
+          "expected_tag": "CHI_TETRAHEDRAL_CW",
+          "actual_tag": "CHI_TETRAHEDRAL_CW",
+          "preserved": true
+        }
+      ]
+    },
+    "configuration": {
+      "torsion_degrees": 105.65946347922366,
+      "torsion_error_degrees": 1.3102408047416247e-10,
+      "installed_target_degrees": 105.65946347935468,
+      "initial_residual_radians": -2.2866153415179724e-12,
+      "accepted_restart": true,
+      "residual_limit_radians": 0.00017453292519943296,
+      "fixed_atoms": 32,
+      "constraint_rank": 97,
+      "free_dimensions": 50
+    },
+    "fixed_core_exactly_equal_to_original_qm": true,
+    "chi_error_degrees": 1.3102408047416247e-10,
+    "energy_relative_to_reference_kcal_mol": 1.1786484351308832,
+    "max_free_projected_atom_gradient_kcal_mol_A": 26.22532767926501,
+    "rms_free_projected_atom_gradient_kcal_mol_A": 14.718862615498157,
+    "max_free_projected_atom_gradient_au": 0.022115754938904233,
+    "rms_free_projected_atom_gradient_au": 0.01241238098394198,
+    "largest_free_gradient_atoms": [
+      {
+        "atom": "1:C2'",
+        "projected_gradient_norm_kcal_mol_A": 26.22532767926501
+      },
+      {
+        "atom": "1:C1'",
+        "projected_gradient_norm_kcal_mol_A": 21.010275712080208
+      },
+      {
+        "atom": "1:O5'",
+        "projected_gradient_norm_kcal_mol_A": 18.27139377175518
+      },
+      {
+        "atom": "1:C3'",
+        "projected_gradient_norm_kcal_mol_A": 16.502893379711416
+      },
+      {
+        "atom": "1:H3'",
+        "projected_gradient_norm_kcal_mol_A": 15.6030158153689
+      },
+      {
+        "atom": "1:O3'",
+        "projected_gradient_norm_kcal_mol_A": 15.195985834730688
+      },
+      {
+        "atom": "1:O4'",
+        "projected_gradient_norm_kcal_mol_A": 14.191703584550417
+      },
+      {
+        "atom": "1:H5''",
+        "projected_gradient_norm_kcal_mol_A": 14.080339745043577
+      },
+      {
+        "atom": "1:H2''",
+        "projected_gradient_norm_kcal_mol_A": 13.783253024398265
+      },
+      {
+        "atom": "1:H1'",
+        "projected_gradient_norm_kcal_mol_A": 12.957772594665315
+      }
+    ],
+    "local_tangent_direction_toward_reference_derivative_kcal_mol_A": -13.765623985455335,
+    "direction_interpretation": "Derivative along the normalized Cartesian chord projected into the local constraint tangent. This is not a reaction path, barrier or prediction that optimization returns to the reference basin.",
+    "native_seconds": 194.2585862299893,
+    "service_seconds": 194.8994014263153,
+    "decision": "Admit one Sella order0/internal fixed-core/chi optimization chunk from this alternate conformer, reusing the exact pilot gradient. At most12new gradients,600seconds per gradient,one-hour service; audit convergence, energy/force progress, conformer identity and necessity before continuation.",
+    "necessity": "The alternate MM state is only1.18kcal/mol above the existing QM conformer but has a26.2kcal/mol/A tangent force. Its unrelaxed energy cannot rank local basins or justify fitting to either. A bounded relaxation resolves a concrete branch-correspondence question without a broader scan.",
+    "alternatives": "No repeated pilot, new scan grid, relaxed-tolerance retry, blind second fit or immediate endpoint Hessian. Reuse194second pilot instead of recomputing it. Keep full coupled core frozen to isolate the observed sugar branch issue.",
+    "fixed_core_qm_chunk_admitted": true,
+    "new_fit_admitted": false,
+    "gradient_reuse": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1/result.json",
+      "sha256": "d98c41f1f46f3e59da75799b59c7341928700158c87f326f59f7aaa39f0e3390"
+    },
+    "maximum_new_gradients": 12,
+    "hard_seconds": 3600,
+    "task_timeout_seconds": 600,
+    "constrained_stationary": false,
+    "minimum_certified": false,
+    "basin_closure_certified": false,
+    "heldout_accessed": false,
+    "simulation_ready": false,
+    "cloud_spending_usd": 0
+  }
+}

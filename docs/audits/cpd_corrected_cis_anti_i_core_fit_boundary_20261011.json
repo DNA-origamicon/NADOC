@@ -1,0 +1,111 @@
+{
+  "schema": "nadoc.corrected-cis-anti-i-core-fit-boundary.v1",
+  "at": "2026-10-12T01:38:28.983388+00:00",
+  "stage": "core-bonded-fit-audited-fixed-core-boundary-complete-audit-queued",
+  "authorization": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/campaign_authorization_20261010.json",
+    "sha256": "c39e549edd30e31ec183cd8094ed5cf0bd29ea34b26736f87f71d867eafd98d5"
+  },
+  "latest_audited_wake": {
+    "token": "feb6b28d-3896-474a-9b13-66447eff9d11",
+    "event": "complete",
+    "ack": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core-bonded-fit-v1-service/completion_wake_ack.json",
+      "sha256": "85ee239beb0a82f03ae689f9792776d85efe61591c2b468cb3810719f91dbe51"
+    }
+  },
+  "core_bonded_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core-bonded-fit-v1/completion_audit.json",
+    "sha256": "3dabfcc2f3942c184565d80b3320792609ef7f8301edec739ccc0777305c82a9"
+  },
+  "target_hessian_check": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core-bonded-fit-v1/target_hessian_reconstruction_addendum_v2.json",
+    "sha256": "c0725f03d94860acc4c37db6f50f2a1de4e9d0d27e503ce97984f862b320a139"
+  },
+  "archived_auditor": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core-bonded-fit-v1/executed_completion_audit.py",
+    "sha256": "a77053cac23b8348f43d06d111f6dfd93218fa2acc5d1f626f2838946d3d2d01"
+  },
+  "local_mm_core_minimum_numerically_certified": true,
+  "certification_scope": "Exact fitted36atom core system at saved final geometry only; endpoint and full candidate remain unqualified.",
+  "candidate_qualified": false,
+  "diagnostic_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/fixed-core-boundary-v1/plan.json",
+    "sha256": "0ee695efd256a1d781e53a579d33ad29fb8140bf93ebbc3067477ef6a145e056"
+  },
+  "preflight": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/fixed-core-boundary-v1/preflight.json",
+    "sha256": "942e78d387ac2ed66a4e1114f73575c0b839507f464cba3419b27eb61e1ee33a"
+  },
+  "tests": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/fixed-core-boundary-v1/test_receipt.json",
+    "sha256": "152339db59bd4036c63d2d1084b42134f8efe1538551256c07d10268aae0bfd7"
+  },
+  "admission": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/fixed-core-boundary-v1/admission.json",
+    "sha256": "84c4838fc010ec4facc74d8402a1b7163e4596a9c905e4618f96a6af5b8813f9"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/fixed-core-boundary-v1/launch_verification.json",
+    "sha256": "1ed24d4af4f918dca46b88e92b996bfda918ae39a49568c2e6eb63fcdff3fe44"
+  },
+  "diagnostic_assessment": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/fixed-core-boundary-v1/assessment.json",
+    "sha256": "8aa6debc9640de4187ed8f09809907c621287856d761815e890bbbba6b1e539c"
+  },
+  "status_at_handoff": {
+    "state": "complete",
+    "pid": 713446,
+    "records": [],
+    "started_at": 1791768988.4011705,
+    "simulation_ready": false,
+    "returncode": 0,
+    "finished_at": 1791768993.2439682
+  },
+  "completion_wake_token": "7bc78462-5dba-4224-8e76-10ea143f641d",
+  "completion_wake_queued": true,
+  "active_calculation": false,
+  "bonded_fit_rounds_consumed": 1,
+  "bonded_fit_rounds_max": 2,
+  "second_fit_admitted": false,
+  "new_qm_admitted": false,
+  "next_action": "Acknowledge queued completion and independently replay both fixed-core native trajectories and accepted checkpoints. Verify97constraint tangent forces,32fixed atoms, exact chi targets, all7centers and cap/sugar torsion evolution. Parent/candidate free forces should remain identical on the conditioned domain. Decide whether remaining mismatch is boundary/cap/nonbonded or coupled core shape before consuming a second fit. No automatic broad scan, new QM or promotion.",
+  "reserved_targets_unacquired": {
+    "glycosidic_offsets_degrees": [
+      -22.5,
+      22.5
+    ],
+    "ring_mode": 32
+  },
+  "full_candidate_hash_lock": false,
+  "minimum_certified": false,
+  "charge_transfer_validated": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0,
+  "storage_policy": "All bulk outputs and scratch on mounted Archive; no existing-data relocation or deletion.",
+  "polling": false,
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/fixed-core-boundary-v1/handoff.json",
+    "sha256": "d4071ced457dfdc04d02959b92e2370f197a22264cd3389e7be1e12bf9032a16"
+  },
+  "summary": {
+    "native_core_states_replayed": 704,
+    "accepted_core_states_verified": 671,
+    "core_force_rmse_before_after": [
+      12.856289296569951,
+      4.42635901331421
+    ],
+    "core_heavy_rmsd_A": 0.17978143346481992,
+    "core_max_bond_error_A": 0.012575390406127429,
+    "active_angle_bounds": 4,
+    "local_mm_hessian_positive_internal_modes": 102,
+    "local_mm_hessian_lowest_kcal_mol_A2": 0.2689086092563963,
+    "hessian_step_operator_difference": 1.5808730955614994e-05,
+    "ring_relative_errors": [
+      -0.12821773715861773,
+      -0.11187794277263785
+    ],
+    "boundary_diagnostic_seconds": 4.842797756195068,
+    "focused_tests_passed": 4
+  }
+}

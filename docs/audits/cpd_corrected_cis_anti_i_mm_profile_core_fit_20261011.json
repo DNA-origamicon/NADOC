@@ -1,0 +1,94 @@
+{
+  "schema": "nadoc.corrected-cis-anti-i-mm-profile-core-fit.v1",
+  "at": "2026-10-12T01:27:28.289869+00:00",
+  "stage": "mm-profile-audited-core-bonded-fit-complete-audit-queued",
+  "authorization": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/campaign_authorization_20261010.json",
+    "sha256": "c39e549edd30e31ec183cd8094ed5cf0bd29ea34b26736f87f71d867eafd98d5"
+  },
+  "latest_audited_wake": {
+    "token": "ba87ff19-75ed-4388-8a8f-de629cf5d138",
+    "event": "complete",
+    "ack": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/mm-endpoint-profile-v2-service/completion_wake_ack.json",
+      "sha256": "ff8dd578f141e7281b57cb096c4e687cb60d4a0790024571eb087b8d140a079c"
+    }
+  },
+  "mm_profile_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/mm-endpoint-profile-v2/completion_audit.json",
+    "sha256": "c2e8aca59b3c368aa6850d084d5435365b735132f55b90da91375d101034ccff"
+  },
+  "matched_relaxed_profile_accepted": false,
+  "core_fit_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core-bonded-fit-v1/plan.json",
+    "sha256": "c4cb569d96745287b442054aa633868eda0a834bcdcc4147dd9d0eac3646c013"
+  },
+  "preflight": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core-bonded-fit-v1/preflight.json",
+    "sha256": "93c0762dfa6cc02671a554460c334bf5384641c20371ff479093ce146b4fe50e"
+  },
+  "tests": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core-bonded-fit-v1/test_receipt.json",
+    "sha256": "6a0a477c1a6b010c88b0ef8316f77caa8c7a9960b8d535cb45e4db174aadd1a2"
+  },
+  "admission": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core-bonded-fit-v1/admission.json",
+    "sha256": "e066d2b47f8ecb57e02eabf3716f131276423b80e9617e6a3b01b9aa2fdd8081"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core-bonded-fit-v1/launch_verification.json",
+    "sha256": "5287976a52242eaa608a92bc2667813c3231d8cf5daeac80659076992b7595fd"
+  },
+  "core_fit_assessment": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core-bonded-fit-v1/assessment.json",
+    "sha256": "53ad6070a5844b87a92473d7e2e6407bdb4d075964724011983ab396c3925ebb"
+  },
+  "status_at_handoff": {
+    "state": "complete",
+    "pid": 704303,
+    "records": [],
+    "started_at": 1791768359.6043873,
+    "simulation_ready": false,
+    "returncode": 0,
+    "finished_at": 1791768360.0438619
+  },
+  "completion_wake_token": "feb6b28d-3896-474a-9b13-66447eff9d11",
+  "completion_wake_queued": true,
+  "active_calculation": false,
+  "fit_round": 1,
+  "fit_rounds_max": 2,
+  "next_action": "On queued completion, acknowledge wake and independently reconstruct fit/regularization/bounds and exact native systems. Audit accepted core geometry, actual force and finite-step Hessian; compare acquired ring response and vertical endpoint transfer. Review before admitting any second fit or further endpoint calculations. Preserve rejected profile and all historical failures.",
+  "reserved_targets_unacquired": {
+    "glycosidic_offsets_degrees": [
+      -22.5,
+      22.5
+    ],
+    "ring_mode": 32
+  },
+  "full_candidate_hash_lock": false,
+  "minimum_certified": false,
+  "charge_transfer_validated": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0,
+  "storage_policy": "All bulk outputs and scratch on mounted Archive. No cleanup, deletion or existing-data relocation authorized.",
+  "polling": false,
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core-bonded-fit-v1/handoff.json",
+    "sha256": "c76eec57fb2ff6d9b22ca6bfd921382eb0d5fb6b4a773349bf44474d5a3c77b9"
+  },
+  "summary": {
+    "verified_evaluated_and_accepted_states": 248,
+    "constrained_stationary_points": 5,
+    "matched_conformer_descriptor_passes": 0,
+    "middle_exocyclic_changes_degrees": [
+      -119.1718738584895,
+      -128.41784115010466,
+      -139.08210711229611
+    ],
+    "fit_groups": 27,
+    "response_rank": 27,
+    "response_condition_number": 191.161681696106,
+    "focused_tests_passed": 6,
+    "service_elapsed_seconds": 0.43947458267211914
+  }
+}

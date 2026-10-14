@@ -1,5 +1,7 @@
 # Join clusters
 
+For the native headset workflow, see [VR Join clusters](vr_join.md).
+
 Open **Tools → Join…** or the **join** button in the desktop tool row while
 editing a part. Join uses the shared draggable tool popup and the native 3D view.
 

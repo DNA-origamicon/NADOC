@@ -174,7 +174,7 @@ def strand_sequence_length(
     return sum(_domain_seq_span(d, ls_map) for d in strand.domains)
 
 
-def strand_nucleotide_count(strand: Strand, design: "Design") -> int:
+def strand_nucleotide_count(strand: Strand, design: "Design", *, loop_skip_map=None) -> int:
     """Actual nucleotide count of *strand*, accounting for loop/skips.
 
     Loops (+1) add a base and skips (-1) remove one, so this differs from the raw
@@ -183,7 +183,9 @@ def strand_nucleotide_count(strand: Strand, design: "Design") -> int:
     or deleted (skip) positions get padded with spurious ``?`` (which breaks CanDo
     and other downstream tools). See ``backend/api/routes_sequences.py``.
     """
-    return _strand_nt_with_skips(strand, _build_loop_skip_map(design))
+    if loop_skip_map is None:
+        loop_skip_map = _build_loop_skip_map(design)
+    return _strand_nt_with_skips(strand, loop_skip_map)
 
 
 # ── Scaffold sequence assignment ───────────────────────────────────────────────
@@ -244,6 +246,8 @@ def _do_assign_sequence(
     design: Design,
     scaffold_strand: Strand,
     chosen_seq: str,
+    *,
+    custom_scaffold_length: int | None = None,
 ) -> tuple[Design, int, int]:
     """Walk *scaffold_strand*'s domains 5' to 3' and assign bases from *chosen_seq*.
 
@@ -270,7 +274,10 @@ def _do_assign_sequence(
                 bases.append(chosen_seq[seq_idx] if seq_idx < seq_len else "N")
                 seq_idx += 1
 
-    new_scaffold = scaffold_strand.model_copy(update={"sequence": "".join(bases)})
+    new_scaffold = scaffold_strand.model_copy(update={
+        "sequence": "".join(bases),
+        "custom_scaffold_length": custom_scaffold_length,
+    })
     new_strands = [
         new_scaffold if s.id == scaffold_strand.id else s for s in design.strands
     ]
@@ -361,7 +368,9 @@ def assign_custom_scaffold_sequence(
             "Only A, T, G, C, N are allowed."
         )
     scaffold = _resolve_scaffold_strand(design, strand_id)
-    return _do_assign_sequence(design, scaffold, cleaned)
+    return _do_assign_sequence(
+        design, scaffold, cleaned, custom_scaffold_length=len(cleaned),
+    )
 
 
 # ── Scaffold position lookup ───────────────────────────────────────────────────

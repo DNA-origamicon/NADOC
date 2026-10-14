@@ -156,10 +156,20 @@ Multiple 2D editor tabs stay in sync automatically — backend is ground truth.
 ### Design readiness
 
 A compact progress ring in the upper-right of the 3D and cadnano path views
-tracks scaffold routing, staple routing, scaffold sequence, oligo sequences and
-design integrity. Hover, focus or click to expand the checklist. Missing steps
+tracks scaffold routing, exact scaffold length, staple routing, scaffold sequence,
+oligo sequences and design integrity. Hover, focus or click to expand the checklist. Missing steps
 open the existing commands, with their keyboard shortcuts; assembly issues lead
 to the affected part editor. The indicator follows the viewport as sidebars resize.
+
+Every active scaffold must exactly match an available length: M13mp18 (7249 nt),
+p7560 (7560 nt), p8064 (8064 nt), or the full length of an explicitly assigned
+custom scaffold source. Counts include loops/skips, junction extra bases and DNA
+terminal extensions. A 7203 nt route fails the length check even though it fits
+inside a 7249 nt budget. Scaffolds are checked separately, including each visible
+assembly instance; native oligo-only and reference-only structures acquire no
+scaffold obligation. Sequence completeness is checked separately. Older custom
+designs without stored source-length metadata must have their original custom
+source reassigned; the routed sequence is never treated as proof of availability.
 
 The ring is red while applicable standard steps are missing, blue with **Sim
 recommended** when they are complete, and hides entirely after a matching completed

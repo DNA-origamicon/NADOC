@@ -20,6 +20,7 @@ validation; see [scope and documentation](README.md#feature-overview).
 - **Design Readiness**
   - Shared 3D/pathview progress ring
   - Actionable checklist and shortcuts
+  - Exact scaffold-length validation
   - Assembly part issue navigation
   - Optional current-design simulation completion
 - **Lattice Design**
@@ -442,6 +443,7 @@ validation; see [scope and documentation](README.md#feature-overview).
   - Existing-presentation pause/resume/end
   - Tracked presenter figure
   - Desktop mirror
+  - Five-second stereo recordings
   - Shared trajectory controls
 
 ## Files, History, and Collaboration

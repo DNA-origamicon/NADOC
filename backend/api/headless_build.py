@@ -223,11 +223,17 @@ def extrude(
     strand_filter: str = "both",
     extend_inplace: bool = True,
     ligate_adjacent: bool = True,
+    separate_fresh_extrusions: bool = True,
+    source_frame_id: str | None = None,
+    expected_design_id: str | None = None,
+    expected_revision: int | None = None,
 ) -> Design:
     """Extrude a continuation off the blunt ends (mirrors POST /design/bundle-continuation).
 
     Cells already ending at ``offset_nm`` extend their existing strands; fresh
-    cells start new helices.  Records an ``extrude-continuation`` feature-log entry.
+    cells start new helices. ``source_frame_id`` selects an independent lattice
+    frame; supply design and revision guards together to reject a stale draft.
+    Records an ``extrude-continuation`` feature-log entry.
     """
     _route_extrude(
         BundleContinuationRequest(
@@ -238,6 +244,10 @@ def extrude(
             strand_filter=strand_filter,
             extend_inplace=extend_inplace,
             ligate_adjacent=ligate_adjacent,
+            separate_fresh_extrusions=separate_fresh_extrusions,
+            source_frame_id=source_frame_id,
+            expected_design_id=expected_design_id,
+            expected_revision=expected_revision,
         )
     )
     return design_state.get_or_404()
@@ -251,6 +261,7 @@ def extrude_segment(
     plane: str = "XY",
     strand_filter: str = "both",
     ligate_adjacent: bool = True,
+    separate_fresh_extrusions: bool = True,
 ) -> Design:
     """Append a fresh segment of helices at ``offset_nm`` (mirrors POST /design/bundle-segment).
 
@@ -267,6 +278,7 @@ def extrude_segment(
             offset_nm=offset_nm,
             strand_filter=strand_filter,
             ligate_adjacent=ligate_adjacent,
+            separate_fresh_extrusions=separate_fresh_extrusions,
         )
     )
     return design_state.get_or_404()
@@ -280,6 +292,7 @@ def circle_segment(
     strand_filter: str = "both",
     ligate_adjacent: bool = True,
     min_chord_bp: int = _DEFAULT_MIN_CHORD_BP,
+    separate_fresh_extrusions: bool = True,
 ) -> Design:
     """Place a parametric circle (flat disc) of ``radius_nm`` (POST /design/circle-segment).
 
@@ -314,6 +327,7 @@ def circle_segment(
             offset_nm=offset_nm,
             strand_filter=strand_filter,
             ligate_adjacent=ligate_adjacent,
+            separate_fresh_extrusions=separate_fresh_extrusions,
         )
     )
     return design_state.get_or_404()
@@ -326,6 +340,7 @@ def bundle_deformed_continuation(
     source_bp: int,
     ref_helix_id: str | None = None,
     plane: str = "XY",
+    separate_fresh_extrusions: bool = True,
 ) -> Design:
     """Extrude a continuation onto the DEFORMED cross-section frame (POST /design/bundle-deformed-continuation).
 
@@ -355,6 +370,7 @@ def bundle_deformed_continuation(
             plane=plane,
             ref_helix_id=ref_helix_id,
             source_bp=source_bp,
+            separate_fresh_extrusions=separate_fresh_extrusions,
         )
     )
     return design_state.get_or_404()
@@ -1767,16 +1783,11 @@ def place_primitive(
     return placed
 
 
-def sweep(cells, points_nm, *, plane="XY", source_helix_id=None, source_end="end",
-          strand_filter="both", ligate_adjacent=True):
-    """Create one editable/revertible sweep; XYZ points are offsets in world nm.
-
-    The first point is (0,0,0). A source helix anchors and ligates continuation
-    at its selected end. The footprint can include coplanar existing ends and
-    vacant cells; occupied cells that cross the source plane are rejected.
-    """
-    from backend.api.routes_sweep import create_sweep
-    from backend.core.sweep import SweepRequest
-    return create_sweep(SweepRequest(cells=cells, points_nm=points_nm, plane=plane,
-        source_helix_id=source_helix_id, source_end=source_end,
-        strand_filter=strand_filter, ligate_adjacent=ligate_adjacent))
+# Keep the established hb.sweep entry point while sharing complete request
+# validation and native preview/edit transactions in one cohesive adapter.
+from backend.api.headless_sweep_build import (  # noqa: E402,F401
+    edit_sweep,
+    preview_sweep,
+    preview_sweep_edit,
+    sweep,
+)

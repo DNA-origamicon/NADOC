@@ -1,0 +1,2776 @@
+{
+  "at": "2026-10-12T03:02:54+00:00",
+  "stage": "alternate-fixed-core-qm-stationary-single-chi-core-release-running",
+  "authorization": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/campaign_authorization_20261010.json",
+    "sha256": "c39e549edd30e31ec183cd8094ed5cf0bd29ea34b26736f87f71d867eafd98d5"
+  },
+  "latest_audited_wake": {
+    "token": "726a3d20-4cc5-4bd1-98fe-ee22d44be1f1",
+    "event": "complete",
+    "ack": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2-service/completion_wake_ack.json",
+      "sha256": "6c07d45405477afa8eb1f3c7350e294ded3c5df69ee7f01995acc68ab3d68c6c"
+    }
+  },
+  "previous_completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/completion_audit.json",
+    "sha256": "2f0afd5019533ee5bd858bba02a9cbee172957dd8983edc31b316490375c2544"
+  },
+  "archived_auditor": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/executed_completion_audit.py",
+    "sha256": "52ae249df35c4573036ca30fc4536b4ac89fb7e1d560fa4e23c8bec4a1e31702"
+  },
+  "stage_transition_review": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/stage_transition_review.json",
+    "sha256": "c454d7ceff430ce47820a31720d90b68fe2dce30a7306172b052c49ef0beb587"
+  },
+  "completed_stage_summary": {
+    "new_gradients": 3,
+    "accepted_states": 4,
+    "optimizer_converged": true,
+    "fixed_core_constrained_stationary": true,
+    "max_free_projected_atom_gradient_au": 1.0331172683071213e-05,
+    "rms_free_projected_atom_gradient_au": 5.810523318722662e-06,
+    "relative_to_original_qm_kcal_mol": -2.4330346034016808,
+    "single_chi_stationary": false,
+    "single_chi_max_gradient_au": 0.006383049501546818,
+    "minimum_certified": false
+  },
+  "release_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v1/plan.json",
+    "sha256": "5efb2a3388f20d6ed4eb8c2043f1c4c2094e9db60fcb0538fb79a46351cd6e30"
+  },
+  "release_design": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v1/design.json",
+    "sha256": "603e81f074fbe4fa303d94e1cdce99b6a3a1c184fba91fa7ac6d66526755836c"
+  },
+  "preflight": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v1/preflight.json",
+    "sha256": "af1f8e95606aca89e52ee499a324e1f2614876704c7727735501d1926ea45727"
+  },
+  "admission": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v1/admission.json",
+    "sha256": "adb746fdc2462eb830271143bc8d4558b6a4f14e895c8ca88cd3bac5d8789898"
+  },
+  "tests": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v1/test_receipt.json",
+    "sha256": "3bf22a1d4e356ab36d580eeba20b27783a66c30a5b95432b4a9616cf4a977b15"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v1/launch_verification.json",
+    "sha256": "7dbcab9661556fe8fe601f45851cd751c44800f32e5745a3ac04ae6ca6c6eba0"
+  },
+  "service_directory": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v1-service",
+  "status_at_single_startup_check": {
+    "state": "running",
+    "pid": 784338,
+    "records": [],
+    "started_at": 1791774118.7879708,
+    "simulation_ready": false
+  },
+  "completion_wake_token": "29f7da0c-7627-492a-ae9d-703632ba9b59",
+  "completion_watcher_armed": true,
+  "expected_finish_epoch": 1791776703.461677,
+  "audit_deadline_epoch": 1791777118.7443438,
+  "hard_deadline_epoch": 1791777718.7443438,
+  "maximum_new_gradients": 12,
+  "task_timeout_seconds": 600,
+  "hard_seconds": 3600,
+  "active_calculation_at_startup": "First new original-method MP2 gradient after seed reuse, Sella order0/internal with all49atoms free and only original chi fixed.",
+  "next_action": "Acknowledge completion/failure/deadline and replay actual native output, geometry/gradient and accepted trajectory. Audit the single-chi projected gradient over all49atoms, chemistry/constraint consistency, relative energy and core/sugar/OH descriptors. Stop on audited stationarity; no minimum certification from convergence. Review progress/cost/necessity before any further chunk or matched-conformer acquisition.",
+  "audit_implementation_note": "The frozen fixed-core completion auditor hardcodes rank97, fixed-coordinate drift and free17atom scope. Do not run it unchanged for this release. Use an explicitly versioned auditor with rank1 and all49atoms, validate the independent single-chi projector and native constraints, and preserve the fixed-core audits.",
+  "restart_policy": "Reuse exact last accepted geometry and full-precision gradient without duplicate QM; fresh Sella history. Retain every evaluated trial and accepted checkpoint.",
+  "bonded_fit_rounds_consumed": 1,
+  "bonded_fit_rounds_max": 2,
+  "second_fit_admitted": false,
+  "additional_profile_acquisition_admitted": false,
+  "heldout_accessed": false,
+  "full_candidate_hash_lock": false,
+  "minimum_certified": false,
+  "basin_closure_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0,
+  "periodic_polling": false,
+  "storage_policy": "All output/native scratch on mounted Archive. Preserve previous failures and original references; no existing-data move/delete.",
+  "completed_stage_audit": {
+    "at": "2026-10-12T02:57:52+00:00",
+    "source": {
+      "path": "/home/jojo/Work/NADOC/experiments/cpd_anti_additive/audit_corrected_alternate_qm_closure.py",
+      "sha256": "52ae249df35c4573036ca30fc4536b4ac89fb7e1d560fa4e23c8bec4a1e31702"
+    },
+    "plan": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/plan.json",
+      "sha256": "0c26c0b38446306f86ca7bf3f1ed17314f6f928397164b4b23f16cd35a66d52d"
+    },
+    "status": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2-service/status.json",
+      "sha256": "e2006d0c3a9d56ad9280cb6cd7d800460517ca2ce4218471708d64ad51f747ba"
+    },
+    "acknowledgement": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2-service/completion_wake_ack.json",
+      "sha256": "6c07d45405477afa8eb1f3c7350e294ded3c5df69ee7f01995acc68ab3d68c6c"
+    },
+    "progress_source": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/progress.json",
+      "sha256": "fb8897e179bba44e46e1fc59fb38aba60cb8fc1ff8aeb450c2e2f94aff17e1be"
+    },
+    "assessment": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/assessment.json",
+      "sha256": "ea7c3372707f593200b5964f1a91626844071084b1fc558e5749d8a4a0dcd0de"
+    },
+    "native_trajectory": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/sella.traj",
+      "sha256": "9cf7196eea9f19f87382b9819c98f562b82396eacc3efd2dce053ba3881d9c13"
+    },
+    "native_log": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/sella.log",
+      "sha256": "e457f90861035f067dd392b18c399a544c0d5e661f7ecb6f2db79229a7f11cee"
+    },
+    "passed": true,
+    "native_evidence_passed": true,
+    "evaluated_states": 4,
+    "accepted_states": 4,
+    "new_gradients": 3,
+    "records": [
+      {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-012/result.json",
+          "sha256": "f176349324346ff95a930e195f37bd0ef1058de6c0899e18d0e37f8c04933b7b"
+        },
+        "reused": true,
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-012/geometry_bohr.npy",
+          "sha256": "d88119e5c0ecc7543173beb478ec81e783c89749362154017bccb54270bb55d7"
+        },
+        "gradient": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-012/gradient_hartree_bohr.npy",
+          "sha256": "8644e7e3ecf85855e7d107bbda1778b18c62549ccf13156b26a00fa5087e5b8c"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-012/output.dat",
+          "sha256": "d2c4d84be945f00214048934501a0ab87e07db11e8ef5c708b95f36bf2299940"
+        },
+        "energy_hartree": -1364.5421047321433,
+        "relative_to_original_qm_kcal_mol": -2.433036178722016,
+        "max_free_projected_atom_gradient_au": 5.8080719315784955e-05,
+        "rms_free_projected_atom_gradient_au": 2.3877527708423158e-05,
+        "max_free_projected_atom_gradient_kcal_mol_A": 0.06887333936558253,
+        "rms_free_projected_atom_gradient_kcal_mol_A": 0.02831447489711763,
+        "independent_projection_error_au": 9.43942562732069e-14,
+        "stationarity_passed": false,
+        "geometry_checks": {
+          "maximum_fixed_drift_A": 5.281862517194635e-10,
+          "chi_error_degrees": 1.2151110126978892e-06
+        },
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.272243261055922,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6919355325197085,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.245440884529488,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.681901015415451,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.861771869083852,
+            1.0326356419580003
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.3959959444015724,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "native_audit": {
+          "electronic": {
+            "scf_converged": true,
+            "response_residuals": [
+              5.306e-11
+            ],
+            "max_atom_gradient_au": 0.0082070822772873,
+            "rms_atom_gradient_au": 0.0018365557862923929
+          },
+          "fitting_conditions": [
+            1e-10,
+            1e-10,
+            1e-10
+          ],
+          "actual_bases": {
+            "6-31G(D)": [
+              449,
+              449,
+              false
+            ],
+            "CC-PVDZ-JKFIT": [
+              2737,
+              2737,
+              false
+            ],
+            "CC-PVDZ-RI": [
+              1820,
+              2112,
+              true
+            ]
+          },
+          "occupations": [
+            27,
+            101,
+            74,
+            348,
+            348,
+            0
+          ],
+          "geometry_tables": 2,
+          "native_geometry_max_rounding_error_bohr": 4.991285162958548e-13,
+          "gradient_components": 147
+        },
+        "native_seconds": 210.04854686209,
+        "torsions_degrees": {
+          "sugar_ring_0": -24.377799719216952,
+          "sugar_ring_1": 35.92016134698597,
+          "sugar_ring_2": -35.41497442700022,
+          "sugar_ring_3": 21.137288904836502,
+          "sugar_ring_4": 2.0621188707819598,
+          "cap_5OH": 61.048564334534014,
+          "cap_3OH": 152.1359275020893,
+          "sugar_exocyclic": 46.75397371581615,
+          "cyclobutane": 21.354666713417114
+        }
+      },
+      {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/evaluation-001/result.json",
+          "sha256": "c5759c40300f2d5e4e1762bc3fcd50828384b3abcf72e8e92cdd7c2c95762688"
+        },
+        "reused": false,
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/evaluation-001/geometry_bohr.npy",
+          "sha256": "9565dd7a6b9309d8bc69148f984679f663d905fe283de43595e8b85e2f67d2c1"
+        },
+        "gradient": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/evaluation-001/gradient_hartree_bohr.npy",
+          "sha256": "2a0b5937700b8bde938d319b287b99982f59822fa2c3a4173bb5c94260a2310c"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/evaluation-001/output.dat",
+          "sha256": "a4ee974f54286657089d86fa508dce8f4bed287c0e808333a58e6064b4700046"
+        },
+        "energy_hartree": -1364.5421045659862,
+        "relative_to_original_qm_kcal_mol": -2.4329319135182086,
+        "max_free_projected_atom_gradient_au": 6.318572551397388e-05,
+        "rms_free_projected_atom_gradient_au": 2.1293401025926345e-05,
+        "max_free_projected_atom_gradient_kcal_mol_A": 0.07492696315835314,
+        "rms_free_projected_atom_gradient_kcal_mol_A": 0.025250163089965305,
+        "independent_projection_error_au": 2.1639173912208366e-13,
+        "stationarity_passed": false,
+        "geometry_checks": {
+          "maximum_fixed_drift_A": 8.953079894491308e-09,
+          "chi_error_degrees": 1.7149420727946563e-07
+        },
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.2722432602149203,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6919355401032288,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.2454408850625307,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.6819010160533296,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.8617718690500805,
+            1.032635642014143
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.3959959453637514,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "native_audit": {
+          "electronic": {
+            "scf_converged": true,
+            "response_residuals": [
+              5.305e-11
+            ],
+            "max_atom_gradient_au": 0.00820677373813007,
+            "rms_atom_gradient_au": 0.0018362681137570073
+          },
+          "fitting_conditions": [
+            1e-10,
+            1e-10,
+            1e-10
+          ],
+          "actual_bases": {
+            "6-31G(D)": [
+              449,
+              449,
+              false
+            ],
+            "CC-PVDZ-JKFIT": [
+              2737,
+              2737,
+              false
+            ],
+            "CC-PVDZ-RI": [
+              1820,
+              2112,
+              true
+            ]
+          },
+          "occupations": [
+            27,
+            101,
+            74,
+            348,
+            348,
+            0
+          ],
+          "geometry_tables": 2,
+          "native_geometry_max_rounding_error_bohr": 4.973799150320701e-13,
+          "gradient_components": 147
+        },
+        "native_seconds": 201.05293467605952,
+        "torsions_degrees": {
+          "sugar_ring_0": -24.39288991106306,
+          "sugar_ring_1": 35.929817957844264,
+          "sugar_ring_2": -35.41592526176479,
+          "sugar_ring_3": 21.127846189385213,
+          "sugar_ring_4": 2.0779082541617835,
+          "cap_5OH": 61.04456305920806,
+          "cap_3OH": 152.12969905838483,
+          "sugar_exocyclic": 46.762261830444466,
+          "cyclobutane": 21.354666737441594
+        }
+      },
+      {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/evaluation-002/result.json",
+          "sha256": "9b70a68df9707056810aa919c0cb128d451be5b1900495cf2c04c1d380c6c4e2"
+        },
+        "reused": false,
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/evaluation-002/geometry_bohr.npy",
+          "sha256": "fd918cfbea76a6f1436115b87ec12721af37f2182c096e7151f20d392161c30e"
+        },
+        "gradient": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/evaluation-002/gradient_hartree_bohr.npy",
+          "sha256": "6f67891f447d49a208b2c2976564a143f2055c59997e7fc70b5f0f9a14e68ee1"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/evaluation-002/output.dat",
+          "sha256": "0d621490ad7227b4b34a4fdcada3f4d7863a666194932fb84a393665aef9de65"
+        },
+        "energy_hartree": -1364.542104742105,
+        "relative_to_original_qm_kcal_mol": -2.4330424297802997,
+        "max_free_projected_atom_gradient_au": 2.2233484368534673e-05,
+        "rms_free_projected_atom_gradient_au": 1.0430850723176956e-05,
+        "max_free_projected_atom_gradient_kcal_mol_A": 0.026364933703176323,
+        "rms_free_projected_atom_gradient_kcal_mol_A": 0.012369122321352729,
+        "independent_projection_error_au": 1.922044388745622e-13,
+        "stationarity_passed": false,
+        "geometry_checks": {
+          "maximum_fixed_drift_A": 4.1044085802376e-09,
+          "chi_error_degrees": 1.2537111615529284e-07
+        },
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.2722432611036925,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6919355363155177,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.2454408847518375,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.68190101581157,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.8617718690737359,
+            1.0326356419725862
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.3959959448131534,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "native_audit": {
+          "electronic": {
+            "scf_converged": true,
+            "response_residuals": [
+              5.305e-11
+            ],
+            "max_atom_gradient_au": 0.008206417965581997,
+            "rms_atom_gradient_au": 0.0018375459437934116
+          },
+          "fitting_conditions": [
+            1e-10,
+            1e-10,
+            1e-10
+          ],
+          "actual_bases": {
+            "6-31G(D)": [
+              449,
+              449,
+              false
+            ],
+            "CC-PVDZ-JKFIT": [
+              2737,
+              2737,
+              false
+            ],
+            "CC-PVDZ-RI": [
+              1820,
+              2112,
+              true
+            ]
+          },
+          "occupations": [
+            27,
+            101,
+            74,
+            348,
+            348,
+            0
+          ],
+          "geometry_tables": 2,
+          "native_geometry_max_rounding_error_bohr": 4.991562718714704e-13,
+          "gradient_components": 147
+        },
+        "native_seconds": 212.6959650340723,
+        "torsions_degrees": {
+          "sugar_ring_0": -24.38262540575907,
+          "sugar_ring_1": 35.928783090103764,
+          "sugar_ring_2": -35.42404345893564,
+          "sugar_ring_3": 21.143228231246184,
+          "sugar_ring_4": 2.061756795655529,
+          "cap_5OH": 61.04460909472394,
+          "cap_3OH": 152.12964696958986,
+          "sugar_exocyclic": 46.75355136049389,
+          "cyclobutane": 21.354666721422394
+        }
+      },
+      {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/evaluation-003/result.json",
+          "sha256": "a2a78d8cac4a648a833da5630d8e12aab308c5d652dbe4b8c66e7b7b08dbde61"
+        },
+        "reused": false,
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/evaluation-003/geometry_bohr.npy",
+          "sha256": "f84e3f70632aa175d715b509986fd7111d09c10e3cd7b61b474e361f3a441d23"
+        },
+        "gradient": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/evaluation-003/gradient_hartree_bohr.npy",
+          "sha256": "c4134b45cabb0579aa884e0825f838d982bf9900a3c47b854cf0e1b260a6be01"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/evaluation-003/output.dat",
+          "sha256": "400b5efb4b27bfa14ba4222e58f282f1af64578973c4779f96fb910a2c349234"
+        },
+        "energy_hartree": -1364.542104729633,
+        "relative_to_original_qm_kcal_mol": -2.4330346034016808,
+        "max_free_projected_atom_gradient_au": 1.0331172683071213e-05,
+        "rms_free_projected_atom_gradient_au": 5.810523318722662e-06,
+        "max_free_projected_atom_gradient_kcal_mol_A": 0.012250922003512774,
+        "rms_free_projected_atom_gradient_kcal_mol_A": 0.006890240843027137,
+        "independent_projection_error_au": 1.7243332573908528e-13,
+        "stationarity_passed": true,
+        "geometry_checks": {
+          "maximum_fixed_drift_A": 6.696425840556925e-11,
+          "chi_error_degrees": 1.6904436961340252e-08
+        },
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.272243261451438,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6919355327138146,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.2454408845036498,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.6819010154996885,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.8617718690890322,
+            1.0326356419477771
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.3959959443632883,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "native_audit": {
+          "electronic": {
+            "scf_converged": true,
+            "response_residuals": [
+              5.305e-11
+            ],
+            "max_atom_gradient_au": 0.008202389847770108,
+            "rms_atom_gradient_au": 0.0018369645274225704
+          },
+          "fitting_conditions": [
+            1e-10,
+            1e-10,
+            1e-10
+          ],
+          "actual_bases": {
+            "6-31G(D)": [
+              449,
+              449,
+              false
+            ],
+            "CC-PVDZ-JKFIT": [
+              2737,
+              2737,
+              false
+            ],
+            "CC-PVDZ-RI": [
+              1820,
+              2112,
+              true
+            ]
+          },
+          "occupations": [
+            27,
+            101,
+            74,
+            348,
+            348,
+            0
+          ],
+          "geometry_tables": 2,
+          "native_geometry_max_rounding_error_bohr": 4.978240042419202e-13,
+          "gradient_components": 147
+        },
+        "native_seconds": 202.41952688002493,
+        "torsions_degrees": {
+          "sugar_ring_0": -24.3821005883606,
+          "sugar_ring_1": 35.93225104446859,
+          "sugar_ring_2": -35.42995961921705,
+          "sugar_ring_3": 21.149563487306796,
+          "sugar_ring_4": 2.0575631058142747,
+          "cap_5OH": 61.042121068176755,
+          "cap_3OH": 152.1236842194481,
+          "sugar_exocyclic": 46.753377445877085,
+          "cyclobutane": 21.35466671044367
+        }
+      }
+    ],
+    "reference_native": {
+      "electronic": {
+        "scf_converged": true,
+        "response_residuals": [
+          4.928e-11
+        ],
+        "max_atom_gradient_au": 0.004861503587702362,
+        "rms_atom_gradient_au": 0.0010720252827383587
+      },
+      "fitting_conditions": [
+        1e-10,
+        1e-10,
+        1e-10
+      ],
+      "actual_bases": {
+        "6-31G(D)": [
+          449,
+          449,
+          false
+        ],
+        "CC-PVDZ-JKFIT": [
+          2737,
+          2737,
+          false
+        ],
+        "CC-PVDZ-RI": [
+          1820,
+          2112,
+          true
+        ]
+      },
+      "occupations": [
+        27,
+        101,
+        74,
+        348,
+        348,
+        0
+      ],
+      "geometry_tables": 2,
+      "native_geometry_max_rounding_error_bohr": 4.996003610813204e-13,
+      "gradient_components": 147
+    },
+    "torsion_definitions": {
+      "sugar_ring_0": [
+        "1:O4'",
+        "1:C1'",
+        "1:C2'",
+        "1:C3'"
+      ],
+      "sugar_ring_1": [
+        "1:C1'",
+        "1:C2'",
+        "1:C3'",
+        "1:C4'"
+      ],
+      "sugar_ring_2": [
+        "1:C2'",
+        "1:C3'",
+        "1:C4'",
+        "1:O4'"
+      ],
+      "sugar_ring_3": [
+        "1:C3'",
+        "1:C4'",
+        "1:O4'",
+        "1:C1'"
+      ],
+      "sugar_ring_4": [
+        "1:C4'",
+        "1:O4'",
+        "1:C1'",
+        "1:C2'"
+      ],
+      "cap_5OH": [
+        "1:HO5'",
+        "1:O5'",
+        "1:C5'",
+        "1:C4'"
+      ],
+      "cap_3OH": [
+        "1:HO3'",
+        "1:O3'",
+        "1:C3'",
+        "1:C2'"
+      ],
+      "sugar_exocyclic": [
+        "1:O5'",
+        "1:C5'",
+        "1:C4'",
+        "1:C3'"
+      ],
+      "cyclobutane": [
+        "1:C5",
+        "1:C6",
+        "2:C5",
+        "2:C6"
+      ]
+    },
+    "last_accepted_result": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/evaluation-003/result.json",
+      "sha256": "a2a78d8cac4a648a833da5630d8e12aab308c5d652dbe4b8c66e7b7b08dbde61"
+    },
+    "final": {
+      "source": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/evaluation-003/result.json",
+        "sha256": "a2a78d8cac4a648a833da5630d8e12aab308c5d652dbe4b8c66e7b7b08dbde61"
+      },
+      "reused": false,
+      "geometry": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/evaluation-003/geometry_bohr.npy",
+        "sha256": "f84e3f70632aa175d715b509986fd7111d09c10e3cd7b61b474e361f3a441d23"
+      },
+      "gradient": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/evaluation-003/gradient_hartree_bohr.npy",
+        "sha256": "c4134b45cabb0579aa884e0825f838d982bf9900a3c47b854cf0e1b260a6be01"
+      },
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/evaluation-003/output.dat",
+        "sha256": "400b5efb4b27bfa14ba4222e58f282f1af64578973c4779f96fb910a2c349234"
+      },
+      "energy_hartree": -1364.542104729633,
+      "relative_to_original_qm_kcal_mol": -2.4330346034016808,
+      "max_free_projected_atom_gradient_au": 1.0331172683071213e-05,
+      "rms_free_projected_atom_gradient_au": 5.810523318722662e-06,
+      "max_free_projected_atom_gradient_kcal_mol_A": 0.012250922003512774,
+      "rms_free_projected_atom_gradient_kcal_mol_A": 0.006890240843027137,
+      "independent_projection_error_au": 1.7243332573908528e-13,
+      "stationarity_passed": true,
+      "geometry_checks": {
+        "maximum_fixed_drift_A": 6.696425840556925e-11,
+        "chi_error_degrees": 1.6904436961340252e-08
+      },
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.272243261451438,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.6919355327138146,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.2454408845036498,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.6819010154996885,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.8617718690890322,
+          1.0326356419477771
+        ],
+        "minimum_nonbonded_covalent_ratio": 1.3959959443632883,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      },
+      "native_audit": {
+        "electronic": {
+          "scf_converged": true,
+          "response_residuals": [
+            5.305e-11
+          ],
+          "max_atom_gradient_au": 0.008202389847770108,
+          "rms_atom_gradient_au": 0.0018369645274225704
+        },
+        "fitting_conditions": [
+          1e-10,
+          1e-10,
+          1e-10
+        ],
+        "actual_bases": {
+          "6-31G(D)": [
+            449,
+            449,
+            false
+          ],
+          "CC-PVDZ-JKFIT": [
+            2737,
+            2737,
+            false
+          ],
+          "CC-PVDZ-RI": [
+            1820,
+            2112,
+            true
+          ]
+        },
+        "occupations": [
+          27,
+          101,
+          74,
+          348,
+          348,
+          0
+        ],
+        "geometry_tables": 2,
+        "native_geometry_max_rounding_error_bohr": 4.978240042419202e-13,
+        "gradient_components": 147
+      },
+      "native_seconds": 202.41952688002493,
+      "torsions_degrees": {
+        "sugar_ring_0": -24.3821005883606,
+        "sugar_ring_1": 35.93225104446859,
+        "sugar_ring_2": -35.42995961921705,
+        "sugar_ring_3": 21.149563487306796,
+        "sugar_ring_4": 2.0575631058142747,
+        "cap_5OH": 61.042121068176755,
+        "cap_3OH": 152.1236842194481,
+        "sugar_exocyclic": 46.753377445877085,
+        "cyclobutane": 21.35466671044367
+      }
+    },
+    "progress": {
+      "force_reduction_factor": 5.621890282693342,
+      "energy_change_kcal_mol": 1.5753203349801622e-06,
+      "last_five_force_reduction_fraction": 0.8221238854343278,
+      "last_five_energy_change_kcal_mol": 1.5753203349801622e-06,
+      "maximum_force_limit_ratio": 0.6887448455380808,
+      "rms_force_limit_ratio": 0.5810523318722661,
+      "uphill_accepted_energy_changes_kcal_mol": [
+        0.00010426520380694215,
+        7.826378619207214e-06
+      ]
+    },
+    "final_descriptors_vs_original": {
+      "heavy_atom_rmsd_angstrom": 0.34871532528488186,
+      "maximum_heavy_proper_change_degrees": 128.9583318724106,
+      "torsions": [
+        {
+          "atoms": [
+            "1:O5'",
+            "1:C5'",
+            "1:C4'",
+            "1:O4'"
+          ],
+          "reference_degrees": 56.07090349073026,
+          "observed_degrees": -70.38630977216447,
+          "change_degrees": -126.45721326289473
+        },
+        {
+          "atoms": [
+            "1:O5'",
+            "1:C5'",
+            "1:C4'",
+            "1:C3'"
+          ],
+          "reference_degrees": 175.7117093182877,
+          "observed_degrees": 46.75337744587707,
+          "change_degrees": -128.9583318724106
+        },
+        {
+          "atoms": [
+            "1:C5'",
+            "1:C4'",
+            "1:O4'",
+            "1:C1'"
+          ],
+          "reference_degrees": 105.07549853652633,
+          "observed_degrees": 144.8265155463699,
+          "change_degrees": 39.751017009843565
+        },
+        {
+          "atoms": [
+            "1:C5'",
+            "1:C4'",
+            "1:C3'",
+            "1:O3'"
+          ],
+          "reference_degrees": 121.09691880477688,
+          "observed_degrees": 87.17798613942077,
+          "change_degrees": -33.918932665356124
+        },
+        {
+          "atoms": [
+            "1:C5'",
+            "1:C4'",
+            "1:C3'",
+            "1:C2'"
+          ],
+          "reference_degrees": -122.23147510699964,
+          "observed_degrees": -154.6120612217534,
+          "change_degrees": -32.38058611475378
+        },
+        {
+          "atoms": [
+            "1:C4'",
+            "1:O4'",
+            "1:C1'",
+            "1:C2'"
+          ],
+          "reference_degrees": 27.38345989322881,
+          "observed_degrees": 2.05756310581429,
+          "change_degrees": -25.325896787414536
+        },
+        {
+          "atoms": [
+            "1:C4'",
+            "1:O4'",
+            "1:C1'",
+            "1:N1"
+          ],
+          "reference_degrees": -102.50948592593537,
+          "observed_degrees": -126.6851400183864,
+          "change_degrees": -24.175654092451055
+        },
+        {
+          "atoms": [
+            "1:C4'",
+            "1:C3'",
+            "1:C2'",
+            "1:C1'"
+          ],
+          "reference_degrees": 15.743712347263115,
+          "observed_degrees": 35.93225104446862,
+          "change_degrees": 20.1885386972055
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C4'",
+            "1:C3'",
+            "1:O3'"
+          ],
+          "reference_degrees": -116.86330741714774,
+          "observed_degrees": -153.6399122580429,
+          "change_degrees": -36.776604840895175
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C4'",
+            "1:C3'",
+            "1:C2'"
+          ],
+          "reference_degrees": -0.19170132892423666,
+          "observed_degrees": -35.42995961921706,
+          "change_degrees": -35.23825829029283
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C1'",
+            "1:C2'",
+            "1:C3'"
+          ],
+          "reference_degrees": -26.59742040180418,
+          "observed_degrees": -24.382100588360615,
+          "change_degrees": 2.215319813443557
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C1'",
+            "1:N1",
+            "1:C2"
+          ],
+          "reference_degrees": 105.65946347192308,
+          "observed_degrees": 105.65946346245025,
+          "change_degrees": -9.472842066315934e-09
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C1'",
+            "1:N1",
+            "1:C6"
+          ],
+          "reference_degrees": -71.82720909766141,
+          "observed_degrees": -65.83777779700412,
+          "change_degrees": 5.989431300657287
+        },
+        {
+          "atoms": [
+            "1:C3'",
+            "1:C4'",
+            "1:O4'",
+            "1:C1'"
+          ],
+          "reference_degrees": -17.080262946185655,
+          "observed_degrees": 21.149563487306786,
+          "change_degrees": 38.229826433492434
+        },
+        {
+          "atoms": [
+            "1:C3'",
+            "1:C2'",
+            "1:C1'",
+            "1:N1"
+          ],
+          "reference_degrees": 99.26686945462536,
+          "observed_degrees": 98.09114499844834,
+          "change_degrees": -1.1757244561770221
+        },
+        {
+          "atoms": [
+            "1:O3'",
+            "1:C3'",
+            "1:C2'",
+            "1:C1'"
+          ],
+          "reference_degrees": 136.43701909130445,
+          "observed_degrees": 155.20607305323742,
+          "change_degrees": 18.76905396193297
+        },
+        {
+          "atoms": [
+            "1:C2'",
+            "1:C1'",
+            "1:N1",
+            "1:C2"
+          ],
+          "reference_degrees": -17.778880350892656,
+          "observed_degrees": -15.906981131031031,
+          "change_degrees": 1.871899219861632
+        },
+        {
+          "atoms": [
+            "1:C2'",
+            "1:C1'",
+            "1:N1",
+            "1:C6"
+          ],
+          "reference_degrees": 164.73444707952285,
+          "observed_degrees": 172.5957776095146,
+          "change_degrees": 7.861330529991761
+        },
+        {
+          "atoms": [
+            "1:C1'",
+            "1:N1",
+            "1:C2",
+            "1:O2"
+          ],
+          "reference_degrees": -9.52898076497791,
+          "observed_degrees": -3.2819980030079785,
+          "change_degrees": 6.246982761969917
+        },
+        {
+          "atoms": [
+            "1:C1'",
+            "1:N1",
+            "1:C2",
+            "1:N3"
+          ],
+          "reference_degrees": 170.27513605886585,
+          "observed_degrees": 176.52211881266726,
+          "change_degrees": 6.246982753801404
+        },
+        {
+          "atoms": [
+            "1:C1'",
+            "1:N1",
+            "1:C6",
+            "1:C5"
+          ],
+          "reference_degrees": -144.20211049484215,
+          "observed_degrees": -149.86253587334625,
+          "change_degrees": -5.660425378504101
+        },
+        {
+          "atoms": [
+            "1:C1'",
+            "1:N1",
+            "1:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 104.79688916828907,
+          "observed_degrees": 99.13646378999516,
+          "change_degrees": -5.660425378293894
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C2",
+            "1:N3",
+            "1:C4"
+          ],
+          "reference_degrees": -11.56027958447706,
+          "observed_degrees": -11.56027958485796,
+          "change_degrees": -3.809077497862745e-10
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "1:C5",
+            "1:C4"
+          ],
+          "reference_degrees": -38.95437939982253,
+          "observed_degrees": -38.954379402740756,
+          "change_degrees": -2.918227437476162e-09
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "1:C5",
+            "1:C7"
+          ],
+          "reference_degrees": 89.31586225692689,
+          "observed_degrees": 89.31586225573635,
+          "change_degrees": -1.190528564620763e-09
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "1:C5",
+            "2:C6"
+          ],
+          "reference_degrees": -150.1530852585683,
+          "observed_degrees": -150.15308525928162,
+          "change_degrees": -7.133280632842798e-10
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "2:C5",
+            "2:C4"
+          ],
+          "reference_degrees": 34.23845538267514,
+          "observed_degrees": 34.23845538268131,
+          "change_degrees": 6.16751094639767e-12
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": -92.9296459217472,
+          "observed_degrees": -92.92964592083311,
+          "change_degrees": 9.140990187006537e-10
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "2:C5",
+            "2:C6"
+          ],
+          "reference_degrees": 145.70477087899292,
+          "observed_degrees": 145.70477088001024,
+          "change_degrees": 1.017326667351881e-09
+        },
+        {
+          "atoms": [
+            "1:C2",
+            "1:N1",
+            "1:C6",
+            "1:C5"
+          ],
+          "reference_degrees": 38.174990986050176,
+          "observed_degrees": 38.174990989996324,
+          "change_degrees": 3.946155402445584e-09
+        },
+        {
+          "atoms": [
+            "1:C2",
+            "1:N1",
+            "1:C6",
+            "2:C5"
+          ],
+          "reference_degrees": -72.82600935081862,
+          "observed_degrees": -72.82600934666225,
+          "change_degrees": 4.156390787102282e-09
+        },
+        {
+          "atoms": [
+            "1:C2",
+            "1:N3",
+            "1:C4",
+            "1:O4"
+          ],
+          "reference_degrees": -171.58765116915984,
+          "observed_degrees": -171.58765116722282,
+          "change_degrees": 1.9370247628103243e-09
+        },
+        {
+          "atoms": [
+            "1:C2",
+            "1:N3",
+            "1:C4",
+            "1:C5"
+          ],
+          "reference_degrees": 7.662591316841402,
+          "observed_degrees": 7.662591318943755,
+          "change_degrees": 2.1023538465669844e-09
+        },
+        {
+          "atoms": [
+            "1:O2",
+            "1:C2",
+            "1:N1",
+            "1:C6"
+          ],
+          "reference_degrees": 167.86632275548905,
+          "observed_degrees": 167.86632276174026,
+          "change_degrees": 6.2512128806702094e-09
+        },
+        {
+          "atoms": [
+            "1:O2",
+            "1:C2",
+            "1:N3",
+            "1:C4"
+          ],
+          "reference_degrees": 168.25884812564303,
+          "observed_degrees": 168.25884811771732,
+          "change_degrees": -7.925706313471892e-09
+        },
+        {
+          "atoms": [
+            "1:N3",
+            "1:C2",
+            "1:N1",
+            "1:C6"
+          ],
+          "reference_degrees": -12.329560420667178,
+          "observed_degrees": -12.329560422584494,
+          "change_degrees": -1.9173285181750543e-09
+        },
+        {
+          "atoms": [
+            "1:N3",
+            "1:C4",
+            "1:C5",
+            "1:C7"
+          ],
+          "reference_degrees": -115.88948531222036,
+          "observed_degrees": -115.8894853133919,
+          "change_degrees": -1.1715428627212532e-09
+        },
+        {
+          "atoms": [
+            "1:N3",
+            "1:C4",
+            "1:C5",
+            "1:C6"
+          ],
+          "reference_degrees": 17.00829116106753,
+          "observed_degrees": 17.008291160496274,
+          "change_degrees": -5.712479378416901e-10
+        },
+        {
+          "atoms": [
+            "1:N3",
+            "1:C4",
+            "1:C5",
+            "2:C6"
+          ],
+          "reference_degrees": 110.92211773002516,
+          "observed_degrees": 110.92211772892635,
+          "change_degrees": -1.0988117082888493e-09
+        },
+        {
+          "atoms": [
+            "1:C4",
+            "1:C5",
+            "1:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 90.17564754277956,
+          "observed_degrees": 90.17564754042613,
+          "change_degrees": -2.3534312276751734e-09
+        },
+        {
+          "atoms": [
+            "1:C4",
+            "1:C5",
+            "2:C6",
+            "2:N1"
+          ],
+          "reference_degrees": 34.32033949488252,
+          "observed_degrees": 34.32033949566382,
+          "change_degrees": 7.813127922418062e-10
+        },
+        {
+          "atoms": [
+            "1:C4",
+            "1:C5",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": -89.189897367765,
+          "observed_degrees": -89.18989736635264,
+          "change_degrees": 1.4123600067250663e-09
+        },
+        {
+          "atoms": [
+            "1:O4",
+            "1:C4",
+            "1:C5",
+            "1:C7"
+          ],
+          "reference_degrees": 63.35378892106766,
+          "observed_degrees": 63.353788920063295,
+          "change_degrees": -1.0043663678516168e-09
+        },
+        {
+          "atoms": [
+            "1:O4",
+            "1:C4",
+            "1:C5",
+            "1:C6"
+          ],
+          "reference_degrees": -163.74843460564446,
+          "observed_degrees": -163.74843460604853,
+          "change_degrees": -4.0407144297205377e-10
+        },
+        {
+          "atoms": [
+            "1:O4",
+            "1:C4",
+            "1:C5",
+            "2:C6"
+          ],
+          "reference_degrees": -69.83460803668683,
+          "observed_degrees": -69.83460803761845,
+          "change_degrees": -9.316067917097826e-10
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "1:C6",
+            "2:C5",
+            "2:C4"
+          ],
+          "reference_degrees": -90.11164878631362,
+          "observed_degrees": -90.11164878688525,
+          "change_degrees": -5.716174200642854e-10
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "1:C6",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": 142.72024990926406,
+          "observed_degrees": 142.7202499096003,
+          "change_degrees": 3.362572442711098e-10
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "1:C6",
+            "2:C5",
+            "2:C6"
+          ],
+          "reference_degrees": 21.354666710004167,
+          "observed_degrees": 21.354666710443666,
+          "change_degrees": 4.3951331463176757e-10
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:N1",
+            "2:CM"
+          ],
+          "reference_degrees": 77.98630740727242,
+          "observed_degrees": 77.98630740729172,
+          "change_degrees": 1.929834070324432e-11
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:N1",
+            "2:C2"
+          ],
+          "reference_degrees": -74.44819224851757,
+          "observed_degrees": -74.44819224856043,
+          "change_degrees": -4.285993782104924e-11
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:C5",
+            "1:C6"
+          ],
+          "reference_degrees": -20.884152858791353,
+          "observed_degrees": -20.884152859098073,
+          "change_degrees": -3.0672708817292005e-10
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:C5",
+            "2:C4"
+          ],
+          "reference_degrees": 93.13299415040854,
+          "observed_degrees": 93.13299415128603,
+          "change_degrees": 8.774918569542933e-10
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": -138.31836405888941,
+          "observed_degrees": -138.31836405827957,
+          "change_degrees": 6.098446192481788e-10
+        },
+        {
+          "atoms": [
+            "1:C7",
+            "1:C5",
+            "1:C6",
+            "2:C5"
+          ],
+          "reference_degrees": -141.55411080047102,
+          "observed_degrees": -141.55411080109678,
+          "change_degrees": -6.25760776529205e-10
+        },
+        {
+          "atoms": [
+            "1:C7",
+            "1:C5",
+            "2:C6",
+            "2:N1"
+          ],
+          "reference_degrees": -94.44657004256702,
+          "observed_degrees": -94.44657004244193,
+          "change_degrees": 1.2508394320320804e-10
+        },
+        {
+          "atoms": [
+            "1:C7",
+            "1:C5",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 142.0431930947855,
+          "observed_degrees": 142.04319309554162,
+          "change_degrees": 7.561311576864682e-10
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "1:C5",
+            "2:C6",
+            "2:N1"
+          ],
+          "reference_degrees": 144.81314377526093,
+          "observed_degrees": 144.81314377526576,
+          "change_degrees": 4.831690603168681e-12
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "1:C5",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 21.302906912613405,
+          "observed_degrees": 21.302906913249306,
+          "change_degrees": 6.359073267958593e-10
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "2:C5",
+            "2:C4",
+            "2:N3"
+          ],
+          "reference_degrees": 112.23352599570654,
+          "observed_degrees": 112.23352599692582,
+          "change_degrees": 1.219291334564332e-09
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "2:C5",
+            "2:C4",
+            "2:O4"
+          ],
+          "reference_degrees": -71.12714476227157,
+          "observed_degrees": -71.12714476144139,
+          "change_degrees": 8.301981324621011e-10
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "2:C5",
+            "2:C6",
+            "2:N1"
+          ],
+          "reference_degrees": -147.92580251870027,
+          "observed_degrees": -147.92580251947726,
+          "change_degrees": -7.769926924083848e-10
+        },
+        {
+          "atoms": [
+            "2:CM",
+            "2:N1",
+            "2:C2",
+            "2:O2"
+          ],
+          "reference_degrees": 14.039037677626704,
+          "observed_degrees": 14.03903767772979,
+          "change_degrees": 1.0308554010407533e-10
+        },
+        {
+          "atoms": [
+            "2:CM",
+            "2:N1",
+            "2:C2",
+            "2:N3"
+          ],
+          "reference_degrees": -168.50737055645948,
+          "observed_degrees": -168.50737055652115,
+          "change_degrees": -6.16751094639767e-11
+        },
+        {
+          "atoms": [
+            "2:CM",
+            "2:N1",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": -172.79013605806415,
+          "observed_degrees": -172.79013605832722,
+          "change_degrees": -2.630713424878195e-10
+        },
+        {
+          "atoms": [
+            "2:N1",
+            "2:C2",
+            "2:N3",
+            "2:C4"
+          ],
+          "reference_degrees": -2.096018766667201,
+          "observed_degrees": -2.096018766516412,
+          "change_degrees": 1.5077716852829326e-10
+        },
+        {
+          "atoms": [
+            "2:N1",
+            "2:C6",
+            "2:C5",
+            "2:C4"
+          ],
+          "reference_degrees": -33.908655509500385,
+          "observed_degrees": -33.90865550909315,
+          "change_degrees": 4.072262527188286e-10
+        },
+        {
+          "atoms": [
+            "2:N1",
+            "2:C6",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": 94.63998628120167,
+          "observed_degrees": 94.63998628134124,
+          "change_degrees": 1.3955059330328368e-10
+        },
+        {
+          "atoms": [
+            "2:C2",
+            "2:N1",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 34.775364286145894,
+          "observed_degrees": 34.77536428582064,
+          "change_degrees": -3.2525804272154346e-10
+        },
+        {
+          "atoms": [
+            "2:C2",
+            "2:N3",
+            "2:C4",
+            "2:O4"
+          ],
+          "reference_degrees": -176.75609790130585,
+          "observed_degrees": -176.75609790086506,
+          "change_degrees": 4.4079229155613575e-10
+        },
+        {
+          "atoms": [
+            "2:C2",
+            "2:N3",
+            "2:C4",
+            "2:C5"
+          ],
+          "reference_degrees": -0.033159082455585,
+          "observed_degrees": -0.03315908240546272,
+          "change_degrees": 5.013589543523267e-11
+        },
+        {
+          "atoms": [
+            "2:O2",
+            "2:C2",
+            "2:N1",
+            "2:C6"
+          ],
+          "reference_degrees": 166.79661109780008,
+          "observed_degrees": 166.79661109789558,
+          "change_degrees": 9.549694368615746e-11
+        },
+        {
+          "atoms": [
+            "2:O2",
+            "2:C2",
+            "2:N3",
+            "2:C4"
+          ],
+          "reference_degrees": 175.51422815965563,
+          "observed_degrees": 175.51422815965194,
+          "change_degrees": -3.694822225952521e-12
+        },
+        {
+          "atoms": [
+            "2:N3",
+            "2:C2",
+            "2:N1",
+            "2:C6"
+          ],
+          "reference_degrees": -15.749797136286093,
+          "observed_degrees": -15.749797136355358,
+          "change_degrees": -6.926370588189457e-11
+        },
+        {
+          "atoms": [
+            "2:N3",
+            "2:C4",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": -117.1062047289709,
+          "observed_degrees": -117.10620472890608,
+          "change_degrees": 6.480149750132114e-11
+        },
+        {
+          "atoms": [
+            "2:N3",
+            "2:C4",
+            "2:C5",
+            "2:C6"
+          ],
+          "reference_degrees": 17.14723967169819,
+          "observed_degrees": 17.14723967165659,
+          "change_degrees": -4.160938260611147e-11
+        },
+        {
+          "atoms": [
+            "2:O4",
+            "2:C4",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": 59.533124513050986,
+          "observed_degrees": 59.53312451272672,
+          "change_degrees": -3.242632828914793e-10
+        },
+        {
+          "atoms": [
+            "2:O4",
+            "2:C4",
+            "2:C5",
+            "2:C6"
+          ],
+          "reference_degrees": -166.21343108627994,
+          "observed_degrees": -166.2134310867106,
+          "change_degrees": -4.306741629989119e-10
+        },
+        {
+          "atoms": [
+            "2:C5",
+            "1:C6",
+            "1:C5",
+            "2:C6"
+          ],
+          "reference_degrees": -21.0230583159662,
+          "observed_degrees": -21.023058316114742,
+          "change_degrees": -1.4853185348329134e-10
+        }
+      ],
+      "historical_descriptor_limits": {
+        "rmsd_angstrom": 0.25,
+        "maximum_torsion_change_degrees": 20
+      },
+      "descriptor_match": false,
+      "interpretation": "Historical geometric screening flags only; passing does not prove basin identity or global-minimum closure."
+    },
+    "final_descriptors_vs_alternate_seed": {
+      "heavy_atom_rmsd_angstrom": 0.00025098074742140465,
+      "maximum_heavy_proper_change_degrees": 0.01685873887797129,
+      "torsions": [
+        {
+          "atoms": [
+            "1:O5'",
+            "1:C5'",
+            "1:C4'",
+            "1:O4'"
+          ],
+          "reference_degrees": -70.38845977339989,
+          "observed_degrees": -70.38630977216447,
+          "change_degrees": 0.002150001235406762
+        },
+        {
+          "atoms": [
+            "1:O5'",
+            "1:C5'",
+            "1:C4'",
+            "1:C3'"
+          ],
+          "reference_degrees": 46.753973715816166,
+          "observed_degrees": 46.75337744587707,
+          "change_degrees": -0.0005962699390806847
+        },
+        {
+          "atoms": [
+            "1:C5'",
+            "1:C4'",
+            "1:O4'",
+            "1:C1'"
+          ],
+          "reference_degrees": 144.81507519686463,
+          "observed_degrees": 144.8265155463699,
+          "change_degrees": 0.011440349505278391
+        },
+        {
+          "atoms": [
+            "1:C5'",
+            "1:C4'",
+            "1:C3'",
+            "1:O3'"
+          ],
+          "reference_degrees": 87.19459569389713,
+          "observed_degrees": 87.17798613942077,
+          "change_degrees": -0.0166095544763607
+        },
+        {
+          "atoms": [
+            "1:C5'",
+            "1:C4'",
+            "1:C3'",
+            "1:C2'"
+          ],
+          "reference_degrees": -154.59732521393815,
+          "observed_degrees": -154.6120612217534,
+          "change_degrees": -0.014736007815258745
+        },
+        {
+          "atoms": [
+            "1:C4'",
+            "1:O4'",
+            "1:C1'",
+            "1:C2'"
+          ],
+          "reference_degrees": 2.0621188707819624,
+          "observed_degrees": 2.05756310581429,
+          "change_degrees": -0.004555764967676623
+        },
+        {
+          "atoms": [
+            "1:C4'",
+            "1:O4'",
+            "1:C1'",
+            "1:N1"
+          ],
+          "reference_degrees": -126.67509144704664,
+          "observed_degrees": -126.6851400183864,
+          "change_degrees": -0.01004857133978021
+        },
+        {
+          "atoms": [
+            "1:C4'",
+            "1:C3'",
+            "1:C2'",
+            "1:C1'"
+          ],
+          "reference_degrees": 35.92016134698597,
+          "observed_degrees": 35.93225104446862,
+          "change_degrees": 0.012089697482650763
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C4'",
+            "1:C3'",
+            "1:O3'"
+          ],
+          "reference_degrees": -153.62305351916493,
+          "observed_degrees": -153.6399122580429,
+          "change_degrees": -0.01685873887797129
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C4'",
+            "1:C3'",
+            "1:C2'"
+          ],
+          "reference_degrees": -35.41497442700021,
+          "observed_degrees": -35.42995961921706,
+          "change_degrees": -0.014985192216840915
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C1'",
+            "1:C2'",
+            "1:C3'"
+          ],
+          "reference_degrees": -24.37779971921695,
+          "observed_degrees": -24.382100588360615,
+          "change_degrees": -0.004300869143662567
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C1'",
+            "1:N1",
+            "1:C2"
+          ],
+          "reference_degrees": 105.65946226424367,
+          "observed_degrees": 105.65946346245025,
+          "change_degrees": 1.198206575736549e-06
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C1'",
+            "1:N1",
+            "1:C6"
+          ],
+          "reference_degrees": -65.84995787408633,
+          "observed_degrees": -65.83777779700412,
+          "change_degrees": 0.012180077082206253
+        },
+        {
+          "atoms": [
+            "1:C3'",
+            "1:C4'",
+            "1:O4'",
+            "1:C1'"
+          ],
+          "reference_degrees": 21.1372889048365,
+          "observed_degrees": 21.149563487306786,
+          "change_degrees": 0.012274582470297446
+        },
+        {
+          "atoms": [
+            "1:C3'",
+            "1:C2'",
+            "1:C1'",
+            "1:N1"
+          ],
+          "reference_degrees": 98.09589863814642,
+          "observed_degrees": 98.09114499844834,
+          "change_degrees": -0.004753639698094503
+        },
+        {
+          "atoms": [
+            "1:O3'",
+            "1:C3'",
+            "1:C2'",
+            "1:C1'"
+          ],
+          "reference_degrees": 155.19318543883244,
+          "observed_degrees": 155.20607305323742,
+          "change_degrees": 0.012887614404974101
+        },
+        {
+          "atoms": [
+            "1:C2'",
+            "1:C1'",
+            "1:N1",
+            "1:C2"
+          ],
+          "reference_degrees": -15.905781466407165,
+          "observed_degrees": -15.906981131031031,
+          "change_degrees": -0.001199664623868557
+        },
+        {
+          "atoms": [
+            "1:C2'",
+            "1:C1'",
+            "1:N1",
+            "1:C6"
+          ],
+          "reference_degrees": 172.58479839526285,
+          "observed_degrees": 172.5957776095146,
+          "change_degrees": 0.01097921425176196
+        },
+        {
+          "atoms": [
+            "1:C1'",
+            "1:N1",
+            "1:C2",
+            "1:O2"
+          ],
+          "reference_degrees": -3.294581070448033,
+          "observed_degrees": -3.2819980030079785,
+          "change_degrees": 0.012583067440061768
+        },
+        {
+          "atoms": [
+            "1:C1'",
+            "1:N1",
+            "1:C2",
+            "1:N3"
+          ],
+          "reference_degrees": 176.5095356891226,
+          "observed_degrees": 176.52211881266726,
+          "change_degrees": 0.012583123544658292
+        },
+        {
+          "atoms": [
+            "1:C1'",
+            "1:N1",
+            "1:C6",
+            "1:C5"
+          ],
+          "reference_degrees": -149.8507420096636,
+          "observed_degrees": -149.86253587334625,
+          "change_degrees": -0.011793863682640904
+        },
+        {
+          "atoms": [
+            "1:C1'",
+            "1:N1",
+            "1:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 99.14825765569255,
+          "observed_degrees": 99.13646378999516,
+          "change_degrees": -0.01179386569737062
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C2",
+            "1:N3",
+            "1:C4"
+          ],
+          "reference_degrees": -11.56027958800409,
+          "observed_degrees": -11.56027958485796,
+          "change_degrees": 3.1461411253985716e-09
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "1:C5",
+            "1:C4"
+          ],
+          "reference_degrees": -38.9543794221817,
+          "observed_degrees": -38.954379402740756,
+          "change_degrees": 1.944096084116609e-08
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "1:C5",
+            "1:C7"
+          ],
+          "reference_degrees": 89.3158622481456,
+          "observed_degrees": 89.31586225573635,
+          "change_degrees": 7.59075646783458e-09
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "1:C5",
+            "2:C6"
+          ],
+          "reference_degrees": -150.1530852635076,
+          "observed_degrees": -150.15308525928162,
+          "change_degrees": 4.225967131787911e-09
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "2:C5",
+            "2:C4"
+          ],
+          "reference_degrees": 34.23845538199306,
+          "observed_degrees": 34.23845538268131,
+          "change_degrees": 6.882601155666634e-10
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": -92.92964591529442,
+          "observed_degrees": -92.92964592083311,
+          "change_degrees": -5.538709046959411e-09
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "2:C5",
+            "2:C6"
+          ],
+          "reference_degrees": 145.7047708861662,
+          "observed_degrees": 145.70477088001024,
+          "change_degrees": -6.155943310659495e-09
+        },
+        {
+          "atoms": [
+            "1:C2",
+            "1:N1",
+            "1:C6",
+            "1:C5"
+          ],
+          "reference_degrees": 38.174991016709754,
+          "observed_degrees": 38.174990989996324,
+          "change_degrees": -2.6713422585089575e-08
+        },
+        {
+          "atoms": [
+            "1:C2",
+            "1:N1",
+            "1:C6",
+            "2:C5"
+          ],
+          "reference_degrees": -72.82600931793412,
+          "observed_degrees": -72.82600934666225,
+          "change_degrees": -2.8728123879773193e-08
+        },
+        {
+          "atoms": [
+            "1:C2",
+            "1:N3",
+            "1:C4",
+            "1:O4"
+          ],
+          "reference_degrees": -171.58765115380243,
+          "observed_degrees": -171.58765116722282,
+          "change_degrees": -1.3420390132523607e-08
+        },
+        {
+          "atoms": [
+            "1:C2",
+            "1:N3",
+            "1:C4",
+            "1:C5"
+          ],
+          "reference_degrees": 7.662591333272528,
+          "observed_degrees": 7.662591318943755,
+          "change_degrees": -1.432877638762875e-08
+        },
+        {
+          "atoms": [
+            "1:O2",
+            "1:C2",
+            "1:N1",
+            "1:C6"
+          ],
+          "reference_degrees": 167.86632280524438,
+          "observed_degrees": 167.86632276174026,
+          "change_degrees": -4.350411586528935e-08
+        },
+        {
+          "atoms": [
+            "1:O2",
+            "1:C2",
+            "1:N3",
+            "1:C4"
+          ],
+          "reference_degrees": 168.25884806275306,
+          "observed_degrees": 168.25884811771732,
+          "change_degrees": 5.496426069839799e-08
+        },
+        {
+          "atoms": [
+            "1:N3",
+            "1:C2",
+            "1:N1",
+            "1:C6"
+          ],
+          "reference_degrees": -12.329560435185007,
+          "observed_degrees": -12.329560422584494,
+          "change_degrees": 1.2600509080584743e-08
+        },
+        {
+          "atoms": [
+            "1:N3",
+            "1:C4",
+            "1:C5",
+            "1:C7"
+          ],
+          "reference_degrees": -115.88948532126332,
+          "observed_degrees": -115.8894853133919,
+          "change_degrees": 7.87142084845982e-09
+        },
+        {
+          "atoms": [
+            "1:N3",
+            "1:C4",
+            "1:C5",
+            "1:C6"
+          ],
+          "reference_degrees": 17.008291156832907,
+          "observed_degrees": 17.008291160496274,
+          "change_degrees": 3.6633593936130637e-09
+        },
+        {
+          "atoms": [
+            "1:N3",
+            "1:C4",
+            "1:C5",
+            "2:C6"
+          ],
+          "reference_degrees": 110.92211772150185,
+          "observed_degrees": 110.92211772892635,
+          "change_degrees": 7.424489467666717e-09
+        },
+        {
+          "atoms": [
+            "1:C4",
+            "1:C5",
+            "1:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 90.17564752423976,
+          "observed_degrees": 90.17564754042613,
+          "change_degrees": 1.6186362472581095e-08
+        },
+        {
+          "atoms": [
+            "1:C4",
+            "1:C5",
+            "2:C6",
+            "2:N1"
+          ],
+          "reference_degrees": 34.3203395010311,
+          "observed_degrees": 34.32033949566382,
+          "change_degrees": -5.367269295675214e-09
+        },
+        {
+          "atoms": [
+            "1:C4",
+            "1:C5",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": -89.1898973565397,
+          "observed_degrees": -89.18989736635264,
+          "change_degrees": -9.812936241360148e-09
+        },
+        {
+          "atoms": [
+            "1:O4",
+            "1:C4",
+            "1:C5",
+            "1:C7"
+          ],
+          "reference_degrees": 63.35378891311093,
+          "observed_degrees": 63.353788920063295,
+          "change_degrees": 6.952348030608846e-09
+        },
+        {
+          "atoms": [
+            "1:O4",
+            "1:C4",
+            "1:C5",
+            "1:C6"
+          ],
+          "reference_degrees": -163.74843460879285,
+          "observed_degrees": -163.74843460604853,
+          "change_degrees": 2.7443149974715197e-09
+        },
+        {
+          "atoms": [
+            "1:O4",
+            "1:C4",
+            "1:C5",
+            "2:C6"
+          ],
+          "reference_degrees": -69.83460804412393,
+          "observed_degrees": -69.83460803761845,
+          "change_degrees": 6.505473493234604e-09
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "1:C6",
+            "2:C5",
+            "2:C4"
+          ],
+          "reference_degrees": -90.11164879075602,
+          "observed_degrees": -90.11164878688525,
+          "change_degrees": 3.870752607326722e-09
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "1:C6",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": 142.7202499119565,
+          "observed_degrees": 142.7202499096003,
+          "change_degrees": -2.3561881334899226e-09
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "1:C6",
+            "2:C5",
+            "2:C6"
+          ],
+          "reference_degrees": 21.354666713417114,
+          "observed_degrees": 21.354666710443666,
+          "change_degrees": -2.973450818899437e-09
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:N1",
+            "2:CM"
+          ],
+          "reference_degrees": 77.98630740744161,
+          "observed_degrees": 77.98630740729172,
+          "change_degrees": -1.4989609553595074e-10
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:N1",
+            "2:C2"
+          ],
+          "reference_degrees": -74.44819224879753,
+          "observed_degrees": -74.44819224856043,
+          "change_degrees": 2.3709390006843023e-10
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:C5",
+            "1:C6"
+          ],
+          "reference_degrees": -20.88415286109753,
+          "observed_degrees": -20.884152859098073,
+          "change_degrees": 1.999467258428922e-09
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:C5",
+            "2:C4"
+          ],
+          "reference_degrees": 93.13299415724026,
+          "observed_degrees": 93.13299415128603,
+          "change_degrees": -5.954234438831918e-09
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": -138.31836405415655,
+          "observed_degrees": -138.31836405827957,
+          "change_degrees": -4.123023700230988e-09
+        },
+        {
+          "atoms": [
+            "1:C7",
+            "1:C5",
+            "1:C6",
+            "2:C5"
+          ],
+          "reference_degrees": -141.55411080543294,
+          "observed_degrees": -141.55411080109678,
+          "change_degrees": 4.336158099249587e-09
+        },
+        {
+          "atoms": [
+            "1:C7",
+            "1:C5",
+            "2:C6",
+            "2:N1"
+          ],
+          "reference_degrees": -94.4465700415957,
+          "observed_degrees": -94.44657004244193,
+          "change_degrees": -8.462279765808489e-10
+        },
+        {
+          "atoms": [
+            "1:C7",
+            "1:C5",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 142.0431931008335,
+          "observed_degrees": 142.04319309554162,
+          "change_degrees": -5.2918665005563525e-09
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "1:C5",
+            "2:C6",
+            "2:N1"
+          ],
+          "reference_degrees": 144.81314377510986,
+          "observed_degrees": 144.81314377526576,
+          "change_degrees": 1.5589307622576598e-10
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "1:C5",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 21.30290691753906,
+          "observed_degrees": 21.302906913249306,
+          "change_degrees": -4.289745447749738e-09
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "2:C5",
+            "2:C4",
+            "2:N3"
+          ],
+          "reference_degrees": 112.2335260051326,
+          "observed_degrees": 112.23352599692582,
+          "change_degrees": -8.206768598029157e-09
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "2:C5",
+            "2:C4",
+            "2:O4"
+          ],
+          "reference_degrees": -71.12714475589446,
+          "observed_degrees": -71.12714476144139,
+          "change_degrees": -5.546922920984798e-09
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "2:C5",
+            "2:C6",
+            "2:N1"
+          ],
+          "reference_degrees": -147.92580252458785,
+          "observed_degrees": -147.92580251947726,
+          "change_degrees": 5.110592837809236e-09
+        },
+        {
+          "atoms": [
+            "2:CM",
+            "2:N1",
+            "2:C2",
+            "2:O2"
+          ],
+          "reference_degrees": 14.03903767845909,
+          "observed_degrees": 14.03903767772979,
+          "change_degrees": -7.293010639841668e-10
+        },
+        {
+          "atoms": [
+            "2:CM",
+            "2:N1",
+            "2:C2",
+            "2:N3"
+          ],
+          "reference_degrees": -168.50737055689146,
+          "observed_degrees": -168.50737055652115,
+          "change_degrees": 3.703064521687338e-10
+        },
+        {
+          "atoms": [
+            "2:CM",
+            "2:N1",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": -172.79013606023537,
+          "observed_degrees": -172.79013605832722,
+          "change_degrees": 1.908148306029034e-09
+        },
+        {
+          "atoms": [
+            "2:N1",
+            "2:C2",
+            "2:N3",
+            "2:C4"
+          ],
+          "reference_degrees": -2.0960187654681035,
+          "observed_degrees": -2.096018766516412,
+          "change_degrees": -1.0483063306310214e-09
+        },
+        {
+          "atoms": [
+            "2:N1",
+            "2:C6",
+            "2:C5",
+            "2:C4"
+          ],
+          "reference_degrees": -33.90865550625004,
+          "observed_degrees": -33.90865550909315,
+          "change_degrees": -2.843108859451604e-09
+        },
+        {
+          "atoms": [
+            "2:N1",
+            "2:C6",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": 94.63998628235318,
+          "observed_degrees": 94.63998628134124,
+          "change_degrees": -1.0119265425601043e-09
+        },
+        {
+          "atoms": [
+            "2:C2",
+            "2:N1",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 34.7753642835255,
+          "observed_degrees": 34.77536428582064,
+          "change_degrees": 2.295138301633415e-09
+        },
+        {
+          "atoms": [
+            "2:C2",
+            "2:N3",
+            "2:C4",
+            "2:O4"
+          ],
+          "reference_degrees": -176.7560978978873,
+          "observed_degrees": -176.75609790086506,
+          "change_degrees": -2.9777709187328583e-09
+        },
+        {
+          "atoms": [
+            "2:C2",
+            "2:N3",
+            "2:C4",
+            "2:C5"
+          ],
+          "reference_degrees": -0.03315908210139425,
+          "observed_degrees": -0.03315908240546272,
+          "change_degrees": -3.0405544748646207e-10
+        },
+        {
+          "atoms": [
+            "2:O2",
+            "2:C2",
+            "2:N1",
+            "2:C6"
+          ],
+          "reference_degrees": 166.79661109855502,
+          "observed_degrees": 166.79661109789558,
+          "change_degrees": -6.594405022042338e-10
+        },
+        {
+          "atoms": [
+            "2:O2",
+            "2:C2",
+            "2:N3",
+            "2:C4"
+          ],
+          "reference_degrees": 175.51422815967007,
+          "observed_degrees": 175.51422815965194,
+          "change_degrees": -1.8133050616597757e-11
+        },
+        {
+          "atoms": [
+            "2:N3",
+            "2:C2",
+            "2:N1",
+            "2:C6"
+          ],
+          "reference_degrees": -15.749797136795516,
+          "observed_degrees": -15.749797136355358,
+          "change_degrees": 4.4016701394866686e-10
+        },
+        {
+          "atoms": [
+            "2:N3",
+            "2:C4",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": -117.10620472849867,
+          "observed_degrees": -117.10620472890608,
+          "change_degrees": -4.0739678297541104e-10
+        },
+        {
+          "atoms": [
+            "2:N3",
+            "2:C4",
+            "2:C5",
+            "2:C6"
+          ],
+          "reference_degrees": 17.147239671411988,
+          "observed_degrees": 17.14723967165659,
+          "change_degrees": 2.445972313580569e-10
+        },
+        {
+          "atoms": [
+            "2:O4",
+            "2:C4",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": 59.533124510474266,
+          "observed_degrees": 59.53312451272672,
+          "change_degrees": 2.252448894068948e-09
+        },
+        {
+          "atoms": [
+            "2:O4",
+            "2:C4",
+            "2:C5",
+            "2:C6"
+          ],
+          "reference_degrees": -166.21343108961509,
+          "observed_degrees": -166.2134310867106,
+          "change_degrees": 2.9044713301118463e-09
+        },
+        {
+          "atoms": [
+            "2:C5",
+            "1:C6",
+            "1:C5",
+            "2:C6"
+          ],
+          "reference_degrees": -21.02305831708614,
+          "observed_degrees": -21.023058316114742,
+          "change_degrees": 9.713971849123482e-10
+        }
+      ],
+      "historical_descriptor_limits": {
+        "rmsd_angstrom": 0.25,
+        "maximum_torsion_change_degrees": 20
+      },
+      "descriptor_match": true,
+      "interpretation": "Historical geometric screening flags only; passing does not prove basin identity or global-minimum closure."
+    },
+    "mean_gradient_seconds": 205.38947553005224,
+    "maximum_gradient_seconds": 212.6959650340723,
+    "service_seconds": 619.3798089027405,
+    "maximum_evaluated_fixed_drift_A": 8.953079894491308e-09,
+    "maximum_evaluated_chi_error_degrees": 1.2151110126978892e-06,
+    "planned_boundary": null,
+    "optimizer_converged": true,
+    "constrained_stationary": true,
+    "continuation_admitted": false,
+    "continuation_reason": "Strong recent force reduction and stable native cost justify one more bounded chunk from the last accepted state. Reuse its full-precision gradient and exact original fixed/chi targets, with fresh optimizer history. Audit again at convergence or the allocation boundary.",
+    "alternatives": "Do not repeat the seed gradient, lower electronic tolerances, fit to an unconverged point, expand the scan or compute an endpoint Hessian now. No optimizer Hessian restart was saved; retain exact native geometry/gradient and use the established Sella restart method.",
+    "continuation_max_new_gradients": 12,
+    "continuation_hard_seconds": 3600,
+    "task_timeout_seconds": 600,
+    "interpretation": "The alternate branch has an observed QM energy below the original reference under the same electronic model and fixed-core/chi conditions within recorded constraint tolerances. This is not a converged relative basin energy, a minimum certificate, a barrier, or proof of global basin closure.",
+    "new_fit_admitted": false,
+    "heldout_accessed": false,
+    "minimum_certified": false,
+    "basin_closure_certified": false,
+    "simulation_ready": false,
+    "cloud_spending_usd": 0
+  },
+  "release_review": {
+    "at": "2026-10-12T03:01:31+00:00",
+    "source": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v1/preparation_source.py",
+      "sha256": "c77f99deea60a2405f6cf3fb3543434eb43c861cf25e0e819dd74197510f9f4c"
+    },
+    "completion_audit": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/completion_audit.json",
+      "sha256": "2f0afd5019533ee5bd858bba02a9cbee172957dd8983edc31b316490375c2544"
+    },
+    "last_accepted_result": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/evaluation-003/result.json",
+      "sha256": "a2a78d8cac4a648a833da5630d8e12aab308c5d652dbe4b8c66e7b7b08dbde61"
+    },
+    "fixed_core_stationary": true,
+    "stop_fixed_core_optimization": true,
+    "original_chi_only_metrics": {
+      "max_atom_gradient_au": 9.446997567695994e-06,
+      "rms_atom_gradient_au": 3.8463481594048375e-06,
+      "torsion_degrees": 105.6594634719231,
+      "torsion_error_degrees": 7.431594895024318e-09,
+      "force_scope": "Cartesian gradient projected tangent to the single fixed glycosidic torsion",
+      "passed": true
+    },
+    "alternate_chi_only_metrics": {
+      "max_atom_gradient_au": 0.006383049501546818,
+      "rms_atom_gradient_au": 0.0014367133830741616,
+      "torsion_degrees": 105.65946346245023,
+      "torsion_error_degrees": 1.6904436961340252e-08,
+      "force_scope": "Cartesian gradient projected tangent to the single fixed glycosidic torsion",
+      "passed": false
+    },
+    "alternate_chi_only_max_gradient_kcal_mol_A": 7.569154440342264,
+    "largest_chi_only_gradient_atoms": [
+      {
+        "atom": "1:C2",
+        "gradient_au": 0.006383049501546818
+      },
+      {
+        "atom": "2:C4",
+        "gradient_au": 0.004385970691818256
+      },
+      {
+        "atom": "1:O2",
+        "gradient_au": 0.0038950651752711497
+      },
+      {
+        "atom": "1:N1",
+        "gradient_au": 0.002525954940312067
+      },
+      {
+        "atom": "2:O4",
+        "gradient_au": 0.0018455204846446367
+      },
+      {
+        "atom": "1:N3",
+        "gradient_au": 0.0017354843757577574
+      },
+      {
+        "atom": "2:N3",
+        "gradient_au": 0.0017239425899398056
+      },
+      {
+        "atom": "2:H52",
+        "gradient_au": 0.0017001609998877807
+      }
+    ],
+    "decision": "Stop the completed fixed-core optimization. Admit one12-gradient/one-hour core-release diagnostic at the same chi, starting from its exact last accepted geometry/gradient. Remaining projected forces prevent stationary comparison under the original single-chi endpoint protocol.",
+    "audit_note": "The reusable completion auditor emitted generic continuation_reason prose; its continuation_admitted=false is the operative verdict. No further fixed-core continuation is admitted.",
+    "alternatives": "A new single-point pilot would duplicate available evidence. A Hessian for the50-dimensional fixed-core subproblem would not establish stationarity when the core moves. A new scan or parameter fit before this central correspondence check is unnecessary.",
+    "release_optimization_admitted": true,
+    "minimum_certified": false,
+    "full_endpoint_stationary": false,
+    "new_fit_admitted": false,
+    "heldout_accessed": false,
+    "cloud_spending_usd": 0
+  }
+}
