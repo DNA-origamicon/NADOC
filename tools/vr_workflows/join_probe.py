@@ -22,6 +22,26 @@ from tools.vr_workflows.extrude_sidebar import SidebarControls
 from tools.vr_workflows.menu_tour import scroll_page
 from tools.vr_workflows.move_acquisition import remote_target
 from tools.vr_workflows.profile_input import aim_orientation, reach_target
+from tools.vr_workflows.join_recording import record_join_operation
+
+
+class JoinSession(LiveSession):
+    """Retain already-returned observations; no extra IPC during motion."""
+    def __init__(self, *args, **kwargs):
+        self.join_samples = []
+        super().__init__(*args, **kwargs)
+
+    def checked(self, result, sequence, *, focus=True):
+        state = super().checked(result, sequence, focus=focus)
+        if state.get('join_active') and (not self.join_samples or self.join_samples[-1]['frame'] != state['frame']):
+            if len(self.join_samples) >= 20000:
+                raise RuntimeError('Join observation capacity exceeded')
+            self.join_samples.append({key: state.get(key) for key in (
+                'frame', 'move_grabbing', 'move_rotating', 'move_position_nm',
+                'move_rotation_degrees', 'join_valid', 'join_hint_count',
+                'join_bridge_count', 'join_frame_comparisons', 'join_transform_sequence',
+                'join_checked_sequence', 'join_reach_nm')})
+        return state
 
 
 def main():
@@ -41,9 +61,12 @@ def main():
         if state and state.get('focused') and not state.get('startup', {}).get('active'):
             break
         if time.monotonic() > deadline:
+            (output / 'startup-failure-state.json').write_text(json.dumps(state, indent=2))
             raise RuntimeError('Join viewer did not become focused and ready')
         time.sleep(.1)
-    live = LiveSession(bridge, physical=True, allow_transactions=True)
+    live = JoinSession(bridge, physical=True, allow_transactions=True)
+    argv = Path(f'/proc/{int(live.session.split("-")[0])}/cmdline').read_bytes().decode().split('\0')
+    feedback_path = Path(argv[argv.index('--events') + 1] + '.join')
     preset = os.environ.get('NADOC_VR_PROFILE', 'steady_fast')
     controls = SidebarControls(live, output, preset)
     trials = []
@@ -59,6 +82,19 @@ def main():
             except TimeoutError:
                 pass
             time.sleep(.04)
+
+    def released_checked(state):
+        # A 'checking' packet also carries the current sequence. Require a
+        # terminal validation, not just an acknowledgement of the released pose.
+        try:
+            with feedback_path.open() as stream:
+                fields = stream.readline().split()
+            return (int(fields[2]) == state['tool_sequence']
+                    and int(fields[3]) == state['join_transform_sequence']
+                    and fields[4] in ('valid', 'invalid')
+                    and state['join_checked_sequence'] == state['join_transform_sequence'])
+        except (OSError, ValueError, IndexError):
+            return False
 
     def reach(position, orientation=None, *, hand=1, acquired=None):
         trials.append(reach_target(live, position, preset, 23000 + len(trials),
@@ -177,23 +213,33 @@ def main():
                 pointer = (point + .4 * toward / np.linalg.norm(toward)).tolist()
                 reach(pointer, aim_orientation(pointer, target), acquired=remote_target)
                 assert live.state['move_beam_end'] is not None
-                live.send('button', hand=1, button='trigger', pressed=True)
-                live.frame()
-                assert live.state['move_grabbing']
                 start = np.array(live.state['hands'][1]['position'])
                 wrist = live.state['hands'][1]['orientation_xyzw']
-                with operation(live, 'join-trigger-preview'):
-                    reach((start + [.03, .015, 0]).tolist(), wrist)
-                live.send('button', hand=1, button='trigger', pressed=False)
-                live.frame()
+                def translate():
+                    live.send('button', hand=1, button='trigger', pressed=True)
+                    live.frame()
+                    assert live.state['move_grabbing']
+                    with operation(live, 'join-trigger-preview'):
+                        reach((start + [.03, .015, 0]).tolist(), wrist)
+                    live.send('button', hand=1, button='trigger', pressed=False)
+                    live.frame()
+                    with operation(live, 'join-trigger-released'):
+                        wait(lambda s: not s['move_grabbing'])
+                        wait(released_checked)
+                record_join_operation(live, output, 'translation', translate)
                 assert np.linalg.norm(live.state['move_position_nm']) > .01
-                live.send('button', hand=1, button='grip', pressed=True)
-                live.frame()
-                assert live.state['move_rotating']
-                with operation(live, 'join-grip-preview'):
-                    reach(live.state['hands'][1]['position'], multiply([0, 0, np.sin(np.pi / 24), np.cos(np.pi / 24)], wrist))
-                live.send('button', hand=1, button='grip', pressed=False)
-                live.frame()
+                def rotate():
+                    live.send('button', hand=1, button='grip', pressed=True)
+                    live.frame()
+                    assert live.state['move_rotating']
+                    with operation(live, 'join-grip-preview'):
+                        reach(live.state['hands'][1]['position'], multiply([0, 0, np.sin(np.pi / 24), np.cos(np.pi / 24)], wrist))
+                    live.send('button', hand=1, button='grip', pressed=False)
+                    live.frame()
+                    with operation(live, 'join-grip-released'):
+                        wait(lambda s: not s['move_rotating'])
+                        wait(released_checked)
+                record_join_operation(live, output, 'rotation', rotate)
                 assert np.linalg.norm(live.state['move_rotation_degrees']) > 1
                 park()
                 live.capture_to(output / 'moved-rotated', discard_source=True)
@@ -212,9 +258,13 @@ def main():
                 park()
                 live.capture_to(output / 'valid-connections', discard_source=True)
                 menu()
-                with operation(live, 'join-apply'):
-                    controls.click('join:apply')
-                    wait(lambda s: s.get('status') == 'COMMITTED', timeout=75)
+                def apply():
+                    with operation(live, 'join-apply'):
+                        revision = live.state['scene_revision']
+                        controls.click('join:apply')
+                        wait(lambda s: s.get('status') == 'COMMITTED', timeout=75)
+                        wait(lambda s: s['scene_revision'] > revision, timeout=75)
+                record_join_operation(live, output, 'apply', apply)
         park()
         live.capture_to(output / 'result', discard_source=True)
         (output / 'result.json').write_text(json.dumps(live.state, indent=2))
@@ -222,6 +272,7 @@ def main():
         (output / 'failure-state.json').write_text(json.dumps(live.state, indent=2))
         raise
     finally:
+        (output / 'join-observations.json').write_text(json.dumps(live.join_samples))
         (output / 'sidebar-reaches.json').write_text(json.dumps(controls.trials, indent=2))
         live.release()
 

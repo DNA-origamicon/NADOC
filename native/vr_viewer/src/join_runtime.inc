@@ -1,7 +1,9 @@
     bool joinActionAvailable(const std::string& action) const {
         if(!movePanel_.active || !movePanel_.joining || toolShell_.executionPending() || moveAwaitRefresh_)return false;
         if(action=="join:apply")return joinReady();
-        if(action=="join:snap")return false;
+        if(action=="join:reach")return false;
+        if(action.starts_with("join:reach:"))return !movePanel_.moving() &&
+            (action=="join:reach:less"?movePanel_.joinReachNm>.3F:movePanel_.joinReachNm<10.F);
         if(action=="join:undo" || action=="join:redo")return !ligation_.waiting && ligation_.version>0;
         if(action.size()>5 && std::isdigit(action[5]))return moveAvailable() && !movePanel_.hand;
         return true;
@@ -39,7 +41,7 @@
         if(!movePanel_.joining)return;
         joinPreview_.accept(joinFeedbackReader_.latest(),toolSequence_,transformSequence_);
         nadoc_vr::CalculationScope scope("joinProximityHints");
-        joinPreview_.update(lastToolTransform_);
+        joinPreview_.update(lastToolTransform_,movePanel_.joinReachNm);
         const auto& feedback=joinPreview_.feedback;
         const std::string reason=feedback && feedback->requestSequence==transformSequence_ && (feedback->status=="failed" || feedback->status=="invalid")?feedback->message:"";
         movePanel_.connectionStatus=toolShell_.executionPending()?"JOINING / ROUTING":movePanel_.selecting?"SELECT A MOVING CLUSTER"

@@ -812,6 +812,38 @@ establish through-lens legibility or physical controller comfort. Evidence:
 
 - **MV-42 — PENDING — Production VR list components and history rail (2026-10-08).** In-headset check Sweep's grouped point markers/XYZ targets, the Dimensions table with long labels and visibility/delete, and job-card text/selection at the normal tablet scale. Scrub Feature Log across more than six entries, release at F0 and a routing sub-step, verify scene readiness, and use edit/revert/delete including cancellation on the in-headset desktop surface. Check assembly/part target changes, tracking loss and both controllers. Automated native layout/actions, production pixels and isolated browser handlers are separate evidence; through-lens comfort and physical controller profiles remain open. Reusable checks: Debug → VR Tours & Tests → Controls & layout → Feature history and production lists.
 
+## MV-VR-JOIN — PENDING (2026-10-11)
+
+Review Tools → Join through the headset: automatic Cluster selection, trigger
+selection and pointer translation, grip rotation, regrabbing the cyan preview,
+1 nm / 15° thumbwheel detents, Position/Rotation fieldsets, pointer beams and
+frosted panel legibility. Check provisional dashed connections while moving,
+checked bridges before Apply, Cancel restoring the entire original pose, and one
+Join history entry with routing and Undo/Redo. Review physical acquisition,
+comfort and sustained submission cadence separately from software and offscreen
+pixel checks. Reusable entries: Debug → VR Tours & Tests → Tools · Authoring →
+Join clusters · move, rotate and connect and Join clusters · routing regression.
+See `docs/vr_join.md`.
+
+Software controller playback and submitted stereo captures are retained under
+`.development-artifacts/vr-join-20261011/`. The variable-deliberate profile missed
+a small +1 arrow during redundant fixture preparation; wheel dragging/snapping
+is checked separately. Include small-arrow acquisition in human review. Apply
+refresh windows showed compositor repeats/drops; smooth preview timings do not
+establish uninterrupted 90 Hz delivery throughout the whole operation.
+
+October 13 follow-up: also review the 0.3–10 nm Reach controls. ISSUE-78's
+Cancel/reselection/Apply failure is fixed. All four unchanged physical-runtime
+profiles pass, producing one routed scaffold with unchanged staples and exact
+Undo. CPU maximum is 4.85 ms across 20 Join intervals, with zero compositor drops;
+Apply still shows 1–2 repeats per profile. Final compositor recordings save 806
+stereo frames, with every eye marker exactly joined, no unknown/reused/gapped
+images, and the Apply scene refresh inside the clip. This does not establish
+through-lens comfort or a strict uninterrupted-90-Hz guarantee. The post-restart
+focus issue was the open dashboard and was resolved remotely through its normal
+hide command; physical headset wake was unnecessary.
+See `.development-artifacts/vr-join-20261013/verification-summary.json`.
+
 - **MV-43 — PENDING — Live Full simulation menu (2026-10-12).** Wear the headset and review curved engine tabs, focused job/back navigation, compact options, horizontal min/max handles and all six gradient-only palette choices now docked around the left touchpad. Confirm the physical left-touchpad triple pulse, shallow Start/End/Every wheels (single-frame control, speed transitions to 10/100 and release stopping), source-frame popup and 500-frame warning, raised scrubber hover/drag, Load cancellation, Play/Pause and ion/cell alignment. The four-profile campaign passed steady-deliberate and variable-fast; steady-fast encountered an input stall, and variable-deliberate missed the compact Overlays tab. Review that tab’s pointer tolerance and the remaining loading/page-transition stalls. Submitted stereo and software-generated controller trials do not establish through-lens comfort or physical haptics. Benchmark timing and fixture coverage: `docs/audits/vr_simulations_20261012.md`. Atomistic is explicitly deferred by the user. The follow-up P1 RunPod campaign passed both steady profiles; variable-fast selected one map then missed the small palette opener on reopen, while variable-deliberate missed the initial opener. All three reached-wheel captures pass exact gradient checks in both eyes and desktop delivery. Preserve this pointer-tolerance debt; see `docs/audits/vr_palette_pbc_20261012.md`.
 
 Range-wheel follow-up to MV-43 (2026-10-12): both steady profiles passed the

@@ -537,3 +537,13 @@ Evidence: [native audit](.development-artifacts/vr-output-capture-20261012/menu-
 [native freeze](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/native-freeze.json),
 [closed-menu live check](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/live-capture-proof/verification.json),
 [retained initial verification failure](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/live-capture-proof/initial-verification-failure.json).
+
+### ISSUE-78 — VR Join duplicate preview lifecycle (2026-10-13)
+
+Fixed in `vr_join.js`; no `main.js` growth. Root cause: duplicate preview event →
+unconditional checking publication → unchanged transform deduplicated → no new
+validation → Apply stayed disabled. The earlier browser dispatch test omitted
+this native event order; physical playback exposed it. Added a failing regression
+then reused the valid result for an identical current pose. Full frontend suite:
+7,906 passed, one skipped. Broader validation and frame-rate limits are retained
+in `.development-artifacts/vr-join-20261013/verification-summary.json`.

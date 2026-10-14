@@ -252,6 +252,12 @@ def test_join_workflows_are_discoverable_and_distinguish_headset_validation(clie
     assert ('all four motion profiles' in tour['description']) == (identifier == 'join')
 
 
+def test_join_final_output_tour_uses_the_configured_recorder(client):
+    tour = next(t for t in client.get('/api/vr/tours').json()['tours'] if t['id'] == 'join-capture')
+    assert tour['group'] == 'authoring'
+    assert arguments(tour, True) == ['-m', 'tools.vr_workflows.join_tour', '--capture-final', '--validate']
+
+
 def test_simulation_menu_study_is_desktop_only(client, monkeypatch):
     study = next(t for t in catalog()['tours'] if t['id'] == 'simulation-menu-gallery')
     assert study['modes'] == ['desktop']

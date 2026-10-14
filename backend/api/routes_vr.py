@@ -3376,6 +3376,9 @@ def _event_payload(state: dict | None) -> dict:
         ):
             raise ValueError("invalid plane pick position")
         transform_sequence = int(event.get("transform_sequence", 0))
+        join_reach_nm = event.get("join_reach_nm", 3)
+        if type(join_reach_nm) not in (int, float) or not math.isfinite(join_reach_nm) or not 0.3 <= join_reach_nm <= 10:
+            raise ValueError("invalid Join connection reach")
         transform_values = event.get(
             "transform_matrix",
             np.identity(4, dtype=float).flatten(order="F").tolist(),
@@ -3571,6 +3574,7 @@ def _event_payload(state: dict | None) -> dict:
             **({"plane_pick_position": plane_pick_position} if plane_pick_position is not None else {}),
             **({"plane_pick_extent": plane_pick_extent} if plane_pick_extent is not None else {}),
             "transform_sequence": transform_sequence,
+            **({"join_reach_nm": join_reach_nm} if event.get("tool_mode") == "join" else {}),
             "transform_matrix": nadoc_transform.flatten(order="F").tolist(),
             "ready_sequence": ready_sequence,
             "first_frame_at_ms": first_frame_at_ms,

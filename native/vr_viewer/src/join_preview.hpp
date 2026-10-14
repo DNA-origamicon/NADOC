@@ -29,10 +29,12 @@ struct JoinCellHash {
     }
 };
 struct JoinSiteIndex {
-    static constexpr float reachNm=3.F;
+    // The desktop permits 0.3–10 nm. A maximum-reach cell keeps every query
+    // within 27 cells; the pair-comparison cap still bounds dense catalogs.
+    static constexpr float cellSizeNm=10.F;
     std::vector<JoinSite> moving,fixed;
     std::unordered_map<JoinCell,std::vector<size_t>,JoinCellHash> cells;
-    static JoinCell cell(glm::vec3 p) {return {int(std::floor(p.x/reachNm)),int(std::floor(p.y/reachNm)),int(std::floor(p.z/reachNm))};}
+    static JoinCell cell(glm::vec3 p) {return {int(std::floor(p.x/cellSizeNm)),int(std::floor(p.y/cellSizeNm)),int(std::floor(p.z/cellSizeNm))};}
     void add(JoinSite s) {
         if(s.moving)moving.push_back(s);
         else {cells[cell(s.position)].push_back(fixed.size());fixed.push_back(s);}
@@ -143,6 +145,7 @@ public:
     uint64_t minimumSequence=0;
     glm::mat4 hintTransform{0};
     const JoinSiteIndex* hintSites=nullptr;
+    float hintReachNm=0;
     void clear() {if(feedback)minimumSequence=std::max(minimumSequence,feedback->sequence);feedback.reset();sites.reset();hintSites=nullptr;hintCount=comparisons=0;}
     bool accept(std::shared_ptr<const JoinFeedback> next,uint64_t toolSequence,uint64_t transformSequence) {
         if(!next || next->sequence<=minimumSequence || (feedback && next->sequence<=feedback->sequence) || next->toolSequence!=toolSequence || next->requestSequence>transformSequence)return false;
@@ -152,15 +155,15 @@ public:
     bool ready(uint64_t toolSequence,uint64_t transformSequence) const {
         return feedback && feedback->toolSequence==toolSequence && feedback->requestSequence==transformSequence && feedback->valid && feedback->status=="valid" && feedback->connections>0;
     }
-    void update(const glm::mat4& transform) {
-        if(hintSites==sites.get() && hintTransform==transform)return;
-        hintSites=sites.get();hintTransform=transform;
+    void update(const glm::mat4& transform,float reachNm=3.F) {
+        if(hintSites==sites.get() && hintTransform==transform && hintReachNm==reachNm)return;
+        hintSites=sites.get();hintTransform=transform;hintReachNm=reachNm;
         hintCount=comparisons=0;if(!sites)return;
         std::array<size_t,maximumHints> used{};
         for(size_t moving=0;moving<std::min(maximumMovingSites,sites->moving.size()) && comparisons<maximumComparisons && hintCount<maximumHints;++moving) {
             const size_t siteIndex=moving*sites->moving.size()/std::min(maximumMovingSites,sites->moving.size());
             const auto& site=sites->moving[siteIndex];const glm::vec3 p=glm::vec3(transform*glm::vec4(site.position,1)),normal=glm::mat3(transform)*site.normal;
-            const auto cell=JoinSiteIndex::cell(p);float best=JoinSiteIndex::reachNm;size_t chosen=sites->fixed.size();
+            const auto cell=JoinSiteIndex::cell(p);float best=reachNm;size_t chosen=sites->fixed.size();
             for(int x=-1;x<=1;++x)for(int y=-1;y<=1;++y)for(int z=-1;z<=1;++z) {
                 const auto found=sites->cells.find({cell.x+x,cell.y+y,cell.z+z});if(found==sites->cells.end())continue;
                 for(size_t index:found->second) {

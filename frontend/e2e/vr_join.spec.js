@@ -42,7 +42,7 @@ test('VR Join previews a cluster pose, cancels, applies desktop routing once and
   const selection = selections.at(-1)
   const target = { targetKind: selection.selection_kind, targetIdentity: selection.identity, targetOwnerTokens: selection.owner_tokens }
   const preview = sequence => dispatch({ type: 'tool', mode: 'join', action: 'preview', sequence, ...target,
-    transformMatrix: fixture.matrix, transformSequence: sequence })
+    transformMatrix: fixture.matrix, transformSequence: sequence, joinReachNm: 3.1 })
 
   await preview(2)
   await expect.poll(() => joins.at(-1)?.valid, { timeout: 45_000 }).toBe(true)
@@ -61,10 +61,10 @@ test('VR Join previews a cluster pose, cancels, applies desktop routing once and
   await preview(5)
   await expect.poll(() => joins.at(-1)?.valid, { timeout: 45_000 }).toBe(true)
   await dispatch({ type: 'tool', mode: 'join', action: 'confirm', sequence: 6, ...target,
-    transformMatrix: fixture.matrix, transformSequence: 5 })
+    transformMatrix: fixture.matrix, transformSequence: 5, joinReachNm: 3.1 })
   await expect.poll(() => execution.some(e => e.tool_sequence === 6 && e.status === 'succeeded'), { timeout: 60_000 }).toBe(true)
   expect(applied).toHaveLength(1)
-  expect(applied[0]).toMatchObject({ mode: 'free', moving_cluster_id: 'join_cluster_1' })
+  expect(applied[0]).toMatchObject({ mode: 'free', moving_cluster_id: 'join_cluster_1', reach_nm: 3.1 })
   expect(applied[0].world_translation).toEqual(fixture.matrix.slice(12, 15))
   const after = await design()
   expect(after.strands.filter(s => s.strand_type === 'scaffold')).toHaveLength(1)

@@ -115,7 +115,7 @@ export function createVRJoin({ api, getState, resolveTarget, transaction, sendFe
   }
   function requestBody(pin, pose) {
     return { mode: 'free', moving_cluster_id: pin.id, fixed_cluster_id: null,
-      ...pose, reach_nm: 3, expected_design_id: pin.design.id, expected_revision: pin.revision }
+      ...pose, expected_design_id: pin.design.id, expected_revision: pin.revision }
   }
   async function loadTarget(event) {
     const id = resolve(event)
@@ -123,7 +123,12 @@ export function createVRJoin({ api, getState, resolveTarget, transaction, sendFe
     if (bound?.id === id && bound.key === targetKey(event) && documentMatches(bound)) {
       if (binding) return binding
       if (revisionMatches(bound)) {
-        update('checking', 'Checking compatible connections…', null, bound.sites)
+        if (preview?.pose === latest) {
+          update('valid', `${preview.result.connection_count ?? 1} compatible connections. Apply joins them in one edit.`, preview.result, bound.sites)
+        } else {
+          update('checking', 'Checking compatible connections…', null, bound.sites)
+          schedule()
+        }
         return true
       }
     }
@@ -153,9 +158,11 @@ export function createVRJoin({ api, getState, resolveTarget, transaction, sendFe
     })()
     return binding
   }
-  function queuePose(matrix, sequence) {
+  function queuePose(matrix, sequence, reach = latest?.pose.reach_nm ?? 3) {
+    if (latest && sequence < latest.sequence) return false
     const pose = vrJoinPose(matrix)
-    if (!pose || !Number.isSafeInteger(sequence) || sequence < 0) { invalidate('Invalid rigid Join pose.'); return false }
+    if (!pose || !Number.isSafeInteger(sequence) || sequence < 0 || !Number.isFinite(reach) || reach < 0.3 || reach > 10) { invalidate('Invalid rigid Join pose or connection reach.'); return false }
+    pose.reach_nm = reach
     const key = JSON.stringify(pose)
     if (latest?.sequence === sequence && latest.key === key) return true
     latest = { pose, sequence, key }; preview = null
@@ -212,7 +219,7 @@ export function createVRJoin({ api, getState, resolveTarget, transaction, sendFe
       } else {
         const ready = binding ? await binding : true
         if (uncertain || !ready || !bound || resolve(event) !== bound.id || targetKey(event) !== bound.key || !revisionMatches(bound)) throw new Error('Select the cluster again and preview its current connections.')
-        if (!queuePose(event.transformMatrix, event.transformSequence ?? latest?.sequence ?? 0)) throw new Error('The final Join pose is missing or invalid.')
+        if (!queuePose(event.transformMatrix, event.transformSequence ?? latest?.sequence ?? 0, event.joinReachNm)) throw new Error('The final Join pose is missing or invalid.')
         if (inFlight) await inFlight
         if (!preview || preview.pose !== latest) await evaluate()
         if (generation !== epoch || !preview || !revisionMatches(bound)) throw new Error('A valid preview of the final pose is required.')
@@ -277,7 +284,7 @@ export function createVRJoin({ api, getState, resolveTarget, transaction, sendFe
       if (!active) return false
       if (busy || uncertain) return true
       if (event.targetKind && event.targetKind !== 'none' && (!bound || targetKey(event) !== bound.key)) void loadTarget(event)
-      queuePose(event.matrix, event.sequence); return true
+      queuePose(event.matrix, event.sequence, event.joinReachNm); return true
     }
     if (event?.type !== 'tool' || event.mode !== 'join') return false
     if (!Number.isSafeInteger(event.sequence) || event.sequence <= toolSequence) return true
@@ -295,7 +302,7 @@ export function createVRJoin({ api, getState, resolveTarget, transaction, sendFe
     active = true; setSelectionLevel('cluster')
     if (event.targetKind !== 'cluster') { retire(); update('ready', 'Select a cluster, then move it near compatible attachments.'); return true }
     void loadTarget(event)
-    queuePose(event.transformMatrix ?? IDENTITY, event.transformSequence ?? 0)
+    queuePose(event.transformMatrix ?? IDENTITY, event.transformSequence ?? 0, event.joinReachNm)
     return true
   }
   function reset() {

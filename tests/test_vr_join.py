@@ -81,10 +81,12 @@ def test_join_tool_and_transform_survive_native_event_envelope(tmp_path):
     path.write_text(json.dumps({
         "sequence": 2, "tool_sequence": 3, "tool_mode": "join", "tool_action": "preview",
         "transform_sequence": 4,
+        "join_reach_nm": 7.4,
         "transform_matrix": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5, 6, 7, 1],
     }))
     payload = _event_payload({"event_path": str(path), "view_rotation": np.eye(3).tolist()})
     assert payload["tool_mode"] == "join"
     assert payload["tool_action"] == "preview"
     assert payload["transform_sequence"] == 4
+    assert payload["join_reach_nm"] == 7.4
     assert payload["transform_matrix"][12:15] == [5, 6, 7]

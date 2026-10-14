@@ -359,6 +359,7 @@ export function initVRSession({
             // Keep Confirm and its final pose in one event, even when polling
             // coalesces an entire short grab into a single native snapshot.
             transformSequence: Number.isSafeInteger(event?.transform_sequence) ? event.transform_sequence : 0,
+            ...(event?.tool_mode === 'join' ? { joinReachNm: event.join_reach_nm ?? 3 } : {}),
             transformMatrix: Array.isArray(event?.transform_matrix) &&
               event.transform_matrix.length === 16 && event.transform_matrix.every(Number.isFinite)
               ? [...event.transform_matrix] : null,
@@ -410,6 +411,7 @@ export function initVRSession({
           onNativeEvent({
             sequence: transformSequence,
             type: 'tool_transform',
+            ...(event?.tool_mode === 'join' ? { joinReachNm: event.join_reach_nm ?? 3 } : {}),
             matrix: [...transformMatrix],
             toolSequence: Number(event?.tool_sequence ?? 0),
             targetIdentity: event?.tool_target_identity ?? null,

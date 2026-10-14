@@ -34,6 +34,7 @@ struct LiveViewerTest {
     static void run(const std::string& directory) {
         Viewer v(SceneData{},directory+"/events.json");
         v.liveSocket_.open(directory+"/test.sock");
+        v.liveMode_="transactions"; // Synthetic controllers; no physical haptic session.
         SceneData data;data.available.fill(true);
         RepresentationData source;ColorSet colors;
         for(auto& color:colors.values)color={.3F,.6F,.9F};

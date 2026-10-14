@@ -36,10 +36,29 @@ def main():
     parser.add_argument('--validate', action='store_true')
     parser.add_argument('--browser', action='store_true', help='No headset; exercise real browser dispatch and desktop routing.')
     parser.add_argument('--profile', choices=PROFILES)
+    parser.add_argument('--capture-final', type=Path, nargs='?', const=Path('configured'),
+                        help='Record gestures with the configured live compositor, or an explicit capture directory.')
     parser.add_argument('--output', type=Path)
     args = parser.parse_args()
+    from tools.native_placement_audit import check_review_gate
+    pending_reviews = check_review_gate()
+    if pending_reviews:
+        raise RuntimeError('Complete the native placement review before starting Join: ' +
+                           ', '.join(item['incident_id'] for item in pending_reviews))
     if args.profile and (args.validate or args.browser):
         parser.error('--profile is only available for a single physical run')
+    if args.capture_final:
+        if args.browser:
+            parser.error('--capture-final requires the physical runtime')
+        if args.capture_final == Path('configured'):
+            from backend.api.vr_capture_launch import load_config, readiness
+            config = load_config()
+            if config is None:
+                parser.error('Final-output capture is not configured')
+            status = readiness(config)
+            if not status.get('available'):
+                parser.error('Final-output recorder is unavailable: ' + str(status.get('reason')))
+            args.capture_final = Path(status['directory'])
     if not args.browser:
         from backend.api.routes_vr_tours import _viewer_active
         if _viewer_active():
@@ -78,6 +97,24 @@ def main():
                    'NADOC_SMOKE_FRONTEND_PORT': frontend_port, 'NADOC_E2E_API_BASE': 'http://127.0.0.1:' + backend_port,
                    'NADOC_DISABLE_SESSION_CACHE': '1', 'NADOC_VR_PROFILE': profile,
                    'NADOC_VR_DEMO': '0' if args.validate or args.browser else '1'}
+            if not args.browser:
+                # Keep configured native scratch, sockets and journals inside
+                # this owned context too. Reuse only the live compositor/layer.
+                from backend.api.vr_capture_launch import load_config, capture_directory
+                config = load_config()
+                if config:
+                    private_config = Path(temporary) / 'capture.json'
+                    data = dict(schema=1, archive_mount=str(config.archive_mount),
+                        storage_root=str(Path(temporary) / 'c'), socket_root=str(Path(temporary) / 's'),
+                        layer_directory=str(config.layer_directory), layer_library_sha256=config.layer_library_sha256,
+                        active_capture_directory=str(capture_directory(config)))
+                    if config.viewer_build_directory:
+                        data['viewer_build_directory'] = str(config.viewer_build_directory)
+                    private_config.write_text(json.dumps(data))
+                    private_config.chmod(0o600)
+                    env['NADOC_VR_CAPTURE_CONFIG'] = str(private_config)
+            if args.capture_final:
+                env['NADOC_JOIN_FINAL_CAPTURE'] = str(args.capture_final.resolve(strict=True))
             config = 'playwright.vr-join.config.js' if args.browser else 'playwright.vr-bend.config.js'
             command = [str(ROOT / 'scripts/validation_guard.sh'), 'node',
                        'node_modules/@playwright/test/cli.js', 'test', '--config', config,
@@ -112,9 +149,9 @@ def main():
                 'physical_headset': not args.browser, 'temporary_workspace_removed_on_exit': True}, indent=2))
             if leftovers or projects:
                 raise RuntimeError(f'Join artifact cleanup failed: {result_row}; evidence: {case}')
-            if result.returncode:
-                raise SystemExit(result.returncode)
     print(output, flush=True)
+    if any(not result['passed'] for result in results):
+        raise SystemExit(1)
 
 
 if __name__ == '__main__':

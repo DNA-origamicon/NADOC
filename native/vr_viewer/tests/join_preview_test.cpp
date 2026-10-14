@@ -21,6 +21,8 @@ int main() {
     preview.update(glm::mat4(1));assert(preview.hintCount==1);
     assert(preview.hints[0].second==glm::vec3(1,0,0));
     preview.update(glm::translate(glm::mat4(1),glm::vec3(5,0,0)));assert(preview.hintCount==0);
+    preview.update(glm::translate(glm::mat4(1),glm::vec3(5,0,0)),7.F);assert(preview.hintCount==1);
+    preview.update(glm::translate(glm::mat4(1),glm::vec3(5,0,0)),3.F);assert(preview.hintCount==0);
     preview.update(glm::rotate(glm::mat4(1),glm::pi<float>(),glm::vec3(0,1,0)));assert(preview.hintCount==0);
     preview.clear();assert(!preview.ready(2,3) && !preview.sites && !preview.accept(feedback,2,3));
     // Crowded cell stress remains bounded independently of scene and site count.

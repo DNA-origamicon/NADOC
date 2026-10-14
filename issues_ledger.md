@@ -1627,3 +1627,17 @@ Evidence: [native pathway audit](.development-artifacts/vr-output-capture-202610
 [interaction findings](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/interaction-timing-findings.json),
 [final deployment verification](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/deployment/final-verification.json),
 [browser attachment](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/deployment/browser-connected.png).
+
+## ISSUE-78 — VR Join remains checking after Cancel and reselection (2026-10-13, FIXED)
+
+The physical Join tour selected the donor again after Cancel, received valid
+connection feedback, then could not Apply. A duplicate tool-preview event for
+the unchanged pose made `loadTarget` publish checking; `queuePose` deduplicated
+the already-validated transform and scheduled no replacement result.
+
+The controller now republishes the cached valid result for that exact pose or
+schedules validation when none exists. The event-order regression failed before
+the fix and passes afterward. The physical steady-fast tour subsequently
+completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
+`.development-artifacts/vr-join-20261013/reselection-repro.log`,
+`reselection-fixed.log`, and `physical-fixed/steady_fast/`.

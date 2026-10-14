@@ -9,6 +9,7 @@ class MovePanel {
     static constexpr size_t selectHand=0, moveHand=1;
     bool active=false, selecting=false, snap=false, rotating=false, joining=false;
     std::string connectionStatus;
+    float joinReachNm=3.F;
     const char* prefix() const { return joining?"join:":"move:"; }
     ToolMode mode() const { return joining?ToolMode::join:ToolMode::move_rotate; }
     bool selectionEnabled(size_t h) const { return !active || (!hand && !wheelHand && (selecting || h==selectHand)); }
@@ -48,7 +49,10 @@ class MovePanel {
         row("apply","APPLY");row("cancel","CANCEL");
         row("selection",joining?(selecting?"Select a moving cluster":"Moving cluster selected"):(selecting || kind=="none"?"Selection: point and click":"Selection: "+kind),
             joining?"TRIGGER: SELECT CLUSTER":"LEFT PAD: FILTER / CLICK TO CHANGE");
-        row("snap",joining?"WHEELS: 1 NM / 15 DEG":snap?"15 DEG SNAP: ON":"15 DEG SNAP: OFF","TRIGGER: MOVE / GRIP: ROTATE");
+        if(joining) {
+            row("reach", "REACH: "+number(joinReachNm,1)+" NM");
+            row("reach:less","-0.1");row("reach:more","+0.1");
+        } else row("snap",snap?"15 DEG SNAP: ON":"15 DEG SNAP: OFF","TRIGGER: MOVE / GRIP: ROTATE");
         for(size_t i=0;i<6;++i) {
             const auto id=std::to_string(i);
             row(id+"-wheel","");

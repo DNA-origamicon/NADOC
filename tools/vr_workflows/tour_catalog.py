@@ -140,6 +140,8 @@ def catalog():
         'Private generated part: select Join and a cluster, trigger translate and grip rotate with live connection hints, test snapped position/angle wheels, Cancel, Apply and Undo. Retains native stereo and frame evidence; validation uses all four motion profiles.', module='join_tour')
     add('join-bridge', 'authoring', 'Join clusters · routing regression',
         'No headset required: real VR tool and cluster selection events, reversible pose preview, Cancel, desktop connection routing, one Apply, Undo and Redo. Intercepts viewer transport and creates only temporary parts; does not measure headset frame rate.', ['--browser'], module='join_tour')
+    add('join-capture', 'authoring', 'Join clusters · final output and release',
+        'Requires the configured live compositor recorder: two-second motion clips and five-second Apply/refresh capture, exact pose journals and released-pose validation. Isolated fixture; validation runs all four motion profiles. Offline frame decoding determines image reuse.', ['--capture-final'], module='join_tour')
     add('end-resize', 'authoring', 'Resize selected ends',
         'Trigger grab selected end arrows, extend and shorten, retain selection, and verify independent desktop Undo. Validation uses all four controller profiles; the frame audit accepts an imported design and records commit latency and stereo frame timing.', module='end_resize_tour')
     add('move-preview-renderer', 'authoring', 'Move / Rotate · renderer regression',

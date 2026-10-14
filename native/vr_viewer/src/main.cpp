@@ -6305,6 +6305,15 @@ class Viewer {
         if(action.starts_with("move:")) {
             if(toolShell_.executionPending() || moveAwaitRefresh_)return;
             if(action=="move:apply")confirmMove();
+            else if(movePanel_.joining && action.starts_with("move:reach:") && !movePanel_.moving()) {
+                const float reach=std::clamp(std::round(movePanel_.joinReachNm*10.F)+(action.ends_with(":more")?1.F:-1.F),3.F,100.F)/10.F;
+                if(reach!=movePanel_.joinReachNm) {
+                    movePanel_.joinReachNm=reach;
+                    // Reach is part of the validated proposal, even at an unchanged pose.
+                    publishToolTransform();refreshJoin();
+                    movePanel_.refresh(sidebarMenus_.menus,selectedSelectionKind_,toolShell_.status());
+                }
+            }
             else if(action=="move:undo" || action=="move:redo") {
                 if(ligation_.waiting || !ligation_.version)return;
                 cancelMove();
@@ -7516,7 +7525,7 @@ class Viewer {
     }
 
     void publishSelectionLevel(const std::string& level) {
-        selectionLevel_ = level;
+        selectionLevel_ = movePanel_.active && movePanel_.joining ? "cluster" : level;
         selectionLevelGuard_.requested(selectSequence_);
         ++levelSequence_;
         publishEventState();
@@ -7852,6 +7861,7 @@ class Viewer {
         } else {
             output << "null";
         }
+        output << ",\"join_reach_nm\":" << movePanel_.joinReachNm;
         output << ",\"transform_sequence\":" << transformSequence_
                << ",\"transform_matrix\":[";
         bool firstValue = true;
@@ -8570,6 +8580,9 @@ class Viewer {
             << ",\"join_hint_count\":" << joinPreview_.hintCount
             << ",\"join_bridge_count\":" << (joinPreview_.feedback?joinPreview_.feedback->bridges.size():0)
             << ",\"join_frame_comparisons\":" << joinPreview_.comparisons
+            << ",\"join_reach_nm\":" << movePanel_.joinReachNm
+            << ",\"join_transform_sequence\":" << transformSequence_
+            << ",\"join_checked_sequence\":" << (joinPreview_.feedback?joinPreview_.feedback->requestSequence:0)
             << ",\"move_snap\":" << (movePanel_.snap?"true":"false")
             << ",\"move_position_nm\":" << point(movePanel_.positionNm)
             << ",\"move_rotation_degrees\":" << point(movePanel_.rotationDegrees)

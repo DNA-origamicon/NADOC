@@ -103,8 +103,17 @@ int main() {
     assert(l.bonds[0].b==glm::vec3(6,8,9));
     assert(glm::distance(l.bonds[0].offsetB,glm::vec3(.8F,1,1.2F))<1e-6F);
     {std::ofstream out(path+".ligation");out<<"NADOC_LIGATION_1 3 ready 1\n3 0 broken";}
-    for(int i=0;i<20;++i) {poll();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    for(int i=0;i<100;++i) {poll();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     assert(l.version==2 && l.ends[0].identity=="identity" && l.bonds.size()==12000);
+    // A new normalization context must rebuild even an unchanged file version.
+    // The previous complete tables remain available until the worker publishes.
+    {std::ofstream out(path+".ligation");out<<"NADOC_LIGATION_1 2 ready 1\n3 0 identity 1 2 3 0 0 1 .1 .2 .3\nBONDS 0\n";}
+    const auto changedDeadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    do {
+        l.poll(path,{0,0,0},1,{0,0,0});
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    } while(l.ends[0].position!=glm::vec3(1,2,3) && std::chrono::steady_clock::now()<changedDeadline);
+    assert(l.version==2 && l.ends[0].position==glm::vec3(1,2,3) && l.bonds.empty());
     std::filesystem::remove_all(dir);
     std::cout<<"Ligation: both polarities, stretch, invalid targets, cancellation, single commit passed\n";
 }

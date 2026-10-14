@@ -88,6 +88,7 @@ struct LiveViewerTest {
     static void run(const std::string& directory) {
         Viewer v(SceneData{},directory+"/events.json");
         v.liveSocket_.open(directory+"/test.sock");
+        v.liveMode_="transactions"; // Synthetic controllers; no physical haptic session.
         SceneData data;data.available.fill(true);
         RepresentationData source;ColorSet colors;
         for(auto& color:colors.values)color={.3F,.6F,.9F};
@@ -101,6 +102,11 @@ struct LiveViewerTest {
         checkToolTransitions(v);
         v.activateSidebarAction("tool:join",1);
         assert(v.movePanel_.active && v.movePanel_.joining && v.selectionLevel_=="cluster" && v.movePanel_.selecting);
+        v.publishSelectionLevel("base");assert(v.selectionLevel_=="cluster");
+        const auto reachSequence=v.transformSequence_;
+        v.activateSidebarAction("join:reach:more",1);
+        assert(std::abs(v.movePanel_.joinReachNm-3.1F)<1e-5F && v.transformSequence_>reachSequence);
+        v.activateSidebarAction("join:reach:less",1);assert(v.movePanel_.joinReachNm==3.F);
         // Full cluster selection is acknowledged through the canonical feedback reader.
         v.feedbackPath_=directory+"/selection.feedback";
         v.publishSelect({"nuc:test"});

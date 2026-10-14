@@ -313,6 +313,78 @@ restarted. Keep persistent viewer launch outside `validation_guard.sh`: its EXIT
 trap stops the scope and its detached children. Use the guard for bounded checks.
 
 
+## Join clusters (2026-10-13)
+
+Current follow-up adds desktop-equivalent 0.3–10 nm Reach, cluster scope locking,
+stale-pose rejection and the duplicate-preview/reselection fix (ISSUE-78). A
+persistent Nick/Ligate worker removes header I/O, thread creation and old-table
+destruction from the headset loop. Debug → VR Tours & Tests also exposes **Join
+clusters · final output and release**. Its optional recorder serializes journal
+and controller commands; released poses require terminal exact-sequence feedback,
+and Apply waits for native scene refresh.
+
+Current software checks pass: 7,906 Vitest, 130 focused backend (including seven
+recorder checks), four native, two browser and 23 smoke. All four unchanged
+physical motion profiles pass Cancel/reselection/Apply/Undo with one routed
+scaffold and unchanged staples. Across 20 Join intervals: 89.51–89.55 application
+FPS, maximum non-runtime-wait CPU 4.85 ms, no over-budget frames and no compositor
+drops. Moving/released intervals have zero repeats; Apply has 1–2 per profile.
+Do not claim uninterrupted 90 FPS or universal scene-size performance.
+Final compositor recordings retain 179 translation +179 rotation +448 Apply
+stereo frames, with all 1,612 eye markers joined and no unknown/reused/gapped
+submitted images. Apply's clip includes the scene revision transition. Raw pixels,
+first-frame ROI calibration/failures, journals and interaction reports are retained
+under `final-pixels/` in the same evidence folder. Optical scanout is not verified.
+Nick/Ligate max fell from 82.60 ms before the worker to 0.0025 ms; host memory
+pressure also changed after restart, so overall improvement is not a controlled
+worker-only comparison. Keep MV-VR-JOIN open for human comfort and strict output
+cadence. Evidence and broader test debt:
+`.development-artifacts/vr-join-20261013/verification-summary.json`.
+
+**Remote recovery after restart:** source/binary hashes survived; no restart cause
+was established. SteamVR rendered but had its dashboard visible and application
+input unavailable. The ordinary Steam client was started remotely to stop Home's
+launch retries. Close the dashboard through the installed dashboard's existing
+mailbox handler: websocket `ws://127.0.0.1:27062`, origin
+`http://localhost:27062`; send `mailbox_open nadoc_join_recovery/remote`, then
+`mailbox_send vrwebui_dashboard {"type":"hide_dashboard_requested","reason":"return_to_game","source_is_vrlink_remote":false}`.
+Close that temporary websocket. A background OpenVR query then reported dashboard
+false/input available, and all four tours gained actual OpenXR focus. No physical
+user action, focus bypass, driver/display setting change or runtime restart was
+needed. Do not ask the remote user to wear the headset before checking this path.
+The configured normal-launch viewer now points to the validated Archive Join
+build; the prior build/config backup remains preserved in the evidence folder.
+
+### Earlier Join implementation and measurements (2026-10-11)
+
+Tools → Join forces Cluster selection and reuses native Move / Rotate's rigid
+preview, trigger pointing/translation and grip rotation. Position/Rotation
+thumbwheels snap to 1 nm / 15°; Cancel discards every draft transform. The shared
+sidebar renderer supplies frost, borders, stroke fonts, beams and Cancel/Apply
+footer. `join_preview.hpp` keeps a cached spatial index with bounded site samples,
+comparisons and provisional guides; full validation runs outside the render loop.
+`vr_join.js` coalesces desktop Join previews and commits only the current validated
+pose through desktop routing/history and canonical native refresh. Generation,
+document, revision and target guards reject obsolete work; ambiguous Apply results
+require authoritative reload before retrying. A session ending during Apply lets
+the owned transaction finish, then retires its event cursor.
+
+Reusable Debug → VR Tours & Tests → Tools · Authoring entries are **Join clusters ·
+move, rotate and connect** and **Join clusters · routing regression**. The isolated runner uses short
+Archive scratch paths for Unix sockets, owns only its fixture/viewer, and verifies
+workspace cleanup. Build overrides use `NADOC_VR_BUILD_DIR`; defaults are unchanged.
+See [VR Join](../docs/vr_join.md), `.development-artifacts/vr-join-20261011/`, and
+MV-VR-JOIN for verification evidence and remaining human headset review.
+
+Native core/gesture/GL/transition checks, two browser routing/menu checks and 23
+smoke tests pass. All four scripted motion profiles pass on the Vive/OpenXR
+runtime (source checkpoints retained). The eight explicit movement intervals
+cover 1,036 frames at 89.50–89.57 application FPS, GPU p95 1.93–2.60 ms and zero
+compositor repeats/drops. Apply/refresh windows include 13 repeated and 10 dropped
+frames across the four retained runs, with GPU max 19.36 ms. Above-90-FPS delivery
+is not achieved on the 90 Hz headset; no general scene-size guarantee is claimed.
+Broader test debt and cleanup: `verification-summary.json` in the evidence folder.
+
 ## Movable sweep start (2026-10-09)
 
 New-bundle Sweep origins now use the same position controls as later knots:

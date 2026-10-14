@@ -336,7 +336,11 @@ class SidebarMenu {
             const float left=-ui_style::toolHalfWidth,right=ui_style::toolHalfWidth;
             add("back",.463F,left,right);
             add("selection",.333F,left,right,.12F);
-            add("snap",tab().key=="join"?.211F:.197F,left,right,tab().key=="join"?.10F:.12F);
+            if(tab().key=="join") {
+                add("reach",.211F,left,.015F,.10F);
+                add("reach:less",.211F,.027F,.195F,.10F);
+                add("reach:more",.211F,.207F,right,.10F);
+            } else add("snap",.197F,left,right,.12F);
             for(int i=0;i<6;++i) {
                 const float x=i<3?left:.012F,y=.060F-float(i%3)*.16F;
                 const auto id=std::to_string(i);

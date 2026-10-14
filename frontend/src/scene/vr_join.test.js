@@ -72,6 +72,41 @@ describe('VR Join world pose and bounded render data', () => {
 })
 
 describe('VR Join controller', () => {
+  it('retains checked feedback when native selection repeats the same pose in a new tool event', async () => {
+    const h = harness()
+    h.join.handle(h.event('activate', 1)); await tick()
+    expect(h.api.sendVRJoinFeedback.mock.calls.at(-1)[0].valid).toBe(true)
+    h.join.handle({ ...h.event('preview', 2), transformSequence: 1 }); await tick()
+    expect(h.api.sendVRJoinFeedback.mock.calls.at(-1)[0]).toMatchObject({
+      tool_sequence: 2, request_sequence: 1, status: 'valid', valid: true,
+    })
+  })
+  it('invalidates a checked pose when reach changes and commits the exact new reach', async () => {
+    const h = harness(), pending = deferred()
+    h.join.handle(h.event()); await tick()
+    h.api.previewClusterJoin.mockReturnValueOnce(pending.promise)
+    h.join.handle({ type: 'tool_transform', sequence: 2, matrix: matrix(), joinReachNm: 7.4 })
+    expect(h.join.getState().valid).toBe(false)
+    await tick()
+    expect(h.api.previewClusterJoin).toHaveBeenLastCalledWith(expect.objectContaining({ reach_nm: 7.4 }), expect.anything())
+    pending.resolve(h.result({ world_translation: [0, 0, 0] })); await tick()
+    h.join.handle({ ...h.event('confirm', 3), joinReachNm: 7.4 }); await tick()
+    expect(h.api.applyClusterJoin).toHaveBeenCalledWith(expect.objectContaining({ reach_nm: 7.4 }))
+  })
+  it('does not replace a released pose with a delayed older transform', async () => {
+    const h = harness()
+    h.join.handle(h.event('preview', 1, 4)); await tick()
+    h.transform(8, 10); await tick()
+    h.transform(2, 5); await tick()
+    expect(h.join.getState()).toMatchObject({ valid: true, transformSequence: 10 })
+    expect(h.api.previewClusterJoin).toHaveBeenLastCalledWith(expect.objectContaining({ world_translation: [8, 0, 0] }), expect.anything())
+  })
+  it.each([0.2, 10.1, NaN, Infinity])('rejects an invalid connection reach %s', async joinReachNm => {
+    const h = harness()
+    h.join.handle({ ...h.event(), joinReachNm }); await tick()
+    expect(h.api.previewClusterJoin).not.toHaveBeenCalled()
+    expect(h.join.getState().valid).toBe(false)
+  })
   it('activates cluster selection and previews the desktop free join without mutating design', async () => {
     const h = harness(), original = h.state().currentDesign
     h.join.handle(h.event('activate', 1)); await tick()
