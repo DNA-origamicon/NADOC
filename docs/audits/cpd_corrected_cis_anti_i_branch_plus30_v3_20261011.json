@@ -1,0 +1,77 @@
+{
+  "at": "2026-10-11T23:06:41+00:00",
+  "event": "complete",
+  "token": "2c10786b-45a0-453b-aa6a-8c34b98acb94",
+  "acknowledgement": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v2-service/completion_wake_ack.json",
+    "sha256": "0231e4dc480d3a10ef6386bae49dd22660f521ffba69f3c32ce837430848b61c"
+  },
+  "completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v2/completion_audit.json",
+    "sha256": "e3cd017779bea4b2d4acb502602b5b14e527d8ff53bf965c0d85e4953c3df3ec"
+  },
+  "review": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v2/continuation_review.json",
+    "sha256": "0d3780a614bd0a2101c61fd05d7b3b5859e0f7bac3191eff642062a7ee55070f"
+  },
+  "reviewed_chunk": {
+    "label": "plus30-v2",
+    "last_accepted_result": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v2/evaluation-020/result.json",
+      "sha256": "1575a16233dde5efb1429d3fff212856adc97590a5ba4e6155b8cda8abd0cac8"
+    },
+    "native_evidence_passed": true,
+    "scan_target_passed": true,
+    "constrained_stationary": false,
+    "unconstrained_stationary": false,
+    "minimum_certified": false,
+    "new_gradients": 20,
+    "reused_gradients": 1,
+    "wall_minutes": 69.62803423802058,
+    "projected_gradient": {
+      "max_atom_gradient_au": 4.863437613383252e-05,
+      "rms_atom_gradient_au": 1.6173114152432474e-05,
+      "torsion_degrees": 135.65946126885834,
+      "torsion_error_degrees": 2.2104963761648833e-06,
+      "force_scope": "Cartesian gradient projected tangent to the single fixed glycosidic torsion",
+      "passed": false
+    },
+    "force_limit_ratio": 3.242291742255501,
+    "max_force_reduction_factor": 207.4479682878114,
+    "energy_relative_to_branch_zero_kcal_mol": 3.439990539657316,
+    "fit_target_accepted": false,
+    "allocation_boundary": "Gradient allocation exhausted; audit before continuation"
+  },
+  "restart_guard_repair": {
+    "review": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v2/continuation_review.json",
+      "sha256": "0d3780a614bd0a2101c61fd05d7b3b5859e0f7bac3191eff642062a7ee55070f"
+    },
+    "legacy_sources_preserved": true,
+    "geometry_or_gradient_modified": false,
+    "angle_tolerance_degrees": 0.01,
+    "degree_target_unchanged": true,
+    "force_limits_unchanged": true
+  },
+  "active_handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v3/handoff.json",
+    "sha256": "c14b6c1d4a7ea0825797a08bf053f5b4828ba4ea5aaa4539476b9c16712f59b7"
+  },
+  "active_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v3/plan.json",
+    "sha256": "80504e05aa046b0339ab44a69b5425290820d5d57e66a3f6e01345a526f5e52f"
+  },
+  "test_receipt": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v3/test_receipt.json",
+    "sha256": "934ae424dbee94949d3c60adc27a2d43de53864f4aceabbefca0087f92c6ef79"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v3/launch_verification.json",
+    "sha256": "fe0f1ead38bf0764423a758aec465af35a0eb31b6213225bfc05f4e6c10c7508"
+  },
+  "minimum_certified": false,
+  "fit_target_accepted": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0,
+  "cleanup_actions": 0
+}

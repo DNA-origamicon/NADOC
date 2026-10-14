@@ -162,3 +162,86 @@ A real `2hb_1xT` archive smoke test was also run against a 30-frame NAMD DCD. De
 resolved its intended reciprocal insert pair, while `all-tt` independently found a closer
 off-target cross-strand thymine and retained the intended pair for comparison. That short,
 restrained segment is a functionality check, not scientific population evidence.
+
+## Experimental isomer-resolved formation screen (2026-10-10)
+
+`experiments/cpd_isomer_formation/run.py` adds a separate, read-only research pilot for
+existing unwelded production jobs in the exp59 inventory. The established KIMMDY score
+and application outputs above are unchanged. The default pilot includes **both intra-
+and interstrand competing T–T pairs**, retaining intended welds even outside the screen.
+
+**Mapping corrected:** all eight independent planar-reactant cases now pass, including
+an explicit C5-methyl cis/trans check. The repair preserves tetrahedral neighbor order
+through syn-to-anti bond edits and uses accurate recursive CIP labeling for the fused
+rings. A C6-only sign adjustment would recover coverage but swap anti cis/trans labels;
+the corrected definitions change endpoint-1 C5 handedness while retaining the ordered
+literature C5 identities. Static construction coordinates are explicitly not QM minima.
+See the [correction and cached-replay audit](audits/cpd_anti_detection_correction_20261010.json).
+The earlier [feasibility audit](audits/cpd_isomer_formation_feasibility_20261010.json) and
+v3 outputs remain preserved as superseded diagnostics. Their zero anti counts are invalid.
+
+The default preflight checks unique coverage and correct methyl relationships before
+reading trajectories. `--diagnostic-only` is for preserving failed diagnostics, never
+qualified ranking. Corrected detection is separate from force-field readiness: the old
+anti minima, fitted parameters and MD receipts do not validate the repaired identity.
+
+```bash
+.venv/bin/python experiments/cpd_isomer_formation/run.py \
+  --job 29c5b267380f --scope all-tt --frames-per-file 200 \
+  --out /absolute/path/to/a/new/isomer-analysis-directory
+```
+
+Previously cached local coordinates can be replayed without rereading trajectories:
+
+```bash
+.venv/bin/python experiments/cpd_isomer_formation/reanalyze.py \
+  --source /absolute/path/to/an/existing/pilot-directory \
+  --out /absolute/path/to/a/new/replay-directory
+```
+
+Replays verify the original plan/cache hashes, reuse exact coordinates and weights,
+and write new descriptors and summaries without overwriting historical results. The
+three corrected 200-frame pilots cover 5, 12 and 2,217 candidate pairs. Anti approaches
+are now detected in the 2HB-2xT and 24HB-2xT samples. All syn descriptors are unchanged.
+
+The pilot reuses the periodic midpoint candidate search, then evaluates both syn
+(C5–C5/C6–C6) and anti (C5–C6/C6–C5) bond pairings. Four-neighbor signed volumes assign
+the hypothetical incoming-bond faces against all eight hash-verified ordered chemical
+definitions. This is a **suprafacial, retained-substituent approach hypothesis**, not
+excited-state propagation or proof that a compatible geometry reacts. Product geometry
+tests establish label/sign consistency, not reaction probabilities. Nearly edge-on
+approaches can remain unassigned, and multiple compatible channels remain ambiguous.
+
+Both proposed bond distances, the bond-pairing-specific twist, and approach-face margins
+are retained in `geometry.npz`, together with the actual local coordinates and source
+file/frame locators. `plan.json` freezes the chemical definitions, analysis-source hashes,
+pair ordering, inputs, and sensitivity grid. `summary.json` reports per-pair/isomer
+time-weighted fractions for distance cutoffs 3.6/4.0/4.5 Å, twist windows 30/45/60 degrees,
+and face margins 0.1/0.25/0.5. A 2.5 Å lower forming-distance bound excludes already
+bonded or grossly overlapping geometries; the topology also rejects existing CPD bonds
+at analyzed pairs. **These windows are exploratory choices, not an all-isomer rate fit.**
+CHARMM thymine C5M is explicitly mapped to chemical-definition C7.
+
+Candidate discovery spans each production file; sparse samples represent equal time
+within a file, and contributions from different files are weighted by represented
+duration. Frames are correlated and are not independent reaction events. Neither zero
+observations nor a ranking from one lineage establishes rarity or exclusion. Counts
+must remain separated by intended-weld, other extra/extra, extra/native, native/native,
+and intra/interstrand context. Several candidate pairs can share a thymine, so summing
+their opportunities does not predict the number of simultaneous achievable welds.
+
+For low-conversion prioritization, an explicit simplified model is
+`relative initial formation rate_s proportional to occupancy_s * photochemical_factor_s`.
+The latter includes absorption/excitation and conditional reaction branching under a
+specified illumination. A common factor gives a geometry-only ranking; it is not an
+experimentally calibrated assumption. Higher-dose prediction additionally needs
+competition, site depletion, photoreversal, UV damage, and structural feedback. Only
+unbiased reactant ensembles should supply these occupancies; formed-product dynamics or
+unreweighted umbrella/steered trajectories cannot be substituted.
+
+The approach has precedent in [Law et al. (2008)](https://pmc.ncbi.nlm.nih.gov/articles/PMC2292369/),
+which tested geometric occupancy against dinucleotide photodimer yields. The published
+[KIMMDY study (2026)](https://www.nature.com/articles/s41467-026-71955-2) includes both
+cis-syn and trans-syn products, although this repository's original two-coordinate
+analysis does not assign product isomers. Neither publication supplies an eight-isomer
+origami-weld calibration. The pilot therefore leaves absolute rates and yields unset.

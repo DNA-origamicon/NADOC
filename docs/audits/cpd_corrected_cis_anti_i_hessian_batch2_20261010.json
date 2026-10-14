@@ -1,0 +1,37 @@
+{
+  "at": "2026-10-10T23:27:14+00:00",
+  "status": "diagnostic_hessian_batch_two_active",
+  "completed_batch1_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/batch-1/completion_delivery_audit.json",
+    "sha256": "861f52ad925e9ba004b6af2ed5ebe85133a3ba187b89e27997622444dfa9ca77"
+  },
+  "completed_wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/batch-1-service/completion_wake_ack.json",
+    "sha256": "98a33266adec9d18d63a5b22fe89e7f4944b172761e8a89b35bd753735b52169"
+  },
+  "continuation_decision": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/batch1_continuation_decision.json",
+    "sha256": "ed78368de2d04a22bd759d9eb7ecf475660ba08ca4f7867335244f4e2b85d38d"
+  },
+  "hessian_manifest": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/manifest.json",
+    "sha256": "ed4d4b61a7709f38c51b2d08b46d8b764f7ab9ccbdda6f1cdf67078c07f1b69c"
+  },
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/batch-2/launch_verification.json",
+    "sha256": "18d2910219484e882e115e249bc591d5d758691ecabbc8787d477d73bce35fd6"
+  },
+  "service_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/batch-2-service",
+  "wake_token": "f368588e-b371-421c-bb99-1f95cc5fe9e3",
+  "expected_finish_denver": "2026-10-10T19:12:17-06:00",
+  "audit_deadline_denver": "2026-10-10T20:00:47-06:00",
+  "hard_deadline_denver": "2026-10-10T20:26:30-06:00",
+  "completed_new_gradients": 104,
+  "reused_reference_gradients": 1,
+  "active_new_gradient_count": 106,
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0,
+  "monitoring": "Completion/failure event plus one audit deadline. No intermittent polling.",
+  "next_action": "On the next wake acknowledge its token, audit every new native result and assembly, then assess raw antisymmetry, independent reconstruction and low-mode sensitivity. Do not infer a minimum from process completion or clipped/symmetrized modes. Broad user authorization continues; proceed with a concrete bounded next stage only when supported by evidence."
+}

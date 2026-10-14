@@ -1,0 +1,47 @@
+{
+  "at": "2026-10-11T01:17:51+00:00",
+  "status": "full_diagnostic_hessian_audited_low_mode_check_active",
+  "completed_batch2_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/batch-2/completion_delivery_audit.json",
+    "sha256": "53215693646f64dd444c87ddb4de9d49d9da34f7f7edd9f5d3d9bd5fd61da11b"
+  },
+  "completed_wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/batch-2-service/completion_wake_ack.json",
+    "sha256": "556309dba42323529637daed327ef9bc82c6c0b544c4c1f9220e813984f87c49"
+  },
+  "full_hessian_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/assembly/independent_completion_audit.json",
+    "sha256": "3c998d8ea9f65bd6ebb09593986b4122b281cf7cd4cfa3d71d8ec19ebbf0174c"
+  },
+  "vibrational_modes": 102,
+  "imaginary_vibrational_modes": 0,
+  "lowest_frequency_cm_inverse": 58.52312456225747,
+  "numerical_caveat": "Weakest four modes require direct step-sensitivity and coupling checks; no minimum certification from assembly alone.",
+  "active_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/low-mode-check-v1/plan.json",
+    "sha256": "cc144f57dc5dcea4e8dcd0ad76c6b15590ea1482107aa6d48bff13e0f78a0177"
+  },
+  "preflight": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/low-mode-check-v1/preflight.json",
+    "sha256": "b1793a1be06e93ba8927695798e014e83f5a492e03d9590ecb763706af03daa2"
+  },
+  "tests": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/low-mode-check-v1/tests.json",
+    "sha256": "e3a3e2f66deb605128ee75a75c694c81fa59db5e3f7a2c4798f0a15c3209f31d"
+  },
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/low-mode-check-v1/launch_verification.json",
+    "sha256": "5764a8ef58ee8593dd12c0a8d167e036a8a974c386a32c730e08fe5a1a08cfc1"
+  },
+  "service_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/low-mode-check-v1-service",
+  "wake_token": "766e12cc-361c-4f96-a1d8-094123680620",
+  "expected_finish_denver": "2026-10-10T19:33:26-06:00",
+  "audit_deadline_denver": "2026-10-10T19:41:50-06:00",
+  "hard_deadline_denver": "2026-10-10T19:46:50-06:00",
+  "active_new_gradient_count": 16,
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0,
+  "monitoring": "Completion/failure events and one audit deadline; no intermittent polling.",
+  "next_action": "Audit low-mode native outputs and independent reconstruction. Assess absolute step corrections, signs, energy-derived curvatures, coupled subspace and coupling to remaining modes before deciding on local harmonic qualification or a specific necessary next diagnostic. Preserve all old failures. Broad all-stage authorization remains in force."
+}

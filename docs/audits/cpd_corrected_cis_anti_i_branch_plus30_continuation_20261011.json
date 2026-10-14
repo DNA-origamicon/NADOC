@@ -1,0 +1,455 @@
+{
+  "at": "2026-10-11T21:53:26+00:00",
+  "schema": "nadoc.corrected-anti-profile-plus30-continuation.v1",
+  "wake_token": "e71cc400-15c6-4cf3-bea3-fdc6f3ff0af6",
+  "event": "complete",
+  "acknowledgement": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v1-service/completion_wake_ack.json",
+    "sha256": "ac7adf4f5504dd074dccb1e4a085f6cdc4bbe48f437c2cb6d0f35d3678cd80f1"
+  },
+  "completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v1/completion_audit.json",
+    "sha256": "5db377420b956fc9ae89b3f60f1f05c3f14541971f580f1063d533e0fca5f2d4"
+  },
+  "continuation_review": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v1/continuation_review.json",
+    "sha256": "cde7a09698cc9784027808c9bf81ec99be8e5b9b9d87ed403af9c871fde8dd3d"
+  },
+  "reviewed_chunk": {
+    "label": "plus30-v1",
+    "last_accepted_result": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v1/evaluation-020/result.json",
+      "sha256": "5c0d25ce96a1fcb7b9bf5af7e0ce4b5175e38e7100b4626f6304eeb0606d62f9"
+    },
+    "native_evidence_passed": true,
+    "scan_target_passed": true,
+    "constrained_stationary": false,
+    "unconstrained_stationary": false,
+    "minimum_certified": false,
+    "new_gradients": 20,
+    "wall_minutes": 69.7549418091774,
+    "projected_gradient": {
+      "max_atom_gradient_au": 0.01008910251790878,
+      "rms_atom_gradient_au": 0.0020519721795122935,
+      "torsion_degrees": 135.65946347935449,
+      "torsion_error_degrees": 2.2737367544323206e-13,
+      "force_scope": "Cartesian gradient projected tangent to the single fixed glycosidic torsion",
+      "passed": false
+    },
+    "force_limit_ratio": 672.606834527252,
+    "energy_relative_to_branch_zero_kcal_mol": 6.386642726888043,
+    "fit_target_accepted": false,
+    "allocation_boundary": "Gradient allocation exhausted; audit before continuation"
+  },
+  "native_gradient_components": 2940,
+  "native_geometry_tables": 40,
+  "trajectory_frames": 20,
+  "maximum_evaluated_angle_error_degrees": 1.5263850627889042e-08,
+  "contact_review": {
+    "original_seed": {
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.2722432615087182,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.6919355327377363,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.245440884499653,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.681901015511474,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.8617718690897944,
+          1.0326356419462666
+        ],
+        "minimum_nonbonded_covalent_ratio": 0.9363500875601104,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      },
+      "contacts": [
+        {
+          "distance_angstrom": 0.5805370542872685,
+          "atoms": [
+            "1:HO5'",
+            "2:H52"
+          ]
+        },
+        {
+          "distance_angstrom": 1.28341340946131,
+          "atoms": [
+            "1:O5'",
+            "2:H52"
+          ]
+        },
+        {
+          "distance_angstrom": 1.443079889002149,
+          "atoms": [
+            "2:C7",
+            "1:HO5'"
+          ]
+        },
+        {
+          "distance_angstrom": 1.7940214230279732,
+          "atoms": [
+            "1:HO5'",
+            "2:H53"
+          ]
+        },
+        {
+          "distance_angstrom": 1.889405126323199,
+          "atoms": [
+            "2:O4",
+            "1:H5''"
+          ]
+        },
+        {
+          "distance_angstrom": 2.019586379020738,
+          "atoms": [
+            "1:O2",
+            "1:H2'"
+          ]
+        },
+        {
+          "distance_angstrom": 2.0804808103434436,
+          "atoms": [
+            "1:HO5'",
+            "1:H5''"
+          ]
+        },
+        {
+          "distance_angstrom": 2.0866556827789804,
+          "atoms": [
+            "1:C5'",
+            "2:H52"
+          ]
+        },
+        {
+          "distance_angstrom": 2.225542307113557,
+          "atoms": [
+            "1:HO5'",
+            "2:H51"
+          ]
+        },
+        {
+          "distance_angstrom": 2.231268114553348,
+          "atoms": [
+            "1:H5''",
+            "2:H52"
+          ]
+        }
+      ],
+      "torsion_degrees": 135.6594634793547
+    },
+    "accepted_checkpoint": {
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.280319861194182,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.682875405918588,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.1495636965842815,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.6900676902285892,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.8619627303028365,
+          1.032657248951422
+        ],
+        "minimum_nonbonded_covalent_ratio": 1.402922989450949,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      },
+      "contacts": [
+        {
+          "distance_angstrom": 1.927515655814089,
+          "atoms": [
+            "1:HO5'",
+            "2:H52"
+          ]
+        },
+        {
+          "distance_angstrom": 2.0442071992485715,
+          "atoms": [
+            "1:HO5'",
+            "1:H5''"
+          ]
+        },
+        {
+          "distance_angstrom": 2.0783702350933813,
+          "atoms": [
+            "1:H1'",
+            "1:H6"
+          ]
+        },
+        {
+          "distance_angstrom": 2.2377351542497963,
+          "atoms": [
+            "1:H3'",
+            "1:HO3'"
+          ]
+        },
+        {
+          "distance_angstrom": 2.2693874679168,
+          "atoms": [
+            "1:O2",
+            "1:H2'"
+          ]
+        },
+        {
+          "distance_angstrom": 2.290088508261779,
+          "atoms": [
+            "1:H5''",
+            "1:H3'"
+          ]
+        },
+        {
+          "distance_angstrom": 2.3094740142134116,
+          "atoms": [
+            "1:H2''",
+            "1:H1'"
+          ]
+        },
+        {
+          "distance_angstrom": 2.3273343413254897,
+          "atoms": [
+            "2:HCM3",
+            "2:H6"
+          ]
+        },
+        {
+          "distance_angstrom": 2.3307868182464606,
+          "atoms": [
+            "2:O4",
+            "1:H5''"
+          ]
+        },
+        {
+          "distance_angstrom": 2.3671357246156517,
+          "atoms": [
+            "1:C1'",
+            "1:H6"
+          ]
+        }
+      ],
+      "torsion_degrees": 135.65946347935449
+    },
+    "plus15_rotated_alternative": {
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.268540079176304,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.6853571707505133,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.2506423993981,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.6855977063407441,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.8618103028080859,
+          1.031969673411324
+        ],
+        "minimum_nonbonded_covalent_ratio": 1.3969520710482564,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      },
+      "contacts": [
+        {
+          "distance_angstrom": 1.3067909378716365,
+          "atoms": [
+            "1:HO5'",
+            "2:H52"
+          ]
+        },
+        {
+          "distance_angstrom": 1.6865738670283503,
+          "atoms": [
+            "1:O5'",
+            "2:H52"
+          ]
+        },
+        {
+          "distance_angstrom": 2.0603875454682252,
+          "atoms": [
+            "1:HO5'",
+            "1:H5''"
+          ]
+        },
+        {
+          "distance_angstrom": 2.1360119280833434,
+          "atoms": [
+            "2:O4",
+            "1:H5''"
+          ]
+        },
+        {
+          "distance_angstrom": 2.1522517865166932,
+          "atoms": [
+            "1:O2",
+            "1:H2'"
+          ]
+        },
+        {
+          "distance_angstrom": 2.154657042075093,
+          "atoms": [
+            "2:C7",
+            "1:HO5'"
+          ]
+        },
+        {
+          "distance_angstrom": 2.160901601964971,
+          "atoms": [
+            "2:O4",
+            "1:HO5'"
+          ]
+        },
+        {
+          "distance_angstrom": 2.255248601341228,
+          "atoms": [
+            "1:H1'",
+            "1:H6"
+          ]
+        },
+        {
+          "distance_angstrom": 2.2638872803766095,
+          "atoms": [
+            "1:H3'",
+            "1:HO3'"
+          ]
+        },
+        {
+          "distance_angstrom": 2.2880069012452093,
+          "atoms": [
+            "1:H2''",
+            "1:H1'"
+          ]
+        }
+      ],
+      "torsion_degrees": 135.6594634793547
+    }
+  },
+  "last_five_energy_change_kcal_mol": -0.39058653551922,
+  "last_five_max_force_reduction_fraction": 0.13678017473687087,
+  "active_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v2/plan.json",
+    "sha256": "8b22a08ce9d7853c307cfa8bc20e68509ad078637e0a2ab9806c69fcef4b7767"
+  },
+  "test_receipt": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v2/test_receipt.json",
+    "sha256": "728c90c6c507ac19190cf77346e30a9b7345c911b3cf53e2e04b906953bee386"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v2/launch_verification.json",
+    "sha256": "c0764c2233389cda8eec7407fc7966f5aee9aaffed74267b3326c1dbed1ef080"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v2/handoff.json",
+    "sha256": "13d49165a6953ee6340dd1bf0e685631d3a1c87492eb566dfd063c5f985f76a8"
+  },
+  "storage_prelaunch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-plus30-v2/storage_prelaunch.json",
+    "sha256": "8ff9d93d30fb70cbf6e400a91640ef858c3c5c85a735d94882507e68060360be"
+  },
+  "endpoint_minimum_certified": false,
+  "fit_target_accepted": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0,
+  "cleanup_authorized": false
+}

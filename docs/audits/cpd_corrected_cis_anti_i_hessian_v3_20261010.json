@@ -1,0 +1,61 @@
+{
+  "at": "2026-10-10T21:43:32+00:00",
+  "status": "diagnostic_hessian_batch_one_active",
+  "completed_pilot": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/original-method-curvature-pilot-v1/completion_audit.json",
+    "sha256": "942449353658c8184fddb24bc113c7559c79f77974f566614f39a00d185fc04d"
+  },
+  "completed_wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/original-method-curvature-pilot-v1-service/completion_wake_ack.json",
+    "sha256": "778ef65fa87868e0a3b930fe8c3757ce3baa317bf286336defd0cd3ac3843060"
+  },
+  "numerical_admission": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/curvature_to_hessian_admission.json",
+    "sha256": "91197a7a619af948405f7c5cb41bcc35f06e21ed4f1b6d702ad4d1fcd8cfc458"
+  },
+  "hessian_manifest": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/manifest.json",
+    "sha256": "ed4d4b61a7709f38c51b2d08b46d8b764f7ab9ccbdda6f1cdf67078c07f1b69c"
+  },
+  "preflight": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/preflight.json",
+    "sha256": "d0ebdc6f99efb141d74588d61f42d6d199749bf31d16f27aa94aa4548b33c1c3"
+  },
+  "reference_reuse": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/reused_reference_audit.json",
+    "sha256": "8354e67f534777bb408f44c51ed18eea7536fb2276746382c363fef4cf6fc14f"
+  },
+  "tests": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/tests.json",
+    "sha256": "1ade0128427ed7ad7790e3c5115ecc69bffde0e541d36cdc57455005c2975376"
+  },
+  "synthetic_preflight": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/actual_plan_synthetic_preflight.json",
+    "sha256": "df863077cd25c9f558b7b5db9079ed6b05e372479962cf9098ac134fdd5bd570"
+  },
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/batch-1/launch_verification.json",
+    "sha256": "5614593afdf35ec32bf00e300a4690c928b40091ab9d4f17582933104013b698"
+  },
+  "service_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v3/batch-1-service",
+  "wake_token": "4feec596-92af-44c7-8057-a4783e22b10b",
+  "expected_finish_denver": "2026-10-10T17:20:14-06:00",
+  "audit_deadline_denver": "2026-10-10T18:14:03-06:00",
+  "hard_deadline_denver": "2026-10-10T18:42:36-06:00",
+  "preserved_preparation_failure": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian-stage2-v2/preparation_failure.json",
+    "sha256": "ba1cd9db401736b0196cf700cfe78106dd64ed5fcbc2086be90c5ce36395600b"
+  },
+  "active_new_gradient_count": 104,
+  "reused_reference_gradients": 1,
+  "pending_batch_two_new_gradients": 106,
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0,
+  "monitoring": "Completion/failure trigger plus a one-shot audit deadline; no intermittent polling.",
+  "next_action": "Audit batch one and write hessian-stage2-v3/batch1_continuation_decision.json with proceed=true and a pinned passed batch_review only if evidence supports continuation. Then launch batch two via the frozen prepare_corrected_core_hessian_v2.py launcher. Preserve all failed receipts. Final harmonic assembly remains diagnostic pending numerical/low-mode review.",
+  "source_files": [
+    "experiments/cpd_anti_additive/corrected_core_hessian.py",
+    "experiments/cpd_anti_additive/prepare_corrected_core_hessian_v2.py"
+  ]
+}

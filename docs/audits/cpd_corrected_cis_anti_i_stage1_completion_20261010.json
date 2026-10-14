@@ -1,0 +1,22 @@
+{
+  "schema": "nadoc.corrected-core-stage1-handoff.v1",
+  "at": "2026-10-10T20:21:27+00:00",
+  "status": "stage1_passed_stationary_candidate",
+  "gate_effect": "none",
+  "completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/stage1_completion_audit.json",
+    "sha256": "fbc51040de27768c15f09193f793dc678e437f1b187bdb98aaeaa6e09112ebe2"
+  },
+  "next_stage_proposal": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/hessian_stage2_proposal.json",
+    "sha256": "d148a99e01dd5a668c3e8fa10a5eea7989b6632443f0b242285dc5e11e8229e3"
+  },
+  "native_new_gradients": 30,
+  "optimizer_service_seconds": 1736.837072134018,
+  "final_metrics": {
+    "max_atom_gradient_au": 6.540755745114802e-06,
+    "rms_atom_gradient_au": 2.57061001141089e-06
+  },
+  "minimum_certified": false,
+  "later_compute_authorized": false
+}

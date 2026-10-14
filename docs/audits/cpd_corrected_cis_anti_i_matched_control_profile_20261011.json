@@ -1,0 +1,130 @@
+{
+  "at": "2026-10-11T18:31:06+00:00",
+  "schema": "nadoc.corrected-anti-matched-control-profile-audit.v1",
+  "campaign_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1",
+  "wake_token": "0a491221-1aec-44e3-967e-ca6f16b79f14",
+  "event": "complete",
+  "acknowledgement": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1-service/completion_wake_ack.json",
+    "sha256": "da14d4ed6f9b467fbf0e6a67d3f91baa9f0e80416e556a3eae144d759c34002b"
+  },
+  "control_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1/completion_audit.json",
+    "sha256": "2a8b0f367fc45fb270f7ebdc092603c17b8e8d3ce0cdd01259c6b001255a434a"
+  },
+  "control_summary": {
+    "result": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1/evaluation-019/result.json",
+      "sha256": "a7f40a1f16f517034402101be11223bf31e7dc534e3a1552a162c48fb8cba7cc"
+    },
+    "native_evidence_passed": true,
+    "scan_target_passed": true,
+    "constrained_stationary": true,
+    "unconstrained_stationary": false,
+    "minimum_certified": false,
+    "new_gradients": 19,
+    "wall_minutes": 67.37775098085403,
+    "projected_gradient": {
+      "max_atom_gradient_au": 9.446997567695994e-06,
+      "rms_atom_gradient_au": 3.8463481594048375e-06,
+      "torsion_degrees": 105.6594634719231,
+      "torsion_error_degrees": 7.431594895024318e-09,
+      "force_scope": "Cartesian gradient projected tangent to the single fixed glycosidic torsion",
+      "passed": true
+    },
+    "energy_below_original_same_angle_kcal_mol": 2.7962305529131135
+  },
+  "comparisons": {
+    "branch_zero_minus_original_zero": {
+      "energy_kcal_mol": -2.7962305529131135,
+      "conformer_torsion_changes_degrees": {
+        "sugar_ring_0": 1.932000237942134,
+        "sugar_ring_1": -19.273436717721097,
+        "sugar_ring_2": 29.77982028311459,
+        "sugar_ring_3": -29.992268563710837,
+        "sugar_ring_4": 17.579843158469572,
+        "cap_5OH": 63.32525344624321,
+        "cap_3OH": 11.542113780842328,
+        "sugar_exocyclic": -6.821488807751734,
+        "cyclobutane": 0.2170799435957349
+      }
+    },
+    "branch_minus15_minus_original_zero": {
+      "energy_kcal_mol": -3.9586865571315846,
+      "conformer_torsion_changes_degrees": {
+        "sugar_ring_0": 5.8116553818632894,
+        "sugar_ring_1": -17.657394652966246,
+        "sugar_ring_2": 23.421379042010443,
+        "sugar_ring_3": -20.815187738914602,
+        "sugar_ring_4": 9.381196046878983,
+        "cap_5OH": 84.28722798235566,
+        "cap_3OH": 10.506440298618259,
+        "sugar_exocyclic": -6.4826373190746835,
+        "cyclobutane": -0.08662021809612952
+      }
+    },
+    "branch_minus15_minus_branch_zero": {
+      "energy_kcal_mol": -1.1624560042184713,
+      "conformer_torsion_changes_degrees": {
+        "sugar_ring_0": 3.8796551439211555,
+        "sugar_ring_1": 1.6160420647548506,
+        "sugar_ring_2": -6.358441241104174,
+        "sugar_ring_3": 9.177080824796235,
+        "sugar_ring_4": -8.198647111590617,
+        "cap_5OH": 20.96197453611245,
+        "cap_3OH": -1.0356734822240696,
+        "sugar_exocyclic": 0.338851488676994,
+        "cyclobutane": -0.3037001616918644
+      }
+    }
+  },
+  "matched_angle_review": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1/matched_angle_review.json",
+    "sha256": "be5695501da84131dd9a543b488bce6d5a1f1d309de4734ba691e7d04a6a9aea"
+  },
+  "interpretation": "A lower constrained conformation persists at the original angle, with different sugar/cap torsions. The earlier minus15-minus-original-zero energy mixes conformation and angle response.",
+  "profile_design": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/glycosidic-branch-profile-v1/design.json",
+    "sha256": "ade6d79e2eccc4edea085fafbe4a9d8f6f9a02743c907cc4868700e4c1add5e3"
+  },
+  "active_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-minus30-v1/plan.json",
+    "sha256": "2a2f1ed23ee488923fd4216e692f7844ac2fc4b0e433770d237ede5f9754de7f"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-minus30-v1/handoff.json",
+    "sha256": "ae0a037eca9b8c74095edf1029669a9f456049b0afe46131f5cf2ff8f25d1e62"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-minus30-v1/launch_verification.json",
+    "sha256": "9eb91820651ca6dead8b0b93e941c31047e2ddc3bc0bdf4fc12a121c90692f2d"
+  },
+  "testing": {
+    "new_qm_evaluations_for_preflight": 0,
+    "seed_checks": "Three exact rigid sugar rotations, all seven stereocenters, graph/bond geometry, and installed Sella target/residual verified.",
+    "fresh_seed_driver": "Synthetic dispatch confirms new geometry acquires a new gradient; synthetic results excluded from scientific evidence.",
+    "regression": "24 prior tests reused with unchanged native/optimizer/constraint sources and verified pins.",
+    "receipt": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branch-minus30-v1/test_receipt.json",
+      "sha256": "1ae7b011b90df1e09f48ddb05e77a1b42ef843a2bdd66967b9cbe84bcfa1c751"
+    }
+  },
+  "failures_preserved": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v2/scientific_failure.json",
+      "sha256": "6f18b475d00573cedbf65972fe380366b3218a939520bf653ac92ebbd491b085"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1/launch_attempt1_failure.json",
+      "sha256": "da86faee35596f9f03b5ce567d63c16bb0a445f4b16340972887349625799de8"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1-deferred-admission/cancellation_review.json",
+      "sha256": "f8ba032720174cb699b905d9a058d99a8f04bff25a1215d2f6428025ff80061a"
+    }
+  ],
+  "endpoint_minimum_certified": false,
+  "fit_target_accepted": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

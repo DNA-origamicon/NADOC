@@ -1,0 +1,64 @@
+{
+  "at": "2026-10-12T00:48:59.232715+00:00",
+  "stage": "core-charge-round1-audited-two-endpoint-electrostatic-diagnostics-launched",
+  "archive_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1",
+  "completion_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/charge-core-fit-v1-service/completion_wake_ack.json",
+    "sha256": "6cba83cc788bff84eaa394cd04e145ec4833d479c035fb21e13f1a58edd557ff"
+  },
+  "charge_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/charge-core-fit-v1/completion_audit.json",
+    "sha256": "f2366398d21f3bf9d58ac0ddb6355f1c0146680cf7068a32435d16ee4a9b838c"
+  },
+  "charge_fit_summary": {
+    "rounds_used": 1,
+    "maximum_rounds": 2,
+    "core_water_development_limits_passed": true,
+    "maximum_water_energy_error_kcal_mol": 0.013198551349450582,
+    "maximum_water_distance_error_angstrom": 0.10489897901103484,
+    "dipole_vector_error_debye": 0.003900500488163594,
+    "esp_relative_rmse": 0.4586465221362792,
+    "active_bounds": [
+      "O4"
+    ],
+    "data_jacobian_condition_number": 1635039.9324789676,
+    "second_fit_admitted": false
+  },
+  "transfer_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-endpoint-transfer-v1/plan.json",
+    "sha256": "cadddc1a7f63f62769aad73ed6279733c72934c705908c6136de3b1b27cc93ad"
+  },
+  "transfer_admission": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-endpoint-transfer-v1/admission.json",
+    "sha256": "a663f0b7e8f4dac1bab07b252292c5d13d927db17db0e0f52009f45d84d299b2"
+  },
+  "transfer_startup": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-endpoint-transfer-v1/launch_verification.json",
+    "sha256": "dcd305dfd296766c33cbf72e3d7ed7bf0e7f5cd95fbc2d8093b0090279d21cc8"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-endpoint-transfer-v1/handoff.json",
+    "sha256": "d4e1664e062d831ccac1808e2f5891a6de166b79fdb3b2e5c580d8e922175116"
+  },
+  "limits": {
+    "maximum_new_scf": 2,
+    "hard_seconds": 900,
+    "task_timeout_seconds": 300,
+    "threads": 4,
+    "psi4_memory_gib": 4,
+    "service_memory_gib": 8
+  },
+  "tests": {
+    "passed": 8,
+    "seconds": 1.14
+  },
+  "launched_local": "2026-10-11T18:47:56.978021-06:00",
+  "expected_finish_local": "2026-10-11T18:50:56.978021-06:00",
+  "audit_deadline_local": "2026-10-11T18:59:56.942107-06:00",
+  "hard_deadline_local": "2026-10-11T19:02:56.942107-06:00",
+  "wake_token": "bd8e64b2-6175-4050-b481-1eff3440b15d",
+  "minimum_certified": false,
+  "charge_transfer_validated": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

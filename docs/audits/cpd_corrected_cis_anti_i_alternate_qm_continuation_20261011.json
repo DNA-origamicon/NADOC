@@ -1,0 +1,3921 @@
+{
+  "at": "2026-10-12T02:47:47+00:00",
+  "stage": "alternate-sugar-qm-closure-v1-audited-v2-continuation-running",
+  "authorization": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/campaign_authorization_20261010.json",
+    "sha256": "c39e549edd30e31ec183cd8094ed5cf0bd29ea34b26736f87f71d867eafd98d5"
+  },
+  "latest_audited_wake": {
+    "token": "85f479a2-72de-45b7-ade2-83d5ff25bebb",
+    "event": "complete",
+    "ack": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1-service/completion_wake_ack.json",
+      "sha256": "0f6a2ab7accf3174c300e1be33d8f5da585a72599ebc630cd2995b638244cfdb"
+    }
+  },
+  "previous_completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/completion_audit.json",
+    "sha256": "7047dc0200db1cc57deded93f5c10aaa3b9132e5bff61238ca4e85cefc007d6a"
+  },
+  "archived_auditor": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/executed_completion_audit.py",
+    "sha256": "52ae249df35c4573036ca30fc4536b4ac89fb7e1d560fa4e23c8bec4a1e31702"
+  },
+  "audit_summary": {
+    "new_gradients": 12,
+    "accepted_states": 13,
+    "optimizer_converged": false,
+    "constrained_stationary": false,
+    "minimum_certified": false,
+    "relative_to_original_qm_kcal_mol": -2.433036178722016,
+    "max_free_projected_atom_gradient_kcal_mol_A": 0.06887333936558253,
+    "force_reduction_factor": 380.77618871524027,
+    "last_five_force_reduction_fraction": 0.7484374219206111
+  },
+  "retained_preparation_failure": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2-preparation-failure/failure.json",
+    "sha256": "6b3c38a045421ceb563c06947510a3c6276c401696c8b4147026e47497d7b880"
+  },
+  "closure_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/plan.json",
+    "sha256": "0c26c0b38446306f86ca7bf3f1ed17314f6f928397164b4b23f16cd35a66d52d"
+  },
+  "preflight": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/preflight.json",
+    "sha256": "406ab283ce251edbdec7a3e95d3e52961af7f4d5ae173e643b4dbfe9a5c5bc96"
+  },
+  "admission": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/admission.json",
+    "sha256": "996a02ecaea8af35ed420d61cb5b1865031818987a97962ca832a5a66384f32d"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2/launch_verification.json",
+    "sha256": "eaadf0fecbf8a579021d56e615c8a586c4bb60b36b635f075ef99fd0d50ef25d"
+  },
+  "service_directory": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v2-service",
+  "status_at_single_startup_check": {
+    "state": "running",
+    "pid": 771566,
+    "records": [],
+    "started_at": 1791773212.8382788,
+    "simulation_ready": false
+  },
+  "completion_wake_token": "726a3d20-4cc5-4bd1-98fe-ee22d44be1f1",
+  "completion_watcher_armed": true,
+  "expected_finish_epoch": 1791775808.838407,
+  "audit_deadline_epoch": 1791776212.8010802,
+  "hard_deadline_epoch": 1791776812.8010802,
+  "maximum_new_gradients": 12,
+  "task_timeout_seconds": 600,
+  "hard_seconds": 3600,
+  "original_fixed_targets_preserved": true,
+  "active_calculation_at_startup": "One original-method MP2 gradient in the second bounded Sella order0/internal chunk, after reuse of the last accepted v1 gradient.",
+  "next_action": "Acknowledge completion/failure/deadline; replay actual native outputs, full-precision gradients and accepted trajectory. Audit last accepted force/energy progress, original fixed targets and chi, stereocenters, and sugar descriptors. Stop additional optimization on audited constrained stationarity; do not call it a minimum. Assess correspondence/curvature needs before any next stage. Further chunk only after evidence of progress/necessity and bounded admission. No automatic second fit or broader grid.",
+  "restart_policy": "Use exact accepted geometry/gradient, keep the original reference targets for all32fixed atoms and the identical chi target. All evaluated trials and accepted checkpoints retained; optimizer Hessian/history not restorable.",
+  "bonded_fit_rounds_consumed": 1,
+  "bonded_fit_rounds_max": 2,
+  "second_fit_admitted": false,
+  "heldout_accessed": false,
+  "full_candidate_hash_lock": false,
+  "minimum_certified": false,
+  "basin_closure_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0,
+  "periodic_polling": false,
+  "storage_policy": "All outputs/native scratch on mounted Archive. No existing-data move/delete.",
+  "completed_chunk_audit": {
+    "at": "2026-10-12T02:44:44+00:00",
+    "source": {
+      "path": "/home/jojo/Work/NADOC/experiments/cpd_anti_additive/audit_corrected_alternate_qm_closure.py",
+      "sha256": "52ae249df35c4573036ca30fc4536b4ac89fb7e1d560fa4e23c8bec4a1e31702"
+    },
+    "plan": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/plan.json",
+      "sha256": "260c16833932504e7e606ea6d76c94ad9ffa1e4e3548a5f364990aa0903c4f5e"
+    },
+    "status": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1-service/status.json",
+      "sha256": "8f8e9cba6d0bffc5a7a70104b9d2b73570ce14479d189f7b2de64d71901d51ab"
+    },
+    "acknowledgement": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1-service/completion_wake_ack.json",
+      "sha256": "0f6a2ab7accf3174c300e1be33d8f5da585a72599ebc630cd2995b638244cfdb"
+    },
+    "progress_source": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/progress.json",
+      "sha256": "c04c99aa3c9f27da17fbd1e521707335b9b2d3b88ce9cd942b1574d5a73d2d9f"
+    },
+    "assessment": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/assessment.json",
+      "sha256": "84fda0d8532e280c41ce4901e6de6d38d603d04f1c38c23e09b373a6e26cd7f7"
+    },
+    "native_trajectory": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/sella.traj",
+      "sha256": "a5e53b687983c2c761508c49d7c3b62b739967e5771d1aa46d50356060bc0720"
+    },
+    "native_log": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/sella.log",
+      "sha256": "b73fdc8dd25fda0f65e9e51f34171877cbea0a2d4911c4e5d8ae5aaf498cb7e9"
+    },
+    "passed": true,
+    "native_evidence_passed": true,
+    "evaluated_states": 13,
+    "accepted_states": 13,
+    "new_gradients": 12,
+    "records": [
+      {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1/result.json",
+          "sha256": "d98c41f1f46f3e59da75799b59c7341928700158c87f326f59f7aaa39f0e3390"
+        },
+        "reused": true,
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1/geometry_bohr.npy",
+          "sha256": "a13e044d0d7afa2f378123d10482724c79d257b2b359b12e743aa74b01cc774e"
+        },
+        "gradient": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1/gradient_hartree_bohr.npy",
+          "sha256": "e6945a0e9afd4d1d5f3769c82d6f0e4e2babc3cd1460552b4b1d9abd892ae562"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-pilot-v1/output.dat",
+          "sha256": "070ae3b0d9d2454682d14a143fe2642191a359d94c51e2e50c0cdd05a3fe13bf"
+        },
+        "energy_hartree": -1364.5363491463504,
+        "relative_to_original_qm_kcal_mol": 1.1786484351308832,
+        "max_free_projected_atom_gradient_au": 0.022115754938904233,
+        "rms_free_projected_atom_gradient_au": 0.012412380983985888,
+        "max_free_projected_atom_gradient_kcal_mol_A": 26.225327667717835,
+        "rms_free_projected_atom_gradient_kcal_mol_A": 14.71886260906942,
+        "independent_projection_error_au": 5.500235683575383e-13,
+        "stationarity_passed": false,
+        "geometry_checks": {
+          "maximum_fixed_drift_A": 0.0,
+          "chi_error_degrees": 1.3102408047416247e-10
+        },
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.2722432615087182,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6919355327377363,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.245440884499653,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.681901015511474,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.8617718690897944,
+            1.0418359949003764
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "native_audit": {
+          "electronic": {
+            "scf_converged": true,
+            "response_residuals": [
+              5.35e-11
+            ],
+            "max_atom_gradient_au": 0.023600638038716988,
+            "rms_atom_gradient_au": 0.00829152127033355
+          },
+          "fitting_conditions": [
+            1e-10,
+            1e-10,
+            1e-10
+          ],
+          "actual_bases": {
+            "6-31G(D)": [
+              449,
+              449,
+              false
+            ],
+            "CC-PVDZ-JKFIT": [
+              2737,
+              2737,
+              false
+            ],
+            "CC-PVDZ-RI": [
+              1820,
+              2112,
+              true
+            ]
+          },
+          "occupations": [
+            27,
+            101,
+            74,
+            348,
+            348,
+            0
+          ],
+          "geometry_tables": 2,
+          "native_geometry_max_rounding_error_bohr": 4.9649173661237e-13,
+          "gradient_components": 147
+        },
+        "native_seconds": 194.2585862299893,
+        "torsions_degrees": {
+          "sugar_ring_0": -27.1753914302805,
+          "sugar_ring_1": 40.491100657615064,
+          "sugar_ring_2": -40.808145708981826,
+          "sugar_ring_3": 25.10737357967035,
+          "sugar_ring_4": 1.147995415211627,
+          "cap_5OH": 52.76240222264382,
+          "cap_3OH": 166.0077836683134,
+          "sugar_exocyclic": 46.963773568871076,
+          "cyclobutane": 21.354666710004157
+        }
+      },
+      {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-001/result.json",
+          "sha256": "fc98854898d9efad9c77bdad4f9f2d08559fa9830b421ad15011d6d36270c188"
+        },
+        "reused": false,
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-001/geometry_bohr.npy",
+          "sha256": "d4f94b2ee05a2e35897dacb5693d85d54cafc84e89c32ebdbf45f5f99068bc15"
+        },
+        "gradient": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-001/gradient_hartree_bohr.npy",
+          "sha256": "a95f81c9aae133a7ecc02523783244a7900b4de6cfc34d9f6206986a5e707631"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-001/output.dat",
+          "sha256": "8892d43a6dd868366f9dd628f5bec88528220152927d9573519497213b3a95eb"
+        },
+        "energy_hartree": -1364.531930186205,
+        "relative_to_original_qm_kcal_mol": 3.9515877918503706,
+        "max_free_projected_atom_gradient_au": 0.018216159811117565,
+        "rms_free_projected_atom_gradient_au": 0.0068540744261342944,
+        "max_free_projected_atom_gradient_kcal_mol_A": 21.601105692019438,
+        "rms_free_projected_atom_gradient_kcal_mol_A": 8.12770570938525,
+        "independent_projection_error_au": 2.1042716180641463e-13,
+        "stationarity_passed": false,
+        "geometry_checks": {
+          "maximum_fixed_drift_A": 0.0,
+          "chi_error_degrees": 1.6028869254114397e-06
+        },
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.2722432615087182,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6919355327377363,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.245440884499653,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.681901015511474,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.8617718690897944,
+            1.0326356419462666
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "native_audit": {
+          "electronic": {
+            "scf_converged": true,
+            "response_residuals": [
+              4.858e-11
+            ],
+            "max_atom_gradient_au": 0.026541419339132833,
+            "rms_atom_gradient_au": 0.0059692220462895206
+          },
+          "fitting_conditions": [
+            1e-10,
+            1e-10,
+            1e-10
+          ],
+          "actual_bases": {
+            "6-31G(D)": [
+              449,
+              449,
+              false
+            ],
+            "CC-PVDZ-JKFIT": [
+              2737,
+              2737,
+              false
+            ],
+            "CC-PVDZ-RI": [
+              1820,
+              2112,
+              true
+            ]
+          },
+          "occupations": [
+            27,
+            101,
+            74,
+            348,
+            348,
+            0
+          ],
+          "geometry_tables": 2,
+          "native_geometry_max_rounding_error_bohr": 4.991562718714704e-13,
+          "gradient_components": 147
+        },
+        "native_seconds": 202.0663407399552,
+        "torsions_degrees": {
+          "sugar_ring_0": -25.718489914263092,
+          "sugar_ring_1": 37.87573005514114,
+          "sugar_ring_2": -37.65116971828103,
+          "sugar_ring_3": 22.48134430518441,
+          "sugar_ring_4": 1.9970970440996634,
+          "cap_5OH": 57.98685656775457,
+          "cap_3OH": 162.2991745416587,
+          "sugar_exocyclic": 49.05203421294063,
+          "cyclobutane": 21.354666710004157
+        }
+      },
+      {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-002/result.json",
+          "sha256": "235585bd1124ac5c2d54a3423af0fc12c11a19820e117fe6b7c58e62b5965fa7"
+        },
+        "reused": false,
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-002/geometry_bohr.npy",
+          "sha256": "03ca54f89e9855adad69a0d4503ad051b6d842aaaa4ef613df030b134c64a61d"
+        },
+        "gradient": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-002/gradient_hartree_bohr.npy",
+          "sha256": "76497051423da8de51fd98fb8b8a7a354f2a884f6339c618e96923ea2b93e1e2"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-002/output.dat",
+          "sha256": "8349792c0bb33e5ce6801456d6f092b82965b7ff373336331c7ee86366ad83cf"
+        },
+        "energy_hartree": -1364.5411462349323,
+        "relative_to_original_qm_kcal_mol": -1.83157009791957,
+        "max_free_projected_atom_gradient_au": 0.008567819278467411,
+        "rms_free_projected_atom_gradient_au": 0.0053120095769912,
+        "max_free_projected_atom_gradient_kcal_mol_A": 10.159900423762362,
+        "rms_free_projected_atom_gradient_kcal_mol_A": 6.299092756069026,
+        "independent_projection_error_au": 3.132737125266516e-13,
+        "stationarity_passed": false,
+        "geometry_checks": {
+          "maximum_fixed_drift_A": 0.0,
+          "chi_error_degrees": 1.5092691967311112e-06
+        },
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.2722432615087182,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6919355327377363,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.245440884499653,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.681901015511474,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.8617718690897944,
+            1.0326356419462666
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "native_audit": {
+          "electronic": {
+            "scf_converged": true,
+            "response_residuals": [
+              5.08e-11
+            ],
+            "max_atom_gradient_au": 0.009198071652215754,
+            "rms_atom_gradient_au": 0.003688593548279058
+          },
+          "fitting_conditions": [
+            1e-10,
+            1e-10,
+            1e-10
+          ],
+          "actual_bases": {
+            "6-31G(D)": [
+              449,
+              449,
+              false
+            ],
+            "CC-PVDZ-JKFIT": [
+              2737,
+              2737,
+              false
+            ],
+            "CC-PVDZ-RI": [
+              1820,
+              2112,
+              true
+            ]
+          },
+          "occupations": [
+            27,
+            101,
+            74,
+            348,
+            348,
+            0
+          ],
+          "geometry_tables": 2,
+          "native_geometry_max_rounding_error_bohr": 4.991562718714704e-13,
+          "gradient_components": 147
+        },
+        "native_seconds": 217.4514699629508,
+        "torsions_degrees": {
+          "sugar_ring_0": -23.638995625443872,
+          "sugar_ring_1": 37.00486464607862,
+          "sugar_ring_2": -38.02505585536224,
+          "sugar_ring_3": 24.285364919026904,
+          "sugar_ring_4": -0.450594236672289,
+          "cap_5OH": 59.393254838671176,
+          "cap_3OH": 161.5855806951662,
+          "sugar_exocyclic": 48.29580827667351,
+          "cyclobutane": 21.354666710004157
+        }
+      },
+      {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-003/result.json",
+          "sha256": "bf8181b761866ae0005bd6cd83b38a38c13ae936f3d98d0324ef08fd9fb1fc65"
+        },
+        "reused": false,
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-003/geometry_bohr.npy",
+          "sha256": "8df3267afb3728e9ff254aae2a057b823f8b36814086893c07c57c18402ddf9e"
+        },
+        "gradient": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-003/gradient_hartree_bohr.npy",
+          "sha256": "13525eeac0bb2a0ba9a5b6554f1a59ff59093bc9cce963eb6568c2e8ed630567"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-003/output.dat",
+          "sha256": "2a9e9414fe6d17bfae5b45201fc7426718d48bee9366935d6d2e30733b305657"
+        },
+        "energy_hartree": -1364.5416813279107,
+        "relative_to_original_qm_kcal_mol": -2.1673460114032608,
+        "max_free_projected_atom_gradient_au": 0.003185582195725678,
+        "rms_free_projected_atom_gradient_au": 0.0020784572298348076,
+        "max_free_projected_atom_gradient_kcal_mol_A": 3.7775304133250294,
+        "rms_free_projected_atom_gradient_kcal_mol_A": 2.4646783275694797,
+        "independent_projection_error_au": 2.9519138869393835e-13,
+        "stationarity_passed": false,
+        "geometry_checks": {
+          "maximum_fixed_drift_A": 0.0,
+          "chi_error_degrees": 3.3812426636359305e-08
+        },
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.2722432615087182,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6919355327377363,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.245440884499653,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.681901015511474,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.8617718690897944,
+            1.0326356419462666
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "native_audit": {
+          "electronic": {
+            "scf_converged": true,
+            "response_residuals": [
+              5.463e-11
+            ],
+            "max_atom_gradient_au": 0.008139563227730354,
+            "rms_atom_gradient_au": 0.002376146104147641
+          },
+          "fitting_conditions": [
+            1e-10,
+            1e-10,
+            1e-10
+          ],
+          "actual_bases": {
+            "6-31G(D)": [
+              449,
+              449,
+              false
+            ],
+            "CC-PVDZ-JKFIT": [
+              2737,
+              2737,
+              false
+            ],
+            "CC-PVDZ-RI": [
+              1820,
+              2112,
+              true
+            ]
+          },
+          "occupations": [
+            27,
+            101,
+            74,
+            348,
+            348,
+            0
+          ],
+          "geometry_tables": 2,
+          "native_geometry_max_rounding_error_bohr": 4.9649173661237e-13,
+          "gradient_components": 147
+        },
+        "native_seconds": 195.1025786550017,
+        "torsions_degrees": {
+          "sugar_ring_0": -24.39451675877219,
+          "sugar_ring_1": 36.80122410845856,
+          "sugar_ring_2": -37.026618411140625,
+          "sugar_ring_3": 22.754295611661213,
+          "sugar_ring_4": 1.013730082586541,
+          "cap_5OH": 56.55361797300208,
+          "cap_3OH": 159.97740084663263,
+          "sugar_exocyclic": 46.12737535229036,
+          "cyclobutane": 21.354666710004157
+        }
+      },
+      {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-004/result.json",
+          "sha256": "e993d9dba54afa85ab2bd697cc7a3740c17c68e68b24dee1cb65f298978144e5"
+        },
+        "reused": false,
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-004/geometry_bohr.npy",
+          "sha256": "aa2eb1d8a165d5576695aac536f48dc614190ce5073e719d1e20958c45511acc"
+        },
+        "gradient": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-004/gradient_hartree_bohr.npy",
+          "sha256": "c5bd91a797b82f346fe535715f3c222743a081b8d1b0891a380cce380fdc21b6"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-004/output.dat",
+          "sha256": "e7fa5fc8dc73361219f4eeb14757aa4e10e30527930b65e03287bb17995986e5"
+        },
+        "energy_hartree": -1364.5419720592681,
+        "relative_to_original_qm_kcal_mol": -2.3497826925673433,
+        "max_free_projected_atom_gradient_au": 0.0022910559514722983,
+        "rms_free_projected_atom_gradient_au": 0.0013066462996866284,
+        "max_free_projected_atom_gradient_kcal_mol_A": 2.7167823661647534,
+        "rms_free_projected_atom_gradient_kcal_mol_A": 1.5494486826137126,
+        "independent_projection_error_au": 2.1293676457506683e-13,
+        "stationarity_passed": false,
+        "geometry_checks": {
+          "maximum_fixed_drift_A": 0.0,
+          "chi_error_degrees": 5.653078005707357e-11
+        },
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.2722432615087182,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6919355327377363,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.245440884499653,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.681901015511474,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.8617718690897944,
+            1.0326356419462666
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "native_audit": {
+          "electronic": {
+            "scf_converged": true,
+            "response_residuals": [
+              5.232e-11
+            ],
+            "max_atom_gradient_au": 0.008374180925406604,
+            "rms_atom_gradient_au": 0.0020730011113578774
+          },
+          "fitting_conditions": [
+            1e-10,
+            1e-10,
+            1e-10
+          ],
+          "actual_bases": {
+            "6-31G(D)": [
+              449,
+              449,
+              false
+            ],
+            "CC-PVDZ-JKFIT": [
+              2737,
+              2737,
+              false
+            ],
+            "CC-PVDZ-RI": [
+              1820,
+              2112,
+              true
+            ]
+          },
+          "occupations": [
+            27,
+            101,
+            74,
+            348,
+            348,
+            0
+          ],
+          "geometry_tables": 2,
+          "native_geometry_max_rounding_error_bohr": 4.9649173661237e-13,
+          "gradient_components": 147
+        },
+        "native_seconds": 201.39868171303533,
+        "torsions_degrees": {
+          "sugar_ring_0": -24.074722873697915,
+          "sugar_ring_1": 36.616784878325376,
+          "sugar_ring_2": -36.91681719229205,
+          "sugar_ring_3": 22.868287312030773,
+          "sugar_ring_4": 0.7614953409736726,
+          "cap_5OH": 59.697277993528246,
+          "cap_3OH": 158.73487392845163,
+          "sugar_exocyclic": 47.67283617555221,
+          "cyclobutane": 21.354666710004157
+        }
+      },
+      {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-005/result.json",
+          "sha256": "4f097495acfbc899a3e8513e395a5f601678f28647647e59bfa9a0e85602fa1a"
+        },
+        "reused": false,
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-005/geometry_bohr.npy",
+          "sha256": "5010b947f024fcb807363a3c93b6abc11b32a79afccedd2f2dd21d2af5b08a2a"
+        },
+        "gradient": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-005/gradient_hartree_bohr.npy",
+          "sha256": "bd0e1494e85674e16541f09547e04c9eac4c4afbfcb50870be67688abfeeffe4"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-005/output.dat",
+          "sha256": "6589011b2e83209a9dd93cea347f6993f86191237415f4e6f9b268a53254a8b9"
+        },
+        "energy_hartree": -1364.5420517888463,
+        "relative_to_original_qm_kcal_mol": -2.399813758217468,
+        "max_free_projected_atom_gradient_au": 0.001437286898044151,
+        "rms_free_projected_atom_gradient_au": 0.0006981881191318416,
+        "max_free_projected_atom_gradient_kcal_mol_A": 1.7043650536848103,
+        "rms_free_projected_atom_gradient_kcal_mol_A": 0.8279261661436811,
+        "independent_projection_error_au": 1.5310300770232654e-13,
+        "stationarity_passed": false,
+        "geometry_checks": {
+          "maximum_fixed_drift_A": 0.0,
+          "chi_error_degrees": 3.979039320256561e-12
+        },
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.2722432615087182,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6919355327377363,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.245440884499653,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.681901015511474,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.8617718690897944,
+            1.0326356419462666
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "native_audit": {
+          "electronic": {
+            "scf_converged": true,
+            "response_residuals": [
+              5.272e-11
+            ],
+            "max_atom_gradient_au": 0.008404837534360762,
+            "rms_atom_gradient_au": 0.001902401015243336
+          },
+          "fitting_conditions": [
+            1e-10,
+            1e-10,
+            1e-10
+          ],
+          "actual_bases": {
+            "6-31G(D)": [
+              449,
+              449,
+              false
+            ],
+            "CC-PVDZ-JKFIT": [
+              2737,
+              2737,
+              false
+            ],
+            "CC-PVDZ-RI": [
+              1820,
+              2112,
+              true
+            ]
+          },
+          "occupations": [
+            27,
+            101,
+            74,
+            348,
+            348,
+            0
+          ],
+          "geometry_tables": 2,
+          "native_geometry_max_rounding_error_bohr": 4.9649173661237e-13,
+          "gradient_components": 147
+        },
+        "native_seconds": 212.6304084849544,
+        "torsions_degrees": {
+          "sugar_ring_0": -23.830840678873255,
+          "sugar_ring_1": 36.1552670535408,
+          "sugar_ring_2": -36.33613331421974,
+          "sugar_ring_3": 22.429399273716108,
+          "sugar_ring_4": 0.8991855480114078,
+          "cap_5OH": 59.86598326991091,
+          "cap_3OH": 157.33139994816923,
+          "sugar_exocyclic": 47.15697934193245,
+          "cyclobutane": 21.354666710004157
+        }
+      },
+      {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-006/result.json",
+          "sha256": "2aa8d765cc690eec8dd4a43426ea4d8992a6259ec879d0c6c3fd43eeca1502a0"
+        },
+        "reused": false,
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-006/geometry_bohr.npy",
+          "sha256": "8e5377d90493e6f819d7c47f1bd2d717aeace0fade4fd7f000944cdad0eed2d8"
+        },
+        "gradient": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-006/gradient_hartree_bohr.npy",
+          "sha256": "b9d62f16285344617f22bb55547e247f0940da84b311200e2f414771191d2d9a"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-006/output.dat",
+          "sha256": "529a7fb3f00bd773ed9698965a41ff2959c8a1b993bbac945e37e351b8510348"
+        },
+        "energy_hartree": -1364.5420839092217,
+        "relative_to_original_qm_kcal_mol": -2.4199695980966647,
+        "max_free_projected_atom_gradient_au": 0.0007008953847069955,
+        "rms_free_projected_atom_gradient_au": 0.00038516550255250436,
+        "max_free_projected_atom_gradient_kcal_mol_A": 0.8311364986413997,
+        "rms_free_projected_atom_gradient_kcal_mol_A": 0.4567373593461022,
+        "independent_projection_error_au": 1.5924924139792962e-13,
+        "stationarity_passed": false,
+        "geometry_checks": {
+          "maximum_fixed_drift_A": 0.0,
+          "chi_error_degrees": 1.503508428868372e-11
+        },
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.2722432615087182,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6919355327377363,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.245440884499653,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.681901015511474,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.8617718690897944,
+            1.0326356419462666
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "native_audit": {
+          "electronic": {
+            "scf_converged": true,
+            "response_residuals": [
+              5.291e-11
+            ],
+            "max_atom_gradient_au": 0.008370985960221143,
+            "rms_atom_gradient_au": 0.0018704026100896582
+          },
+          "fitting_conditions": [
+            1e-10,
+            1e-10,
+            1e-10
+          ],
+          "actual_bases": {
+            "6-31G(D)": [
+              449,
+              449,
+              false
+            ],
+            "CC-PVDZ-JKFIT": [
+              2737,
+              2737,
+              false
+            ],
+            "CC-PVDZ-RI": [
+              1820,
+              2112,
+              true
+            ]
+          },
+          "occupations": [
+            27,
+            101,
+            74,
+            348,
+            348,
+            0
+          ],
+          "geometry_tables": 2,
+          "native_geometry_max_rounding_error_bohr": 4.973799150320701e-13,
+          "gradient_components": 147
+        },
+        "native_seconds": 201.07508411398157,
+        "torsions_degrees": {
+          "sugar_ring_0": -24.045934796977768,
+          "sugar_ring_1": 36.059189170788095,
+          "sugar_ring_2": -35.961902183707586,
+          "sugar_ring_3": 21.90776153047925,
+          "sugar_ring_4": 1.3676147645031353,
+          "cap_5OH": 60.2774526134769,
+          "cap_3OH": 156.08480556815732,
+          "sugar_exocyclic": 46.99153319892631,
+          "cyclobutane": 21.354666710004157
+        }
+      },
+      {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-007/result.json",
+          "sha256": "36e871448f3d70e305d617cd5a16620509b44733b02139a1472d3abb71dc907a"
+        },
+        "reused": false,
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-007/geometry_bohr.npy",
+          "sha256": "348f6e8c7675be50a046b0c4828ac51bfe06aae8696d4d1efa6ced997397cbb0"
+        },
+        "gradient": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-007/gradient_hartree_bohr.npy",
+          "sha256": "cf9ba783258fb749710d3e831f8dc945bc2685d53ffa01a7ff813d68e5f28b7c"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-007/output.dat",
+          "sha256": "744d2f1d3d47d21257cbdd2589bce97622f3a73f6f93889306bc5a3958404c3e"
+        },
+        "energy_hartree": -1364.5420970594234,
+        "relative_to_original_qm_kcal_mol": -2.4282214742910604,
+        "max_free_projected_atom_gradient_au": 0.00043856711228589445,
+        "rms_free_projected_atom_gradient_au": 0.0002257487871478032,
+        "max_free_projected_atom_gradient_kcal_mol_A": 0.5200621120895931,
+        "rms_free_projected_atom_gradient_kcal_mol_A": 0.2676976630414029,
+        "independent_projection_error_au": 2.1395439673416172e-13,
+        "stationarity_passed": false,
+        "geometry_checks": {
+          "maximum_fixed_drift_A": 0.0,
+          "chi_error_degrees": 1.5631940186722204e-11
+        },
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.2722432615087182,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6919355327377363,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.245440884499653,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.681901015511474,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.8617718690897944,
+            1.0326356419462666
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "native_audit": {
+          "electronic": {
+            "scf_converged": true,
+            "response_residuals": [
+              5.312e-11
+            ],
+            "max_atom_gradient_au": 0.008249239678496343,
+            "rms_atom_gradient_au": 0.0018575252155245583
+          },
+          "fitting_conditions": [
+            1e-10,
+            1e-10,
+            1e-10
+          ],
+          "actual_bases": {
+            "6-31G(D)": [
+              449,
+              449,
+              false
+            ],
+            "CC-PVDZ-JKFIT": [
+              2737,
+              2737,
+              false
+            ],
+            "CC-PVDZ-RI": [
+              1820,
+              2112,
+              true
+            ]
+          },
+          "occupations": [
+            27,
+            101,
+            74,
+            348,
+            348,
+            0
+          ],
+          "geometry_tables": 2,
+          "native_geometry_max_rounding_error_bohr": 4.991562718714704e-13,
+          "gradient_components": 147
+        },
+        "native_seconds": 211.39849107991904,
+        "torsions_degrees": {
+          "sugar_ring_0": -24.340453610064642,
+          "sugar_ring_1": 36.02887446580229,
+          "sugar_ring_2": -35.63000056761398,
+          "sugar_ring_3": 21.38140962954713,
+          "sugar_ring_4": 1.8855239442687646,
+          "cap_5OH": 60.70757779701405,
+          "cap_3OH": 154.71017288363984,
+          "sugar_exocyclic": 46.71940333694286,
+          "cyclobutane": 21.354666710004157
+        }
+      },
+      {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-008/result.json",
+          "sha256": "d1135c9fc72f4bbd99bcfce12599be711a025270f17b6e545324c6f1c6b34ce8"
+        },
+        "reused": false,
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-008/geometry_bohr.npy",
+          "sha256": "74430797daae89968425799bbb51782d2252d3f2b4e10cfcdf5730fdc65ad022"
+        },
+        "gradient": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-008/gradient_hartree_bohr.npy",
+          "sha256": "666e49724187d42d6c73fecbbd4b0aef89f4b4330fb2f8b8c6115970416bb72f"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-008/output.dat",
+          "sha256": "eb14087bde1e8473005adca6e728cd1537889fe27404b27601793a8584d30b76"
+        },
+        "energy_hartree": -1364.5421007623556,
+        "relative_to_original_qm_kcal_mol": -2.430545099322229,
+        "max_free_projected_atom_gradient_au": 0.00023087980636553852,
+        "rms_free_projected_atom_gradient_au": 0.00013414635540794632,
+        "max_free_projected_atom_gradient_kcal_mol_A": 0.27378213362023696,
+        "rms_free_projected_atom_gradient_kcal_mol_A": 0.15907357156571172,
+        "independent_projection_error_au": 1.434863851541325e-13,
+        "stationarity_passed": false,
+        "geometry_checks": {
+          "maximum_fixed_drift_A": 0.0,
+          "chi_error_degrees": 0.0
+        },
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.2722432615087182,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6919355327377363,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.245440884499653,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.681901015511474,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.8617718690897944,
+            1.0326356419462666
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "native_audit": {
+          "electronic": {
+            "scf_converged": true,
+            "response_residuals": [
+              5.309e-11
+            ],
+            "max_atom_gradient_au": 0.008257960530345049,
+            "rms_atom_gradient_au": 0.0018553046521316992
+          },
+          "fitting_conditions": [
+            1e-10,
+            1e-10,
+            1e-10
+          ],
+          "actual_bases": {
+            "6-31G(D)": [
+              449,
+              449,
+              false
+            ],
+            "CC-PVDZ-JKFIT": [
+              2737,
+              2737,
+              false
+            ],
+            "CC-PVDZ-RI": [
+              1820,
+              2112,
+              true
+            ]
+          },
+          "occupations": [
+            27,
+            101,
+            74,
+            348,
+            348,
+            0
+          ],
+          "geometry_tables": 2,
+          "native_geometry_max_rounding_error_bohr": 4.9649173661237e-13,
+          "gradient_components": 147
+        },
+        "native_seconds": 211.025512652006,
+        "torsions_degrees": {
+          "sugar_ring_0": -24.432366270109444,
+          "sugar_ring_1": 35.99701615967494,
+          "sugar_ring_2": -35.487776122015276,
+          "sugar_ring_3": 21.17759279483069,
+          "sugar_ring_4": 2.0704107983899234,
+          "cap_5OH": 61.01963410630757,
+          "cap_3OH": 154.0174751468986,
+          "sugar_exocyclic": 46.68381923531814,
+          "cyclobutane": 21.354666710004157
+        }
+      },
+      {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-009/result.json",
+          "sha256": "27f7c5072272d0b79ae75d3ccd03803759738e7244f5ea8cd37d817ebb58c9d9"
+        },
+        "reused": false,
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-009/geometry_bohr.npy",
+          "sha256": "56527e7bb28a398d40a093dd7f9991cca98487ef39f55cb5f15bbef58bc834ea"
+        },
+        "gradient": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-009/gradient_hartree_bohr.npy",
+          "sha256": "bfe193b022954aee8b89b80c8c6dbcac3c8f8d0210c6d7771657fdc2585160b4"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-009/output.dat",
+          "sha256": "14e78492e6e9c21a117986408697817a8039d6ae50f829468202ca05f22d5846"
+        },
+        "energy_hartree": -1364.5421033816579,
+        "relative_to_original_qm_kcal_mol": -2.432188736282112,
+        "max_free_projected_atom_gradient_au": 0.00015670999916226662,
+        "rms_free_projected_atom_gradient_au": 8.309145908233087e-05,
+        "max_free_projected_atom_gradient_kcal_mol_A": 0.18583001521728093,
+        "rms_free_projected_atom_gradient_kcal_mol_A": 0.09853160097146854,
+        "independent_projection_error_au": 1.541319697741239e-13,
+        "stationarity_passed": false,
+        "geometry_checks": {
+          "maximum_fixed_drift_A": 0.0,
+          "chi_error_degrees": 0.0
+        },
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.2722432615087182,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6919355327377363,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.245440884499653,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.681901015511474,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.8617718690897944,
+            1.0326356419462666
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "native_audit": {
+          "electronic": {
+            "scf_converged": true,
+            "response_residuals": [
+              5.31e-11
+            ],
+            "max_atom_gradient_au": 0.008225573067107276,
+            "rms_atom_gradient_au": 0.0018405742183093745
+          },
+          "fitting_conditions": [
+            1e-10,
+            1e-10,
+            1e-10
+          ],
+          "actual_bases": {
+            "6-31G(D)": [
+              449,
+              449,
+              false
+            ],
+            "CC-PVDZ-JKFIT": [
+              2737,
+              2737,
+              false
+            ],
+            "CC-PVDZ-RI": [
+              1820,
+              2112,
+              true
+            ]
+          },
+          "occupations": [
+            27,
+            101,
+            74,
+            348,
+            348,
+            0
+          ],
+          "geometry_tables": 2,
+          "native_geometry_max_rounding_error_bohr": 4.991562718714704e-13,
+          "gradient_components": 147
+        },
+        "native_seconds": 206.41292692895513,
+        "torsions_degrees": {
+          "sugar_ring_0": -24.45562279050004,
+          "sugar_ring_1": 35.93982383052766,
+          "sugar_ring_2": -35.367208961078944,
+          "sugar_ring_3": 21.040404336632132,
+          "sugar_ring_4": 2.1695113012268243,
+          "cap_5OH": 61.216012404977484,
+          "cap_3OH": 153.170476919764,
+          "sugar_exocyclic": 46.609011388799956,
+          "cyclobutane": 21.354666710004157
+        }
+      },
+      {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-010/result.json",
+          "sha256": "232a65bf466f58105aac7c3c1e02f50e98ff5784359d0c60df3a300e7e55b1df"
+        },
+        "reused": false,
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-010/geometry_bohr.npy",
+          "sha256": "7059618e6f469e56e56a637da98c5aa68e4773bba79b54ba7770b6472dc3e12f"
+        },
+        "gradient": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-010/gradient_hartree_bohr.npy",
+          "sha256": "57e630a5ddc6a99369f271e6926d67f9073ff160f727209f0ea5e7693f4a7fec"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-010/output.dat",
+          "sha256": "194c5971222abe5c0abc8a5f0e448f5c70e98662085746d046fecf285c85edb4"
+        },
+        "energy_hartree": -1364.5421040958306,
+        "relative_to_original_qm_kcal_mol": -2.4326368864529266,
+        "max_free_projected_atom_gradient_au": 0.00012696050584763702,
+        "rms_free_projected_atom_gradient_au": 6.524740746643594e-05,
+        "max_free_projected_atom_gradient_kcal_mol_A": 0.15055243991948744,
+        "rms_free_projected_atom_gradient_kcal_mol_A": 0.07737174900895168,
+        "independent_projection_error_au": 1.2824893328312187e-13,
+        "stationarity_passed": false,
+        "geometry_checks": {
+          "maximum_fixed_drift_A": 1.2718859212084243e-08,
+          "chi_error_degrees": 1.594519858372223e-07
+        },
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.2722432567085105,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6919355390454591,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.245440885332332,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.6819010153673508,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.8617718690023455,
+            1.0326356421131664
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.3959959457669455,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "native_audit": {
+          "electronic": {
+            "scf_converged": true,
+            "response_residuals": [
+              5.308e-11
+            ],
+            "max_atom_gradient_au": 0.008220235048054686,
+            "rms_atom_gradient_au": 0.0018359428044360429
+          },
+          "fitting_conditions": [
+            1e-10,
+            1e-10,
+            1e-10
+          ],
+          "actual_bases": {
+            "6-31G(D)": [
+              449,
+              449,
+              false
+            ],
+            "CC-PVDZ-JKFIT": [
+              2737,
+              2737,
+              false
+            ],
+            "CC-PVDZ-RI": [
+              1820,
+              2112,
+              true
+            ]
+          },
+          "occupations": [
+            27,
+            101,
+            74,
+            348,
+            348,
+            0
+          ],
+          "geometry_tables": 2,
+          "native_geometry_max_rounding_error_bohr": 4.924949337237194e-13,
+          "gradient_components": 147
+        },
+        "native_seconds": 204.51577884389553,
+        "torsions_degrees": {
+          "sugar_ring_0": -24.42708959690126,
+          "sugar_ring_1": 35.91521047292359,
+          "sugar_ring_2": -35.35552940866719,
+          "sugar_ring_3": 21.045983904327592,
+          "sugar_ring_4": 2.147924146368516,
+          "cap_5OH": 61.20838799414316,
+          "cap_3OH": 152.75922165986856,
+          "sugar_exocyclic": 46.644608516359,
+          "cyclobutane": 21.35466676509127
+        }
+      },
+      {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-011/result.json",
+          "sha256": "466f68084be3aee103bd9e42203cbfc957e23d1ecc4e5d7b5071c664c4437824"
+        },
+        "reused": false,
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-011/geometry_bohr.npy",
+          "sha256": "cbe40949905ad5f1b299011c22a71f4f82d1966a3e25b2b8f3464e1d8ecb59a8"
+        },
+        "gradient": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-011/gradient_hartree_bohr.npy",
+          "sha256": "0fef17f5aa783504e1b5e6815e8a3dab985cd7014f96766c677027d915c52de9"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-011/output.dat",
+          "sha256": "8376ec061c83b84b242b78ea27e56b395b7af53f86d5d816c83692a05ee83437"
+        },
+        "energy_hartree": -1364.542104568685,
+        "relative_to_original_qm_kcal_mol": -2.432933607119547,
+        "max_free_projected_atom_gradient_au": 8.675007100019305e-05,
+        "rms_free_projected_atom_gradient_au": 4.4092668328955055e-05,
+        "max_free_projected_atom_gradient_kcal_mol_A": 0.10287005998496432,
+        "rms_free_projected_atom_gradient_kcal_mol_A": 0.05228601410466453,
+        "independent_projection_error_au": 1.0634283845222317e-13,
+        "stationarity_passed": false,
+        "geometry_checks": {
+          "maximum_fixed_drift_A": 2.262589261654599e-09,
+          "chi_error_degrees": 1.0872853977161867e-06
+        },
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.2722432615995234,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6919355350422594,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.245440884628646,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.6819010157629952,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.8617718690845385,
+            1.032635641952624
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.395995944599145,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "native_audit": {
+          "electronic": {
+            "scf_converged": true,
+            "response_residuals": [
+              5.307e-11
+            ],
+            "max_atom_gradient_au": 0.008212126566969265,
+            "rms_atom_gradient_au": 0.0018342033030494264
+          },
+          "fitting_conditions": [
+            1e-10,
+            1e-10,
+            1e-10
+          ],
+          "actual_bases": {
+            "6-31G(D)": [
+              449,
+              449,
+              false
+            ],
+            "CC-PVDZ-JKFIT": [
+              2737,
+              2737,
+              false
+            ],
+            "CC-PVDZ-RI": [
+              1820,
+              2112,
+              true
+            ]
+          },
+          "occupations": [
+            27,
+            101,
+            74,
+            348,
+            348,
+            0
+          ],
+          "geometry_tables": 2,
+          "native_geometry_max_rounding_error_bohr": 4.956035581926699e-13,
+          "gradient_components": 147
+        },
+        "native_seconds": 202.87430827505887,
+        "torsions_degrees": {
+          "sugar_ring_0": -24.389443512404256,
+          "sugar_ring_1": 35.90697977575257,
+          "sugar_ring_2": -35.38008090831638,
+          "sugar_ring_3": 21.094588651326944,
+          "sugar_ring_4": 2.0949405466005966,
+          "cap_5OH": 61.11958926886949,
+          "cap_3OH": 152.34693901787813,
+          "sugar_exocyclic": 46.709528508306256,
+          "cyclobutane": 21.35466671435745
+        }
+      },
+      {
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-012/result.json",
+          "sha256": "f176349324346ff95a930e195f37bd0ef1058de6c0899e18d0e37f8c04933b7b"
+        },
+        "reused": false,
+        "geometry": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-012/geometry_bohr.npy",
+          "sha256": "d88119e5c0ecc7543173beb478ec81e783c89749362154017bccb54270bb55d7"
+        },
+        "gradient": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-012/gradient_hartree_bohr.npy",
+          "sha256": "8644e7e3ecf85855e7d107bbda1778b18c62549ccf13156b26a00fa5087e5b8c"
+        },
+        "native": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-012/output.dat",
+          "sha256": "d2c4d84be945f00214048934501a0ab87e07db11e8ef5c708b95f36bf2299940"
+        },
+        "energy_hartree": -1364.5421047321433,
+        "relative_to_original_qm_kcal_mol": -2.433036178722016,
+        "max_free_projected_atom_gradient_au": 5.8080719315784955e-05,
+        "rms_free_projected_atom_gradient_au": 2.3877527708423158e-05,
+        "max_free_projected_atom_gradient_kcal_mol_A": 0.06887333936558253,
+        "rms_free_projected_atom_gradient_kcal_mol_A": 0.02831447489711763,
+        "independent_projection_error_au": 9.43942562732069e-14,
+        "stationarity_passed": false,
+        "geometry_checks": {
+          "maximum_fixed_drift_A": 5.281862517194635e-10,
+          "chi_error_degrees": 1.2151110126978892e-06
+        },
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.272243261055922,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6919355325197085,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.245440884529488,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.681901015415451,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.861771869083852,
+            1.0326356419580003
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.3959959444015724,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "native_audit": {
+          "electronic": {
+            "scf_converged": true,
+            "response_residuals": [
+              5.306e-11
+            ],
+            "max_atom_gradient_au": 0.0082070822772873,
+            "rms_atom_gradient_au": 0.0018365557862923929
+          },
+          "fitting_conditions": [
+            1e-10,
+            1e-10,
+            1e-10
+          ],
+          "actual_bases": {
+            "6-31G(D)": [
+              449,
+              449,
+              false
+            ],
+            "CC-PVDZ-JKFIT": [
+              2737,
+              2737,
+              false
+            ],
+            "CC-PVDZ-RI": [
+              1820,
+              2112,
+              true
+            ]
+          },
+          "occupations": [
+            27,
+            101,
+            74,
+            348,
+            348,
+            0
+          ],
+          "geometry_tables": 2,
+          "native_geometry_max_rounding_error_bohr": 4.991285162958548e-13,
+          "gradient_components": 147
+        },
+        "native_seconds": 210.04854686209,
+        "torsions_degrees": {
+          "sugar_ring_0": -24.377799719216952,
+          "sugar_ring_1": 35.92016134698597,
+          "sugar_ring_2": -35.41497442700022,
+          "sugar_ring_3": 21.137288904836502,
+          "sugar_ring_4": 2.0621188707819598,
+          "cap_5OH": 61.048564334534014,
+          "cap_3OH": 152.1359275020893,
+          "sugar_exocyclic": 46.75397371581615,
+          "cyclobutane": 21.354666713417114
+        }
+      }
+    ],
+    "reference_native": {
+      "electronic": {
+        "scf_converged": true,
+        "response_residuals": [
+          4.928e-11
+        ],
+        "max_atom_gradient_au": 0.004861503587702362,
+        "rms_atom_gradient_au": 0.0010720252827383587
+      },
+      "fitting_conditions": [
+        1e-10,
+        1e-10,
+        1e-10
+      ],
+      "actual_bases": {
+        "6-31G(D)": [
+          449,
+          449,
+          false
+        ],
+        "CC-PVDZ-JKFIT": [
+          2737,
+          2737,
+          false
+        ],
+        "CC-PVDZ-RI": [
+          1820,
+          2112,
+          true
+        ]
+      },
+      "occupations": [
+        27,
+        101,
+        74,
+        348,
+        348,
+        0
+      ],
+      "geometry_tables": 2,
+      "native_geometry_max_rounding_error_bohr": 4.996003610813204e-13,
+      "gradient_components": 147
+    },
+    "torsion_definitions": {
+      "sugar_ring_0": [
+        "1:O4'",
+        "1:C1'",
+        "1:C2'",
+        "1:C3'"
+      ],
+      "sugar_ring_1": [
+        "1:C1'",
+        "1:C2'",
+        "1:C3'",
+        "1:C4'"
+      ],
+      "sugar_ring_2": [
+        "1:C2'",
+        "1:C3'",
+        "1:C4'",
+        "1:O4'"
+      ],
+      "sugar_ring_3": [
+        "1:C3'",
+        "1:C4'",
+        "1:O4'",
+        "1:C1'"
+      ],
+      "sugar_ring_4": [
+        "1:C4'",
+        "1:O4'",
+        "1:C1'",
+        "1:C2'"
+      ],
+      "cap_5OH": [
+        "1:HO5'",
+        "1:O5'",
+        "1:C5'",
+        "1:C4'"
+      ],
+      "cap_3OH": [
+        "1:HO3'",
+        "1:O3'",
+        "1:C3'",
+        "1:C2'"
+      ],
+      "sugar_exocyclic": [
+        "1:O5'",
+        "1:C5'",
+        "1:C4'",
+        "1:C3'"
+      ],
+      "cyclobutane": [
+        "1:C5",
+        "1:C6",
+        "2:C5",
+        "2:C6"
+      ]
+    },
+    "last_accepted_result": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-012/result.json",
+      "sha256": "f176349324346ff95a930e195f37bd0ef1058de6c0899e18d0e37f8c04933b7b"
+    },
+    "final": {
+      "source": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-012/result.json",
+        "sha256": "f176349324346ff95a930e195f37bd0ef1058de6c0899e18d0e37f8c04933b7b"
+      },
+      "reused": false,
+      "geometry": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-012/geometry_bohr.npy",
+        "sha256": "d88119e5c0ecc7543173beb478ec81e783c89749362154017bccb54270bb55d7"
+      },
+      "gradient": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-012/gradient_hartree_bohr.npy",
+        "sha256": "8644e7e3ecf85855e7d107bbda1778b18c62549ccf13156b26a00fa5087e5b8c"
+      },
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-closure-v1/evaluation-012/output.dat",
+        "sha256": "d2c4d84be945f00214048934501a0ab87e07db11e8ef5c708b95f36bf2299940"
+      },
+      "energy_hartree": -1364.5421047321433,
+      "relative_to_original_qm_kcal_mol": -2.433036178722016,
+      "max_free_projected_atom_gradient_au": 5.8080719315784955e-05,
+      "rms_free_projected_atom_gradient_au": 2.3877527708423158e-05,
+      "max_free_projected_atom_gradient_kcal_mol_A": 0.06887333936558253,
+      "rms_free_projected_atom_gradient_kcal_mol_A": 0.02831447489711763,
+      "independent_projection_error_au": 9.43942562732069e-14,
+      "stationarity_passed": false,
+      "geometry_checks": {
+        "maximum_fixed_drift_A": 5.281862517194635e-10,
+        "chi_error_degrees": 1.2151110126978892e-06
+      },
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.272243261055922,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.6919355325197085,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.245440884529488,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.681901015415451,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.861771869083852,
+          1.0326356419580003
+        ],
+        "minimum_nonbonded_covalent_ratio": 1.3959959444015724,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      },
+      "native_audit": {
+        "electronic": {
+          "scf_converged": true,
+          "response_residuals": [
+            5.306e-11
+          ],
+          "max_atom_gradient_au": 0.0082070822772873,
+          "rms_atom_gradient_au": 0.0018365557862923929
+        },
+        "fitting_conditions": [
+          1e-10,
+          1e-10,
+          1e-10
+        ],
+        "actual_bases": {
+          "6-31G(D)": [
+            449,
+            449,
+            false
+          ],
+          "CC-PVDZ-JKFIT": [
+            2737,
+            2737,
+            false
+          ],
+          "CC-PVDZ-RI": [
+            1820,
+            2112,
+            true
+          ]
+        },
+        "occupations": [
+          27,
+          101,
+          74,
+          348,
+          348,
+          0
+        ],
+        "geometry_tables": 2,
+        "native_geometry_max_rounding_error_bohr": 4.991285162958548e-13,
+        "gradient_components": 147
+      },
+      "native_seconds": 210.04854686209,
+      "torsions_degrees": {
+        "sugar_ring_0": -24.377799719216952,
+        "sugar_ring_1": 35.92016134698597,
+        "sugar_ring_2": -35.41497442700022,
+        "sugar_ring_3": 21.137288904836502,
+        "sugar_ring_4": 2.0621188707819598,
+        "cap_5OH": 61.048564334534014,
+        "cap_3OH": 152.1359275020893,
+        "sugar_exocyclic": 46.75397371581615,
+        "cyclobutane": 21.354666713417114
+      }
+    },
+    "progress": {
+      "force_reduction_factor": 380.77618871524027,
+      "energy_change_kcal_mol": -3.611684613852899,
+      "last_five_force_reduction_fraction": 0.7484374219206111,
+      "last_five_energy_change_kcal_mol": -0.002491079399786508,
+      "maximum_force_limit_ratio": 3.8720479543856636,
+      "rms_force_limit_ratio": 2.3877527708423156,
+      "uphill_accepted_energy_changes_kcal_mol": [
+        2.7729393567194873
+      ]
+    },
+    "final_descriptors_vs_original": {
+      "heavy_atom_rmsd_angstrom": 0.3486620632833023,
+      "maximum_heavy_proper_change_degrees": 128.95773560247153,
+      "torsions": [
+        {
+          "atoms": [
+            "1:O5'",
+            "1:C5'",
+            "1:C4'",
+            "1:O4'"
+          ],
+          "reference_degrees": 56.07090349073026,
+          "observed_degrees": -70.38845977339989,
+          "change_degrees": -126.45936326413015
+        },
+        {
+          "atoms": [
+            "1:O5'",
+            "1:C5'",
+            "1:C4'",
+            "1:C3'"
+          ],
+          "reference_degrees": 175.7117093182877,
+          "observed_degrees": 46.753973715816166,
+          "change_degrees": -128.95773560247153
+        },
+        {
+          "atoms": [
+            "1:C5'",
+            "1:C4'",
+            "1:O4'",
+            "1:C1'"
+          ],
+          "reference_degrees": 105.07549853652633,
+          "observed_degrees": 144.81507519686463,
+          "change_degrees": 39.73957666033829
+        },
+        {
+          "atoms": [
+            "1:C5'",
+            "1:C4'",
+            "1:C3'",
+            "1:O3'"
+          ],
+          "reference_degrees": 121.09691880477688,
+          "observed_degrees": 87.19459569389713,
+          "change_degrees": -33.90232311087976
+        },
+        {
+          "atoms": [
+            "1:C5'",
+            "1:C4'",
+            "1:C3'",
+            "1:C2'"
+          ],
+          "reference_degrees": -122.23147510699964,
+          "observed_degrees": -154.59732521393815,
+          "change_degrees": -32.365850106938524
+        },
+        {
+          "atoms": [
+            "1:C4'",
+            "1:O4'",
+            "1:C1'",
+            "1:C2'"
+          ],
+          "reference_degrees": 27.38345989322881,
+          "observed_degrees": 2.0621188707819624,
+          "change_degrees": -25.32134102244686
+        },
+        {
+          "atoms": [
+            "1:C4'",
+            "1:O4'",
+            "1:C1'",
+            "1:N1"
+          ],
+          "reference_degrees": -102.50948592593537,
+          "observed_degrees": -126.67509144704664,
+          "change_degrees": -24.165605521111274
+        },
+        {
+          "atoms": [
+            "1:C4'",
+            "1:C3'",
+            "1:C2'",
+            "1:C1'"
+          ],
+          "reference_degrees": 15.743712347263115,
+          "observed_degrees": 35.92016134698597,
+          "change_degrees": 20.17644899972285
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C4'",
+            "1:C3'",
+            "1:O3'"
+          ],
+          "reference_degrees": -116.86330741714774,
+          "observed_degrees": -153.62305351916493,
+          "change_degrees": -36.759746102017175
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C4'",
+            "1:C3'",
+            "1:C2'"
+          ],
+          "reference_degrees": -0.19170132892423666,
+          "observed_degrees": -35.41497442700021,
+          "change_degrees": -35.223273098075964
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C1'",
+            "1:C2'",
+            "1:C3'"
+          ],
+          "reference_degrees": -26.59742040180418,
+          "observed_degrees": -24.37779971921695,
+          "change_degrees": 2.2196206825872196
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C1'",
+            "1:N1",
+            "1:C2"
+          ],
+          "reference_degrees": 105.65946347192308,
+          "observed_degrees": 105.65946226424367,
+          "change_degrees": -1.207679417802865e-06
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C1'",
+            "1:N1",
+            "1:C6"
+          ],
+          "reference_degrees": -71.82720909766141,
+          "observed_degrees": -65.84995787408633,
+          "change_degrees": 5.977251223575081
+        },
+        {
+          "atoms": [
+            "1:C3'",
+            "1:C4'",
+            "1:O4'",
+            "1:C1'"
+          ],
+          "reference_degrees": -17.080262946185655,
+          "observed_degrees": 21.1372889048365,
+          "change_degrees": 38.217551851022165
+        },
+        {
+          "atoms": [
+            "1:C3'",
+            "1:C2'",
+            "1:C1'",
+            "1:N1"
+          ],
+          "reference_degrees": 99.26686945462536,
+          "observed_degrees": 98.09589863814642,
+          "change_degrees": -1.1709708164789276
+        },
+        {
+          "atoms": [
+            "1:O3'",
+            "1:C3'",
+            "1:C2'",
+            "1:C1'"
+          ],
+          "reference_degrees": 136.43701909130445,
+          "observed_degrees": 155.19318543883244,
+          "change_degrees": 18.756166347527994
+        },
+        {
+          "atoms": [
+            "1:C2'",
+            "1:C1'",
+            "1:N1",
+            "1:C2"
+          ],
+          "reference_degrees": -17.778880350892656,
+          "observed_degrees": -15.905781466407165,
+          "change_degrees": 1.8730988844855005
+        },
+        {
+          "atoms": [
+            "1:C2'",
+            "1:C1'",
+            "1:N1",
+            "1:C6"
+          ],
+          "reference_degrees": 164.73444707952285,
+          "observed_degrees": 172.58479839526285,
+          "change_degrees": 7.850351315739999
+        },
+        {
+          "atoms": [
+            "1:C1'",
+            "1:N1",
+            "1:C2",
+            "1:O2"
+          ],
+          "reference_degrees": -9.52898076497791,
+          "observed_degrees": -3.294581070448033,
+          "change_degrees": 6.234399694529884
+        },
+        {
+          "atoms": [
+            "1:C1'",
+            "1:N1",
+            "1:C2",
+            "1:N3"
+          ],
+          "reference_degrees": 170.27513605886585,
+          "observed_degrees": 176.5095356891226,
+          "change_degrees": 6.234399630256746
+        },
+        {
+          "atoms": [
+            "1:C1'",
+            "1:N1",
+            "1:C6",
+            "1:C5"
+          ],
+          "reference_degrees": -144.20211049484215,
+          "observed_degrees": -149.8507420096636,
+          "change_degrees": -5.64863151482146
+        },
+        {
+          "atoms": [
+            "1:C1'",
+            "1:N1",
+            "1:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 104.79688916828907,
+          "observed_degrees": 99.14825765569255,
+          "change_degrees": -5.648631512596523
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C2",
+            "1:N3",
+            "1:C4"
+          ],
+          "reference_degrees": -11.56027958447706,
+          "observed_degrees": -11.56027958800409,
+          "change_degrees": -3.5270204534754157e-09
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "1:C5",
+            "1:C4"
+          ],
+          "reference_degrees": -38.95437939982253,
+          "observed_degrees": -38.9543794221817,
+          "change_degrees": -2.235918827864225e-08
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "1:C5",
+            "1:C7"
+          ],
+          "reference_degrees": 89.31586225692689,
+          "observed_degrees": 89.3158622481456,
+          "change_degrees": -8.781285032455344e-09
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "1:C5",
+            "2:C6"
+          ],
+          "reference_degrees": -150.1530852585683,
+          "observed_degrees": -150.1530852635076,
+          "change_degrees": -4.939295195072191e-09
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "2:C5",
+            "2:C4"
+          ],
+          "reference_degrees": 34.23845538267514,
+          "observed_degrees": 34.23845538199306,
+          "change_degrees": -6.820641829108354e-10
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": -92.9296459217472,
+          "observed_degrees": -92.92964591529442,
+          "change_degrees": 6.452779643950635e-09
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "2:C5",
+            "2:C6"
+          ],
+          "reference_degrees": 145.70477087899292,
+          "observed_degrees": 145.7047708861662,
+          "change_degrees": 7.173269978011376e-09
+        },
+        {
+          "atoms": [
+            "1:C2",
+            "1:N1",
+            "1:C6",
+            "1:C5"
+          ],
+          "reference_degrees": 38.174990986050176,
+          "observed_degrees": 38.174991016709754,
+          "change_degrees": 3.065957798753516e-08
+        },
+        {
+          "atoms": [
+            "1:C2",
+            "1:N1",
+            "1:C6",
+            "2:C5"
+          ],
+          "reference_degrees": -72.82600935081862,
+          "observed_degrees": -72.82600931793412,
+          "change_degrees": 3.2884486245166045e-08
+        },
+        {
+          "atoms": [
+            "1:C2",
+            "1:N3",
+            "1:C4",
+            "1:O4"
+          ],
+          "reference_degrees": -171.58765116915984,
+          "observed_degrees": -171.58765115380243,
+          "change_degrees": 1.5357414895333932e-08
+        },
+        {
+          "atoms": [
+            "1:C2",
+            "1:N3",
+            "1:C4",
+            "1:C5"
+          ],
+          "reference_degrees": 7.662591316841402,
+          "observed_degrees": 7.662591333272528,
+          "change_degrees": 1.6431130234195734e-08
+        },
+        {
+          "atoms": [
+            "1:O2",
+            "1:C2",
+            "1:N1",
+            "1:C6"
+          ],
+          "reference_degrees": 167.86632275548905,
+          "observed_degrees": 167.86632280524438,
+          "change_degrees": 4.975532874595956e-08
+        },
+        {
+          "atoms": [
+            "1:O2",
+            "1:C2",
+            "1:N3",
+            "1:C4"
+          ],
+          "reference_degrees": 168.25884812564303,
+          "observed_degrees": 168.25884806275306,
+          "change_degrees": -6.288996701186989e-08
+        },
+        {
+          "atoms": [
+            "1:N3",
+            "1:C2",
+            "1:N1",
+            "1:C6"
+          ],
+          "reference_degrees": -12.329560420667178,
+          "observed_degrees": -12.329560435185007,
+          "change_degrees": -1.4517837598759797e-08
+        },
+        {
+          "atoms": [
+            "1:N3",
+            "1:C4",
+            "1:C5",
+            "1:C7"
+          ],
+          "reference_degrees": -115.88948531222036,
+          "observed_degrees": -115.88948532126332,
+          "change_degrees": -9.042963711181073e-09
+        },
+        {
+          "atoms": [
+            "1:N3",
+            "1:C4",
+            "1:C5",
+            "1:C6"
+          ],
+          "reference_degrees": 17.00829116106753,
+          "observed_degrees": 17.008291156832907,
+          "change_degrees": -4.234607331454754e-09
+        },
+        {
+          "atoms": [
+            "1:N3",
+            "1:C4",
+            "1:C5",
+            "2:C6"
+          ],
+          "reference_degrees": 110.92211773002516,
+          "observed_degrees": 110.92211772150185,
+          "change_degrees": -8.523329597664997e-09
+        },
+        {
+          "atoms": [
+            "1:C4",
+            "1:C5",
+            "1:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 90.17564754277956,
+          "observed_degrees": 90.17564752423976,
+          "change_degrees": -1.853979370025627e-08
+        },
+        {
+          "atoms": [
+            "1:C4",
+            "1:C5",
+            "2:C6",
+            "2:N1"
+          ],
+          "reference_degrees": 34.32033949488252,
+          "observed_degrees": 34.3203395010311,
+          "change_degrees": 6.1485820879170205e-09
+        },
+        {
+          "atoms": [
+            "1:C4",
+            "1:C5",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": -89.189897367765,
+          "observed_degrees": -89.1898973565397,
+          "change_degrees": 1.1225296248085215e-08
+        },
+        {
+          "atoms": [
+            "1:O4",
+            "1:C4",
+            "1:C5",
+            "1:C7"
+          ],
+          "reference_degrees": 63.35378892106766,
+          "observed_degrees": 63.35378891311093,
+          "change_degrees": -7.956714398460463e-09
+        },
+        {
+          "atoms": [
+            "1:O4",
+            "1:C4",
+            "1:C5",
+            "1:C6"
+          ],
+          "reference_degrees": -163.74843460564446,
+          "observed_degrees": -163.74843460879285,
+          "change_degrees": -3.1483864404435735e-09
+        },
+        {
+          "atoms": [
+            "1:O4",
+            "1:C4",
+            "1:C5",
+            "2:C6"
+          ],
+          "reference_degrees": -69.83460803668683,
+          "observed_degrees": -69.83460804412393,
+          "change_degrees": -7.437108706653817e-09
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "1:C6",
+            "2:C5",
+            "2:C4"
+          ],
+          "reference_degrees": -90.11164878631362,
+          "observed_degrees": -90.11164879075602,
+          "change_degrees": -4.4423984491004376e-09
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "1:C6",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": 142.72024990926406,
+          "observed_degrees": 142.7202499119565,
+          "change_degrees": 2.6924453777610324e-09
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "1:C6",
+            "2:C5",
+            "2:C6"
+          ],
+          "reference_degrees": 21.354666710004167,
+          "observed_degrees": 21.354666713417114,
+          "change_degrees": 3.412935711821774e-09
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:N1",
+            "2:CM"
+          ],
+          "reference_degrees": 77.98630740727242,
+          "observed_degrees": 77.98630740744161,
+          "change_degrees": 1.6919443623919506e-10
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:N1",
+            "2:C2"
+          ],
+          "reference_degrees": -74.44819224851757,
+          "observed_degrees": -74.44819224879753,
+          "change_degrees": -2.7995383788947947e-10
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:C5",
+            "1:C6"
+          ],
+          "reference_degrees": -20.884152858791353,
+          "observed_degrees": -20.88415286109753,
+          "change_degrees": -2.3061659248924116e-09
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:C5",
+            "2:C4"
+          ],
+          "reference_degrees": 93.13299415040854,
+          "observed_degrees": 93.13299415724026,
+          "change_degrees": 6.831726295786211e-09
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": -138.31836405888941,
+          "observed_degrees": -138.31836405415655,
+          "change_degrees": 4.7328683194791665e-09
+        },
+        {
+          "atoms": [
+            "1:C7",
+            "1:C5",
+            "1:C6",
+            "2:C5"
+          ],
+          "reference_degrees": -141.55411080047102,
+          "observed_degrees": -141.55411080543294,
+          "change_degrees": -4.9619188757787924e-09
+        },
+        {
+          "atoms": [
+            "1:C7",
+            "1:C5",
+            "2:C6",
+            "2:N1"
+          ],
+          "reference_degrees": -94.44657004256702,
+          "observed_degrees": -94.4465700415957,
+          "change_degrees": 9.71311919784057e-10
+        },
+        {
+          "atoms": [
+            "1:C7",
+            "1:C5",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 142.0431930947855,
+          "observed_degrees": 142.0431931008335,
+          "change_degrees": 6.047997658242821e-09
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "1:C5",
+            "2:C6",
+            "2:N1"
+          ],
+          "reference_degrees": 144.81314377526093,
+          "observed_degrees": 144.81314377510986,
+          "change_degrees": -1.510613856225973e-10
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "1:C5",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 21.302906912613405,
+          "observed_degrees": 21.30290691753906,
+          "change_degrees": 4.925652774545597e-09
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "2:C5",
+            "2:C4",
+            "2:N3"
+          ],
+          "reference_degrees": 112.23352599570654,
+          "observed_degrees": 112.2335260051326,
+          "change_degrees": 9.426059932593489e-09
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "2:C5",
+            "2:C4",
+            "2:O4"
+          ],
+          "reference_degrees": -71.12714476227157,
+          "observed_degrees": -71.12714475589446,
+          "change_degrees": 6.377092631737469e-09
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "2:C5",
+            "2:C6",
+            "2:N1"
+          ],
+          "reference_degrees": -147.92580251870027,
+          "observed_degrees": -147.92580252458785,
+          "change_degrees": -5.8875855302176205e-09
+        },
+        {
+          "atoms": [
+            "2:CM",
+            "2:N1",
+            "2:C2",
+            "2:O2"
+          ],
+          "reference_degrees": 14.039037677626704,
+          "observed_degrees": 14.03903767845909,
+          "change_degrees": 8.323866040882422e-10
+        },
+        {
+          "atoms": [
+            "2:CM",
+            "2:N1",
+            "2:C2",
+            "2:N3"
+          ],
+          "reference_degrees": -168.50737055645948,
+          "observed_degrees": -168.50737055689146,
+          "change_degrees": -4.319815616327105e-10
+        },
+        {
+          "atoms": [
+            "2:CM",
+            "2:N1",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": -172.79013605806415,
+          "observed_degrees": -172.79013606023537,
+          "change_degrees": -2.1712196485168533e-09
+        },
+        {
+          "atoms": [
+            "2:N1",
+            "2:C2",
+            "2:N3",
+            "2:C4"
+          ],
+          "reference_degrees": -2.096018766667201,
+          "observed_degrees": -2.0960187654681035,
+          "change_degrees": 1.199111920868745e-09
+        },
+        {
+          "atoms": [
+            "2:N1",
+            "2:C6",
+            "2:C5",
+            "2:C4"
+          ],
+          "reference_degrees": -33.908655509500385,
+          "observed_degrees": -33.90865550625004,
+          "change_degrees": 3.2503351121704327e-09
+        },
+        {
+          "atoms": [
+            "2:N1",
+            "2:C6",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": 94.63998628120167,
+          "observed_degrees": 94.63998628235318,
+          "change_degrees": 1.1515055575728184e-09
+        },
+        {
+          "atoms": [
+            "2:C2",
+            "2:N1",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 34.775364286145894,
+          "observed_degrees": 34.7753642835255,
+          "change_degrees": -2.6203963443549583e-09
+        },
+        {
+          "atoms": [
+            "2:C2",
+            "2:N3",
+            "2:C4",
+            "2:O4"
+          ],
+          "reference_degrees": -176.75609790130585,
+          "observed_degrees": -176.7560978978873,
+          "change_degrees": 3.418563210288994e-09
+        },
+        {
+          "atoms": [
+            "2:C2",
+            "2:N3",
+            "2:C4",
+            "2:C5"
+          ],
+          "reference_degrees": -0.033159082455585,
+          "observed_degrees": -0.03315908210139425,
+          "change_degrees": 3.5419134292169474e-10
+        },
+        {
+          "atoms": [
+            "2:O2",
+            "2:C2",
+            "2:N1",
+            "2:C6"
+          ],
+          "reference_degrees": 166.79661109780008,
+          "observed_degrees": 166.79661109855502,
+          "change_degrees": 7.549374458903912e-10
+        },
+        {
+          "atoms": [
+            "2:O2",
+            "2:C2",
+            "2:N3",
+            "2:C4"
+          ],
+          "reference_degrees": 175.51422815965563,
+          "observed_degrees": 175.51422815967007,
+          "change_degrees": 1.4438228390645236e-11
+        },
+        {
+          "atoms": [
+            "2:N3",
+            "2:C2",
+            "2:N1",
+            "2:C6"
+          ],
+          "reference_degrees": -15.749797136286093,
+          "observed_degrees": -15.749797136795516,
+          "change_degrees": -5.094307198305614e-10
+        },
+        {
+          "atoms": [
+            "2:N3",
+            "2:C4",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": -117.1062047289709,
+          "observed_degrees": -117.10620472849867,
+          "change_degrees": 4.722267021861626e-10
+        },
+        {
+          "atoms": [
+            "2:N3",
+            "2:C4",
+            "2:C5",
+            "2:C6"
+          ],
+          "reference_degrees": 17.14723967169819,
+          "observed_degrees": 17.147239671411988,
+          "change_degrees": -2.8620661396416835e-10
+        },
+        {
+          "atoms": [
+            "2:O4",
+            "2:C4",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": 59.533124513050986,
+          "observed_degrees": 59.533124510474266,
+          "change_degrees": -2.5767121769604273e-09
+        },
+        {
+          "atoms": [
+            "2:O4",
+            "2:C4",
+            "2:C5",
+            "2:C6"
+          ],
+          "reference_degrees": -166.21343108627994,
+          "observed_degrees": -166.21343108961509,
+          "change_degrees": -3.3351454931107583e-09
+        },
+        {
+          "atoms": [
+            "2:C5",
+            "1:C6",
+            "1:C5",
+            "2:C6"
+          ],
+          "reference_degrees": -21.0230583159662,
+          "observed_degrees": -21.02305831708614,
+          "change_degrees": -1.1199290383956395e-09
+        }
+      ],
+      "historical_descriptor_limits": {
+        "rmsd_angstrom": 0.25,
+        "maximum_torsion_change_degrees": 20
+      },
+      "descriptor_match": false,
+      "interpretation": "Historical geometric screening flags only; passing does not prove basin identity or global-minimum closure."
+    },
+    "final_descriptors_vs_alternate_seed": {
+      "heavy_atom_rmsd_angstrom": 0.04885804896184668,
+      "maximum_heavy_proper_change_degrees": 6.1545939180461176,
+      "torsions": [
+        {
+          "atoms": [
+            "1:O5'",
+            "1:C5'",
+            "1:C4'",
+            "1:O4'"
+          ],
+          "reference_degrees": -69.6421182697256,
+          "observed_degrees": -70.38845977339989,
+          "change_degrees": -0.7463415036742731
+        },
+        {
+          "atoms": [
+            "1:O5'",
+            "1:C5'",
+            "1:C4'",
+            "1:C3'"
+          ],
+          "reference_degrees": 46.96377356887111,
+          "observed_degrees": 46.753973715816166,
+          "change_degrees": -0.2097998530549603
+        },
+        {
+          "atoms": [
+            "1:C5'",
+            "1:C4'",
+            "1:O4'",
+            "1:C1'"
+          ],
+          "reference_degrees": 148.29157479412993,
+          "observed_degrees": 144.81507519686463,
+          "change_degrees": -3.4764995972653026
+        },
+        {
+          "atoms": [
+            "1:C5'",
+            "1:C4'",
+            "1:C3'",
+            "1:O3'"
+          ],
+          "reference_degrees": 83.20449871605842,
+          "observed_degrees": 87.19459569389713,
+          "change_degrees": 3.9900969778387037
+        },
+        {
+          "atoms": [
+            "1:C5'",
+            "1:C4'",
+            "1:C3'",
+            "1:C2'"
+          ],
+          "reference_degrees": -160.75191913198427,
+          "observed_degrees": -154.59732521393815,
+          "change_degrees": 6.1545939180461176
+        },
+        {
+          "atoms": [
+            "1:C4'",
+            "1:O4'",
+            "1:C1'",
+            "1:C2'"
+          ],
+          "reference_degrees": 1.1479954152116278,
+          "observed_degrees": 2.0621188707819624,
+          "change_degrees": 0.9141234555703477
+        },
+        {
+          "atoms": [
+            "1:C4'",
+            "1:O4'",
+            "1:C1'",
+            "1:N1"
+          ],
+          "reference_degrees": -131.29045625817264,
+          "observed_degrees": -126.67509144704664,
+          "change_degrees": 4.615364811126
+        },
+        {
+          "atoms": [
+            "1:C4'",
+            "1:C3'",
+            "1:C2'",
+            "1:C1'"
+          ],
+          "reference_degrees": 40.49110065761505,
+          "observed_degrees": 35.92016134698597,
+          "change_degrees": -4.570939310629086
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C4'",
+            "1:C3'",
+            "1:O3'"
+          ],
+          "reference_degrees": -156.85172786093912,
+          "observed_degrees": -153.62305351916493,
+          "change_degrees": 3.2286743417741945
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C4'",
+            "1:C3'",
+            "1:C2'"
+          ],
+          "reference_degrees": -40.80814570898181,
+          "observed_degrees": -35.41497442700021,
+          "change_degrees": 5.3931712819816084
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C1'",
+            "1:C2'",
+            "1:C3'"
+          ],
+          "reference_degrees": -27.175391430280495,
+          "observed_degrees": -24.37779971921695,
+          "change_degrees": 2.7975917110635464
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C1'",
+            "1:N1",
+            "1:C2"
+          ],
+          "reference_degrees": 105.65946347922367,
+          "observed_degrees": 105.65946226424367,
+          "change_degrees": -1.214979988617415e-06
+        },
+        {
+          "atoms": [
+            "1:O4'",
+            "1:C1'",
+            "1:N1",
+            "1:C6"
+          ],
+          "reference_degrees": -63.46137816836433,
+          "observed_degrees": -65.84995787408633,
+          "change_degrees": -2.388579705722009
+        },
+        {
+          "atoms": [
+            "1:C3'",
+            "1:C4'",
+            "1:O4'",
+            "1:C1'"
+          ],
+          "reference_degrees": 25.10737357967036,
+          "observed_degrees": 21.1372889048365,
+          "change_degrees": -3.9700846748338563
+        },
+        {
+          "atoms": [
+            "1:C3'",
+            "1:C2'",
+            "1:C1'",
+            "1:N1"
+          ],
+          "reference_degrees": 97.03503126492683,
+          "observed_degrees": 98.09589863814642,
+          "change_degrees": 1.060867373219594
+        },
+        {
+          "atoms": [
+            "1:O3'",
+            "1:C3'",
+            "1:C2'",
+            "1:C1'"
+          ],
+          "reference_degrees": 156.0647726705421,
+          "observed_degrees": 155.19318543883244,
+          "change_degrees": -0.8715872317096682
+        },
+        {
+          "atoms": [
+            "1:C2'",
+            "1:C1'",
+            "1:N1",
+            "1:C2"
+          ],
+          "reference_degrees": -17.625828142668585,
+          "observed_degrees": -15.905781466407165,
+          "change_degrees": 1.7200466762614326
+        },
+        {
+          "atoms": [
+            "1:C2'",
+            "1:C1'",
+            "1:N1",
+            "1:C6"
+          ],
+          "reference_degrees": 173.25333020974344,
+          "observed_degrees": 172.58479839526285,
+          "change_degrees": -0.6685318144805876
+        },
+        {
+          "atoms": [
+            "1:C1'",
+            "1:N1",
+            "1:C2",
+            "1:O2"
+          ],
+          "reference_degrees": -1.0472775848839215,
+          "observed_degrees": -3.294581070448033,
+          "change_degrees": -2.2473034855641174
+        },
+        {
+          "atoms": [
+            "1:C1'",
+            "1:N1",
+            "1:C2",
+            "1:N3"
+          ],
+          "reference_degrees": 178.75683923895983,
+          "observed_degrees": 176.5095356891226,
+          "change_degrees": -2.247303549837227
+        },
+        {
+          "atoms": [
+            "1:C1'",
+            "1:N1",
+            "1:C6",
+            "1:C5"
+          ],
+          "reference_degrees": -152.4463811703648,
+          "observed_degrees": -149.8507420096636,
+          "change_degrees": 2.5956391607011824
+        },
+        {
+          "atoms": [
+            "1:C1'",
+            "1:N1",
+            "1:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 96.55261849276644,
+          "observed_degrees": 99.14825765569255,
+          "change_degrees": 2.5956391629260906
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C2",
+            "1:N3",
+            "1:C4"
+          ],
+          "reference_degrees": -11.56027958447706,
+          "observed_degrees": -11.56027958800409,
+          "change_degrees": -3.5270204534754157e-09
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "1:C5",
+            "1:C4"
+          ],
+          "reference_degrees": -38.95437939982253,
+          "observed_degrees": -38.9543794221817,
+          "change_degrees": -2.235918827864225e-08
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "1:C5",
+            "1:C7"
+          ],
+          "reference_degrees": 89.31586225692689,
+          "observed_degrees": 89.3158622481456,
+          "change_degrees": -8.781285032455344e-09
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "1:C5",
+            "2:C6"
+          ],
+          "reference_degrees": -150.1530852585683,
+          "observed_degrees": -150.1530852635076,
+          "change_degrees": -4.939295195072191e-09
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "2:C5",
+            "2:C4"
+          ],
+          "reference_degrees": 34.23845538267514,
+          "observed_degrees": 34.23845538199306,
+          "change_degrees": -6.820641829108354e-10
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": -92.9296459217472,
+          "observed_degrees": -92.92964591529442,
+          "change_degrees": 6.452779643950635e-09
+        },
+        {
+          "atoms": [
+            "1:N1",
+            "1:C6",
+            "2:C5",
+            "2:C6"
+          ],
+          "reference_degrees": 145.70477087899292,
+          "observed_degrees": 145.7047708861662,
+          "change_degrees": 7.173269978011376e-09
+        },
+        {
+          "atoms": [
+            "1:C2",
+            "1:N1",
+            "1:C6",
+            "1:C5"
+          ],
+          "reference_degrees": 38.174990986050176,
+          "observed_degrees": 38.174991016709754,
+          "change_degrees": 3.065957798753516e-08
+        },
+        {
+          "atoms": [
+            "1:C2",
+            "1:N1",
+            "1:C6",
+            "2:C5"
+          ],
+          "reference_degrees": -72.82600935081862,
+          "observed_degrees": -72.82600931793412,
+          "change_degrees": 3.2884486245166045e-08
+        },
+        {
+          "atoms": [
+            "1:C2",
+            "1:N3",
+            "1:C4",
+            "1:O4"
+          ],
+          "reference_degrees": -171.58765116915984,
+          "observed_degrees": -171.58765115380243,
+          "change_degrees": 1.5357414895333932e-08
+        },
+        {
+          "atoms": [
+            "1:C2",
+            "1:N3",
+            "1:C4",
+            "1:C5"
+          ],
+          "reference_degrees": 7.662591316841402,
+          "observed_degrees": 7.662591333272528,
+          "change_degrees": 1.6431130234195734e-08
+        },
+        {
+          "atoms": [
+            "1:O2",
+            "1:C2",
+            "1:N1",
+            "1:C6"
+          ],
+          "reference_degrees": 167.86632275548905,
+          "observed_degrees": 167.86632280524438,
+          "change_degrees": 4.975532874595956e-08
+        },
+        {
+          "atoms": [
+            "1:O2",
+            "1:C2",
+            "1:N3",
+            "1:C4"
+          ],
+          "reference_degrees": 168.25884812564303,
+          "observed_degrees": 168.25884806275306,
+          "change_degrees": -6.288996701186989e-08
+        },
+        {
+          "atoms": [
+            "1:N3",
+            "1:C2",
+            "1:N1",
+            "1:C6"
+          ],
+          "reference_degrees": -12.329560420667178,
+          "observed_degrees": -12.329560435185007,
+          "change_degrees": -1.4517837598759797e-08
+        },
+        {
+          "atoms": [
+            "1:N3",
+            "1:C4",
+            "1:C5",
+            "1:C7"
+          ],
+          "reference_degrees": -115.88948531222036,
+          "observed_degrees": -115.88948532126332,
+          "change_degrees": -9.042963711181073e-09
+        },
+        {
+          "atoms": [
+            "1:N3",
+            "1:C4",
+            "1:C5",
+            "1:C6"
+          ],
+          "reference_degrees": 17.00829116106753,
+          "observed_degrees": 17.008291156832907,
+          "change_degrees": -4.234607331454754e-09
+        },
+        {
+          "atoms": [
+            "1:N3",
+            "1:C4",
+            "1:C5",
+            "2:C6"
+          ],
+          "reference_degrees": 110.92211773002516,
+          "observed_degrees": 110.92211772150185,
+          "change_degrees": -8.523329597664997e-09
+        },
+        {
+          "atoms": [
+            "1:C4",
+            "1:C5",
+            "1:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 90.17564754277956,
+          "observed_degrees": 90.17564752423976,
+          "change_degrees": -1.853979370025627e-08
+        },
+        {
+          "atoms": [
+            "1:C4",
+            "1:C5",
+            "2:C6",
+            "2:N1"
+          ],
+          "reference_degrees": 34.32033949488252,
+          "observed_degrees": 34.3203395010311,
+          "change_degrees": 6.1485820879170205e-09
+        },
+        {
+          "atoms": [
+            "1:C4",
+            "1:C5",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": -89.189897367765,
+          "observed_degrees": -89.1898973565397,
+          "change_degrees": 1.1225296248085215e-08
+        },
+        {
+          "atoms": [
+            "1:O4",
+            "1:C4",
+            "1:C5",
+            "1:C7"
+          ],
+          "reference_degrees": 63.35378892106766,
+          "observed_degrees": 63.35378891311093,
+          "change_degrees": -7.956714398460463e-09
+        },
+        {
+          "atoms": [
+            "1:O4",
+            "1:C4",
+            "1:C5",
+            "1:C6"
+          ],
+          "reference_degrees": -163.74843460564446,
+          "observed_degrees": -163.74843460879285,
+          "change_degrees": -3.1483864404435735e-09
+        },
+        {
+          "atoms": [
+            "1:O4",
+            "1:C4",
+            "1:C5",
+            "2:C6"
+          ],
+          "reference_degrees": -69.83460803668683,
+          "observed_degrees": -69.83460804412393,
+          "change_degrees": -7.437108706653817e-09
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "1:C6",
+            "2:C5",
+            "2:C4"
+          ],
+          "reference_degrees": -90.11164878631362,
+          "observed_degrees": -90.11164879075602,
+          "change_degrees": -4.4423984491004376e-09
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "1:C6",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": 142.72024990926406,
+          "observed_degrees": 142.7202499119565,
+          "change_degrees": 2.6924453777610324e-09
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "1:C6",
+            "2:C5",
+            "2:C6"
+          ],
+          "reference_degrees": 21.354666710004167,
+          "observed_degrees": 21.354666713417114,
+          "change_degrees": 3.412935711821774e-09
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:N1",
+            "2:CM"
+          ],
+          "reference_degrees": 77.98630740727242,
+          "observed_degrees": 77.98630740744161,
+          "change_degrees": 1.6919443623919506e-10
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:N1",
+            "2:C2"
+          ],
+          "reference_degrees": -74.44819224851757,
+          "observed_degrees": -74.44819224879753,
+          "change_degrees": -2.7995383788947947e-10
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:C5",
+            "1:C6"
+          ],
+          "reference_degrees": -20.884152858791353,
+          "observed_degrees": -20.88415286109753,
+          "change_degrees": -2.3061659248924116e-09
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:C5",
+            "2:C4"
+          ],
+          "reference_degrees": 93.13299415040854,
+          "observed_degrees": 93.13299415724026,
+          "change_degrees": 6.831726295786211e-09
+        },
+        {
+          "atoms": [
+            "1:C5",
+            "2:C6",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": -138.31836405888941,
+          "observed_degrees": -138.31836405415655,
+          "change_degrees": 4.7328683194791665e-09
+        },
+        {
+          "atoms": [
+            "1:C7",
+            "1:C5",
+            "1:C6",
+            "2:C5"
+          ],
+          "reference_degrees": -141.55411080047102,
+          "observed_degrees": -141.55411080543294,
+          "change_degrees": -4.9619188757787924e-09
+        },
+        {
+          "atoms": [
+            "1:C7",
+            "1:C5",
+            "2:C6",
+            "2:N1"
+          ],
+          "reference_degrees": -94.44657004256702,
+          "observed_degrees": -94.4465700415957,
+          "change_degrees": 9.71311919784057e-10
+        },
+        {
+          "atoms": [
+            "1:C7",
+            "1:C5",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 142.0431930947855,
+          "observed_degrees": 142.0431931008335,
+          "change_degrees": 6.047997658242821e-09
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "1:C5",
+            "2:C6",
+            "2:N1"
+          ],
+          "reference_degrees": 144.81314377526093,
+          "observed_degrees": 144.81314377510986,
+          "change_degrees": -1.510613856225973e-10
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "1:C5",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 21.302906912613405,
+          "observed_degrees": 21.30290691753906,
+          "change_degrees": 4.925652774545597e-09
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "2:C5",
+            "2:C4",
+            "2:N3"
+          ],
+          "reference_degrees": 112.23352599570654,
+          "observed_degrees": 112.2335260051326,
+          "change_degrees": 9.426059932593489e-09
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "2:C5",
+            "2:C4",
+            "2:O4"
+          ],
+          "reference_degrees": -71.12714476227157,
+          "observed_degrees": -71.12714475589446,
+          "change_degrees": 6.377092631737469e-09
+        },
+        {
+          "atoms": [
+            "1:C6",
+            "2:C5",
+            "2:C6",
+            "2:N1"
+          ],
+          "reference_degrees": -147.92580251870027,
+          "observed_degrees": -147.92580252458785,
+          "change_degrees": -5.8875855302176205e-09
+        },
+        {
+          "atoms": [
+            "2:CM",
+            "2:N1",
+            "2:C2",
+            "2:O2"
+          ],
+          "reference_degrees": 14.039037677626704,
+          "observed_degrees": 14.03903767845909,
+          "change_degrees": 8.323866040882422e-10
+        },
+        {
+          "atoms": [
+            "2:CM",
+            "2:N1",
+            "2:C2",
+            "2:N3"
+          ],
+          "reference_degrees": -168.50737055645948,
+          "observed_degrees": -168.50737055689146,
+          "change_degrees": -4.319815616327105e-10
+        },
+        {
+          "atoms": [
+            "2:CM",
+            "2:N1",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": -172.79013605806415,
+          "observed_degrees": -172.79013606023537,
+          "change_degrees": -2.1712196485168533e-09
+        },
+        {
+          "atoms": [
+            "2:N1",
+            "2:C2",
+            "2:N3",
+            "2:C4"
+          ],
+          "reference_degrees": -2.096018766667201,
+          "observed_degrees": -2.0960187654681035,
+          "change_degrees": 1.199111920868745e-09
+        },
+        {
+          "atoms": [
+            "2:N1",
+            "2:C6",
+            "2:C5",
+            "2:C4"
+          ],
+          "reference_degrees": -33.908655509500385,
+          "observed_degrees": -33.90865550625004,
+          "change_degrees": 3.2503351121704327e-09
+        },
+        {
+          "atoms": [
+            "2:N1",
+            "2:C6",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": 94.63998628120167,
+          "observed_degrees": 94.63998628235318,
+          "change_degrees": 1.1515055575728184e-09
+        },
+        {
+          "atoms": [
+            "2:C2",
+            "2:N1",
+            "2:C6",
+            "2:C5"
+          ],
+          "reference_degrees": 34.775364286145894,
+          "observed_degrees": 34.7753642835255,
+          "change_degrees": -2.6203963443549583e-09
+        },
+        {
+          "atoms": [
+            "2:C2",
+            "2:N3",
+            "2:C4",
+            "2:O4"
+          ],
+          "reference_degrees": -176.75609790130585,
+          "observed_degrees": -176.7560978978873,
+          "change_degrees": 3.418563210288994e-09
+        },
+        {
+          "atoms": [
+            "2:C2",
+            "2:N3",
+            "2:C4",
+            "2:C5"
+          ],
+          "reference_degrees": -0.033159082455585,
+          "observed_degrees": -0.03315908210139425,
+          "change_degrees": 3.5419134292169474e-10
+        },
+        {
+          "atoms": [
+            "2:O2",
+            "2:C2",
+            "2:N1",
+            "2:C6"
+          ],
+          "reference_degrees": 166.79661109780008,
+          "observed_degrees": 166.79661109855502,
+          "change_degrees": 7.549374458903912e-10
+        },
+        {
+          "atoms": [
+            "2:O2",
+            "2:C2",
+            "2:N3",
+            "2:C4"
+          ],
+          "reference_degrees": 175.51422815965563,
+          "observed_degrees": 175.51422815967007,
+          "change_degrees": 1.4438228390645236e-11
+        },
+        {
+          "atoms": [
+            "2:N3",
+            "2:C2",
+            "2:N1",
+            "2:C6"
+          ],
+          "reference_degrees": -15.749797136286093,
+          "observed_degrees": -15.749797136795516,
+          "change_degrees": -5.094307198305614e-10
+        },
+        {
+          "atoms": [
+            "2:N3",
+            "2:C4",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": -117.1062047289709,
+          "observed_degrees": -117.10620472849867,
+          "change_degrees": 4.722267021861626e-10
+        },
+        {
+          "atoms": [
+            "2:N3",
+            "2:C4",
+            "2:C5",
+            "2:C6"
+          ],
+          "reference_degrees": 17.14723967169819,
+          "observed_degrees": 17.147239671411988,
+          "change_degrees": -2.8620661396416835e-10
+        },
+        {
+          "atoms": [
+            "2:O4",
+            "2:C4",
+            "2:C5",
+            "2:C7"
+          ],
+          "reference_degrees": 59.533124513050986,
+          "observed_degrees": 59.533124510474266,
+          "change_degrees": -2.5767121769604273e-09
+        },
+        {
+          "atoms": [
+            "2:O4",
+            "2:C4",
+            "2:C5",
+            "2:C6"
+          ],
+          "reference_degrees": -166.21343108627994,
+          "observed_degrees": -166.21343108961509,
+          "change_degrees": -3.3351454931107583e-09
+        },
+        {
+          "atoms": [
+            "2:C5",
+            "1:C6",
+            "1:C5",
+            "2:C6"
+          ],
+          "reference_degrees": -21.0230583159662,
+          "observed_degrees": -21.02305831708614,
+          "change_degrees": -1.1199290383956395e-09
+        }
+      ],
+      "historical_descriptor_limits": {
+        "rmsd_angstrom": 0.25,
+        "maximum_torsion_change_degrees": 20
+      },
+      "descriptor_match": true,
+      "interpretation": "Historical geometric screening flags only; passing does not prove basin identity or global-minimum closure."
+    },
+    "mean_gradient_seconds": 206.33334402598362,
+    "maximum_gradient_seconds": 217.4514699629508,
+    "service_seconds": 2486.3861343860626,
+    "maximum_evaluated_fixed_drift_A": 1.2718859212084243e-08,
+    "maximum_evaluated_chi_error_degrees": 1.6028869254114397e-06,
+    "planned_boundary": "New-gradient allocation exhausted",
+    "optimizer_converged": false,
+    "constrained_stationary": false,
+    "continuation_admitted": true,
+    "continuation_reason": "Strong recent force reduction and stable native cost justify one more bounded chunk from the last accepted state. Reuse its full-precision gradient and exact original fixed/chi targets, with fresh optimizer history. Audit again at convergence or the allocation boundary.",
+    "alternatives": "Do not repeat the seed gradient, lower electronic tolerances, fit to an unconverged point, expand the scan or compute an endpoint Hessian now. No optimizer Hessian restart was saved; retain exact native geometry/gradient and use the established Sella restart method.",
+    "continuation_max_new_gradients": 12,
+    "continuation_hard_seconds": 3600,
+    "task_timeout_seconds": 600,
+    "interpretation": "The alternate branch has an observed QM energy below the original reference under the same electronic model and fixed-core/chi conditions within recorded constraint tolerances. This is not a converged relative basin energy, a minimum certificate, a barrier, or proof of global basin closure.",
+    "new_fit_admitted": false,
+    "heldout_accessed": false,
+    "minimum_certified": false,
+    "basin_closure_certified": false,
+    "simulation_ready": false,
+    "cloud_spending_usd": 0
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "at": "2026-10-10T21:32:35+00:00",
+  "status": "original_method_curvature_pilot_launched",
+  "decision": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/threshold_reassessment_20261010.json",
+    "sha256": "3b839d583e9cbc30c5c5ea344ad89651a6b586e5242b76d7729e4d353c95206e"
+  },
+  "plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/original-method-curvature-pilot-v1/plan.json",
+    "sha256": "adb9c0f72aae116aca1d51a78bdaf8c30bc157ba9dc1f9c283462bf30d284d28"
+  },
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/original-method-curvature-pilot-v1/launch_verification.json",
+    "sha256": "4101f3f96022172d49a66f9df5d16e23e98045305bedb891987312e996e92c79"
+  },
+  "tests": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/original-method-curvature-pilot-v1/test_verification.json",
+    "sha256": "7c4ee4166debcb06d2509c5146266a56bcd2af1d7d6761f7269d29d8e1b83fba"
+  },
+  "service": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/original-method-curvature-pilot-v1-service",
+  "wake_token": "3e61db64-8efc-4a53-8617-869211c872a0",
+  "monitoring": "Completion/failure events plus one nine-minute deadline; no intermittent polling.",
+  "maximum_seconds": 900,
+  "new_gradient_allocation": 4,
+  "original_failures_preserved": true,
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "next_action": "Acknowledge completion token and independently audit native evidence once. Evaluate absolute consistency, two-step curvature and measured sensitivity to choose a diagnostic Hessian chunk or concrete alternative. Do not enforce the superseded universal 5%/1e-8 heuristics or infer a minimum from this pilot."
+}

@@ -1,0 +1,102 @@
+{
+  "at": "2026-10-11T07:24:03+00:00",
+  "acknowledgement": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v3-service/completion_wake_ack.json",
+    "sha256": "37ec24ec4a35c08be2afeca4002699de865be015cec4ac6f2e7901f178372c95"
+  },
+  "completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v3/completion_audit.json",
+    "sha256": "d43fcfde4b9889166e88653fb5b1236abdd067764bd80d6bb7242545cad14c9b"
+  },
+  "completed_scan": {
+    "passed": true,
+    "native_evidence_passed": true,
+    "scan_target_passed": true,
+    "constrained_stationary": true,
+    "stationary": false,
+    "new_gradients": 18,
+    "native_gradient_components": 2793,
+    "native_geometry_tables": 38,
+    "trajectory_frames_verified": 19,
+    "service_seconds": 3694.5484466552734,
+    "last_gradient_metrics": {
+      "max_atom_gradient_au": 1.2007853886098536e-05,
+      "rms_atom_gradient_au": 4.3951243446799e-06,
+      "torsion_degrees": 90.65946346907356,
+      "torsion_error_degrees": 1.0281155482516624e-08,
+      "force_scope": "Cartesian gradient projected tangent to the single fixed glycosidic torsion",
+      "passed": true
+    },
+    "mean_gradient_seconds": 204.5267675613286,
+    "max_gradient_seconds": 227.48708971205633
+  },
+  "branch_review": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v3/converged_branch_review.json",
+    "sha256": "55c4cc47d922fd3d942cc223eaa83d3f64f3df5e4cd6b49c714e00be7a0487a8"
+  },
+  "energy_relative_to_original_zero_kcal_mol": -3.9586865571315846,
+  "conformer_torsion_changes_degrees": {
+    "sugar_ring_0": 5.8116553818632894,
+    "sugar_ring_1": -17.657394652966246,
+    "sugar_ring_2": 23.421379042010443,
+    "sugar_ring_3": -20.815187738914602,
+    "sugar_ring_4": 9.381196046878983,
+    "cap_5OH": 84.28722798235566,
+    "cap_3OH": 10.506440298618259,
+    "sugar_exocyclic": -6.4826373190746835,
+    "cyclobutane": -0.08662021809612952
+  },
+  "maximum_scan_angle_error_degrees": 5.697783308278304e-06,
+  "decision": "Stop converged minus15 calculation. Acquire one diagnostic at the original zero angle from the relaxed cap/sugar conformation before fitting or new profile targets.",
+  "prepared_control_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1/plan.json",
+    "sha256": "a399b2e2c581f060fd3bc12b68ce0474875ee04c67030890374b88c830509d46"
+  },
+  "control_design": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1/design.json",
+    "sha256": "c5ad14cc60a96d5860aea946d92e26797807427dd1ff8961d3e7a8d6da2005d1"
+  },
+  "seed_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1/seed_audit.json",
+    "sha256": "b2af259a63dc65e86c63ba4b61d8d5360fd4db6ee6a631900fdd21b4933d4ba3"
+  },
+  "test_receipt": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1/test_receipt.json",
+    "sha256": "66939856b45d796597a0b9115a722e1e164f2a93969e6aab075b6d7cd587358a"
+  },
+  "current_native_job_started": false,
+  "runtime_admission_failure": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1/launch_attempt1_failure.json",
+    "sha256": "da86faee35596f9f03b5ce567d63c16bb0a445f4b16340972887349625799de8"
+  },
+  "scheduling": {
+    "admission_due_local": "2026-10-11T01:41:11-06:00",
+    "timer_verified": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1-deferred-admission/timer_verification.json",
+      "sha256": "49d54892d4d18aee0d4af879f9f6fb5560c22e3bbb4f8c8ad019ec2ebd1dcfca"
+    },
+    "deferred_plan": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1-deferred-admission/plan.json",
+      "sha256": "c690b0096593bb216c78fa3041a9c3217af7fbcd0303337410709dc0f6df0f23"
+    },
+    "one_attempt_only": true,
+    "periodic_polling": false,
+    "unchanged_available_memory_requirement_gib": 12
+  },
+  "deferred_runner_tests": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1-deferred-admission/test_receipt.json",
+    "sha256": "187dd448423e677367686aa113ca9826e219b639290902e0c019f272efdfc66d"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-branchzero-v1/handoff.json",
+    "sha256": "a271a2de88998ab65297d3fccb5f14b3cc987cbac37ece20ffd50b02a83dde40"
+  },
+  "preserved_wrong_angle_failure": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v2/scientific_failure.json",
+    "sha256": "6f18b475d00573cedbf65972fe380366b3218a939520bf653ac92ebbd491b085"
+  },
+  "endpoint_minimum_certified": false,
+  "fit_target_accepted": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

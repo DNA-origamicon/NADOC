@@ -1,0 +1,172 @@
+{
+  "at": "2026-10-12T01:14:29.361416+00:00",
+  "event": "1d1071dd-da50-4a47-9477-91cabe4cb3e5 complete",
+  "acknowledgement": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/bonded-baseline-v1-service/completion_wake_ack.json",
+    "sha256": "736292791d26f41f117328318a6c24a4e903739c39e18696284511f69234c666"
+  },
+  "completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/bonded-baseline-v1/completion_audit.json",
+    "sha256": "8a4f7dd5b0b33987dcd2abe28e8217eba889be7aee2f28307a246b30511e2876"
+  },
+  "baseline_summary": [
+    {
+      "variant": "first",
+      "independently_stationary": true,
+      "max_atom_gradient_kcal_mol_angstrom": 7.026651395358533e-06,
+      "geometry_summary": {
+        "max_bond_error_angstrom": 0.030615688671469243,
+        "max_angle_error_degrees": 5.1466049141500605,
+        "heavy_atom_proper_alignment_rmsd_angstrom": 0.35508572839001884
+      },
+      "vertical_endpoint_profile": [
+        {
+          "offset_degrees": -30,
+          "qm_relative_kcal_mol": -1.652114129428658,
+          "vertical_mm_relative_kcal_mol": 0.7005759315711941,
+          "vertical_error_kcal_mol": 2.3526900609998522
+        },
+        {
+          "offset_degrees": -15,
+          "qm_relative_kcal_mol": -1.1624560043353636,
+          "vertical_mm_relative_kcal_mol": -0.9758114637324269,
+          "vertical_error_kcal_mol": 0.18664454060293667
+        },
+        {
+          "offset_degrees": 0,
+          "qm_relative_kcal_mol": 0.0,
+          "vertical_mm_relative_kcal_mol": 0.0,
+          "vertical_error_kcal_mol": 0.0
+        },
+        {
+          "offset_degrees": 15,
+          "qm_relative_kcal_mol": 1.3247358286033717,
+          "vertical_mm_relative_kcal_mol": -0.7914993871006359,
+          "vertical_error_kcal_mol": -2.1162352157040076
+        },
+        {
+          "offset_degrees": 30,
+          "qm_relative_kcal_mol": 3.4399520487394515,
+          "vertical_mm_relative_kcal_mol": -0.46231652035911,
+          "vertical_error_kcal_mol": -3.9022685690985615
+        }
+      ],
+      "ring_mode_response": [
+        {
+          "rank": 1,
+          "step_bohr": 0.1,
+          "mm_even_energy_kcal_mol": 0.3876320045151971,
+          "qm_even_energy_kcal_mol": 0.42003215851880926,
+          "even_energy_relative_error": -0.0771373175755572,
+          "mm_odd_energy_kcal_mol": -0.009958298421437917,
+          "qm_odd_energy_kcal_mol": 8.459089245551705e-06,
+          "interpretation": "Finite coupled-mode displacement response at the QM core, not curvature at an MM minimum or Hessian certification."
+        },
+        {
+          "rank": 2,
+          "step_bohr": 0.1,
+          "mm_even_energy_kcal_mol": 0.8327051057883992,
+          "qm_even_energy_kcal_mol": 0.931998001224023,
+          "even_energy_relative_error": -0.10653766993622227,
+          "mm_odd_energy_kcal_mol": -1.3472960526227382,
+          "qm_odd_energy_kcal_mol": -0.011231089630880512,
+          "interpretation": "Finite coupled-mode displacement response at the QM core, not curvature at an MM minimum or Hessian certification."
+        }
+      ],
+      "core_qm_gradient_component_rmse_kcal_mol_angstrom": 12.743638158135154
+    },
+    {
+      "variant": "last",
+      "independently_stationary": true,
+      "max_atom_gradient_kcal_mol_angstrom": 5.824891518606053e-06,
+      "geometry_summary": {
+        "max_bond_error_angstrom": 0.030004797389100002,
+        "max_angle_error_degrees": 5.515938824792869,
+        "heavy_atom_proper_alignment_rmsd_angstrom": 0.17536285079562744
+      },
+      "vertical_endpoint_profile": [
+        {
+          "offset_degrees": -30,
+          "qm_relative_kcal_mol": -1.652114129428658,
+          "vertical_mm_relative_kcal_mol": 1.4651619331382406,
+          "vertical_error_kcal_mol": 3.1172760625668987
+        },
+        {
+          "offset_degrees": -15,
+          "qm_relative_kcal_mol": -1.1624560043353636,
+          "vertical_mm_relative_kcal_mol": -0.5887361281534389,
+          "vertical_error_kcal_mol": 0.5737198761819247
+        },
+        {
+          "offset_degrees": 0,
+          "qm_relative_kcal_mol": 0.0,
+          "vertical_mm_relative_kcal_mol": 0.0,
+          "vertical_error_kcal_mol": 0.0
+        },
+        {
+          "offset_degrees": 15,
+          "qm_relative_kcal_mol": 1.3247358286033717,
+          "vertical_mm_relative_kcal_mol": -1.205676473543246,
+          "vertical_error_kcal_mol": -2.5304123021466176
+        },
+        {
+          "offset_degrees": 30,
+          "qm_relative_kcal_mol": 3.4399520487394515,
+          "vertical_mm_relative_kcal_mol": -1.2310944246161348,
+          "vertical_error_kcal_mol": -4.671046473355586
+        }
+      ],
+      "ring_mode_response": [
+        {
+          "rank": 1,
+          "step_bohr": 0.1,
+          "mm_even_energy_kcal_mol": 0.3819623523532627,
+          "qm_even_energy_kcal_mol": 0.42003215851880926,
+          "even_energy_relative_error": -0.09063545586555788,
+          "mm_odd_energy_kcal_mol": -0.009520437365885925,
+          "qm_odd_energy_kcal_mol": 8.459089245551705e-06,
+          "interpretation": "Finite coupled-mode displacement response at the QM core, not curvature at an MM minimum or Hessian certification."
+        },
+        {
+          "rank": 2,
+          "step_bohr": 0.1,
+          "mm_even_energy_kcal_mol": 0.8306209263024655,
+          "qm_even_energy_kcal_mol": 0.931998001224023,
+          "even_energy_relative_error": -0.1087739188157224,
+          "mm_odd_energy_kcal_mol": -1.2749510326169435,
+          "qm_odd_energy_kcal_mol": -0.011231089630880512,
+          "interpretation": "Finite coupled-mode displacement response at the QM core, not curvature at an MM minimum or Hessian certification."
+        }
+      ],
+      "core_qm_gradient_component_rmse_kcal_mol_angstrom": 12.856289296569951
+    }
+  ],
+  "profile_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/mm-endpoint-profile-v2/plan.json",
+    "sha256": "639c24bb42f9011ebf2513ebe419f424e5854dce19ae076a445d2b4de4ca9b9d"
+  },
+  "admission": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/mm-endpoint-profile-v2/admission.json",
+    "sha256": "bd55e761ab64723e8005c594b73e0ae87f5290305cf5ea3d6f1da04aa4d2b3e7"
+  },
+  "profile_service_seconds": 12.904980659484863,
+  "profile_audit_queued": true,
+  "profile_wake_token": "ba87ff19-75ed-4388-8a8f-de629cf5d138",
+  "currently_running_native_job": false,
+  "preserved_prelaunch_failure": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/mm-endpoint-profile-v1/prelaunch_test_failure.json",
+    "sha256": "b6d222f7ea4ab21cbd7ec45c223142b437cfc50682a44a2b2db8ccf329c57fe3"
+  },
+  "tests": {
+    "passed": 8,
+    "seconds": 1.17
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/mm-endpoint-profile-v2/handoff.json",
+    "sha256": "2b1a2be064e7a7d07bca511c93b198c8e63615a7994f0c9138b9da8695f0706a"
+  },
+  "fit_admitted": false,
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

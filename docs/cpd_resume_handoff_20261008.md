@@ -1,6 +1,8 @@
 # CPD resume handoff — 8 October 2026
 
-**Explicitly paused by user. Await explicit resume.**
+**Historical pause, superseded by explicit user resume on 2026-10-09.**
+See the latest entry in `cpd_anti_additive_campaign.md` and the new v13
+continuation service. This document preserves the original pause state.
 Stopped `cpd-anti-cube-validation-control-2-v6-watch.service`, then
 `cpd-anti-cube-validation-control-2-v6.service`. Both inactive/dead; no NAMD
 process remains. An old completion message does not authorize restarting.

@@ -1,0 +1,62 @@
+{
+  "at": "2026-10-11T06:13:25+00:00",
+  "acknowledgement": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v2-service/completion_wake_ack.json",
+    "sha256": "cbdc9fc6c37d843a8c343a6442797e93896aaedd30c0ce937330a80b9736faa0"
+  },
+  "native_evidence_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v2/completion_audit.json",
+    "sha256": "29e81a18b7bcfe6e7bb3f1a6e519403b415aad5c095ef3ecb887ce62e568dcd4"
+  },
+  "scientific_failure": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v2/scientific_failure.json",
+    "sha256": "6f18b475d00573cedbf65972fe380366b3218a939520bf653ac92ebbd491b085"
+  },
+  "scientific_scan_passed": false,
+  "intended_angle_degrees": 90.65946347935471,
+  "erroneous_angle_degrees": 1.582306135806294,
+  "final_angle_degrees": 1.582306135788033,
+  "excluded_new_gradients": 20,
+  "native_components_checked": 3087,
+  "native_geometry_tables_checked": 42,
+  "accepted_frames_checked": 21,
+  "service_seconds": 4101.276801109314,
+  "failure_cause": "Restart worker converted the degree target to radians before calling Constraints.fix_dihedral. The installed public API converts its degree argument to radians internally, causing double conversion.",
+  "preflight_gap": "The zero-budget test reused the correctly angled seed and stopped before the first displaced calculation. It checked physical seed coordinates, not Sella target/residual. Thus it missed the wrong configured target. Independent convergence rejected the error but did not block native acquisition.",
+  "original_failure_preserved": true,
+  "repair": "Pass degrees; validate installed target and initial residual, reject off-target coordinates before every native dispatch and in the child before Psi4, check every accepted checkpoint and audit all evaluated angles. Test actual moving optimizer steps without QM.",
+  "valid_restart": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v1/evaluation-020/result.json",
+    "sha256": "b6db673de45b92eba2fb9abcec4bcc1c6de83dc2dbdf77aed88ae96ce5985c54"
+  },
+  "validation": {
+    "focused_tests_passed": 24,
+    "installed_sella_moving_step_preflight_passed": true,
+    "double_conversion_rejected": true,
+    "wrong_native_entry_rejected_before_psi4": true,
+    "diagnosis_and_test_new_qm_evaluations": 0
+  },
+  "active_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v3/plan.json",
+    "sha256": "71599aa9c73901172a11312d0dac17460a07f248f845b10f933b959f88dd056e"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v3/launch_verification.json",
+    "sha256": "47a07c329daf30375e5adbbaa5508b9f215aac189e11b2d248f80b4c95fa3f99"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-glyco-minus15-v3/handoff.json",
+    "sha256": "e33fe0daf3a60df652f218f1f8a0dbdeb7dae9be481acbea0bdc48c74dabad10"
+  },
+  "active_limits": {
+    "max_new_gradients": 20,
+    "hard_seconds": 5400,
+    "threads": 4,
+    "psi4_memory_gib": 4,
+    "service_memory_gib": 8,
+    "swap_gib": 0
+  },
+  "endpoint_minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

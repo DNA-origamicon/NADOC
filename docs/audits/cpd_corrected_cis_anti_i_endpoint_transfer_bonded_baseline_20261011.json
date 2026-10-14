@@ -1,0 +1,58 @@
+{
+  "at": "2026-10-12T01:00:34.526356+00:00",
+  "event": "bd8e64b2-6175-4050-b481-1eff3440b15d complete",
+  "acknowledgement": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-endpoint-transfer-v1-service/completion_wake_ack.json",
+    "sha256": "2a944593117d5de03aeeb17214b597aa399488bd475eff98e2d67361182cce38"
+  },
+  "completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-endpoint-transfer-v1/completion_audit.json",
+    "sha256": "32345cdf83c96463112024f7b7977bc2114d1a468e297d32c7339af922ff66cc"
+  },
+  "electrostatic_summary": [
+    {
+      "label": "minus30",
+      "baseline_dipole_error_debye": 4.565906824958141,
+      "candidate_dipole_error_debye": 1.0238390572844094,
+      "baseline_esp_relative_rmse": 0.6112452226127674,
+      "candidate_esp_relative_rmse": 0.42506382907198714
+    },
+    {
+      "label": "plus30",
+      "baseline_dipole_error_debye": 5.713980606579896,
+      "candidate_dipole_error_debye": 2.0404232572639884,
+      "baseline_esp_relative_rmse": 0.7533488090971673,
+      "candidate_esp_relative_rmse": 0.5147409918076021
+    }
+  ],
+  "electrostatic_service_seconds": 109.88189721107483,
+  "decision": "Unchanged charge candidate retained provisionally; electrostatic accuracy unvalidated. Fresh corrected bonded baseline completed; queued audit must assess quality before selecting refit.",
+  "baseline_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/bonded-baseline-v1/plan.json",
+    "sha256": "f0c0d876bf8752fa522dd182fb589962f80a35e81242e2738b417948ef2dd2be"
+  },
+  "baseline_admission": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/bonded-baseline-v1/admission.json",
+    "sha256": "f4fdd484550641444ea46c1d7350c5895d48f2864c3dd81a68d0dc7dc8439846"
+  },
+  "baseline_startup": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/bonded-baseline-v1/launch_verification.json",
+    "sha256": "38b036cfcfe7bac3d66600783d449029952a8c722d5ec533788bb47385ebd0b8"
+  },
+  "baseline_service_seconds": 0.9502878189086914,
+  "baseline_completion_audit_queued": true,
+  "baseline_token": "1d1071dd-da50-4a47-9477-91cabe4cb3e5",
+  "currently_running_native_job": false,
+  "tests": {
+    "passed": 4,
+    "seconds": 1.14
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/bonded-baseline-v1/handoff.json",
+    "sha256": "81380ddd885b4117cb987f974068a23467abb3386a812ad2e3985448e600b822"
+  },
+  "minimum_certified": false,
+  "charge_transfer_validated": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

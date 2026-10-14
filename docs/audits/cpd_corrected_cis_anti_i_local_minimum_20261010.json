@@ -1,0 +1,68 @@
+{
+  "at": "2026-10-11T01:46:11+00:00",
+  "campaign_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1",
+  "stage": "corrected-sugar-endpoint-gradient-pilot-active",
+  "user_authorization": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/campaign_authorization_20261010.json",
+    "sha256": "c39e549edd30e31ec183cd8094ed5cf0bd29ea34b26736f87f71d867eafd98d5"
+  },
+  "core_minimum": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core_local_minimum_assessment.json",
+    "sha256": "a7a8a905de89bb2c0ffb3433b820b04efdea423ac441124e2c8ab64f1960e81f"
+  },
+  "core_review_packet": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/local_minimum_review/review_packet.json",
+    "sha256": "03c5c73ace1555e9747f6670c035a0fa97942d3c4e0cd94b4a77be7249acc53b"
+  },
+  "low_mode_completion_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/low-mode-check-v1/completion_audit.json",
+    "sha256": "8897db3a32979f5cd71077c019e6c8dad03980c919a6dda505ccf8490c459930"
+  },
+  "seed_screen": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-seeds-v2/assessment.json",
+    "sha256": "20ebe296161171405498f9fb55b96cda4f4397ab8c9053409fded7e8df425234"
+  },
+  "independent_seed_screen": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-seeds-v2/independent_seed_audit.json",
+    "sha256": "d984b7647701d16495548c76476c47bf3d75d50ccf161e0fdab6d0c8a2d85c73"
+  },
+  "endpoint_exchange_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-seeds-v2/endpoint_exchange_audit.json",
+    "sha256": "a990f45666bb387e0781965ea5fc18f9c0bf90eb1d148514e3a971d8e878d4e9"
+  },
+  "reference_design": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint_reference_design_v1.json",
+    "sha256": "5039b71ee65e0e1c3feb15d580b88c67fbe744e52a1a9b484e6edf37f47f4451"
+  },
+  "active_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-pilot-v1/plan.json",
+    "sha256": "b4465eacb917ee40becef30189b1d28fb20ad3a79400d66b80d96713ccb32e8c"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-pilot-v1/launch_verification.json",
+    "sha256": "6aa9f5ad5f00d0be90feee656b0e8f97ce1d5dee5e5facd46709a23977aadaba"
+  },
+  "active_service": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-pilot-v1-service",
+  "wake_token": "49f5471b-b1bb-4c75-a080-2c735075820f",
+  "next_actions": [
+    "On completion/failure wake, write matching acknowledgement and audit native energy, all 147 gradient components, geometry/atom order, both sugar/product stereochemistry, actual basis and response convergence.",
+    "Measure gradient cost and resource use; if sound, prepare bounded Sella optimization reusing this exact pilot gradient and accepted-geometry checkpoints. Use all-stage authority without routine reapproval.",
+    "The two single-sugar model graphs are exactly endpoint-exchange equivalent. Calculate one unique reference branch and explicitly transform/permutate equivalent data; do not count the second mapping as independent evidence or blindly optimize both. Distinct conformer acquisition must answer a registered fitting question.",
+    "Freeze exact training conformers/constraints before new target acquisition; hold out +/-22.5-degree glycosidic targets until parameter hash lock. Resolve HF dipole convention before electrostatic acquisition/fit.",
+    "Record stationary endpoint separately from any endpoint local-minimum certification. Core minimum claim applies only to the 36-atom capped core."
+  ],
+  "preserved_failures": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-seeds-v1/preparation_failure.json",
+      "sha256": "47c87be5c6f69ec7f0c54e6ce557d6653485b558aaeb5b0ba8ff441b3ad16590"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/low-mode-check-v1/completion_audit_attempt1_failure.json",
+      "sha256": "8780eb646e452dd7f234baa7abd42d06e2514e60e949d9a0cc51843953b607d7"
+    }
+  ],
+  "monitoring": "Completion/failure event plus one audit deadline; no intermittent polling. One native job at a time, zero cloud spending.",
+  "minimum_certified_scope": "36-atom capped core only",
+  "simulation_ready": false,
+  "registry_gate_effect": "none"
+}

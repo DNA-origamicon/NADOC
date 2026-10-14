@@ -1,0 +1,61 @@
+{
+  "at": "2026-10-11T23:47:12+00:00",
+  "event": "472d5d97-3059-4b17-ba8f-9b009009d232 complete",
+  "acknowledgement": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/coupled-ring-training-v1-service/completion_wake_ack.json",
+    "sha256": "263f85268e6d3a8ec9ab410103751c7cd27982c0b298a73f07f99f86361a4261"
+  },
+  "ring_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/coupled-ring-training-v1/completion_audit.json",
+    "sha256": "265474bbdf8a0d36a28ee19069b8b48ee54c8a1519f589586b41e00f3eb37be0"
+  },
+  "ring": {
+    "new_gradients": 4,
+    "wall_minutes": 4.187654689947764,
+    "native_components": 432,
+    "native_geometry_tables": 8,
+    "maximum_relative_curvature_difference": 0.00033224242308627083,
+    "repeats_admitted": false
+  },
+  "next_stage": "HF electrostatic core pilot",
+  "active_handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-core-pilot-v1/handoff.json",
+    "sha256": "a11f61def5ecb7e31cbcc78dfcd4d7be3a1fc296f30ac1629b1e2f30233d58c9"
+  },
+  "method_choice": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-core-pilot-v1/method_choice.json",
+    "sha256": "57e3653131208b62d03b40df5d04179b12a1b519902b78f8634f2007a8e5394b"
+  },
+  "primary_source": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4801715/",
+  "geometry_review": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-core-pilot-v1/independent_prelaunch_geometry_review.json",
+    "sha256": "058dcd0cf44e30c323b21983bacf2b74dfec674f38a98e1fc852a8a8e36571ab"
+  },
+  "test_receipt": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-core-pilot-v1/test_receipt.json",
+    "sha256": "ce201c99ce2e4c07c0b0226f3d3bd6c575b027bc6cffc30d2ceb67d11388f490"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/electrostatic-core-pilot-v1/launch_verification.json",
+    "sha256": "987974eb74962b1792e810962630ad57773b8bd9334ffedba6c4f009db391d87"
+  },
+  "unit": "cpd-corrected-anti1-electrostatic-core-pilot-v1",
+  "wake_token": "aae6da15-f444-410e-b7b7-ff6e4482c4e7",
+  "limits": {
+    "maximum_new_scf": 10,
+    "hard_seconds": 1800,
+    "task_timeout_seconds": 150,
+    "threads": 4,
+    "psi4_memory_gib": 4,
+    "service_memory_gib": 8
+  },
+  "expected_finish_local": "2026-10-11T17:56:14.709217-06:00",
+  "audit_deadline_local": "2026-10-11T18:11:14.674835-06:00",
+  "hard_deadline_local": "2026-10-11T18:16:14.674835-06:00",
+  "boundary_minimum_certified": false,
+  "fit_target_accepted": false,
+  "simulation_ready": false,
+  "bulk_storage": "mounted Archive",
+  "existing_data_moved_or_deleted": false,
+  "cloud_spending_usd": 0
+}

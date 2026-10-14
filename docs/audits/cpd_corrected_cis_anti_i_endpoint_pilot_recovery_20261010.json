@@ -1,0 +1,71 @@
+{
+  "at": "2026-10-11T01:55:58+00:00",
+  "stage": "endpoint-1-sella-chunk-active",
+  "campaign_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1",
+  "authorization": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/campaign_authorization_20261010.json",
+    "sha256": "c39e549edd30e31ec183cd8094ed5cf0bd29ea34b26736f87f71d867eafd98d5"
+  },
+  "core_local_minimum": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/core_local_minimum_assessment.json",
+    "sha256": "a7a8a905de89bb2c0ffb3433b820b04efdea423ac441124e2c8ab64f1960e81f"
+  },
+  "pilot_failure": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-pilot-v1/assessment.json",
+    "sha256": "48557f8c44e79d3aafa24f3971378c2222219a66648997da5b266864cf968639"
+  },
+  "pilot_failure_acknowledgement": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-pilot-v1-service/completion_wake_ack.json",
+    "sha256": "70e6a9945bdf144ec3618c771fdef9fc0e46d88ce8b42b32ed318749472224d8"
+  },
+  "pilot_recovery_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-pilot-recovery-v1/completion_audit.json",
+    "sha256": "28acc0cfd08182e6fe129321d61da2c9eef8d1ec0c2d6e1272ca0a8020e54f8d"
+  },
+  "recovered_gradient": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-pilot-recovery-v1/recovered_result.json",
+    "sha256": "9c84bd2d988c42c5bd24b8f9657124eb071f9de5b38afe84b2ea5356ecd00ed8"
+  },
+  "reference_design": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint_reference_design_v1.json",
+    "sha256": "5039b71ee65e0e1c3feb15d580b88c67fbe744e52a1a9b484e6edf37f47f4451"
+  },
+  "endpoint_exchange": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-seeds-v2/endpoint_exchange_audit.json",
+    "sha256": "a990f45666bb387e0781965ea5fc18f9c0bf90eb1d148514e3a971d8e878d4e9"
+  },
+  "active_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-optimization-v1/plan.json",
+    "sha256": "9b179960b7f25e1d3279a8fa3ee1b795b8ed0f4b2033c6f41d17ac5c86864bf1"
+  },
+  "admission": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-optimization-v1/admission.json",
+    "sha256": "27aeff76b261236f033c7c01effd69efdf0f0d8eccd54161923a1c3cdaa6a256"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-optimization-v1/launch_verification.json",
+    "sha256": "4af7bcd813f08b9c59f13e7740b2a1f4d1b3959499108ae7870108347d22edca"
+  },
+  "service": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-1-optimization-v1-service",
+  "wake_token": "aa576b15-f5c8-46c9-b874-230f0ada295e",
+  "limits": {
+    "max_new_gradients": 30,
+    "hard_seconds": 7200,
+    "gradient_timeout_seconds": 600,
+    "threads": 4,
+    "psi4_memory_gib": 4,
+    "service_memory_gib": 8,
+    "cloud_spending_usd": 0
+  },
+  "next_actions": [
+    "On wake acknowledge its token, inspect status and native evidence once. A complete chunk may mean allocation exhausted, not convergence.",
+    "Audit all native energy/147-component gradient tables, both printed Bohr geometry tables, input/returned binaries, exact electronic options/basis/frozen-core occupations, seven product/sugar centers, every accepted checkpoint and source hashes.",
+    "Compare force and energy progress versus native time. If unconverged but progressing, evaluate a bounded continuation from the last accepted geometry and matching gradient with fresh Sella history; preserve rejected trials and old optimizer state. If stalled, identify a specific cause/alternative before new work.",
+    "Stationary endpoint does not by itself certify a local minimum. Decide necessary curvature/reference follow-up from actual use and evidence; do not rerun core Hessian.",
+    "Use exact endpoint exchange for the equivalent mapping, never count it as independent data. Freeze exact training targets and holdout membership before acquisition; lock parameters before prospective holdout access. Resolve dipole convention before charge acquisition/fitting."
+  ],
+  "monitoring": "Verified completion/failure event and one deadline; no intermittent polling.",
+  "minimum_certified_scope": "Previously assessed 36-atom capped core only; 49-atom endpoint is not yet stationary/certified.",
+  "simulation_ready": false,
+  "registry_gate_effect": "none"
+}
