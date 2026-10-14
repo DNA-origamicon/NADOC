@@ -9,6 +9,27 @@ status: active
 User instruction, 2026-09-15/16: delete disposable development/test artifacts;
 retain useful evidence only where it does not clutter the main user workspace.
 
+## Feature-validation cleanup — 2026-10-13
+
+User clarification: “make sure we are cleaning up all data after validation” and
+“We don't want to be saving large capture files after testing each new feature.”
+
+- Treat feature-validation captures as temporary. After reviewing and summarizing
+  the results, delete recordings, extracted frames, depth/object-ID buffers,
+  browser traces, copied fixture designs and detailed frame/pose dumps, including
+  failed attempts. Keep compact pass/fail, timing, failure-reason and cleanup
+  summaries; a failed test does not justify indefinite bulk retention.
+- Complete any necessary pixel/identity analysis before deletion. Retain large
+  evidence beyond the validation task only when the user explicitly requests it.
+- Check active file/mapping references and configured runtime dependencies first.
+  Preserve deployed binaries, active runtimes, authored designs and managed jobs.
+  Verify deletion and report bytes removed; mark prior raw-evidence links as pruned.
+- This instruction authorizes cleanup of completed Join feature-validation data
+  and governs future feature checks. It does not authorize deleting scientific
+  production results or unrelated historical storage-review candidates.
+
+## General retention rules
+
 - `workspace/` is for user designs and application-managed state/jobs. Do not
   create top-level campaign, benchmark, literature-download or diagnostic folders
   there. A filename containing “test” is not evidence that a user design is disposable.

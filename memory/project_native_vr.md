@@ -315,6 +315,14 @@ trap stops the scope and its detached children. Use the guard for bounded checks
 
 ## Join clusters (2026-10-13)
 
+**Retention update:** per the user's October 13 instruction, the completed Join
+campaign's raw captures, extracted images, depth/ID buffers, detailed pose/frame
+logs, traces and copied designs were deleted after validation. Historical raw
+paths in this section are no longer replayable. Compact results and deletion
+inventory remain in `vr-join-20261013/verification-summary.json` and
+`bulk-cleanup.json` under `.development-artifacts/`. Keep the configured build and
+active runtime; do not accumulate large captures after each feature check.
+
 Current follow-up adds desktop-equivalent 0.3–10 nm Reach, cluster scope locking,
 stale-pose rejection and the duplicate-preview/reselection fix (ISSUE-78). A
 persistent Nick/Ligate worker removes header I/O, thread creation and old-table

@@ -814,6 +814,11 @@ establish through-lens legibility or physical controller comfort. Evidence:
 
 ## MV-VR-JOIN — PENDING (2026-10-11)
 
+Retention update (October 13): completed Join bulk validation data was deleted at
+the user's request. Compact result/timing/failure summaries remain; raw evidence
+paths below are historical. Future physical review should capture temporarily
+and clean up after summarizing, rather than accumulating recordings.
+
 Review Tools → Join through the headset: automatic Cluster selection, trigger
 selection and pointer translation, grip rotation, regrabbing the cyan preview,
 1 nm / 15° thumbwheel detents, Position/Rotation fieldsets, pointer beams and

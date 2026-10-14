@@ -121,3 +121,14 @@ and its original failures are retained; the other 803 frames were held out with
 unchanged decoder thresholds. See `final-pixels/summary.json` and
 `final-capture-coverage.json`. These are captured display-surface pixels, not
 through-lens or physical scanout measurements.
+
+### Validation-data retention
+
+After completed validation, delete raw compositor recordings, extracted images,
+depth/object-ID buffers, pose/frame dumps, browser traces and copied test designs.
+Keep compact outcomes, timing/failure summaries and a cleanup inventory. On
+October 13 the user requested this policy; the completed October 11/13 Join data
+was pruned accordingly. Historical raw-evidence links above are no longer
+replayable; the validation summary and `bulk-cleanup.json` remain. The configured
+viewer build and active SteamVR runtime are preserved. Retain large captures
+beyond validation only on explicit user request.
