@@ -448,3 +448,92 @@ ISSUE-74 (2026-10-12): simulation trajectory popup controls now precede disabled
 background rows in hit testing. All ten numeric keys have real-ray regression
 coverage. The initial live loop check exposed this while seeking the selected
 range end; its failed evidence is retained under `vr-trajectory-loop-20261012/initial`.
+
+
+2026-10-13 — ISSUE-76 fixed for normal-launch integration. Root cause: the optimized
+viewer and final recorder were validated through a private diagnostic launch, while
+the ordinary backend still selected the pre-work executable without the capture
+binding. The new torso recording therefore exercised the old path. The failed
+assumption was that a private runtime success implied ordinary user launch was
+deployed; exact executable/capture provenance now prevents that confusion.
+
+Owner-controlled configuration selects the versioned Archive build and capture
+layer. Normal launch creates inspect/journal resources, uses markers only while
+journaling, preserves physical haptics/Desktop/touch input, reports fresh recorder
+readiness, and requires valid diagnostics before claiming completion. No scientific
+geometry or current document content changed; Join regression evidence is retained.
+A normal-menu recording and final physical-inspect recording each saved 179 final
+images, zero drops, with full pixel and durable direct-I/O audits. Final calibrated
+decoding joins all 716 eye images to strict CRC/full-session/eye/frame identities:
+179 unique consecutive IDs per eye per clip, no repeats/gaps/regressions, both eyes
+matching. Wide ROI and first tight-ROI failures remain preserved. The bounded
+component filter skips only already subminimum components before the same 64-cap;
+all other thresholds are unchanged. Menu frame 0 alone calibrated the tighter ROIs;
+178 later menu frames and all 179 physical-inspect frames were held out.
+
+Final viewer 378253/start 96081361 uses native v2 hash 1e830a7f...; original Stick/Flex
+source placement restored within 2.4e-7 m, grouped/opaque defaults active, one-shot
+restore setting removed. Both controllers were untracked. Browser reattachment is
+now independently verified: same PID/session and exact presentation, actual feed
+sequence advances, unchanged geometry payload/scientific export, and Help's Exit VR
+toggle enabled. The stale restore dialog was cancelled without reimporting content.
+NADOC is now foreground; desktop 3D during VR retains its original true setting.
+Earlier capture cadence does not certify this combined foreground workload.
+SteamVR process and four saved global VR config hashes are unchanged.
+
+101 focused backend checks, four readiness cases, five native v2 checks and 175
+tracking/decoder checks plus 24 subtests passed. Initial FAST: 10,830 passed, 14 failed, 8 errors, 92 skipped, 2,500 warnings.
+Three Unix-socket failures pass with short Archive paths. Final FAST: 10,832 passed,
+11 failed, 8 errors, 92 skipped, 2,500 warnings; pytest 134.82 seconds, guard 137 seconds,
+five timing overruns. psfgen and CPD failures remain recorded. Focused success does
+not clear broad/full-suite debt. Reopen count: 0.
+ISSUE-76 closes the deployment gap only; worn-headset doubling remains MV-44.
+Evidence and rollback:
+[normal-launch integration](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/launch-handoff.json),
+[recording review](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/recording-validation/index.html),
+[calibrated identity proof](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/recording-validation/postfix-summary.json),
+[test triage](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/test-smart-triage/triage-report.txt),
+[rollback](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/rollback-plan.txt),
+[browser reattachment](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/browser-reconnect/verification.json).
+
+2026-10-13 — ISSUE-77 investigation checkpoint, OPEN. The user reports that
+doubling is substantially reduced, with remaining menu/hover-associated lag.
+Request 962531370889719 retains all 179 final presentations with zero capture
+drops. The complete bounded-follow decode joins all 358 eye images: 144 distinct
+submitted images and 35 reused-image pairs per eye, no unknowns/gaps/regressions.
+The original fixed-ROI 313/358 joins and 22-pair lower bound are retained. The
+retrospective follow trial changed no CRC, contrast or bit/geometry thresholds;
+it does not constitute a separately acquired validation clip.
+
+The longest measured input/actions stage is 1.61 ms versus 20.88 ms inside
+xrEndFrame. All 242 journal rows have head/hand tracking flags 15, which excludes
+no unflagged jitter. Both menus are logically open with varying visible coverage.
+This evidence locates host waiting without proving its cause; older journals
+have no per-frame hover/haptic timings. Native inspection identified synchronous
+event-triggered haptic calls, hover-sensitive texture caching, backdrop copies and
+frosted shading as measurable pathways. No behavior/performance fix was applied.
+
+The new bounded capture-only diagnostics and summarize-interactions reader expose
+actual API dispatch/results, hover changes, texture/cache work and per-eye menu/
+backdrop host spans. Missing legacy fields, truncation, overflow and clock errors
+remain explicit. Haptic dispatch does not independently establish actuator motion;
+host GL time is not GPU time, and draw counts are not on-screen coverage.
+
+Six native checks passed, including actual GL hover/cache changes and OpenXR
+dispatch/result spies; 45 reader tests and 69 marker tests passed. Normal launch
+deployed native SHA256 65bcd41e1de02d1d6271c19a1aa7d04683087358eb0dd78a17d4eb282cb8a4d3
+as physical-inspect viewer 545874 with the existing compositor. The real browser
+reattached; scientific data and restored placement are preserved. Closed-menu
+recording 963838453284914 saved 179 frames, with 288 diagnostic journal rows,
+zero UI clock calls/errors/overflow. The first check mistakenly required positive
+UI clocks; that failed assertion is retained, then corrected without recapture or
+native change. This is a zero-activity integration check, not live physical hover
+validation. The reload closed the menus and did not restore their previous positions.
+Reopen/place them for a new worn-controller reproduction; ISSUE-77 and MV-44 remain
+open. Existing broad-test failures and timing-guard debt are not cleared.
+
+Evidence: [native audit](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/native-audit.json),
+[complete identity proof](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/recording-analysis/identity-follow-summary.json),
+[native freeze](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/native-freeze.json),
+[closed-menu live check](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/live-capture-proof/verification.json),
+[retained initial verification failure](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/live-capture-proof/initial-verification-failure.json).

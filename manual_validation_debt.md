@@ -854,3 +854,31 @@ passed. Variable-deliberate remains unverified after a 155 ms setup input stall,
 before simulation controls were reached (`vr-trajectory-loop-20261012/focused-final`).
 No timing thresholds or motion presets were relaxed. Re-run this profile under a
 quiet host condition before claiming complete four-profile coverage.
+
+- **MV-44 — IMPROVED, OPEN — Timing-related physical double vision (2026-10-13).**
+  The user reports substantially reduced doubling after the normal optimized
+  viewer deployment, with remaining lag/frame drops when menus enter view or the
+  other controller aims, hovers or vibrates. The speed-dependent monocular symptom
+  during model movement and coupled torso/head/controller motion remains the
+  validation target. New final recording 962531370889719 saved 179 presentations
+  with zero capture drops; exact stereo identities show 144 distinct submitted
+  images and 35 reused-image pairs per eye. This is renewed application-image reuse,
+  not proof of the exact percept or of haptics as its cause. ISSUE-77 is open.
+  The browser is reattached to the new physical-inspect diagnostic viewer. A later
+  closed-menu recording validates the new telemetry with zero UI activity; actual
+  hover/haptic dispatch tests passed separately and a worn-controller reproduction
+  with the new fields remains due. The reload closed the sidebars and did not
+  restore their prior positions: reopen/place them before the menu comparison.
+  In 24hb_0xT/P1 Alpine Aug 7 Flex/Stick, use right Tools → Record final output 2s,
+  wait until recording starts after preparation, perform the motion, and wait for
+  Saved. Record menus open and closed; inspect each eye separately. Retain final
+  compositor pixels, encoded image IDs, viewer binary identity, synchronized pose
+  journal, all missing frames/failed matches, and capture overhead. Single-frame
+  clarity never excludes temporal doubling; physical panel/optical evidence remains
+  separate. Normal configured launches retain physical controllers in inspect mode.
+  Use the bounded journal hover/haptic/menu counters and summarize-interactions
+  review without treating host GL-call spans as GPU time, draw counts as visibility,
+  or a haptic dispatch as independently observed vibration. Old journals lack these
+  fields; missing telemetry must not become zero activity.
+  Reusable workflow: Debug → VR Tours & Tests → Controls & layout → SteamVR final
+  output · capture and calibration; original manual recordings remain preserved.

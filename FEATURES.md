@@ -442,6 +442,7 @@ validation; see [scope and documentation](README.md#feature-overview).
   - Existing-presentation pause/resume/end
   - Tracked presenter figure
   - Desktop mirror
+  - Five-second stereo recordings
   - Shared trajectory controls
 
 ## Files, History, and Collaboration

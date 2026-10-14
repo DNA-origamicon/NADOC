@@ -138,6 +138,10 @@ add('right','overhangs','Connection entries','frontend/src/ui/overhang_connectio
 tabs.push({side:'right',key:'tools',label:'Tools',rows:[
   ['tool-inspect','Inspect','tool:inspect'],['tool-move','Move / Rotate','tool:move_rotate'],['tool-extrude','Extrude','tool:extrude'],['tool-sweep','Sweep','tool:sweep'],
   ['tool-twist','Twist','tool:twist'],['tool-bend','Bend','tool:bend'],
+  ['vr-record','Record app eyes 5s','recording:start'],
+  ['vr-record-duration','Duration: 2 seconds','recording:duration'],
+  ['vr-record-status','Both eyes - 2 second countdown','recording:status'],
+  ['vr-record-folder','Open recordings folder','recording:folder'],
 ].map(([id,label,action])=>({id,label,action,section:'Tools',kind:'button',options:[],source:'frontend/scripts/generate-vr-sidebar-catalog.mjs',reason:''}))})
 
 // Keep the native Tools menu in sync with the active desktop routing menu.

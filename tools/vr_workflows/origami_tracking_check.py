@@ -1,0 +1,24 @@
+"""Discoverable terminal entry for measured origami image positions."""
+from tools.vr_tracking.__main__ import main as tracking_main
+
+
+def main():
+    import sys
+    if len(sys.argv) == 1:
+        print("Origami tracking measures named features in original eye images.\n"
+              "Read docs/vr_origami_tracking.md for reference selection, expected-pose comparisons,\n"
+              "and the optional pose journal attached to Tools → Record final output.\n"
+              "Run python -m tools.vr_tracking --help for export/track/identify-frames/compare-temporal.\n"
+              "Opt-in submitted frame markers identify reused images and exact pose-journal rows.\n"
+              "Use summarize-interactions --journal PATH [--identities PATH] --output NEW_DIR\n"
+              "for a timing review of image reuse, menu hover, texture work and haptic dispatch.\n"
+              "NADOC_VR_GPU_PASS_TIMING=1 measures shadow and eye GPU timeline intervals.\n"
+              "Use summarize-gpu-passes on the saved viewer log to inspect cost and missing measurements.\n"
+              "Final distorted pixel positions still require separate lens calibration.\n"
+              "This entry never restarts a runtime or changes the scene.")
+        return
+    tracking_main()
+
+
+if __name__ == '__main__':
+    main()

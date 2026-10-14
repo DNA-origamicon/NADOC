@@ -139,7 +139,8 @@ class VRLaunchRequest(BaseModel):
     representation: Literal["cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "surface-detail", "mrdna-coarse", "mrdna-fine", "oxdna"] = "full"
     coloring: Literal["strand", "base", "cluster", "cpk"] = "strand"
     show_periodic_seam_arcs: bool = False
-    # Developer-only opt-in. Paths are server-generated, never client supplied.
+    # Diagnostic access; configured final recording also enables private inspect.
+    # Paths are server-generated, never client supplied.
     scrywrite_live: Literal["off", "inspect", "transactions"] = "off"
     scrywrite_place_scene_in_view: bool = False
     mirror_eye: Literal["off", "left", "right"] = "left"
@@ -2720,6 +2721,11 @@ def _build_viewer_locked() -> None:
 
     env = _build_environment()
     env.update({"CC": "/usr/bin/gcc", "CXX": "/usr/bin/g++"})
+    from backend.api import vr_capture_launch
+    try:
+        generator = vr_capture_launch.cmake_generator(_BUILD_DIR)
+    except vr_capture_launch.CaptureSetupError as exc:
+        raise HTTPException(503, detail=str(exc)) from exc
     configure = subprocess.run(
         [
             "/usr/bin/cmake",
@@ -2728,7 +2734,7 @@ def _build_viewer_locked() -> None:
             "-B",
             str(_BUILD_DIR),
             "-G",
-            "Ninja",
+            generator,
             "-DCMAKE_BUILD_TYPE=Release",
         ],
         env=env,
@@ -2759,6 +2765,7 @@ def _build_viewer_locked() -> None:
 
 
 def _read_state() -> dict | None:
+    _capture_configuration()
     try:
         state = json.loads(_STATE_PATH.read_text())
         pid = int(state["pid"])
@@ -2862,11 +2869,38 @@ def _assert_vr_display_lease_available() -> None:
     )
 
 
+def _capture_configuration():
+    from backend.api import vr_capture_launch
+    global _BUILD_DIR, _VIEWER
+    try:
+        config = vr_capture_launch.load_config()
+        _BUILD_DIR = vr_capture_launch.select_build_directory(_VIEWER_DIR / "build", config)
+        _VIEWER = _BUILD_DIR / "nadoc-vr-viewer"
+        return config
+    except vr_capture_launch.CaptureSetupError as exc:
+        raise HTTPException(503, detail=str(exc)) from exc
+
+
+def _vr_temporary_directory() -> Path | None:
+    from backend.api import vr_capture_launch
+    return vr_capture_launch.backend_temporary_directory(_capture_configuration())
+
+
 def _start_steamvr() -> dict[str, bool]:
-    """Start SteamVR through Steam so its dashboard owns the runtime lifecycle."""
+    """Reuse SteamVR or bootstrap the configured final-output capture stack."""
     with _RUNTIME_LOCK:
         _detach_hmd_from_desktop()
         status = _runtime_payload()
+        capture_config = _capture_configuration()
+        if capture_config:
+            from backend.api import vr_capture_launch
+            try:
+                return vr_capture_launch.ensure_runtime(
+                    capture_config, status, runtime_payload=_runtime_payload,
+                    assert_display=_assert_vr_display_lease_available,
+                )
+            except (OSError, ValueError, RuntimeError) as exc:
+                raise HTTPException(503, detail=str(exc)) from exc
         if (
             status["steamvr_running"]
             and status["dashboard_running"]
@@ -3004,6 +3038,21 @@ def _status_payload() -> dict:
             "log_path": str(_LOG_PATH),
             **_runtime_payload(),
         }
+    capture_snapshot = state.get("final_capture")
+    capture_status = capture_snapshot
+    if isinstance(capture_snapshot, dict) and capture_snapshot.get("configured"):
+        from backend.api import vr_capture_launch
+        # Probe the directory bound to this viewer, not a possibly newer runtime
+        # pointer. Keep the launch snapshot separately for provenance.
+        directory = capture_snapshot.get("directory")
+        if isinstance(directory, str) and directory:
+            capture_status = vr_capture_launch.directory_readiness(Path(directory))
+        else:
+            capture_status = {
+                **capture_snapshot, "available": False,
+                "checked_unix_ns": time.time_ns(),
+                "reason": "Final-output recorder has no saved capture directory.",
+            }
     return {
         "running": True,
         "available": True,
@@ -3011,6 +3060,10 @@ def _status_payload() -> dict:
         "started_at": state.get("started_at"),
         "scrywrite_live": state.get("scrywrite_live", "off"),
         "scrywrite_socket": state.get("scrywrite_socket"),
+        "final_capture": capture_status,
+        "final_capture_launch_snapshot": capture_snapshot,
+        "pose_journal_directory": state.get("pose_journal_directory"),
+        "submitted_frame_marker": state.get("submitted_frame_marker", "off"),
         "mirror_eye": state.get("mirror_eye", "off"),
         "reference_grid": state.get("reference_grid", "off"),
         "timing": _runtime_timing(state, _event_payload(state)),
@@ -4078,6 +4131,7 @@ def _write_job_snapshot(
     if updated_at_ms is None:
         updated_at_ms = int(time.time() * 1000)
     with tempfile.NamedTemporaryFile(
+        dir=_vr_temporary_directory(),
         mode="w",
         prefix="nadoc-vr-jobs-",
         suffix=".txt",
@@ -4165,6 +4219,7 @@ def _write_visualization_snapshot(
     representation: str = "full", coloring: str = "strand",
 ) -> Path:
     with tempfile.NamedTemporaryFile(
+        dir=_vr_temporary_directory(),
         mode="w", prefix="nadoc-vr-visualization-", suffix=".txt", delete=False,
     ) as visualization_file:
         visualization_file.write(
@@ -4235,6 +4290,7 @@ def _coordinate_record(
 def _write_trajectory_feeds(body: VRLaunchRequest, view_rotation: np.ndarray) -> tuple[Path, Path]:
     """Create private timeline and coordinate feeds used by the native viewer."""
     with tempfile.NamedTemporaryFile(
+        dir=_vr_temporary_directory(),
         mode="w", prefix="nadoc-vr-trajectory-", suffix=".txt", delete=False,
     ) as state_file:
         state_file.write(_trajectory_state_record(
@@ -4248,6 +4304,7 @@ def _write_trajectory_feeds(body: VRLaunchRequest, view_rotation: np.ndarray) ->
         trajectory_path = Path(state_file.name)
     trajectory_path.chmod(0o600)
     with tempfile.NamedTemporaryFile(
+        dir=_vr_temporary_directory(),
         mode="wb", prefix="nadoc-vr-coordinates-", suffix=".bin", delete=False,
     ) as coordinate_file:
         coordinate_file.write(_coordinate_record(
@@ -4589,6 +4646,7 @@ def _write_scene_snapshot(
         flush=True,
     )
     with tempfile.NamedTemporaryFile(
+        dir=_vr_temporary_directory(),
         mode="wb",
         prefix="nadoc-vr-",
         suffix=".nadocvr.gz",
@@ -4712,8 +4770,8 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
     require_native_placement_review_clear()
     body = body.model_copy(update={"representation": "full"})
 
-    # Starting SteamVR through the Steam client (rather than incidentally through
-    # xrCreateInstance) keeps Dashboard/Desktop available after the NADOC scene exits.
+    # Start the runtime explicitly before xrCreateInstance: configured workstations
+    # prepare final-output recording, while other hosts retain the Steam path.
     _start_steamvr()
 
     with _STATE_LOCK:
@@ -4721,6 +4779,16 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         if running:
             return _status_payload()
         _ensure_viewer_built()
+        capture = None
+        capture_config = _capture_configuration()
+        if capture_config:
+            from backend.api import vr_capture_launch
+            try:
+                capture = vr_capture_launch.prepare_viewer(capture_config)
+            except (OSError, ValueError, RuntimeError) as exc:
+                raise HTTPException(503, detail=f"Could not prepare final-output recording: {exc}") from exc
+            if body.scrywrite_live == "off":
+                body = body.model_copy(update={"scrywrite_live": "inspect"})
         snapshot_started_at = time.time()
         # Start the OpenXR application before any molecular geometry is built.
         scene_path = _write_scene_snapshot("NADOCVR 14 full strand\nQ empty_authoring\nR full\n")
@@ -4729,6 +4797,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         vr_startup.publish(progress_path, "loading", 2, "Starting VR and preparing document")
         snapshot_ready_at = None
         with tempfile.NamedTemporaryFile(
+            dir=_vr_temporary_directory(),
             mode="w",
             prefix="nadoc-vr-event-",
             suffix=".json",
@@ -4751,6 +4820,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             event_path = Path(event_file.name)
         event_path.chmod(0o600)
         with tempfile.NamedTemporaryFile(
+            dir=_vr_temporary_directory(),
             mode="w",
             prefix="nadoc-vr-feedback-",
             suffix=".txt",
@@ -4762,6 +4832,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             feedback_path = Path(feedback_file.name)
         feedback_path.chmod(0o600)
         with tempfile.NamedTemporaryFile(
+            dir=_vr_temporary_directory(),
             mode="w",
             prefix="nadoc-vr-tool-feedback-",
             suffix=".txt",
@@ -4773,6 +4844,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             tool_feedback_path = Path(tool_feedback_file.name)
         tool_feedback_path.chmod(0o600)
         with tempfile.NamedTemporaryFile(
+            dir=_vr_temporary_directory(),
             mode="w",
             prefix="nadoc-vr-plane-feedback-",
             suffix=".txt",
@@ -4784,6 +4856,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             plane_feedback_path = Path(plane_feedback_file.name)
         plane_feedback_path.chmod(0o600)
         with tempfile.NamedTemporaryFile(
+            dir=_vr_temporary_directory(),
             mode="w",
             prefix="nadoc-vr-preflight-feedback-",
             suffix=".txt",
@@ -4795,6 +4868,7 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             preflight_feedback_path = Path(preflight_feedback_file.name)
         preflight_feedback_path.chmod(0o600)
         with tempfile.NamedTemporaryFile(
+            dir=_vr_temporary_directory(),
             mode="w",
             prefix="nadoc-vr-tool-execution-feedback-",
             suffix=".txt",
@@ -4828,9 +4902,12 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
         from backend.api import vr_dimensions, vr_view_volumes
         vr_dimensions.prepare(event_path, body.assembly_active, view_rotation)
         vr_view_volumes.prepare(event_path, body.assembly_active, view_rotation)
-        live_socket_path = None
-        if body.scrywrite_live != "off":
+        live_socket_path = capture.socket if capture else None
+        if body.scrywrite_live != "off" and live_socket_path is None:
             live_socket_path = Path(tempfile.mkdtemp(prefix="nadoc-scry-")) / "viewer.sock"
+        viewer_environment = _build_environment()
+        if capture:
+            viewer_environment = capture.environment(viewer_environment)
         log = _LOG_PATH.open("ab")
         try:
             process = subprocess.Popen(
@@ -4839,9 +4916,9 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
                     plane_feedback_path, preflight_feedback_path,
                     tool_execution_feedback_path, job_path,
                     visualization_path, trajectory_path, coordinate_path, body, live_socket_path
-                ) + ["--loading-status", str(progress_path)],
+                ) + ["--loading-status", str(progress_path)] + (capture.arguments() if capture else []),
                 cwd=_REPO_ROOT,
-                env=_build_environment(),
+                env=viewer_environment,
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=subprocess.STDOUT,
@@ -4927,6 +5004,9 @@ def launch_vr(body: VRLaunchRequest, request: Request) -> dict:
             "view_rotation": view_rotation.tolist(),
             "scrywrite_live": body.scrywrite_live,
             "scrywrite_socket": str(live_socket_path) if live_socket_path else None,
+            "final_capture": capture.status if capture else None,
+            "pose_journal_directory": str(capture.journal_directory) if capture else None,
+            "submitted_frame_marker": "recording" if capture else "off",
             "mirror_eye": body.mirror_eye,
             "reference_grid": body.reference_grid,
         }

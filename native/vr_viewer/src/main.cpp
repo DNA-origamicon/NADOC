@@ -7,6 +7,8 @@
 #include <mutex>
 #include "lattice_grip.hpp"
 #include "thumbwheel_mesh.hpp"
+#define XR_USE_TIMESPEC
+#include <time.h>
 #define XR_USE_PLATFORM_XLIB
 #define XR_USE_GRAPHICS_API_OPENGL
 #define GL_GLEXT_PROTOTYPES
@@ -81,6 +83,15 @@
 #include "scrywrite_visual.hpp"
 #include "spectator_mirror.hpp"
 #include "live_mirror_capture.hpp"
+#include "stereo_recording.hpp"
+#include "compositor_recording.hpp"
+#include "pose_journal.hpp"
+#include <source_location>
+#include "submitted_frame_marker.hpp"
+#include "view_opaque_shader.hpp"
+#include "view_instance_groups.hpp"
+#include "view_programs.hpp"
+#include "gpu_pass_timing.hpp"
 #include "live_visual_measure.hpp"
 #include "live_presentation.hpp"
 #include "presenter_ui.hpp"
@@ -5159,6 +5170,7 @@ class Viewer {
             if (!eventPath_.empty() && liveMode == "control")
                 throw std::runtime_error("live browser events require explicit transactions mode");
             liveMode_ = std::move(liveMode);
+            liveSocketPath_ = liveSocketPath;
             liveDirectory_ = std::filesystem::path(liveSocketPath).parent_path();
             liveSession_ = std::to_string(::getpid()) + "-" + std::to_string(
                 std::chrono::steady_clock::now().time_since_epoch().count());
@@ -5197,6 +5209,10 @@ class Viewer {
                 committedSelectionOwnerTokens_ = {selectedOwnerTokens_.front()};
             }
         }
+    }
+
+    void restorePresentationOnStartup(const nadoc_vr::SavedPresentation& saved) {
+        initialPresentationRestore_=saved;
     }
 
     void beginStartup(const std::string& scene,const std::string& status,
@@ -5284,15 +5300,29 @@ class Viewer {
 
     }
 
+    void enablePoseJournal(const std::string& directory) {
+        poseJournal_.enable(directory,liveSession_);
+    }
+
+    void configureSubmittedFrameMarker(const std::string& value) {
+        frameMarker_.configure(nadoc_vr::frame_identity::parseMode(value),liveSession_,poseJournal_.enabled());
+        poseJournal_.setFrameIdentityConfig(frameMarker_.json());
+    }
+
     int run() {
         initializeWindow();
         initializeOpenXr();
         initializeGraphics();
+        frameMarker_.initialize();
         eventLoop();
         return 0;
     }
 
     ~Viewer() {
+        frameMarker_.shutdown();
+        stereoRecording_.shutdown();
+        compositorRecording_.shutdown();
+        gpuPassTiming_.shutdown();
         gpuFrameTimer_.shutdown();
         qrCalibration_.shutdown();
         referenceModels_.shutdown();
@@ -5494,7 +5524,11 @@ class Viewer {
         });
         if (!hasOpenGl) throw std::runtime_error("The active OpenXR runtime does not support OpenGL");
 
-        const char* enabledExtensions[] = {XR_KHR_OPENGL_ENABLE_EXTENSION_NAME};
+        std::vector<const char*> enabledExtensions{XR_KHR_OPENGL_ENABLE_EXTENSION_NAME};
+        const bool journalClock = poseJournal_.enabled() && std::any_of(extensions.begin(),extensions.end(),[](const auto& ext) {
+            return std::string(ext.extensionName)==XR_KHR_CONVERT_TIMESPEC_TIME_EXTENSION_NAME;
+        });
+        if(journalClock)enabledExtensions.push_back(XR_KHR_CONVERT_TIMESPEC_TIME_EXTENSION_NAME);
         XrInstanceCreateInfo createInfo{XR_TYPE_INSTANCE_CREATE_INFO};
         std::snprintf(createInfo.applicationInfo.applicationName,
                       XR_MAX_APPLICATION_NAME_SIZE, "%s", "NADOC VR Viewer");
@@ -5503,9 +5537,20 @@ class Viewer {
                       XR_MAX_ENGINE_NAME_SIZE, "%s", "NADOC Native");
         createInfo.applicationInfo.engineVersion = 1;
         createInfo.applicationInfo.apiVersion = XR_CURRENT_API_VERSION;
-        createInfo.enabledExtensionCount = 1;
-        createInfo.enabledExtensionNames = enabledExtensions;
+        createInfo.enabledExtensionCount = static_cast<uint32_t>(enabledExtensions.size());
+        createInfo.enabledExtensionNames = enabledExtensions.data();
         checkXr(XR_NULL_HANDLE, xrCreateInstance(&createInfo, &instance_), "xrCreateInstance");
+        if(journalClock) {
+            PFN_xrConvertTimeToTimespecTimeKHR convert=nullptr;
+            if(XR_SUCCEEDED(xrGetInstanceProcAddr(instance_,"xrConvertTimeToTimespecTimeKHR",
+                reinterpret_cast<PFN_xrVoidFunction*>(&convert))) && convert) {
+                poseJournal_.setClockMapper([this,convert](int64_t time)->std::optional<int64_t> {
+                    timespec stamp{};
+                    if(XR_FAILED(convert(instance_,time,&stamp)) || stamp.tv_sec<0 || stamp.tv_nsec<0 || stamp.tv_nsec>=1000000000)return std::nullopt;
+                    return int64_t(stamp.tv_sec)*1000000000+stamp.tv_nsec;
+                });
+            }
+        }
         initializeActions();
 
         XrSystemGetInfo systemInfo{XR_TYPE_SYSTEM_GET_INFO};
@@ -5673,7 +5718,12 @@ class Viewer {
         sidebarMenus_.simulationDraw=[this](size_t hand,auto& ui){if(hand==0)simulationPanel_.draw(ui);};
         featureLogPanel_.bind(sidebarMenus_.menus[0]);
         for(auto& sidebar:sidebarMenus_.menus) {
+            sidebar.visible=[this](const std::string& action){return action!="recording:duration" || compositorRecording_.enabled();};
             sidebar.label=[this](const std::string& action,const std::string& fallback) {
+                if(action=="recording:start")return compositorRecording_.enabled()?compositorRecording_.label():stereoRecording_.label();
+                if(action=="recording:duration")return compositorRecording_.durationLabel();
+                if(action=="recording:status")return compositorRecording_.enabled()?compositorRecording_.status():stereoRecording_.status();
+                if(action=="recording:folder" && compositorRecording_.enabled())return std::string("Open final-output folder");
                 if(action=="vr:head-light")return std::string(shadowLight_.headFollowing()?"Head-following lighting: On":"Head-following lighting: Off");
                 if(action=="qr:calibrate")return std::string(qrCalibration_.running()?"Cancel QR calibration":"Calibrate QR code");
                 if(action=="qr:cube")return std::string(qrCalibration_.running()&&qrCalibration_.cubeMode()?"Cancel cube calibration":"Calibrate cube");
@@ -5682,6 +5732,9 @@ class Viewer {
                 return std::string(shareFailed_?"Action failed - check desktop":!shareActive_?"Start presentation on desktop":shareBusy_ || shareAck_<shareSequence_?"Updating presentation...":sharePerspective_?"Sharing desktop perspective":"Perspective paused");
             };
             sidebar.available=[this](const std::string& action) {
+                if(action=="recording:start")return !stereoRecording_.busy() && !compositorRecording_.busy();
+                if(action=="recording:duration")return compositorRecording_.enabled() && !compositorRecording_.busy();
+                if(action=="recording:status")return false;
                 if(action.starts_with("routing:"))return routingPanel_.available(action);
                 if(action=="qr:status" || action=="qr:cube-status")return false;
                 if(action=="qr:cube")return !qrCalibration_.running() || qrCalibration_.cubeMode();
@@ -5750,6 +5803,7 @@ class Viewer {
         representationLoading_.popup.surface.initialize();
         placementFailurePopup_.surface.initialize();
         gpuFrameTimer_.initialize();
+        gpuPassTiming_.initialize();
         if (witness_) witnessSurface_.initialize(makeDesktopProgram());
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_PROGRAM_POINT_SIZE);
@@ -5792,10 +5846,12 @@ class Viewer {
         suppressManipulationUntilRelease_=true;
     }
 
-    void pulse(size_t hand, float amplitude = 0.35F) {
+    void pulse(size_t hand, float amplitude = 0.35F,
+               const std::source_location origin=std::source_location::current()) {
         ++hapticRequests_[hand];
         hapticAmplitude_[hand]=amplitude;
-        if (witness_ || liveSocket_.enabled()) return;
+        const int diagnosticEvent=captureUiDiagnostics_.request(hand,amplitude,origin.line());
+        if (!physicalEffectsEnabled()) return;
         XrHapticActionInfo info{XR_TYPE_HAPTIC_ACTION_INFO};
         info.action = hapticAction_;
         info.subactionPath = handPaths_[hand];
@@ -5803,8 +5859,10 @@ class Viewer {
         vibration.duration = 30'000'000;
         vibration.frequency = XR_FREQUENCY_UNSPECIFIED;
         vibration.amplitude = amplitude;
+        const auto diagnosticStart=captureUiDiagnostics_.stamp();
         const XrResult result = xrApplyHapticFeedback(
             session_, &info, reinterpret_cast<const XrHapticBaseHeader*>(&vibration));
+        captureUiDiagnostics_.dispatched(diagnosticEvent,hand,diagnosticStart,result);
         if (XR_FAILED(result) && result != XR_SESSION_NOT_FOCUSED) {
             checkXr(instance_, result, "xrApplyHapticFeedback");
         }
@@ -6070,6 +6128,22 @@ class Viewer {
                 publishTrajectoryRequest("seek",trajectoryState_.frameIndex);
             return;
         }
+        if(requestedAction=="recording:duration") {compositorRecording_.toggleDuration();return;}
+        if(requestedAction=="recording:start") {
+            if(compositorRecording_.enabled()) {
+                if(!stereoRecording_.busy())compositorRecording_.start(
+                    "{\"session\":\""+nadoc_vr::scrywrite::visualJson(liveSession_)+"\",\"simulation_mode\":\""+nadoc_vr::scrywrite::visualJson(simulationPanel_.snapshot.mode)+
+                    "\",\"duration_seconds\":"+std::to_string(compositorRecording_.seconds())+",\"representation\":\""+std::string(representationName(glScene_->representation()))+"\",\"presentation\":"+
+                    nadoc_vr::livePresentationJson(manipulator_.transform(),normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters})+
+                    ",\"diagnostics_required\":true,\"submitted_frame_marker\":"+frameMarker_.json()+
+                    ",\"pose_journal\":"+poseJournal_.contextJson(liveSocketPath_)+"}");
+                return;
+            }
+            if(swapchains_.size()==2)stereoRecording_.start(swapchains_[0].width,swapchains_[0].height,
+                "{\"session\":\""+nadoc_vr::scrywrite::visualJson(liveSession_)+"\",\"simulation_mode\":\""+nadoc_vr::scrywrite::visualJson(simulationPanel_.snapshot.mode)+"\"}");
+            return;
+        }
+        if(requestedAction=="recording:folder") {if(compositorRecording_.enabled())compositorRecording_.openFolder();else stereoRecording_.openFolder();return;}
         const bool known=requestedAction=="options" || requestedAction=="tools" || requestedAction=="settings" ||
             requestedAction=="jobs" || requestedAction=="trajectory" || requestedAction=="desktop" || requestedAction=="recenter" ||
             requestedAction=="feedback:activate" || requestedAction=="vr:head-light" || requestedAction=="vr:exit" ||
@@ -6990,9 +7064,9 @@ class Viewer {
                 if(triggerClicked_[h]) {desktopPanel_.open=false;desktopPanel_.magnifying=false;desktopSurface_.hidePointer();break;}
             } else if(!pointerOwned)if(const auto uv=desktopPanel_.uv(hands_[h])) {
                 pointerOwned=true;desktopPanel_.pointer=*uv;
-                desktopSurface_.setPointer(*uv,!witness_ && !liveSocket_.enabled());
+                desktopSurface_.setPointer(*uv,physicalEffectsEnabled());
                 desktopPanel_.magnifying=triggerPartial_[h] && !triggerPressed_[h];
-                if(triggerClicked_[h] && !witness_ && !liveSocket_.enabled())desktopSurface_.click();
+                if(triggerClicked_[h] && physicalEffectsEnabled())desktopSurface_.click();
             }
         }
         return blocked;
@@ -7271,7 +7345,7 @@ class Viewer {
         dimensionPanel_.tool.draw(manipulator_.transform(),normalizationScale_,witnessObserverOrientation_,line,
             [&](const auto&... args){appendPlacedText(args...);});
         trajectoryPanel_.refresh(sidebarMenus_.menus,trajectoryState_);
-        sidebarMenus_.draw();
+        sidebarMenus_.draw(&captureUiDiagnostics_);
         routingPopup_.draw();
         updateDesktopFrame();
         appendThumbwheelGuides();
@@ -8215,6 +8289,12 @@ class Viewer {
         return liveSocket_.enabled() && liveMode_ != "inspect";
     }
 
+    bool physicalEffectsEnabled() const {
+        // Inspection/journaling observes real controllers. Suppress OS effects
+        // and haptics only when an explicit synthetic input provider owns them.
+        return !witness_ && !liveControlsEnabled();
+    }
+
     void neutralLiveInput(bool forgetPoses = true) {
         interruptSweepGesture();
         remotePanels_.cancel();
@@ -8308,6 +8388,8 @@ class Viewer {
             << ",\"startup\":{\"active\":" << (startup_.active?"true":"false")
             << ",\"percent\":" << startup_.percent << ",\"phase\":" << quote(startup_.phase)
             << ",\"detail\":" << quote(startup_.detail) << "}"
+            << ",\"presentation_restore\":{\"requested\":" << (initialPresentationRestore_?"true":"false")
+            << ",\"applied\":" << (initialPresentationRestoreApplied_?"true":"false") << "}"
             << ",\"menu\":" << quote(menuPageName())
             << ",\"remote_border\":{\"active\":" << (remotePanels_.active?"true":"false")
             << ",\"resizing\":" << (remotePanels_.active && remotePanels_.resizing?"true":"false")
@@ -8335,10 +8417,12 @@ class Viewer {
             out << quote(selectedOwnerTokens_[i]);
         }
         const auto moveCenter=glScene_?glScene_->ownerHandle(selectedOwnerTokens_,manipulator_.transform()):std::nullopt;
-        out << "],\"qr_calibration\":" << qrCalibration_.json() << ",\"room_floor\":" << roomFloor_.json() << ",\"menu_glass\":{\"enabled\":true,\"gray_opacity\":0.10,\"blur_radius_px\":15},\"view_tools\":{\"open\":" << (viewTools_.open?"true":"false") << ",\"waiting\":" << (viewTools_.waiting?"true":"false")
+        out << "],\"gpu_pass_timing\":" << gpuPassTiming_.json() << ",\"frame_identity\":" << frameMarker_.json() << ",\"pose_journal\":" << poseJournal_.json() << ",\"recording\":" << (compositorRecording_.enabled()?compositorRecording_.json():stereoRecording_.json()) << ",\"qr_calibration\":" << qrCalibration_.json() << ",\"room_floor\":" << roomFloor_.json() << ",\"menu_glass\":{\"enabled\":true,\"gray_opacity\":0.10,\"blur_radius_px\":15},\"view_tools\":{\"open\":" << (viewTools_.open?"true":"false") << ",\"waiting\":" << (viewTools_.waiting?"true":"false")
             << ",\"close_hover\":[" << (viewTools_.closeHover[0]?"true":"false") << ',' << (viewTools_.closeHover[1]?"true":"false") << "]"
             << ",\"following\":" << ((viewTools_.open && !viewTools_.placement.worldDocked())?"true":"false")
             << ",\"sequence\":" << viewTools_.sequence << ",\"ack_sequence\":" << viewTools_.acknowledged << ",\"version\":" << viewTools_.version << ",\"flags\":" << viewTools_.flags << ",\"triangles\":" << viewTools_.triangles.size()/3
+            << ",\"instance_groups\":" << viewTools_.instanceGroupsJson()
+            << ",\"opaque_shader\":" << viewTools_.opaqueShaderJson()
             << ",\"parse_ms\":" << viewTools_.parseMs << ",\"upload_ms\":" << viewTools_.uploadMs << ",\"instances\":" << viewTools_.instanceCount() << ",\"lines\":" << viewTools_.lines.size()/2 << ",\"sprites\":" << viewTools_.sprites.size() << ",\"hover\":[" << viewTools_.hover[0] << ',' << viewTools_.hover[1] << "],\"items\":[";
         for(size_t i=0;i<VRViewTools::keys.size();++i){if(i)out<<',';out<<"{\"key\":"<<quote(VRViewTools::keys[i])<<",\"active\":"<<((viewTools_.flags&(1<<(i<7?i:i+1)))?"true":"false")<<",\"center\":"<<point(viewTools_.world(VRViewTools::cell(i)))<<'}';}
         out << "]}";
@@ -8660,7 +8744,20 @@ class Viewer {
         auto end = [&]() { if (in >> extra) throw std::runtime_error("trailing arguments"); };
         auto hand = [&]() { int h = -1; if (!(in >> h) || h < 0 || h > 1) throw std::runtime_error("invalid hand"); return size_t(h); };
         auto number = [&]() { float v = 0; if (!(in >> v) || !std::isfinite(v) || std::abs(v) > 100.0F) throw std::runtime_error("invalid finite number"); return v; };
-        if (operation == "scene_visibility") {
+        if (operation == "pose_journal") {
+            std::string verb,requestText;
+            if(!(in >> verb >> requestText))throw std::runtime_error("pose_journal requires verb and request");
+            const auto request=nadoc_vr::PoseJournal::parseRequest(requestText);
+            if(verb=="arm") {
+                double seconds=0;if(!(in>>seconds))throw std::runtime_error("pose_journal arm requires maximum seconds");end();
+                poseJournal_.arm(request,seconds);
+            } else if(verb=="window") {
+                int64_t start=0,finish=0;if(!(in>>start>>finish))throw std::runtime_error("pose_journal window requires monotonic start and end");end();
+                poseJournal_.window(request,start,finish);
+            } else if(verb=="flush") {end();poseJournal_.flush(request);}
+            else if(verb=="cancel") {end();poseJournal_.cancel(request);}
+            else throw std::runtime_error("Unknown pose_journal verb");
+        } else if (operation == "scene_visibility") {
             std::string visibility; in >> visibility; end();
             if (visibility != "normal" && visibility != "hidden") throw std::runtime_error("invalid scene visibility");
             liveSceneHidden_ = visibility == "hidden";
@@ -8889,10 +8986,17 @@ class Viewer {
             XrActionStatePose poseState{XR_TYPE_ACTION_STATE_POSE};
             checkXr(instance_, xrGetActionStatePose(session_, &getInfo, &poseState),
                     "xrGetActionStatePose");
+            if(auto* journal=poseJournal_.frame())journal->hands[hand].poseActionActive=poseState.isActive;
             if (poseState.isActive) {
                 XrSpaceLocation location{XR_TYPE_SPACE_LOCATION};
+                if(auto* journal=poseJournal_.frame())journal->hands[hand].locateStart=poseJournal_.stamp();
                 checkXr(instance_, xrLocateSpace(
                     handSpaces_[hand], space_, displayTime, &location), "xrLocateSpace(hand)");
+                if(auto* journal=poseJournal_.frame()) {
+                    auto& handRecord=journal->hands[hand];handRecord.locateEnd=poseJournal_.stamp();
+                    handRecord.queried=true;handRecord.locationFlags=location.locationFlags;
+                    handRecord.runtime=nadoc_vr::PoseJournal::pose(location.pose.position,location.pose.orientation);
+                }
                 const XrSpaceLocationFlags valid = XR_SPACE_LOCATION_POSITION_VALID_BIT |
                                                    XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
                 if ((location.locationFlags & valid) == valid) {
@@ -8978,7 +9082,7 @@ class Viewer {
             if(hand==0)selectionWheel_.input(trackpadPressed,navigationAxis,hands_[0],
                 !routingPopup_.anyOpen() && !componentGallery_.active && !toolShell_.executionPending() && !moveAwaitRefresh_ && sessionState_==XR_SESSION_STATE_FOCUSED && (liveControlsEnabled() || trackpadAxis.isActive),
                 [&](const char* level){if(movePanel_.active)cancelMove();publishSelectionLevel(level);},[&](float strength){pulse(0,strength);});
-            const bool touching = !witness_ && !liveSocket_.enabled() && trackpadTouch.isActive && trackpadTouch.currentState &&
+            const bool touching = physicalEffectsEnabled() && trackpadTouch.isActive && trackpadTouch.currentState &&
                                   trackpadAxis.isActive;
             const bool desktopActive = [&] {
                 const auto local=desktopPanel_.hit(hands_[hand]);
@@ -9806,6 +9910,14 @@ class Viewer {
                 -normalizationCenter_*normalizationScale_+glm::vec3(0,0,-kViewDistanceMeters),
                 sourceAxes_);
         }
+        if(initialPresentationRestore_) {
+            // Apply after normal stable tracking/startup placement, so that it
+            // cannot subsequently overwrite the recovered source-space pose.
+            manipulator_.restorePresentation(initialPresentationRestore_->forNormalization(
+                normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters}));
+            initialPresentationRestoreApplied_=true;
+            std::cout << "NADOC presentation state restored (physical input unchanged)" << std::endl;
+        }
         initialRoomPlacementRequested_=false;
         shadowLight_.anchor(headOrientation);
         if (witness_) witnessShadowLight_.anchor(witness_->input().head.orientation);
@@ -9846,7 +9958,8 @@ class Viewer {
         glDisable(GL_STENCIL_TEST);
     }
 
-    void renderMenuSurface(const glm::mat4& viewProjection) {
+    void renderMenuSurface(const glm::mat4& viewProjection,int diagnosticEye=-1) {
+        nadoc_vr::CaptureUiDiagnostics::Scope menuTiming(&captureUiDiagnostics_,nadoc_vr::CaptureUiDiagnostics::Kind::menuDraw,diagnosticEye);
         componentGallery_.render(viewProjection);
         solidWheels_.render(viewProjection);
         controllerPrompt_.draw(promptSurface_);
@@ -9855,7 +9968,8 @@ class Viewer {
             simulationPanel_.mapper.prompt.drawGradients(promptSurface_,simulation_study::paletteColour,simulationPanel_.snapshot.scale.palette);
             promptSurface_.render(viewProjection);
         }
-        menuGlass_.capture();
+        { nadoc_vr::CaptureUiDiagnostics::Scope copyTiming(&captureUiDiagnostics_,nadoc_vr::CaptureUiDiagnostics::Kind::backdropCopy,diagnosticEye);
+          menuGlass_.capture(); }
         sidebarMenus_.render(viewProjection);
         routingPopup_.render(viewProjection);
         if(latticeOpen_) latticePanelSurface_.render(viewProjection,latticePlacement_,kLatticePanelBounds);
@@ -9888,7 +10002,7 @@ class Viewer {
         auto arc=bendPanel_.arc;
         if(bendPanel_.twist)arc.angle=glm::radians(float(toolConfig_.twistTotalDegrees()));
         glScene_->setBendPointArc(bendPointPreviewActive()?std::optional{arc}:std::nullopt,bendPanel_.twist);
-        if(viewTools_.overrideScene()) {glScene_->bindDisplayLighting(viewTools_.program);viewTools_.renderScene(vp,model,witnessObserverOrientation_);if(!guides.empty())glScene_->renderGuides(vp,guides);}
+        if(viewTools_.overrideScene()) {viewTools_.bindSceneLighting([&](GLuint program){glScene_->bindDisplayLighting(program);});viewTools_.renderScene(vp,model,witnessObserverOrientation_);if(!guides.empty())glScene_->renderGuides(vp,guides);}
         else glScene_->renderVolumes(vp,model,guides,ids,volumePanel_.entries,representationLoading_.pending && representationLoading_.lightweight);
         referenceModels_.render(vp,model);
     }
@@ -9948,6 +10062,7 @@ class Viewer {
         glClear(clearMask);
         const glm::mat4 projection = projectionFromFov(view.fov, kNearMeters, kFarMeters);
         const glm::mat4 viewProjection = projection * viewFromPose(view.pose);
+        poseJournal_.eye(index,swapchain.width,swapchain.height,imageIndex,view,manipulator_.transform());
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::reference_grid);
         roomFloor_.render(viewProjection);
         qrCalibration_.render(viewProjection,witnessObserverPosition_,witnessObserverOrientation_);
@@ -9967,7 +10082,7 @@ class Viewer {
         }
         if (componentGallery_.active || latticeOpen_ || sidebarMenus_.anyOpen() || viewTools_.open || desktopPanel_.open) {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
-            renderMenuSurface(viewProjection);
+            renderMenuSurface(viewProjection,int(index));
         }
         if (witness_) {
             setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::overlay);
@@ -9994,7 +10109,10 @@ class Viewer {
         startup_.render(viewProjection, head);
         representationLoading_.render(viewProjection, head);
         placementFailurePopup_.render(viewProjection, head, false, true);
+        poseJournal_.frameIdentity(index,frameMarker_.draw(index,swapchain.width,swapchain.height,liveFrame_,
+            captureIds,spectatorClassificationEnabled(),unsigned(nadoc_vr::SpectatorRenderClass::overlay),poseJournal_.collecting()));
         traceRender("eye_draw");
+        stereoRecording_.eye(index,view,swapchain.width,swapchain.height);
         captureLiveEye(index, view, swapchain.width, swapchain.height);
         liveMeasure_.readEye(index, swapchain.width, swapchain.height);
         if (captureIds) {
@@ -10488,15 +10606,39 @@ class Viewer {
         witnessSurface_.endCapture();
     }
 
+    void journalRenderedState() {
+        auto* record=poseJournal_.frame();if(!record)return;
+        record->commandSequence=liveCommandSequence_;
+        record->model=nadoc_vr::PoseJournal::matrix(manipulator_.transform());
+        record->sourceCenter={normalizationCenter_.x,normalizationCenter_.y,normalizationCenter_.z};
+        record->normalizationScale=normalizationScale_;record->offset={0,0,-kViewDistanceMeters};
+        record->sceneRevision=sceneRefresh_.revision();record->visualizationSequence=visualizationSequence_;
+        record->coordinateSequence=coordinateSequence_;record->viewToolsVersion=viewTools_.version;
+        record->viewToolsSequence=viewTools_.sequence;record->viewToolsFlags=viewTools_.flags;
+        record->viewToolsOpen=viewTools_.open;record->desktopOpen=desktopPanel_.open;
+        record->motionDetailReduced=glScene_->motionDetailReduced();record->sceneHidden=liveSceneHidden_;
+        record->manipulationMode=static_cast<unsigned>(manipulator_.mode());
+        std::snprintf(record->representation.data(),record->representation.size(),"%s",representationName(glScene_->representation()));
+        for(size_t h=0;h<2;++h) {
+            record->menuOpen[h]=sidebarMenus_.menus[h].open;
+            record->hands[h].applied=nadoc_vr::PoseJournal::pose(hands_[h].position,hands_[h].orientation);
+            record->hands[h].valid=hands_[h].valid;record->hands[h].grip=hands_[h].pressed;
+            record->hands[h].provider=liveControlsEnabled()?1:witness_?2:0;
+        }
+    }
+
     void renderFrame() {
         renderTrace_.begin(liveSocket_.enabled());
         frameAudit_.mark("render_setup");
         XrFrameWaitInfo waitInfo{XR_TYPE_FRAME_WAIT_INFO};
         XrFrameState frameState{XR_TYPE_FRAME_STATE};
+        const auto journalFrameStart=poseJournal_.stamp();
         checkXr(instance_, xrWaitFrame(session_, &waitInfo, &frameState), "xrWaitFrame");
         traceRender("xr_wait");
         ++liveFrame_;
         currentPredictedDisplayTime_ = frameState.predictedDisplayTime;
+        poseJournal_.begin(liveFrame_,frameState.predictedDisplayTime,frameState.predictedDisplayPeriod,frameState.shouldRender,journalFrameStart);
+        captureUiDiagnostics_.begin(poseJournal_.frame()?&poseJournal_.frame()->captureUi:nullptr);
         roomFloor_.update(session_,space_,frameState.predictedDisplayTime);
         qrCalibration_.update(roomFloor_.located?std::optional<glm::mat4>(roomFloor_.stageToLocal):std::nullopt);
         if(const auto position=qrCalibration_.takePosition()) {
@@ -10508,7 +10650,13 @@ class Viewer {
         const auto frameStarted = std::chrono::steady_clock::now();
         XrFrameBeginInfo beginInfo{XR_TYPE_FRAME_BEGIN_INFO};
         checkXr(instance_, xrBeginFrame(session_, &beginInfo), "xrBeginFrame");
-        if(!startup_.active && !placementIntegrity_.blocked()) syncActions(frameState.predictedDisplayTime);
+        if(!startup_.active && !placementIntegrity_.blocked()) {
+            if(auto* journal=poseJournal_.frame())journal->actionsStart=poseJournal_.stamp();
+            syncActions(frameState.predictedDisplayTime);
+            if(auto* journal=poseJournal_.frame())journal->actionsEnd=poseJournal_.stamp();
+        }
+        for(size_t h=0;h<2;++h)
+            captureUiDiagnostics_.sidebar(h,sidebarMenus_.menus[h].open,sidebarMenus_.menus[h].hovered);
         traceRender("input");
         const auto inputFinished = std::chrono::steady_clock::now();
         desktopSurface_.update(desktopPanel_.open);
@@ -10529,10 +10677,14 @@ class Viewer {
             locateInfo.space = space_;
             XrViewState viewState{XR_TYPE_VIEW_STATE};
             uint32_t viewCount = 0;
+            if(auto* journal=poseJournal_.frame())journal->locateViewsStart=poseJournal_.stamp();
             checkXr(instance_, xrLocateViews(
                 session_, &locateInfo, &viewState, static_cast<uint32_t>(views_.size()),
                 &viewCount, views_.data()), "xrLocateViews");
             currentViewStateFlags_ = viewState.viewStateFlags;
+            if(auto* journal=poseJournal_.frame()) {
+                journal->locateViewsEnd=poseJournal_.stamp();journal->viewFlags=viewState.viewStateFlags;
+            }
             const bool completeViewSet = viewCount == views_.size();
             const bool positionValid = completeViewSet &&
                 (viewState.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) != 0;
@@ -10571,6 +10723,8 @@ class Viewer {
                     headOrientation, validViewSet && orientationTracked);
                 if (frameState.shouldRender && validViewSet) {
                     frameAudit_.mark("tracking_ui");
+                    stereoRecording_.begin(liveFrame_,frameState.predictedDisplayTime,frameState.predictedDisplayPeriod,
+                        sidebarMenus_.menus[0].open,sidebarMenus_.menus[1].open,representationName(glScene_->representation()));
                     gpuFrameTimer_.begin(sidebarMenus_.anyOpen());
                     if (witness_) {
                         const auto actorKeyLight = witnessShadowLight_.update(
@@ -10578,12 +10732,17 @@ class Viewer {
                         if(!placementIntegrity_.blocked())renderSceneShadow(actorKeyLight);
                         captureWitnessView();
                     }
+                    gpuPassTiming_.begin(liveFrame_,sidebarMenus_.anyOpen(),viewTools_.version,viewTools_.flags,viewTools_.inspectionLayout()?2:1);
                     if(!placementIntegrity_.blocked() && !representationLoading_.lightweight)renderSceneShadow(keyLight);
+                    gpuPassTiming_.afterShadow(!placementIntegrity_.blocked() && !representationLoading_.lightweight,glScene_->motionDetailReduced());
                     traceRender("shadow");
+                    journalRenderedState();
                     for (uint32_t offset = 0; offset < viewCount; ++offset) {
                         const auto i=nadoc_vr::spectatorRenderViewIndex(mirrorEye_,offset,viewCount);
                         renderView(i, views_[i], layerViews[i]);
+                        gpuPassTiming_.afterEye(i);
                     }
+                    gpuPassTiming_.end();
                     gpuFrameTimer_.end();
                     layer.space = space_;
                     layer.viewCount = viewCount;
@@ -10619,7 +10778,12 @@ class Viewer {
         const auto sceneFinished = std::chrono::steady_clock::now();
         auditSubmitted_=layerCount>0; auditPeriod_=double(frameState.predictedDisplayPeriod)/1e6;
         frameAudit_.mark("submit_prepare");
-        checkXr(instance_, xrEndFrame(session_, &endInfo), "xrEndFrame");
+        if(auto* journal=poseJournal_.frame())journal->endFrameStart=poseJournal_.stamp();
+        const auto endFrameResult=xrEndFrame(session_, &endInfo);
+        captureUiDiagnostics_.end();
+        if(poseJournal_.frame())poseJournal_.finish(endFrameResult,layerCount>0);
+        checkXr(instance_,endFrameResult,"xrEndFrame");
+        stereoRecording_.submitted(layerCount>0);
         traceRender("xr_end");
         const auto endFinished = std::chrono::steady_clock::now();
         representationLoading_.frameTiming(std::chrono::duration<double,std::milli>(endFinished-frameStarted).count(),double(frameState.predictedDisplayPeriod)/1e6);
@@ -10639,6 +10803,7 @@ class Viewer {
                       << " query_skips=" << gpuFrameTimer_.skipped()
                       << std::endl;
         }
+        gpuPassTiming_.collect();
         traceRender("gpu_results");
         if(layerCount>0 && startup_.active && startup_.completedAt>=0) {
             startup_.percent=100;startup_.detail="Part ready";
@@ -10952,6 +11117,9 @@ class Viewer {
             loadTrace.begin(liveSocket_.enabled());
             glfwPollEvents();trace("events_glfw");
             pollXrEvents();trace("events_xr");
+            stereoRecording_.poll();
+            compositorRecording_.poll();
+            poseJournal_.poll();
             pollLive();trace("events_live");
             placementIntegrity_.poll(eventPath_);
             if(placementIntegrity_.blocked()) {
@@ -11003,7 +11171,7 @@ class Viewer {
     std::array<bool, 2> liveMenuPressed_{}, liveTrackpadPressed_{};
     std::array<glm::vec2,2> liveTrackpadAxis_{};
     std::array<float,2> liveTriggerValues_{};
-    std::string liveSession_, liveMode_ = "inspect";
+    std::string liveSession_, liveSocketPath_, liveMode_ = "inspect";
     std::array<LiveEyeCapture, 2> liveEyes_{};
     GLuint liveObjectIdTexture_ = 0;
     int liveObjectIdWidth_ = 0, liveObjectIdHeight_ = 0;
@@ -11064,6 +11232,8 @@ class Viewer {
     bool initialScenePlacementEnabled_ = false;
     bool initialScenePlacementRequested_ = false;
     bool initialScenePlacementApplied_ = false;
+    std::optional<nadoc_vr::SavedPresentation> initialPresentationRestore_;
+    bool initialPresentationRestoreApplied_ = false;
     nadoc_vr::SceneViewPlacement sceneViewPlacement_;
     nadoc_vr::SpectatorPlacementGate initialPlacementGate_;
     glm::vec3 initialPlacementCandidatePosition_{};
@@ -11222,6 +11392,10 @@ class Viewer {
     std::array<std::string,2> liveInputOwner_{"none","none"};
     bool liveSceneHidden_ = false;
     nadoc_vr::LiveMirrorCapture liveMirrorCapture_;
+    nadoc_vr::StereoRecording stereoRecording_;
+    nadoc_vr::CompositorRecording compositorRecording_;
+    nadoc_vr::PoseJournal poseJournal_;
+    nadoc_vr::SubmittedFrameMarker frameMarker_;
     nadoc_vr::ControllerPaths controllerPaths_;
     std::optional<size_t> controllerContactWheel_;
     std::vector<Vertex> controllerPathGuides_;
@@ -11297,6 +11471,8 @@ class Viewer {
     nadoc_vr::LoadingFrameTrace renderTrace_{"VR_RENDER_TRACE"};
     void traceRender(const char* phase){frameAudit_.mark(phase);renderTrace_.mark(phase,representationLoading_.percent,representationName(representationLoading_.target));}
     GpuFrameTimer gpuFrameTimer_;
+    nadoc_vr::GpuPassTiming gpuPassTiming_;
+    nadoc_vr::CaptureUiDiagnostics captureUiDiagnostics_;
     bool recenterRequested_ = false;
     size_t recenterHand_ = 0;
     XrSessionState sessionState_ = XR_SESSION_STATE_UNKNOWN;
@@ -11391,6 +11567,8 @@ int main(int argc, char** argv) {
                      "[--witness-captures <directory>] "
                      "[--witness-visual-expect <directory>] "
                      "[--witness-exit <on|off>] "
+                     "[--presentation-state <saved-presentation.txt>] "
+                     "[--pose-journal <private-output-directory>] [--submitted-frame-marker on|off|recording] "
                      "[--scrywrite-live <private-socket-path>] "
                      "[--scrywrite-live-mode <inspect|control|transactions>]\n";
         return 2;
@@ -11406,6 +11584,9 @@ int main(int argc, char** argv) {
     std::string trajectoryPath;
     std::string coordinatePath;
     std::string loadingStatusPath;
+    std::string presentationStatePath;
+    std::string poseJournalDirectory;
+    std::string submittedFrameMarker="off";
     std::string liveSocketPath, liveMode = "inspect";
     std::string witnessPath;
     std::string mirrorDiagnosticsPath;
@@ -11456,6 +11637,9 @@ int main(int argc, char** argv) {
         else if (option == "--visualization") visualizationPath = argv[index + 1];
         else if (option == "--trajectory") trajectoryPath = argv[index + 1];
         else if (option == "--coordinates") coordinatePath = argv[index + 1];
+        else if (option == "--presentation-state") presentationStatePath = argv[index + 1];
+        else if (option == "--pose-journal") poseJournalDirectory = argv[index + 1];
+        else if (option == "--submitted-frame-marker") submittedFrameMarker = argv[index + 1];
         else if (option == "--scrywrite-live") liveSocketPath = argv[index + 1];
         else if (option == "--scrywrite-live-mode") liveMode = argv[index + 1];
         else if (option == "--scrywrite-witness") witnessPath = argv[index + 1];
@@ -11613,6 +11797,8 @@ int main(int argc, char** argv) {
         std::cout << "VR_METRIC event=process_start mode=openxr_viewer rss_mib="
                   << currentResidentMiB() << std::endl;
         SceneData initialScene;
+        std::optional<nadoc_vr::SavedPresentation> savedPresentation;
+        if(!presentationStatePath.empty())savedPresentation=nadoc_vr::loadSavedPresentation(presentationStatePath);
         if(loadingStatusPath.empty())initialScene=loadScene(argv[1]);
         else {initialScene.emptyAuthoring=true;initialScene.available.fill(true);}
         const auto startupOwners=selectedOwnerTokens;
@@ -11629,6 +11815,9 @@ int main(int argc, char** argv) {
             sceneViewPlacement,
             mirrorDiagnosticsPath, witnessCaptureDirectory,
             witnessVisualExpectationDirectory, exitOnWitnessComplete, liveSocketPath, liveMode);
+        if(!poseJournalDirectory.empty())viewer.enablePoseJournal(poseJournalDirectory);
+        viewer.configureSubmittedFrameMarker(submittedFrameMarker);
+        if(savedPresentation)viewer.restorePresentationOnStartup(*savedPresentation);
         if(!loadingStatusPath.empty())viewer.beginStartup(argv[1],loadingStatusPath,startupOwners,startupKind);
         if(componentGallery)viewer.enableComponentGallery(galleryButtons,galleryCards,galleryLists);
         viewer.loadControllerPath(controllerPath);
