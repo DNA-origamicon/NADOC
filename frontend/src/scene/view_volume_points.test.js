@@ -3,6 +3,12 @@ import { withSkippedColumnPoints } from './view_volume_points.js'
 import { resolveViewVolumeLayers } from './view_volumes.js'
 import { clippedCylinderRuns } from './helix_renderer.js'
 
+it('returns unchanged points without reading their coordinates when no deleted columns need interpolation', () => {
+  const points = [{ key: 'h:0', get position() { throw new Error('unused coordinate read') } }]
+  expect(withSkippedColumnPoints(points, [])).toBe(points)
+  expect(withSkippedColumnPoints(points, [{ id: 'h', loop_skips: [{ bp_index: 1, delta: 1 }] }])).toBe(points)
+})
+
 it('suppresses isolated cylinder slices at deleted columns inside a volume', () => {
   const points = [24, 25, 26, 28, 29, 30, 31].flatMap(bp => [-1, 1].map(x => ({ key: `h:${bp}`, position: [x, 0, bp * .334] })))
   const helices = [{ id: 'h', loop_skips: [{ bp_index: 27, delta: -1 }] }]

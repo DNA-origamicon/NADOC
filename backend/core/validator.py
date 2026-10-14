@@ -144,15 +144,18 @@ def validate_design(design: Design) -> ValidationReport:
         )
 
     # Shared sequence accounting includes insertions and the binder/overhang contract.
-    from backend.core.sequences import strand_sequence_length
+    from backend.core.sequences import _build_loop_skip_map, strand_sequence_length
     from backend.core.topology_integrity import domain_order_errors, occupancy_errors, junction_errors
 
     for message in domain_order_errors(design) + occupancy_errors(design) + junction_errors(design):
         report.results.append(ValidationResult(False, message))
+    loop_skip_map = None
     for strand in design.strands:
         if strand.sequence is None or strand.is_reference or strand.strand_type == StrandType.LINKER:
             continue
-        expected_len = strand_sequence_length(design, strand)
+        if loop_skip_map is None:
+            loop_skip_map = _build_loop_skip_map(design)
+        expected_len = strand_sequence_length(design, strand, loop_skip_map=loop_skip_map)
         if len(strand.sequence) != expected_len:
             report.results.append(ValidationResult(False,
                 f"Strand {strand.id!r} sequence length {len(strand.sequence)} != expected {expected_len}."))

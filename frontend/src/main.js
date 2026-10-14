@@ -5218,19 +5218,16 @@ async function main() {
     },
   })
 
-  // Sidebar "Overhangs" list — grouped per part, two-way synced with the 3D
-  // overhang-selection tool via the shared assemblyOverhangSelection store slice.
+  const assemblyDisplayDesigns = {
+    getInstanceDesign: (id, key) => assemblyRenderer.getInstanceDesign?.(id, key) ?? null,
+    fetchInstanceDesign: (id) => api.getInstanceDesign(id),
+    waitForAssemblyReady: (assembly, options) => assemblyRenderer.whenReady?.(assembly, options),
+  }
   const assemblyOverhangListPanel = initAssemblyOverhangListPanel({
-    store,
-    getInstanceDesign: (id) => assemblyRenderer.getInstanceDesign?.(id) ?? null,
-    fetchInstanceDesign: (id) => api.getInstanceDesign(id),
+    store, ...assemblyDisplayDesigns,
   })
-  // Cross-part "Overhang Connections" panel (A/B dropdowns + type picker + create),
-  // mirroring the per-part panel; A/B two-way synced with the 3D overhang tool.
   const assemblyOverhangConnectionsPanel = initAssemblyOverhangConnectionsPanel({
-    store,
-    getInstanceDesign: (id) => assemblyRenderer.getInstanceDesign?.(id) ?? null,
-    fetchInstanceDesign: (id) => api.getInstanceDesign(id),
+    store, ...assemblyDisplayDesigns,
   })
 
   // ── Library panel (welcome screen) ───────────────────────────────────────────
@@ -5718,6 +5715,7 @@ async function main() {
   })
 
   clusterPanel = initClusterPanel(store, {
+    ...assemblyDisplayDesigns,
     onAssemblyClusterClick: (instanceId, clusterId) => {
       if (!instanceId || !clusterId) {
         _selectedAssemblyCluster = null
@@ -5780,7 +5778,7 @@ async function main() {
     const instChanged = newState.currentAssembly !== prevState.currentAssembly
     if (!asmChanged && !instChanged) return
     if (newState.assemblyActive) {
-      clusterPanel?.setAssemblyMode(newState.currentAssembly?.instances ?? [])
+      clusterPanel?.setAssemblyMode(newState.currentAssembly)
     } else if (asmChanged) {
       clusterPanel?.clearAssemblyMode()
     }
@@ -7230,7 +7228,7 @@ async function main() {
     syncBadge: _syncBadge,
   })
 
-  initDesignReadinessHost({ store, api, onRestored: _hideWelcome, onSimulate: () => _leftSidebar?.selectTab('dynamics') })
+  initDesignReadinessHost({ store, api, waitForAssemblyReady: assemblyDisplayDesigns.waitForAssemblyReady, onRestored: _hideWelcome, onSimulate: () => _leftSidebar?.selectTab('dynamics') })
 
   // ── Run the boot action for a New/Open-spawned tab (?new / ?open) ────────────
   // This tab owns a fresh ?doc=<id>, so the action targets its own document.

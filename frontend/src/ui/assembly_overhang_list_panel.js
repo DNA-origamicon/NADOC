@@ -19,6 +19,7 @@
  */
 
 import { initInstanceDesignCache } from './assembly_instance_designs.js'
+import { assemblyOverhangPanelVisible, assemblyOverhangPanelInputs, sameAssemblyOverhangInputs } from './assembly_overhang_panel_state.js'
 
 const _LIST_ID = 'asm-oh-list'
 
@@ -45,11 +46,13 @@ export function selectionClass(index) {
  */
 export function groupOverhangs(assembly, resolveDesign) {
   const out = []
+  const byDesign = new Map()
   for (const inst of assembly?.instances ?? []) {
     const design = resolveDesign?.(inst) ?? null
-    const overhangs = [...(design?.overhangs ?? [])]
+    if (!byDesign.has(design)) byDesign.set(design, (design?.overhangs ?? [])
       .map(o => ({ id: o.id, label: o.label || o.id, endTag: endTagFor(o.id) }))
-      .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true })))
+    const overhangs = byDesign.get(design)
     out.push({ instanceId: inst.id, name: inst.name || inst.id, overhangs })
   }
   return out
@@ -72,11 +75,13 @@ function _escape(s) {
  *        sources are spilled to disk on import, so instances are file-backed and carry
  *        no client-side `source.design`. Mirrors the Overhangs Manager popup's cache.
  */
-export function initAssemblyOverhangListPanel({ store, getInstanceDesign, fetchInstanceDesign } = {}) {
+export function initAssemblyOverhangListPanel({ store, getInstanceDesign, fetchInstanceDesign, waitForAssemblyReady } = {}) {
   const _collapsed = new Set()          // instanceIds the user collapsed
-  const _designs = initInstanceDesignCache({ getInstanceDesign, fetchInstanceDesign })
+  const _designs = initInstanceDesignCache({ getInstanceDesign, fetchInstanceDesign, waitForAssemblyReady })
   let _prevAssembly = undefined
   let _prevSel = undefined
+  let _renderedInputs = null
+  let _renderedSelection = null
 
   const _listEl = () => document.getElementById(_LIST_ID)
   const _assembly = () => store?.getState()?.currentAssembly ?? null
@@ -100,14 +105,22 @@ export function initAssemblyOverhangListPanel({ store, getInstanceDesign, fetchI
     store.setState({ assemblyOverhangSelection: next })
   }
 
-  function rebuild() {
+  function rebuild(force = false) {
     const el = _listEl()
-    if (!el) return
+    if (!assemblyOverhangPanelVisible(el)) return
     const assembly = _assembly()
-    const groups = groupOverhangs(assembly, _resolveDesign)
+    const inputs = assemblyOverhangPanelInputs(assembly, _resolveDesign)
     // Kick an async fetch for any not-yet-resolvable instance (file-backed parts
     // before the renderer cache is warm); it re-renders when designs arrive.
     _designs.ensure(assembly, () => { if (assembly === _assembly()) rebuild() })
+    if (!force && sameAssemblyOverhangInputs(_renderedInputs, inputs)) {
+      refreshSelection()
+      return
+    }
+    _renderedInputs = inputs
+    _renderedSelection = null
+    const byId = new Map(inputs.rows.map(row => [row.id, row.design]))
+    const groups = groupOverhangs(assembly, inst => byId.get(inst.id))
     if (groups.length === 0) {
       el.innerHTML = '<div class="asm-oh-empty">No parts in this assembly.</div>'
       return
@@ -139,7 +152,8 @@ export function initAssemblyOverhangListPanel({ store, getInstanceDesign, fetchI
 
   function refreshSelection() {
     const el = _listEl()
-    if (!el) return
+    if (!assemblyOverhangPanelVisible(el) || _renderedSelection === _selection()) return
+    _renderedSelection = _selection()
     for (const row of el.querySelectorAll('.ohc-list-row')) {
       const idx = _selIndex(row.dataset.instanceId, row.dataset.overhangId)
       row.classList.remove('ct-selected-a', 'ct-selected-b', 'is-selected')
@@ -154,7 +168,7 @@ export function initAssemblyOverhangListPanel({ store, getInstanceDesign, fetchI
       const id = header.dataset.instanceId
       if (_collapsed.has(id)) _collapsed.delete(id)
       else _collapsed.add(id)
-      rebuild()
+      rebuild(true)
       return
     }
     const row = ev.target.closest('.ohc-list-row')
@@ -167,7 +181,7 @@ export function initAssemblyOverhangListPanel({ store, getInstanceDesign, fetchI
   const el = _listEl()
   if (el) el.addEventListener('click', _onClick)
 
-  store?.subscribe?.((s) => {
+  const unsubscribe = store?.subscribe?.((s) => {
     if (s.currentAssembly !== _prevAssembly) {
       // currentAssembly ref changes on every assembly mutation — prune caches to
       // the live instance set (keep resolved designs; don't flash+refetch).
@@ -180,6 +194,13 @@ export function initAssemblyOverhangListPanel({ store, getInstanceDesign, fetchI
       refreshSelection()
     }
   })
+  const onSidebar = () => rebuild()
+  window.addEventListener('nadoc:right-tab-change', onSidebar)
 
-  return { rebuild, refreshSelection }
+  return { rebuild, refreshSelection, destroy() {
+    unsubscribe?.()
+    window.removeEventListener('nadoc:right-tab-change', onSidebar)
+    el?.removeEventListener('click', _onClick)
+    _designs.prune([])
+  } }
 }

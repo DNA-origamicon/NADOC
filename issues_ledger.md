@@ -122,6 +122,7 @@ historical only and should move to `issues_ledger_archive.md` during the next ar
 | 11 | **ISSUE-1** Context-menu consolidation remains a large multi-phase UX program. | UX / debt | large | decisions banked |
 | 12 | **ISSUE-59** Creating an all-helix cluster drops the lattice placement cluster and produces a saved design that cannot reload. | persistence / cluster correctness | triage | no |
 | 13 | **ISSUE-60** Extrusion into fresh cells leaves new helices outside the default placement cluster; moving that cluster moves only the original cells. | geometry / cluster correctness | triage | no |
+| 14 | **ISSUE-76** Assembly cold loading and Full frame rates remain costly; validated prepared CG switches are fast, but load/GPU targets remain unmet. | performance / responsiveness | medium | no; load/FPS targets unmet |
 | done | ~~**ISSUE-16**~~ ✅ FIXED — all relevant `eigsh()` calls now pass deterministic `_eigsh_v0(...)`; focused verification still owed before archival. | reproducibility | — | — |
 
 ISSUE-8 and ISSUE-11 remain decision-gated. Closed ISSUE-9/14/15/16/17 belong in the archive, not in
@@ -1468,3 +1469,34 @@ record: `.development-artifacts/build-animation/sweep-validation.json`.
 - [x] Order popup controls first, matching their visual foreground ownership.
 - [x] Regression sends actual rays to all ten digit centers through SidebarMenu.
 - Failed live evidence: `.development-artifacts/vr-trajectory-loop-20261012/initial/`.
+
+## ISSUE-75 — Selecting assembly parts writes animations and rebuilds large Full assemblies (2026-10-13, FIXED)
+
+- Repro: open the seven-part native Benchy, select previously unanimated parts,
+  and wait. A hidden animation panel seeds a default animation by PATCHing the
+  entire part; invalidation starts a full geometry rebuild. Independent sidebar
+  caches fetch the same sources repeatedly and the busy overlay obscures the view.
+- Fix: passive selection is read-only; share versioned base-source reads; retain
+  selection DOM and unaffected renderer meshes; reuse coordinates on representation
+  changes; coalesce refreshes and cancel obsolete builds. Batch indexed sweep axis
+  evaluation, preserve unrelated backend cache entries, and reuse compact payloads.
+- Color changes repaint retained buffers instead of constructing temporary
+  molecular geometry; forced part refreshes block stale authoring callbacks.
+- Final Full Benchy run: selection 64–449 ms, recoloring 290 ms (previously
+  10.39 s), no basic-action or idle rebuilds/busy overlays, 462,002 nucleotides
+  retained, 32 rendered fps during idle. Cold load and explicit mesh builds
+  remain expensive and are measured separately in the audit.
+- Validation is recorded in `docs/audits/benchy_full_performance_20261013.md`.
+
+## ISSUE-76 — Assembly cold loading and Full frame rates remain costly (2026-10-13, PARTIAL)
+
+- **Status:** `[~]` PARTIAL for measured cold-load/GPU limits. Implementation, final frontend, post-fix smoke, hardware measurements and cleanup are complete. This follows ISSUE-75's resolved selection/recoloring defects and does not reopen them. Sub-five-second cold loading and historical 2,000/5,000-instance targets remain unmet.
+- **Baseline / scope:** this session's Benchy has seven distinct sources and 462,002 nucleotides; hinge500 is 500 copies of one source. The earlier hardware workflow measured 69.71 s opening and 22.60 s first Full, with different opening boundaries. Do not substitute repeated-instance performance for unique-source cost.
+- **Implemented:** bounded native compact production, lossless NDGB/default-JSON cache interchange, versioned renderer readiness and base/display Design separation, hidden library/panel deferral, semantic backend readiness, exact hull-work reuse, prepared CG primitives and lazy indexes. Ordered optimistic CG saves preserve source versions, rollback and accepted API provenance; atomistic/surface confirmation remains. Inactive volumes/warnings, semantic panel/joint reuse and lazy connectors avoid repeated UI work. Autosave is quiet; manual Save retains progress.
+- **Final Benchy measurement:** one document/browser/source-cold run, `release_benchy_766e00d2745c`: 34.203 s navigation→paint / **29.669 s import→paint**; first Full **33.0 ms**, Beads 93.8 ms, Cylinders 76.4 ms, restored Full 35.4 ms. All seven close, 462,002 nucleotides, 91,752,688 triangles/35 calls; steady Full **21.075/21.597 FPS**, Cylinders 59.460. Only startup geometry busy; no errors, Design PATCHes or context loss; hashes/cleanup pass.
+- **Final hinge500 measurement:** `release_hinge500_4ea9e7c55fdd`: 10.481 s navigation→paint / **6.119 s import→paint**; first Full **485.2 ms**, Beads 1,058.8 ms, Cylinders 689 ms, restored Full 205.8 ms. Unchanged native camera/LOD, all 500 close, 1,517,472,000 triangles/five calls; Full **2.363/1.855 FPS**, Cylinders 59.210. No errors/busy/Design PATCH/context loss; hashes/cleanup pass. One readiness GET remains pending at close.
+- **Measurement limitation:** timings start at the trusted option click, exclude menu navigation, and measure renderer submission/next rAF rather than compositor/input-to-photon. The release hinge first-Full screenshot shows Cylinders selectors despite recorded Full store/renderer state; cause not reproduced. The separate `controls_hinge500_a993d498ff87` run checks 500 controls after each Full/Beads/Cylinders/Full phase with zero mismatches and a Full screenshot; its 5.964 s import/233.8 ms Full is diagnostic, not a replacement for the primary run. No unproven cause or repair is claimed.
+- **Remaining background cost:** the intermediate post-map/flatten-reuse profile measures cold hinge500 readiness at 39.604 s before final lifetime cleanup (flatten 6.507 s, standard readiness 5.812 s, fingerprint 0.326 s, roughly 27 s projection/canonical remainder). Bounded 20-copy legacy→new is 1.515→1.343 s with exact report/fingerprint equality. Server cancellation is absent; pending requests may continue competing with foreground work.
+- **Correctness:** early representation switches wait by source version/membership/mode, retaining dirty and versionless authority; fresh inline/legacy snapshots restart conservatively. Source failures reject later poll/Show waiters until explicit rebuild start, with no automatic geometry retry. Accepted API provenance confirms equal optimistic snapshots through synchronous clones and excludes unmarked delayed snapshots. Independent reviews are clean; exact seven-source transport/hull parity passes.
+- **Final validation:** frontend **8,075 passed, one skipped / 697 files / 314.18 s**; post-fix smoke **23 passed / 2.6 minutes**. Backend FAST **10,603 passed, 22 failed, 21 skipped, four collection errors / 191.09 s pytest / 203 s guard**; failure/error IDs exactly match baseline, zero individual timing violators, aggregate 90 s warning remains. FULL is deferred verbatim in the [audit](docs/audits/assembly_loading_performance_20261013.md). Focused batches overlap; final correctness scope has 122 unique cases and readiness scope 131. Ruff passes 23 changed backend/test files; native gate/diff clean, `main.js` net −2. Aggregate lint retains two pre-existing unused imports; memory lint retains four unchanged-file errors/60 warnings.
+- **Final preservation:** `final-cleanup-verification.json` confirms identical 205 project-store paths, five document IDs and nine original source hashes, zero test-prefixed artifacts/bridge credentials, and all 109 frozen app/test hashes unchanged with no added/removed scope files. No acceptance work remains pending. Earlier runs remain checkpoints; PARTIAL is retained for the performance limits and unresolved screenshot observation.

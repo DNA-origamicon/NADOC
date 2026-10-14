@@ -121,6 +121,9 @@ describe('_expandV2Assembly', () => {
     const a = ca.instances[0]
     expect(a.id).toBe('inst_A')
     expect(a.source).toEqual(src)            // resolved from sources map
+    expect(a.geometrySourceKey).toBe('hinge_key')
+    expect(Object.keys(a)).not.toContain('geometrySourceKey')
+    expect(JSON.stringify(a)).not.toContain('geometrySourceKey')
     expect(a.transform.values.length).toBe(16)
     expect(a.transform.values).toEqual(identityV1Transform().values)
     expect(a.name).toBe('Part')

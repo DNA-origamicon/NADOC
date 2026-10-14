@@ -10,21 +10,11 @@ import { initMrdnaConnections } from './mrdna_connections.js'
 import { initOxdnaInputOverlay } from './oxdna_input_overlay.js'
 import { segmentsForKeys, resolveViewVolumeLayers, activeViewVolumes } from './view_volumes.js'
 import { withSkippedColumnPoints } from './view_volume_points.js'
+import { assemblyVolumePoints } from './assembly_volume_points.js'
+export { assemblyVolumePoints } from './assembly_volume_points.js'
 
 const preview = rep => ['mrdna-coarse', 'mrdna-fine', 'oxdna'].includes(rep)
 const prefix = id => `${encodeURIComponent(id)}|`
-export function assemblyVolumePoints(assembly, renderer) {
-  const hidden = computeGroupHiddenInstanceIds(assembly), points = []
-  for (const inst of assembly?.instances ?? []) {
-    if (inst.visible === false || hidden.has(inst.id)) continue
-    const data = renderer.getInstanceRenderData(inst.id)
-    const matrix = renderer.getLiveTransform(inst.id)
-    if (!data || !matrix) continue
-    const local = withSkippedColumnPoints((data.nucleotides ?? []).map(n => ({ key: `${n.helix_id}:${n.bp_index}`, position: n.backbone_position })), data.design?.helices)
-    for (const p of local) if (p.position) points.push({ key: prefix(inst.id) + p.key, position: new THREE.Vector3(...p.position).applyMatrix4(matrix).toArray() })
-  }
-  return points
-}
 
 /** Independent display scenes: never change authored instance representations or the part store. */
 export async function buildAssemblyVisualization({ state, api, sourceScene, representation, coloring = state.coloringMode ?? 'strand', layers = null }) {

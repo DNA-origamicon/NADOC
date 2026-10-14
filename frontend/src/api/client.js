@@ -8,6 +8,9 @@ import { recordPanelRequest } from '../ui/panel_loading.js'
 import { recordRequestDiagnostic } from '../perf/process_log.js'
 import { withGenerationProgress } from './generation_progress.js'
 import { createDocumentRequestScope } from './document_request_scope.js'
+import { initAssemblyInstanceDesignCache } from './assembly_instance_design_cache.js'
+import { recordAssemblyResponse } from './assembly_response_authority.js'
+import { readGeometryResponse } from '../viewer/native_geometry_binary.js'
 import { welcomeVisible } from '../shared/welcome_visibility.js'
 
 const _documentRequests = createDocumentRequestScope()
@@ -507,7 +510,7 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
       status: r.status,
     }, operationTrace)
     notifyRequestSuccess()   // any HTTP response means the backend is reachable
-    json = await r.json().catch(() => null)
+    json = await readGeometryResponse(r)
     // Transport cancellation can race a completed response/body parse.
     if (retired()) { retireDisplay(); return null }
     markOperationTiming('response-parsed', undefined, operationTrace)
@@ -951,6 +954,8 @@ function _expandV2Instance(entry, sources) {
   for (const k of Object.keys(_PART_INSTANCE_DEFAULTS)) {
     if (k in entry) out[k] = entry[k]
   }
+  // Runtime freshness evidence, not an authored/persisted PartInstance field.
+  if (entry.src_key != null) Object.defineProperty(out, 'geometrySourceKey', { value: entry.src_key })
   return out
 }
 
@@ -996,6 +1001,7 @@ export function _syncFromAssemblyResponse(json) {
       }
       const snapshot = { design: _expandV2Assembly(json.assembly), revision: json.revision }
       if (!_assemblyRevisions.acceptDesign(snapshot)) return json
+      recordAssemblyResponse(snapshot.design, json)
       _setTimedState({ currentAssembly: snapshot.design }, json)
       persistAssembly()
     }
@@ -4460,8 +4466,8 @@ export async function patchInstance(id, body) {
   return _syncFromAssemblyResponse(json)
 }
 
-export async function batchPatchInstances(patches, { skipSync = false } = {}) {
-  const json = await _request('PATCH', '/assembly/instances/batch', { patches })
+export async function batchPatchInstances(patches, { skipSync = false, suppressBusy = false } = {}) {
+  const json = await _request('PATCH', '/assembly/instances/batch', { patches }, { suppressBusy })
   // skipSync: persist server-side without re-syncing the store (used when the
   // caller has already updated the store, to avoid a redundant renderer rebuild).
   if (skipSync) return json
@@ -4774,7 +4780,7 @@ export async function getJointConnectorFrames(jointId) {
 }
 
 export async function getAllConnectorFrames() {
-  return _request('GET', '/assembly/connector-frames')
+  return _request('GET', '/assembly/connector-frames', undefined, { suppressBusy: true })
 }
 
 export async function getJointDebugFrames(jointId) {
@@ -4826,15 +4832,18 @@ export async function redoAssembly() {
 }
 
 
-export async function getInstanceDesign(id) {
-  return _request('GET', `/assembly/instances/${id}/design`)
-}
+const _instanceDesigns = initAssemblyInstanceDesignCache({
+  getContext: () => ({ docId: docHeaders()['X-NADOC-Doc'], assembly: store.getState().currentAssembly }),
+  fetchDesign: (id, context) => _request('GET', `/assembly/instances/${id}/design`, undefined, context),
+})
+
+export function getInstanceDesign(id) { return _instanceDesigns.get(id) }
 
 // Compatibility export; the decoder is shared with prepared viewer packages.
 export { expandCompactNucleotides as _expandCompactNucleotides } from '../viewer/geometry_codec.js'
 
 export async function getInstanceGeometry(id) {
-  const json = await _request('GET', `/assembly/instances/${id}/geometry`)
+  const json = await _request('GET', `/assembly/instances/${id}/geometry?format=ndgb1`)
   // Decode compact wire format → flat nuc list (legacy shape the renderer
   // expects). Server always ships compact for this endpoint now.
   if (json && !json.nucleotides && json.nucleotides_compact) {
@@ -4888,7 +4897,7 @@ export async function getInstancePeriodicClosure(id, count = 4) {
  * so V8 doesn't carry N copies of identical nucleotide lists.
  */
 export async function getAssemblyGeometry() {
-  const json = await _request('GET', `/assembly/geometry`)
+  const json = await _request('GET', `/assembly/geometry?format=ndgb1`)
   if (!json) return json
   if (!json.sources) return json  // pre-Phase-3 shape passthrough (legacy)
 
@@ -4932,8 +4941,8 @@ export async function saveDesignAs(path, overwrite = true) {
 }
 
 /** Save current in-memory assembly to an explicit workspace path. */
-export async function saveAssemblyAs(path, overwrite = true) {
-  const json = await _request('POST', '/assembly/save', { path, overwrite })
+export async function saveAssemblyAs(path, overwrite = true, { suppressBusy = false } = {}) {
+  const json = await _request('POST', '/assembly/save', { path, overwrite }, { suppressBusy })
   return _syncFromAssemblyResponse(json)
 }
 

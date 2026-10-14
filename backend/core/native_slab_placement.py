@@ -130,6 +130,56 @@ def _expected_slab_pose(record):
     return center, frame
 
 
+def _native_slab_array_poses(beads, bases, normals, tangents, slab_offsets, base_offsets):
+    """Shared batch arithmetic for record and array producers; no second authority."""
+    if not all(a.shape == (len(beads), 3) and np.all(np.isfinite(a))
+               for a in (beads, bases, normals, tangents, slab_offsets, base_offsets)):
+        return None
+    lengths = np.linalg.norm(tangents, axis=1, keepdims=True)
+    if not (np.all(lengths >= 1e-12) and np.all(np.isfinite(lengths))):
+        return None
+    tangents = tangents / lengths
+    normals = normals - tangents * np.sum(normals * tangents, axis=1, keepdims=True)
+    lengths = np.linalg.norm(normals, axis=1, keepdims=True)
+    if not (np.all(lengths >= 1e-12) and np.all(np.isfinite(lengths))):
+        return None
+    normals = normals / lengths
+    frames = np.stack((np.cross(tangents, normals), tangents, normals), axis=2)
+    actual_offsets = np.einsum('nji,nj->ni', frames, bases - beads)
+    if not np.allclose(actual_offsets, base_offsets, rtol=0, atol=1e-7):
+        return None
+    centers = beads + np.einsum('nij,nj->ni', frames, slab_offsets)
+    return centers, frames
+
+
+def native_slab_poses_for_arrays(arrays):
+    """Consume canonical occupied native arrays without materializing records.
+
+    Invalid arrays are diagnosed by the existing record authority; batching
+    does not suppress any integrity check or reinterpret placement sources.
+    """
+    directions = arrays["directions"]
+    poses = None
+    if arrays.get("placement_source") == SOURCE and np.all((directions == 0) | (directions == 1)):
+        registration = _native_registration()
+        offsets = np.asarray([registration[d] for d in ("FORWARD", "REVERSE")])[directions.astype(int)]
+        poses = _native_slab_array_poses(
+            arrays["positions"], arrays["base_positions"], arrays["base_normals"],
+            arrays["axis_tangents"], offsets[:, 0], offsets[:, 1])
+    if poses is not None:
+        centers, frames = poses
+        return centers, Rotation.from_matrix(frames).as_quat()
+    records = [{"helix_id": arrays["helix_id"], "bp_index": int(bp),
+                "direction": ("FORWARD", "REVERSE")[int(direction)] if direction in (0, 1) else direction,
+                "placement_source": arrays.get("placement_source"),
+                **{field: arrays[key][i].tolist() for field, key in (
+                    ("backbone_position", "positions"), ("base_position", "base_positions"),
+                    ("base_normal", "base_normals"), ("axis_tangent", "axis_tangents"))}}
+               for i, (bp, direction) in enumerate(zip(arrays["bp_indices"], directions))]
+    attach_native_slab_poses(records)
+    return np.asarray([r["slab_position"] for r in records]), np.asarray([r["slab_quaternion"] for r in records])
+
+
 def _expected_slab_poses(records):
     """Batch the native authority's arithmetic; retain its scalar error oracle.
 
@@ -148,22 +198,11 @@ def _expected_slab_poses(records):
     except (TypeError, ValueError, OverflowError):
         valid = False
     if native and valid:
-        beads, bases, normals, tangents = arrays
-        lengths = np.linalg.norm(tangents, axis=1, keepdims=True)
-        valid = bool(np.all(lengths >= 1e-12) and np.all(np.isfinite(lengths)))
+        slab_offsets, base_offsets = map(np.asarray, zip(*(_native_registration()[r['direction']] for r in native)))
+        poses = _native_slab_array_poses(*arrays, slab_offsets, base_offsets)
+        valid = poses is not None
         if valid:
-            tangents = tangents / lengths
-            normals = normals - tangents * np.sum(normals * tangents, axis=1, keepdims=True)
-            lengths = np.linalg.norm(normals, axis=1, keepdims=True)
-            valid = bool(np.all(lengths >= 1e-12) and np.all(np.isfinite(lengths)))
-        if valid:
-            normals = normals / lengths
-            frames = np.stack((np.cross(tangents, normals), tangents, normals), axis=2)
-            slab_offsets, base_offsets = map(np.asarray, zip(*(_native_registration()[r['direction']] for r in native)))
-            actual_offsets = np.einsum('nji,nj->ni', frames, bases - beads)
-            valid = bool(np.allclose(actual_offsets, base_offsets, rtol=0, atol=1e-7))
-        if valid:
-            centers = beads + np.einsum('nij,nj->ni', frames, slab_offsets)
+            centers, frames = poses
             for i, center, frame in zip(indices, centers, frames):
                 result[i] = center, frame
     if not valid:

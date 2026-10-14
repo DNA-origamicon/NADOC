@@ -3005,10 +3005,24 @@ def _lattice_helix_axes(design: "Design") -> list[dict]:
         arm_min_bp = min(h2.bp_start for h2 in arm_helices)
         bp_offset = h.bp_start - arm_min_bp
 
-        samples_pre: list[list[float]] = []
-        for local_bp in sample_local:
-            spine_p, R_p, _ = _frame_at_bp(design, local_bp + bp_offset, arm_helices)
-            samples_pre.append((spine_p + R_p @ cs_offset).tolist())
+        arm_ids = {h2.id for h2 in arm_helices}
+        arm_ops = [op for op in design.deformations
+                   if not op.affected_helix_ids or arm_ids.intersection(op.affected_helix_ids)]
+        sweep = next((op for op in arm_ops if isinstance(op.params, SweepParams)), None)
+        if sweep is not None:
+            arm_ops = [op for op in arm_ops if op.id not in sweep.params.preceding_op_ids]
+        if len(arm_ops) == 1 and arm_ops[0] is sweep and sweep.params.bp_positions_nm is not None:
+            # Indexed native paths already own every station. Transport all display
+            # samples together instead of rebuilding their full Slerp table per bp.
+            from backend.core.sweep_path import sweep_frames
+            spines, frames, _ = sweep_frames(sweep, np.asarray(sample_local) + bp_offset,
+                arm_min_bp, centroid_0, tangent_0)
+            samples_pre = (spines + np.einsum("nij,j->ni", frames, cs_offset)).tolist()
+        else:
+            samples_pre = []
+            for local_bp in sample_local:
+                spine_p, R_p, _ = _frame_at_bp(design, local_bp + bp_offset, arm_helices)
+                samples_pre.append((spine_p + R_p @ cs_offset).tolist())
         # Per-segment endpoints: interpolate the pre-cluster centerline at the
         # segment's bp boundaries, then apply each cluster only to the segments
         # that move with it.

@@ -20,6 +20,7 @@ regress anything).
 
 | # | Date | Issue / phase | What changed (module) | Repro pinned by | Wall-clock | main.js LOC Δ | tests added | edits-to-green | app-validated | regression caught |
 |---|------|---------------|------------------------|-----------------|-----------|---------------|-------------|----------------|---------------|-------------------|
+| 29 | 2026-10-13 | ISSUE-76 — assembly loading / Full GPU limits, PARTIAL | Compact/NDGB transport, readiness/source reuse, prepared CG primitives, semantic/lazy UI work and ordered saves | Exact seven-source parity, final 8,075 frontend/23 smoke, real-frame release benchmarks, frozen source/cleanup proof | completed implementation; limits retained | −2; thin wiring only | focused batches overlap; audit records counts | final frontend/smoke pass; backend retains identical baseline 22/4 failures, zero individual timing violations | Benchy 29.669 s import/33 ms Full; hinge 6.119 s/485 ms Full; load/GPU targets unmet | unique-source CPU, repeated-instance GPU, background readiness and screenshot timing are measured separately |
 | 28 | 2026-10-08 | ISSUE-66 — obsolete loop/skip marks survived recomputation | `crud.py` clears active marks inside the revision-checked commit; new sweep strain synthesis uses stored spline intent | HC/SQ API tests seed obsolete end marks, recompute twice, undo/redo and revert | one sweep follow-up | 0 | 14 backend + 1 browser for sweep support and regression | focused suites green; browser reload fixture corrected to use complete export | yes — real Add Loops/Skips menu, undo/redo, full export/reload, screenshot inspected | yes — clearing only the calculation copy left old marks in the committed design |
 | 27 | 2026-10-08 | ISSUE-65 — native cluster history ownership | Optional creation snapshot and extracted replay helper; restore original v2 snapshot cluster baseline | Cluster replay regressions and all 98 saved-design history boundaries | focused generator refactor | 0 | 2 backend | boundary audit caught both ownership loss and missing original group | covered by generator app exercise | root cause: creation entries stored membership without parent/duplex ownership; restoring only generated groups also lost original snapshot membership |
 | 26 | 2026-10-07 | ISSUE-61 — pending-review regression failed on WSL and opened a durable incident | One test in `test_native_placement_vr_failure.py` stubs `_native_platform_reason`; runtime checks and placement code unchanged | Existing pending-review regression failed before / passed after; 18 VR-failure assertions and four platform cases passed | short focused follow-up | 0 | 0; existing regression corrected | first focused assertion run passed; retained gate required separate review | n/a, test-only; explicit review audit clear after recorded acknowledgement | yes — platform rejection occurred before the review check; original report and review retained |
@@ -73,6 +74,7 @@ multi-factor (CLAUDE.md's own warning). If the bug is a *class*, add a `LESSONS.
 
 | Issue | Root cause (5-Whys, one line) | Failed hypothesis (the "obvious fix" that was wrong, if any) | → LESSONS.md |
 |-------|-------------------------------|-------------------------------------------------------------|--------------|
+| ISSUE-76 (partial) | Cold display repeated work across native record expansion, JSON/gzip, hidden source readers, readiness assessment, primitive construction and eager maps → caches/scheduling were scoped to individual consumers instead of one versioned source lifecycle → first Full and representation saves still blocked after selection was fixed | A sub-millisecond CPU representation update was insufficient evidence: retained Full buffers do not prove Full drawing, backend save/readiness can still delay the gesture, and the initial runner omitted curved-cylinder slots; preserve the invalid run and require actual frame/triangle proof | `docs/audits/assembly_loading_performance_20261013.md` |
 | ISSUE-66 | Recomputed marks were merged into the original design → its obsolete marks had never been cleared → clearing happened only on the temporary calculation copy; commit now replaces active marks atomically and rejects stale revisions | None; integration assertions exposed the calculation/commit mismatch | — |
 | ISSUE-61 | Gate test depended on the host platform → WSL returned plain-string 503 before the intended review check → structured-detail assertion failed → marked parent failure correctly latched the durable journal; isolate only the test's platform prerequisite and explicitly review the retained incident | Temporary incident-store leakage was considered, but source inspection showed intentional recording of the outer test failure in the runner's durable ledger | n/a; bounded test precondition fix, no placement change |
 | Alpine post-download feedback | Reconciliation saved `verified` and then synchronously scanned a 19.7 GB DCD before saving terminal job state → the UI continued showing the prior synthetic `running`/retry error for minutes → users had no evidence that local CPU-bound bookkeeping was active | Treating byte verification as the terminal UX state; the download was complete, but the job was not yet usable as fully finalized | `memory/project_alpine_cluster_submission.md` |
@@ -448,3 +450,69 @@ ISSUE-74 (2026-10-12): simulation trajectory popup controls now precede disabled
 background rows in hit testing. All ten numeric keys have real-ray regression
 coverage. The initial live loop check exposed this while seeking the selected
 range end; its failed evidence is retained under `vr-trajectory-loop-20261012/initial`.
+
+2026-10-13 — ISSUE-75 fixed: selecting an assembly part no longer seeds an
+animation or PATCHes its source. Shared versioned Design reads, stable selection
+rows, queued source-aware renderer refreshes and direct color-buffer repainting
+remove redundant work. Backend indexed-sweep axis sampling is batched with exact
+coordinate parity; compact geometry and unrelated cache entries are retained.
+A review caught a stale authoring callback during forced refresh; a loading guard
+and three regressions close that race. `main.js` delta 0 (two wiring substitutions).
+
+Full Benchy app validation retained 462,002 nucleotides and 91.75 million triangles:
+selection 64–449 ms, color change 290 ms versus 10.39 s, 32 fps during idle, no
+basic-action/idle rebuild or busy overlay. Cold opening and explicit representation
+builds remain slow; their measured limits are recorded rather than hidden.
+Frontend: 7,917 passed, 1 skipped, followed by 33 affected tests passing after the
+refresh guard. Focused backend: 48 passed. `test-smart` FAST: 10,542 passed,
+22 failed, 21 skipped, 4 collection errors; missing prerequisites and four
+HEAD-reproduced failures are documented, with the deferred FULL notice, in
+`docs/audits/benchy_full_performance_20261013.md`. Reopen count: 0.
+App smoke: 23 passed; native placement gate clear; changed-file Ruff clean,
+repository lint delta zero. Original Benchy hashes and test cleanup verified.
+
+2026-10-13 — ISSUE-76 **PARTIAL: implementation and validation complete; cold-load/GPU targets unmet**.
+Lossless native compact/NDGB transport, versioned source/readiness reuse, exact
+hull-work reuse, prepared CG primitives/lazy indexes, ordered optimistic saves,
+inactive UI gates and lazy connectors remove repeated work. Base authoring stays
+separate from overridden display Designs. Source failure/retry and accepted API
+snapshot provenance are regression-pinned; independent reviews are clean.
+
+Final release Benchy (seven sources, 462,002 nucleotides): 34.203 s navigation /
+29.669 s import→paint, 33.0 ms first Full, 93.8 ms Beads, 76.4 ms Cylinders,
+35.4 ms restored Full. All seven close, 91,752,688 triangles/35 calls, steady Full
+21.075/21.597 FPS; Cylinders 59.460. Final hinge500 (one repeated source):
+10.481 s navigation / 6.119 s import→paint, 485.2 ms first Full, 1,058.8 ms Beads,
+689 ms Cylinders, 205.8 ms restored Full. All 500 close, unchanged camera/LOD,
+1,517,472,000 triangles/five calls, Full 2.363/1.855 FPS; Cylinders 59.210.
+Both have no errors, Design PATCHes or context loss; only Benchy startup geometry
+has a busy overlay. Hashes and cleanup pass. These are single document/browser/
+source-cold runs, with actual option click→rendered frame excluding menu travel;
+they are not compositor/input-to-photon or repeated-median measurements.
+
+The release hinge first-Full screenshot shows Cylinders selectors despite Full
+store/renderer evidence. This cause was not reproduced: the separate controls
+run checks all 500 row selectors after every phase with zero mismatches and a
+Full screenshot. Its 5.964 s import / 233.8 ms Full remains diagnostic; primary
+release values above are retained. One hinge readiness GET is pending at close;
+backend cancellation is absent. The intermediate readiness profile is still
+39.604 s after map/flatten reuse, before lifetime cleanup. No claim that cold
+readiness, GPU scale, or screenshot presentation is solved is made.
+
+Final frontend: 8,075 passed, one skipped across 697 files / 314.18 s.
+Post-fix smoke: 23 passed / 2.6 minutes. Final FAST: 10,603 passed, 22 failed,
+21 skipped, four collection errors / 191.09 s pytest / 203 s guard. Failure/error
+IDs are identical to baseline; zero individual timing violators remain, but the
+203 s aggregate exceeds 90 s. FULL deferred notice is retained verbatim in
+`docs/audits/assembly_loading_performance_20261013.md`; budgets/markers unchanged.
+Scoped Ruff passes 23 changed backend/test files. Native gate and diff clean;
+`main.js` net −2. Aggregate lint retains two pre-existing unused imports; memory
+lint retains four unchanged-file errors/60 warnings. Focused counts, overlap,
+exact transport/hull parity and commands are in the audit.
+
+Final cleanup preserves exact 205 project-store paths, five document IDs and
+nine original source hashes; all test prefixes and bridge credentials are empty.
+All 109 frozen app/test hashes match, with no added/removed scoped files. Final
+measurements, controls diagnostic and smoke are complete; earlier runs remain
+checkpoints. Reopen count: 0. PARTIAL reflects remaining performance limits and
+the unresolved screenshot observation, not unfinished acceptance work.

@@ -332,7 +332,7 @@ describe('initAutosaveSync', () => {
     const sync = initAutosaveSync(deps)
     store._emitSlice('assembly', { currentAssembly: { id: 'a1' } })
     await vi.advanceTimersByTimeAsync(1500)
-    expect(deps.api.saveAssemblyAs).toHaveBeenCalledWith('/ws/a.nass')
+    expect(deps.api.saveAssemblyAs).toHaveBeenCalledWith('/ws/a.nass', true, { suppressBusy: true })
     expect(deps.setAssemblyWorkspacePath).toHaveBeenCalledWith('/ws/a.nass')
     expect(sync.selfSavedPaths.has('/ws/a.nass')).toBe(true)
     expect(sync.getSavingAssembly()).toBe(false)   // cleared in finally

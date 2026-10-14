@@ -38,11 +38,16 @@ URLs are unchanged from their previous home in assembly.py. Mounting is done in
 
 from __future__ import annotations
 
+from typing import Literal
+
 from backend.core.display_placement import measured_display_placement
+from backend.core.native_compact_geometry import native_compact_geometry
 
 from fastapi import APIRouter, Query
+from fastapi.responses import Response
 
 from backend.api import assembly_state
+from backend.api.native_geometry_response import native_geometry_response
 from backend.api.routes_display_geometry import SurfaceRegionRequest, build_region_surface
 from backend.api.assembly import (
     _assembly_source_path,
@@ -54,7 +59,8 @@ from backend.api.assembly import (
 )
 from backend.core.assembly_geometry import (
     geo_cache_get as _geo_cache_get,
-    geo_cache_set as _geo_cache_set,
+    display_geo_cache_key,
+    cache_display_geometry,
 )
 
 router = APIRouter()
@@ -78,7 +84,8 @@ def get_instance_design(instance_id: str) -> dict:
 def get_instance_geometry(
     instance_id: str,
     measured_positioning: bool = Query(True),
-) -> dict:
+    wire_format: Literal["json", "ndgb1"] = Query("json", alias="format"),
+) -> Response:
     """
     Compute and return nucleotide geometry for a PartInstance's Design.
 
@@ -98,7 +105,6 @@ def get_instance_geometry(
     measured_positioning = measured_display_placement(measured_positioning)
     from backend.api.crud import (
         _geometry_for_design,
-        _compact_geometry_from_nucleotides,
         _inject_joint_world_axes,
     )
     from backend.core.deformation import (
@@ -110,25 +116,21 @@ def get_instance_geometry(
     inst = _find_instance(assembly, instance_id)
 
     base_key = _geo_cache_key(inst)
-    key = f"{base_key}:measured={int(measured_positioning)}" if base_key else None
+    key = display_geo_cache_key(base_key)
     cached = _geo_cache_get(key) if key else None
     if cached:
-        return {
-            "nucleotides_compact": _compact_geometry_from_nucleotides(
-                cached["nucleotides"]
-            ),
-            "helix_axes": cached["helix_axes"],
-            "design": cached.get("design"),
-        }
+        return native_geometry_response(cached, wire_format)
 
     design = _display_design(_design_with_instance_overrides(inst))
-    nucleotides = _geometry_for_design(
+    compact = native_compact_geometry(design) if wire_format == "ndgb1" else None
+    nucleotides = [] if compact is not None else _geometry_for_design(
         design,
         measured_positioning=measured_positioning,
         junction_balance=True,
     )
     axes = deformed_helix_axes(design)
-    _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
+    if compact is None:
+        _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
     design_dict = design.to_dict()
     from backend.core.cpd_representation import inject_cpd_representation
     inject_cpd_representation(design_dict)
@@ -136,15 +138,7 @@ def get_instance_geometry(
     # local-frame storage, same as the design-view GET. Without this the assembly
     # part-joint drag reads undefined joint.axis_origin and throws.
     _inject_joint_world_axes(design_dict)
-    if key:
-        _geo_cache_set(
-            key, {"nucleotides": nucleotides, "helix_axes": axes, "design": design_dict}
-        )
-    return {
-        "nucleotides_compact": _compact_geometry_from_nucleotides(nucleotides),
-        "helix_axes": axes,
-        "design": design_dict,
-    }
+    return native_geometry_response(cache_display_geometry(key, nucleotides, axes, design_dict, compact=compact), wire_format)
 
 
 @router.get("/assembly/instances/{instance_id}/bend-centers", status_code=200)
@@ -244,7 +238,8 @@ def get_instance_surface_geometry(
 @router.get("/assembly/geometry", status_code=200)
 def get_assembly_geometry(
     measured_positioning: bool = Query(True),
-) -> dict:
+    wire_format: Literal["json", "ndgb1"] = Query("json", alias="format"),
+) -> Response:
     """
     Batch geometry for all visible instances in one request.
 
@@ -268,7 +263,7 @@ def get_assembly_geometry(
     measured_positioning = measured_display_placement(measured_positioning)
     from backend.api.crud import (
         _geometry_for_design,
-        _compact_geometry_from_nucleotides,
+        _inject_joint_world_axes,
     )
     from backend.core.deformation import (
         deformed_helix_axes,
@@ -285,7 +280,7 @@ def get_assembly_geometry(
         # inline-design id, plus cluster-transform overrides hash) so two
         # instances of the same part with no overrides share one source.
         base = _geo_cache_key(inst) or f"inst:{inst.id}"
-        return f"{base}:measured={int(measured_positioning)}"
+        return display_geo_cache_key(base)
 
     for inst in assembly.instances:
         if not inst.visible:
@@ -297,46 +292,30 @@ def get_assembly_geometry(
                 continue  # already computed for an earlier identical-source instance
 
             base_key = _geo_cache_key(inst)
-            key = f"{base_key}:measured={int(measured_positioning)}" if base_key else None
+            key = display_geo_cache_key(base_key)
             cached = _geo_cache_get(key) if key else None
             if cached:
-                sources[src_key] = {
-                    "nucleotides_compact": _compact_geometry_from_nucleotides(
-                        cached["nucleotides"]
-                    ),
-                    "helix_axes": cached["helix_axes"],
-                    "design": cached.get("design"),
-                }
+                sources[src_key] = cached
                 continue
 
             design = _display_design(_design_with_instance_overrides(inst))
-            nucleotides = _geometry_for_design(
+            compact = native_compact_geometry(design) if wire_format == "ndgb1" else None
+            nucleotides = [] if compact is not None else _geometry_for_design(
                 design,
                 measured_positioning=measured_positioning,
                 junction_balance=True,
             )
             axes = deformed_helix_axes(design)
-            _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
+            if compact is None:
+                _apply_ovhg_rotations_to_axes(design, axes, nucleotides)
             design_dict = design.to_dict()
             from backend.core.cpd_representation import inject_cpd_representation
             inject_cpd_representation(design_dict)
-            if key:
-                _geo_cache_set(
-                    key,
-                    {
-                        "nucleotides": nucleotides,
-                        "helix_axes": axes,
-                        "design": design_dict,
-                    },
-                )
-            sources[src_key] = {
-                "nucleotides_compact": _compact_geometry_from_nucleotides(nucleotides),
-                "helix_axes": axes,
-                "design": design_dict,
-            }
+            _inject_joint_world_axes(design_dict)
+            sources[src_key] = cache_display_geometry(key, nucleotides, axes, design_dict, compact=compact)
         except Exception as exc:
             errors[inst.id] = str(exc)
-    return {"sources": sources, "instances": instance_to_src, "errors": errors}
+    return native_geometry_response({"sources": sources, "instances": instance_to_src, "errors": errors}, wire_format)
 
 
 @router.post("/assembly/instances/{instance_id}/surface/region")

@@ -16,6 +16,7 @@ from backend.core.design_readiness import finish_readiness, standard_readiness
 from backend.core.models import Design, PartSourceFile, PartSourceInline
 from backend.core.oxdna_staleness import design_build_fingerprint
 from backend.core.readiness_jobs import completed_simulation
+from backend.core.readiness_cache import assembly_readiness_fingerprint
 
 router = APIRouter(tags=["design"])
 _CACHE = OrderedDict()
@@ -47,7 +48,7 @@ def _source_stamps(assembly):
 
 def _assembly_report(assembly):
     from backend.core.assembly_flatten import _load_design, flatten_assembly
-    from backend.core.assembly_validate import validate_assembly_report
+    from backend.core.assembly_validate import validate_and_flatten_assembly
 
     resolved = []
     source_reports = []
@@ -77,11 +78,15 @@ def _assembly_report(assembly):
         return None, finish_readiness(report)
     resolved_assembly = assembly.model_copy(update={"instances": resolved})
     try:
-        # This validator performs its own flatten-ID check. Run it before
-        # retaining our canonical design, avoiding two large projections at once.
-        assembly_report = validate_assembly_report(resolved_assembly)
+        assembly_report, flattened = validate_and_flatten_assembly(resolved_assembly)
+        if flattened is None:
+            # Preserve the route's existing actionable error on a failed flatten.
+            flattened = flatten_assembly(resolved_assembly)
         # Use the same canonical simulation boundary as /assembly/flatten.
-        design = Design.from_json(flatten_assembly(resolved_assembly).to_json())
+        serialized = flattened.to_json()
+        del flattened
+        design = Design.from_json(serialized)
+        del serialized
         report = standard_readiness(design)
         for step in report["steps"]:
             step["targets"] = [
@@ -141,14 +146,22 @@ def get_design_readiness(assembly: bool = False) -> dict:
     with _CACHE_LOCK:
         cached = _CACHE.get(key)
         if cached is None or cached[0]() is not current or cached[1] != version:
-            design, report = _assembly_report(current) if assembly else (current, standard_readiness(current))
-            fingerprint = design_build_fingerprint(design) if design is not None and report["available"] else None
-            cached = (weakref.ref(current), version, design.id if design is not None else None, report, fingerprint)
+            # Exact-version polls stay O(source-file stats), including assemblies
+            # with large inline Designs. Only a changed revision/object needs a
+            # semantic comparison; representation changes do not change readiness.
+            semantic = (assembly_readiness_fingerprint(current), source_stamps) if assembly else None
+            if assembly and cached is not None and cached[2] == semantic:
+                cached = (weakref.ref(current), version, *cached[2:])
+            else:
+                design, report = _assembly_report(current) if assembly else (current, standard_readiness(current))
+                fingerprint = design_build_fingerprint(design) if design is not None and report["available"] else None
+                cached = (weakref.ref(current), version, semantic,
+                          design.id if design is not None else None, report, fingerprint)
             _CACHE[key] = cached
             _CACHE.move_to_end(key)
             while len(_CACHE) > 16:
                 _CACHE.popitem(last=False)
-    _, _, design_id, report, fingerprint = cached
+    _, _, _, design_id, report, fingerprint = cached
     report = deepcopy(report)
     if design_id is not None and report["available"]:
         report = finish_readiness(report, completed_simulation(design_id, _WORKSPACE_DIR, fingerprint))

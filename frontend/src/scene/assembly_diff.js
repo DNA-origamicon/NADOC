@@ -41,6 +41,11 @@ export function assemblyTransformOnlyChange(prev, next) {
     if (p.mode          !== inst.mode)          return false
     if ((p.source?.type) !== (inst.source?.type)) return false
     if ((p.source?.path) !== (inst.source?.path)) return false
+    // The v2 response carries a live source mtime/override key. File changes
+    // must refresh geometry even when every instance transform is unchanged.
+    if (p.geometrySourceKey !== inst.geometrySourceKey) return false
+    if (p.source?.sha256 !== inst.source?.sha256) return false
+    if (p.source?.type === 'inline' && p.source.design !== inst.source.design) return false
     if (JSON.stringify(p.cluster_transform_overrides ?? [])
         !== JSON.stringify(inst.cluster_transform_overrides ?? [])) return false
   }

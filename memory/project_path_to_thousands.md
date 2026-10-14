@@ -16,6 +16,68 @@ metadata:
 
 This file is the single source of truth for all subagents working on this refactor. Subagents must read this entire file before starting and update the relevant phase section when their chunk is done.
 
+## Assembly rebuild performance correction — 2026-10-13
+
+The shared renderer now retains unchanged source meshes and decoded nucleotide
+geometry. Live backend file versions prove freshness; inline IDs and saved hash
+keys alone do not. Supported Full/Beads/Cylinders/Hull Prism sources prepare Full
+primitives once and change actual LOD caps/visibility without rebuilding them.
+Interaction/simulation indexes are lazy. Unsupported/auxiliary sources retain
+the guarded rebuild-from-cached-coordinates fallback; edits refetch affected
+sources. `assembly_diff` includes source versions so source edits cannot
+accidentally take the transform-only path. Prepared buffers alone never prove
+that Full was drawn: validate actual close-LOD slots, frames, and triangles.
+
+`invalidateInstance` only marks the source dirty. Callers mutate, then request
+one rebuild; external part-refresh explicitly invalidates before syncing the
+assembly. `assembly_rebuild_queue.js` shares duplicate in-flight work, serializes
+new snapshots and suppresses stale work after disposal. Transform-only linker
+refreshes remain valid. Historical descriptions of unconditional whole-assembly
+refetch/dispose and invalidation-triggered rebuilds below are superseded.
+See `docs/audits/benchy_full_performance_20261013.md` and source-reuse regressions.
+
+Loading follow-up (ISSUE-76, **PARTIAL for cold-load/GPU limits; validation complete**):
+native geometry negotiates lossless Float64 NDGB (`?format=ndgb1`); default JSON
+reuses the compact cache and native placement authority. Both decoders bound
+malformed expansion. Hidden cluster/overhang panels and readiness await versioned
+renderer sources; display Designs never seed base-only selected-part authoring.
+Hidden direct-open library startup defers listing. Readiness caches every authored
+input except live representation, retains source stamps, and rechecks job status.
+Source waits use version/membership/mode, not representation; fresh unversioned
+snapshots restart. Source failures persist until explicit rebuild begin, without
+auto retry. Accepted API provenance confirms equal optimistic snapshots through
+synchronous clones and rejects unmarked delayed snapshots. CG choices show while
+ordered saves finish; rollback/document guards and atomistic confirmation remain.
+Autosave is quiet; manual Save retains progress. Inactive volumes/warnings and
+hidden/lazy panel work no longer expand/rebuild per-instance UI unnecessarily.
+
+Final release Benchy: 34.203 s navigation / 29.669 s import→paint, 33 ms first Full;
+all seven sources close, 462,002 nucleotides / 91,752,688 triangles, Full FPS
+21.07/21.60. Hinge500: 10.481 s navigation / 6.119 s import, 485 ms first Full;
+all 500 close / 1.517 billion triangles, Full FPS 2.36/1.85, Cylinders 59.21.
+Single document/browser/source-cold runs; option-click timing excludes menu
+navigation and measures renderer submission/next rAF, not compositor pixels.
+The hinge release first-Full screenshot has stale-looking Cylinders selectors;
+a separate 500-control probe has zero mismatches every phase and a Full screenshot.
+Cause not reproduced; retain anomaly. One readiness GET is pending at close,
+server cancellation is absent, and the intermediate cold assessment remains
+39.604 s before lifetime cleanup. Cold-load and historical scale targets are unmet.
+
+Final frontend 8,075 passed/one skipped/697 files; smoke 23 passed. FAST 10,603
+passed with unchanged 22 failures/four errors; zero individual timing violators,
+aggregate 203 s > 90 s. Exact transport/hull parity and native review gate pass.
+Final cleanup preserves 205 project paths/five document IDs/nine source hashes,
+zero test artifacts/bridge credentials and all 109 frozen app/test hashes.
+No acceptance work remains pending. Evidence, limitations and checkpoint history:
+`docs/audits/assembly_loading_performance_20261013.md`.
+
+Color updates also avoid rebuilding temporary molecular geometry.
+`assembly_source_colors.js` repaints retained close/mid/overhang color textures
+and curved-cylinder vertex ranges; crossover insertions and arc lines keep their
+endpoint-owner coloring helper. Real helix-controller parity tests cover all four
+color modes, custom/binder/scaffold colors, curved domains and alpha preservation.
+The older throwaway-builder descriptions below are superseded.
+
 ## WHERE THE CODE LIVES (2026-07-25 — assembly_renderer.js was split; paths below are current)
 `scene/assembly_renderer.js` used to hold BOTH renderers (6,261 lines). It was split — behavior
 unchanged, no logic edits, both paths verified in-app A/B on `gears_test.nass` + a 500-instance
@@ -37,10 +99,12 @@ The **stub-list audit rule below still applies** — `_SHARED_RENDERER_STUB_DEFA
 
 ## Shared-renderer visual parity audit (2026-08-28)
 
-The shared assembly path must consume the same authoritative geometry mode as the individual
-design path. `getAssemblyGeometry()` and `getInstanceGeometry()` therefore send the explicit
-`measured_positioning` preference, and backend geometry cache/source keys include that flag.
-Without it, Full representation had matching primitive counts but different bead/slab transforms.
+The shared assembly path must consume the same authoritative geometry as the individual
+design path. The former selectable `measured_positioning` preference described by this audit
+has been removed: both geometry APIs now require canonical native Full placement, with a
+single `measured=1` display-cache identity. Their negotiated NDGB transport preserves those
+placements exactly. Historically, mismatched modes had equal primitive counts but different
+bead/slab transforms; matching counts alone is still insufficient.
 
 Full shared sources also build the part renderer's crossover-specific geometry before applying the
 shared-instancing patch: extra beads, slabs, backbone connectors, slab connectors, and scaffold /

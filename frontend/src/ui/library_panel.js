@@ -13,6 +13,7 @@ import { formatBytes } from './format_bytes.js'
 import { fetchActiveJobs, activeJobForPath, jobActivityTooltip, jobLocationTag, normPath } from './job_activity.js'
 import { visibleWorkspaceEntries } from './sim_folders.js'
 import { showConfirm } from './primitives/confirm.js'
+import { welcomeVisible, observeWelcomeVisibility } from '../shared/welcome_visibility.js'
 
 const _JOB_POLL_MS = 4000   // welcome-screen activity-spinner refresh cadence
 const _PEER_POLL_MS = 4000  // keep remote tabs in sync with current reachability
@@ -386,7 +387,9 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
     _render()
   }
 
+  let _initialRefreshPending = true
   async function refresh() {
+    _initialRefreshPending = false
     clearTimeout(_diskUsageTimer)
     const generation = ++_refreshGeneration
     if (!_allEntries.length) treeEl.innerHTML = '<div class="lib-loading">Loading…</div>'
@@ -1055,7 +1058,15 @@ export function initLibraryPanel({ api, onOpenPart, onOpenAssembly, onNewPart, o
   _renderServerTabs()
   _updateActionVisibility()
   if (_allEntries.length) _render()
-  refresh()
+  // Direct-open tabs hide welcome before this factory runs. Their editor load
+  // should not race a library scan; explicit refresh calls remain immediate.
+  if (document.getElementById('welcome-screen') && !welcomeVisible()) {
+    const stopWaiting = observeWelcomeVisibility(visible => {
+      if (!visible) return
+      stopWaiting()
+      if (_initialRefreshPending) void refresh()
+    })
+  } else void refresh()
   _startPeerPolling()
   window.addEventListener('nadoc:collaboration-peers-changed', _refreshServerStatuses)
   _startJobPolling()

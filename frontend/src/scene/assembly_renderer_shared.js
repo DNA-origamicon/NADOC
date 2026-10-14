@@ -38,6 +38,12 @@ import {
 import { clusterMemberFilter as _clusterMemberFilter } from './cluster_entries.js'
 import { _hullGeoForSource } from './assembly_hull_geometry.js'
 import { _rebuildLinkerHelices } from './assembly_linker_render.js'
+import { createAssemblyRebuildQueue } from './assembly_rebuild_queue.js'
+import { repaintAssemblySourceColors } from './assembly_source_colors.js'
+import { assemblyMemberSignature, canReuseAssemblyRepresentation, applyAssemblyRepresentation,
+  fullOnlyAssemblyMeshes, canPrepareFullAssemblySource } from './assembly_representation.js'
+import { initAssemblySourceReadiness } from './assembly_source_readiness.js'
+import { versionedAssemblySourceKey } from '../api/assembly_instance_design_cache.js'
 import {
   _OVHG_SPRITE_HEIGHT_BASE, _makeOverhangNameTexture, _overhangLabelAnchorsLocal,
 } from './assembly_overhang_labels.js'
@@ -203,7 +209,7 @@ const _SHARED_RENDERER_STUB_METHODS = new Set(Object.keys(_SHARED_RENDERER_STUB_
  * @param {object}      opts.store
  * @param {object}      opts.api
  */
-export function _createSharedInstancingRenderer({ scene, store, api }) {
+export function _createSharedInstancingRenderer({ scene, store, api, prepareFull = true }) {
   // ── Per-source render data ─────────────────────────────────────────────────
   // key  = source_key (mirrors `/assembly/geometry`'s sources map; computed
   //         from PartInstance.source via `_sharedSourceKey`).
@@ -224,6 +230,11 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
   //   instBoundingBox,           // THREE.Box3 (per-source local bbox)
   // }
   const _sources = new Map()
+  const _dirtySources = new Map()
+  let _invalidation = 0, _lastRenderedAssembly = null, _disposed = false
+  const _rebuildQueue = createAssemblyRebuildQueue(_rebuild)
+  const _readiness = initAssemblySourceReadiness({ isReady: _isAssemblyReady })
+  let _readinessCycle = null
 
   // id → source_key (lookup for setActiveInstance / applyInlineGeometry)
   const _instToSrc = new Map()
@@ -262,9 +273,9 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
   // caches the shared path doesn't keep, so they're deferred here (a separate
   // feature, not part of cross-part linkers).
   async function rebuildLinkers(assembly) {
-    // rebuild() calls dispose() at its top, which detaches _linkerGroup from the
-    // scene; main.js runs rebuild().then(rebuildLinkers), so re-attach here or
-    // the freshly-built linker meshes would live in an orphaned group (invisible).
+    if (_disposed || (assembly !== _lastRenderedAssembly && assembly !== store.getState().currentAssembly)) return
+    // Re-entry after dispose must reattach the reusable linker group. Transform-
+    // only store updates may also call this without rebuilding source meshes.
     if (!_linkerGroup.parent) scene.add(_linkerGroup)
     await _rebuildLinkerHelices({
       assembly, api, linkerGroup: _linkerGroup, axesToMap: _axesArrayToMap,
@@ -467,6 +478,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
           int bpRow       = bpIdx / BP_TILE_W;
           v_instanceIdx = instanceIdx;
           v_visible = texelFetch(u_visibilityTex, ivec2(0, instanceIdx), 0).r;
+          ${uniformsBundle.fullOnly ? 'v_visible *= texelFetch(u_visibilityTex, ivec2(0, instanceIdx), 0).g;' : ''}
           // Per-source instance matrix. 4 RGBA texels (4 floats each) = one
           // mat4. Texture layout: column-major (texel j of row i = column j
           // of matrix i). mat4(c0,c1,c2,c3) is column-major in GLSL.
@@ -570,6 +582,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
       local: uniformsBundle.uBpTex, color: uniformsBundle.uBpColorTex,
       baseCount: numBpPerInstance, baseCompile: _isImpostor ? null : _priorOnBeforeCompile,
       radius: _isImpostor ? (material.userData.impostorRadius ?? 0.1) : null,
+      visibilityChannel: uniformsBundle.fullOnly ? 1 : null,
     })
   }
 
@@ -1203,6 +1216,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     helixCtrl.root.traverse(obj => {
       if (!(obj instanceof THREE.InstancedMesh)) return
       const isLinkerCyl = _LINKER_CYL_NAMES.has(obj.name)
+      if (isLinkerCyl && obj.count > 0 && source) source.hasLinkerCylinders = true
       // Linker cylinders only represent the linker at the cylinders rep; at
       // full/beads the linker draws as bp beads, so hide them there.
       if (isLinkerCyl && rep !== 'cylinders') {
@@ -1317,6 +1331,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
         uBpTex,
         uBpColorTex,
         hasBpColor:  bpColorTex !== null,
+        fullOnly: fullOnlyAssemblyMeshes.has(obj.name),
       }
       const mat = obj.material
       const mats = Array.isArray(mat) ? mat : [mat]
@@ -1356,7 +1371,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
       // bucket at cylinders rep) doesn't hide them. They stay force-visible
       // (set above) as the linker's cylinder rep alongside sharedLodMid.
       if (!isLinkerCyl) {
-        activeMeshes.push({ mesh: obj, baseCount, bpTex, bpData, bpColorTex, bpColorData })
+        activeMeshes.push({ mesh: obj, baseCount, bpTex, bpData, bpColorTex, bpColorData, fullOnly: meshUniforms.fullOnly })
       }
     })
   }
@@ -1425,6 +1440,13 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
   async function _buildSource(srcKey, srcDesignData, instancesForKey) {
     const { nucleotides, helix_axes, design } = srcDesignData
     if (!nucleotides || !design) return null
+    const buildStarted = performance.now(), buildTimings = {}
+    let lastStage = buildStarted
+    const markBuildStage = name => {
+      const now = performance.now()
+      buildTimings[name] = now - lastStage
+      lastStage = now
+    }
 
     // Build at the most-detailed LOD that any instance in this source needs.
     // Per-instance ``representation`` selects which LOD draws via
@@ -1447,10 +1469,14 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     // global rep menu sets all instances the same, which is the common case.)
     let rep = 'cylinders'
     for (const inst of instancesForKey) {
-      const r = inst.representation
+      const r = inst.representation ?? 'full'
       if (r === 'full') { rep = 'full'; break }   // deepest — stop scanning
       if (r === 'beads') rep = 'beads'            // keep scanning in case a 'full' follows
     }
+    // Prepare the native Full primitives once while the source loads. Its rows
+    // still draw their requested representation; the first Full click only
+    // changes caps/masks. Auxiliary sources keep their established build path.
+    if (prepareFull && canPrepareFullAssemblySource(design, instancesForKey)) rep = 'full'
     const numInstances = instancesForKey.length
 
     // ── Hull-prism source geometry ───────────────────────────────────────────
@@ -1465,6 +1491,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     // leave them invisible when none could be produced.
     const hull = _hullGeoForSource(design, nucleotides, helix_axes ?? null)
     const hasHull = !!hull?.solid
+    markBuildStage('hull')
 
     // Build a single helixCtrl with the canonical bp matrices.
     const helixGroup = new THREE.Group()
@@ -1476,6 +1503,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     const helixCtrl = buildHelixObjects(
       nucleotides, design, helixGroup, customColors, [], helix_axes ?? null, rep,
     )
+    markBuildStage('helix')
     // Match the individual-part renderer: crossover insertions have their own
     // bead/slab/connector meshes and must be present before shared-instancing
     // patches every InstancedMesh in the source tree.
@@ -1484,6 +1512,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
       design, nucleotides, stapleColorMap, customColors,
     )
     if (xoverResult) helixCtrl.root.add(xoverResult.group)
+    markBuildStage('crossovers')
     // Assembly mode never needs the helix axis arrows — they're meant for
     // single-design editing (and were the only thing visible at default
     // zoom on large assemblies, which looked like clutter).  Hide them so
@@ -1504,8 +1533,12 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
       if (obj instanceof THREE.InstancedMesh) obj.userData.sharedBase = obj.count
     })
 
-    // Compute per-source local bbox BEFORE we patch (count is still baseCount).
-    const instBoundingBox = _computeSourceLocalBox(helixCtrl)
+    // The final selection bounds already use the nucleotide cloud plus LOD
+    // cylinders below. Avoid a redundant full primitive-matrix walk when that
+    // authoritative cloud is available. Empty sources retain the old fallback.
+    const nucleotideBox = nucleotideLocalBox(nucleotides)
+    const instBoundingBox = nucleotideBox ?? _computeSourceLocalBox(helixCtrl)
+    markBuildStage('bounds')
 
     // Patch shader + collapse InstancedMesh.instanceMatrix + extract per-bp
     // matrices into per-mesh DataTextures. We pass a transient holder so the
@@ -1513,6 +1546,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     const activeMeshes = []
     const sourceCollector = { bpTextures: [] }
     _patchSharedMeshes(helixCtrl, numInstances, uniformsBundle, activeMeshes, sourceCollector, rep)
+    markBuildStage('sharedTextures')
 
     // ── Memory-savings probe (debug visibility into the per-source budget) ──
     // Compute the byte count of the per-bp DataTextures (NEW) + the
@@ -1557,6 +1591,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
       _packMatrixIntoRow(m, xformData, i * 16)
       visibility[i] = (inst.visible !== false) ? 1.0 : 0.0
       visData[i * 16 + 0] = visibility[i]
+      visData[i * 16 + 1] = (inst.representation ?? 'full') === 'full' ? 1 : 0
       // Hull cap (3) needs the hull InstancedMesh to exist; if this source
       // produced no hull geometry, demote hull-prism instances to cylinders
       // (1) so they stay visible instead of bucketing to a non-existent mesh.
@@ -1590,6 +1625,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
       helixAxes: helix_axes ?? null,
       rep,                    // representation/LOD — needed to re-run buildHelixObjects
       customColors,           // strandId → hex (live, mutated by updateStrandColor)
+      stapleColorMap,
       numBpPerInstance: 0,    // not used directly — each mesh carries its baseCount in userData
       instanceIds,
       instanceIndex,
@@ -1609,6 +1645,9 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
       instBoundingBox,
       crossoverArcGroup,
       xoverResult,
+      cgRepresentationReusable: !sourceCollector.hasLinkerCylinders && !(design.protein_attachments?.length),
+      representationById: new Map(instancesForKey.map(inst => [inst.id, inst.representation ?? 'full'])),
+      hasFullRepresentation: instancesForKey.some(inst => (inst.representation ?? 'full') === 'full'),
     }
 
     // ── Phase 3f: build mid-LOD + far-LOD meshes for this source ─────────────
@@ -1656,6 +1695,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
       const ovhgLod = _buildOverhangLodMesh(srcEntry, legacyOvhgMesh, helixGroup)
       legacyOvhgMesh.count = 0
       if (ovhgLod) {
+        ovhgLod.fullCylinder = legacyOvhgMesh.name === 'overhangFullCylinders'
         srcEntry.overhangLod = ovhgLod
         console.info(`[shared_renderer]   overhang LOD built: numSegments=${ovhgLod.numSegments}`)
       } else {
@@ -1677,7 +1717,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     //      no empty end padding" property for offset-from-origin parts like
     //      Ultimate Polymer Hinge.
     {
-      const box = nucleotideLocalBox(nucleotides) ?? new THREE.Box3()
+      const box = nucleotideBox?.clone() ?? new THREE.Box3()
       const visBox = _computeLodLocalBox(srcEntry.midLod, srcEntry.overhangLod)
       if (!visBox.isEmpty()) box.union(visBox)
       if (!box.isEmpty()) srcEntry.instBoundingBox = box
@@ -1705,7 +1745,8 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     // straight part). Lets bent parts show capped, strand-coloured cylinders at
     // every instance in the cylinder rep (mid bucket); see _updateLodForSource.
     {
-      const curvedCylGeo = _curvedCylGeoForSource(helixCtrl)
+      srcEntry.curvedColorRanges = []
+      const curvedCylGeo = _curvedCylGeoForSource(helixCtrl, srcEntry.curvedColorRanges)
       if (curvedCylGeo) {
         const ccl = _buildCurvedCylLodMesh(srcEntry, curvedCylGeo, helixGroup)
         if (ccl) {
@@ -1722,8 +1763,10 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     // average).  Now the seed populates a per-helix texture instead, so
     // each cylinder picks up its own strand colour and the legacy
     // per-instance look is preserved on the shared path.
+    markBuildStage('lod')
     try { _applyColorsToSource(srcEntry, null) }
     catch (err) { console.warn('[shared_renderer] initial colour seed failed:', err) }
+    markBuildStage('colors')
 
     // The shared LODs carry custom shaders that compose placement transforms.
     // Preserve that patch as a material-reinstaller so photo mode can use the
@@ -1762,10 +1805,12 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
       const atomRep = instancesForKey[0].representation   // 'vdw' | 'ballstick' | 'stick'
       await _buildAtomImpostorBatch(srcEntry, instancesForKey[0].id, uniformsBundle, numInstances, helixGroup, atomRep)
     }
-    if (instancesForKey.some(i => ['full', 'cylinders'].includes(i.representation ?? 'full'))) {
+    if (design.protein_attachments?.length && instancesForKey.some(i => ['full', 'cylinders'].includes(i.representation ?? 'full'))) {
       await _buildProteinTraceBatch(srcEntry, instancesForKey[0].id, helixGroup, instancesForKey)
     }
-
+    markBuildStage('accessories')
+    buildTimings.total = performance.now() - buildStarted
+    helixGroup.userData.assemblyBuildTimings = buildTimings
     return srcEntry
   }
 
@@ -2495,11 +2540,12 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
   // into ONE source-local geometry with per-vertex strand colours, then instance
   // it per copy exactly like the hull solid.  Returns position+normal+color, or
   // null for a straight part (no curved tubes) — so the straight path is untouched.
-  function _curvedCylGeoForSource(helixCtrl) {
+  function _curvedCylGeoForSource(helixCtrl, colorRanges = []) {
     const root = helixCtrl?.root
     if (!root) return null
     root.updateMatrixWorld(true)
     const baked = []
+    let vertexOffset = 0
     const col = new THREE.Color()
     root.traverse(o => {
       const pn = o.parent?.name
@@ -2518,6 +2564,8 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
       const colors = new Float32Array(n * 3)
       for (let i = 0; i < n; i++) { colors[i * 3] = col.r; colors[i * 3 + 1] = col.g; colors[i * 3 + 2] = col.b }
       g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+      colorRanges.push({ start: vertexOffset, count: n, domain: { ...o.userData }, overhang: pn === 'curvedOvhgGroup' })
+      vertexOffset += n
       baked.push(g)
     })
     if (!baked.length) return null
@@ -2888,7 +2936,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     //        mid:   numHelices
     //        hull:  1
     for (const am of srcEntry.activeMeshes) {
-      const c = nClose * am.baseCount
+      const c = am.fullOnly && !srcEntry.hasFullRepresentation ? 0 : nClose * am.baseCount
       am.mesh.count = c
       // Phase 3f stage 2 follow-up: keep `visible = true` unconditionally so
       // the onBeforeRender hook chain keeps firing even when count=0. Three.js
@@ -3001,6 +3049,12 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
 
   // ── Public: dispose ───────────────────────────────────────────────────────
   function dispose() {
+    _readiness.reset()
+    _readinessCycle = null
+    _rebuildQueue.cancel()
+    _disposed = true
+    _lastRenderedAssembly = null
+    _dirtySources.clear()
     for (const srcEntry of _sources.values()) _disposeSource(srcEntry)
     _sources.clear()
     _instToSrc.clear()
@@ -3083,80 +3137,123 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
   }
 
   // ── Public: rebuild ───────────────────────────────────────────────────────
-  async function rebuild(assembly /*, opts */) {
-    if (!assembly) { dispose(); return }
-
-    const instances = assembly.instances ?? []
-    if (!instances.length) {
+  function rebuild(assembly /*, opts */) {
+    if (!assembly?.instances?.length) {
       dispose()
-      _fireRebuildComplete()
-      return
+      if (assembly) _fireRebuildComplete()
+      return Promise.resolve()
     }
+    _disposed = false
+    _readiness.begin()
+    const cycle = _rebuildQueue.request(assembly, _invalidation)
+    if (cycle !== _readinessCycle) {
+      _readinessCycle = cycle
+      cycle.catch(error => { if (cycle === _readinessCycle) _readiness.fail(error) })
+    }
+    return cycle
+  }
 
-    // Group instances by source_key.
-    const groups = new Map() // srcKey → PartInstance[]
-    for (const inst of instances) {
+  function _isAssemblyReady(assembly) {
+    if (_disposed || !assembly?.instances?.length) return false
+    const groups = new Map()
+    for (const instance of assembly.instances) {
+      const key = _sharedSourceKey(instance)
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key).push(instance)
+    }
+    if (groups.size !== _sources.size) return false
+    for (const [key, instances] of groups) {
+      const source = _sources.get(key)
+      if (!source || _dirtySources.has(key)) return false
+      const version = versionedAssemblySourceKey(instances[0])
+      if (version ? source.geometryVersion !== version : _lastRenderedAssembly !== assembly) return false
+      // Consumers wait for source Designs, not a display tier. A newer
+      // representation may finish while an older source wait is still pending.
+      if (source.memberSignature !== assemblyMemberSignature(instances)) return false
+    }
+    return true
+  }
+
+  async function _rebuild(assembly, current) {
+    const groups = new Map()
+    for (const inst of assembly.instances) {
       const key = _sharedSourceKey(inst)
       if (!groups.has(key)) groups.set(key, [])
       groups.get(key).push(inst)
     }
-
-    // Fetch geometry for any source we haven't built yet (or one that the
-    // user invalidated). For simplicity (and per spec for invalidateInstance),
-    // we tear down all current sources and rebuild. Future optimization: only
-    // rebuild sources whose membership / source_key set changed.
-    // Fetch BEFORE disposing so the CURRENT geometry stays on screen during the
-    // (slow, seconds-long) batch fetch. Disposing first blanked the whole scene
-    // for the entire fetch — the user saw an empty viewport and assumed the app
-    // had hung. Now the old chain stays visible until the new data is in hand.
-    let batchGeo = null
-    try {
-      batchGeo = await api.getAssemblyGeometry()
-    } catch (err) {
-      console.warn('[shared_renderer] batch geometry fetch failed:', err)
-      _fireRebuildComplete()
-      return   // keep the old scene visible on error rather than blanking it
+    const plans = [...groups].map(([key, instances]) => {
+      const existing = _sources.get(key)
+      const version = versionedAssemblySourceKey(instances[0])
+      const dirty = _dirtySources.get(key)
+      // Only a live file version is authoritative. Inline IDs and persisted
+      // SHA-only source keys cannot prove that the displayed shape is current.
+      const reuse = !!existing && !!version && existing.geometryVersion === version && !dirty
+      const signature = JSON.stringify(instances.map(i => [i.id, i.representation ?? 'full', i.mode]).sort())
+      return { key, instances, existing, version, dirty, signature, reuse,
+        data: reuse ? { design: existing.design, nucleotides: existing.nucleotides, helix_axes: existing.helixAxes } : null }
+    })
+    const missing = plans.filter(plan => !plan.reuse)
+    // Re-fetch only edited/new sources. A representation switch already has
+    // all nucleotide coordinates in memory; it needs no geometry round-trip.
+    let batch = null
+    if (missing.length >= 3 || (missing.length && !api.getInstanceGeometry)) {
+      try { batch = await api.getAssemblyGeometry() }
+      catch (error) { console.warn('[shared_renderer] batch geometry fetch failed:', error) }
+      if (!current()) return
     }
-    dispose()  // now wipe — we rebuild from scratch with the fetched data below.
-    const perInst = batchGeo?.instances ?? {}
+    for (const plan of missing) {
+      const id = plan.instances[0].id
+      let data = batch?.instances?.[id]
+      if ((!data || data.error) && api.getInstanceGeometry) {
+        try { data = await api.getInstanceGeometry(id) }
+        catch (error) { console.warn(`[shared_renderer] geometry fetch failed for ${id}:`, error) }
+        if (!current()) return
+      }
+      if (data?.design && data.nucleotides && !data.error) {
+        plan.data = { ...data, helix_axes: _convertHelixAxesArray(data.helix_axes) }
+      }
+    }
+    if (!current()) return
+    const unavailable = missing.filter(plan => !plan.data)
+    if (unavailable.length) {
+      throw new Error(`Could not load assembly geometry for ${unavailable.map(plan => plan.instances[0].id).join(', ')}`)
+    }
 
-    for (const [srcKey, instList] of groups) {
-      // Pick the first instance's geometry record — every instance of the
-      // same source shares the same nucleotides/design references (client.js
-      // dedup is already in place).
-      const firstId = instList[0].id
-      const rec = perInst[firstId]
-      let srcData = rec
-      if (!srcData || srcData.error) {
-        // Per-instance fallback.
-        try {
-          const geo = await api.getInstanceGeometry(firstId)
-          srcData = {
-            nucleotides: geo?.nucleotides ?? [],
-            helix_axes: _convertHelixAxesArray(geo?.helix_axes),
-            design: geo?.design ?? null,
-          }
-        } catch (err) {
-          console.warn(`[shared_renderer] geometry fetch failed for ${firstId}:`, err)
-          continue
-        }
+    // Leave existing geometry visible through fetch failures. Unaffected source
+    // groups retain their GPU resources, picking data and instance-table rows.
+    _dematerializeInstance()
+    _disposeActiveBox()
+    for (const [key, entry] of _sources) {
+      if (!groups.has(key)) {
+        _disposeSource(entry); _sources.delete(key); _dirtySources.delete(key)
       }
-      // The client's `getAssemblyGeometry` projects helix_axes through as the
-      // raw map (already dict-shape after _expandCompactNucleotides). When
-      // we fall back to getInstanceGeometry the shape is array-of-axis so we
-      // convert it.
-      if (Array.isArray(srcData.helix_axes)) {
-        srcData = { ...srcData, helix_axes: _convertHelixAxesArray(srcData.helix_axes) }
+    }
+    for (const plan of plans) {
+      if (!plan.data) continue
+      if (plan.reuse && (plan.existing.renderSignature === plan.signature || canReuseAssemblyRepresentation(plan.existing, plan.instances))) {
+        applyAssemblyRepresentation(plan.existing, plan.instances)
+        for (const inst of plan.instances) setLiveTransform(inst.id, _instMat4(inst.transform?.values))
+        plan.existing.renderSignature = plan.signature
+        continue
       }
-      const entry = await _buildSource(srcKey, srcData, instList)
+      if (plan.existing) { _disposeSource(plan.existing); _sources.delete(plan.key) }
+      const entry = await _buildSource(plan.key, plan.data, plan.instances)
+      if (!current()) { _disposeSource(entry); return }
       if (!entry) continue
-      _sources.set(srcKey, entry)
+      entry.geometryVersion = plan.version
+      entry.renderSignature = plan.signature
+      entry.memberSignature = assemblyMemberSignature(plan.instances)
+      _sources.set(plan.key, entry)
+      if (_dirtySources.get(plan.key) === plan.dirty) _dirtySources.delete(plan.key)
       _installDirtyUploader(entry)
       _installLodUpdater(entry)
     }
-
-    rebuildOverhangNames()   // rebuild label sprites if the toggle is on
+    _lastRenderedAssembly = assembly
+    applyGroupVisibilityOverlay(_groupHiddenInstanceIds)
+    setActiveInstance(store.getState().activeInstanceId ?? _activeInstanceId)
+    rebuildOverhangNames()
     _fireRebuildComplete()
+    _readiness.notify()
   }
 
   function _convertHelixAxesArray(arr) {
@@ -3183,21 +3280,21 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
   async function applyInlineGeometry(filePath, design, nucleotides, helixAxes) {
     const assembly = store?.getState?.()?.currentAssembly
     if (!assembly || !filePath) return
-    // Same trigger as the old path — rebuild will refetch.
+    for (const inst of assembly.instances ?? []) {
+      if (inst.source?.type === 'file' && inst.source.path === filePath) invalidateInstance(inst.id)
+    }
     await rebuild(assembly)
   }
 
   // ── Public: invalidateInstance ────────────────────────────────────────────
   function invalidateInstance(instanceId) {
     _bendCentersLocalCache.delete(instanceId)
-    // Per the spec: a full rebuild is acceptable for representation changes.
-    const assembly = store?.getState?.()?.currentAssembly
-    if (assembly) {
-      // Don't await — fire-and-forget; matches old path semantics.
-      rebuild(assembly).catch(err =>
-        console.warn('[shared_renderer] invalidate-triggered rebuild failed:', err),
-      )
-    }
+    const instance = store.getState().currentAssembly?.instances?.find(i => i.id === instanceId)
+    const key = _instToSrc.get(instanceId) ?? (instance && _sharedSourceKey(instance))
+    if (key) _dirtySources.set(key, ++_invalidation)
+    // Callers invalidate before mutating or invalidate several copies before
+    // rebuilding once. Starting a fetch here races the mutation and multiplies
+    // a single edit into one complete assembly request per instance.
   }
 
   // ── Public: setActiveInstance ─────────────────────────────────────────────
@@ -3510,27 +3607,8 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     _ovhgAnchors = []; _ovhgSelList = []; _ovhgHover = null
   }
 
-  // ── Public: updateStrandColor ─────────────────────────────────────────────
-  // Live UI strand-color change. For each source we:
-  //   1. Update the source's `customColors` dict (strandId → hex int).
-  //   2. Re-run `buildHelixObjects` with the updated colors into a throwaway
-  //      Group, producing fresh InstancedMeshes whose `instanceColor.array`
-  //      already encodes the new per-bp colors (helix_renderer.js owns the
-  //      bp-slot → strand mapping).
-  //   3. Walk the temp helixCtrl + the patched activeMeshes IN PARALLEL
-  //      (traverse order is deterministic from buildHelixObjects), copying
-  //      each temp InstancedMesh's `instanceColor.array` into the matching
-  //      activeMeshes entry's `bpColorData` Float32Array. Mark
-  //      `bpColorTex.needsUpdate = true` for a full re-upload on the next
-  //      frame (bp color textures are 1 × bp_count × RGBA32F, typically a
-  //      few KB per mesh — full re-upload is cheap relative to per-row
-  //      `texSubImage2D` bookkeeping, and the user-visible UI click already
-  //      cost the buildHelixObjects rebuild).
-  //   4. Dispose the temp helixCtrl group (its InstancedMeshes + geometries
-  //      + materials).
-  //
-  // The bp-color mapping is implicit inside helix_renderer.js (option C in
-  // the Phase 3d-A spec); we never inspect it directly.
+  // Live color updates use retained source slots and existing GPU color buffers.
+  // Crossover insertions/arc lines have their own endpoint-owner palette rules.
   function _applyCrossoverColorsToSource(srcEntry, mode) {
     if (!srcEntry) return
     const dimGray = 0xbbbbbb
@@ -3604,162 +3682,10 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     }
   }
 
-  // Re-paint one source's bp-color texture by running `buildHelixObjects`
-  // against a throwaway Group (option C from the 3d-A spec). When
-  // `modeOverride` is non-null OR the store's coloringMode is not 'strand',
-  // also invoke `helixCtrl.applyColoring(mode, ...)` on the throwaway —
-  // mirrors the per-instance path's `_applyColoringToEntry`.
   function _applyColorsToSource(srcEntry, modeOverride) {
-    if (!srcEntry?.design || !srcEntry?.nucleotides) return
-    const tmpGroup = new THREE.Group()
-    let tmpHelixCtrl
-    try {
-      tmpHelixCtrl = buildHelixObjects(
-        srcEntry.nucleotides,
-        srcEntry.design,
-        tmpGroup,
-        srcEntry.customColors,
-        [],                  // loopStrandIds — assemblies don't track this
-        srcEntry.helixAxes,
-        srcEntry.rep,
-      )
-    } catch (err) {
-      console.warn('[shared_renderer] _applyColorsToSource: buildHelixObjects threw:', err)
-      return
-    }
-
-    // Apply coloring-mode transform on the temp helixCtrl. buildHelixObjects
-    // always paints strand colors; non-strand modes need a follow-up
-    // `applyColoring` call. Old per-instance path does the same.
     const mode = modeOverride ?? (store.getState().coloringMode || 'strand')
-    if (mode !== 'strand' && typeof tmpHelixCtrl.applyColoring === 'function') {
-      try {
-        tmpHelixCtrl.applyColoring(mode, srcEntry.design, srcEntry.customColors, new Set())
-      } catch (err) {
-        console.warn('[shared_renderer] _applyColorsToSource: applyColoring threw:', err)
-      }
-    }
-
-    // Collect temp InstancedMeshes in traverse order (matches the order in
-    // `_patchSharedMeshes`, which uses the same .traverse() over the SAME
-    // helixCtrl.root structure). Skip count=0 meshes.
-    // Also stash the temp iHelixCylinders mesh by name so we can pull its
-    // per-segment instanceColor into the mid-LOD per-helix colour texture.
-    const tmpMeshes = []
-    let tmpHelixCyl = null
-    let tmpOvhgCyl  = null
-    tmpHelixCtrl.root.traverse(obj => {
-      if (!(obj instanceof THREE.InstancedMesh)) return
-      if (obj.name === 'helixCylinders')    tmpHelixCyl = obj
-      if (obj.name === 'overhangCylinders' || obj.name === 'overhangFullCylinders') tmpOvhgCyl  = tmpOvhgCyl ?? obj
-      if (obj.count === 0) return
-      tmpMeshes.push(obj)
-    })
-
-    const pairs = Math.min(tmpMeshes.length, srcEntry.activeMeshes.length)
-    // Per-bp colour copy into activeMeshes' bpColorTex (full-rep path).
-    for (let i = 0; i < pairs; i++) {
-      const tmp = tmpMeshes[i]
-      const am  = srcEntry.activeMeshes[i]
-      if (!tmp.instanceColor) continue
-      if (!am.bpColorTex || !am.bpColorData) continue
-      const src = tmp.instanceColor.array
-      const n   = Math.min(am.baseCount, Math.floor(src.length / 3))
-      const dst = am.bpColorData
-      for (let j = 0; j < n; j++) {
-        dst[j * 4 + 0] = src[j * 3 + 0]
-        dst[j * 4 + 1] = src[j * 3 + 1]
-        dst[j * 4 + 2] = src[j * 3 + 2]
-      }
-      am.bpColorTex.needsUpdate = true
-    }
-
-    // Direct per-segment colour copy (overhang LOD): the temp mesh's
-    // instanceColor already matches the LOD's numSegments 1:1, so we just
-    // copy 3 floats per segment into the LOD's 4-float texture rows.
-    function _copySegmentColors(lod, tmpMesh) {
-      if (!lod?.segColorTex || !tmpMesh?.instanceColor) return
-      const src = tmpMesh.instanceColor.array
-      const dst = lod.segColorData
-      const n = Math.min(lod.numSegments, Math.floor(src.length / 3))
-      for (let i = 0; i < n; i++) {
-        dst[i * 4 + 0] = src[i * 3 + 0]
-        dst[i * 4 + 1] = src[i * 3 + 1]
-        dst[i * 4 + 2] = src[i * 3 + 2]
-        dst[i * 4 + 3] = 1
-      }
-      lod.segColorTex.needsUpdate = true
-    }
-    _copySegmentColors(srcEntry.overhangLod, tmpOvhgCyl)
-
-    // Mid LOD: one cylinder per *contiguous dsDNA region* (interval) →
-    // average the legacy iHelixCylinders per-domain colours within each
-    // interval.  Each interval carries its own `domains` list with
-    // cylIdx entries that index into tmpHelixCyl.instanceColor.
-    if (srcEntry.midLod?.segColorTex && srcEntry.midLod?.intervals
-        && tmpHelixCyl?.instanceColor) {
-      const midLod = srcEntry.midLod
-      const intervals = midLod.intervals
-      const cylColors = tmpHelixCyl.instanceColor.array
-      const dst = midLod.segColorData
-      for (let i = 0; i < intervals.length; i++) {
-        const iv = intervals[i]
-        let sumR = 0, sumG = 0, sumB = 0, count = 0
-        for (const d of iv.domains) {
-          const ci = d.cylIdx * 3
-          sumR += cylColors[ci + 0]
-          sumG += cylColors[ci + 1]
-          sumB += cylColors[ci + 2]
-          count++
-        }
-        if (count > 0) {
-          dst[i * 4 + 0] = sumR / count
-          dst[i * 4 + 1] = sumG / count
-          dst[i * 4 + 2] = sumB / count
-        } else {
-          dst[i * 4 + 0] = 1
-          dst[i * 4 + 1] = 1
-          dst[i * 4 + 2] = 1
-        }
-        dst[i * 4 + 3] = 1
-      }
-      midLod.segColorTex.needsUpdate = true
-    }
-
-    // Curved-cyl LOD (bent parts): its cylinders are a baked TubeGeometry whose
-    // per-vertex colours were frozen at build time, so live coloringMode changes
-    // never reached it (the documented "Known v1 limitation").  Re-bake the
-    // colour attribute from the freshly-recoloured temp helixCtrl and copy it
-    // into the live geometry so bent parts track the coloringMode like straight
-    // ones.  Vertex order/count are deterministic from the same source, so a
-    // plain array copy suffices (guarded on count).
-    if (srcEntry.curvedCylLod?.mesh?.geometry) {
-      const reGeo = _curvedCylGeoForSource(tmpHelixCtrl)
-      if (reGeo) {
-        const newCol = reGeo.getAttribute('color')
-        const dstCol = srcEntry.curvedCylLod.mesh.geometry.getAttribute('color')
-        if (newCol && dstCol && newCol.count === dstCol.count) {
-          dstCol.array.set(newCol.array)
-          dstCol.needsUpdate = true
-        }
-        reGeo.dispose()
-      }
-    }
-
+    repaintAssemblySourceColors(srcEntry, mode)
     _applyCrossoverColorsToSource(srcEntry, mode)
-
-    // (No far/billboard tint to update — the far tier was retired; distant
-    // instances render as the flat-grey hull solid, not a coloured rectangle.)
-
-    // Dispose: skip module-level shared template geometries (still in use
-    // by the live helixCtrl); dispose the fresh-per-call materials.
-    tmpHelixCtrl.root.traverse(obj => {
-      if (obj.geometry && !obj.geometry.userData?.shared) obj.geometry.dispose()
-      if (obj.material) {
-        const mats = Array.isArray(obj.material) ? obj.material : [obj.material]
-        mats.forEach(m => m.dispose())
-      }
-    })
   }
 
   function updateStrandColor(strandId, hexColor) {
@@ -3964,9 +3890,11 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
 
   // The Design dict for an instance's source. Used by cluster articulation +
   // the cluster-panel glow to resolve cluster_transforms / cluster_joints.
-  function getInstanceDesign(instanceId) {
+  function getInstanceDesign(instanceId, expectedSourceKey) {
     const srcKey = instanceId ? _instToSrc.get(instanceId) : null
-    return (srcKey ? _sources.get(srcKey)?.design : null) ?? null
+    const entry = srcKey ? _sources.get(srcKey) : null
+    if (expectedSourceKey && entry?.geometryVersion !== expectedSourceKey) return null
+    return entry?.design ?? null
   }
 
   // Source-local backbone beads + the instance's world matrix. Mirrors the
@@ -4030,7 +3958,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     srcEntry.visData[row * 16 + 0] = srcEntry.visibility[row]
     srcEntry.dirtyVisRows.add(row)
     const arcGroup = srcEntry.crossoverArcGroup?.userData?.instanceGroups?.get(id)
-    if (arcGroup) arcGroup.visible = visible
+    if (arcGroup) arcGroup.visible = visible && ['full', 'beads'].includes(srcEntry.representationById?.get(id) ?? 'full')
   }
 
   function _materializeInstance(id) {
@@ -4039,6 +3967,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     const srcKey   = id ? _instToSrc.get(id) : null
     const srcEntry = srcKey ? _sources.get(srcKey) : null
     if (!srcEntry?.design || !srcEntry?.nucleotides) return null
+    const representation = srcEntry.representationById?.get(id) ?? srcEntry.rep
     const mw = getLiveTransform(id)
     if (!mw) return null
     const group = new THREE.Group()
@@ -4051,14 +3980,14 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
     // which is exactly what captureClusterBase/applyClusterTransform need.
     const helixCtrl = buildHelixObjects(
       srcEntry.nucleotides, srcEntry.design, group,
-      srcEntry.customColors, [], srcEntry.helixAxes ?? null, srcEntry.rep,
+      srcEntry.customColors, [], srcEntry.helixAxes ?? null, representation,
     )
     helixCtrl.setAxisArrowsVisible?.(false)
     // buildHelixObjects starts every LOD mesh with visible=false; setDetailLevel
     // flips the right ones on (the bp-invisibility lesson — without this the
     // overlay renders nothing and the user sees no articulation).
     if (helixCtrl.root) helixCtrl.root.visible = true
-    helixCtrl.setDetailLevel?.(CG_LOD[srcEntry.rep] ?? CG_LOD.cylinders)
+    helixCtrl.setDetailLevel?.(CG_LOD[representation] ?? CG_LOD.cylinders)
     scene.add(group)
     _setBatchSlotVisible(srcEntry, id, false)   // hide the batch copy
     _matInst = { id, srcKey, group, helixCtrl }
@@ -4286,7 +4215,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
         srcEntry.visData[row * 16 + 0]  = srcEntry.visibility[row]
         srcEntry.dirtyVisRows.add(row)
         const arcGroup = srcEntry.crossoverArcGroup?.userData?.instanceGroups?.get(id)
-        if (arcGroup) arcGroup.visible = vis
+        if (arcGroup) arcGroup.visible = vis && ['full', 'beads'].includes(srcEntry.representationById?.get(id) ?? 'full')
         if (sm) {
           if (vis) {
             for (let k = 0; k < 16; k++) _m.elements[k] = srcEntry.xformData[row * 16 + k]
@@ -4356,6 +4285,7 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
 
   const out = {
     rebuild,
+    whenReady: _readiness.whenReady,
     dispose,
     setActiveInstance,
     setVisible,
@@ -4420,6 +4350,14 @@ export function _createSharedInstancingRenderer({ scene, store, api }) {
           minPxSize: dbg?.minPxSize ?? null,
           maxPxSize: dbg?.maxPxSize ?? null,
           activeMeshes: srcEntry.activeMeshes.length,
+          builtRepresentation: srcEntry.rep,
+          representations: Object.fromEntries(srcEntry.representationById ?? []),
+          nucleotideCount: srcEntry.nucleotides?.length ?? 0,
+          meshSlots: srcEntry.activeMeshes.map(active => ({
+            name: active.mesh.name, count: active.mesh.count, visible: active.mesh.visible,
+            baseCount: active.baseCount, fullOnly: active.fullOnly,
+          })),
+          buildTimings: srcEntry.group.userData.assemblyBuildTimings,
           midLodCount: srcEntry.midLod?.mesh.count ?? null,
           hullLodCount: srcEntry.hullLod?.mesh.count ?? null,
         })

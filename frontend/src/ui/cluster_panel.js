@@ -22,6 +22,7 @@ import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_sta
 import { initClusterStylePopover } from './cluster_style_popover.js'
 import { STAPLE_PALETTE } from '../scene/helix_renderer/palette.js'
 import { canonicalSelection, selectedClusterIds } from '../scene/selection_model.js'
+import { initInstanceDesignCache } from './assembly_instance_designs.js'
 
 /** The auto palette slot a cluster gets when it has no explicit colour — the same
  *  index-mod-12 rule the 3D cluster coloring uses, so the swatch agrees with it. */
@@ -30,7 +31,7 @@ function _paletteHex(index) {
   return '#' + c.toString(16).padStart(6, '0')
 }
 
-export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick = null, api, onVisibilityChange = null, onStylePreview = null }) {
+export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick = null, api, onVisibilityChange = null, onStylePreview = null, getInstanceDesign, fetchInstanceDesign, waitForAssemblyReady }) {
   const listEl   = document.getElementById('cluster-list')
   const newBtn   = document.getElementById('cluster-new-btn')
   const heading  = document.getElementById('cluster-panel-heading')
@@ -82,6 +83,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
     body.style.display = _collapsed ? 'none' : ''
     arrow.classList.toggle('is-collapsed', _collapsed)
     setSectionCollapsed('dynamics', 'cluster-panel', _collapsed)
+    if (!_collapsed) _rebuild(store.getState().currentDesign?.cluster_transforms ?? [], store.getState().activeClusterId)
   })
 
   // ── Enable / disable new-cluster button ──────────────────────────────────────
@@ -130,7 +132,11 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
   let _assemblyMode    = false
   let _instanceOrder   = []
   const _instanceNames      = new Map()
-  const _instanceDesigns    = new Map()
+  const _instanceDesigns = initInstanceDesignCache({
+    getInstanceDesign, waitForAssemblyReady,
+    fetchInstanceDesign: fetchInstanceDesign ?? (id => api.getInstanceDesign(id)),
+  })
+  let _assemblySnapshot = null
   const _expandedInstances  = new Map()  // instanceId → boolean
 
   // Active cluster selection in assembly mode
@@ -365,7 +371,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
 
     for (const instanceId of _instanceOrder) {
       const partName = _instanceNames.get(instanceId) ?? instanceId
-      const design   = _instanceDesigns.get(instanceId)
+      const design   = _instanceDesigns.designFor(instanceId)
       const clusters = (design?.cluster_transforms ?? []).filter(c => !c.is_default)
 
       const sectionEl = document.createElement('div')
@@ -471,51 +477,36 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
 
   // ── Exported assembly methods ─────────────────────────────────────────────────
 
-  function setAssemblyMode(instances) {
+  function setAssemblyMode(assemblyOrInstances) {
+    const assembly = Array.isArray(assemblyOrInstances) ? { instances: assemblyOrInstances } : assemblyOrInstances
+    const instances = assembly?.instances ?? []
+    _assemblySnapshot = assembly
     _assemblyMode = true
     _stylePopover.close()   // the assembly list has no swatches
     _instanceOrder.length = 0
     _instanceNames.clear()
-    _instanceDesigns.clear()
+    _instanceDesigns.prune(instances.map(inst => inst.id))
     for (const inst of instances) {
       _instanceOrder.push(inst.id)
       _instanceNames.set(inst.id, inst.name)
+      _instanceDesigns.resolve(inst)
     }
     newBtn.disabled = true
     if (!_collapsed) _rebuildAssembly()
-    // Fetch each unique SOURCE's design once and share it across every instance
-    // of that source — same-source instances have an identical cluster list, so
-    // the panel only needs one fetch per part. Fetching per-instance fired O(N)
-    // `GET /assembly/instances/{id}/design` requests (~480ms each), which on the
-    // single-worker backend WAS the assembly-load O(N) cold-open at scale
-    // (~43 s for 500 instances). See path_to_thousands LOD benchmark.
-    const _srcKey = inst =>
-      inst.source?.type === 'file'
-        ? `file:${inst.source.path ?? ''}`
-        : `inline:${inst.source?.design?.id ?? ''}`
-    const _bySource = new Map()   // srcKey → instanceId[]
-    for (const inst of instances) {
-      const k = _srcKey(inst)
-      if (!_bySource.has(k)) _bySource.set(k, [])
-      _bySource.get(k).push(inst.id)
-    }
-    for (const ids of _bySource.values()) {
-      api.getInstanceDesign(ids[0]).then(result => {
-        if (!_assemblyMode) return
-        if (result?.design) {
-          for (const id of ids) _instanceDesigns.set(id, result.design)
-          if (!_collapsed) _rebuildAssembly()
-        }
-      }).catch(() => {})
-    }
+    // Hidden panels wait for version-matched display data already in geometry.
+    // Selected-part authoring independently reads the base Design through api.
+    void _instanceDesigns.ensure(assembly, () => {
+      if (_assemblyMode && _assemblySnapshot === assembly && !_collapsed) _rebuildAssembly()
+    })
   }
 
   function clearAssemblyMode() {
     _assemblyMode = false
+    _assemblySnapshot = null
     _stylePopover.close()
     _instanceOrder.length = 0
     _instanceNames.clear()
-    _instanceDesigns.clear()
+    _instanceDesigns.prune([])
     _expandedInstances.clear()
     if (_activeAsmInstId !== null) {
       _activeAsmInstId    = null
@@ -567,8 +558,8 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
         _rebuildFlat(currentDesign?.cluster_transforms ?? [], activeClusterId)
       }
     },
-    /** Tear down the style popover's document-level listeners (smoke-test gate). */
-    destroy: _stylePopover.destroy,
+    /** Cancel background reads and tear down the popover's document listeners. */
+    destroy() { _instanceDesigns.prune([]); _stylePopover.destroy() },
   }
 }
 

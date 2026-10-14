@@ -246,3 +246,57 @@ it('repairs unassigned components once and disables repair in assemblies', async
   expect(button.disabled).toBe(true)
   document.body.innerHTML = ''
 })
+
+describe('cluster panel assembly display loading', () => {
+  beforeEach(() => { mountDom(); localStorage.removeItem('nadoc.leftSidebar.sections.v1') })
+  afterEach(() => { document.body.innerHTML = ''; localStorage.removeItem('nadoc.leftSidebar.sections.v1') })
+
+  it('uses the ready renderer Design for a hidden panel and refreshes when expanded', async () => {
+    let finish, rendered = null
+    const waitForAssemblyReady = vi.fn(() => new Promise(resolve => { finish = resolve }))
+    const api = { getInstanceDesign: vi.fn() }
+    const instance = { id: 'part', name: 'Part', source: { type: 'file', path: '/part' }, geometrySourceKey: 'f:/part:100:' }
+    const assembly = { instances: [instance] }
+    const store = createMockStore({ assemblyActive: true, currentAssembly: assembly })
+    const panel = initClusterPanel(store, { api, getInstanceDesign: () => rendered, waitForAssemblyReady })
+    document.getElementById('cluster-panel-heading').click()
+    panel.setAssemblyMode(assembly)
+    panel.expandInstance('part')
+    expect(api.getInstanceDesign).not.toHaveBeenCalled()
+    rendered = design()
+    finish()
+    // Both hidden-panel state and later expansion must use the loaded Design.
+    await vi.waitFor(() => expect(waitForAssemblyReady).toHaveBeenCalledOnce())
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    document.getElementById('cluster-panel-heading').click()
+    expect(document.getElementById('cluster-list').textContent).toContain('Cluster A')
+    expect(api.getInstanceDesign).not.toHaveBeenCalled()
+    panel.clearAssemblyMode()
+    panel.destroy()
+  })
+
+  it('does not populate a newer same-ID assembly from a stale wait', async () => {
+    const waits = []
+    const waitForAssemblyReady = (assembly, options) => new Promise(resolve => waits.push({ assembly, ...options, resolve }))
+    let rendered = null
+    const api = { getInstanceDesign: vi.fn() }
+    const source = { type: 'file', path: '/part' }
+    const old = { instances: [{ id: 'part', name: 'Old', source, geometrySourceKey: 'f:/part:100:' }] }
+    const fresh = { instances: [{ id: 'part', name: 'New', source, geometrySourceKey: 'f:/part:101:' }] }
+    const panel = initClusterPanel(createMockStore({ assemblyActive: true }), { api, getInstanceDesign: () => rendered, waitForAssemblyReady })
+    panel.setAssemblyMode(old)
+    panel.setAssemblyMode(fresh)
+    expect(waits[0].signal.aborted).toBe(true)
+    waits[0].resolve()
+    await Promise.resolve(); await Promise.resolve()
+    expect(api.getInstanceDesign).not.toHaveBeenCalled()
+    rendered = { cluster_transforms: [{ id: 'new', name: 'Fresh cluster', helix_ids: [] }] }
+    waits[1].resolve()
+    panel.expandInstance('part')
+    await vi.waitFor(() => expect(document.getElementById('cluster-list').textContent).toContain('Fresh cluster'))
+    expect(document.getElementById('cluster-list').textContent).not.toContain('Old')
+    expect(api.getInstanceDesign).not.toHaveBeenCalled()
+    panel.clearAssemblyMode()
+    panel.destroy()
+  })
+})

@@ -1,3 +1,5 @@
+import { boxSweptSections as _boxSweptSections, createHullSweepFrame } from './hull_sweep.js'
+import { latticeCellEdges, createLatticeEdgeCache } from './hull_lattice_edges.js'
 import { initHullVolumeCutouts } from './hull_volume_cutouts.js'
 /**
  * Joint Renderer — surface approximation, joint axis visualisation, and
@@ -1360,10 +1362,6 @@ const _EXTRUSION_OPS = new Set([
   'bundle-create', 'extrude-segment', 'extrude-continuation', 'extrude-deformed-continuation',
 ])
 
-// bp per deformed-axis sample — MUST match backend deformation._AXIS_SAMPLE_STEP (7).
-// Used to map an extrusion box's global bp range onto its helices' sample indices.
-const _AXIS_SAMPLE_STEP = 7
-
 // Plane → which world axis each lattice coordinate maps to.
 // col → cross-section axis A, row → cross-section axis B, extrusion runs along the third.
 const _PLANE_AXES = {
@@ -2008,14 +2006,11 @@ function _latticeCellPolygon(cell, latticeType) {
   ]
 }
 
-function _latticeBoundaryLoops(cells, latticeType) {
-  const q = n => Math.round(n * 1e7), vertexKey = p => `${q(p.x)},${q(p.z)}`
+function _latticeBoundaryLoops(cells, latticeType, cachedEdges) {
   const edges = new Map(), points = new Map()
   for (const cell of cells) {
-    const polygon = _latticeCellPolygon(cell, latticeType)
-    for (let i = 0; i < polygon.length; i++) {
-      const a = polygon[i], b = polygon[(i + 1) % polygon.length]
-      const ak = vertexKey(a), bk = vertexKey(b), key = `${ak}>${bk}`, reverse = `${bk}>${ak}`
+    const cellEdges = cachedEdges ? cachedEdges(cell) : latticeCellEdges(_latticeCellPolygon(cell, latticeType))
+    for (const { a, b, ak, bk, key, reverse } of cellEdges) {
       points.set(ak, a); points.set(bk, b)
       if (edges.has(reverse)) edges.delete(reverse)
       else edges.set(key, { a: ak, b: bk })
@@ -2075,8 +2070,8 @@ function _mapLatticeLoops(cells, points, loops, latticeType) {
   }))
 }
 
-function _latticeCrossSections(cells, points, latticeType) {
-  const loops = _latticeBoundaryLoops(cells, latticeType)
+function _latticeCrossSections(cells, points, latticeType, cachedEdges) {
+  const loops = _latticeBoundaryLoops(cells, latticeType, cachedEdges)
   const occupied = new Set(cells.map(cell => `${cell.row},${cell.col}`))
   const rows = cells.map(c => c.row), cols = cells.map(c => c.col)
   const holesWithSites = new Set()
@@ -2382,26 +2377,20 @@ function _buildOccupancyHull(design, geometry, helixAxes, curveTolNm = 1.0) {
     return [h.id, { x: p.dot(frame.U), z: p.dot(frame.V) }]
   }))
   const geos = []
+  const frameHelixIds = helices.map(h => h.id)
+  const sweepFrame = curved ? createHullSweepFrame(design, helixAxes, frameHelixIds) : null
+  const cachedEdges = createLatticeEdgeCache(cell => _latticeCellPolygon(cell, design.lattice_type))
   let elementIndex = 0
   for (const run of runs) {
     const points = run.cells.map(h => mids.get(h.id))
-    const crossSections = _latticeCrossSections(run.cells, points, design.lattice_type)
+    const crossSections = _latticeCrossSections(run.cells, points, design.lattice_type, cachedEdges)
     for (const crossSection of crossSections) {
       let members = run.cells.filter(h => _pointInLoop(mids.get(h.id), crossSection.outer))
       if (!members.length) members = run.cells
-      const axial = []
-      for (const h of members) {
-        const ax = trimmedAxes[h.id], start = new THREE.Vector3(...ax.start), end = new THREE.Vector3(...ax.end)
-        const startA = start.clone().sub(frame.origin).dot(frame.dir), endA = end.clone().sub(frame.origin).dot(frame.dir)
-        const denom = Math.max(1, h.hi - h.lo)
-        axial.push(startA + (endA - startA) * ((run.lo - h.lo) / denom),
-          startA + (endA - startA) * ((run.hi - h.lo) / denom))
-      }
-      const a0 = Math.min(...axial), a1 = Math.max(...axial)
       let geo
       if (curved) {
         let sections = _boxSweptSections(design, helixAxes, members.map(h => h.id), run.lo, run.hi,
-          SQUARE_HELIX_SPACING, SQUARE_HELIX_SPACING, helices.map(h => h.id))
+          SQUARE_HELIX_SPACING, SQUARE_HELIX_SPACING, frameHelixIds, sweepFrame)
         if (!sections) continue
         sections = _decimateSections(sections, curveTolNm)
         const center = {
@@ -2412,6 +2401,15 @@ function _buildOccupancyHull(design, geometry, helixAxes, curveTolNm = 1.0) {
           loop.map(p => ({ x: p.x - center.x, z: p.z - center.z })))
         geo = _buildSweptCrossSectionGeometry(sections, loops)
       } else {
+        const axial = []
+        for (const h of members) {
+          const ax = trimmedAxes[h.id], start = new THREE.Vector3(...ax.start), end = new THREE.Vector3(...ax.end)
+          const startA = start.clone().sub(frame.origin).dot(frame.dir), endA = end.clone().sub(frame.origin).dot(frame.dir)
+          const denom = Math.max(1, h.hi - h.lo)
+          axial.push(startA + (endA - startA) * ((run.lo - h.lo) / denom),
+            startA + (endA - startA) * ((run.hi - h.lo) / denom))
+        }
+        const a0 = Math.min(...axial), a1 = Math.max(...axial)
         geo = _extrudeCrossSection(crossSection.outer, crossSection.holes, frame, a0, a1)
       }
       if (geo) geos.push(_colorHullElement(geo, elementIndex++))
@@ -2844,92 +2842,6 @@ function _decimateSections(sections, tolNm) {
  * match the straight comb) and restricts to the box's sample-index sub-range.
  * Returns sections[] (>=2) or null (no sampled helices / range too short).
  */
-function _boxSweptSections(design, helixAxes, boxHelixIds, bpLo, bpHi, wCol, wRow, frameHelixIds = boxHelixIds) {
-  const sampled = boxHelixIds.filter(hid => (helixAxes[hid]?.samples?.length ?? 0) > 2)
-  if (!sampled.length) return null
-  const frameSampled = frameHelixIds.filter(hid => (helixAxes[hid]?.samples?.length ?? 0) > 2)
-  if (!frameSampled.length) return null
-  const repHelix = design.helices.find(h => h.id === frameSampled[0])
-  const bs = repHelix?.bp_start ?? 0
-  let nMin = Infinity
-  for (const hid of [...new Set([...sampled, ...frameSampled])]) nMin = Math.min(nMin, helixAxes[hid].samples.length)
-  if (nMin < 2) return null
-  const idxLo = Math.max(0, Math.min(nMin - 1, Math.round((bpLo - bs) / _AXIS_SAMPLE_STEP)))
-  const idxHi = Math.max(0, Math.min(nMin - 1, Math.round((bpHi - bs) / _AXIS_SAMPLE_STEP)))
-  if (idxHi - idxLo < 1) return null
-
-  const Yv = new THREE.Vector3(0, 1, 0)
-  const Zv = new THREE.Vector3(0, 0, 1)
-  // Rectangle in the cross-section (U,V) plane — corner.x → U, corner.z → V.
-  const corners = [
-    { x:  wCol / 2, z:  wRow / 2 }, { x: -wCol / 2, z:  wRow / 2 },
-    { x: -wCol / 2, z: -wRow / 2 }, { x:  wCol / 2, z: -wRow / 2 },
-  ]
-  // Build the centroid spine for the FULL range [0, idxHi] — NOT just the box's
-  // [idxLo, idxHi].  The parallel-transport frame below must be anchored at the
-  // bundle START (idx 0, tangent ≈ +Z, well-conditioned), so EVERY extrusion box
-  // shares ONE consistent frame.  Seeding each box independently from its own
-  // first section put the LAST box's seed right at the −Y pole (90° bend) →
-  // degenerate → the whole final block was mis-rolled (the residual flip seen
-  // even after the per-box smoothing fix).  We propagate from 0 but EMIT sections
-  // only for idxLo..idxHi below.
-  const centers = [], sectionCenters = []
-  for (let i = 0; i <= idxHi; i++) {
-    const c = new THREE.Vector3()
-    for (const hid of frameSampled) { const s = helixAxes[hid].samples[i]; c.x += s[0]; c.y += s[1]; c.z += s[2] }
-    centers.push(c.divideScalar(frameSampled.length))
-    const sc = new THREE.Vector3()
-    for (const hid of sampled) { const s = helixAxes[hid].samples[i]; sc.x += s[0]; sc.y += s[1]; sc.z += s[2] }
-    sectionCenters.push(sc.divideScalar(sampled.length))
-  }
-  const M = centers.length
-  // Rotation-minimizing (parallel-transport) cross-section frame.  The original
-  // code rebuilt the box axes from `tangent × worldY` at EVERY section, which is
-  // SINGULAR when the spine tangent nears the vertical axis: a bend that drives
-  // the bundle toward world-up (teeth.nadoc: 90° bend at direction 270° → final
-  // tangent ≈ −Y, verified) made the U axis collapse and flip ~90° on the last
-  // box — the "sudden twist, wrong degree + direction" on the final segment.
-  // Instead, seed U once at the bundle start, then carry it forward by the
-  // minimal rotation between consecutive tangents.  No world-up reference → no
-  // pole → no flip; for a planar bend U stays constant straight through the
-  // formerly-singular end.  NOTE: this is a smooth swept envelope — it does NOT
-  // roll by the bundle's material twist (the axis `samples` carry only spine
-  // centers, no per-bp orientation); the visible coil comes from the spine path.
-  const sections = []
-  let prevT = null
-  let U = null
-  for (let k = 0; k < M; k++) {
-    let tangent
-    if (k === 0)          tangent = new THREE.Vector3().subVectors(centers[1], centers[0])
-    else if (k === M - 1) tangent = new THREE.Vector3().subVectors(centers[k], centers[k - 1])
-    else                  tangent = new THREE.Vector3().subVectors(centers[k + 1], centers[k - 1])
-    if (tangent.lengthSq() < 1e-12) continue
-    tangent.normalize()
-    if (!U) {
-      // Seed: any unit vector ⟂ tangent.  world-Y, falling back to world-Z when
-      // the start tangent is itself near the Y pole.
-      U = new THREE.Vector3().crossVectors(tangent, Yv)
-      if (U.lengthSq() < 1e-4) U = new THREE.Vector3().crossVectors(tangent, Zv)
-      U.normalize()
-    } else {
-      // Parallel-transport U across the tangent change: rotate about
-      // (prevT × tangent) by the angle between the tangents, then re-orthogonalize.
-      const axis = new THREE.Vector3().crossVectors(prevT, tangent)
-      const sin  = axis.length()
-      if (sin > 1e-9) {
-        U.applyAxisAngle(axis.divideScalar(sin), Math.atan2(sin, prevT.dot(tangent)))
-      }
-      U.addScaledVector(tangent, -U.dot(tangent)).normalize()   // re-project ⟂ tangent
-    }
-    prevT = tangent
-    // Propagate the frame through [0, idxLo) but only EMIT the box's own sections.
-    if (k < idxLo) continue
-    const V = new THREE.Vector3().crossVectors(U, tangent).normalize()
-    sections.push({ center: sectionCenters[k], U: U.clone(), V, tangent, corners })
-  }
-  return sections.length >= 2 ? sections : null
-}
-
 // ── Public init ────────────────────────────────────────────────────────────────
 
 export function initJointRenderer(scene, camera, canvas, store, api) {

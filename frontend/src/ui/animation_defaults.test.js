@@ -26,7 +26,7 @@ describe('initial animation', () => {
     await defaults.ensure()
     expect(api.ensureDefaultAnimation).toHaveBeenCalledOnce()
   })
-  it('uses separate assembly and embedded-part contexts', async () => {
+  it('seeds the assembly but never rewrites a source merely because its part is selected', async () => {
     const context = { assemblyMode: true }
     const { defaults, api } = setup(context)
     await defaults.ensure()
@@ -35,9 +35,9 @@ describe('initial animation', () => {
     context.partDesign = { id: 'd' }
     context.partInstanceId = 'p1'
     context.partPatchFn = vi.fn(fn => fn(context.partDesign))
-    await defaults.ensure()
-    expect(context.partDesign.animations[0]).toMatchObject({ name: 'animation 1', keyframes: [], fps: 30, loop: false })
-    expect(context.partDesign.animations[0].id).toBeTruthy()
+    await defaults.ensure(); await defaults.ensure()
+    expect(context.partPatchFn).not.toHaveBeenCalled()
+    expect(context.partDesign.animations).toBeUndefined()
     expect(api.ensureDefaultAnimation).not.toHaveBeenCalled()
   })
   it('waits for a document and reports failures without a retry loop', async () => {

@@ -15,7 +15,7 @@
 // Factory. Deps:
 //   store                  — { getState } (reads assemblyActive / currentAssembly)
 //   api                    — { getAssembly, getInstanceDesign }
-//   assemblyRenderer       — { rebuild, rebuildLinkers }
+//   assemblyRenderer       — { invalidateInstance, rebuild, rebuildLinkers }
 //   assemblyJointRenderer  — { rebuild }
 //   syncLog(level,tag,msg) — sync console logger
 //   setSyncStatus(state,label) — sync-status badge setter
@@ -76,19 +76,17 @@ export function initAssemblyRefresh({
     syncLog('info', 'ASM', `${reason}: refreshing ${instanceId}`)
     setSyncStatus('yellow', 'syncing part…')
 
-    // The edited part is usually shared by several instances (a polymerized
-    // chain). Do NOT invalidate per-instance: on the shared renderer
-    // `invalidateInstance` IGNORES the id and triggers a FULL rebuild, so a
-    // per-instance loop fired one rebuild PER copy (40 instances → 40
-    // getAssemblyGeometry calls → backend saturation + the rebuild-race overlay).
-    // A single `rebuild()` below disposes every source and refetches the batch
-    // geometry once, so all copies pick up the new shape from one rebuild.
+    // The edited part may be shared by several copies. Invalidation only marks
+    // the source dirty; the single rebuild below refreshes that source and
+    // preserves unrelated source meshes. Mark before getAssembly so its store
+    // subscriber shares this same refresh instead of retaining old geometry.
     const cur     = store.getState().currentAssembly
     const srcInst = cur?.instances?.find(i => i.id === instanceId)
     const srcPath = srcInst?.source?.type === 'file' ? srcInst.source.path : null
     const affected = srcPath
       ? (cur?.instances ?? []).filter(i => i.source?.type === 'file' && i.source.path === srcPath)
       : (srcInst ? [srcInst] : [])
+    for (const instance of affected) assemblyRenderer.invalidateInstance?.(instance.id)
 
     // The part-editor save also writes the .nadoc file, which fires a watchdog
     // SSE `file-changed`. Mark the path self-saved so `_handleLibraryEvent`
@@ -100,8 +98,8 @@ export function initAssemblyRefresh({
 
     // getAssembly pulls the re-docked transforms the backend produced when the
     // part edit auto-resolved (PATCH /assembly/instances/{id}/design). rebuild()
-    // then disposes all sources and refetches fresh geometry once (the part-edit
-    // cleared the backend geo cache), so every instance updates.
+    // then refreshes the invalidated source (the part-edit cleared the backend
+    // geo cache), so every copy updates without reloading unrelated parts.
     //
     // CRITICAL: use the EXPANDED store assembly, NOT result.assembly. getAssembly()
     // returns the RAW backend JSON, whose `assembly` is the v2 wire format —
