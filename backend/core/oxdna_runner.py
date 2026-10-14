@@ -20,6 +20,8 @@ oxDNA output is Physical-layer only — never written back into Design topology.
 
 from __future__ import annotations
 
+from backend.core import simulation_runtime as runtime
+
 import asyncio
 import json
 import logging
@@ -78,14 +80,14 @@ class _RunningHandle:
     task: Optional[asyncio.Task] = None
 
 
-_RUNNING: dict[str, _RunningHandle] = {}
-_ACTIVE_PIDS: dict[str, int] = {}
+_RUNNING: dict[str, _RunningHandle] = runtime.Registry()
+_ACTIVE_PIDS: dict[str, int] = runtime.Registry()
 _STOP_MARKER = ".stop_requested"
 
 
 def is_running(job_id: str) -> bool:
     handle = _RUNNING.get(job_id)
-    return handle is not None and handle.thread.is_alive()
+    return (handle is not None and handle.thread.is_alive()) or runtime.owned_job("oxdna_jobs", job_id)
 
 
 def _external_oxdna_running(job: OxdnaJob, workspace_dir: Path) -> bool:
@@ -2267,11 +2269,11 @@ async def run_job(
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
+@runtime.in_workspace
 def start_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -> None:
     """Launch run_job in a background thread. Idempotent if already running."""
     if is_running(job.job_id):
         return
-    (job.job_dir(workspace_dir) / _STOP_MARKER).unlink(missing_ok=True)
 
     def _thread_main() -> None:
         loop = asyncio.new_event_loop()
@@ -2299,11 +2301,10 @@ def start_job(job: OxdnaJob, workspace_dir: Path, specs: list[OxdnaStageSpec]) -
                     pass
             loop.close()
 
-    thread = threading.Thread(
-        target=_thread_main, name=f"oxdna-runner-{job.job_id}", daemon=True
+    runtime.launch_thread(
+        job.job_dir(workspace_dir), job.job_id, _thread_main, _RUNNING, _RunningHandle,
+        lambda: stop_job(job.job_id, workspace_dir), name=f"oxdna-runner-{job.job_id}", before_start=lambda: (job.job_dir(workspace_dir) / _STOP_MARKER).unlink(missing_ok=True),
     )
-    _RUNNING[job.job_id] = _RunningHandle(thread=thread)
-    thread.start()
 
 
 def _pid_is_oxdna(pid: int) -> bool:
@@ -2315,6 +2316,8 @@ def _pid_is_oxdna(pid: int) -> bool:
     return b"oxdna" in cmdline
 
 
+@runtime.in_workspace
+@runtime.idle_stop_guard("oxdna_jobs")
 def stop_job(job_id: str, workspace_dir: Path) -> bool:
     """Cancel the running task for job_id. Returns True if a task was found.
 
@@ -2322,6 +2325,11 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
     ORPHAN path (server restarted → registry empty, but a detached oxDNA may still be
     running) finds the orphan via /proc (self-verifying) or the persisted ``oxdna_pid``,
     kills it, and marks the job stopped so it stays controllable."""
+    local = _RUNNING.get(job_id)
+    requested = runtime.request_stop(Path(workspace_dir) / "oxdna_jobs" / job_id)
+    if not (local and local.thread.is_alive()) and requested:
+        return True
+
     handle = _RUNNING.get(job_id)
     if handle and handle.thread.is_alive():
         try:
@@ -2352,6 +2360,8 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
     if pid is None and job.oxdna_pid and _pid_is_oxdna(job.oxdna_pid):
         pid = job.oxdna_pid
     if pid is None:
+        job.status = OxdnaStatus.stopped
+        job.save(workspace_dir)
         return False
     (job.job_dir(workspace_dir) / _STOP_MARKER).touch()
     _kill_process_group(pid)
@@ -2361,6 +2371,7 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
     return True
 
 
+@runtime.reconcile_guard
 def reconcile_oxdna_status(
     job: OxdnaJob,
     workspace_dir: Path,
@@ -2380,12 +2391,15 @@ def reconcile_oxdna_status(
     job is reconsidered because a detached process can finish after an earlier
     reconciliation classified it. Idempotent.
     """
+    if runtime.is_owned(job.job_dir(workspace_dir)):
+        return job
+
     if job.archived and not (job.job_dir(workspace_dir) / "job.json").is_file():
         return job
     if job.status not in (OxdnaStatus.running, OxdnaStatus.stopped):
         return job
     was_running = job.status == OxdnaStatus.running
-    if was_running and is_running(job.job_id):
+    if was_running and (is_running(job.job_id) or runtime.is_owned(job.job_dir(workspace_dir))):
         return job  # a live runner owns it — leave it alone
     if was_running and _external_oxdna_running(job, workspace_dir):
         return job  # orphaned but still alive on disk/GPU — keep it running

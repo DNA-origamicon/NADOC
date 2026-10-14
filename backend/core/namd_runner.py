@@ -19,6 +19,8 @@ API can cancel it.
 
 from __future__ import annotations
 
+from backend.core import simulation_runtime as runtime
+
 import asyncio
 import functools
 import json
@@ -371,12 +373,12 @@ class _RunningHandle:
     task: Optional[asyncio.Task] = None
 
 
-_RUNNING: dict[str, _RunningHandle] = {}
-_ACTIVE_PIDS: dict[str, int] = {}
+_RUNNING: dict[str, _RunningHandle] = runtime.Registry()
+_ACTIVE_PIDS: dict[str, int] = runtime.Registry()
 # Mid-run early-stop toggles: set_early_stop() stashes {job_id: bool} here while a
 # job is running; the runner thread consumes it at the next chunk boundary so the
 # flag flips without a relaunch AND the runner stays the sole job.json writer.
-_EARLY_STOP_OVERRIDE: dict[str, bool] = {}
+_EARLY_STOP_OVERRIDE: dict[str, bool] = runtime.Registry()
 
 
 def active_namd_pids() -> set[int]:
@@ -387,7 +389,7 @@ def active_namd_pids() -> set[int]:
 
 def is_running(job_id: str) -> bool:
     handle = _RUNNING.get(job_id)
-    return handle is not None and handle.thread.is_alive()
+    return handle is not None and handle.thread.is_alive() or runtime.owned_job("md_jobs", job_id)
 
 
 def _segment_pid(segment_name: str) -> Optional[int]:
@@ -775,6 +777,7 @@ def _reconcile_min_name(job: MdJob, manifest_path: Path) -> Optional[str]:
     return getattr(getattr(job, "minimization", None), "name", None) or None
 
 
+@runtime.reconcile_guard(read_only=lambda job: job.status == MdStatus.completed)
 def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
     """Repair stale running state after a server/runner interruption.
 
@@ -789,6 +792,9 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
       states are picked up and relaunched by ``resume_interrupted_jobs`` (startup
       + periodic supervisor); ``run_job`` then resumes mid-segment if needed.
     """
+    if runtime.is_owned(job.job_dir(workspace_dir)):
+        return job
+
     if job.archived and not (job.job_dir(workspace_dir) / "job.json").is_file():
         return job
     # A completed package is stronger evidence than a transient stale-heartbeat
@@ -818,6 +824,7 @@ def reconcile_job_status(job: MdJob, workspace_dir: Path) -> MdJob:
     if (
         job.status != MdStatus.running
         or is_running(job.job_id)
+        or runtime.is_owned(job.job_dir(workspace_dir))
         or _external_process_running(job, workspace_dir)
     ):
         return job
@@ -2837,6 +2844,8 @@ async def run_job(job: MdJob, workspace_dir: Path) -> None:
         # running thread consumes here, so the flag flips without a relaunch (and
         # the runner stays the single job.json writer).
         _ov = _EARLY_STOP_OVERRIDE.pop(job.job_id, None)
+        if _ov is None:
+            _ov = runtime.read_control(job.job_dir(workspace_dir), "early_stop_relax", consume=True)
         if _ov is not None and _ov != job.early_stop_relax:
             job.early_stop_relax = _ov
             job.save(workspace_dir)
@@ -2931,6 +2940,7 @@ def _finish_job(job, workspace_dir):
 # ── Public API called by routes_md ────────────────────────────────────────────
 
 
+@runtime.in_workspace
 def start_job(job: MdJob, workspace_dir: Path) -> None:
     """Launch run_job in a background thread. Idempotent if already running.
 
@@ -2982,13 +2992,10 @@ def start_job(job: MdJob, workspace_dir: Path) -> None:
                 pass
             loop.close()
 
-    thread = threading.Thread(
-        target=_thread_main,
-        name=f"md-runner-{job.job_id}",
-        daemon=True,
+    runtime.launch_thread(
+        job.job_dir(workspace_dir), job.job_id, _thread_main, _RUNNING, _RunningHandle,
+        lambda: stop_job(job.job_id, workspace_dir), name=f"md-runner-{job.job_id}",
     )
-    _RUNNING[job.job_id] = _RunningHandle(thread=thread)
-    thread.start()
 
 
 def apply_user_stop(job: MdJob) -> None:
@@ -3014,6 +3021,7 @@ def apply_user_stop(job: MdJob) -> None:
         job.minimization.percent = 0.0
 
 
+@runtime.in_workspace
 def set_early_stop(job_id: str, enabled: bool, workspace_dir: Path) -> bool:
     """Flip a job's relaxation early-stop accelerator without relaunching it.
 
@@ -3022,8 +3030,10 @@ def set_early_stop(job_id: str, enabled: bool, workspace_dir: Path) -> bool:
     for the runner to consume at its next chunk boundary, leaving the runner the
     sole writer of ``job.json`` (never touch disk here).  Returns the value applied.
     """
+    if runtime.set_control(Path(workspace_dir) / "md_jobs" / job_id, "early_stop_relax", enabled):
+        return enabled
     if is_running(job_id):
-        _EARLY_STOP_OVERRIDE[job_id] = enabled
+        _EARLY_STOP_OVERRIDE[job_id] = enabled  # legacy in-process owner
         return enabled
     job = MdJob.load(job_id, workspace_dir)
     job.early_stop_relax = enabled
@@ -3031,14 +3041,18 @@ def set_early_stop(job_id: str, enabled: bool, workspace_dir: Path) -> bool:
     return enabled
 
 
-def pending_early_stop(job_id: str) -> Optional[bool]:
+def pending_early_stop(job_id: str, workspace_dir: Path | None = None) -> Optional[bool]:
     """The mid-run early-stop value a POST stashed but the runner has not yet
     consumed at a chunk boundary, or None when nothing is queued.  The UI shows a
     "pending" state (and blocks re-toggling) while this differs from the persisted
     ``early_stop_relax`` so a slow chunk can't make the live toggle look reverted."""
-    return _EARLY_STOP_OVERRIDE.get(job_id)
+    if job_id in _EARLY_STOP_OVERRIDE:
+        return _EARLY_STOP_OVERRIDE[job_id]
+    return runtime.read_control(runtime.job_path("md_jobs", job_id, workspace_dir), "early_stop_relax")
 
 
+@runtime.in_workspace
+@runtime.idle_stop_guard("md_jobs")
 def stop_job(job_id: str, workspace_dir: Path) -> bool:
     """Kill the NAMD process for job_id and cancel its runner task.  Returns True
     if anything (a live task or a running process) was found and acted on.
@@ -3057,6 +3071,11 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
     We always kill the process (when found) AND cancel the runner task (when a live
     handle exists), regardless of the on-disk status — a live NAMD for a job the user
     is stopping must die even if a prior half-stop already flipped the status."""
+    local = _RUNNING.get(job_id)
+    requested = runtime.request_stop(Path(workspace_dir) / "md_jobs" / job_id)
+    if not (local and local.thread.is_alive()) and requested:
+        return True
+
     try:
         job = MdJob.load(job_id, workspace_dir)
     except Exception:  # noqa: BLE001
@@ -3072,6 +3091,11 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
     live_handle = bool(handle and handle.thread.is_alive())
 
     if pid is None and not live_handle:
+        if job is not None:
+            job.user_stopped = True
+            if job.status == MdStatus.running:
+                apply_user_stop(job)
+            job.save(workspace_dir)
         return False
 
     # Cancel the runner task first so the CancelledError propagates out of any
@@ -3133,7 +3157,7 @@ def resume_interrupted_jobs(workspace_dir: Path) -> list[str]:
     for job in MdJob.list_jobs(workspace_dir):
         if getattr(job, "execution_target", "local") != "local":
             continue  # remote jobs are polled by the SlurmExecutor, not resumed here
-        if job.user_stopped or job.status != MdStatus.running or is_running(job.job_id):
+        if job.user_stopped or job.status != MdStatus.running or is_running(job.job_id) or runtime.is_owned(job.job_dir(workspace_dir)):
             continue
         job = reconcile_job_status(job, workspace_dir)
         if job.status != MdStatus.running:

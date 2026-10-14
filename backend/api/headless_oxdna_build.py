@@ -20,8 +20,8 @@ is read back as a position map (PBC-unwrapped + Kabsch-aligned to the design) an
 path — nothing here mutates a design from a relaxed configuration.
 
 Isolation: a relaxation runs against whatever workspace dir the caller passes (the
-route handlers read the module-global ``routes_oxdna._WORKSPACE_DIR``; we redirect
-it for the duration of each call), and ``create_oxdna_job`` reads the active design
+route handlers resolve a context-local workspace override for the duration of
+each call), and ``create_oxdna_job`` reads the active design
 from an isolated throwaway document, so a scripted relaxation never disturbs the
 real workspace or the caller's active design.  In tests the mock oxDNA binary
 (``$OXDNA_BIN``) makes the whole path deterministic without a GPU; a real run is
@@ -37,7 +37,6 @@ import time
 from pathlib import Path
 
 from backend.api import doc_context
-from backend.api import routes_oxdna
 from backend.api import state as design_state
 from backend.api.routes_oxdna import (
     CreateOxdnaJobRequest,
@@ -91,16 +90,14 @@ STANDARD_RELAX_PARAMS: dict = {
 def _use_workspace(workspace):
     """Temporarily point the oxDNA routes' workspace at ``workspace``.
 
-    The route handlers read the module-global ``routes_oxdna._WORKSPACE_DIR`` via
-    ``_workspace()``; a headless caller redirects it at a throwaway dir so a
-    scripted relaxation never touches the real workspace, restoring it on exit.
+    Routes resolve this context-local override through their usual _workspace().
+    Concurrent API requests retain their own workspace; no module global changes.
+    Passing the app workspace uses the same managed lifecycle as the UI.
     """
-    prev = routes_oxdna._WORKSPACE_DIR
-    routes_oxdna._WORKSPACE_DIR = Path(workspace)
-    try:
+    from backend.core.simulation_runtime import use_workspace
+
+    with use_workspace(workspace):
         yield
-    finally:
-        routes_oxdna._WORKSPACE_DIR = prev
 
 
 @contextlib.contextmanager
@@ -344,6 +341,7 @@ def wait_for_terminal(
     is independent of any active session.
     """
     from backend.core.oxdna_runner import is_running
+    from backend.core.simulation_runtime import is_owned, use_workspace
 
     workspace = Path(workspace)
     deadline = time.monotonic() + timeout
@@ -355,8 +353,9 @@ def wait_for_terminal(
             # (append_production / append_field) rejects a job that still reads as
             # running.  Wait out that teardown window (bounded by the deadline) so a
             # programmatic relax→append chain doesn't race the thread shutdown.
-            while is_running(job_id) and time.monotonic() < deadline:
-                time.sleep(poll_s)
+            with use_workspace(workspace):
+                while (is_running(job_id) or is_owned(job.job_dir(workspace))) and time.monotonic() < deadline:
+                    time.sleep(poll_s)
             return job
         time.sleep(poll_s)
     return OxdnaJob.load(job_id, workspace)

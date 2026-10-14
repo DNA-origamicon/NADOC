@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 
 
-def main(workspace_dir: str, job_id: str) -> int:
+def _run(workspace_dir: str, job_id: str) -> int:
     ws = Path(workspace_dir)
     from backend.core.blade_job import BladeJob, BladeStatus
     from backend.core.blade_runner import relax_and_cache
@@ -44,6 +44,22 @@ def main(workspace_dir: str, job_id: str) -> int:
     # marks the orphan stopped.
     relax_and_cache(job, ws)
     return 0 if job.status == BladeStatus.completed else 1
+
+
+def main(workspace_dir: str, job_id: str) -> int:
+    from backend.core.simulation_runtime import worker_lease
+    from backend.core.blade_job import BladeJob, BladeStatus
+
+    ws = Path(workspace_dir)
+    with worker_lease(ws / "blade_jobs" / job_id) as lease:
+        if lease is None:
+            return 0  # another managed worker already owns this job
+        if lease.stop_requested():
+            job = BladeJob.load(job_id, ws)
+            job.status = BladeStatus.stopped
+            job.save(ws)
+            return 1
+        return _run(workspace_dir, job_id)
 
 
 if __name__ == "__main__":

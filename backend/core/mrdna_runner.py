@@ -25,6 +25,8 @@ mrDNA output is Physical-layer only — never written back into Design topology.
 
 from __future__ import annotations
 
+from backend.core import simulation_runtime as runtime
+
 import json
 import logging
 import os
@@ -70,12 +72,12 @@ class _RunningHandle:
     cancelled: bool = False
 
 
-_RUNNING: dict[str, _RunningHandle] = {}
+_RUNNING: dict[str, _RunningHandle] = runtime.Registry()
 
 
 def is_running(job_id: str) -> bool:
     handle = _RUNNING.get(job_id)
-    return handle is not None and handle.thread.is_alive()
+    return (handle is not None and handle.thread.is_alive()) or runtime.owned_job("mrdna_jobs", job_id)
 
 
 def _scan_arbd_proc_cmdlines() -> list[tuple[Path, bytes]]:
@@ -1156,24 +1158,20 @@ def _finalize_outputs(
     return payload
 
 
+@runtime.in_workspace
 def start_job(job: MrdnaJob, workspace_dir: Path) -> None:
     """Launch _run_job in a background daemon thread. Idempotent if running."""
     if is_running(job.job_id):
         return
-    # Model generation can be substantial for a Voltron-class design. Publish it
-    # as preparation immediately instead of leaving an autostarted job "queued".
-    job.status = MrdnaStatus.preparing
-    job.save(workspace_dir)
-    handle = _RunningHandle(
-        thread=threading.Thread(
-            target=_run_job,
-            args=(job, workspace_dir),
-            name=f"mrdna-runner-{job.job_id}",
-            daemon=True,
-        )
+    def preparing():
+        job.status = MrdnaStatus.preparing
+        job.save(workspace_dir)
+
+    runtime.launch_thread(
+        job.job_dir(workspace_dir), job.job_id, lambda: _run_job(job, workspace_dir),
+        _RUNNING, _RunningHandle, lambda: stop_job(job.job_id, workspace_dir),
+        name=f"mrdna-runner-{job.job_id}", before_start=preparing,
     )
-    _RUNNING[job.job_id] = handle
-    handle.thread.start()
 
 
 def _pid_is_arbd(pid: int) -> bool:
@@ -1184,11 +1182,18 @@ def _pid_is_arbd(pid: int) -> bool:
     return b"arbd" in cmdline
 
 
+@runtime.in_workspace
+@runtime.idle_stop_guard("mrdna_jobs")
 def stop_job(job_id: str, workspace_dir: Path) -> bool:
     """Stop a running mrDNA job.  Sets the cancel flag and kills the detached ARBD
     child (found via /proc, self-verifying, or the persisted ``arbd_pid``) so the
     blocked ``simulate()`` unwinds and the thread marks the job stopped.  Returns
     True if a live job or orphan process was found."""
+    local = _RUNNING.get(job_id)
+    requested = runtime.request_stop(Path(workspace_dir) / "mrdna_jobs" / job_id)
+    if not (local and local.thread.is_alive()) and requested:
+        return True
+
     handle = _RUNNING.get(job_id)
     live = handle is not None and handle.thread.is_alive()
     if handle is not None:
@@ -1217,6 +1222,7 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
     return live
 
 
+@runtime.reconcile_guard
 def reconcile_mrdna_status(
     job: MrdnaJob,
     workspace_dir: Path,
@@ -1230,6 +1236,9 @@ def reconcile_mrdna_status(
 
     ``proc_scan`` — see :func:`_external_arbd_pid`; passed through for a job-list
     poll sharing one /proc scan across every job instead of each re-scanning."""
+    if runtime.is_owned(job.job_dir(workspace_dir)):
+        return job
+
     pid = _external_arbd_pid(job, workspace_dir, proc_scan=proc_scan)
     if is_running(job.job_id) or pid is not None:
         changed = False

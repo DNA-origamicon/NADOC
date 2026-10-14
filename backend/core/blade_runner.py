@@ -24,13 +24,13 @@ topology (CLAUDE.md Three-Layer Law).
 
 from __future__ import annotations
 
+from backend.core import simulation_runtime as runtime
+
 import json
 import logging
 import os
 import signal
 import subprocess
-import sys
-import threading
 import time
 from pathlib import Path
 from typing import Optional
@@ -148,6 +148,8 @@ def is_running(job_id: str, workspace_dir: Optional[Path] = None) -> bool:
         except Exception:  # noqa: BLE001
             job = None
         if job is not None:
+            if runtime.known(job.job_dir(workspace_dir)):
+                return runtime.is_owned(job.job_dir(workspace_dir))
             if job.status != BladeStatus.running:
                 return False
             return _pid_alive(job.pid)
@@ -729,45 +731,11 @@ def start_job(job: BladeJob, workspace_dir: Path) -> None:
     if is_running(job.job_id, workspace_dir):
         return
     _check_sim_guard(job)
-    jd = job.job_dir(workspace_dir)
-    jd.mkdir(parents=True, exist_ok=True)
-    log_fh = open(jd / "worker.log", "w")  # noqa: SIM115 — closed by the reaper thread
-    proc = subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "backend.core.blade_worker",
-            str(workspace_dir),
-            job.job_id,
-        ],
-        cwd=str(_REPO_ROOT),
-        stdout=log_fh,
-        stderr=subprocess.STDOUT,
-        start_new_session=True,  # own session → outlives a uvicorn --reload of the parent
+    runtime.launch_detached(
+        job, workspace_dir, "backend.core.blade_worker", _REPO_ROOT,
+        on_spawn=lambda proc: _STARTED.update({job.job_id: proc.pid}),
+        on_exit=lambda: _STARTED.pop(job.job_id, None),
     )
-    job.pid = proc.pid
-    # Flip the JOB status to running (not just the stage) so the panel's progress bar + ETA —
-    # both gated on status==running — light up while the detached worker runs.
-    job.status = BladeStatus.running
-    if job.stages:
-        job.stages[0].status = "running"
-        job.stages[0].started_at = time.time()
-    job.save(workspace_dir)
-    _STARTED[job.job_id] = proc.pid
-
-    def _reap() -> None:
-        try:
-            proc.wait()  # reap the child so a finished worker isn't left a zombie
-        except Exception:  # noqa: BLE001
-            pass
-        finally:
-            try:
-                log_fh.close()
-            except Exception:  # noqa: BLE001
-                pass
-            _STARTED.pop(job.job_id, None)
-
-    threading.Thread(target=_reap, name=f"blade-reap-{job.job_id}", daemon=True).start()
 
 
 def _check_sim_guard(job: BladeJob) -> None:
@@ -795,6 +763,7 @@ def _check_sim_guard(job: BladeJob) -> None:
         )
 
 
+@runtime.idle_stop_guard("blade_jobs")
 def stop_job(job_id: str, workspace_dir: Path) -> bool:
     """Stop a running BLADE job.  Group-kills the detached worker (SIGTERM→SIGKILL), which
     also reaps the OpenMM grandchild holding the GPU.  Marks a still-``running`` job
@@ -803,24 +772,38 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
         job = BladeJob.load(job_id, workspace_dir)
     except Exception:  # noqa: BLE001
         return False
-    live = _pid_alive(job.pid)
+    jd = job.job_dir(workspace_dir)
+    stopped_generation = runtime.generation(jd)
+    if runtime.known(jd):
+        requested = runtime.request_stop(jd)
+        pid = runtime.worker_pid(jd)
+        if requested and pid is None:
+            return True  # launcher/worker handoff; worker observes the stop after its gate
+    else:
+        requested = False
+        pid = job.pid if _pid_alive(job.pid) else None
+    live = pid is not None
     if live:
-        _kill_pid(job.pid)
+        _kill_pid(pid)
         _STARTED.pop(job_id, None)
-    # Re-load: the worker may have written a terminal status between our load and the kill.
-    try:
-        job = BladeJob.load(job_id, workspace_dir)
-    except Exception:  # noqa: BLE001
+    with runtime.idle_stop_update(jd, stopped_generation) as acquired:
+        if not acquired:
+            return live
+        # Re-load: the worker may have written a terminal status between our load and the kill.
+        try:
+            job = BladeJob.load(job_id, workspace_dir)
+        except Exception:  # noqa: BLE001
+            return live
+        if job.status == BladeStatus.running:
+            job.status = BladeStatus.stopped
+            for st in job.stages:
+                if st.status != "done":
+                    st.status = "failed"
+            job.save(workspace_dir)
         return live
-    if job.status == BladeStatus.running:
-        job.status = BladeStatus.stopped
-        for st in job.stages:
-            if st.status != "done":
-                st.status = "failed"
-        job.save(workspace_dir)
-    return live
 
 
+@runtime.reconcile_guard
 def reconcile_blade_status(job: BladeJob, workspace_dir: Path) -> BladeJob:
     """Recover an orphaned ``running`` job whose worker died without writing a terminal status
     (SIGKILLed, or the machine rebooted).  A live worker → unchanged.  Dead worker + cached
@@ -828,7 +811,8 @@ def reconcile_blade_status(job: BladeJob, workspace_dir: Path) -> BladeJob:
     survives a ``uvicorn --reload`` stays alive (pid still valid) → left ``running``."""
     if job.status != BladeStatus.running:
         return job
-    if _pid_alive(job.pid):
+    jd = job.job_dir(workspace_dir)
+    if runtime.is_owned(jd) or (not runtime.known(jd) and _pid_alive(job.pid)):
         return job
     jd = job.job_dir(workspace_dir)
     if (jd / "display.json").exists():

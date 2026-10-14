@@ -1,5 +1,20 @@
 # LESSONS — full entries
 
+<a id="c13"></a>
+### C13. Local thread/PID state is not global simulation ownership (2026-10-11)
+
+A native CanDo runner started headlessly was alive while UI polling in another
+process marked its job stopped. A private workspace only hid the competing
+reader. Child PIDs also leave preparation and inter-stage gaps unprotected;
+stale stop/recovery writes can overwrite a subsequent run.
+
+**How to avoid:** use the shared execution lease and generation-scoped controls
+in `simulation_runtime.py` from both UI and headless paths. Keep the lock inode
+stable, scope handles to their workspace, and refresh managed manifests while
+holding ownership before any recovery write. Pin behavior with real separate
+processes, including polling, cancellation, owner death and restart races.
+See [managed simulation ownership](../docs/simulation_runtime.md).
+
 <a id="k13"></a>
 ### K13. Recreating a working VR system instead of recovering its launch conditions (2026-09-08)
 

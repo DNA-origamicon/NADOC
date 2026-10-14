@@ -8,6 +8,15 @@ import pytest
 
 from backend.api.main import app
 from backend.api.doc_context import get_current_doc
+from backend.core.simulation_runtime import use_workspace
+
+
+@pytest.fixture(autouse=True)
+def isolated_simulation_workspace(tmp_path):
+    # Unified polling calls every engine route, including unstubbed catalogs.
+    # Their context-local workspace must remain test-owned across thread hops.
+    with use_workspace(tmp_path):
+        yield
 
 
 @pytest.mark.parametrize('engine,model', [

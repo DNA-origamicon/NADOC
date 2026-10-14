@@ -19,6 +19,8 @@ GET   /md/jobs/{job_id}/display     latest displayable NADOC MD trajectory
 
 from __future__ import annotations
 
+from backend.core import simulation_runtime
+
 from backend.api.startup_cache import coalesce_job_reads
 
 import asyncio
@@ -164,7 +166,7 @@ from backend.api.md_request_models import (
 
 
 def _workspace() -> Path:
-    return _WORKSPACE_DIR
+    return simulation_runtime.workspace(_WORKSPACE_DIR)
 
 
 def _load_job(job_id: str) -> MdJob:
@@ -4676,7 +4678,7 @@ def _md_job_list_rows(jobs, ws, runpod_connected, runpod_ids):
                 if isinstance(verified_dcd, int) and verified_dcd >= 0
                 else _local_dcd_bytes(j.package_dir(ws))
             )
-        d["early_stop_pending"] = pending_early_stop(j.job_id)
+        d["early_stop_pending"] = pending_early_stop(j.job_id, _workspace())
         frac, eta, estimated = _namd_live_progress(j, ws)
         if frac is not None:
             d["progress_fraction"] = frac
@@ -4736,7 +4738,7 @@ async def get_md_job(job_id: str) -> dict:
         if row is not None:
             d["minimization"] = asdict(row)
     d["out_of_date"] = _md_job_out_of_date(job, current_active_design_fingerprint())
-    d["early_stop_pending"] = pending_early_stop(job_id)
+    d["early_stop_pending"] = pending_early_stop(job_id, _workspace())
     return d
 
 
@@ -6877,6 +6879,7 @@ async def roll_md_job_design(job_id: str) -> dict:
 
 
 @router.post("/md/jobs/{job_id}/start")
+@simulation_runtime.start_request(lambda: _workspace(), "md_jobs")
 async def start_md_job(job_id: str) -> dict:
     """Start or resume a queued/stopped/failed job."""
     job = _load_job(job_id)
@@ -7932,9 +7935,11 @@ async def _stop_md_job_impl(job_id: str, *, fetch_remote_output: bool = True) ->
     """Cancel a running job."""
     job = _load_job(job_id)
 
-    # Mark as user-stopped so the startup/supervisor auto-resume leaves it alone.
-    job.user_stopped = True
-    job.save(_workspace())
+    # Local cancellation publishes through the native owner/idle-stop guard.
+    # Remote supervisors retain their existing persisted cancellation intent.
+    if job.execution_target != "local":
+        job.user_stopped = True
+        job.save(_workspace())
 
     # ── RunPod: cancel the task AND destroy the pod ───────────────────────────
     # MUST come before the `!= "local"` branch below, which is the Alpine scancel path.
@@ -8025,10 +8030,6 @@ async def _stop_md_job_impl(job_id: str, *, fetch_remote_output: bool = True) ->
 
     cancelled = stop_job(job_id, _workspace())
     if not cancelled:
-        # Not in our task registry — job may have completed or never started
-        if job.status == MdStatus.running:
-            apply_user_stop(job)
-            job.save(_workspace())
         return {"ok": True, "message": "Job was not actively running"}
 
     return {"ok": True, "job_id": job_id, "status": "stopping"}

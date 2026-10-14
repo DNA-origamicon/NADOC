@@ -15,6 +15,8 @@ state — never written back into Design topology.
 
 from __future__ import annotations
 
+from backend.core import simulation_runtime as runtime
+
 import asyncio
 import logging
 import os
@@ -368,13 +370,13 @@ class _RunHandle:
     task: Optional[asyncio.Task] = None
 
 
-_RUNNING: dict[str, _RunHandle] = {}
-_ACTIVE_PIDS: dict[str, int] = {}
+_RUNNING: dict[str, _RunHandle] = runtime.Registry()
+_ACTIVE_PIDS: dict[str, int] = runtime.Registry()
 
 
 def is_running(job_id: str) -> bool:
     h = _RUNNING.get(job_id)
-    return bool(h and h.thread.is_alive())
+    return bool(h and h.thread.is_alive()) or runtime.owned_job("lammps_jobs", job_id)
 
 
 def parse_thermo_step(line: str) -> int | None:
@@ -461,6 +463,7 @@ async def run_job(job: LammpsJob, workspace_dir: Path) -> None:
     job.save(workspace_dir)
 
 
+@runtime.in_workspace
 def start_job(job: LammpsJob, workspace_dir: Path) -> None:
     """Launch ``run_job`` in a background thread. Idempotent if already running."""
     if is_running(job.job_id):
@@ -493,11 +496,10 @@ def start_job(job: LammpsJob, workspace_dir: Path) -> None:
                     pass
             loop.close()
 
-    thread = threading.Thread(
-        target=_thread_main, name=f"lammps-runner-{job.job_id}", daemon=True
+    runtime.launch_thread(
+        job.job_dir(workspace_dir), job.job_id, _thread_main, _RUNNING, _RunHandle,
+        lambda: stop_job(job.job_id, workspace_dir), name=f"lammps-runner-{job.job_id}",
     )
-    _RUNNING[job.job_id] = _RunHandle(thread=thread)
-    thread.start()
 
 
 def _kill_process_group(pid: int) -> None:
@@ -519,6 +521,8 @@ def _kill_process_group(pid: int) -> None:
         pass
 
 
+@runtime.in_workspace
+@runtime.idle_stop_guard("lammps_jobs")
 def stop_job(job_id: str, workspace_dir: Path) -> bool:
     """Stop a running LAMMPS job. Returns True if a run was found + stopped.
 
@@ -526,6 +530,11 @@ def stop_job(job_id: str, workspace_dir: Path) -> bool:
     (server restarted → registry empty but a detached ``lmp`` may persist): kill the
     persisted PID if it is still a live LAMMPS process, and mark the job stopped.
     """
+    local = _RUNNING.get(job_id)
+    requested = runtime.request_stop(Path(workspace_dir) / "lammps_jobs" / job_id)
+    if not (local and local.thread.is_alive()) and requested:
+        return True
+
     handle = _RUNNING.get(job_id)
     if handle and handle.thread.is_alive():
         pid = _ACTIVE_PIDS.get(job_id)
@@ -558,15 +567,19 @@ def _pid_is_lammps(pid: int) -> bool:
     return b"lmp" in cmdline or b"lammps" in cmdline
 
 
+@runtime.reconcile_guard
 def reconcile_lammps_status(job: LammpsJob, workspace_dir: Path) -> LammpsJob:
     """Heal a job persisted ``running`` whose process is gone (server died mid-run).
 
     If it isn't in the live registry and its recorded PID isn't a live LAMMPS
     process, flip it to ``stopped`` so it stays controllable (no auto-resume for
     LAMMPS yet — a stopped job is simply re-launchable)."""
+    if runtime.is_owned(job.job_dir(workspace_dir)):
+        return job
+
     if job.status != LammpsStatus.running:
         return job
-    if is_running(job.job_id):
+    if is_running(job.job_id) or runtime.is_owned(job.job_dir(workspace_dir)):
         return job
     if job.lammps_pid and _pid_is_lammps(job.lammps_pid):
         return job
