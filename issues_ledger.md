@@ -122,6 +122,8 @@ historical only and should move to `issues_ledger_archive.md` during the next ar
 | 11 | **ISSUE-1** Context-menu consolidation remains a large multi-phase UX program. | UX / debt | large | decisions banked |
 | 12 | **ISSUE-59** Creating an all-helix cluster drops the lattice placement cluster and produces a saved design that cannot reload. | persistence / cluster correctness | triage | no |
 | 13 | **ISSUE-60** Extrusion into fresh cells leaves new helices outside the default placement cluster; moving that cluster moves only the original cells. | geometry / cluster correctness | triage | no |
+| 14 | **ISSUE-70** Free Join can reject an otherwise attachable brace when the maximum precursor connection set contains a connector-only cycle. | Join correctness | triage | attachment policy |
+| 15 | **ISSUE-71** Native import can reverse derived flexible-connector anchor order and change connector nucleotide positions. | persistence / geometry | triage | geometry review |
 | done | ~~**ISSUE-16**~~ ✅ FIXED — all relevant `eigsh()` calls now pass deterministic `_eigsh_v0(...)`; focused verification still owed before archival. | reproducibility | — | — |
 
 ISSUE-8 and ISSUE-11 remain decision-gated. Closed ISSUE-9/14/15/16/17 belong in the archive, not in
@@ -1270,6 +1272,26 @@ individual over-budget test, so no classifications or budget changes were made.
 Evidence: `.development-artifacts/linear-pattern-custom-smart.log`.
 
 
+Headless parity follow-up (2026-10-11): final `test-smart` decision **FAST**;
+10,529 passed, 90 skipped, one archive timeout and four CPD fixture errors
+(121.62 s). **FULL DEFERRED**, recorded in `.nadoc-slow-pending`. The CPD preview
+fixture rejects `cis-anti-I` after separate working-tree chemistry-definition
+changes; those scientific assets were left untouched. The archive test's path
+does not call the new runtime; its retry passed in 0.32 s. All six timing-flagged
+tests passed in an isolated 6.06 s run (individual calls 0.23–0.85 s); no genuine
+heavy work or reclassification. An earlier run's three IPC failures were caused
+by overlong AF_UNIX paths under the archive TMPDIR; a shorter test-owned path
+resolved them. The earlier native review-gate timing flag fell from 10.4 s to
+0.30 s on retry. Polling responsiveness tests now bind a temporary workspace for
+every engine catalog, avoiding real workspace scans; all ten pass in 1.31 s.
+No test budgets or guards changed.
+
+Frontend validation: 7,796 passed, one skipped, two unchanged
+`md_jobs_panel.test.js` RAM-confirmation failures (lines 2067/2109), reproduced
+in isolation. Readiness app exercise: two passed; smoke: 23 passed. Lint has five
+unrelated unused-import findings in VR prompts and CPD tests. Evidence and exact
+failure names: `.development-artifacts/headless-api-parity-20261010/`.
+
 ## ISSUE-54 — Pattern confirmation treated rejected requests as success (2026-10-04, FIXED)
 
 [x] `createCircularPattern` previously passed `_request`'s null failure through the
@@ -1430,6 +1452,88 @@ slow tests took 0.05s and 0.02s in isolated reruns (no real engine work); no bud
 or classification changes. Native placement review gate clear. Test artifacts
 removed. Decoded sweep video has exactly 76 frames / 9.5s at 8fps. Full validation
 record: `.development-artifacts/build-animation/sweep-validation.json`.
+
+## ISSUE-68 — UI polling falsely stops live headless simulations (2026-10-11, FIXED)
+
+- **Repro:** start native CanDo from a separate process and poll its job through
+  the UI API. The polling process's empty thread registry previously classified
+  the live job as orphaned. The interrupted Benchy run exposed this defect.
+- **User specification:** headless simulation operations must share the ordinary
+  user lifecycle; private workspaces must not be necessary to keep a job alive.
+- **Root cause:** process-local registries and child PIDs did not establish
+  ownership across processes or across preparation, inter-stage and publication
+  work; stale stop/recovery writes could also overwrite a new execution.
+- **Fix:** `simulation_runtime.py` owns a persistent-inode kernel lease and
+  generation-scoped control mailbox. All seven local native engines share it;
+  start, stop and orphan writes are serialized. Workspace scope is context-local.
+  Detached workers inherit ownership through a publication gate. Read-only
+  legacy completed NAMD planning creates no runtime files.
+- **Pinned by:** `test_simulation_runtime.py` and `test_simulation_runtime_api.py`
+  cover separate processes, HTTP polling, stop/resume, actual owner death,
+  workspace isolation, stale generations and detached launch/stop races. Native
+  CanDo and SNUPI solver launch checks passed. Scope and limitations are in
+  `docs/simulation_runtime.md`; evidence is under
+  `.development-artifacts/headless-api-parity-20261010/`.
+
+## ISSUE-69 — Native menu-spacing gate fails on existing Extrude layout (2026-10-11, OPEN)
+
+- Repro: build/run `nadoc-vr-menu-spacing-test`; it throws `extrude: row does not align to content rails` before reaching Join.
+- The identical failure occurs with untouched HEAD headers and test source at `d6e10e23aeb7149580575fa4699caf04296340c5`; retained proof: `.development-artifacts/vr-join-20261011/native-spacing-baseline.log`.
+- Scope: existing Extrude layout versus the spacing oracle; root cause and intended rail alignment are not yet established. No Extrude behavior or spacing assertion was changed during Join development.
+- [ ] Determine whether the layout or oracle is stale, then restore this broad native gate. Join-specific layout, footer and production GL checks pass independently.
+
+## ISSUE-70 — Extra precursor Join connections prevent an otherwise valid brace (2026-10-11, OPEN)
+
+- Repro: `.development-artifacts/braced-corner-20261011/braced-rounded-corner-v3/baseline.nadoc`
+  plus `join-request.json`: a rounded 90-degree 1x6 Sweep and separate flat 1x6 brace,
+  both ends within the requested 3 nm reach. Native preview rejects atomically with
+  `Saved joins form a cycle with no native backbone available for a scaffold nick.`
+- Captured root cause: the precursor matcher selects four of seven candidates.
+  The two desired end attachments are compatible. Two additional adjacent side
+  attachments form a 14-nt cycle containing two original nucleotides and twelve
+  connector nucleotides, with no surviving native bond available to nick.
+  `maximum_connections(..., routes=None)` optimizes attachment/clearance only;
+  `realize_join_constraints` subsequently rejects this selected set correctly.
+- Evidence: `validation/cycle-diagnosis.json` records the exact directed cycle.
+  Isolated unchanged realization accepts the desired two-pair subset and either
+  of two three-pair alternatives. These diagnostic alternatives are not product
+  changes. The public workflow succeeds at a narrower reach; Seamed routing
+  preserves all Join bonds and produces one scaffold.
+- [ ] Make precursor matching respect realizability before final selection;
+  retain strict rejection of cycles without a permitted native nick. A braced
+  corner primitive also needs explicit two-arm/two-end coverage validation.
+- No routing, placement, polarity, phase constant, or validation rule was changed
+  during this feasibility investigation. This does not establish that arbitrary
+  braced corners are routable in either routing mode.
+
+## ISSUE-71 — Flexible connector geometry changes on native import (2026-10-11, OPEN)
+
+- Repro: the braced-corner fixture at
+  `.development-artifacts/braced-corner-20261011/final/routed-seamed.nadoc` passes
+  topology and Join-preserving Seamed routing. Ordinary export/import via
+  `tests.automation_harness.roundtrip_nadoc` changes `flexible_connections` and
+  resolved connector nucleotide positions by 1.16348546 nm in the first process
+  and up to 1.97979197 nm in a second process. Plain model
+  JSON serialization preserves the original records and does not expose this.
+- All original nucleotides, staple strands, forced bonds, rigid cluster poses,
+  deformations and lattice frames remain unchanged. Both reciprocal brace-end
+  attachments remain present and every exported strand remains a complete
+  linear chain. The stricter geometry-preserving persistence audit fails.
+  The detailed second probe moves eight connector nucleotides and zero
+  nonconnector nucleotides.
+- Evidence: `final/independent-validation-detailed.json` and the same-frame
+  before/imported models under `final/import-drift/`. One observed connection
+  swaps anchors A/B and reverses its bead order; its nucleotide identity and
+  contour length are unchanged.
+- Suspected mechanism: load/import recomputes the derived cache through
+  `derive_flexible_connections`, which discovers marked components and anchors
+  through sets. Anchor reversal changes the resolved arc in this fixture.
+  Inspect deterministic ownership/ordering and reversal behavior before choosing
+  a repair; do not treat arbitrary set order as molecular placement intent.
+- [ ] Pin native import and cross-process ordering with a regression, review
+  concrete before/after geometry, then restore geometry-preserving persistence.
+  No molecular geometry formula, phase constant or topology rule was changed
+  during this investigation.
 
 ## ISSUE-72 — VR range acknowledgement briefly restores old frame bounds (2026-10-12, FIXED)
 

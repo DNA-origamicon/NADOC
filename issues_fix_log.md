@@ -20,6 +20,7 @@ regress anything).
 
 | # | Date | Issue / phase | What changed (module) | Repro pinned by | Wall-clock | main.js LOC Δ | tests added | edits-to-green | app-validated | regression caught |
 |---|------|---------------|------------------------|-----------------|-----------|---------------|-------------|----------------|---------------|-------------------|
+| 29 | 2026-10-11 | ISSUE-68 — shared headless/UI simulation ownership | `simulation_runtime.py` and seven native engine adapters | Separate-process native CanDo + HTTP poll/stop/resume/death; detached-worker and generation races | one headless parity follow-up | 0 | 25 lifecycle regressions | final 26 focused runtime/planning checks passed | native API and actual CanDo/SNUPI launches; readiness browser exercise also passed | yes — read-only legacy completed NAMD planning initially created a lock file; fixed and pinned |
 | 28 | 2026-10-08 | ISSUE-66 — obsolete loop/skip marks survived recomputation | `crud.py` clears active marks inside the revision-checked commit; new sweep strain synthesis uses stored spline intent | HC/SQ API tests seed obsolete end marks, recompute twice, undo/redo and revert | one sweep follow-up | 0 | 14 backend + 1 browser for sweep support and regression | focused suites green; browser reload fixture corrected to use complete export | yes — real Add Loops/Skips menu, undo/redo, full export/reload, screenshot inspected | yes — clearing only the calculation copy left old marks in the committed design |
 | 27 | 2026-10-08 | ISSUE-65 — native cluster history ownership | Optional creation snapshot and extracted replay helper; restore original v2 snapshot cluster baseline | Cluster replay regressions and all 98 saved-design history boundaries | focused generator refactor | 0 | 2 backend | boundary audit caught both ownership loss and missing original group | covered by generator app exercise | root cause: creation entries stored membership without parent/duplex ownership; restoring only generated groups also lost original snapshot membership |
 | 26 | 2026-10-07 | ISSUE-61 — pending-review regression failed on WSL and opened a durable incident | One test in `test_native_placement_vr_failure.py` stubs `_native_platform_reason`; runtime checks and placement code unchanged | Existing pending-review regression failed before / passed after; 18 VR-failure assertions and four platform cases passed | short focused follow-up | 0 | 0; existing regression corrected | first focused assertion run passed; retained gate required separate review | n/a, test-only; explicit review audit clear after recorded acknowledgement | yes — platform rejection occurred before the review check; original report and review retained |
@@ -73,6 +74,7 @@ multi-factor (CLAUDE.md's own warning). If the bug is a *class*, add a `LESSONS.
 
 | Issue | Root cause (5-Whys, one line) | Failed hypothesis (the "obvious fix" that was wrong, if any) | → LESSONS.md |
 |-------|-------------------------------|-------------------------------------------------------------|--------------|
+| ISSUE-68 | Process-local thread maps were treated as global ownership → UI polling orphaned live headless runners; child PIDs also missed preparation/inter-stage work, and stale status writes could overwrite a restart → shared kernel lease, workspace scope and generation checks now cover those boundaries | A private workspace hid the original polling symptom; it was not the lifecycle fix | `memory/project_simulation_runtime.md` |
 | ISSUE-66 | Recomputed marks were merged into the original design → its obsolete marks had never been cleared → clearing happened only on the temporary calculation copy; commit now replaces active marks atomically and rejects stale revisions | None; integration assertions exposed the calculation/commit mismatch | — |
 | ISSUE-61 | Gate test depended on the host platform → WSL returned plain-string 503 before the intended review check → structured-detail assertion failed → marked parent failure correctly latched the durable journal; isolate only the test's platform prerequisite and explicitly review the retained incident | Temporary incident-store leakage was considered, but source inspection showed intentional recording of the outer test failure in the runner's durable ledger | n/a; bounded test precondition fix, no placement change |
 | Alpine post-download feedback | Reconciliation saved `verified` and then synchronously scanned a 19.7 GB DCD before saving terminal job state → the UI continued showing the prior synthetic `running`/retry error for minutes → users had no evidence that local CPU-bound bookkeeping was active | Treating byte verification as the terminal UX state; the download was complete, but the job was not yet usable as fully finalized | `memory/project_alpine_cluster_submission.md` |
@@ -426,6 +428,29 @@ Reopen count: 0. Validation evidence: `.development-artifacts/build-animation/`.
 path end in Full/Cylinders/atomistic/surface displays; reverse playback retracts
 from the end. Empty initial surface preparation is handled explicitly. Headed
 preview and decoded video verified; source geometry/topology stays unchanged.
+
+2026-10-11 — ISSUE-69 intake: isolated untouched HEAD reproduces the Extrude
+menu-spacing failure seen while validating VR Join. No fix attempted; root cause
+remains the mismatch between Extrude bounds and the existing rail oracle.
+Baseline proof is retained in `.development-artifacts/vr-join-20261011/`; exact
+generated baseline sources/binary were removed after verification.
+
+2026-10-11 — ISSUE-70 intake: the headless braced-corner investigation reproduced
+Free Join selecting extra adjacent side attachments whose connector-only cycle
+cannot be nicked without breaking requested joins. Native realization correctly
+rejects the set; precursor matching lacks that feasibility constraint. Same-pose
+diagnostic subsets and a narrower-reach public Join succeed. No product fix or
+scientific rule change attempted. Evidence and reproducible authored fixtures:
+`.development-artifacts/braced-corner-20261011/`. `main.js` delta 0.
+
+2026-10-11 — ISSUE-71 intake: strict native export/import validation of the braced
+corner preserves topology and rigid poses but changes flexible-connector anchor
+orientation and bead positions (maximum observed 1.97979197 nm across two
+processes; eight connector nucleotides, zero nonconnector nucleotides). Direct model
+serialization had passed; exercising the real import path exposed the defect.
+Before/imported models and per-nucleotide evidence are retained under the same
+artifact root. No geometry repair attempted; native persistence remains an
+explicit failed gate for promoting this prototype to a reusable primitive.
 
 2026-10-12 — ISSUE-72 fixed: range configuration now publishes atomically after
 clearing old playback state. The new acknowledgement can no longer carry the
