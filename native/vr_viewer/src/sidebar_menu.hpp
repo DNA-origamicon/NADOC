@@ -69,6 +69,7 @@ class SidebarMenu {
     double pressedUntil=0;
     MenuLayoutAudit audit;
     std::function<std::string(const std::string&,const std::string&)> label = [](const auto&,const auto& fallback){return fallback;};
+    std::function<bool(const std::string&)> visible = [](const auto&){return true;};
     std::function<bool(const std::string&)> available = [](const auto&){return true;};
     std::function<std::optional<std::pair<float,std::string>>(const std::string&)> loadingProgress=[](const auto&){return std::optional<std::pair<float,std::string>>{};};
     std::function<bool(const std::string&)> spinning=[](const auto&){return false;};
@@ -78,6 +79,7 @@ class SidebarMenu {
     std::vector<const SidebarRow*> visibleRows() const {
         std::vector<const SidebarRow*> rows;
         for(const auto& row:tab().rows) {
+            if(!visible(row.action))continue;
             // Both surface presets share the final representation row.
             if(row.id=="menu-view-surface-detail") continue;
             if(std::none_of(row.parents.begin(),row.parents.end(),[&](const auto& id){return collapsed.contains(id);})) rows.push_back(&row);

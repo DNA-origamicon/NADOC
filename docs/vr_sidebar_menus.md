@@ -678,3 +678,37 @@ transport/scene publication is stubbed only in the browser scenario; desktop
 operations use the actual backend. Cleanup verification found no prefixed designs,
 new revision stores or test credentials. Final native screenshots and the review
 atlas are in `.development-artifacts/vr-production-lists/render-reviewed/`.
+## Five-second stereo recording
+
+Right **Tools → Record 5 seconds** starts a two-second countdown, then records
+both full-resolution application eye buffers for five seconds of wall time.
+Leave menus open or close them during the countdown; recording never changes
+their visibility. The button shows the countdown, recording and saving states,
+and remains disabled until export finishes. **Open recordings folder** opens
+`.development-artifacts/vr-recordings` (override with `NADOC_VR_RECORDINGS_DIR`).
+
+Each recording contains `left.mp4`, `right.mp4`, an `index.html` review page and
+`timeline.json` with actual sample timestamps, predicted display times, eye poses,
+menu visibility and skipped-pair counts. Numbered `.rgbz` files retain lossless
+RGB24 stereo pairs: left then right, each bottom-up. Video uses variable timestamps
+and holds frames across gaps without motion interpolation. The first sample covers
+the short initial gap; the lossless frames and JSON are authoritative.
+
+The recorder samples submitted application frames, so a scene rendering at 45 Hz
+produces approximately 45 unique stereo pairs per second even on a 90 Hz headset.
+It does not capture compositor reprojection or physical display persistence.
+GPU readback uses a bounded three-buffer ring and a bounded compression queue;
+pressure skips entire stereo pairs and reports the reason. Compression, disk writes
+and video export run away from the render thread. Capture still has overhead;
+compare identical scenes with recording off/on before interpreting artifacts.
+The manifest reports total CPU time in readback calls and their maximum duration.
+Python 3 and ffmpeg provide video export; on export failure the original frames
+remain and the menu reports failure. Re-export with
+`python3 tools/vr_recording.py RECORDING_DIRECTORY`.
+
+Reusable checks: **Debug → VR Tours & Tests → Controls & layout → Tools ·
+five-second stereo recording**, or `uv run python -m tools.vr_workflows.menu_tour
+--recording-checks --validate --hold 0 --exit`. This exercises ordinary menu inputs
+and grip motion under all four profiles with menus open and closed. GPU integration
+also uses different left/right colors and both eye rendering orders. Headset
+double-image perception still requires physical review or a through-lens recording.

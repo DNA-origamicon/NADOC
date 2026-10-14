@@ -81,8 +81,9 @@ def _serialize_fixture_scene(design, nucleotides, *args, **kwargs):
 
 
 @pytest.fixture(autouse=True)
-def native_linux_host(monkeypatch):
+def native_linux_host(monkeypatch, tmp_path):
     """Route tests model a supported workstation regardless of the test host."""
+    monkeypatch.setenv("NADOC_VR_CAPTURE_CONFIG", str(tmp_path / "no-capture-config.json"))
     monkeypatch.setattr(routes_vr.platform, "system", lambda: "Linux")
     monkeypatch.setattr(routes_vr.platform, "release", lambda: "6.8.0-generic")
     monkeypatch.setattr(routes_vr.platform, "version", lambda: "Ubuntu")

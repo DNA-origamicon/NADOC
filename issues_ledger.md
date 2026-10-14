@@ -1468,3 +1468,162 @@ record: `.development-artifacts/build-animation/sweep-validation.json`.
 - [x] Order popup controls first, matching their visual foreground ownership.
 - [x] Regression sends actual rays to all ten digit centers through SidebarMenu.
 - Failed live evidence: `.development-artifacts/vr-trajectory-loop-20261012/initial/`.
+
+## ISSUE-75 — Large exported Flex Stick renders at half headset cadence (2026-10-13, FIXED for the measured workload)
+
+The retained `24hb_0xT` P1 Alpine Aug 7 Flex Stick workload renders about 44.763
+new images/s while the compositor presents about 89.526/s. Session/eye/frame/CRC
+markers decode all 179 baseline presentations in both eyes: 90 distinct application
+images and 89 repeated pairs. Independently tracked molecular features hold on
+reused IDs and jump up to 12 pixels on advanced IDs. Applied hand/model translation
+agrees within 7.1e-8 m. Rendering cadence explains these software jumps; the user's
+monocular optical symptom remains separate physical validation debt MV-44.
+
+Same-map Full/oxDNA and small 2HB Stick render at about 90 Hz. The first exported
+Full trial was stationary because recorder preparation expired the two-second
+scripted-input lease. Its replacement verifies 15 cm model movement and 179 unique
+consecutive IDs in both eyes. The harness now requires fresh post-ACK grip, measured
+model span, pose coherence, capture-window containment and successful cleanup.
+
+Two eye passes dominate the original dense Stick GPU interval (about 5.4 ms each),
+plus about 2.1 ms shadows. Exact body/cap batch merging was slower; precomputed
+normal transforms did not improve cadence. Those attempts remain preserved.
+An eligible opaque fragment specialization saves about 2.6 ms but remains at 45 Hz.
+Grouping eight tiny instances while preserving batch/instance/triangle order brings
+moving total GPU time to 5.64 ms and restores 90 Hz. On the same binary, disabling
+grouping gives 11.17 ms and 45 Hz. Shadow time stays about 2.1 ms; eye passes fall
+to about 1.3 ms each. This locates the demonstrated cost in the exported eye path.
+
+The optimized final capture decodes 179 consecutive right-eye IDs and 177 left-eye
+IDs, with two left-eye component-limit rejections retained as unknown. The disabled
+control decodes both eyes completely and reproduces 89 repeated pairs. Original
+molecular geometry, colors, draw order and instance data are preserved. Native GL
+comparisons cover exact color/depth/object IDs and ordered vertex outputs.
+Both optimizations are now defaults for eligible geometry, with explicit environment
+`=0` rollback and safe legacy fallback. Final default-path validation passed fast
+15 cm movement and all four unchanged human-motion presets for marked/unmarked
+large Stick, same-map exported Full, and small 2HB exported Stick. All remain near
+90 Hz. The physical double-image symptom remains open as MV-44.
+
+Evidence: Archive `vr-output-capture-20261012/frame-identity-20261013/index.html`.
+Reusable entry: Debug → VR Tours & Tests → Controls & layout → Origami tracking.
+No scientific geometry/topology changes or global SteamVR configuration changes.
+
+## ISSUE-76 — Normal VR launch reopened the original renderer and recorder (2026-10-13, FIXED for normal-launch integration)
+
+Normal API launch now selects the versioned optimized native build and final-output
+recorder through owner-controlled Archive configuration. It provides an inspect
+socket, pose journal, recording-only markers and executable provenance. Journal
+failure prevents a complete-diagnostics claim; configured recorder failure is
+explicit rather than silently using application-eye capture. Fresh status probes
+retain the original launch readiness snapshot separately.
+
+The real Tools action saved 179 final images with zero accounting drops; a second
+recording on the final physical inspect viewer also saved 179. All-frame pixel
+audits verified both clips and durable direct-I/O persistence. Final calibrated
+decoding joins all 716 eye images to exact CRC/session/eye/frame records: 179 unique
+consecutive IDs per eye per clip, matching both eyes, with zero repeats, gaps or
+regressions. The wide ROI and first tight-ROI failures remain recorded. The fix
+ignores already subminimum components before the unchanged 64-candidate cap;
+other acceptance thresholds are unchanged. ROI calibration used menu frame 0 only;
+178 later menu frames and all 179 physical-inspect frames were held out.
+These stationary checks validate integration, not the user's torso bug.
+
+Integration checkpoint proof: normal-managed viewer 378253/start 96081361, native SHA256
+1e830a7fd2e8c273cec04aba917e64903ccc3b166a692659158314cac8c53b76;
+original Stick/Flex placement restored within 2.4e-7 m, scientific export unchanged,
+default grouped/opaque programs active, pass timing off. Physical inspect preserves
+haptics, desktop pointer/click and touch scrolling; controllers were untracked at
+the snapshot. The original NADOC browser tab then reattached to the same PID/session:
+real visualization and view-tools sequence publications advanced, with exact
+presentation/scientific content and geometry payload preserved; Help shows Exit VR
+enabled. This verifies the poller beyond mere events-path presence. NADOC is now
+foreground; the original desktop-3D-during-VR preference remains true, and the prior
+capture does not certify the combined foreground workload. The one-shot restore
+binding was removed, all four global VR config hashes match, and SteamVR was not restarted.
+
+Validation: 101 focused backend tests, four readiness cases and five native v2
+checks passed; 175 tracking/decoder checks plus 24 subtests passed. The initial broad FAST run retained 14 failures, 8 errors, 10,830
+passes, 92 skips and 2,500 warnings. After three Unix-socket fixture failures were
+resolved by shorter Archive paths, final FAST reports 10,832 passes, 11 failures,
+8 errors, 92 skips and 2,500 warnings; five timing overruns remain. psfgen path and
+CPD stereochemistry failures are documented. No broad-green, clean-worktree,
+optical-equivalence or subjective-resolution claim.
+
+Evidence: [integration handoff](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/launch-handoff.json),
+[recording review](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/recording-validation/index.html),
+[calibrated identity proof](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/recording-validation/postfix-summary.json),
+[final configuration/document verification](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/final-config-document-verification.json),
+[browser reattachment](.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/browser-reconnect/verification.json).
+Worn-headset doubling remains MV-44.
+
+Historical intake (retained):
+The private optimized diagnostic viewer exited; ordinary browser launch still selected
+the original executable and application-eye recorder. The user’s new torso clip
+therefore was not a controlled post-fix recording. Integrate the tested native
+renderer/tools into the main checkout and bind normal launch to a pinned Archive
+build/layer, private inspect socket, recording-only image markers and pose journal.
+Save executable provenance in every new recording; never claim full diagnostic
+completion after journal failure. Keep active user design/Flex presentation and
+existing VR editing/Join behavior. Validation evidence is in
+`.development-artifacts/vr-output-capture-20261012/normal-launch-integration-20261013/`.
+Worn-headset doubling remains MV-44.
+
+## ISSUE-77 — Menus/hover coincide with renewed VR lag after the dense Stick fix (2026-10-13, OPEN)
+
+The user reports that doubling is substantially reduced, but lag/frame drops
+remain as menus enter view or the other controller aims, hovers or vibrates while
+moving the model. Request 962531370889719 saves all 179 final presentations with
+zero capture drops. Complete CRC/session/eye/frame decoding joins all 358 eye
+images: 144 distinct submitted images and 35 two-presentation runs in each eye
+(19.55% of presentations reuse the previous image), matching both eyes, with no
+unknowns, forward gaps or regressions. A retrospective bounded ROI-follow trial
+improves observation coverage; the original fixed-ROI result 313/358 with 22 proven
+pairs per eye and 45 unknowns is preserved. Acceptance thresholds were unchanged.
+
+The journal has 143 predicted-in-window application rows; its 144 distinct decoded
+images use a different boundary and must not be conflated with that count. All 242
+journal rows report head/hand tracking flags 15: no flagged tracking dropout is
+shown, which does not exclude pose jitter. Both menus stay logically open, while
+original images show changing visible coverage. The longest input/actions stage
+is 1.61 ms; xrEndFrame reaches 20.88 ms with mixed 11/22 ms application intervals. This
+locates a long host wait, not its GPU/menu/haptic cause. The old journal lacks
+per-frame hover and haptic telemetry.
+
+Exact-ID grouping gives median host/xrEndFrame durations of 22.242/20.259 ms
+for reused-image frames, versus 11.104/2.347 ms for single-presentation frames.
+This is a correlation with application-image reuse, not a causal haptic/menu test.
+
+Native inspection found event-triggered synchronous xrApplyHapticFeedback calls,
+not an unconditional vibration loop; vibration duration is not the API call's
+blocking duration. Sidebar hover can invalidate cached textures before the
+existing total GPU timer starts. Visible menu rendering includes backdrop copies
+and frosted-glass sampling. These are candidates to measure, not established
+causes, and no rendering or haptic behavior fix was applied.
+
+The normal viewer now records bounded capture-only hover, actual haptic dispatch
+results/durations, texture/cache counters, and per-eye menu/backdrop host spans.
+The offline summarize-interactions reader retains unavailable old telemetry and
+performs optional exact identity joins. Six native checks passed, including actual
+GL hover/cache changes and OpenXR dispatch/result spies; 45 reader checks and 69
+marker checks passed. A normal closed-menu recording 963838453284914 saved 179
+frames and 288 journal rows with diagnostics enabled, zero clock errors/overflow
+and zero UI clock calls, as expected. The initial incorrect expectation of positive
+UI clocks is retained as a failed verification; no native change or recapture was
+needed. This check does not exercise a physical hover or establish a performance fix.
+
+Current deployment: physical-inspect viewer 545874, session 545874-963676394554697,
+native SHA256 65bcd41e1de02d1d6271c19a1aa7d04683087358eb0dd78a17d4eb282cb8a4d3;
+existing compositor 2783034. The actual browser reattached, scientific export is
+unchanged, and placement normalization differs by at most 1.0547e-7. The reload
+closed the menus and did not restore their old positions. Reopen/place them and
+capture the reported physical menu/hover motion with the new telemetry; compare a
+menus-closed condition. MV-44 remains improved but open. No optical-equivalence,
+clean-worktree or broad-green claim is made.
+
+Evidence: [native pathway audit](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/native-audit.json),
+[complete identity follow trial](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/recording-analysis/identity-follow-summary.json),
+[frozen native build](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/native-freeze.json),
+[interaction findings](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/interaction-timing-findings.json),
+[final deployment verification](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/deployment/final-verification.json),
+[browser attachment](.development-artifacts/vr-output-capture-20261012/menu-hover-followup-20261013/deployment/browser-connected.png).

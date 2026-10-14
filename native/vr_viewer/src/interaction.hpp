@@ -1,6 +1,7 @@
 #pragma once
 
 #include "scene_placement.hpp"
+#include "presentation_restore.hpp"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -1959,6 +1960,15 @@ inline glm::mat4 poseMatrix(const HandPose& pose) {
  */
 class SceneManipulator {
   public:
+    // Opt-in recovery only; keep the scale used by subsequent physical grips
+    // consistent with the matrix and end any previous manipulation snapshot.
+    void restorePresentation(const glm::mat4& value) {
+        const float scale=validatedPresentationScale(value);
+        if(scale<kMinScale || scale>kMaxScale)
+            throw std::runtime_error("Restored presentation exceeds manipulation scale limits");
+        transform_=value;scale_=scale;mode_=ManipulationMode::none;
+    }
+
     ManipulationMode update(const std::array<HandPose, 2>& hands) {
         const bool left = hands[0].valid && hands[0].pressed;
         const bool right = hands[1].valid && hands[1].pressed;

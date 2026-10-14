@@ -2,7 +2,7 @@
   "version": 2,
   "sourceHashes": {
     "frontend/index.html": "3be4ad8bcf7c500435022cc77d9f822c79c322390276b55d16e81dd4f17c3fc1",
-    "frontend/scripts/generate-vr-sidebar-catalog.mjs": "899ebc0e707f1d200cf51f537d095c2942ad09d7755cce1e87a6e1e79a076f68",
+    "frontend/scripts/generate-vr-sidebar-catalog.mjs": "2dfa95f2190006db27fb16e5f2686ef7888303345090f4ecd7aeb3611766f867",
     "frontend/scripts/vr-sidebar-sections.mjs": "263f383abf0572352d6e5fd36406618a4e87e12961a005fe50de108391387e55",
     "frontend/src/scene/coloring_modes.js": "38b8f278e205a935a63413a0aa0d32d89762759d0b77c7da7eaba28c7d802bae",
     "frontend/src/scene/view_volumes.js": "8cb5f50859a2394fa47cf78b1d60ffd6aaf3e6319dc8cae4585ee452f3f24c9b",
@@ -12902,6 +12902,46 @@
           "id": "tool-bend",
           "label": "Bend",
           "action": "tool:bend",
+          "section": "Tools",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
+          "reason": ""
+        },
+        {
+          "id": "vr-record",
+          "label": "Record app eyes 5s",
+          "action": "recording:start",
+          "section": "Tools",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
+          "reason": ""
+        },
+        {
+          "id": "vr-record-duration",
+          "label": "Duration: 2 seconds",
+          "action": "recording:duration",
+          "section": "Tools",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
+          "reason": ""
+        },
+        {
+          "id": "vr-record-status",
+          "label": "Both eyes - 2 second countdown",
+          "action": "recording:status",
+          "section": "Tools",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
+          "reason": ""
+        },
+        {
+          "id": "vr-record-folder",
+          "label": "Open recordings folder",
+          "action": "recording:folder",
           "section": "Tools",
           "kind": "button",
           "options": [],

@@ -2,6 +2,7 @@
 #include "sidebar_grips.hpp"
 #include "solid_ui.hpp"
 #include "job_card.hpp"
+#include "capture_ui_diagnostics.hpp"
 // Included after the native GL surface types; owns both sidebar panels.
 class SidebarRuntime {
  public:
@@ -179,8 +180,9 @@ class SidebarRuntime {
         }
         return out;
     }
-    void draw() {
+    void draw(nadoc_vr::CaptureUiDiagnostics* diagnostics=nullptr) {
         for(size_t i=0;i<2;++i) if(menus[i].open) {
+            nadoc_vr::CaptureUiDiagnostics::Scope timing(diagnostics,nadoc_vr::CaptureUiDiagnostics::Kind::sidebarDraw,int(i));
             std::vector<Vertex> lines,triangles;
             auto line=[&](glm::vec3 a,glm::vec3 b,glm::vec3 color){lines.push_back({a,color,1});lines.push_back({b,color,1});};
             auto fill=[&](nadoc_vr::MenuPanelBounds b,glm::vec3 color){
@@ -219,7 +221,9 @@ class SidebarRuntime {
                 }
             }
             if(menu.customSimulationDraw() && simulationDraw)simulationDraw(i,ui);
-            surfaces[i].update(lines,menus[i].bounds(),false,triangles);
+            const auto updateStart=diagnostics?diagnostics->stamp():0;
+            const bool updated=surfaces[i].update(lines,menus[i].bounds(),false,triangles);
+            if(diagnostics)diagnostics->texture(i,updated,updateStart);
         }
     }
     void render(const glm::mat4& projection) {

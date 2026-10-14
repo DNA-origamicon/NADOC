@@ -70,6 +70,13 @@ TOOLS = [
     action("activate", "Semantic test entry to the production radial tool activation. Requires a valid right hand. This bypasses radial acquisition; it does not prove radial UI usability.",
            {"tool": {"enum": ["extrude", "move_rotate", "twist", "bend"]}}),
     action("release", "Neutralize all scripted hands and held buttons; available even when unfocused."),
+    tool("pose_journal", "Bounded diagnostic pose journal; requires viewer --pose-journal DIRECTORY. Arm before compositor capture, bind its acknowledged monotonic window, then flush after saving. Never moves the model or hands.",
+         {**SESSION, "verb": {"enum": ["arm", "window", "flush", "cancel"]},
+          "request": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+          "max_seconds": {"type": "number", "minimum": 0.1, "maximum": 30},
+          "start_ns": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+          "end_ns": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807}},
+         [*SESSION, "verb", "request"]),
     action("capture", "Capture the next submitted stereo app frame: PNGs, window depth, render classes, per-pixel uint32 object IDs and objects.json mapping primitive identities/owner tokens, plus semantic/transaction metadata. IDs are stable within the viewer session; zero denotes background/UI; glow creates no IDs. Returns left-eye image. No compositor acknowledgement; requires rendering."),
     tool("measure", "Measure final visible render-class pixels in the next submitted stereo frame, without PNG/depth readback. ROI is normalized top-left x,y,width,height. Returns counts, bounds, centroids and moment-equivalent axes; classes group controls, not individual UI identities.",
          {**SESSION, "roi": {"type": "array", "items": {"type": "number", "minimum": 0, "maximum": 1},
@@ -229,6 +236,19 @@ class Bridge:
             command += f" {args['hand']} {args['panel']} {args['edge']}"
         elif operation == "activate":
             command += " " + args["tool"]
+        elif operation == "pose_journal":
+            verb = args["verb"]
+            required = {"arm": {"max_seconds"}, "window": {"start_ns", "end_ns"},
+                        "flush": set(), "cancel": set()}[verb]
+            if set(args) - {*SESSION, "verb", "request"} != required:
+                raise ValueError("pose journal arguments do not match verb")
+            command += f" {verb} {args['request']}"
+            if verb == "arm":
+                command += f" {args['max_seconds']}"
+            elif verb == "window":
+                if not args["start_ns"] < args["end_ns"]:
+                    raise ValueError("pose journal window must increase")
+                command += f" {args['start_ns']} {args['end_ns']}"
         sequence = args["expected_sequence"] + 1
         result = self.request(f"{session} {sequence} {command}")
         if "error" in result:

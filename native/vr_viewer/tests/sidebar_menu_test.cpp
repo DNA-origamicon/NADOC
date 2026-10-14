@@ -223,6 +223,23 @@ int main() {
         if(control.enabled || !tools.activate(control).empty())
             throw std::runtime_error("Unavailable tool dispatched");
     }
+    // A hidden opt-in row must not consume layout space, geometry or input.
+    tools.visible=[](const std::string& action){return action!="recording:duration";};
+    const auto ordinaryRows=tools.visibleRows();
+    require(std::none_of(ordinaryRows.begin(),ordinaryRows.end(),[](const auto* r){return r->id=="vr-record-duration";}),"Hidden duration consumed a row");
+    const auto statusRow=std::find_if(ordinaryRows.begin(),ordinaryRows.end(),[](const auto* row){return row->id=="vr-record-status";});
+    require(statusRow!=ordinaryRows.end(),"Recorder status row missing");
+    tools.offsets[tools.selected]=size_t(statusRow-ordinaryRows.begin());
+    const auto ordinaryControls=tools.controls();
+    require(std::none_of(ordinaryControls.begin(),ordinaryControls.end(),[](const auto& c){return c.id=="vr-record-duration";}),"Hidden duration exposed hit geometry");
+    require(std::any_of(ordinaryControls.begin(),ordinaryControls.end(),[](const auto& c){return c.id=="vr-record-status";}),"Hidden duration shifted the ordinary status row");
+    tools.visible=[](const std::string&){return true;};
+    const auto optInRows=tools.visibleRows();
+    require(optInRows.size()==ordinaryRows.size()+1,"Opt-in duration row missing");
+    const auto disabledControls=tools.controls();
+    const auto duration=std::find_if(disabledControls.begin(),disabledControls.end(),[](const auto& c){return c.id=="vr-record-duration";});
+    require(duration!=disabledControls.end() && !duration->enabled && tools.activate(*duration).empty(),"Busy duration control dispatched");
+    tools.offsets[tools.selected]=0;
     tools.available=[](const std::string&){return true;};
     for(const auto& control:tools.controls()) {
         if(control.action=="tool:inspect" &&
