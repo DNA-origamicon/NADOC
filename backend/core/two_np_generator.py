@@ -38,7 +38,7 @@ class GeneratorSettings(BaseModel):
         "legacy", "beam", "variable", "robust", "fem-linear", "fem-nonlinear", "oxdna"
     ] = "legacy"
     shape: Literal["auto", "platform", "curved-rod", "branched"] = "auto"
-    branch_geometry: Literal["curved", "lattice"] = "curved"
+    branch_geometry: Literal["curved", "lattice", "join"] = "curved"
     branch_sizing: Literal["optimized", "fixed"] = "optimized"
     branch_scaffold_size: Literal["auto", 7249, 8064] = "auto"
     branch_sections: list[list[tuple[int, int]]] | None = None

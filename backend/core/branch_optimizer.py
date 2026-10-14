@@ -385,7 +385,7 @@ def plan_optimized_branches(source, settings):
             candidates=len(trials), routing_attempts=attempted, rejected=rejected
         ),
         reason="Lowest weak-axis beam compliance proxy among route-checked section and junction sizes in a bounded search.",
-        qualification="Experimental planar forks. Cross-sections are independently sized; curvature and actual scaffold cost are checked. Discrete routing can leave unused bases; no unpaired filler is counted as reinforcement. CanDo validates the generated structure, not a global rigidity optimum.",
+        qualification="Experimental planar forks. Cross-sections are independently sized; curvature and actual scaffold cost are checked. Discrete routing can leave unused bases; no unpaired filler is counted as reinforcement. Mechanical refinement is separate from first-pass generation.",
     )
 
 
@@ -517,6 +517,9 @@ def combine_budget_plans(source, settings, planner, *, screened):
         candidates=sum(r["search"]["candidates"] for c, r in feasible),
         structural_candidates=sum(
             r["search"].get("structural_candidates", 0) for c, r in feasible
+        ),
+        routing_candidates=sum(
+            r["search"].get("routing_candidates", 0) for c, r in feasible
         ),
         budgets={
             str(c.summary["scaffold_size"]): deepcopy(r["search"]) for c, r in feasible

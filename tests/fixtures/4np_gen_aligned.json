@@ -1,0 +1,421 @@
+{
+  "id": "52d34bbb-c70b-400f-aeda-5202e28a5ba7",
+  "helices": [
+    {
+      "id": "__np__9e2d7f53-c749-464e-8ed1-d74e92d7c40e__0__8463d089",
+      "axis_start": {
+        "x": 3.786526837402116,
+        "y": 0.0,
+        "z": 4.260541574686665
+      },
+      "axis_end": {
+        "x": 7.6261979111186475,
+        "y": 0.0,
+        "z": 8.580880224105774
+      },
+      "length_bp": 18,
+      "label": "AuNP DNA 1"
+    },
+    {
+      "id": "__np__ece6839a-b6af-462f-879a-edb8983575c3",
+      "axis_start": {
+        "x": 60.19204149916457,
+        "y": 0.0,
+        "z": 4.260541574686665
+      },
+      "axis_end": {
+        "x": 64.0317125728811,
+        "y": 0.0,
+        "z": 8.580880224105774
+      },
+      "length_bp": 18,
+      "label": "AuNP DNA 1"
+    },
+    {
+      "id": "__np__921870d1-e6f9-48ce-80c6-eeeeb74d240b",
+      "axis_start": {
+        "x": -3.7650275019164408,
+        "y": 0.0,
+        "z": 44.61991025128139
+      },
+      "axis_end": {
+        "x": 0.07464357180009085,
+        "y": 0.0,
+        "z": 48.9402489007005
+      },
+      "length_bp": 18,
+      "label": "AuNP DNA 1"
+    },
+    {
+      "id": "__np__e30164ba-1132-4ddb-9ad3-fb89e3cb9b66",
+      "axis_start": {
+        "x": 75.20892089516045,
+        "y": 0.0,
+        "z": 34.2245844738628
+      },
+      "axis_end": {
+        "x": 79.04859196887698,
+        "y": 0.0,
+        "z": 38.54492312328191
+      },
+      "length_bp": 18,
+      "label": "AuNP DNA 1"
+    }
+  ],
+  "strands": [
+    {
+      "id": "797d66d9-1d09-4841-bf31-f63938c70289",
+      "domains": [
+        {
+          "helix_id": "__np__9e2d7f53-c749-464e-8ed1-d74e92d7c40e__0__8463d089",
+          "start_bp": 0,
+          "end_bp": 17,
+          "direction": "FORWARD",
+          "overhang_id": "__np_oh__797d66d9-1d09-4841-bf31-f63938c70289"
+        }
+      ],
+      "sequence": "ATAAGTAGCACAGTCGCC",
+      "color": "#c050d0",
+      "name": "NP-1:S1"
+    },
+    {
+      "id": "c71688de-0f2a-4f47-a7d4-f676dd6eafe4",
+      "domains": [
+        {
+          "helix_id": "__np__ece6839a-b6af-462f-879a-edb8983575c3",
+          "start_bp": 0,
+          "end_bp": 17,
+          "direction": "FORWARD",
+          "overhang_id": "839bdd4e-c681-48b0-a2ed-2e7690d9906a"
+        }
+      ],
+      "sequence": "ATAAGTAGCACAGTCGCC",
+      "color": "#c050d0",
+      "name": "NP-1:S1"
+    },
+    {
+      "id": "f2c90192-7eca-4e83-b9f2-1ebe3803ef45",
+      "domains": [
+        {
+          "helix_id": "__np__921870d1-e6f9-48ce-80c6-eeeeb74d240b",
+          "start_bp": 0,
+          "end_bp": 17,
+          "direction": "FORWARD",
+          "overhang_id": "c94975c4-3062-41c9-8cb7-5de067cd5124"
+        }
+      ],
+      "sequence": "ATAAGTAGCACAGTCGCC",
+      "color": "#c050d0",
+      "name": "NP-1:S1"
+    },
+    {
+      "id": "28d89f5e-edb7-4aa0-9ca5-4d72be4af9e0",
+      "domains": [
+        {
+          "helix_id": "__np__e30164ba-1132-4ddb-9ad3-fb89e3cb9b66",
+          "start_bp": 0,
+          "end_bp": 17,
+          "direction": "FORWARD",
+          "overhang_id": "2b15c9b5-4e7a-40d7-8dd9-ce6c27ca4506"
+        }
+      ],
+      "sequence": "ATAAGTAGCACAGTCGCC",
+      "color": "#c050d0",
+      "name": "NP-1:S1"
+    }
+  ],
+  "metadata": {
+    "name": "4NP_gen_test",
+    "identity_last_known_path": "4NP_gen_test_aligned.nadoc",
+    "identity_confirmed_at": "2026-10-08T01:40:44.691998+00:00"
+  },
+  "cluster_transforms": [
+    {
+      "id": "cf7aab56-5ffa-4fb8-b060-80dec7494229",
+      "name": "Cluster 1",
+      "is_default": true,
+      "helix_ids": [
+        "__np__9e2d7f53-c749-464e-8ed1-d74e92d7c40e__0__8463d089"
+      ],
+      "auto_created": true
+    }
+  ],
+  "overhangs": [
+    {
+      "id": "__np_oh__797d66d9-1d09-4841-bf31-f63938c70289",
+      "helix_id": "__np__9e2d7f53-c749-464e-8ed1-d74e92d7c40e__0__8463d089",
+      "strand_id": "797d66d9-1d09-4841-bf31-f63938c70289",
+      "sequence": "ATAAGTAGCACAGTCGCC",
+      "label": "NP-1:S1",
+      "sub_domains": [
+        {
+          "id": "afdbd531-855d-5cac-b963-b685e03bed7a",
+          "length_bp": 18
+        }
+      ],
+      "auxiliary_endpoint": true
+    },
+    {
+      "id": "839bdd4e-c681-48b0-a2ed-2e7690d9906a",
+      "helix_id": "__np__ece6839a-b6af-462f-879a-edb8983575c3",
+      "strand_id": "c71688de-0f2a-4f47-a7d4-f676dd6eafe4",
+      "sequence": "ATAAGTAGCACAGTCGCC",
+      "label": "NP-1:S1",
+      "sub_domains": [
+        {
+          "id": "0650aa29-47d0-4164-982e-8b1a5e747dbe",
+          "length_bp": 18
+        }
+      ],
+      "auxiliary_endpoint": true
+    },
+    {
+      "id": "c94975c4-3062-41c9-8cb7-5de067cd5124",
+      "helix_id": "__np__921870d1-e6f9-48ce-80c6-eeeeb74d240b",
+      "strand_id": "f2c90192-7eca-4e83-b9f2-1ebe3803ef45",
+      "sequence": "ATAAGTAGCACAGTCGCC",
+      "label": "NP-1:S1",
+      "sub_domains": [
+        {
+          "id": "04f39faf-7851-461d-96a1-b6f26e67ca6e",
+          "length_bp": 18
+        }
+      ],
+      "auxiliary_endpoint": true
+    },
+    {
+      "id": "2b15c9b5-4e7a-40d7-8dd9-ce6c27ca4506",
+      "helix_id": "__np__e30164ba-1132-4ddb-9ad3-fb89e3cb9b66",
+      "strand_id": "28d89f5e-edb7-4aa0-9ca5-4d72be4af9e0",
+      "sequence": "ATAAGTAGCACAGTCGCC",
+      "label": "NP-1:S1",
+      "sub_domains": [
+        {
+          "id": "03d0dc4c-85b4-4169-9d80-8c2cc62564a9",
+          "length_bp": 18
+        }
+      ],
+      "auxiliary_endpoint": true
+    }
+  ],
+  "nanoparticles": [
+    {
+      "id": "9e2d7f53-c749-464e-8ed1-d74e92d7c40e",
+      "diameter_nm": 10.0
+    },
+    {
+      "id": "87495070-55ba-4211-9e10-03c4ecd279c2",
+      "diameter_nm": 10.0,
+      "pose": {
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          56.40551466176245,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": "0b52769a-6bc7-4e0e-a957-53a5e62db9fd",
+      "diameter_nm": 10.0,
+      "pose": {
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          -7.551554339318557,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          40.35936867659473,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    },
+    {
+      "id": "b833b416-f0e9-4043-a4bc-bad725edacec",
+      "diameter_nm": 10.0,
+      "pose": {
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          71.42239405775832,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          29.964042899176135,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    }
+  ],
+  "nanoparticle_conjugations": [
+    {
+      "id": "0003c2e1-f0fd-4cff-8da9-536092b26380",
+      "nanoparticle_id": "9e2d7f53-c749-464e-8ed1-d74e92d7c40e",
+      "sequence": "ATAAGTAGCACAGTCGCC",
+      "requested_count": 1,
+      "estimated_capacity": 31,
+      "density_per_nm2": 0.0031830988618379067,
+      "surface_strands": [
+        {
+          "strand_id": "797d66d9-1d09-4841-bf31-f63938c70289",
+          "helix_id": "__np__9e2d7f53-c749-464e-8ed1-d74e92d7c40e__0__8463d089",
+          "overhang_id": "__np_oh__797d66d9-1d09-4841-bf31-f63938c70289",
+          "site_local": [
+            0.6643029539301958,
+            0.0,
+            0.7474634341555553
+          ],
+          "sulfur_local_nm": [
+            3.321514769650979,
+            0.0,
+            3.7373171707777764
+          ]
+        }
+      ]
+    },
+    {
+      "id": "3ee1dc0a-31b7-4555-880d-f6c868f42146",
+      "nanoparticle_id": "87495070-55ba-4211-9e10-03c4ecd279c2",
+      "sequence": "ATAAGTAGCACAGTCGCC",
+      "requested_count": 1,
+      "estimated_capacity": 31,
+      "density_per_nm2": 0.0031830988618379067,
+      "surface_strands": [
+        {
+          "strand_id": "c71688de-0f2a-4f47-a7d4-f676dd6eafe4",
+          "helix_id": "__np__ece6839a-b6af-462f-879a-edb8983575c3",
+          "overhang_id": "839bdd4e-c681-48b0-a2ed-2e7690d9906a",
+          "site_local": [
+            0.6643029539301958,
+            0.0,
+            0.7474634341555553
+          ],
+          "sulfur_local_nm": [
+            3.321514769650979,
+            0.0,
+            3.7373171707777764
+          ]
+        }
+      ]
+    },
+    {
+      "id": "37554487-0307-4b41-b8f9-c5f39a7f0da3",
+      "nanoparticle_id": "0b52769a-6bc7-4e0e-a957-53a5e62db9fd",
+      "sequence": "ATAAGTAGCACAGTCGCC",
+      "requested_count": 1,
+      "estimated_capacity": 31,
+      "density_per_nm2": 0.0031830988618379067,
+      "surface_strands": [
+        {
+          "strand_id": "f2c90192-7eca-4e83-b9f2-1ebe3803ef45",
+          "helix_id": "__np__921870d1-e6f9-48ce-80c6-eeeeb74d240b",
+          "overhang_id": "c94975c4-3062-41c9-8cb7-5de067cd5124",
+          "site_local": [
+            0.6643029539301958,
+            0.0,
+            0.7474634341555553
+          ],
+          "sulfur_local_nm": [
+            3.321514769650979,
+            0.0,
+            3.7373171707777764
+          ]
+        }
+      ]
+    },
+    {
+      "id": "a82ff4d7-9111-4daf-a7b3-fce5635932fa",
+      "nanoparticle_id": "b833b416-f0e9-4043-a4bc-bad725edacec",
+      "sequence": "ATAAGTAGCACAGTCGCC",
+      "requested_count": 1,
+      "estimated_capacity": 31,
+      "density_per_nm2": 0.0031830988618379067,
+      "surface_strands": [
+        {
+          "strand_id": "28d89f5e-edb7-4aa0-9ca5-4d72be4af9e0",
+          "helix_id": "__np__e30164ba-1132-4ddb-9ad3-fb89e3cb9b66",
+          "overhang_id": "2b15c9b5-4e7a-40d7-8dd9-ce6c27ca4506",
+          "site_local": [
+            0.6643029539301958,
+            0.0,
+            0.7474634341555553
+          ],
+          "sulfur_local_nm": [
+            3.321514769650979,
+            0.0,
+            3.7373171707777764
+          ]
+        }
+      ]
+    }
+  ],
+  "staple_groups": [
+    {
+      "id": "conjugate-1df0cf09-af01-4d3a-b2a5-adacaac5a143",
+      "name": "NP-1",
+      "color": "#c050d0",
+      "strand_ids": [
+        "797d66d9-1d09-4841-bf31-f63938c70289"
+      ]
+    },
+    {
+      "id": "578c2ae2-6076-4210-be69-cf8fdc42b171",
+      "name": "NP-1",
+      "color": "#c050d0",
+      "strand_ids": [
+        "c71688de-0f2a-4f47-a7d4-f676dd6eafe4"
+      ]
+    },
+    {
+      "id": "dc6e0c12-844d-49b3-bbaf-2c52bcd87cdd",
+      "name": "NP-1",
+      "color": "#c050d0",
+      "strand_ids": [
+        "f2c90192-7eca-4e83-b9f2-1ebe3803ef45"
+      ]
+    },
+    {
+      "id": "a30a6606-6344-49ee-a9ea-7f2bca4f5cc3",
+      "name": "NP-1",
+      "color": "#c050d0",
+      "strand_ids": [
+        "28d89f5e-edb7-4aa0-9ca5-4d72be4af9e0"
+      ]
+    }
+  ],
+  "animations": [
+    {
+      "id": "c3d71b93-d545-47b9-a61c-00bb340216f8",
+      "name": "animation 1"
+    }
+  ]
+}
