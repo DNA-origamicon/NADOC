@@ -107,6 +107,30 @@ int main(int argc,char** argv) {
     gallery.listMode=false;
     gallery.cardMode=false;
     gallery.buttonMode=false;
+    gallery.tabMode=true;gallery.reset();
+    auto& tabs=gallery.tabStyles;
+    const auto tabFrame=[&](bool click=false,bool held=false){gallery.update(hands,{false,click},{false,held},.02F,{},{});};
+    const auto aimTab=[&](int row,int i){const auto b=tabs.bounds(row,i);hands[1]={true,false,gallery.placement.worldPoint({b.x+b.w*.5F,b.y+.03F,0})+normal*.3F,gallery.placement.orientation()};};
+    aimTab(0,1);tabFrame(true,true);
+    checkGallery(tabs.rows[0].selected==0,"tab selected before release");tabFrame();
+    checkGallery(tabs.rows[0].selected==1,"tab release selection failed");
+    hands[1].valid=false;
+    float furthest=0;bool returned=false;
+    for(int f=0;f<1500;++f){tabFrame();float offset=tabs.offset(1);furthest=std::max(furthest,offset);if(furthest>.1F && offset<.001F)returned=true;}
+    checkGallery(furthest>=tabs.overflow(0,1)-.001F && returned,"selected label did not scroll to both ends");
+    checkGallery(tabs.width(0,1)==tabs.width(0,0),"scroll changed fixed tab width");
+    aimTab(0,2);tabFrame(true,true);hands[1].valid=false;tabFrame();
+    checkGallery(tabs.rows[0].selected==1,"lost input selected a tab");
+    aimTab(1,1);tabFrame(true,true);tabFrame();hands[1].valid=false;
+    for(int f=0;f<20;++f)tabFrame();
+    checkGallery(tabs.overflow(1,1)<.001F && tabs.width(1,1)>.4F,"selected compact tab did not reveal label");
+    aimTab(1,3);for(int f=0;f<20;++f)tabFrame();
+    checkGallery(tabs.overflow(1,3)<.001F,"hovered compact tab did not reveal label");
+    checkGallery(tabs.bounds(1,3).x+tabs.width(1,3)<=.73F,"expanded tabs escaped panel");
+    hands[1].valid=false;for(int f=0;f<20;++f)tabFrame();
+    checkGallery(tabs.width(1,3)==.17F && tabs.width(1,1)>.4F,"hover exit lost selected expansion or retained hover");
+    gallery.reset();checkGallery(tabs.rows[0].selected==0 && tabs.offset(1)==0,"tab reset failed");
+    gallery.tabMode=false;
     // Render exact native meshes and retain front/oblique plus offscreen negative.
     if(!glfwInit())return 77;
     glfwWindowHint(GLFW_VISIBLE,GLFW_FALSE);glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,3);glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,3);
@@ -116,8 +140,8 @@ int main(int argc,char** argv) {
     gallery.reset();gallery.demo=false;gallery.placement.openDocked({0,0,0},{1,0,0,0});
     const std::filesystem::path output=argc>1?argv[1]:"gallery-evidence";
     std::filesystem::create_directories(output);
-    for(int mode=0;mode<4;++mode)for(int view=0;view<3;++view) {
-        gallery.buttonMode=mode==1;gallery.cardMode=mode==2;gallery.listMode=mode==3;
+    for(int mode=0;mode<5;++mode)for(int view=0;view<3;++view) {
+        gallery.tabMode=mode==4;gallery.buttonMode=mode==1;gallery.cardMode=mode==2;gallery.listMode=mode==3;
         if(mode==2)for(auto& card:gallery.cardStyles.cards){card.open=true;card.reveal=1;}gallery.placement.openDocked({0,0,0},{1,0,0,0});
         const glm::vec3 eye=view==1?glm::vec3(.6F,.22F,1.1F):glm::vec3(0,0,1.25F);
         const auto vp=glm::perspective(glm::radians(52.F),1.28F,.01F,20.F)*glm::lookAt(eye,glm::vec3(0),glm::vec3(0,1,0));
@@ -126,9 +150,29 @@ int main(int argc,char** argv) {
         gallery.render(vp);glFinish();
         std::vector<uint8_t> rgb(1280*1000*3);glReadPixels(0,0,1280,1000,GL_RGB,GL_UNSIGNED_BYTE,rgb.data());
         int bright=0;for(size_t p=0;p<rgb.size();p+=3)if(rgb[p]>60 && rgb[p+1]>80 && rgb[p+2]>100)++bright;
-        checkGallery(view==2?bright==0:bright>18000,"gallery pixel coverage/negative control failed");
+        if(mode!=4)checkGallery(view==2?bright==0:bright>18000,"gallery pixel coverage/negative control failed");
+        else {
+            // This sparse two-row study has fewer lit pixels than the six/nine-control
+            // galleries. Require visible text at every actual tab, including oblique.
+            for(int row=0;row<2;++row)for(int i=0;i<4;++i){
+                const auto b=tabs.bounds(row,i);int count=0;
+                glm::vec2 lo(1280,1000),hi(0);
+                for(float dx:{0.F,b.w})for(float dy:{0.F,b.h}){
+                    auto clip=vp*glm::vec4(gallery.placement.worldPoint({b.x+dx,b.y+dy,.019F}),1);
+                    glm::vec2 pixel=(glm::vec2(clip)/clip.w*.5F+.5F)*glm::vec2(1280,1000);
+                    lo=glm::min(lo,pixel);hi=glm::max(hi,pixel);
+                }
+                for(int y=std::max(0,int(lo.y));y<std::min(1000,int(hi.y)+1);++y)
+                    for(int x=std::max(0,int(lo.x));x<std::min(1280,int(hi.x)+1);++x){
+                        const size_t p=(size_t(y)*1280+x)*3;
+                        if(rgb[p]>140 && rgb[p+1]>160 && rgb[p+2]>180)++count;
+                    }
+                checkGallery(view==2?count==0:count>20,"tab label pixels missing/negative failed");
+            }
+            if(view==2)checkGallery(bright==0,"offscreen tab gallery visible");
+        }
         auto png=nadoc_vr::scrywrite::encodeActorEyePng(rgb,1280,1000);
-        std::ofstream file(output/(std::string(mode==3?"lists-":mode==2?"cards-":mode==1?"buttons-":"")+(view==0?"front.png":view==1?"oblique.png":"offscreen.png")),std::ios::binary);
+        std::ofstream file(output/(std::string(mode==4?"tabs-":mode==3?"lists-":mode==2?"cards-":mode==1?"buttons-":"")+(view==0?"front.png":view==1?"oblique.png":"offscreen.png")),std::ios::binary);
         file.write(reinterpret_cast<const char*>(png.data()),png.size());
     }
     gallery.ui.shutdown();glfwDestroyWindow(window);glfwTerminate();

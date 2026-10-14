@@ -6,6 +6,7 @@
 #include "ui_style.hpp"
 #include "menu_grip_frame.hpp"
 #include "sidebar_scroll.hpp"
+#include "compact_tabs.hpp"
 #include "extrude_wheels.hpp"
 #include <functional>
 #include <optional>
@@ -63,6 +64,17 @@ class SidebarMenu {
     MenuPlacement placement;
     GripFrameState gripState=GripFrameState::idle;
     std::array<bool,2> gripNearby{};
+    CompactTabs compactTabs;
+    void animateTabs(float dt) {
+        int hot=-1;
+        const auto& id=focus.active?focus.id:hovered;
+        for(size_t i=0;i<tabs.size();++i)if(id=="tab:"+kSidebarTabs[tabs[i]].key)hot=int(i);
+        compactTabs.step(tabs.size(),selected,hot,std::clamp(dt,0.F,.05F));
+    }
+    float tabFont(const std::string& id) const {
+        for(size_t i=0;i<tabs.size();++i)if(id=="tab:"+kSidebarTabs[tabs[i]].key)return compactTabs.font(i);
+        return CompactTabs::idleFont;
+    }
     std::string hovered;
     MenuFocus focus;
     std::string pressed;
@@ -267,10 +279,15 @@ class SidebarMenu {
         std::vector<SidebarControl> out;
         const float tx=hand==0 ? -.397F : .397F;
         const float cx=toolFooter()?0.F:hand==0 ? .058F : -.058F;
+        float tabTop=.647F;
         for(size_t i=0;!customTab && i<tabs.size();++i) {
-            float y=.558F-static_cast<float>(i)*.189F;
             const auto& t=kSidebarTabs[tabs[i]];
-            out.push_back({"tab:"+t.key,t.label,"","tab:"+std::to_string(i),{{tx-.05F,y-.0885F},{tx+.05F,y+.0885F}},true,i==selected,true});
+            const float length=compactTabs.length(i,t.label.size());
+            const float width=.09F;
+            const float left=hand==0?tx+.05F-width:tx-.05F;
+            const float right=hand==0?tx+.05F:left+width;
+            out.push_back({"tab:"+t.key,t.label,"","tab:"+std::to_string(i),{{left,tabTop-length},{right,tabTop}},true,i==selected,true});
+            tabTop-=length+CompactTabs::gap;
         }
         if(dynamicActive()) {
             const auto extra=dynamicControls(animated);out.insert(out.end(),extra.begin(),extra.end());
@@ -662,7 +679,7 @@ class SidebarMenu {
                 const auto color=focus.active && c.id==focus.id?ui_style::focus:ui_style::selectedBorder;
                 ui_style::rounded({lo,hi},bg,color,line,[](MenuPanelBounds,glm::vec3){},ui_style::cornerRadius-.004F,.003F);
             }
-            if(!clip || menuLayoutContains(*clip,b)) audit.addControl(c.id,b,b,c.id.starts_with("dimension:value:")?glm::vec2(.14F,.065F):c.id.starts_with("sweep:axis:")?glm::vec2(.07F,.065F):c.id.ends_with("-wheel")?glm::vec2(.05F,.065F):(!c.icon.empty() || c.id.starts_with("volume:enabled:"))?glm::vec2(.09F,.065F):scrollbar?glm::vec2(.06F,.15F):c.vertical?glm::vec2(.09F,.15F):glm::vec2(.15F,.065F));
+            if(!clip || menuLayoutContains(*clip,b)) audit.addControl(c.id,b,b,c.id.starts_with("dimension:value:")?glm::vec2(.14F,.065F):c.id.starts_with("sweep:axis:")?glm::vec2(.07F,.065F):c.id.ends_with("-wheel")?glm::vec2(.05F,.065F):(!c.icon.empty() || c.id.starts_with("volume:enabled:"))?glm::vec2(.09F,.065F):scrollbar?glm::vec2(.06F,.15F):c.vertical?glm::vec2(.09F,CompactTabs::idleLength):glm::vec2(.15F,.065F));
             if(scrollbar) {
                 const auto thumb=dynamicActive()?dynamicThumb(c.id):scrollThumb();
                 const auto color=c.enabled?ui_style::disabledText:glm::vec3(.55F);
@@ -711,10 +728,23 @@ class SidebarMenu {
                 continue;
             }
             if(c.vertical) {
-                const auto fitted=boundedMenuStrokeText(c.label,b.maximum.y-b.minimum.y-.010F,.0033F);
-                const float s=fitted.scale;
-                text(c.id,fitted.text,{(b.minimum.x+b.maximum.x)*.5F+(hand==0?-3:3)*s,(b.minimum.y+b.maximum.y+(hand==0?-1:1)*strokeTextWidth(fitted.text.size(),s))*.5F},s,fg,
-                    {b.minimum+glm::vec2(.005F),b.maximum-glm::vec2(.005F)},true);
+                const float s=tabFont(c.id),full=strokeTextWidth(c.label.size(),s);
+                const MenuPanelBounds content{b.minimum+glm::vec2(.005F),b.maximum-glm::vec2(.005F)};
+                const float available=content.maximum.y-content.minimum.y;
+                const bool overflow=full>available;
+                // Clockwise lettering reads from the top of either tab column down.
+                const float start=content.maximum.y-std::max(0.F,(available-full)*.5F);
+                const float x=(b.minimum.x+b.maximum.x)*.5F+3*s;
+                audit.addTextBounds(c.id,c.label,{{x-6*s,std::max(content.minimum.y,start-full)},{x,start}},s,content);
+                for(size_t n=0;n<c.label.size();++n){const auto shape=glyph(static_cast<char>(std::toupper(static_cast<unsigned char>(c.label[n]))));
+                    for(size_t row=0;row<shape.size();++row)for(int col=0;col<5;++col)if(shape[row]&(1U<<(4-col))){
+                        glm::vec3 a{x-float(row)*s,start-float(n*6+col)*s,.002F};
+                        auto end=a;end.y-=s*.82F;
+                        if(!clipSidebarLine(a,end,content))continue;
+                        const float edge=end.y-content.minimum.y;
+                        line(a,end,overflow?glm::mix(bg,fg,std::clamp(edge/.030F,0.F,1.F)):fg);
+                    }
+                }
             } else {
                 const bool sweepValue=c.id.starts_with("sweep:axis:") && c.id.ends_with(":value");
                 const float padding=sweepValue?.010F:.012F;

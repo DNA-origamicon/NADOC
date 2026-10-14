@@ -18,6 +18,42 @@ int main() {
         require(shown==assembly,"Assembly tab must match the document context");
         require(menu.tab().key=="properties","Default Properties tab changed with Assembly visibility");
     }
+    // All selected/hover pairs must reveal full names without widening tabs or enlarging the panel.
+    for(int side=0;side<2;++side){
+        nadoc_vr::SidebarMenu m(side,true);m.open=true;m.placement.openDocked({0,0,0},{1,0,0,0});
+        for(size_t selected=0;selected<m.tabs.size();++selected)for(size_t hover=0;hover<m.tabs.size();++hover){
+            m.compactTabs={};m.selected=selected;m.hovered="tab:"+nadoc_vr::kSidebarTabs[m.tabs[hover]].key;
+            for(int frame=0;frame<12;++frame){
+                const auto before=m.controls();
+                m.animateTabs(.02F);
+                const auto after=m.controls();
+                for(size_t i=0;i<m.tabs.size();++i){
+                    require(before[i].bounds.minimum.x==after[i].bounds.minimum.x && before[i].bounds.maximum.x==after[i].bounds.maximum.x,"Tab animation changes thickness or column position");
+                    require(std::abs(after[i].bounds.maximum.x-after[i].bounds.minimum.x-.09F)<1e-6F,"Tab thickness changed");
+                    require(std::abs(after[i].bounds.maximum.y-(i?after[i-1].bounds.minimum.y-nadoc_vr::CompactTabs::gap:.647F))<1e-6F,"Tab expansion must flow downward with fixed gaps");
+                }
+                m.draw([](auto,auto,auto){},[](auto,auto){});
+                require(m.audit.valid(),m.audit.summary().c_str());
+            }
+            std::vector<std::pair<glm::vec3,glm::vec3>> glyphs;
+            m.draw([&](glm::vec3 a,glm::vec3 b,glm::vec3 color){if(std::abs(a.z-.002F)<1e-6F && std::min({color.r,color.g,color.b})>.7F)glyphs.push_back({a,b});},[](auto,auto){});
+            float previous=.66F;
+            for(const auto& c:m.controls())if(c.vertical){
+                int visible=0;
+                for(const auto& [a,b]:glyphs)if(a.x>=c.bounds.minimum.x && a.x<=c.bounds.maximum.x && a.y>=c.bounds.minimum.y && a.y<=c.bounds.maximum.y)++visible;
+                require(visible>10,"Tab label has no visible glyph strokes");
+                require(c.bounds.maximum.y<previous,"Expanded tabs overlap");previous=c.bounds.minimum.y;
+                require(c.bounds.minimum.y>=-.67F,"Expanded tabs escape existing panel");
+                if(c.active || c.id==m.hovered)require(c.bounds.maximum.y-c.bounds.minimum.y>=nadoc_vr::strokeTextWidth(c.label.size(),m.tabFont(c.id))+.019F,"Expanded tab truncates label");
+                const glm::vec2 center=(c.bounds.minimum+c.bounds.maximum)*.5F;
+                nadoc_vr::HandPose ray{true,false,m.placement.worldPoint({center,.3F}),{1,0,0,0}};
+                require(m.hit(ray) && m.hit(ray)->id==c.id,"Rendered tab and ray geometry disagree");
+            }
+            m.hovered.clear();for(int n=0;n<12;++n)m.animateTabs(.02F);
+            require(m.compactTabs.amount(selected)==1,"Selected tab collapsed after hover exit");
+            if(selected!=hover)require(m.compactTabs.amount(hover)==0,"Unselected tab failed to collapse");
+        }
+    }
     const auto vrTab=std::find_if(nadoc_vr::kSidebarTabs.begin(),nadoc_vr::kSidebarTabs.end(),[](const auto& tab){return tab.key=="vr";});
     require(vrTab!=nadoc_vr::kSidebarTabs.end(),"VR tab missing");
     require(std::any_of(vrTab->rows.begin(),vrTab->rows.end(),[](const auto& row){return row.id=="qr-cube-calibrate" && row.action=="qr:cube";}),"Cube calibration must be available in VR tab");

@@ -258,8 +258,9 @@ def test_join_final_output_tour_uses_the_configured_recorder(client):
     assert arguments(tour, True) == ['-m', 'tools.vr_workflows.join_tour', '--capture-final', '--validate']
 
 
-def test_simulation_menu_study_is_desktop_only(client, monkeypatch):
-    study = next(t for t in catalog()['tours'] if t['id'] == 'simulation-menu-gallery')
+@pytest.mark.parametrize("identifier,component", [("simulation-menu-gallery", "simulations"), ("tab-gallery", "tabs")])
+def test_simulation_menu_study_is_desktop_only(client, monkeypatch, identifier, component):
+    study = next(t for t in catalog()['tours'] if t['id'] == identifier)
     assert study['modes'] == ['desktop']
     assert study['command'].endswith('--desktop')
     entry = next(t for t in client.get('/api/vr/tours').json()['tours'] if t['id'] == study['id'])
@@ -276,4 +277,18 @@ def test_simulation_menu_study_is_desktop_only(client, monkeypatch):
     assert result.status_code == 200, result.text
     argv = popen.call_args.args[0]
     assert '--desktop' in argv
-    assert argv[argv.index('--component')+1] == 'simulations'
+    assert argv[argv.index('--component')+1] == component
+
+
+def test_compact_tab_profile_report_keeps_misses():
+    from tools.vr_workflows.compact_tabs_tour import summarize
+    result = summarize([
+        {"hit": True, "acquired": True, "wrong_tab": False, "clicked": True, "target": "tab:tools", "after": "tools"},
+        {"hit": False, "acquired": False, "wrong_tab": False, "clicked": True, "target": "tab:tools", "after": "tools"},
+        {"hit": False, "acquired": True, "wrong_tab": True, "clicked": True, "target": "tab:tools", "after": "properties"},
+    ])
+    assert result == {"trials": 3, "hits": 1, "misses": 2, "hit_rate": 1/3,
+                      "acquisition_hits": 2, "wrong_tab_activations": 1, "selection_hits": 2,
+                      "selection_misses": 1, "selection_hit_rate": 2/3, "non_tab_endpoints": 0}
+    entry = next(t for t in catalog()["tours"] if t["id"] == "compact-tabs")
+    assert arguments(entry, True) == ["-m", "tools.vr_workflows.compact_tabs_tour", "--validate"]

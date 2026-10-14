@@ -11,6 +11,7 @@ class SidebarRuntime {
     std::array<SolidUi,2> raised;
     std::function<void(size_t,SolidUi&)> simulationDraw;
     std::array<bool,2> openedBefore{};
+    double lastTabFrame=0;
     std::array<nadoc_vr::SidebarMenu*,2> historyGrab{};
     void initialize() { for(auto& s:surfaces) s.initialize(); }
     void shutdown() { for(auto& s:surfaces) s.shutdown(); for(auto& s:raised)s.shutdown(); }
@@ -130,6 +131,8 @@ class SidebarRuntime {
                 activate(*target,*c,h,hands,now,action);
             }
         }
+        const float dt=lastTabFrame>0?float(now-lastTabFrame):0.F;lastTabFrame=now;
+        for(auto& m:menus)m.animateTabs(dt);
         return blocked;
     }
     bool scrollAt(const nadoc_vr::HandPose& hand,int direction=0) {

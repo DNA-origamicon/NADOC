@@ -31,6 +31,12 @@ def catalog():
         'Seek backward and forward through a temporary part using native history event dispatch. Checks desktop geometry and the current design/revision sent to VR. Isolated browser with intercepted VR transport; keeps the physical headset session running.', module='history_refresh_check')
     add('production-lists', 'interaction', 'Feature history and production lists',
         'Review sweep rails, dimension tables, simulation job cards and the feature-history scrub rail. Runs bounded native interaction checks and retains production-rendered state images.', module='list_components_check')
+    add('compact-tabs', 'interaction', 'Compact tabs · controller hit/miss comparison',
+        'Production expanding sidebar tabs. Matched seeds for all four profiles, no retries, acquisition and correct activation counts, stereo pixels. Isolated empty Part fixture.', module='compact_tabs_tour')
+    add('tab-gallery', 'components', 'Long-label tabs A/B',
+        'Desktop-only comparison: fixed tabs with larger fading and scrolling labels, and compact tabs that expand on hover or selection.',
+        ['--component', 'tabs'], module='component_gallery_tour')
+    tours[-1]['modes'] = ['desktop']
     add('simulation-menu-gallery', 'components', 'Simulation menus A/B',
         'Desktop-only round 5: compact split and horizontal colour scale, with flat or raised trajectory scrubbers, explicit range/interval Load gate, exact frame entry and large-load confirmation.',
         ['--component', 'simulations'], module='component_gallery_tour')
@@ -169,7 +175,7 @@ def arguments(tour, validate=False):
         args += ['--validate', '--hold', '0', '--exit'] if validate else ['--preset', 'steady_fast']
     elif tour['module'] == 'view_volumes_check':
         args += ['--validate'] if validate else ['--demo']
-    elif tour['module'] in ('quiver_tour', 'tablet_controls_tour', 'quiver_reactivation_check', 'history_refresh_check', 'list_components_check', 'menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'deformation_selection_check', 'lattice_compatibility_check', 'representation_tour', 'extrude_tour', 'sweep_tour', 'bend_tour', 'twist_tour', 'move_tour', 'join_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'edit_wheel_history_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
+    elif tour['module'] in ('compact_tabs_tour', 'quiver_tour', 'tablet_controls_tour', 'quiver_reactivation_check', 'history_refresh_check', 'list_components_check', 'menu_render_audit', 'tool_frame_audit', 'frame_audit_tour', 'component_gallery_tour', 'browser_representation_tour', 'startup_tour', 'simulation_tour', 'dimensions_persistence_check', 'deformation_selection_check', 'lattice_compatibility_check', 'representation_tour', 'extrude_tour', 'sweep_tour', 'bend_tour', 'twist_tour', 'move_tour', 'join_tour', 'end_resize_tour', 'ligation_tour', 'nick_tour', 'edit_wheel_history_tour', 'view_tools_tour', 'share_tour', 'avatar_tour', 'presence_ui_tour'):
         if validate:
             args += ['--validate']
     return args

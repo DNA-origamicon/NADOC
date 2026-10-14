@@ -11629,7 +11629,7 @@ int main(int argc, char** argv) {
     std::string witnessPath;
     std::string mirrorDiagnosticsPath;
     std::string controllerPath;
-    bool componentGallery=false, galleryDesktop=false, galleryButtons=false, galleryCards=false,galleryLists=false,gallerySimulations=false;
+    bool componentGallery=false, galleryDesktop=false, galleryButtons=false, galleryCards=false,galleryLists=false,gallerySimulations=false,galleryTabs=false;
     std::string galleryOutput;
     std::string witnessCaptureDirectory;
     std::string witnessVisualExpectationDirectory;
@@ -11652,8 +11652,8 @@ int main(int argc, char** argv) {
         const std::string option(argv[index]);
         if(option=="--component-gallery") {
             const std::string component=argv[index+1];
-            if(component!="thumbwheel" && component!="buttons" && component!="cards" && component!="lists" && component!="simulations") {std::cerr<<"Unknown gallery component\n";return 2;}
-            galleryButtons=component=="buttons";galleryCards=component=="cards";galleryLists=component=="lists";gallerySimulations=component=="simulations";
+            if(component!="thumbwheel" && component!="buttons" && component!="cards" && component!="lists" && component!="simulations" && component!="tabs") {std::cerr<<"Unknown gallery component\n";return 2;}
+            galleryButtons=component=="buttons";galleryCards=component=="cards";galleryLists=component=="lists";gallerySimulations=component=="simulations";galleryTabs=component=="tabs";
             componentGallery=true;
         }
         else if(option=="--gallery-desktop") {
@@ -11826,10 +11826,10 @@ int main(int argc, char** argv) {
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
     try {
-        if(gallerySimulations && !galleryDesktop)throw std::runtime_error("Simulation menu studies are desktop-only; use --gallery-desktop on");
+        if((gallerySimulations||galleryTabs) && !galleryDesktop)throw std::runtime_error("Menu studies are desktop-only; use --gallery-desktop on");
         if(galleryDesktop) {
             if(!componentGallery)throw std::runtime_error("Desktop gallery requires --component-gallery thumbwheel");
-            return runComponentGalleryDesktop(galleryOutput,galleryButtons,galleryCards,galleryLists,gallerySimulations);
+            return runComponentGalleryDesktop(galleryOutput,galleryButtons,galleryCards,galleryLists,gallerySimulations,galleryTabs);
         }
         const auto processStarted = std::chrono::steady_clock::now();
         std::cout << "VR_METRIC event=process_start mode=openxr_viewer rss_mib="
