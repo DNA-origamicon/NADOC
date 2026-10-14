@@ -113,4 +113,3 @@ export function boxSweptSections(design, helixAxes, boxHelixIds, bpLo, bpHi, wCo
   }
   return sections.length >= 2 ? sections : null
 }
-
