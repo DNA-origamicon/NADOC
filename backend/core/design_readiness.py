@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 
 from backend.core.models import Design, StrandType
+from backend.core.scaffold_length import scaffold_length_checks
 from backend.core.sequences import strand_sequence_length
 from backend.core.topology_integrity import (
     domain_order_errors, junction_errors, occupancy_errors,
@@ -125,6 +126,8 @@ def standard_readiness(design: Design | None) -> dict:
     scaffold_issues = _sequence_issues(active, scaffolds)
     oligo_issues = _sequence_issues(active, oligos)
     scaffold_precursors = _routing_precursors(active, scaffolds)
+    scaffold_lengths = scaffold_length_checks(active)
+    length_issues = [check["detail"] for check in scaffold_lengths if not check["complete"]]
     staple_precursors = _routing_precursors(active, staples)
     scaffold_routed = bool(scaffolds) and all(s.domains for s in scaffolds) and not route_issues and not scaffold_precursors
     staple_routed = bool(staples) and all(s.domains for s in staples) and not route_issues and not staple_precursors
@@ -137,6 +140,15 @@ def standard_readiness(design: Design | None) -> dict:
                if scaffolds else "Native oligo structure needs no scaffold." if native_only else "Route a scaffold path."),
               applicable=scaffold_applicable, issues=route_issues,
               action="validation" if route_issues and not scaffold_precursors else "scaffold_routing"),
+        {**_step("scaffold_length", "Scaffold length",
+                 bool(scaffolds) and not length_issues or not scaffold_applicable,
+                 "Native oligo structure needs no scaffold." if not scaffold_applicable else
+                 "Each scaffold must exactly match an available length; unused budget does not pass."
+                 if length_issues else
+                 f"{len(scaffolds)} scaffold length(s) exactly match an available source."
+                 if scaffolds else "Route a scaffold to check its exact nucleotide count.",
+                 applicable=scaffold_applicable, issues=length_issues, action="validation"),
+         "scaffolds": scaffold_lengths},
         _step("staple_routing", "Oligo routing" if native_only else "Staple routing", staple_routed,
               (f"{len(staple_precursors)} extruded staple strand(s) still need routing. Use Full Autostaple after scaffold routing, or route manually."
                if staple_precursors else f"{len(oligos) if native_only else len(staples)} authored oligo path(s); unpaired scaffold is allowed."

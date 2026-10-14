@@ -73,3 +73,18 @@ def test_sequence_assignment_alone_does_not_route_precursors(editor):
     report = readiness(editor)
     assert not report['scaffold_routing']['complete']
     assert not report['staple_routing']['complete']
+
+
+def test_custom_source_assignment_persists_exact_length_and_undo_restores_failure(editor):
+    from backend.core.design_readiness import standard_readiness
+    from tests.conftest import make_minimal_design
+
+    state.set_design(make_minimal_design(helix_length_bp=200))
+    assert editor.post('/api/design/assign-scaffold-sequence', json={'scaffold_name': 'M13mp18'}).status_code == 200
+    assert not readiness(editor)['scaffold_length']['complete']
+    assert editor.post('/api/design/assign-scaffold-sequence', json={'custom_sequence': 'ACGT' * 50}).status_code == 200
+    assert readiness(editor)['scaffold_length']['complete']
+    loaded = Design.from_json(state.get_or_404().to_json())
+    assert steps(standard_readiness(loaded))['scaffold_length']['complete']
+    assert editor.post('/api/design/undo').status_code == 200
+    assert not readiness(editor)['scaffold_length']['complete']

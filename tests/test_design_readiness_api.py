@@ -41,7 +41,7 @@ def test_route_empty_and_part_assembly_parity_without_state_writes(host):
     part = client.get("/api/design/readiness").json()
     combined = client.get("/api/design/readiness?assembly=true").json()
     assert part["state"] == combined["state"] == "simulation_recommended"
-    assert part["completed_steps"] == combined["completed_steps"] == 4
+    assert part["completed_steps"] == combined["completed_steps"] == 5
     assert combined["context"] == "assembly"
     assert combined["document_id"] == assembly.id
     assert combined["design_id"] == f"flat_{assembly.id}"
@@ -121,8 +121,63 @@ def test_assembly_integrity_penalty_is_once_per_design(host):
     bad.extensions = [StrandExtension(strand_id='missing', end='five_prime', modification='biotin')]
     host['assembly'] = Assembly(instances=[instance(bad), instance(bad)])
     report = routes.get_design_readiness(assembly=True)
-    assert report['completed_steps'] == report['total_steps'] == 4
-    assert report['score'] == 3
+    assert report['completed_steps'] == report['total_steps'] == 5
+    assert report['score'] == 4
     assert report['integrity_penalty'] == -1
     assert len(steps(report)['topology']['targets']) == 2
     assert report['state'] == 'incomplete'
+
+
+@pytest.mark.parametrize(("length", "complete"), [(7203, False), (7249, True), (7250, False), (7560, True), (8064, True)])
+def test_api_reports_exact_scaffold_length_without_mutating_design(host, length, complete):
+    from tests.conftest import make_minimal_design
+
+    design = make_minimal_design(helix_length_bp=length)
+    host["design"] = design
+    before = design.model_dump()
+    check = steps(routes.get_design_readiness())["scaffold_length"]
+    assert check["complete"] is complete
+    assert check["scaffolds"][0]["actual_nt"] == length
+    assert check["action"] == "validation"
+    assert design.model_dump() == before
+
+
+def test_scaffold_length_is_independent_per_assembly_owner_and_ignores_hidden_parts(host):
+    from tests.conftest import make_minimal_design
+
+    good = make_minimal_design(helix_length_bp=7249)
+    bad = make_minimal_design(helix_length_bp=7203)
+    broken = instance(bad, id="short-route", name="Short route")
+    host["assembly"] = Assembly(instances=[instance(good), broken, instance(bad, visible=False)])
+    check = steps(routes.get_design_readiness(assembly=True))["scaffold_length"]
+    assert not check["complete"]
+    assert check["action"] == "validation"
+    assert [target["instance_id"] for target in check["targets"]] == [broken.id]
+    assert sorted(row["actual_nt"] for row in check["scaffolds"]) == [7203, 7249]
+    assert any("46 nt short of 7249 nt" in issue for issue in check["issues"])
+
+
+def test_custom_source_length_survives_assembly_projection_and_reload(host):
+    custom = sequenced_design(helix_length_bp=200)
+    host["design"] = Design.from_json(custom.to_json())
+    host["assembly"] = Assembly(instances=[instance(host["design"]), instance(host["design"])])
+    part = steps(routes.get_design_readiness())["scaffold_length"]
+    combined = steps(routes.get_design_readiness(assembly=True))["scaffold_length"]
+    assert part["complete"] and combined["complete"]
+    assert [row["actual_nt"] for row in combined["scaffolds"]] == [200, 200]
+    assert all(row["matched_scaffold"] == "declared custom scaffold" for row in combined["scaffolds"])
+    assert combined["targets"] == []
+
+
+def test_assembly_owned_scaffold_length_cannot_be_satisfied_by_valid_parts(host):
+    from tests.conftest import make_minimal_design
+
+    owned = make_minimal_design(helix_length_bp=200, with_staple=False)
+    host["assembly"] = Assembly(
+        instances=[instance(sequenced_design())],
+        assembly_helices=owned.helices, assembly_strands=owned.strands,
+    )
+    check = steps(routes.get_design_readiness(assembly=True))["scaffold_length"]
+    assert not check["complete"]
+    assert check["targets"] == []
+    assert any(row["strand_id"] == "asm::scaf" and not row["complete"] for row in check["scaffolds"])

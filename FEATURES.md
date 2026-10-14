@@ -20,6 +20,7 @@ validation; see [scope and documentation](README.md#feature-overview).
 - **Design Readiness**
   - Shared 3D/pathview progress ring
   - Actionable checklist and shortcuts
+  - Exact scaffold-length validation
   - Assembly part issue navigation
   - Optional current-design simulation completion
 - **Lattice Design**
