@@ -145,12 +145,14 @@ def audit_tt_cpd_stereo_with_openbabel(
             errors.append(
                 "identically capped cis-syn I/II candidates do not collapse by symmetry"
             )
-        if by_id["tt-cpd-trans-anti-i"]["inchikey"] == by_id[
+        if by_id["tt-cpd-trans-anti-i"]["inchikey"] != by_id[
             "tt-cpd-trans-anti-ii"
         ]["inchikey"]:
             errors.append(
-                "trans-anti I/II candidates unexpectedly collapse to one stereochemical identifier"
+                "identically capped trans-anti I/II candidates do not collapse by symmetry"
             )
+        if len({item["inchikey"] for item in records}) != 6:
+            errors.append("identically capped TT-CPDs must form six distinct stereoisomers")
 
     passed = not errors
     report = {

@@ -1,0 +1,482 @@
+{
+  "schema": "nadoc.cpd-anti-definition-correction.v1",
+  "date": "2026-10-10",
+  "status": "detection_identity_verified_release_review_pending",
+  "automated_identity_checks_passed": true,
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "construction_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/audit.json",
+    "sha256": "3a9a47d3a9d315a26674e4851cd3eaf01c605b330a9392f266501aa1a0b4441f"
+  },
+  "planar_precursor_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/precursor_audit.json",
+    "sha256": "1f5b768cef9d9a38fe17a1e8443a2f4ee68fa1db34dc666302f6d74ae1a08824"
+  },
+  "superseded_gate_records": {
+    "tt-cpd-cis-anti-i": {
+      "status": "passed",
+      "evidence": [
+        {
+          "reviewer": "Jeffe",
+          "reviewed_at": "2026-09-05T05:26:00.667269+00:00",
+          "rationale": "Human visual atom-mapped identity review approved; automated ingestion revalidated the exact graph, atom map, source hashes, and all four stereochemical sentinels.",
+          "path": "photoproducts/tt-cpd-cis-anti-i/chemical_definition_review_audit.json",
+          "sha256": "07224c6aeb131c012d010d6ec3748ede25ed4196978aee30d2ff8f0381e31cfa"
+        }
+      ]
+    },
+    "tt-cpd-cis-anti-ii": {
+      "status": "passed",
+      "evidence": [
+        {
+          "reviewer": "Jeffe",
+          "reviewed_at": "2026-09-05T05:26:01.355600+00:00",
+          "rationale": "Human visual atom-mapped identity review approved; automated ingestion revalidated the exact graph, atom map, source hashes, and all four stereochemical sentinels.",
+          "path": "photoproducts/tt-cpd-cis-anti-ii/chemical_definition_review_audit.json",
+          "sha256": "07224c6aeb131c012d010d6ec3748ede25ed4196978aee30d2ff8f0381e31cfa"
+        }
+      ]
+    },
+    "tt-cpd-trans-anti-i": {
+      "status": "passed",
+      "evidence": [
+        {
+          "reviewer": "Jeffe",
+          "reviewed_at": "2026-09-05T05:26:02.028774+00:00",
+          "rationale": "Human visual atom-mapped identity review approved; automated ingestion revalidated the exact graph, atom map, source hashes, and all four stereochemical sentinels.",
+          "path": "photoproducts/tt-cpd-trans-anti-i/chemical_definition_review_audit.json",
+          "sha256": "07224c6aeb131c012d010d6ec3748ede25ed4196978aee30d2ff8f0381e31cfa"
+        }
+      ]
+    },
+    "tt-cpd-trans-anti-ii": {
+      "status": "passed",
+      "evidence": [
+        {
+          "reviewer": "Jeffe",
+          "reviewed_at": "2026-09-05T05:26:02.696607+00:00",
+          "rationale": "Human visual atom-mapped identity review approved; automated ingestion revalidated the exact graph, atom map, source hashes, and all four stereochemical sentinels.",
+          "path": "photoproducts/tt-cpd-trans-anti-ii/chemical_definition_review_audit.json",
+          "sha256": "07224c6aeb131c012d010d6ec3748ede25ed4196978aee30d2ff8f0381e31cfa"
+        }
+      ]
+    }
+  },
+  "changes": [
+    {
+      "product_id": "tt-cpd-cis-anti-i",
+      "previous_definition": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/before/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-i/chemical_definition.json",
+        "sha256": "2ad8acdded5633ea84bf33c48cd7decbd3a1b6fab46f97bc54f0e9ca54a6e1c4"
+      },
+      "corrected_definition_sha256": "dd8dbecbb0a6349233d7b7f260d2b4f41dc34d3635568afd72cb72620a865e63",
+      "old_centers": [
+        {
+          "atom": "1:C5",
+          "ccd_configuration": "S",
+          "signed_volume_reference_atoms": [
+            "1:C4",
+            "1:C6",
+            "1:C7"
+          ],
+          "expected_signed_volume": "negative",
+          "authority": "Taylor 2023 ordered assignment"
+        },
+        {
+          "atom": "1:C6",
+          "ccd_configuration": "S",
+          "signed_volume_reference_atoms": [
+            "1:N1",
+            "1:C5",
+            "1:H6"
+          ],
+          "expected_signed_volume": "negative",
+          "authority": "suprafacial candidate derivation; independent review required"
+        },
+        {
+          "atom": "2:C5",
+          "ccd_configuration": "S",
+          "signed_volume_reference_atoms": [
+            "2:C4",
+            "2:C6",
+            "2:C7"
+          ],
+          "expected_signed_volume": "positive",
+          "authority": "Taylor 2023 ordered assignment"
+        },
+        {
+          "atom": "2:C6",
+          "ccd_configuration": "R",
+          "signed_volume_reference_atoms": [
+            "2:N1",
+            "2:C5",
+            "2:H6"
+          ],
+          "expected_signed_volume": "negative",
+          "authority": "suprafacial candidate derivation; independent review required"
+        }
+      ],
+      "new_centers": [
+        {
+          "atom": "1:C5",
+          "ccd_configuration": "S",
+          "signed_volume_reference_atoms": [
+            "1:C4",
+            "1:C6",
+            "1:C7"
+          ],
+          "expected_signed_volume": "positive",
+          "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+        },
+        {
+          "atom": "1:C6",
+          "ccd_configuration": "R",
+          "signed_volume_reference_atoms": [
+            "1:N1",
+            "1:C5",
+            "1:H6"
+          ],
+          "expected_signed_volume": "negative",
+          "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+        },
+        {
+          "atom": "2:C5",
+          "ccd_configuration": "S",
+          "signed_volume_reference_atoms": [
+            "2:C4",
+            "2:C6",
+            "2:C7"
+          ],
+          "expected_signed_volume": "positive",
+          "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+        },
+        {
+          "atom": "2:C6",
+          "ccd_configuration": "R",
+          "signed_volume_reference_atoms": [
+            "2:N1",
+            "2:C5",
+            "2:H6"
+          ],
+          "expected_signed_volume": "negative",
+          "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+        }
+      ],
+      "original_definition_path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-i/chemical_definition.json"
+    },
+    {
+      "product_id": "tt-cpd-cis-anti-ii",
+      "previous_definition": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/before/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-ii/chemical_definition.json",
+        "sha256": "8668cfeaaa85d70f920f81f425dff79cb0de29228ddb62532352e4e0092e52c8"
+      },
+      "corrected_definition_sha256": "c2d7fc2b0b0ec3d46ab58553d3826bf4b6e4164a9b9c64f36c3d996d66f16520",
+      "old_centers": [
+        {
+          "atom": "1:C5",
+          "ccd_configuration": "R",
+          "signed_volume_reference_atoms": [
+            "1:C4",
+            "1:C6",
+            "1:C7"
+          ],
+          "expected_signed_volume": "positive",
+          "authority": "Taylor 2023 ordered assignment"
+        },
+        {
+          "atom": "1:C6",
+          "ccd_configuration": "R",
+          "signed_volume_reference_atoms": [
+            "1:N1",
+            "1:C5",
+            "1:H6"
+          ],
+          "expected_signed_volume": "positive",
+          "authority": "suprafacial candidate derivation; independent review required"
+        },
+        {
+          "atom": "2:C5",
+          "ccd_configuration": "R",
+          "signed_volume_reference_atoms": [
+            "2:C4",
+            "2:C6",
+            "2:C7"
+          ],
+          "expected_signed_volume": "negative",
+          "authority": "Taylor 2023 ordered assignment"
+        },
+        {
+          "atom": "2:C6",
+          "ccd_configuration": "S",
+          "signed_volume_reference_atoms": [
+            "2:N1",
+            "2:C5",
+            "2:H6"
+          ],
+          "expected_signed_volume": "positive",
+          "authority": "suprafacial candidate derivation; independent review required"
+        }
+      ],
+      "new_centers": [
+        {
+          "atom": "1:C5",
+          "ccd_configuration": "R",
+          "signed_volume_reference_atoms": [
+            "1:C4",
+            "1:C6",
+            "1:C7"
+          ],
+          "expected_signed_volume": "negative",
+          "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+        },
+        {
+          "atom": "1:C6",
+          "ccd_configuration": "S",
+          "signed_volume_reference_atoms": [
+            "1:N1",
+            "1:C5",
+            "1:H6"
+          ],
+          "expected_signed_volume": "positive",
+          "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+        },
+        {
+          "atom": "2:C5",
+          "ccd_configuration": "R",
+          "signed_volume_reference_atoms": [
+            "2:C4",
+            "2:C6",
+            "2:C7"
+          ],
+          "expected_signed_volume": "negative",
+          "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+        },
+        {
+          "atom": "2:C6",
+          "ccd_configuration": "S",
+          "signed_volume_reference_atoms": [
+            "2:N1",
+            "2:C5",
+            "2:H6"
+          ],
+          "expected_signed_volume": "positive",
+          "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+        }
+      ],
+      "original_definition_path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-ii/chemical_definition.json"
+    },
+    {
+      "product_id": "tt-cpd-trans-anti-i",
+      "previous_definition": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/before/backend/data/forcefield/photoproducts/tt-cpd-trans-anti-i/chemical_definition.json",
+        "sha256": "27139365d5cfb64d2b90b2172c13c94eac02d5357dd46c4e1a8e686f00c3539f"
+      },
+      "corrected_definition_sha256": "a1db9e139fbdb6ef7e7d7659249fb355f4d9be9932d22c7583961bd0e0beee46",
+      "old_centers": [
+        {
+          "atom": "1:C5",
+          "ccd_configuration": "R",
+          "signed_volume_reference_atoms": [
+            "1:C4",
+            "1:C6",
+            "1:C7"
+          ],
+          "expected_signed_volume": "positive",
+          "authority": "Taylor 2023 ordered assignment"
+        },
+        {
+          "atom": "1:C6",
+          "ccd_configuration": "R",
+          "signed_volume_reference_atoms": [
+            "1:N1",
+            "1:C5",
+            "1:H6"
+          ],
+          "expected_signed_volume": "positive",
+          "authority": "suprafacial candidate derivation; independent review required"
+        },
+        {
+          "atom": "2:C5",
+          "ccd_configuration": "S",
+          "signed_volume_reference_atoms": [
+            "2:C4",
+            "2:C6",
+            "2:C7"
+          ],
+          "expected_signed_volume": "positive",
+          "authority": "Taylor 2023 ordered assignment"
+        },
+        {
+          "atom": "2:C6",
+          "ccd_configuration": "R",
+          "signed_volume_reference_atoms": [
+            "2:N1",
+            "2:C5",
+            "2:H6"
+          ],
+          "expected_signed_volume": "negative",
+          "authority": "suprafacial candidate derivation; independent review required"
+        }
+      ],
+      "new_centers": [
+        {
+          "atom": "1:C5",
+          "ccd_configuration": "R",
+          "signed_volume_reference_atoms": [
+            "1:C4",
+            "1:C6",
+            "1:C7"
+          ],
+          "expected_signed_volume": "negative",
+          "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+        },
+        {
+          "atom": "1:C6",
+          "ccd_configuration": "S",
+          "signed_volume_reference_atoms": [
+            "1:N1",
+            "1:C5",
+            "1:H6"
+          ],
+          "expected_signed_volume": "positive",
+          "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+        },
+        {
+          "atom": "2:C5",
+          "ccd_configuration": "S",
+          "signed_volume_reference_atoms": [
+            "2:C4",
+            "2:C6",
+            "2:C7"
+          ],
+          "expected_signed_volume": "positive",
+          "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+        },
+        {
+          "atom": "2:C6",
+          "ccd_configuration": "R",
+          "signed_volume_reference_atoms": [
+            "2:N1",
+            "2:C5",
+            "2:H6"
+          ],
+          "expected_signed_volume": "negative",
+          "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+        }
+      ],
+      "original_definition_path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-anti-i/chemical_definition.json"
+    },
+    {
+      "product_id": "tt-cpd-trans-anti-ii",
+      "previous_definition": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/before/backend/data/forcefield/photoproducts/tt-cpd-trans-anti-ii/chemical_definition.json",
+        "sha256": "f6933a888a07ed850dd469ab9f81f4d0dcbdf489924bfac5470092f46880b5c8"
+      },
+      "corrected_definition_sha256": "862116a0883d908876df182013f196862e10e8ac338e64f9d6d4a286d67a48c7",
+      "old_centers": [
+        {
+          "atom": "1:C5",
+          "ccd_configuration": "S",
+          "signed_volume_reference_atoms": [
+            "1:C4",
+            "1:C6",
+            "1:C7"
+          ],
+          "expected_signed_volume": "negative",
+          "authority": "Taylor 2023 ordered assignment"
+        },
+        {
+          "atom": "1:C6",
+          "ccd_configuration": "S",
+          "signed_volume_reference_atoms": [
+            "1:N1",
+            "1:C5",
+            "1:H6"
+          ],
+          "expected_signed_volume": "negative",
+          "authority": "suprafacial candidate derivation; independent review required"
+        },
+        {
+          "atom": "2:C5",
+          "ccd_configuration": "R",
+          "signed_volume_reference_atoms": [
+            "2:C4",
+            "2:C6",
+            "2:C7"
+          ],
+          "expected_signed_volume": "negative",
+          "authority": "Taylor 2023 ordered assignment"
+        },
+        {
+          "atom": "2:C6",
+          "ccd_configuration": "S",
+          "signed_volume_reference_atoms": [
+            "2:N1",
+            "2:C5",
+            "2:H6"
+          ],
+          "expected_signed_volume": "positive",
+          "authority": "suprafacial candidate derivation; independent review required"
+        }
+      ],
+      "new_centers": [
+        {
+          "atom": "1:C5",
+          "ccd_configuration": "S",
+          "signed_volume_reference_atoms": [
+            "1:C4",
+            "1:C6",
+            "1:C7"
+          ],
+          "expected_signed_volume": "positive",
+          "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+        },
+        {
+          "atom": "1:C6",
+          "ccd_configuration": "R",
+          "signed_volume_reference_atoms": [
+            "1:N1",
+            "1:C5",
+            "1:H6"
+          ],
+          "expected_signed_volume": "negative",
+          "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+        },
+        {
+          "atom": "2:C5",
+          "ccd_configuration": "R",
+          "signed_volume_reference_atoms": [
+            "2:C4",
+            "2:C6",
+            "2:C7"
+          ],
+          "expected_signed_volume": "negative",
+          "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+        },
+        {
+          "atom": "2:C6",
+          "ccd_configuration": "S",
+          "signed_volume_reference_atoms": [
+            "2:N1",
+            "2:C5",
+            "2:H6"
+          ],
+          "expected_signed_volume": "positive",
+          "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+        }
+      ],
+      "original_definition_path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-anti-ii/chemical_definition.json"
+    }
+  ],
+  "reasons": [
+    "Preserve tetrahedral parity when replacing crosslink neighbors.",
+    "Use accurate recursive CIP labeling; legacy labeling misassigns endpoint-1 ring centers.",
+    "A C6 sign flip alone restores coverage but mislabels anti cis/trans; corrected registered identities change the endpoint-1 C5 signed sentinel."
+  ],
+  "limits": [
+    "Prior human reviews and QM minima apply to old definition hashes.",
+    "Existing anti fitting and MD evidence is preserved and requires identity requalification.",
+    "No new MD or QM; static construction coordinates are not certified minima or production placement templates."
+  ]
+}

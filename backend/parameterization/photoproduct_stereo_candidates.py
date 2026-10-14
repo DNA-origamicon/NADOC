@@ -31,10 +31,12 @@ _FACE_FLIPS = {
     "cis-syn-II": (True, True),
     "trans-syn-I": (True, False),
     "trans-syn-II": (False, True),
-    "trans-anti-I": (False, False),
-    "cis-anti-I": (True, False),
-    "cis-anti-II": (False, True),
-    "trans-anti-II": (True, True),
+    # Reversing endpoint 2 to make the anti alignment reverses its approach
+    # face relative to TTD. These flips apply AFTER parity-preserving rewiring.
+    "trans-anti-I": (True, True),
+    "cis-anti-I": (False, True),
+    "cis-anti-II": (True, False),
+    "trans-anti-II": (False, False),
 }
 
 
@@ -147,8 +149,12 @@ def _atom_index(molecule: Any, name: str) -> int:
 
 def _cip_codes(molecule: Any) -> dict[str, str]:
     from rdkit import Chem
+    from rdkit.Chem import rdCIPLabeler
 
     Chem.AssignStereochemistry(molecule, cleanIt=True, force=True)
+    # The legacy CIP approximation misranks the two ring paths in anti CPDs.
+    # Use the recursive CIP implementation for these multiply fused rings.
+    rdCIPLabeler.AssignCIPLabels(molecule)
     result = {}
     for name in _RING_ATOMS:
         atom = molecule.GetAtomWithIdx(_atom_index(molecule, name))
@@ -186,10 +192,28 @@ def _candidate_full_molecule(source: Any, stereochemistry: str) -> Any:
             c6, c6t
         ) is None:
             raise ValueError("source TTD does not contain both canonical syn crosslinks")
+        replacements = {c5: (c5t, c6t), c6: (c6t, c5t),
+                        c5t: (c5, c6), c6t: (c6, c5)}
+        desired_order = {}
+        for center, (old, new) in replacements.items():
+            neighbors = [a.GetIdx() for a in editable.GetAtomWithIdx(center).GetNeighbors()]
+            if len(neighbors) != 4 or old not in neighbors or new in neighbors:
+                raise ValueError("TTD ring centers require four explicit neighbors")
+            desired_order[center] = [new if n == old else n for n in neighbors]
         editable.RemoveBond(c5, c5t)
         editable.RemoveBond(c6, c6t)
         editable.AddBond(c5, c6t, Chem.BondType.SINGLE)
         editable.AddBond(c6, c5t, Chem.BondType.SINGLE)
+        # RDKit tetrahedral tags are relative to neighbor order. Remove/AddBond
+        # appends the new neighbor: compensate each odd permutation before any
+        # physical face inversion, including when input atoms were renumbered.
+        for center, desired in desired_order.items():
+            atom = editable.GetAtomWithIdx(center)
+            permutation = [desired.index(a.GetIdx()) for a in atom.GetNeighbors()]
+            inversions = sum(a > b for i, a in enumerate(permutation)
+                             for b in permutation[i + 1:])
+            if inversions % 2:
+                _invert_tag(atom)
     for endpoint, flip in enumerate(recipe["endpoint_face_flips"], start=1):
         if flip:
             for name in _ENDPOINT_RING_ATOMS[endpoint]:

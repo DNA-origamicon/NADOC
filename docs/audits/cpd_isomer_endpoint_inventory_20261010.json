@@ -1,0 +1,1067 @@
+{
+  "schema": "nadoc.cpd-isomer-endpoint-inventory.v1",
+  "created_at": "2026-10-10T18:14:04.384392+00:00",
+  "generator": {
+    "path": "/home/jojo/Work/NADOC/experiments/cpd_anti_additive/inventory_isomer_endpoints_v1.py",
+    "sha256": "c492a316c8cc241e52d898d035e1f7d5b9015a43eb0273390e7ac98ac1e3a956",
+    "prior_pin_verified": false
+  },
+  "registry": {
+    "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproduct_registry.json",
+    "sha256": "332e101426cc48de5ed73084df5d3d900062af2634e1720237ffe09dd8ddce66",
+    "prior_pin_verified": false
+  },
+  "scope": "Source inventory and static core descriptors only; no new QM, MD, fitting, registry edits, or cloud spending.",
+  "verification": "Rehashed definitions, registry assets, mapped geometries, job/frequency records, Hessians and output files; recomputed four signed centers and descriptors. Archived positive-mode tables checked, not a new Hessian/stationarity calculation.",
+  "descriptor_method": {
+    "distance": "Euclidean norm of the difference of the named atom coordinates",
+    "direction_angle": "acos(dot(CM1-N1_1, CM2-N1_2)/(norm(CM1-N1_1)*norm(CM2-N1_2))), in degrees",
+    "graph_distances": "Unweighted shortest paths in the local base-plus-C1prime graph, without an external phosphodiester backbone",
+    "stereo": "Determinant of the three definition-ordered neighbor vectors from each center; only sign compared"
+  },
+  "connectivity_classes": [
+    {
+      "products": [
+        "tt-cpd-cis-syn",
+        "tt-cpd-cis-syn-ii",
+        "tt-cpd-trans-syn-i",
+        "tt-cpd-trans-syn-ii"
+      ],
+      "atom_graph_ignores_stereochemistry": true
+    },
+    {
+      "products": [
+        "tt-cpd-cis-anti-i",
+        "tt-cpd-cis-anti-ii",
+        "tt-cpd-trans-anti-i",
+        "tt-cpd-trans-anti-ii"
+      ],
+      "atom_graph_ignores_stereochemistry": true
+    }
+  ],
+  "cis_syn_II_core_equivalence": {
+    "reference": {
+      "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/cis-syn-ii-equivalent-hessian-reference-v1.json",
+      "sha256": "88288721500520b0d2df747e8981a543493b7ca36baa2fae0b2e0a652d463ac4",
+      "prior_pin_verified": true
+    },
+    "audit": {
+      "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1/qm/cis-syn-i-ii-model-equivalence-archive-v4.json",
+      "sha256": "51949f731187db85ca884b797304e6a6a76543eb2b0a196a8e19200cf1c76674",
+      "prior_pin_verified": true
+    },
+    "scope": "Gas-phase N-methyl geometry and Cartesian response under the explicit stable-atom endpoint permutation only. The source frame is retained, so no Hessian tensor rotation or interpolation is performed.",
+    "not_established": [
+      "ordered DNA chemical-definition equivalence",
+      "DNA boundary-model response",
+      "coordinate-template interchangeability",
+      "context validation",
+      "parameter or registry gate passage"
+    ]
+  },
+  "most_developed": {
+    "tt-cpd-cis-syn": "Additive v6 preliminary adjacent-internal intrastrand DNA package; 34 ns matched overnight CPD/control benchmark. One CPD replica opened locally. Terminal/interstrand builder contexts not qualified.",
+    "tt-cpd-cis-anti-i": "Additive v3 fit with independent prospective points and completed three anti plus three control 10 ns finite-context runs. Replica effects differed. Separate Archive research package; no general registry promotion.",
+    "evidence_sources": [
+      {
+        "path": "/home/jojo/Work/NADOC/docs/cpd_strand_builder.md",
+        "sha256": "7c9ffa6c39191e9a7ec626cc396f6a6bc79ea35104c8311044947f8868cef853",
+        "prior_pin_verified": false
+      },
+      {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-syn/preliminary-v6/completion_review.md",
+        "sha256": "ac5f11241c4d584d79e0a9677ccc6a3991ca0f1394bbc53cef9e855d15a8e420",
+        "prior_pin_verified": false
+      },
+      {
+        "path": "/home/jojo/Work/NADOC/docs/cpd_anti_validation_closeout_20261010.md",
+        "sha256": "6a231b14b980a9c82c65ec76d4ba5244d42fee4a45700d983509ec77edf5cbe3",
+        "prior_pin_verified": false
+      },
+      {
+        "path": "/home/jojo/Work/NADOC/.development-artifacts/cpd-anti-readiness-fit-v3-r1/assessment.json",
+        "sha256": "572d508a8e23060f477327757b3ddff3eeaa51577297a09d0dda4a270ace17c8",
+        "prior_pin_verified": false
+      },
+      {
+        "path": "/home/jojo/Work/NADOC/.development-artifacts/cpd-anti-prospective-score-v3-r1/assessment.json",
+        "sha256": "62da9a233f3d9123d16743b48efd10338153170a847f680778e99c81cb8b4921",
+        "prior_pin_verified": false
+      },
+      {
+        "path": "/home/jojo/Work/NADOC/.development-artifacts/cpd-anti-gpu-cube-context-v5/campaign_closeout_v17.json",
+        "sha256": "9ec517c0cbd93b4754b4c5780de2ba1c4542e14be5179e553f772d4469124b55",
+        "prior_pin_verified": false
+      }
+    ],
+    "comparison_limit": "These are different DNA systems and validation contexts, not a matched syn/anti experiment."
+  },
+  "interpretation": [
+    "The two developed cis models cover both registered atom-connectivity classes (syn and anti), but neither trans class.",
+    "Every product connects the same two generic nucleotide endpoints and preserves their backbone/glycosidic connectivity. No additional generic endpoint pairing class appears among the other six.",
+    "Same endpoint graph does not establish the same spatial embedding, winding, loop closure, accessibility, or thermal behavior in a particular DNA design.",
+    "Trans-syn and trans-anti add stereochemical geometry, not a third atom-connectivity graph. Both deserve local placement screening before assuming cis representatives suffice.",
+    "Cis-syn-II is a strong candidate for capped-core reuse because an explicit atom permutation already exists; its ordered DNA boundary equivalence is not established.",
+    "Other I/II pairs remain distinct in ordered chiral DNA even when the reported scalar distances and angles nearly coincide."
+  ],
+  "limitations": [
+    "One archived local core conformer per direct calculation; no conformational ensemble or free-energy ranking.",
+    "N-methyl carbon positions are attachment proxies, not C1prime, O3prime, O5prime or DNA 5prime/3prime exits.",
+    "Distances and one angle omit handedness, ring-face arrangement, sugar torsions, sterics and backbone winding.",
+    "Preview coordinates and stale frontend progress labels were not used as physical evidence.",
+    "No isomer thermal equivalence, melting shift, actual weld occupancy or photochemical yield is inferred.",
+    "Legacy QM harmonic evidence describes capped models only, not current full-DNA minimum certification or production release."
+  ],
+  "recommended_next_screen": {
+    "scope": "Same real weld site, same surrounding DNA and endpoint identities, both developed cis models and all four trans candidates; compare II variants where the ordered attachment differs.",
+    "metrics": [
+      "5prime/3prime exit orientation and spacing",
+      "properly mapped sugar chirality",
+      "closure strain and clashes",
+      "neighbor pairing/stacking"
+    ],
+    "priority": "Cover trans-syn and trans-anti geometry before extensive independent campaigns on every I/II variant; choose representatives by actual site compatibility.",
+    "status": "Recommendation only; no simulation launched."
+  },
+  "literature": [
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11305913/",
+      "title": "Distinguishing Isomeric Cyclobutane Thymidine Dimers by Ion Mobility and Tandem Mass Spectrometry",
+      "use": "Primary support for separate syn/anti connectivity and cis/trans stereochemistry axes; not origami melting equivalence."
+    }
+  ],
+  "products": [
+    {
+      "id": "tt-cpd-cis-syn",
+      "label": "cis-syn-I TT-CPD",
+      "class": {
+        "ring_substituent_relationship": "cis",
+        "double_bond_orientation": "syn",
+        "diastereomer": "I",
+        "ordered_c5_configurations": [
+          "R",
+          "S"
+        ],
+        "legacy_stereochemistry_key": "cis-syn"
+      },
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-syn/chemical_definition.json",
+        "sha256": "b583ce20398dff5bb6e1fa167f99842ed3e3947973f8d79ea41238f04ef14c55",
+        "prior_pin_verified": true
+      },
+      "added_bonds": [
+        "1:C5--2:C5",
+        "1:C6--2:C6"
+      ],
+      "backbone_and_glycosidic_connectivity": "preserved",
+      "local_graph_N1_to_N1_bond_count": 3,
+      "local_graph_C1prime_to_C1prime_bond_count": 5,
+      "endpoint_quotient_edge": [
+        1,
+        2
+      ],
+      "requested_contexts_not_validation": [
+        "adjacent-intrastrand",
+        "interstrand"
+      ],
+      "registry_validated_contexts": [],
+      "registry_release_status": "pending",
+      "registered_assets_verified": {
+        "patch_charge_scope": {
+          "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-syn/patch_charge_scope.json",
+          "sha256": "d2b8c4edfccbbfe073bb7d87112f23045444f1e72b0e3c7f5207e3f7337ba99b",
+          "prior_pin_verified": true
+        },
+        "topology": {
+          "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-syn/preliminary-v6/topology.rtf",
+          "sha256": "335a0ba26dc268805aa3e13f4ce4dea760375a462197adac3af32394e5496e27",
+          "prior_pin_verified": true
+        },
+        "parameters": {
+          "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-syn/preliminary-v6/parameters.prm",
+          "sha256": "524893cd4c553ed6e21c459d6957aa74ff4b77108a2f3651b81110f557fa34f9",
+          "prior_pin_verified": true
+        },
+        "coordinate_template": {
+          "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-syn/preliminary-v6/template.json",
+          "sha256": "cfb5cd66b05f210b8e6f5e95478373ad169d9de3dfbfcff91a2b0c9fe908c0d6",
+          "prior_pin_verified": true
+        },
+        "topology_audit_spec": {
+          "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-syn/preliminary-v6/topology_audit.json",
+          "sha256": "2c5c1020da541eff5d552a13427e7fdaf063549add504d969f4beb82d7525913",
+          "prior_pin_verified": true
+        },
+        "preliminary_review": {
+          "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-syn/preliminary-v6/preliminary_review.json",
+          "sha256": "99c01674db30cecdd9503b7bef57a5dbef252afb4427853b14e21c8c85270d3d",
+          "prior_pin_verified": true
+        }
+      },
+      "core": {
+        "model": "N1-methyl capped TT-CPD, gas phase, 36 atoms; no sugars or backbone",
+        "method": "mp2",
+        "basis": "6-31G(d)",
+        "source_records": [
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/frequency-v1.4/job_manifest.json",
+            "sha256": "c0890d63a4d77a442357ff6beeef13c73112920e1d742c82440b66644be9144b",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/frequency-v1.4/frequency_audit.json",
+            "sha256": "7b89952906901e98089c84a1a39142a7f30d8fbe89cddcbff3ce0cde9b87ec6a",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/frequency-v1.4/provenance/source_geometry.xyz",
+            "sha256": "386e92995e9421d69d4952a5c1060bdbe8fbbdbe4d0a80c3ed1469c6409d2b3c",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/frequency-v1.4/hessian_hartree_per_bohr2.txt",
+            "sha256": "82ee229681d2d93594c08af0e4488bc10ef04a03ba257fd26a5c7df26fc1c3ae",
+            "prior_pin_verified": true,
+            "declared_path": "/tmp/nadoc-cpd-model.ZtwtKE/qm/frequency-v1.4/hessian_hartree_per_bohr2.txt"
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/frequency-v1.4/output.dat",
+            "sha256": "694eae344bc5393a92cb5d346f4f78a7eb12357343f7e0eae7d3ea4454f2fd4d",
+            "prior_pin_verified": true,
+            "declared_path": "/tmp/nadoc-cpd-model.ZtwtKE/qm/frequency-v1.4/output.dat"
+          }
+        ],
+        "mapped_stereocenters_recomputed": [
+          {
+            "atom": "1:C5",
+            "neighbor_determinant_angstrom3": 2.3426871102984403,
+            "expected_sign": "positive",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "neighbor_determinant_angstrom3": -1.6735125493271605,
+            "expected_sign": "negative",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "neighbor_determinant_angstrom3": -2.3857468693218853,
+            "expected_sign": "negative",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "neighbor_determinant_angstrom3": 1.58225637630891,
+            "expected_sign": "positive",
+            "passed": true
+          }
+        ],
+        "harmonic_evidence_kind": "direct archived frequency calculation",
+        "archived_frequency_status": "passed_harmonic_minimum",
+        "archived_positive_mode_count": 102,
+        "archived_lowest_frequency_cm_inverse": 41.5522,
+        "N1_to_N1_angstrom": 2.9658372762160776,
+        "methyl_cap_C_to_C_angstrom": 3.505645080034335,
+        "N1_to_cap_direction_angle_degrees": 37.256678742941574
+      }
+    },
+    {
+      "id": "tt-cpd-cis-syn-ii",
+      "label": "cis-syn-II TT-CPD",
+      "class": {
+        "ring_substituent_relationship": "cis",
+        "double_bond_orientation": "syn",
+        "diastereomer": "II",
+        "ordered_c5_configurations": [
+          "S",
+          "R"
+        ]
+      },
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-syn-ii/chemical_definition.json",
+        "sha256": "cdcf91558952d1b0a6dd3c0df8ddd9ff5a8b5418a97cb4108b5d0765adc27a37",
+        "prior_pin_verified": true
+      },
+      "added_bonds": [
+        "1:C5--2:C5",
+        "1:C6--2:C6"
+      ],
+      "backbone_and_glycosidic_connectivity": "preserved",
+      "local_graph_N1_to_N1_bond_count": 3,
+      "local_graph_C1prime_to_C1prime_bond_count": 5,
+      "endpoint_quotient_edge": [
+        1,
+        2
+      ],
+      "requested_contexts_not_validation": [
+        "intrastrand",
+        "non-adjacent",
+        "interstrand"
+      ],
+      "registry_validated_contexts": [],
+      "registry_release_status": "pending",
+      "registered_assets_verified": {
+        "patch_charge_scope": {
+          "path": "/home/jojo/Work/NADOC/backend/data/forcefield/tt_cpd_patch_charge_scope_v2.json",
+          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f",
+          "prior_pin_verified": true
+        }
+      },
+      "core": {
+        "model": "N1-methyl capped TT-CPD, gas phase, 36 atoms; no sugars or backbone",
+        "method": "mp2",
+        "basis": "6-31G(d)",
+        "source_records": [
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/frequency-v1.4/job_manifest.json",
+            "sha256": "c0890d63a4d77a442357ff6beeef13c73112920e1d742c82440b66644be9144b",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/frequency-v1.4/frequency_audit.json",
+            "sha256": "7b89952906901e98089c84a1a39142a7f30d8fbe89cddcbff3ce0cde9b87ec6a",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/frequency-v1.4/provenance/source_geometry.xyz",
+            "sha256": "386e92995e9421d69d4952a5c1060bdbe8fbbdbe4d0a80c3ed1469c6409d2b3c",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/frequency-v1.4/hessian_hartree_per_bohr2.txt",
+            "sha256": "82ee229681d2d93594c08af0e4488bc10ef04a03ba257fd26a5c7df26fc1c3ae",
+            "prior_pin_verified": true,
+            "declared_path": "/tmp/nadoc-cpd-model.ZtwtKE/qm/frequency-v1.4/hessian_hartree_per_bohr2.txt"
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/frequency-v1.4/output.dat",
+            "sha256": "694eae344bc5393a92cb5d346f4f78a7eb12357343f7e0eae7d3ea4454f2fd4d",
+            "prior_pin_verified": true,
+            "declared_path": "/tmp/nadoc-cpd-model.ZtwtKE/qm/frequency-v1.4/output.dat"
+          }
+        ],
+        "mapped_stereocenters_recomputed": [
+          {
+            "atom": "1:C5",
+            "neighbor_determinant_angstrom3": -2.3857468693218853,
+            "expected_sign": "negative",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "neighbor_determinant_angstrom3": 1.58225637630891,
+            "expected_sign": "positive",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "neighbor_determinant_angstrom3": 2.3426871102984403,
+            "expected_sign": "positive",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "neighbor_determinant_angstrom3": -1.6735125493271605,
+            "expected_sign": "negative",
+            "passed": true
+          }
+        ],
+        "harmonic_evidence_kind": "endpoint-exchange reuse of cis-syn-I; not an independent run",
+        "archived_frequency_status": "passed_harmonic_minimum",
+        "archived_positive_mode_count": 102,
+        "archived_lowest_frequency_cm_inverse": 41.5522,
+        "N1_to_N1_angstrom": 2.9658372762160776,
+        "methyl_cap_C_to_C_angstrom": 3.505645080034335,
+        "N1_to_cap_direction_angle_degrees": 37.25667874294156
+      }
+    },
+    {
+      "id": "tt-cpd-trans-syn-i",
+      "label": "trans-syn-I TT-CPD",
+      "class": {
+        "ring_substituent_relationship": "trans",
+        "double_bond_orientation": "syn",
+        "diastereomer": "I",
+        "ordered_c5_configurations": [
+          "S",
+          "S"
+        ]
+      },
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-syn-i/chemical_definition.json",
+        "sha256": "674efb301b06c3ceb85f481d31481acf0a102182a4816d34297c921ab285852b",
+        "prior_pin_verified": true
+      },
+      "added_bonds": [
+        "1:C5--2:C5",
+        "1:C6--2:C6"
+      ],
+      "backbone_and_glycosidic_connectivity": "preserved",
+      "local_graph_N1_to_N1_bond_count": 3,
+      "local_graph_C1prime_to_C1prime_bond_count": 5,
+      "endpoint_quotient_edge": [
+        1,
+        2
+      ],
+      "requested_contexts_not_validation": [
+        "intrastrand",
+        "non-adjacent",
+        "interstrand"
+      ],
+      "registry_validated_contexts": [],
+      "registry_release_status": "pending",
+      "registered_assets_verified": {
+        "patch_charge_scope": {
+          "path": "/home/jojo/Work/NADOC/backend/data/forcefield/tt_cpd_patch_charge_scope_v2.json",
+          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f",
+          "prior_pin_verified": true
+        }
+      },
+      "core": {
+        "model": "N1-methyl capped TT-CPD, gas phase, 36 atoms; no sugars or backbone",
+        "method": "mp2",
+        "basis": "6-31G(d)",
+        "source_records": [
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/job_manifest.json",
+            "sha256": "066c66cfbe97ae5ad416bbaba5402333bae7a93e3a1362148aac87bb40f088eb",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/frequency_audit.json",
+            "sha256": "7787eb8cf9be6a7365eaab85016d2a69f180c434c51a4a0f3da206e30182220c",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/provenance/source_geometry.xyz",
+            "sha256": "518b3b4856fc45d1d72b20396936d881c0287fa7f9a07635ecc06e2a622e140d",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/provenance/optimized_model_parent.json",
+            "sha256": "967b09c004c8b02b3cd9c42f09d5b849b1f09088b0e80811addc9e428c52c439",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/hessian_hartree_per_bohr2.txt",
+            "sha256": "7ef8d86a69697308ae99e8895e863c4e898b530831c5ec7d1fad3e0deed4e2de",
+            "prior_pin_verified": true,
+            "declared_path": "/tmp/nadoc-cpd-model.ZtwtKE/qm/stereo-frequencies/tt-cpd-trans-syn-i/hessian_hartree_per_bohr2.txt"
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-i/output.dat",
+            "sha256": "afd7d2e793d6092f0cb0a5225280661f72d7f48e3bbac05b4b2451e7db4ddc59",
+            "prior_pin_verified": true,
+            "declared_path": "/tmp/nadoc-cpd-model.ZtwtKE/qm/stereo-frequencies/tt-cpd-trans-syn-i/output.dat"
+          }
+        ],
+        "mapped_stereocenters_recomputed": [
+          {
+            "atom": "1:C5",
+            "neighbor_determinant_angstrom3": -2.32247131319912,
+            "expected_sign": "negative",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "neighbor_determinant_angstrom3": 1.6821822740564205,
+            "expected_sign": "positive",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "neighbor_determinant_angstrom3": -2.3224601824731588,
+            "expected_sign": "negative",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "neighbor_determinant_angstrom3": 1.6822010738127617,
+            "expected_sign": "positive",
+            "passed": true
+          }
+        ],
+        "harmonic_evidence_kind": "direct archived frequency calculation",
+        "archived_frequency_status": "passed_candidate_harmonic_minimum",
+        "archived_positive_mode_count": 102,
+        "archived_lowest_frequency_cm_inverse": 38.3675,
+        "N1_to_N1_angstrom": 3.567761609282988,
+        "methyl_cap_C_to_C_angstrom": 4.024413184325943,
+        "N1_to_cap_direction_angle_degrees": 46.74752321726466
+      }
+    },
+    {
+      "id": "tt-cpd-trans-syn-ii",
+      "label": "trans-syn-II TT-CPD",
+      "class": {
+        "ring_substituent_relationship": "trans",
+        "double_bond_orientation": "syn",
+        "diastereomer": "II",
+        "ordered_c5_configurations": [
+          "R",
+          "R"
+        ]
+      },
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-syn-ii/chemical_definition.json",
+        "sha256": "ef2412a9ffc7133d353301c2fb62f47108ef9ec4fe04d14d36ba46e1e3d6ab29",
+        "prior_pin_verified": true
+      },
+      "added_bonds": [
+        "1:C5--2:C5",
+        "1:C6--2:C6"
+      ],
+      "backbone_and_glycosidic_connectivity": "preserved",
+      "local_graph_N1_to_N1_bond_count": 3,
+      "local_graph_C1prime_to_C1prime_bond_count": 5,
+      "endpoint_quotient_edge": [
+        1,
+        2
+      ],
+      "requested_contexts_not_validation": [
+        "intrastrand",
+        "non-adjacent",
+        "interstrand"
+      ],
+      "registry_validated_contexts": [],
+      "registry_release_status": "pending",
+      "registered_assets_verified": {
+        "patch_charge_scope": {
+          "path": "/home/jojo/Work/NADOC/backend/data/forcefield/tt_cpd_patch_charge_scope_v2.json",
+          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f",
+          "prior_pin_verified": true
+        }
+      },
+      "core": {
+        "model": "N1-methyl capped TT-CPD, gas phase, 36 atoms; no sugars or backbone",
+        "method": "mp2",
+        "basis": "6-31G(d)",
+        "source_records": [
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/job_manifest.json",
+            "sha256": "5719419eb1e33ad148707236e18beb6df1409c273af3ea6abfade52b32c01674",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/frequency_audit.json",
+            "sha256": "56e06b6bdabf80ffaea0369282d742d4c438e26a780a425b0b74b02b827f74ac",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/provenance/source_geometry.xyz",
+            "sha256": "f65aa32dcc5926517bb21604210d2570422dbabbf3d4fae81b3a594626f4e7e6",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/provenance/optimized_model_parent.json",
+            "sha256": "af904c5fc60e018e6d94518303c4ece26028d1fd5acdf6a436bd2d23da37614a",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/hessian_hartree_per_bohr2.txt",
+            "sha256": "c1c1f12d531a486dc2eb1b4669c28fce3325cde1e1be21cf9794d4dc81184764",
+            "prior_pin_verified": true,
+            "declared_path": "/tmp/nadoc-cpd-model.ZtwtKE/qm/stereo-frequencies/tt-cpd-trans-syn-ii/hessian_hartree_per_bohr2.txt"
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-syn-ii/output.dat",
+            "sha256": "3f0a9391ef0f7d17089c1ae3b9ed7b6aa7526b71afb56f12b2ae684350cecc80",
+            "prior_pin_verified": true,
+            "declared_path": "/tmp/nadoc-cpd-model.ZtwtKE/qm/stereo-frequencies/tt-cpd-trans-syn-ii/output.dat"
+          }
+        ],
+        "mapped_stereocenters_recomputed": [
+          {
+            "atom": "1:C5",
+            "neighbor_determinant_angstrom3": 2.3467340021803107,
+            "expected_sign": "positive",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "neighbor_determinant_angstrom3": -1.5841413484180458,
+            "expected_sign": "negative",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "neighbor_determinant_angstrom3": 2.346738191282051,
+            "expected_sign": "positive",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "neighbor_determinant_angstrom3": -1.5841494237131515,
+            "expected_sign": "negative",
+            "passed": true
+          }
+        ],
+        "harmonic_evidence_kind": "direct archived frequency calculation",
+        "archived_frequency_status": "passed_candidate_harmonic_minimum",
+        "archived_positive_mode_count": 102,
+        "archived_lowest_frequency_cm_inverse": 45.3664,
+        "N1_to_N1_angstrom": 3.6687504209087067,
+        "methyl_cap_C_to_C_angstrom": 3.935270724760899,
+        "N1_to_cap_direction_angle_degrees": 16.96717258645983
+      }
+    },
+    {
+      "id": "tt-cpd-cis-anti-i",
+      "label": "cis-anti-I TT-CPD",
+      "class": {
+        "ring_substituent_relationship": "cis",
+        "double_bond_orientation": "anti",
+        "diastereomer": "I",
+        "ordered_c5_configurations": [
+          "S",
+          "S"
+        ]
+      },
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-i/chemical_definition.json",
+        "sha256": "2ad8acdded5633ea84bf33c48cd7decbd3a1b6fab46f97bc54f0e9ca54a6e1c4",
+        "prior_pin_verified": true
+      },
+      "added_bonds": [
+        "1:C5--2:C6",
+        "1:C6--2:C5"
+      ],
+      "backbone_and_glycosidic_connectivity": "preserved",
+      "local_graph_N1_to_N1_bond_count": 4,
+      "local_graph_C1prime_to_C1prime_bond_count": 6,
+      "endpoint_quotient_edge": [
+        1,
+        2
+      ],
+      "requested_contexts_not_validation": [
+        "non-adjacent",
+        "interstrand"
+      ],
+      "registry_validated_contexts": [],
+      "registry_release_status": "pending",
+      "registered_assets_verified": {
+        "patch_charge_scope": {
+          "path": "/home/jojo/Work/NADOC/backend/data/forcefield/tt_cpd_patch_charge_scope_v2.json",
+          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f",
+          "prior_pin_verified": true
+        }
+      },
+      "core": {
+        "model": "N1-methyl capped TT-CPD, gas phase, 36 atoms; no sugars or backbone",
+        "method": "mp2",
+        "basis": "6-31G(d)",
+        "source_records": [
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-i/job_manifest.json",
+            "sha256": "e433d0426fde608d87b0ea615068e1d8ecf4401198f4624fcc3a07dd2d4cab8b",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-i/frequency_audit.json",
+            "sha256": "1f8d114105e901d1d349bcb3a0bd2b62c22e39fa28717a1022103a295aa8a122",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-i/provenance/source_geometry.xyz",
+            "sha256": "2ce70cb77e4a3ca77e17eae2312fdb1e1f49069f64d7dfa1f091074c49b0689f",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-i/provenance/optimized_model_parent.json",
+            "sha256": "67653399f5ee3b4be6c8b4c3c404b157034f78deb97b50e0ea449a3c19a723d7",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-i/hessian_hartree_per_bohr2.txt",
+            "sha256": "aedadc6b163b2385371687ee7c50512f8d02df0c084b3f007b2c80b3e9156d83",
+            "prior_pin_verified": true,
+            "declared_path": "/tmp/nadoc-cpd-model.ZtwtKE/qm/stereo-frequencies/tt-cpd-cis-anti-i/hessian_hartree_per_bohr2.txt"
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-i/output.dat",
+            "sha256": "d5dce472b11cc5597675bdb190d6a22d2d7f7650050de2c2c22beec0dd85481a",
+            "prior_pin_verified": true,
+            "declared_path": "/tmp/nadoc-cpd-model.ZtwtKE/qm/stereo-frequencies/tt-cpd-cis-anti-i/output.dat"
+          }
+        ],
+        "mapped_stereocenters_recomputed": [
+          {
+            "atom": "1:C5",
+            "neighbor_determinant_angstrom3": -2.644348886799166,
+            "expected_sign": "negative",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "neighbor_determinant_angstrom3": -1.8766685440450546,
+            "expected_sign": "negative",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "neighbor_determinant_angstrom3": 2.4177962156324933,
+            "expected_sign": "positive",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "neighbor_determinant_angstrom3": -1.6738243376521527,
+            "expected_sign": "negative",
+            "passed": true
+          }
+        ],
+        "harmonic_evidence_kind": "direct archived frequency calculation",
+        "archived_frequency_status": "passed_candidate_harmonic_minimum",
+        "archived_positive_mode_count": 102,
+        "archived_lowest_frequency_cm_inverse": 56.4732,
+        "N1_to_N1_angstrom": 4.6470460047262705,
+        "methyl_cap_C_to_C_angstrom": 6.882620864214188,
+        "N1_to_cap_direction_angle_degrees": 167.92894887168177
+      }
+    },
+    {
+      "id": "tt-cpd-cis-anti-ii",
+      "label": "cis-anti-II TT-CPD",
+      "class": {
+        "ring_substituent_relationship": "cis",
+        "double_bond_orientation": "anti",
+        "diastereomer": "II",
+        "ordered_c5_configurations": [
+          "R",
+          "R"
+        ]
+      },
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-ii/chemical_definition.json",
+        "sha256": "8668cfeaaa85d70f920f81f425dff79cb0de29228ddb62532352e4e0092e52c8",
+        "prior_pin_verified": true
+      },
+      "added_bonds": [
+        "1:C5--2:C6",
+        "1:C6--2:C5"
+      ],
+      "backbone_and_glycosidic_connectivity": "preserved",
+      "local_graph_N1_to_N1_bond_count": 4,
+      "local_graph_C1prime_to_C1prime_bond_count": 6,
+      "endpoint_quotient_edge": [
+        1,
+        2
+      ],
+      "requested_contexts_not_validation": [
+        "non-adjacent",
+        "interstrand"
+      ],
+      "registry_validated_contexts": [],
+      "registry_release_status": "pending",
+      "registered_assets_verified": {
+        "patch_charge_scope": {
+          "path": "/home/jojo/Work/NADOC/backend/data/forcefield/tt_cpd_patch_charge_scope_v2.json",
+          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f",
+          "prior_pin_verified": true
+        }
+      },
+      "core": {
+        "model": "N1-methyl capped TT-CPD, gas phase, 36 atoms; no sugars or backbone",
+        "method": "mp2",
+        "basis": "6-31G(d)",
+        "source_records": [
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-ii/job_manifest.json",
+            "sha256": "731cbec7e443e3d71cb1e97b1ee05313abfe3ddb4736f03578c0ae8461893b8c",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-ii/frequency_audit.json",
+            "sha256": "43c3884639f8bfc4f15ed8ebe7b363a38b501dbf43809be0d711a03d6a0cd3d5",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-ii/provenance/source_geometry.xyz",
+            "sha256": "bee8eaa1aedee97353040a4ec2bcf8d177367dd429073703adc3236e0e90cba2",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-ii/provenance/optimized_model_parent.json",
+            "sha256": "a940127a48ac3bd93076a1bea944a3bd2aee88e3f5bf219f13e51c7e373326bb",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-ii/hessian_hartree_per_bohr2.txt",
+            "sha256": "9d306b8e5254c1f06c8be2f4d675b69412f33f391b54ba7bc3037c9b426f50b1",
+            "prior_pin_verified": true,
+            "declared_path": "/tmp/nadoc-cpd-model.ZtwtKE/qm/stereo-frequencies/tt-cpd-cis-anti-ii/hessian_hartree_per_bohr2.txt"
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-ii/output.dat",
+            "sha256": "310e43756a4270f123acaa50c6431746c94b65417a18c5961ff1d0a7502008d7",
+            "prior_pin_verified": true,
+            "declared_path": "/tmp/nadoc-cpd-model.ZtwtKE/qm/stereo-frequencies/tt-cpd-cis-anti-ii/output.dat"
+          }
+        ],
+        "mapped_stereocenters_recomputed": [
+          {
+            "atom": "1:C5",
+            "neighbor_determinant_angstrom3": 2.6443358722012382,
+            "expected_sign": "positive",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "neighbor_determinant_angstrom3": 1.8766721992589612,
+            "expected_sign": "positive",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "neighbor_determinant_angstrom3": -2.4177859071648946,
+            "expected_sign": "negative",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "neighbor_determinant_angstrom3": 1.6738216982196286,
+            "expected_sign": "positive",
+            "passed": true
+          }
+        ],
+        "harmonic_evidence_kind": "direct archived frequency calculation",
+        "archived_frequency_status": "passed_candidate_harmonic_minimum",
+        "archived_positive_mode_count": 102,
+        "archived_lowest_frequency_cm_inverse": 57.2628,
+        "N1_to_N1_angstrom": 4.647043339388332,
+        "methyl_cap_C_to_C_angstrom": 6.882627416542848,
+        "N1_to_cap_direction_angle_degrees": 167.92675176627705
+      }
+    },
+    {
+      "id": "tt-cpd-trans-anti-i",
+      "label": "trans-anti-I TT-CPD",
+      "class": {
+        "ring_substituent_relationship": "trans",
+        "double_bond_orientation": "anti",
+        "diastereomer": "I",
+        "ordered_c5_configurations": [
+          "R",
+          "S"
+        ],
+        "legacy_stereochemistry_key": "trans-anti"
+      },
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-anti-i/chemical_definition.json",
+        "sha256": "27139365d5cfb64d2b90b2172c13c94eac02d5357dd46c4e1a8e686f00c3539f",
+        "prior_pin_verified": true
+      },
+      "added_bonds": [
+        "1:C5--2:C6",
+        "1:C6--2:C5"
+      ],
+      "backbone_and_glycosidic_connectivity": "preserved",
+      "local_graph_N1_to_N1_bond_count": 4,
+      "local_graph_C1prime_to_C1prime_bond_count": 6,
+      "endpoint_quotient_edge": [
+        1,
+        2
+      ],
+      "requested_contexts_not_validation": [
+        "non-adjacent",
+        "interstrand"
+      ],
+      "registry_validated_contexts": [],
+      "registry_release_status": "pending",
+      "registered_assets_verified": {
+        "patch_charge_scope": {
+          "path": "/home/jojo/Work/NADOC/backend/data/forcefield/tt_cpd_patch_charge_scope_v2.json",
+          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f",
+          "prior_pin_verified": true
+        }
+      },
+      "core": {
+        "model": "N1-methyl capped TT-CPD, gas phase, 36 atoms; no sugars or backbone",
+        "method": "mp2",
+        "basis": "6-31G(d)",
+        "source_records": [
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-anti-i/job_manifest.json",
+            "sha256": "2166fd402a67fd80f07777ed47756507f69a013993758984d9197497fbe45a8a",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-anti-i/frequency_audit.json",
+            "sha256": "043f68b4ff451a87a2bebea5396ab596424e6fe52fdf6af54630b97c85e8a001",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-anti-i/provenance/source_geometry.xyz",
+            "sha256": "f967832c987ec34e8489eaecb3da5ed30b346f3205f19e99dc9146d7cbe6c2ca",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-anti-i/provenance/optimized_model_parent.json",
+            "sha256": "55eed9ff689a4592295d1c3c336fa9ca181064a77cb1b3f27cf6b1b911b52dbb",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-anti-i/hessian_hartree_per_bohr2.txt",
+            "sha256": "aede5689303b8368688185302edb3d9bc45fee93416567b76085c74981b42350",
+            "prior_pin_verified": true,
+            "declared_path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-anti-i/hessian_hartree_per_bohr2.txt"
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-anti-i/output.dat",
+            "sha256": "2637c7db6ec28e5ade0b64577818bcd66ecdf4b49060546e4b4c3351f8632913",
+            "prior_pin_verified": true,
+            "declared_path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-anti-i/output.dat"
+          }
+        ],
+        "mapped_stereocenters_recomputed": [
+          {
+            "atom": "1:C5",
+            "neighbor_determinant_angstrom3": 2.661992322284188,
+            "expected_sign": "positive",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "neighbor_determinant_angstrom3": 1.8350655139974252,
+            "expected_sign": "positive",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "neighbor_determinant_angstrom3": 2.2135538592255255,
+            "expected_sign": "positive",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "neighbor_determinant_angstrom3": -1.624405581634504,
+            "expected_sign": "negative",
+            "passed": true
+          }
+        ],
+        "harmonic_evidence_kind": "direct archived frequency calculation",
+        "archived_frequency_status": "passed_candidate_harmonic_minimum",
+        "archived_positive_mode_count": 102,
+        "archived_lowest_frequency_cm_inverse": 40.76,
+        "N1_to_N1_angstrom": 4.3359773288582115,
+        "methyl_cap_C_to_C_angstrom": 6.56414724788727,
+        "N1_to_cap_direction_angle_degrees": 168.96305298478617
+      }
+    },
+    {
+      "id": "tt-cpd-trans-anti-ii",
+      "label": "trans-anti-II TT-CPD",
+      "class": {
+        "ring_substituent_relationship": "trans",
+        "double_bond_orientation": "anti",
+        "diastereomer": "II",
+        "ordered_c5_configurations": [
+          "S",
+          "R"
+        ]
+      },
+      "definition": {
+        "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-trans-anti-ii/chemical_definition.json",
+        "sha256": "f6933a888a07ed850dd469ab9f81f4d0dcbdf489924bfac5470092f46880b5c8",
+        "prior_pin_verified": true
+      },
+      "added_bonds": [
+        "1:C5--2:C6",
+        "1:C6--2:C5"
+      ],
+      "backbone_and_glycosidic_connectivity": "preserved",
+      "local_graph_N1_to_N1_bond_count": 4,
+      "local_graph_C1prime_to_C1prime_bond_count": 6,
+      "endpoint_quotient_edge": [
+        1,
+        2
+      ],
+      "requested_contexts_not_validation": [
+        "non-adjacent",
+        "interstrand"
+      ],
+      "registry_validated_contexts": [],
+      "registry_release_status": "pending",
+      "registered_assets_verified": {
+        "patch_charge_scope": {
+          "path": "/home/jojo/Work/NADOC/backend/data/forcefield/tt_cpd_patch_charge_scope_v2.json",
+          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f",
+          "prior_pin_verified": true
+        }
+      },
+      "core": {
+        "model": "N1-methyl capped TT-CPD, gas phase, 36 atoms; no sugars or backbone",
+        "method": "mp2",
+        "basis": "6-31G(d)",
+        "source_records": [
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-anti-ii/job_manifest.json",
+            "sha256": "74b64b8a773c642532dfb553d8d53f81a1e6798f2214b2bb6a3f91f8f7d41182",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-anti-ii/frequency_audit.json",
+            "sha256": "b8c1f4f59fac3a902a291410897791e7a78d76f056df32dea14c0e71180f842d",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-anti-ii/provenance/source_geometry.xyz",
+            "sha256": "74b37053f184b4635f5f72a8d13e7123b21166e13f44a5b1d01f39aa2c3b6be9",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-anti-ii/provenance/optimized_model_parent.json",
+            "sha256": "ef8c50591c177477eb3ee1e223934ca33ec4c72b253140148154f3343db038df",
+            "prior_pin_verified": true
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-anti-ii/hessian_hartree_per_bohr2.txt",
+            "sha256": "f83fdf6cf2c4113092cbc7989804b045011129f13ac47b45a4713713f949e67c",
+            "prior_pin_verified": true,
+            "declared_path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-anti-ii/hessian_hartree_per_bohr2.txt"
+          },
+          {
+            "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-anti-ii/output.dat",
+            "sha256": "557edfff5597cb16e6ace183567ffeeeea785bfe9d1720c78a5f4fdca21580d3",
+            "prior_pin_verified": true,
+            "declared_path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-trans-anti-ii/output.dat"
+          }
+        ],
+        "mapped_stereocenters_recomputed": [
+          {
+            "atom": "1:C5",
+            "neighbor_determinant_angstrom3": -2.661997170273775,
+            "expected_sign": "negative",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "neighbor_determinant_angstrom3": -1.835051354169087,
+            "expected_sign": "negative",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "neighbor_determinant_angstrom3": -2.2135421791771153,
+            "expected_sign": "negative",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "neighbor_determinant_angstrom3": 1.6244060363263455,
+            "expected_sign": "positive",
+            "passed": true
+          }
+        ],
+        "harmonic_evidence_kind": "direct archived frequency calculation",
+        "archived_frequency_status": "passed_candidate_harmonic_minimum",
+        "archived_positive_mode_count": 102,
+        "archived_lowest_frequency_cm_inverse": 41.0574,
+        "N1_to_N1_angstrom": 4.335953212939266,
+        "methyl_cap_C_to_C_angstrom": 6.564120023319874,
+        "N1_to_cap_direction_angle_degrees": 168.96196596807303
+      }
+    }
+  ]
+}

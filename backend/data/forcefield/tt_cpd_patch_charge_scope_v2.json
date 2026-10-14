@@ -1,16 +1,16 @@
 {
   "schema": "nadoc.photoproduct-patch-charge-scope.v2",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "family": "ordered-DNA-TT-CPD",
   "chemical_definitions": {
     "tt-cpd-cis-syn": "b583ce20398dff5bb6e1fa167f99842ed3e3947973f8d79ea41238f04ef14c55",
     "tt-cpd-cis-syn-ii": "cdcf91558952d1b0a6dd3c0df8ddd9ff5a8b5418a97cb4108b5d0765adc27a37",
     "tt-cpd-trans-syn-i": "674efb301b06c3ceb85f481d31481acf0a102182a4816d34297c921ab285852b",
     "tt-cpd-trans-syn-ii": "ef2412a9ffc7133d353301c2fb62f47108ef9ec4fe04d14d36ba46e1e3d6ab29",
-    "tt-cpd-cis-anti-i": "2ad8acdded5633ea84bf33c48cd7decbd3a1b6fab46f97bc54f0e9ca54a6e1c4",
-    "tt-cpd-cis-anti-ii": "8668cfeaaa85d70f920f81f425dff79cb0de29228ddb62532352e4e0092e52c8",
-    "tt-cpd-trans-anti-i": "27139365d5cfb64d2b90b2172c13c94eac02d5357dd46c4e1a8e686f00c3539f",
-    "tt-cpd-trans-anti-ii": "f6933a888a07ed850dd469ab9f81f4d0dcbdf489924bfac5470092f46880b5c8"
+    "tt-cpd-cis-anti-i": "dd8dbecbb0a6349233d7b7f260d2b4f41dc34d3635568afd72cb72620a865e63",
+    "tt-cpd-cis-anti-ii": "c2d7fc2b0b0ec3d46ab58553d3826bf4b6e4164a9b9c64f36c3d996d66f16520",
+    "tt-cpd-trans-anti-i": "a1db9e139fbdb6ef7e7d7659249fb355f4d9be9932d22c7583961bd0e0beee46",
+    "tt-cpd-trans-anti-ii": "862116a0883d908876df182013f196862e10e8ac338e64f9d6d4a286d67a48c7"
   },
   "atoms_with_charges_replaced": [
     "1:N1",
@@ -42,7 +42,10 @@
     "2:H53",
     "2:H6"
   ],
-  "unchanged_boundary_atoms": ["1:C1'", "2:C1'"],
+  "unchanged_boundary_atoms": [
+    "1:C1'",
+    "2:C1'"
+  ],
   "expected_pair_charge": 0,
   "model_caps": "Each N1 methyl cap is fitting-only, constrained neutral, and absent from the DNA patch.",
   "rationale": "Cyclobutane formation conserves atoms and formal charge. Only the two neutral thymine base groups are retyped and recharged; both sugar C1' atoms retain CHARMM36 types and charges while remaining in the affected bonded-term audit.",

@@ -1,0 +1,14 @@
+{
+  "source": {
+    "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1/references/tt-cpd-cis-syn/TTD_ideal.sdf",
+    "sha256": "e9402af214dc99e5c477d8f11f1e9942fa54b78dd0167b65b69a03f713acb4d2"
+  },
+  "license": "CC0 1.0 Universal",
+  "ring_atom_maps": {
+    "1": "C5",
+    "2": "C6",
+    "3": "C5T",
+    "4": "C6T"
+  },
+  "smiles": "[H]O[C@@]1([H])C([H])([H])[C@@]2([H])O[C@]1([H])C([H])([H])O[P@@](=O)(O[H])O[C@@]1([H])C([H])([H])[C@@]([H])(O[C@]1([H])C([H])([H])OP(=O)(O[H])O[H])N1C(=O)N([H])C(=O)[C@@:1]3(C([H])([H])[H])[C@:2]1([H])[C@@:4]1([H])N2C(=O)N([H])C(=O)[C@@:3]31C([H])([H])[H]"
+}

@@ -241,7 +241,7 @@
         },
         "patch_charge_scope": {
           "path": "tt_cpd_patch_charge_scope_v2.json",
-          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f"
+          "sha256": "d79aafa6394b1094b196dc13eb0c16df7b0189f5a0742c62207a76a091e29db0"
         }
       }
     },
@@ -338,7 +338,7 @@
         },
         "patch_charge_scope": {
           "path": "tt_cpd_patch_charge_scope_v2.json",
-          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f"
+          "sha256": "d79aafa6394b1094b196dc13eb0c16df7b0189f5a0742c62207a76a091e29db0"
         }
       }
     },
@@ -435,7 +435,7 @@
         },
         "patch_charge_scope": {
           "path": "tt_cpd_patch_charge_scope_v2.json",
-          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f"
+          "sha256": "d79aafa6394b1094b196dc13eb0c16df7b0189f5a0742c62207a76a091e29db0"
         }
       }
     },
@@ -480,14 +480,12 @@
       ],
       "gates": {
         "chemical_definition": {
-          "status": "passed",
+          "status": "pending",
           "evidence": [
             {
-              "reviewer": "Jeffe",
-              "reviewed_at": "2026-09-05T05:26:00.667269+00:00",
-              "rationale": "Human visual atom-mapped identity review approved; automated ingestion revalidated the exact graph, atom map, source hashes, and all four stereochemical sentinels.",
-              "path": "photoproducts/tt-cpd-cis-anti-i/chemical_definition_review_audit.json",
-              "sha256": "07224c6aeb131c012d010d6ec3748ede25ed4196978aee30d2ff8f0381e31cfa"
+              "path": "photoproducts/anti_definition_correction_20261010.json",
+              "sha256": "34d529c7cc9ea0f7e2c14b77ca847c49fa51b0d0d173ce9a0a8f0eb471287c7f",
+              "rationale": "Corrected identity passes automated detection audits; prior human approval is superseded and not transferred."
             }
           ]
         },
@@ -527,11 +525,11 @@
       "assets": {
         "chemical_definition": {
           "path": "photoproducts/tt-cpd-cis-anti-i/chemical_definition.json",
-          "sha256": "2ad8acdded5633ea84bf33c48cd7decbd3a1b6fab46f97bc54f0e9ca54a6e1c4"
+          "sha256": "dd8dbecbb0a6349233d7b7f260d2b4f41dc34d3635568afd72cb72620a865e63"
         },
         "patch_charge_scope": {
           "path": "tt_cpd_patch_charge_scope_v2.json",
-          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f"
+          "sha256": "d79aafa6394b1094b196dc13eb0c16df7b0189f5a0742c62207a76a091e29db0"
         }
       }
     },
@@ -576,14 +574,12 @@
       ],
       "gates": {
         "chemical_definition": {
-          "status": "passed",
+          "status": "pending",
           "evidence": [
             {
-              "reviewer": "Jeffe",
-              "reviewed_at": "2026-09-05T05:26:01.355600+00:00",
-              "rationale": "Human visual atom-mapped identity review approved; automated ingestion revalidated the exact graph, atom map, source hashes, and all four stereochemical sentinels.",
-              "path": "photoproducts/tt-cpd-cis-anti-ii/chemical_definition_review_audit.json",
-              "sha256": "07224c6aeb131c012d010d6ec3748ede25ed4196978aee30d2ff8f0381e31cfa"
+              "path": "photoproducts/anti_definition_correction_20261010.json",
+              "sha256": "34d529c7cc9ea0f7e2c14b77ca847c49fa51b0d0d173ce9a0a8f0eb471287c7f",
+              "rationale": "Corrected identity passes automated detection audits; prior human approval is superseded and not transferred."
             }
           ]
         },
@@ -623,11 +619,11 @@
       "assets": {
         "chemical_definition": {
           "path": "photoproducts/tt-cpd-cis-anti-ii/chemical_definition.json",
-          "sha256": "8668cfeaaa85d70f920f81f425dff79cb0de29228ddb62532352e4e0092e52c8"
+          "sha256": "c2d7fc2b0b0ec3d46ab58553d3826bf4b6e4164a9b9c64f36c3d996d66f16520"
         },
         "patch_charge_scope": {
           "path": "tt_cpd_patch_charge_scope_v2.json",
-          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f"
+          "sha256": "d79aafa6394b1094b196dc13eb0c16df7b0189f5a0742c62207a76a091e29db0"
         }
       }
     },
@@ -673,14 +669,12 @@
       ],
       "gates": {
         "chemical_definition": {
-          "status": "passed",
+          "status": "pending",
           "evidence": [
             {
-              "reviewer": "Jeffe",
-              "reviewed_at": "2026-09-05T05:26:02.028774+00:00",
-              "rationale": "Human visual atom-mapped identity review approved; automated ingestion revalidated the exact graph, atom map, source hashes, and all four stereochemical sentinels.",
-              "path": "photoproducts/tt-cpd-trans-anti-i/chemical_definition_review_audit.json",
-              "sha256": "07224c6aeb131c012d010d6ec3748ede25ed4196978aee30d2ff8f0381e31cfa"
+              "path": "photoproducts/anti_definition_correction_20261010.json",
+              "sha256": "34d529c7cc9ea0f7e2c14b77ca847c49fa51b0d0d173ce9a0a8f0eb471287c7f",
+              "rationale": "Corrected identity passes automated detection audits; prior human approval is superseded and not transferred."
             }
           ]
         },
@@ -720,11 +714,11 @@
       "assets": {
         "chemical_definition": {
           "path": "photoproducts/tt-cpd-trans-anti-i/chemical_definition.json",
-          "sha256": "27139365d5cfb64d2b90b2172c13c94eac02d5357dd46c4e1a8e686f00c3539f"
+          "sha256": "a1db9e139fbdb6ef7e7d7659249fb355f4d9be9932d22c7583961bd0e0beee46"
         },
         "patch_charge_scope": {
           "path": "tt_cpd_patch_charge_scope_v2.json",
-          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f"
+          "sha256": "d79aafa6394b1094b196dc13eb0c16df7b0189f5a0742c62207a76a091e29db0"
         }
       }
     },
@@ -769,14 +763,12 @@
       ],
       "gates": {
         "chemical_definition": {
-          "status": "passed",
+          "status": "pending",
           "evidence": [
             {
-              "reviewer": "Jeffe",
-              "reviewed_at": "2026-09-05T05:26:02.696607+00:00",
-              "rationale": "Human visual atom-mapped identity review approved; automated ingestion revalidated the exact graph, atom map, source hashes, and all four stereochemical sentinels.",
-              "path": "photoproducts/tt-cpd-trans-anti-ii/chemical_definition_review_audit.json",
-              "sha256": "07224c6aeb131c012d010d6ec3748ede25ed4196978aee30d2ff8f0381e31cfa"
+              "path": "photoproducts/anti_definition_correction_20261010.json",
+              "sha256": "34d529c7cc9ea0f7e2c14b77ca847c49fa51b0d0d173ce9a0a8f0eb471287c7f",
+              "rationale": "Corrected identity passes automated detection audits; prior human approval is superseded and not transferred."
             }
           ]
         },
@@ -816,11 +808,11 @@
       "assets": {
         "chemical_definition": {
           "path": "photoproducts/tt-cpd-trans-anti-ii/chemical_definition.json",
-          "sha256": "f6933a888a07ed850dd469ab9f81f4d0dcbdf489924bfac5470092f46880b5c8"
+          "sha256": "862116a0883d908876df182013f196862e10e8ac338e64f9d6d4a286d67a48c7"
         },
         "patch_charge_scope": {
           "path": "tt_cpd_patch_charge_scope_v2.json",
-          "sha256": "e3a7b9d4ce68cec4c313bf971a70533cc5e90fe1f15ecdb4758aabe78b96117f"
+          "sha256": "d79aafa6394b1094b196dc13eb0c16df7b0189f5a0742c62207a76a091e29db0"
         }
       }
     }
