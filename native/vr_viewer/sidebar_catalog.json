@@ -12879,6 +12879,16 @@
           "reason": ""
         },
         {
+          "id": "tool-join",
+          "label": "Join",
+          "action": "tool:join",
+          "section": "Tools",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
+          "reason": ""
+        },
+        {
           "id": "tool-extrude",
           "label": "Extrude",
           "action": "tool:extrude",

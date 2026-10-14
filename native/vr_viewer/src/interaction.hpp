@@ -1056,7 +1056,7 @@ class BoundsAccumulator {
     glm::vec3 maximum_{std::numeric_limits<float>::lowest()};
 };
 
-enum class ToolMode { inspect, move_rotate, extrude, twist, bend, sweep };
+enum class ToolMode { inspect, move_rotate, extrude, twist, bend, sweep, join };
 enum class ToolAction { activate, preview, confirm, cancel, undo };
 enum class ToolCapability {
     view_only, direct_preview, configuration_required, unsupported,
@@ -1065,8 +1065,8 @@ enum class ToolStrandFilter { both, scaffold, staples };
 enum class TwistAmountMode { total_degrees, degrees_per_nm };
 
 inline const char* toolModeName(ToolMode mode) {
-    static constexpr std::array<const char*, 6> names = {
-        "inspect", "move_rotate", "extrude", "twist", "bend", "sweep",
+    static constexpr std::array<const char*, 7> names = {
+        "inspect", "move_rotate", "extrude", "twist", "bend", "sweep", "join",
     };
     return names[static_cast<size_t>(mode)];
 }
@@ -1322,7 +1322,7 @@ class ToolShell {
             const char* selectionKind;
             ToolCapability capability;
         };
-        static constexpr std::array<CapabilityEntry, 17> entries = {{
+        static constexpr std::array<CapabilityEntry, 18> entries = {{
 #define NADOC_VR_TOOL_CAPABILITY(tool, kind, capability) \
             {ToolMode::tool, #kind, ToolCapability::capability},
 #include "../tool_capabilities.def"
@@ -1680,8 +1680,8 @@ inline std::optional<ToolExecutionFeedback> parseToolExecutionFeedback(
         fields >> trailing) {
         return std::nullopt;
     }
-    static constexpr std::array<const char*, 5> modes = {
-        "move_rotate", "extrude", "bend", "twist", "sweep",
+    static constexpr std::array<const char*, 6> modes = {
+        "move_rotate", "extrude", "bend", "twist", "sweep", "join",
     };
     static constexpr std::array<const char*, 2> actions = {"confirm", "undo"};
     static constexpr std::array<const char*, 4> statuses = {

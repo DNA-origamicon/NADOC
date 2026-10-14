@@ -2,19 +2,12 @@
 import * as THREE from 'three'
 import { createJoinMovement } from './cluster_join_movement.js'
 import { createClusterJoinPanel } from '../ui/cluster_join_panel.js'
+import { clusterJoinNativeSignature as nativeSignature } from './cluster_join_document.js'
 
 const OTHER_TOOLS = ['forceXoverActive', 'sweepActive', 'deformToolActive', 'translateRotateActive', 'nucleotideTransformActive']
 const finitePoint = point => Array.isArray(point) && point.length === 3 && point.every(Number.isFinite)
 const siteKey = site => `${site.cluster_id}/${site.id}`
 const describe = value => typeof value === 'string' ? value : value?.message || value?.detail || JSON.stringify(value)
-// Save acknowledgements, history payload backfills and display metadata replace
-// the design object too. Only native placement/routing changes retire this tool.
-const JOIN_NATIVE_FIELDS = ['lattice_type', 'lattice_frames', 'helices', 'strands', 'deformations', 'cluster_transforms',
-  'nucleotide_transforms', 'cluster_joints', 'cluster_join_constraints', 'overhangs', 'overhang_connections', 'overhang_bindings', 'duplexes',
-  'flexible_segment_marks', 'flexible_connections', 'extensions', 'photoproduct_junctions', 'crossovers',
-  'crossover_constraints', 'forced_ligations', 'protein_assets', 'protein_attachments', 'nanoparticles', 'nanoparticle_conjugations']
-const nativeSignature = design => JSON.stringify(JOIN_NATIVE_FIELDS.map(key => design?.[key] ?? null))
-
 function disposeLayer(group) {
   group.traverse(object => {
     object.geometry?.dispose()

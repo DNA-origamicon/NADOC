@@ -380,6 +380,7 @@ describe('initVRSession', () => {
         sequence: 1, type: 'tool', mode: 'twist', action: 'preview', configSequence: 1,
         targetIdentity: 'nuc:s1', targetKind: 'domain',
         targetOwnerTokens: ['domain-token'],
+        transformSequence: 1,
         transformMatrix: [1,0,0,0,0,1,0,0,0,0,1,0,2,3,4,1],
       }],
       [{
@@ -407,6 +408,7 @@ describe('initVRSession', () => {
       [{
         sequence: 1,
         type: 'tool_transform',
+        toolSequence: 1, targetIdentity: 'nuc:s1', targetKind: 'domain', targetOwnerTokens: ['domain-token'],
         matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 2, 3, 4, 1],
       }],
     ])

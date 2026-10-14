@@ -7,7 +7,10 @@ namespace nadoc_vr {
 class MovePanel {
  public:
     static constexpr size_t selectHand=0, moveHand=1;
-    bool active=false, selecting=false, snap=false, rotating=false;
+    bool active=false, selecting=false, snap=false, rotating=false, joining=false;
+    std::string connectionStatus;
+    const char* prefix() const { return joining?"join:":"move:"; }
+    ToolMode mode() const { return joining?ToolMode::join:ToolMode::move_rotate; }
     bool selectionEnabled(size_t h) const { return !active || (!hand && !wheelHand && (selecting || h==selectHand)); }
     size_t savedOffset=0, wheelIndex=0;
     std::optional<size_t> hand, wheelHand;
@@ -29,7 +32,7 @@ class MovePanel {
         menus[1].focus.reset();
     }
     void exit(std::array<SidebarMenu,2>& menus) {
-        active=false;reset();
+        active=false;joining=false;reset();
         auto& m=menus[1];m.customTab.reset();m.offsets[m.selected]=savedOffset;m.focus.reset();
     }
     static std::string number(float value,int decimals) {
@@ -37,20 +40,20 @@ class MovePanel {
     }
     void refresh(std::array<SidebarMenu,2>& menus,const std::string& kind,const std::string& status) const {
         if(!active)return;
-        SidebarTab tab{1,"move","Move / Rotate",{}};
+        SidebarTab tab{1,joining?"join":"move",joining?"Join":"Move / Rotate",{}};
         auto row=[&](std::string id,std::string label,std::string detail="") {
-            tab.rows.push_back({"move:"+id,label,detail,"move:"+id,{}});
+            tab.rows.push_back({prefix()+id,label,detail,prefix()+id,{}});
         };
-        row("back","RETURN TO TOOLS",status);
+        row("back","RETURN TO TOOLS",joining?connectionStatus:status);
         row("apply","APPLY");row("cancel","CANCEL");
-        row("selection",selecting || kind=="none"?"Selection: point and click":"Selection: "+kind,
-            "LEFT PAD: FILTER / CLICK TO CHANGE");
-        row("snap",snap?"15 DEG SNAP: ON":"15 DEG SNAP: OFF","TRIGGER: MOVE / GRIP: ROTATE");
+        row("selection",joining?(selecting?"Select a moving cluster":"Moving cluster selected"):(selecting || kind=="none"?"Selection: point and click":"Selection: "+kind),
+            joining?"TRIGGER: SELECT CLUSTER":"LEFT PAD: FILTER / CLICK TO CHANGE");
+        row("snap",joining?"WHEELS: 1 NM / 15 DEG":snap?"15 DEG SNAP: ON":"15 DEG SNAP: OFF","TRIGGER: MOVE / GRIP: ROTATE");
         for(size_t i=0;i<6;++i) {
             const auto id=std::to_string(i);
             row(id+"-wheel","");
             row(id+":value",std::string(i<3?"":"R")+"XYZ"[i%3]+" "+number(i<3?positionNm[i]:rotationDegrees[i-3],i<3?3:1)+(i<3?" nm":" deg"));
-            row(id+":less","-1");row(id+":more","+1");
+            row(id+":less",joining&&i>=3?"-15":"-1");row(id+":more",joining&&i>=3?"+15":"+1");
         }
         row("undo","UNDO");row("redo","REDO");row("recenter","Frame model");
         menus[1].customTab=std::move(tab);
@@ -63,6 +66,11 @@ class MovePanel {
         return glm::translate(glm::mat4(1),pivot+axes*positionNm*nmScale)*glm::mat4(rotation)*glm::translate(glm::mat4(1),-pivot);
     }
     void adjust(size_t index,int steps) {
+        if(joining) {
+            if(index<3)positionNm[index]=std::round(positionNm[index])+steps;
+            else rotationDegrees[index-3]=(std::round(rotationDegrees[index-3]/15.F)+steps)*15.F;
+            return;
+        }
         if(index<3)positionNm[index]=std::round((positionNm[index]+steps)*1000.F)/1000.F;
         else rotationDegrees[index-3]+=steps; // Manual detents are always one degree.
     }

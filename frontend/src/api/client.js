@@ -5542,6 +5542,7 @@ export async function relaxCpd(photoproductId) {
 export const sendVREndResizeHandles = body => _request('POST', '/vr/end-resize-handles', body)
 
 export const sendVRLigationEnds = body => _request('POST', '/vr/ligation-ends', body)
+export const sendVRJoinFeedback = body => _request('POST', '/vr/join-feedback', body, { suppressBusy: true })
 
 export async function saveAssemblyViewVolumes(volumes) {
   return _request('PUT', '/assembly/view-volumes', { volumes }, { suppressBusy: true })

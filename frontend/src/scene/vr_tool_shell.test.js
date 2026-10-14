@@ -22,7 +22,7 @@ describe('native VR transactional tool shell', () => {
   })
   it('exposes the requested tool and action vocabulary', () => {
     expect(VR_TOOL_MODES).toEqual([
-      'inspect', 'move_rotate', 'extrude', 'sweep', 'twist', 'bend',
+      'inspect', 'move_rotate', 'join', 'extrude', 'sweep', 'twist', 'bend',
     ])
     expect(VR_TOOL_ACTIONS).toEqual([
       'activate', 'preview', 'confirm', 'cancel', 'undo',
@@ -156,13 +156,13 @@ describe('native VR transactional tool shell', () => {
     const rows = [...definition.matchAll(
       /NADOC_VR_TOOL_CAPABILITY\((\w+),\s*(\w+),\s*(\w+)\)/g,
     )].map(([, mode, kind, capability]) => ({ mode, kind, capability }))
-    expect(rows).toHaveLength(17)
+    expect(rows).toHaveLength(18)
     expect(new Set(rows.map(row => `${row.mode}:${row.kind}`)).size).toBe(rows.length)
     for (const row of rows) {
       expect(vrToolSelectionCapability(row.mode, { kind: row.kind }))
         .toBe(row.capability)
     }
-    for (const mode of ['move_rotate', 'extrude', 'twist', 'bend']) {
+    for (const mode of ['move_rotate', 'join', 'extrude', 'twist', 'bend']) {
       for (const kind of ['cluster', 'strand', 'domain', 'end', 'base', 'bond', 'crossover']) {
         if (rows.some(row => row.mode === mode && row.kind === kind)) continue
         expect(vrToolSelectionCapability(mode, { kind }))

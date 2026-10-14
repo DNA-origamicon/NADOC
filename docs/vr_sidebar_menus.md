@@ -108,7 +108,10 @@ Unsupported controls are gray and consume clicks without executing an action.
 Implemented controls include representation, coloring, recentering, job and
 trajectory panels, and existing native tools. Tool availability follows the
 current selection; trajectory playback requires a loaded trajectory. Tools contains
-Inspect, Extrude, Twist, Bend and Move / Rotate. Selection is on the left touchpad.
+Inspect, Extrude, Twist, Bend, Move / Rotate and Join. Selection is on the left touchpad.
+Join fixes selection to Cluster and reuses the Move / Rotate gesture and panel
+components, with 1 nm / 15° thumbwheel detents and explicit Cancel / Apply.
+See [VR Join](vr_join.md) for connection preview and routing behavior.
 Tool settings, Confirm, Cancel and Undo live in their dedicated sidebar panels.
 Recenter is in Visualization; the desktop window is in the left VR tab.
 

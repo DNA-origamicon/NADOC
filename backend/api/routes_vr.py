@@ -290,7 +290,7 @@ class VRToolExecutionFeedbackRequest(BaseModel):
 
     execution_sequence: int = Field(ge=1, le=2**53 - 1)
     tool_sequence: int = Field(ge=1, le=2**53 - 1)
-    tool_mode: Literal["move_rotate", "extrude", "sweep", "bend", "twist"]
+    tool_mode: Literal["move_rotate", "join", "extrude", "sweep", "bend", "twist"]
     tool_action: Literal["confirm", "undo"]
     target_identity: Optional[str] = Field(default=None, min_length=1, max_length=2048)
     target_kind: SelectionKind
@@ -2989,6 +2989,8 @@ def _cleanup_after_process(
     Path(str(scene_path) + ".loading").unlink(missing_ok=True)
     Path(str(scene_path) + ".loading.next").unlink(missing_ok=True)
     Path(str(event_path) + ".ligation").unlink(missing_ok=True)
+    Path(str(event_path) + ".join").unlink(missing_ok=True)
+    Path(str(event_path) + ".join.next").unlink(missing_ok=True)
     Path(str(event_path) + ".avatar").unlink(missing_ok=True)
     Path(str(event_path) + ".avatar.next").unlink(missing_ok=True)
     for suffix in (".references", ".references.next", ".references-event", ".references-event.next"):
@@ -3424,7 +3426,7 @@ def _event_payload(state: dict | None) -> dict:
             not in {"default", "cluster", "strand", "domain", "end", "xover", "base"}
             or representation not in {"cylinders", "full", "ballstick", "stick", "beads", "vdw", "hull-prism", "surface", "surface-detail", "mrdna-coarse", "mrdna-fine", "oxdna"}
             or coloring not in {"strand", "base", "cluster", "cpk"}
-            or tool_mode not in {"inspect", "move_rotate", "extrude", "sweep", "twist", "bend"}
+            or tool_mode not in {"inspect", "move_rotate", "join", "extrude", "sweep", "twist", "bend"}
             or tool_action not in {"activate", "preview", "confirm", "cancel", "undo"}
             or (
                 plane_pick_sequence == 0

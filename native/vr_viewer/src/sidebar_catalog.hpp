@@ -934,6 +934,7 @@ inline const std::vector<SidebarTab> kSidebarTabs = {
   {1, "tools", "Tools", {
     {"tool-inspect", "Inspect", "Tools", "tool:inspect", {}},
     {"tool-move", "Move / Rotate", "Tools", "tool:move_rotate", {}},
+    {"tool-join", "Join", "Tools", "tool:join", {}},
     {"tool-extrude", "Extrude", "Tools", "tool:extrude", {}},
     {"tool-sweep", "Sweep", "Tools", "tool:sweep", {}},
     {"tool-twist", "Twist", "Tools", "tool:twist", {}},

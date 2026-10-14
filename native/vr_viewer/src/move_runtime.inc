@@ -1,7 +1,7 @@
     bool moveAvailable() const {
         return movePanel_.active && !movePanel_.selecting && !toolShell_.executionPending() &&
             !moveAwaitRefresh_ && !ligation_.waiting &&
-            nadoc_vr::ToolShell::selectionCapability(nadoc_vr::ToolMode::move_rotate,selectedSelectionKind_)==nadoc_vr::ToolCapability::direct_preview;
+            nadoc_vr::ToolShell::selectionCapability(movePanel_.mode(),selectedSelectionKind_)==nadoc_vr::ToolCapability::direct_preview;
     }
     bool prepareMove() {
         if(!moveAvailable())return false;
@@ -18,7 +18,7 @@
         const auto transform=movePanel_.transform();
         if(transform!=pendingToolTransform_.transform()) {pendingToolTransform_.setTransform(transform);publishToolTransform();}
         glScene_->setMovePointPreview(selectedOwnerTokens_,pendingToolTransform_.transform());
-        movePanel_.refresh(sidebarMenus_.menus,selectedSelectionKind_,toolShell_.status());
+        refreshJoin();movePanel_.refresh(sidebarMenus_.menus,selectedSelectionKind_,toolShell_.status());
     }
     std::optional<glm::vec3> moveRayHit() const {
         if(!hands_[1].valid)return std::nullopt;
@@ -51,7 +51,7 @@
         }
         const auto& menu=sidebarMenus_.menus[1];
         for(size_t h=0;h<2;++h)if(!blocked[h] && menu.open) {
-            for(const auto& c:menu.controls())if(c.id.starts_with("move:") && c.id.ends_with("-wheel") &&
+            for(const auto& c:menu.controls())if(c.id.starts_with(movePanel_.prefix()) && c.id.ends_with("-wheel") &&
                 nadoc_vr::thumbwheelHit(nadoc_vr::thumbwheelPreset(100,.2F),
                     {(c.bounds.minimum.x+c.bounds.maximum.x)*.5F,(c.bounds.minimum.y+c.bounds.maximum.y)*.5F,.012F},menu.placement,hands_[h])) {
                 blocked[h]=true;
@@ -92,10 +92,11 @@
         if(moveAwaitRefresh_ && !toolShell_.executionPending() &&
            (sceneRefresh_.revision()>moveStartRevision_ || toolShell_.status()=="COMMIT FAILED" || toolShell_.status()=="COMMIT REFUSED"))moveAwaitRefresh_=false;
         if(toolShell_.previewRequested() && !toolShell_.executionPending() && sceneRefresh_.revision()!=moveStartRevision_)cancelMove();
-        movePanel_.refresh(sidebarMenus_.menus,selectedSelectionKind_,toolShell_.status());
+        refreshJoin();movePanel_.refresh(sidebarMenus_.menus,selectedSelectionKind_,toolShell_.status());
+        if(movePanel_.joining && moveAvailable() && !toolShell_.previewRequested())prepareMove();
         movePanel_.nearby.fill(false);movePanel_.beamEnd.reset();
         if(movePanel_.hand) {
-            constexpr size_t h=1;blocked[h]=true;liveInputOwner_[h]="move-rotate";
+            constexpr size_t h=1;blocked[h]=true;liveInputOwner_[h]=movePanel_.joining?"join":"move-rotate";
             if(!hands_[h].valid || sessionState_!=XR_SESSION_STATE_FOCUSED ||
                 (sceneMoving && !movePanel_.rotating) || !moveAvailable() ||
                 manipulator_.transform()!=movePanel_.startModel || sceneRefresh_.revision()!=moveStartRevision_) {cancelMove();return;}
@@ -105,7 +106,7 @@
         } else if(moveAvailable() && !movePanel_.moving() && !sceneMoving && !blocked[1]) {
             movePanel_.beamEnd=moveRayHit();movePanel_.nearby[1]=movePanel_.beamEnd.has_value();
             if(movePanel_.nearby[1] && triggerClicked_[1] && beginMove(false)) {
-                blocked[1]=true;liveInputOwner_[1]="move-rotate";
+                blocked[1]=true;liveInputOwner_[1]=movePanel_.joining?"join":"move-rotate";
             }
         }
         const bool preview=toolShell_.previewRequested() &&

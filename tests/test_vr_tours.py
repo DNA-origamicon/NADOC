@@ -242,6 +242,16 @@ def test_deformation_selection_check_is_discoverable_and_headset_independent(cli
     assert arguments(tour, True) == ['-m', 'tools.vr_workflows.deformation_selection_check', '--validate']
 
 
+@pytest.mark.parametrize('identifier,extra', [('join', []), ('join-bridge', ['--browser'])])
+def test_join_workflows_are_discoverable_and_distinguish_headset_validation(client, identifier, extra):
+    tour = next(t for t in client.get('/api/vr/tours').json()['tours'] if t['id'] == identifier)
+    assert tour['group'] == 'authoring'
+    assert tour['runnable']
+    assert arguments(tour, True) == ['-m', 'tools.vr_workflows.join_tour', *extra, '--validate']
+    assert ('No headset required' in tour['description']) == (identifier == 'join-bridge')
+    assert ('all four motion profiles' in tour['description']) == (identifier == 'join')
+
+
 def test_simulation_menu_study_is_desktop_only(client, monkeypatch):
     study = next(t for t in catalog()['tours'] if t['id'] == 'simulation-menu-gallery')
     assert study['modes'] == ['desktop']
