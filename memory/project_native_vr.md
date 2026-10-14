@@ -6,6 +6,7 @@ review_after: 2026-09-01
 ---
 
 # Native VR expansion
+
 ## Current menu-hover timing follow-up (2026-10-13)
 
 The user reports substantially reduced doubling after normal deployment, with
@@ -312,6 +313,36 @@ effect. Saved placement and physical controllers were restored; SteamVR was not
 restarted. Keep persistent viewer launch outside `validation_guard.sh`: its EXIT
 trap stops the scope and its detached children. Use the guard for bounded checks.
 
+## Live simulation menu (2026-10-12)
+
+Accepted round 5's **raised scrubber**, horizontal mapper, compact split and curved
+engine tabs now drive the native left Simulations panel. Real job rows and desktop
+visualization handlers feed Full representation. Trajectory metadata is separate
+from explicit Load. Start/End/Every use the smallest 20%-exposed gallery cylinders
+in both the component viewer and live panel. `trajectory_range_wheels.hpp` uses
+single-frame detents at slow speed, 10-frame steps at 100+ source frames and
+100-frame steps at 1,000+ frames for faster drags. Values are bounded, stop on
+release, and publish once. Heartbeats preserve drafts and pending configuration;
+desktop configuration publishes atomically (ISSUE-72). The source-frame readout
+retains exact entry, and the 500-frame Load confirmation remains. The registered
+Simulation jobs tour checks slow/fast gestures and stereo wheel pixels.
+NAMD/oxDNA/LAMMPS stream eight-frame pages (two retained); SNUPI seeks indexed
+frames. NAMD ion/cell companions use the exact sparse page, cached PSF row/species
+tables and the shared affine; drawing waits for matching DNA. Shared suboptions and
+real progress are mirrored, including indeterminate preparation and buffering.
+The six-map wheel is docked around the left controller's touchpad using the
+existing prompt and triple haptic pulse. Its sectors show radial gradients only;
+the tablet keeps the horizontal scale. Input is modal through the release frame.
+P1 RunPod's periodic-image correction and picker checks are documented in the
+[follow-up audit](../docs/audits/vr_palette_pbc_20261012.md).
+
+Native scene reads/normalization/bounds run on a worker; geometry uploads stage
+under a per-frame budget and playback reuses the atlas. See the
+[October implementation audit](../docs/audits/vr_simulations_20261012.md) for actual
+24HB compositor measurements, validation coverage and remaining physical checks.
+90 FPS is a measured target, not an unconditional guarantee. Atomistic remains
+outside this iteration. The desktop A/B gallery remains available for reference;
+its artificial loader is isolated from the real native simulation menu.
 
 ## Join clusters (2026-10-13)
 
@@ -886,20 +917,13 @@ runs the isolated `room-ui` demo/validation. All four profiles pass stereo blur,
 calibrated-edge and actual desktop checks. Worn-headset review remains pending.
 See [usage](../docs/vr_room_ui.md) and [audit](../docs/audits/vr_room_ui_20260928.md).
 
-## Simulation results (2026-09-28)
+## Earlier static simulation results (2026-09-28)
 
-The left Simulations tab now mirrors desktop engine tabs and job selection through
-`vr_simulations.js` and `simulation_panel.hpp`. Selecting a job extends a separately
-scrollable Visualizations pane to the right. Native touchpad focus/Trigger and ray
-input invoke the desktop's real result handlers; trajectories are omitted. Actual
-static meshes use the existing view-tools scene feed. **Frame result** uses result
-bounds. The Debug Left-sidebar tour `simulations` uses private copies of completed
-`2hb_1xT` jobs, including archived NAMD results. See [usage](../docs/vr_simulations.md)
-for operation and the known, deferred CanDo small-design predicted-shape bug.
-The complete tour verified 22 available static modes; a final navigation campaign
-passed all four motion profiles with one mode per engine. Actual stereo/menu and
-desktop-mirror checks passed. Physical headset comfort remains pending. Exact
-coverage and failed attempts: [audit](../docs/audits/vr_simulations_20260928.md).
+The initial static-only implementation and its 22-mode coverage are historical:
+[September audit](../docs/audits/vr_simulations_20260928.md). The October native menu
+above replaces its separately expanding pane and adds trajectory transport. The
+known CanDo small-design predicted-shape bug remains deferred by the user; framing
+that result establishes visibility, not scientific correctness.
 
 ## Standing user requirement: organized VR tours
 

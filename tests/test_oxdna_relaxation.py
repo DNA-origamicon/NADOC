@@ -6369,7 +6369,7 @@ def test_composite_trajectory_binary_matches_json_and_reports_each_phase(
         "keys": legacy["keys"],
         "stages": legacy["stages"],
         "markers": legacy["markers"],
-        "frame_start": 0, "total_n_frames": legacy["n_frames"],
+        "frame_start": 0, "frame_step": 1, "total_n_frames": legacy["n_frames"],
     }
     off = 20 + header_len
     off += (4 - (off % 4)) % 4
@@ -6632,3 +6632,24 @@ def test_composite_selected_range_matches_full(design, geometry, tmp_path):
     assert selected["n_frames"] == 3
     assert selected["frames"] == full["frames"][2:5]
     assert max(total for _, total in progress) == 3
+
+
+def test_composite_binary_interval_crosses_stage_boundary(design, geometry, tmp_path):
+    import struct
+    from backend.core import oxdna_health as oh
+    ref, first, second = (tmp_path / name for name in ('ref.dat', 'first.dat', 'second.dat'))
+    _write_traj(design, geometry, ref, 1)
+    _write_traj(design, geometry, first, 6)
+    _write_traj(design, geometry, second, 4)
+    stages = [('relax', 'relax', first), ('production', 'production', second)]
+    full = oh.composite_trajectory(design, stages, ref, max_frames=0)
+    calls = []
+    buf = oh.pack_composite_trajectory_bin(design, stages, ref, max_frames=0,
+        frame_start=2, frame_end=10, frame_step=3,
+        progress=lambda phase, done, total: calls.append((phase, done, total)))
+    _, _, count, keys, header_len = struct.unpack_from('<5I', buf)
+    assert count == 3
+    frames = np.frombuffer(buf, dtype='<f4', offset=(20+header_len+3)&~3).reshape(count, keys, 6)
+    expected = np.asarray(full['frames'])[2:11:3].reshape(count, keys, 9)[:,:,:6]
+    assert np.allclose(frames, expected, atol=1e-5)
+    assert any(phase == 'align' and total == 3 for phase, _, total in calls)
