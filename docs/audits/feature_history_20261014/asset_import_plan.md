@@ -39,14 +39,48 @@ the oracle.
   topology has a typed codec that separates current owners from historical
   definitions; ambiguous historical co-ownership remains unsupported.
 
-Remaining source work includes large-input transport/capture measurements,
-validation of inactive loadout closure, source restoration/repair UI, full
+The next increment adds pinned catalog particles, supported conjugation lifecycle,
+unbound thiol grafts and [bounded transport/inactive-source auditing](document_transport.md).
+Remaining source work includes larger-input capture qualification,
+source restoration/repair UI, full
 conjugation/NP decoration and placement coverage, topology-format imports, typed
 rigid copy and explicit physical-source provenance. Recovery blobs deliberately
 remain outside input proof; poisoned recovery bytes must not invalidate an
 otherwise reproducible native recipe. No source garbage collection is enabled.
 See `implementation.md` and `validation_inputs_duplex_p4.json` for executed checks.
 The architectural sections below preserve the fuller P4 plan.
+
+## P4c contract decisions
+
+Small captured proteins can be conjugated to one part overhang using the native
+chemical-site/element-validation gate. Attachment, binder and group identities
+are recorded before execution. Existing free placement conversion preserves its
+attachment ID. Explicit binder ownership supports constrained delta movement,
+visibility and guarded deletion. Strand references and directional residue
+references prevent deleting another feature's resources. Absolute poses,
+conjugation-atom changes, free-conjugate movement and coupled ownership need
+separate contracts; no scientific placement repair is implied here.
+
+Unbound thiol graft create/replace/delete records the exact old conjugation IDs,
+the new stable namespace, selected scheme, sequence, count, end, spacer and seed.
+The existing scientific builder is unchanged. Native admission is 128 handles
+and 50,000 generated nucleotides. Larger or opaque unsupported ownership retains
+an explicit legacy receipt; errors after native admission never fall back.
+
+Quantum dots retain existing create/patch/delete feature kinds with a strict
+`quantum_dot_version` discriminator. Each import pins the selected catalog JSON
+entry, bounded to 64 KiB; replay never consults a mutable catalog, path or URL.
+Diameter and pose remain editable. Whole-part provenance conservatively reports
+the catalog as imported input, without claiming that external vendor data is
+native construction. Optional spectra plots remain presentation data.
+The native diameter and movement formulas are unchanged. Parsed metadata must
+be finite, with positive ordered size ranges, before publication.
+
+This pinning policy is NADOC's inference from established versioned input
+practice. Onshape documents that updated material libraries do not change
+existing assignments until reapplied, and FeatureScript imports carry explicit
+document/version references. Sources: [material updates](https://cad.onshape.com/help/Content/PartStudio/customizing_part_materials.htm)
+and [FeatureScript imports](https://cad.onshape.com/FsDoc/imports.html).
 
 ## Architectural decisions
 

@@ -5,7 +5,7 @@ from typing import Literal, Optional
 import numpy as np
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictInt
 
 from backend.api import state as design_state
 from backend.api.crud import _design_response
@@ -19,7 +19,7 @@ from backend.core.nanoparticle import (
 )
 from backend.core.conjugate_strands import groups_without_strands
 from backend.core.quantum_dots import (
-    DATA_DIR as QUANTUM_DOT_DATA_DIR, catalog_entry, create_quantum_dot,
+    DATA_DIR as QUANTUM_DOT_DATA_DIR, catalog_entry,
     quantum_dot_catalog, validate_quantum_dot_diameter,
 )
 
@@ -43,6 +43,7 @@ class GoldNanosphereCreate(BaseModel):
 class QuantumDotCreate(BaseModel):
     catalog_id: str
     diameter_nm: Optional[float] = Field(default=None, gt=0.0, le=1000.0)
+    expected_revision: StrictInt | None = Field(default=None, ge=0)
 
 
 class GizmoMove(BaseModel):
@@ -113,26 +114,11 @@ def get_quantum_dot_spectra(catalog_id: str):
 
 @router.post("/design/nanoparticles/quantum-dots", status_code=201)
 def import_quantum_dot(body: QuantumDotCreate) -> dict:
-    try:
-        particle = create_quantum_dot(body.catalog_id, body.diameter_nm)
-    except KeyError:
-        raise HTTPException(404, detail="Quantum dot not found in catalog.")
-    except ValueError as exc:
-        raise HTTPException(422, detail=str(exc))
+    from backend.api.part_quantum_dot_commands import record_import
 
-    def mutate(design: Design) -> None:
-        design.nanoparticles = [*design.nanoparticles, particle]
-
-    updated, report, _ = design_state.mutate_with_feature_log(
-        "nanoparticle-create",
-        f"Import {particle.quantum_dot.product_name} quantum dot ({particle.diameter_nm:g} nm)",
-        {"nanoparticle_id": particle.id, "catalog_id": body.catalog_id,
-         "diameter_nm": particle.diameter_nm},
-        mutate,
-    )
-    response = _design_response(updated, report)
-    response["nanoparticle_id"] = particle.id
-    return response
+    updated, report, identity = record_import(body.catalog_id, body.diameter_nm,
+                                            expected_revision=body.expected_revision)
+    return {**_design_response(updated, report), "nanoparticle_id": identity}
 
 
 @router.post("/design/nanoparticles/gold-nanospheres", status_code=201)
@@ -179,6 +165,12 @@ def patch_nanoparticle(nanoparticle_id: str, body: NanoparticlePatch) -> dict:
         raise HTTPException(400, detail="Invalid gizmo move dimensions.")
     current = design_state.get_or_404()
     particle = _particle_or_404(current, nanoparticle_id)
+    from backend.api.part_quantum_dot_commands import route_native_target as native_dot, record as record_dot
+    if particle.kind == "quantum_dot" and body.coating is None and native_dot(current, nanoparticle_id):
+        updated, report, _ = record_dot("nanoparticle-patch",
+            f"{'Resize' if body.diameter_nm is not None else 'Move'} quantum dot",
+            {"nanoparticle_id": nanoparticle_id, **body.model_dump(exclude_unset=True)})
+        return _design_response(updated, report)
     from backend.api.part_nanoparticle_commands import record, route_source_free_target
     if body.coating is None and route_source_free_target(current, nanoparticle_id):
         updated, report, _ = record("nanoparticle-patch",
@@ -256,6 +248,11 @@ def patch_nanoparticle(nanoparticle_id: str, body: NanoparticlePatch) -> dict:
 def delete_nanoparticle(nanoparticle_id: str) -> dict:
     current = design_state.get_or_404()
     particle = _particle_or_404(current, nanoparticle_id)
+    from backend.api.part_quantum_dot_commands import route_native_target as native_dot, record as record_dot
+    if particle.kind == "quantum_dot" and native_dot(current, nanoparticle_id):
+        updated, report, _ = record_dot("nanoparticle-delete", "Delete quantum dot",
+                                      {"nanoparticle_id": nanoparticle_id})
+        return _design_response(updated, report)
     from backend.api.part_nanoparticle_commands import record, route_source_free_target
     if route_source_free_target(current, nanoparticle_id):
         updated, report, _ = record("nanoparticle-delete", "Delete gold nanosphere",
@@ -329,6 +326,19 @@ def put_conjugation(nanoparticle_id: str, body: ThiolConjugationRequest) -> dict
     old = [c for c in design.nanoparticle_conjugations if c.nanoparticle_id == nanoparticle_id]
     if any(s.bound_overhang_id for c in old for s in c.surface_strands):
         raise HTTPException(409, detail="Unbind nanoparticle strands before replacing conjugation.")
+    from backend.api import part_thiol_commands
+
+    if part_thiol_commands.native_route_eligible(
+            design, nanoparticle_id, count=body.count, sequence=body.sequence, seed=body.seed):
+        updated, report, _ = part_thiol_commands.record(
+            "nanoparticle-conjugate", f"Conjugate {body.count} thiol-DNA strands to gold nanosphere",
+            {"nanoparticle_id": nanoparticle_id, **body.model_dump()})
+        conjugation = next(item for item in updated.nanoparticle_conjugations
+                           if item.nanoparticle_id == nanoparticle_id)
+        response = _design_response(updated, report)
+        response.update({"conjugation_id": conjugation.id,
+                         "strand_ids": [item.strand_id for item in conjugation.surface_strands]})
+        return response
     try:
         conjugation, helices, strands = build_thiol_conjugation(
             particle, scheme=body.scheme, sequence=body.sequence, count=body.count,
@@ -385,6 +395,13 @@ def delete_conjugation(nanoparticle_id: str) -> dict:
     owned = [c for c in design.nanoparticle_conjugations if c.nanoparticle_id == nanoparticle_id]
     if any(s.bound_overhang_id for c in owned for s in c.surface_strands):
         raise HTTPException(409, detail="Unbind nanoparticle strands before deleting conjugation.")
+    from backend.api import part_thiol_commands
+
+    if part_thiol_commands.native_route_eligible(design, nanoparticle_id):
+        updated, report, _ = part_thiol_commands.record(
+            "nanoparticle-conjugation-delete", "Remove nanoparticle thiol conjugation",
+            {"nanoparticle_id": nanoparticle_id})
+        return _design_response(updated, report)
     strand_ids = {s.strand_id for c in owned for s in c.surface_strands}
     helix_ids = {s.helix_id for c in owned for s in c.surface_strands}
     from backend.core.conjugate_strands import groups_without_strands

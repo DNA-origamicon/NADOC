@@ -57,11 +57,22 @@ class DeleteRequest(_Input):
 
 
 def parse_command(kind, params):
+    if "quantum_dot_version" in params:
+        from backend.api.part_quantum_dot_commands import parse_command as parse_quantum_dot
+        return parse_quantum_dot(kind, params)
     model = {"nanoparticle-create": CreateRequest, "nanoparticle-patch": PatchRequest,
              "nanoparticle-delete": DeleteRequest}.get(kind)
     if model is None:
         raise ValueError("Unsupported source-free nanoparticle command")
     return model.model_validate(params)
+
+
+def resources(kind, params):
+    if "quantum_dot_version" in params:
+        from backend.api.part_quantum_dot_commands import resources as quantum_dot_resources
+        return quantum_dot_resources(kind, params)
+    parse_command(kind, params)
+    return {"sources": (), "imports": False}
 
 
 def _fail(detail, identity, *, missing=False):
@@ -98,7 +109,10 @@ def route_source_free_target(design, identity):
                             detail=error.as_issue()) from error
 
 
-def build(kind, design, params):
+def build(kind, design, params, *, resolver=None):
+    if "quantum_dot_version" in params:
+        from backend.api.part_quantum_dot_commands import build as build_quantum_dot
+        return build_quantum_dot(kind, design, params, resolver=resolver)
     body = parse_command(kind, params)
     identity = body.nanoparticle_id
     if kind == "nanoparticle-create":

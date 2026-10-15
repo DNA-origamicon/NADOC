@@ -211,6 +211,7 @@ def _point(matrix: np.ndarray, xyz) -> np.ndarray:
 def build_thiol_conjugation(
     particle: Nanoparticle, *, scheme: str, sequence: str, count: int,
     attach_end: str = "5p", spacer_nm: float | None = None, seed: int = 1,
+    identity_factory=None, conjugation_id: str | None = None,
 ) -> tuple[NanoparticleConjugation, list[Helix], list[Strand]]:
     sequence = sequence.strip().upper()
     if not sequence or any(base not in "ACGTN" for base in sequence):
@@ -232,8 +233,10 @@ def build_thiol_conjugation(
         start_local = tuple((radius + spacer) * v for v in site)
         end_local = tuple((radius + spacer + max(0.34, 0.34 * (len(sequence) - 1))) * v for v in site)
         start, end = _point(matrix, start_local), _point(matrix, end_local)
-        helix_id = f"__np__{particle.id}__{index}__{uuid.uuid4().hex[:8]}"
-        strand_id = str(uuid.uuid4())
+        helix_id = (f"__np__{identity_factory('thiol-helix', [str(index)])}" if identity_factory
+                    else f"__np__{particle.id}__{index}__{uuid.uuid4().hex[:8]}")
+        strand_id = (identity_factory("thiol-strand", [str(index)]) if identity_factory
+                     else str(uuid.uuid4()))
         overhang_id = f"__np_oh__{strand_id}"
         helix = Helix(
             id=helix_id, axis_start=Vec3(x=float(start[0]), y=float(start[1]), z=float(start[2])),
@@ -256,6 +259,7 @@ def build_thiol_conjugation(
         ))
         helices.append(helix); strands.append(strand)
     conjugation = NanoparticleConjugation(
+        **({"id": conjugation_id} if conjugation_id is not None else {}),
         nanoparticle_id=particle.id, scheme=scheme, sequence=sequence,
         attach_end=attach_end, spacer_nm=spacer, requested_count=count,
         estimated_capacity=estimate["estimated_capacity"],

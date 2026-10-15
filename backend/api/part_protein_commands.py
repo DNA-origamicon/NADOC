@@ -92,6 +92,9 @@ class DeleteRequest(_Input):
 
 
 def parse_command(kind, params):
+    if kind in {"protein-attach-patch", "protein-attach-delete"} and "conjugation_version" in params:
+        from backend.api.part_protein_conjugate_lifecycle import parse_command as parse_lifecycle
+        return parse_lifecycle(kind, params)
     model = {"protein-import": ImportRequest, "protein-attach": AttachRequest,
              "protein-attach-patch": PatchRequest, "protein-attach-delete": DeleteRequest}.get(kind)
     if model is None:
@@ -274,6 +277,9 @@ def _delete(design, attachment):
 
 
 def build(kind, design, params, *, resolver=None):
+    if kind in {"protein-attach-patch", "protein-attach-delete"} and "conjugation_version" in params:
+        from backend.api.part_protein_conjugate_lifecycle import build as build_lifecycle
+        return build_lifecycle(kind, design, params)
     from uuid import NAMESPACE_URL, uuid5
 
     from backend.core.cluster_autodetect import with_default_cluster

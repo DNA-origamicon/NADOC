@@ -1731,8 +1731,8 @@ def load_design(body: FilePathRequest) -> dict:
     if not os.path.isfile(path):
         raise HTTPException(400, detail=f"File not found: {path}")
     try:
-        with open(path, encoding="utf-8") as f:
-            text = f.read()
+        from backend.core.part_document_io import read_file
+        text = read_file(path).decode("utf-8")
         design = Design.from_json(text)
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to load design: {exc}") from exc
@@ -1765,7 +1765,9 @@ def _install_loaded_design(design: Design) -> dict:
     report = validate_design(design)
     # New lineage (fresh load/import) — see the matching comment in load_design above:
     # slim response now, GET /design/feature-log/full backfills bodies in the background.
-    return _design_response(design, report, full_feature_log=False)
+    from backend.core.part_source_audit import with_source_warnings
+    return with_source_warnings(_design_response(design, report, full_feature_log=False),
+                                design, loadout_id=design.active_loadout_id)
 
 
 @router.post("/library/open-part", status_code=200)
@@ -1807,7 +1809,8 @@ def import_design(body: DesignImportRequest) -> dict:
     recentering is only applied to non-native imports.
     """
     try:
-        design = Design.from_json(body.content)
+        from backend.core.part_document_io import check_text
+        design = Design.from_json(check_text(body.content))
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to parse design: {exc}") from exc
     return _install_loaded_design(design)

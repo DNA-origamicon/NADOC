@@ -130,6 +130,19 @@ def read_verified(path: Path, source: InputSource) -> bytes:
     return verify(source, data)
 
 
+def command_sources(kind, params) -> tuple[InputSource, ...]:
+    """Descriptors owned by supported source-bearing command families.
+
+    This cheap declaration is shared by portability and explicit source audit;
+    executor schemas still decide whether a command is admitted for proof.
+    """
+    source_bearing = kind == "protein-import" or (
+        kind == "nanoparticle-create" and "quantum_dot_version" in params)
+    if (not source_bearing or params.get("_proof_version") != 1 or "source" not in params):
+        return ()
+    return (InputSource.model_validate(params["source"]),)
+
+
 def portable_sources(design) -> dict[str, InputSource]:
     """Validate portable byte closure without parsing or regenerating geometry.
 
@@ -145,13 +158,9 @@ def portable_sources(design) -> dict[str, InputSource]:
         children = entry.children if entry.feature_type == "routing-cluster" else [entry]
         for child in children:
             kind, params = command_input(child)
-            if kind != "protein-import":
-                continue
-            if "source" not in params or params.get("_proof_version") != 1:
-                continue
-            source = InputSource.model_validate(params["source"])
-            resolver(source)
-            descriptors[source.sha256] = source
+            for source in command_sources(kind, params):
+                resolver(source)
+                descriptors[source.sha256] = source
     for sha256, blob in design.input_sources.items():
         if sha256 in descriptors:
             continue

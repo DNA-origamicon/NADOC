@@ -19,6 +19,7 @@ from backend.core.design_loadouts import (
 )
 from backend.core.models import DesignLoadout
 from backend.core.validator import validate_design
+from backend.core.part_source_audit import audit_current_sources, audit_loadout_sources, with_source_warnings
 
 router = APIRouter()
 
@@ -29,6 +30,14 @@ class LoadoutCreateBody(BaseModel):
 
 class LoadoutRenameBody(BaseModel):
     name: str
+
+
+@router.get("/design/loadouts/source-audit")
+def audit_loadout_inputs() -> dict:
+    """Explicit bounded inspection; never invoked by ordinary edit responses."""
+    design = design_state.get_or_404()
+    return {"current": audit_current_sources(design, loadout_id=design.active_loadout_id),
+            **audit_loadout_sources(design)}
 
 
 @router.post("/design/loadouts", status_code=200)
@@ -77,9 +86,9 @@ def select_loadout(loadout_id: str, save_current: bool = True) -> dict:
     design_state.set_design_branch(updated)
     # Branch switch — the restored design's feature log has no relation to
     # whatever the client currently has cached.
-    return _design_response_with_geometry(
+    return with_source_warnings(_design_response_with_geometry(
         updated, validate_design(updated), full_feature_log=True,
-    )
+    ), updated, loadout_id=loadout_id)
 
 
 @router.post("/design/loadouts/activate-editable", status_code=200)
@@ -110,9 +119,9 @@ def activate_last_editable_loadout() -> dict:
     design_state.set_design_branch(updated)
     # Branch switch — the restored design's feature log has no relation to
     # whatever the client currently has cached.
-    return _design_response_with_geometry(
+    return with_source_warnings(_design_response_with_geometry(
         updated, validate_design(updated), full_feature_log=True,
-    )
+    ), updated, loadout_id=target.id)
 
 
 @router.patch("/design/loadouts/{loadout_id}", status_code=200)
@@ -163,6 +172,7 @@ def delete_loadout(loadout_id: str) -> dict:
             raise HTTPException(500, detail=f"Failed to restore next loadout: {exc}") from exc
         updated = restored.copy_with(loadouts=remaining, active_loadout_id=next_id)
     design_state.set_design(updated)
-    return _design_response_with_geometry(
+    response = _design_response_with_geometry(
         updated, validate_design(updated), full_feature_log=branch_switch,
     )
+    return with_source_warnings(response, updated, loadout_id=next_id) if branch_switch else response

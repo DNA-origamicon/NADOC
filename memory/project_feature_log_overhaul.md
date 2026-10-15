@@ -26,7 +26,7 @@ keep assemblies deferred. Consult the implementation ledger for subsequent fixes
 
 ## Native recipe continuation (2026-10-15)
 
-P3 plus initial P4 input/placement/duplex slices now has 109 versioned kinds (with method/action restrictions), pure native
+P3 plus current P4 input/attachment slices now has 112 versioned kinds (with method/action restrictions), pure native
 builders shared by routes and proof, source-based continuation references,
 thread-local deterministic routing IDs, actual-failure cascade analysis, and one
 independently rebuilt prefix retained per edit. No saved outputs are proof inputs.
@@ -61,7 +61,15 @@ cascade reasons. Scoped replay preserves source tables and uses typed historical
 relocation definitions without treating them as live geometry. Native roots skip
 legacy load/response inference; builders must author default clusters explicitly.
 Project blobs are optional derived caches; portable inline inputs remain authority.
-Large-input transport, inactive-loadout closure and further P4 families remain.
+P4c adds small native protein conjugation plus explicitly owned constrained
+move/visibility/delete, unbound thiol graft create/replace/delete, and pinned
+quantum-dot catalog inputs with native diameter/pose edits. Existing operation
+kinds use strict discriminators without adding model fields. The shared identity
+module is in duplex numerical pins; prior pins are not silently upgraded.
+Document reads/decompression are bounded separately from proof capture, and
+explicit inactive-loadout source audits retain broken drafts with typed warnings.
+Ordinary edits do not run those audits. Further import/decoration families,
+large-asset capture qualification and physical provenance remain P4 work.
 
 `part_recipe_capabilities.py` exposes API/editor limitations explicitly. No new
 frontend controls were added. Long jobs evaluate privately, omit candidates from

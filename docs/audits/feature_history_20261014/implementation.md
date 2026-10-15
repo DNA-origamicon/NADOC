@@ -10,7 +10,7 @@ Scope approved October 14, 2026: implement standard-part validation, editability
 | P1 | Standard-part recording transactions, executable replay registry and evidenced cleanup | Foundation implemented below. Retain legacy callbacks and compatibility recovery; no claim of general isolated evaluation |
 | P2 | Explicit recipe roots/versions, authoritative-field classification, read-only verification and incremental dependencies | Implementation exit checks complete: independent nonempty replay, content-pinned roots, typed dependencies, fingerprints, bounded capture/jobs and stale/cancel handling. Supported-family expansion continues in P3/P4; validation debt below remains explicit |
 | P3 | Native DNA command families and generated construction | 96 versioned kinds with method/action restrictions, joined/connectivity input compilation and bounded native-source CPD conversion/relaxation implemented. See the latest evidence and explicit scope limits below; full generated asset/attachment histories belong to P4 |
-| P4 | Standard-part assets and attachments | In progress. Source-free gold, pinned small protein inputs/placements and duplex lifecycle implemented; bounded native duplex relaxation added. Full import/attachment coverage and physical-result provenance remain open |
+| P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol, pinned small protein/catalog inputs, supported protein conjugation lifecycle and duplex lifecycle/relaxation implemented. Bounded document transport and explicit inactive-source audits added. Full import/attachment coverage and physical-result provenance remain open |
 | P5 | Standard-part repair, drafts, desktop and part-mode VR | Pending. Revision-bound impact previews, failed/blocked diagnostics, reference replacement, last-successful-state display, undo/reload |
 | P6 | Strict standard-part agent transactions and legacy retirement | Pending. Pure candidate execution outside long-held locks, expected-revision publication, registered command batches, bypass closure and explicit import exceptions |
 
@@ -61,7 +61,7 @@ No frontend behavior was changed in this foundation; no molecular geometry algor
 
 ## Current implementation entry point
 
-P0–P2 implementation exit checks are recorded below. P3 is underway with native bundle construction and its parameter-edit path; expand the remaining native DNA command families next. Keep unsupported contracts unverified, retain the import/native distinction, and keep all proof work off automatic edit, frame and scrub paths. Broad-suite/environment debt is separate from these implementation gates.
+P0–P3 implementation exit checks are recorded below; chronological entries retain their original phase status. P4 is the active implementation phase. Keep unsupported contracts unverified, retain the import/native distinction, and keep full proof off automatic edit, frame and scrub paths. Broad-suite/environment debt is separate from these implementation gates.
 
 ## P2 first increment — explicit provenance and assessment
 
@@ -519,3 +519,54 @@ relaxation after the shared runtime extraction. Changed Python files pass Ruff;
 warnings. Detailed results and limitations are recorded in
 `validation_inputs_duplex_p4.json`. Existing broad-suite/archive limitations
 remain open; no browser/headset or physical simulation run is claimed.
+
+## P4c conjugation, catalog inputs and document boundaries — October 15
+
+There are now 112 versioned command kinds, with additional strict discriminators
+for owned protein lifecycle and catalog particle operations. Small captured
+proteins can form native conjugates, retain exact attachment/binder/group IDs,
+move through the existing constrained delta solver, change visibility, and be
+deleted only after typed strand and directional residue dependency checks.
+Unrelated groups survive deletion. Existing free-placement conversion conflict
+responses and atomic rollback behavior are retained. Legacy cleanup now prefers
+current explicit binder ownership over historical guesses. Live orchestration
+was extracted into `part_protein_recording.py`; routes remain thin adapters.
+
+Unbound source-free thiol grafts record complete input choices and exact old
+ownership for replacement/removal. Stable site IDs are supplied to the existing
+native builder. Larger, coupled and genuinely opaque unsupported selections
+retain legacy unverified behavior before admission; a native error never retries
+through legacy mutation. Quantum-dot recipes pin the selected catalog entry and
+use unchanged native size/pose calculations. Replay needs no mutable library or
+network. Catalog metadata counts as imported evidence, with editable native
+parameters; source hashes alone cannot certify changed particle outputs.
+
+Document input decoding now has independent byte bounds before JSON parsing,
+including gzip/base64, revisions, packages and peer transfer. ZIP64 and streamed
+simulation members retain the standard-library path. An explicit source audit
+reports missing/corrupt inactive branch evidence without discarding drafts.
+Only activated state gets load warnings; ordinary edits and proof never decode
+inactive snapshots. These transport bounds do not increase proof/capture limits
+or claim to cap process heap usage. See [transport details](document_transport.md).
+
+Nine warm samples at 1/128/100 handles (8/1,024/50,000 bases) had median native
+build times of 0.23/8.12/5.83 ms, capture times 1.19/14.51/11.51 ms and proof
+times 0.58/14.50/10.78 ms. All final samples verified; the largest observed build
+sample was 41.9 ms. These include ordinary Python allocation behavior and are
+not hard latency promises or HTTP/render qualification. Capture budgets stay
+unchanged; [raw evidence](thiol_capture_benchmark_p4.json).
+
+Focused validation: **708 passed across 36 files**. Changed-file Ruff and
+whitespace checks pass; global lint retains five unchanged unused imports, and
+memory lint retains six errors/60 warnings. Corrected findings are recorded in
+`validation_conjugates_transport_p4.json`. The selector still requests the FULL
+suite; Archive remains unavailable, so no broad pass is claimed. No frontend or
+scientific algorithm changed; `main.js` LOC delta is zero. Shared identity edits
+invalidate prior duplex numerical pins conservatively; their explicit upgrade
+workflow remains P5 work, without silently substituting a newer engine.
+
+P4 remains open. Prioritize ordinary unbound thiol particle movement/resizing,
+then the [bounded topology-import sequence](topology_import_plan.md). Coatings,
+biotin/coupled attachment contracts, typed rigid copy, larger asset capture and
+physical-source provenance still need independent admission/validation. P5
+repair drafts/UI and P6 strict automation are pending. Assemblies remain deferred.

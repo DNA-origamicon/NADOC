@@ -415,24 +415,22 @@ def _native_placement_eligible(design: Design, attachment) -> bool:
 
 
 def _record_native_placement(kind, label, params, *, prepare=None):
-    """Resolve authored defaults, evaluate and record under the document lock."""
-    from backend.api.part_protein_commands import build
-    from backend.core.part_command_errors import CommandContractError
+    from backend.api.part_protein_recording import record_placement
 
-    params.update(_proof_version=1, protein_version=1)
+    return record_placement(kind, label, params, prepare=prepare)
 
-    def apply(design):
-        if prepare is not None:
-            prepare(design, params)
-        return build(kind, design, params)
 
-    try:
-        updated, report, _entry = design_state.mutate_with_feature_log(kind, label, params, apply)
-    except CommandContractError as error:
-        raise HTTPException(422, detail={"status": error.status, **error.as_issue()}) from error
-    except ValueError as error:
-        raise HTTPException(422, detail=str(error)) from error
-    return updated, report
+def _native_conjugate_lifecycle_eligible(kind, design, attachment, patch=None):
+    from backend.api.part_protein_conjugate_lifecycle import native_route_eligible
+
+    return native_route_eligible(kind, design, attachment, patch)
+
+
+def _record_native_conjugate_lifecycle(kind, attachment, patch=None):
+    from backend.api.part_protein_recording import record_conjugate_lifecycle
+
+    return record_conjugate_lifecycle(kind, attachment, patch,
+        design_response=_design_response, geometry_response=_design_response_with_geometry)
 
 
 class ProteinAttachRequest(BaseModel):
@@ -543,6 +541,20 @@ class ProteinConjugateRequest(BaseModel):
     azide_end: Literal["5p", "3p"] = "5p"
 
 
+def _native_conjugation_eligible(design, body):
+    from backend.api.part_protein_conjugation_commands import native_route_eligible
+
+    return native_route_eligible(design, body.asset_id, body.overhang_id)
+
+
+def _record_native_conjugation(body, operation_id, started):
+    from backend.api.part_protein_recording import record_conjugation
+
+    return record_conjugation(body, operation_id, started,
+        strand_occupancy=_strand_occupancy, local_changed_helices=_local_changed_helices,
+        geometry_response=_design_response_with_geometry)
+
+
 @router.post("/design/protein/conjugate", status_code=201)
 def conjugate_protein_to_overhang(body: ProteinConjugateRequest) -> dict:
     """Commit an azide-oligo conjugation into the design (one undo step).
@@ -571,6 +583,9 @@ def conjugate_protein_to_overhang(body: ProteinConjugateRequest) -> dict:
         raise HTTPException(
             409, detail=f"Conjugation operation {body.operation_id} was already committed."
         )
+    if _native_conjugation_eligible(design, body):
+        return _record_native_conjugation(body, operation_id, started)
+
     asset = _resolve_protein_asset(body.asset_id)
     if asset is None:
         raise HTTPException(404, detail=f"Protein asset {body.asset_id} not found.")
@@ -809,6 +824,9 @@ def patch_protein_attachment(
         label = "Move protein" if body.pose is not None or body.gizmo_move is not None else "Edit protein attachment"
         updated, report = _record_native_placement("protein-attach-patch", label, params)
         return _design_response(updated, report)
+    patch = body.model_dump(mode="json", exclude_unset=True)
+    if _native_conjugate_lifecycle_eligible("protein-attach-patch", design, current_attachment, patch):
+        return _record_native_conjugate_lifecycle("protein-attach-patch", current_attachment, patch)
 
     selected_candidate = None
     if body.conjugation_atom_serial is not None:
@@ -957,10 +975,12 @@ def delete_protein_attachment(attachment_id: str) -> dict:
             "protein-attach-delete", "Detach protein", {"attachment_id": attachment_id},
         )
         return _design_response(updated, report)
+    if _native_conjugate_lifecycle_eligible("protein-attach-delete", design, attachment):
+        return _record_native_conjugate_lifecycle("protein-attach-delete", attachment)
 
-    binder_id = None
+    binder_id = attachment.binder_strand_id
     overhang_id = getattr(attachment.target, "overhang_id", None)
-    if overhang_id is not None:
+    if binder_id is None and overhang_id is not None:
         # New entries carry exact IDs. Legacy entries are repairable only when
         # history proves a conjugation and the target has one unambiguous binder.
         log_entry = next(

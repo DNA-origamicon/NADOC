@@ -9,7 +9,6 @@ mtime/last-writer-wins.
 
 from __future__ import annotations
 
-import base64
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -26,6 +25,10 @@ import uuid
 
 from backend.core.design_loadouts import decode_snapshot, encode_snapshot
 from backend.core.models import Design, DesignLoadout
+from backend.core.part_document_io import (
+    MAX_COMPRESSED_BYTES, MAX_METADATA_BYTES, check_text, decode_gzip,
+    decode_snapshot_bytes, read_file,
+)
 
 
 FORMAT = "nadoc.project-revision"
@@ -200,12 +203,12 @@ class ProjectRevisionStore:
         path = self.ref_path(project_id, loadout_id)
         if not path.is_file():
             return None
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(read_file(path, limit=MAX_METADATA_BYTES, label="Project branch metadata"))
         return data.get("head_revision_id")
 
     def branch_ref(self, project_id: str, loadout_id: str) -> dict | None:
         path = self.ref_path(project_id, loadout_id)
-        return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+        return json.loads(read_file(path, limit=MAX_METADATA_BYTES, label="Project branch metadata")) if path.is_file() else None
 
     def commit(
         self,
@@ -228,7 +231,7 @@ class ProjectRevisionStore:
         """
         self.stage_design_inputs(design)
         stripped = design.model_copy(update={"loadouts": [], "active_loadout_id": None, "last_editable_loadout_id": None})
-        snapshot = stripped.model_dump_json().encode("utf-8")
+        snapshot = check_text(stripped.model_dump_json()).encode("utf-8")
         snapshot_sha = hashlib.sha256(snapshot).hexdigest()
         identity = {
             "schema_version": SCHEMA_VERSION,
@@ -253,7 +256,7 @@ class ProjectRevisionStore:
             _atomic_bytes(snapshot_path, gzip.compress(snapshot, mtime=0))
         object_path = self.object_path(design.id, revision_id)
         if object_path.exists():
-            existing = json.loads(object_path.read_text(encoding="utf-8"))
+            existing = json.loads(read_file(object_path))
             if any(existing.get(k) != record.get(k) for k in identity):
                 raise ValueError(f"revision object collision: {revision_id}")
         else:
@@ -468,7 +471,7 @@ class ProjectRevisionStore:
         project = self._project(project_id)
         refs = {}
         for path in sorted((project / "refs").glob("*.json")):
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = json.loads(read_file(path, limit=MAX_METADATA_BYTES, label="Project branch metadata"))
             refs[data["loadout_id"]] = data
         objects = sorted(path.stem for path in (project / "objects").glob("*.json"))
         snapshots = sorted(
@@ -495,16 +498,13 @@ class ProjectRevisionStore:
 
     def export_revision(self, project_id: str, revision_id: str) -> dict:
         return json.loads(
-            self.object_path(project_id, revision_id).read_text(encoding="utf-8")
+            read_file(self.object_path(project_id, revision_id), label="Project revision metadata")
         )
 
     def ingest_snapshot(
         self, project_id: str, snapshot_sha256: str, compressed: bytes
     ) -> None:
-        try:
-            raw = gzip.decompress(compressed)
-        except (gzip.BadGzipFile, EOFError) as exc:
-            raise ValueError("project snapshot checksum/decompression failure") from exc
+        raw = decode_gzip(compressed, label="Project snapshot")
         if hashlib.sha256(raw).hexdigest() != snapshot_sha256:
             raise ValueError("project snapshot checksum mismatch")
         design = Design.model_validate_json(raw)
@@ -542,15 +542,17 @@ class ProjectRevisionStore:
         return self.read_revision(record["project_id"], expected)
 
     def load_design(self, project_id: str, revision_id: str) -> Design:
-        data = json.loads(self.object_path(project_id, revision_id).read_text(encoding="utf-8"))
+        # Legacy revision objects may embed a base64 snapshot. The document
+        # bound applies to that JSON envelope before its separate decoded gate.
+        data = json.loads(read_file(self.object_path(project_id, revision_id)))
         if data.get("format") != FORMAT or data.get("schema_version") != SCHEMA_VERSION:
             raise ValueError("unsupported project revision format")
         if "snapshot_gz_b64" in data:  # v1 development compatibility
-            raw = gzip.decompress(base64.b64decode(data["snapshot_gz_b64"]))
+            raw = decode_snapshot_bytes(data["snapshot_gz_b64"])
         else:
-            raw = gzip.decompress(
-                self.snapshot_path(project_id, data["snapshot_sha256"]).read_bytes()
-            )
+            raw = decode_gzip(read_file(
+                self.snapshot_path(project_id, data["snapshot_sha256"]),
+                limit=MAX_COMPRESSED_BYTES, label="Compressed project snapshot"))
         if hashlib.sha256(raw).hexdigest() != data.get("snapshot_sha256"):
             raise ValueError("project revision snapshot checksum mismatch")
         design = Design.model_validate_json(raw)
@@ -560,7 +562,7 @@ class ProjectRevisionStore:
 
     def read_revision(self, project_id: str, revision_id: str) -> StoredRevision:
         data = json.loads(
-            self.object_path(project_id, revision_id).read_text(encoding="utf-8")
+            read_file(self.object_path(project_id, revision_id), label="Project revision metadata")
         )
         if data.get("format") != FORMAT or data.get("schema_version") != SCHEMA_VERSION:
             raise ValueError("unsupported project revision format")
@@ -769,11 +771,11 @@ def migrate_job_revision_provenance(
                 skipped += 1
                 continue
             try:
-                snapshot = Design.from_json(frozen.read_text(encoding="utf-8"))
+                snapshot = Design.from_json(read_file(frozen).decode("utf-8"))
                 if job.design_source_path:
                     source = workspace / _norm(job.design_source_path)
                     if source.is_file():
-                        current = Design.from_json(source.read_text(encoding="utf-8"))
+                        current = Design.from_json(read_file(source).decode("utf-8"))
                         snapshot = snapshot.model_copy(update={"id": current.id})
                 revision = record_simulation_revision(
                     workspace, snapshot, engine, job.job_id

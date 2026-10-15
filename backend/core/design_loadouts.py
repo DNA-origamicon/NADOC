@@ -12,21 +12,20 @@ import gzip
 import uuid
 
 from backend.core.models import Design, DesignLoadout
+from backend.core.part_document_io import check_text, decode_snapshot_bytes
 
 
 def encode_snapshot(design: Design) -> tuple[str, int]:
     """Encode a branch snapshot while avoiding recursive loadout nesting."""
     stripped = design.model_copy(update={"loadouts": [], "active_loadout_id": None})
-    raw = stripped.model_dump_json().encode("utf-8")
+    raw = check_text(stripped.model_dump_json()).encode("utf-8")
     compressed = gzip.compress(raw, compresslevel=6)
     return base64.b64encode(compressed).decode("ascii"), len(raw)
 
 
-def decode_snapshot(payload_b64: str) -> Design:
+def decode_snapshot(payload_b64: str, *, max_bytes=None) -> Design:
     """Decode a loadout snapshot into a validated design."""
-    if not payload_b64:
-        raise ValueError("empty loadout snapshot payload")
-    raw = gzip.decompress(base64.b64decode(payload_b64.encode("ascii")))
+    raw = decode_snapshot_bytes(payload_b64, limit=max_bytes)
     return Design.model_validate_json(raw)
 
 
