@@ -291,3 +291,26 @@ proof-and-edit cases pass. The latter cover routed and precursor Joins from an
 empty native root across processes. The two original synchronous geometry
 algorithms remain unchanged. This checkpoint precedes generated-scope schema
 refactoring; required broad validation is still pending for the combined changes.
+
+At `afe9cb5d`, guarded **FAST** completed with **11,301 passed, 21 skipped,
+23 failed and eight errors** in 181.39 seconds. All failed/error nodes match the
+retained baseline; both new Join cold-replay cases pass. There are no individual
+five-second timing violators; aggregate runtime is comparable to the prior
+181.00-second run. No marker, threshold or assertion was weakened.
+
+`just test-smart` initially selected **FULL** because a preexisting user-opened
+test session was active. It was interrupted after 48.13 seconds (1,031 passes,
+four missing-fixture collection errors) because the required Archive mount is
+unavailable. FULL did not complete. The explicit `just test-fast` run above then
+finished; its preexisting tests also produced bulk temporary fixture data. Both
+runs' task-owned pytest directories were removed and absence verified. Further
+broad artifact-producing runs require Archive-backed scratch; focused in-memory
+checks can continue. No user designs, production jobs or historical artifacts
+were removed. Details: [validation_hardening.json](validation_hardening.json).
+
+The next CPD decision is documented in [the conversion contract audit](cpd_conversion_contract.md).
+Conversion and `photoproduct-relax` can consume a physical atomistic reference;
+native proof must explicitly declare its geometry source, template and engine,
+and use a separate bounded long job. The prior 70.70-second measurement included
+conversion plus replay, not one solve. Extending the ordinary deadline or
+storing solved coordinates cannot resolve this missing input contract.
