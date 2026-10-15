@@ -1112,3 +1112,29 @@ outputs were created; normal tiny Vitest caches and existing placement journal
 are preserved. Visual candidate comparison and native VR are the next UI slices.
 See [validation](validation_repair_ui1_p5.json) and [UI contract](repair_ui_plan.md).
 P4/P5/P6 remain open.
+
+## Internal immutable session storage — October 15
+
+The staged strict storage path keeps one sealed immutable full-document revision
+in `session.design`, with no mutable mirror. Explicit internal empty creation
+reserves the actual empty session, prepares content outside the shared lock, then
+compares session identity, revision and host policy before publication. Closing
+or replacing that reservation cannot recreate it. Mutable getters, old capture
+and persistence facades refuse this internal representation explicitly; scalar
+document/revision metadata remains available and compatible.
+
+Native replacement retains immutable source handles for undo instead of copying
+models. Retention admission precedes mutation, preserves the immediate source,
+and rolls back exact handles/stacks/revision on failure. The provisional 32 MB
+cumulative allowance is not a public memory qualification. Populated immutable
+sessions refuse a silent strict-to-compatibility policy transition.
+
+**276 parent-run focused/regression cases pass.** Changed Python Ruff and
+whitespace checks pass. Public immutable creation remains false, and current
+strict HTTP creation retains its existing mutable representation. This is an
+internal reversible checkpoint: typed sibling persistence, pending-record
+protection, independent cold restore, job integration and measured HTTP/GIL
+responsiveness must precede public enablement. Existing files and cache pruning
+behavior are preserved. See [validation](validation_immutable_state_p6.json),
+[storage plan](immutable_part_revision_plan.md) and
+[durability plan](immutable_part_persistence_plan.md). P4/P5/P6 remain open.

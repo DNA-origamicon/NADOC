@@ -11,6 +11,7 @@ from backend.api import doc_context
 def publish_replacement(session, candidate, *, publication_permit=None):
     from backend.api import state
     from backend.api import part_publication_permit as permits
+    from backend.api.part_immutable_storage import is_immutable, retained_history
 
     checked = None
     if publication_permit is None:
@@ -23,7 +24,12 @@ def publish_replacement(session, candidate, *, publication_permit=None):
             session=session, candidate=candidate)
 
     before = session.design
-    snapshot = state._snapshot_copy(before) if before is not None else None
+    immutable = is_immutable(before) or is_immutable(candidate)
+    if immutable and checked is None:
+        from fastapi import HTTPException
+        raise HTTPException(409, detail={"code": "immutable_publication_scope", "detail": "Immutable content requires a registered publication permit"})
+    next_history = retained_history(session, candidate, max_steps=state.MAX_UNDO_STEPS) if immutable else None
+    snapshot = state._snapshot_copy(before) if before is not None and not immutable else None
     history, redo = list(session.history), list(session.redo)
     revision = session.revision
     request_revision = doc_context.current_request_revision()
@@ -31,7 +37,10 @@ def publish_replacement(session, candidate, *, publication_permit=None):
     try:
         if checked is not None:
             permits.check_liveness(checked)
-        if snapshot is not None:
+        if immutable:
+            session.history.clear()
+            session.history.extend(next_history)
+        elif snapshot is not None:
             session.history.append(snapshot)
         session.redo.clear()
         session.design = candidate

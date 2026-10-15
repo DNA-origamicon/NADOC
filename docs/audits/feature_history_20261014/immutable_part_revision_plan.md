@@ -1,8 +1,12 @@
 # Immutable strict-part revisions: minimum migration
 
 Reviewed migration plan, October 15, 2026. The pure immutable preparation and
-materialization foundation passes 49 focused tests. Session storage integration,
-retention, persistence and responsiveness qualification remain pending. No
+materialization foundation passes 49 focused tests. The staged internal
+session-content union and retention path now pass their focused regressions;
+276 parent-run cases cover the state slice and existing permit, HTTP, scalar
+read and cache behavior. Public immutable creation remains disabled. Typed
+persistence, qualified restore, evaluation integration and responsiveness
+qualification remain pending. No
 admission increase or baseline cache is included in this checkpoint. Compatibility
 documents, assemblies and molecular algorithms remain unchanged.
 

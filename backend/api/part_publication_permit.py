@@ -122,7 +122,17 @@ def issue_batch_permit(admission, candidate, *, request_sha256, authoring_sha256
     if not isinstance(cancelled, Event) or cancelled.is_set():
         _refusal("The evaluated candidate was cancelled", code="cancelled")
     source = context.source()
-    if source is None or candidate is source or candidate.id != source.id:
+    if source is None or candidate is source:
+        _refusal("Publication needs a privately decoded candidate for the captured part")
+    from backend.api.part_immutable_storage import immutable_pair, require_sealed
+
+    if immutable_pair(source, candidate):
+        meta = require_sealed(candidate)
+        if (meta.authoring_sha256 != authoring_sha256 or meta.recipe_sha256 != recipe_sha256
+                or not policy.resolve(context.doc_id).strict):
+            _refusal("Immutable candidate does not match its checked transport or strict policy",
+                     code="immutable_publication_scope")
+    elif candidate.id != source.id:
         _refusal("Publication needs a privately decoded candidate for the captured part")
     return _register(_permits, PublicationPermit(), _PermitContext(context, ref(candidate),
         authoring_sha256, recipe_sha256, "registered_composition", expires, cancelled))
@@ -144,6 +154,35 @@ def prepare_empty_creation(doc_id, session, *, name, lattice_type):
     return candidate, permit
 
 
+def admit_empty_creation(doc_id, session):
+    """Lock-owned reservation for host-built immutable empty content only."""
+    from backend.api.part_immutable_storage import require_empty_session
+
+    require_empty_session(session)
+    current = policy.resolve(doc_id)
+    if not current.strict:
+        _refusal("Immutable empty admission requires strict host policy", code="immutable_publication_scope")
+    context = AdmissionContext(doc_id, session.identity, lambda: None, session.revision,
+        current.generation, "create_empty", "", "empty_root_v1")
+    return _register(_admissions, EvaluationAdmission(), context)
+
+
+def prepare_admitted_empty(admission, *, name, lattice_type):
+    """Build/seal outside state lock; this API accepts no authored model/bytes."""
+    from backend.api.part_immutable_revision import prepare_revision
+    from backend.core.part_history_contract import create_empty_part
+
+    context = admission_context(admission)
+    if context is None or context.operation != "create_empty" or context.scope_tag != "empty_root_v1":
+        _refusal("Empty preparation needs its original private creation admission")
+    if type(name) is not str or not name.strip() or len(name) > 1024 or lattice_type not in {"HONEYCOMB", "SQUARE"}:
+        raise ValueError("Empty part creation requires a bounded name and supported lattice")
+    candidate = prepare_revision(create_empty_part(name, lattice_type))
+    permit = _register(_permits, PublicationPermit(), _PermitContext(context, ref(candidate),
+        None, None, "explicit_empty_root", monotonic() + MAX_LIFETIME, None))
+    return candidate, permit
+
+
 def check_publication(permit, *, doc_id, session, candidate):
     """Lock-owned precondition; nothing is consumed until publication succeeds."""
     if type(permit) is not PublicationPermit:
@@ -157,6 +196,8 @@ def check_publication(permit, *, doc_id, session, candidate):
     if not context_matches(context.admission, doc_id, session) or context.candidate() is not candidate:
         _refusal("The publication does not match its source, session or exact candidate")
     check_liveness(context)
+    from backend.api.part_immutable_storage import immutable_pair, is_immutable, require_sealed, require_empty_session
+
     if context.admission.scope_tag == "registered_batch_v1":
         from backend.api.part_batch_publication_scope import admit_batch_source
         from backend.core.part_command_errors import CommandContractError
@@ -164,11 +205,23 @@ def check_publication(permit, *, doc_id, session, candidate):
         # These are fixed typed checks, not caller-supplied callbacks. They also
         # apply to compatibility batch jobs; ordinary legacy edits are separate.
         try:
-            admit_batch_source(session.design)
-            admit_batch_source(candidate)
+            if immutable_pair(session.design, candidate):
+                meta = require_sealed(candidate)
+                if (not policy.resolve(doc_id).strict or meta.authoring_sha256 != context.authoring_sha256
+                        or meta.recipe_sha256 != context.recipe_sha256):
+                    _refusal("Immutable publication lost its checked transport binding", code="immutable_publication_scope")
+            else:
+                admit_batch_source(session.design)
+                admit_batch_source(candidate)
         except CommandContractError as error:
             raise HTTPException(422, detail=error.as_issue()) from error
-    elif context.admission.scope_tag != "empty_root_v1":
+    elif context.admission.scope_tag == "empty_root_v1":
+        if is_immutable(candidate):
+            require_sealed(candidate)
+            require_empty_session(session)
+            if not policy.resolve(doc_id).strict:
+                _refusal("Immutable publication requires strict policy", code="immutable_publication_scope")
+    else:
         _refusal("This publication scope has no host contract")
     return context
 

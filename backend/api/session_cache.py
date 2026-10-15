@@ -326,7 +326,7 @@ def _remove_doc_dir(doc_id: str) -> None:
 def _write_registry(current: dict[str, tuple[int, int]]) -> None:
     docs = []
     for doc_id in sorted(current):
-        design = design_state.peek_design(doc_id)
+        design = design_state.design_metadata_for_doc(doc_id)
         assembly = assembly_state.peek_assembly(doc_id)
         if design is None and assembly is None:
             continue
@@ -334,7 +334,7 @@ def _write_registry(current: dict[str, tuple[int, int]]) -> None:
             {
                 "doc_id": doc_id,
                 "is_default": doc_id == DEFAULT_DOC_ID,
-                "design": _meta(design),
+                "design": design,
                 "assembly": _meta(assembly),
             }
         )

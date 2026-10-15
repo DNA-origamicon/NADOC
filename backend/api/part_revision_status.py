@@ -4,6 +4,7 @@ from fastapi import HTTPException
 
 from backend.api import state
 from backend.api.doc_context import get_current_doc
+from backend.api.part_immutable_storage import content_identity
 
 
 def revision_status_locked(doc_id):
@@ -13,7 +14,7 @@ def revision_status_locked(doc_id):
             "detail": "Document context exceeds the bounded revision read allowance"})
     session = state._sessions.get(doc_id)
     design = None if session is None else session.design
-    identity = None if design is None else design.id
+    identity = content_identity(design)
     if identity is not None and (type(identity) is not str or len(identity) > 1024):
         raise HTTPException(422, detail={"code": "revision_identity_limit",
             "detail": "Document identity exceeds the bounded revision read allowance"})

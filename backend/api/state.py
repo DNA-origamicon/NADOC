@@ -55,7 +55,11 @@ from backend.core.models import (
 )
 from backend.core.lattice import retry_pending_ligations as _retry_pending_ligations
 from backend.core.validator import ValidationReport, validate_design
-
+from backend.api.part_immutable_revision import StrictPartRevision
+from backend.api.part_immutable_storage import (
+    content_metadata as _content_metadata, is_immutable as _is_immutable,
+    mutable_design as _mutable_design,
+)
 
 def _snapshot_copy(design: Design) -> Design:
     """Independent copy of ``design`` for the undo/redo stack and pre/post-mutation
@@ -75,6 +79,7 @@ def _snapshot_copy(design: Design) -> Design:
     """
     # Frame authoring may hold intermediate references while clusters are replaced.
     # Snapshot those values without rerunning document-load validators.
+    _mutable_design(design)
     if design.lattice_frames:
         return design.model_copy(deep=True)
     return Design.model_validate(design.model_dump())
@@ -100,7 +105,7 @@ def current_request_feature_log_entry_id() -> str | None:
 class _DesignSession:
     """Per-document design state: the active design + its undo/redo + extras."""
 
-    design: Design | None = None
+    design: Design | StrictPartRevision | None = None
     history: deque = field(default_factory=lambda: deque(maxlen=MAX_UNDO_STEPS))
     redo: deque = field(default_factory=lambda: deque(maxlen=MAX_UNDO_STEPS))
     # Optional pre-built atomistic model from PDB import (per document).
@@ -203,7 +208,14 @@ def peek_design(doc_id: str) -> Design | None:
     """The design for a specific doc id without touching the ContextVar."""
     with _lock:
         s = _sessions.get(doc_id)
-        return s.design if s else None
+        return _mutable_design(s.design) if s else None
+
+
+def design_metadata_for_doc(doc_id: str) -> dict | None:
+    """Owned scalar metadata; never decode immutable content or expose a model."""
+    with _lock:
+        session = _sessions.get(doc_id)
+        return _content_metadata(None if session is None else session.design)
 
 
 def drop_doc(doc_id: str) -> bool:
@@ -251,7 +263,8 @@ def copy_doc_for_persist(doc_id: str) -> tuple[Design | None, int]:
         s = _sessions.get(doc_id)
         if s is None:
             return None, 0
-        snap = _snapshot_copy(s.design) if s.design is not None else None
+        design = _mutable_design(s.design)
+        snap = _snapshot_copy(design) if design is not None else None
         return snap, s.revision
 
 
@@ -260,7 +273,7 @@ def copy_doc_for_persist(doc_id: str) -> tuple[Design | None, int]:
 
 def get_design() -> Design | None:
     with _lock:
-        return _session().design
+        return _mutable_design(_session().design)
 
 
 def get_design_with_revision() -> tuple[Design | None, int]:
@@ -272,7 +285,7 @@ def get_design_with_revision() -> tuple[Design | None, int]:
     """
     with _lock:
         s = _session()
-        return s.design, s.revision
+        return _mutable_design(s.design), s.revision
 
 
 def capture_design_for_verification(*, preserve_entry_types=False):
@@ -281,6 +294,7 @@ def capture_design_for_verification(*, preserve_entry_types=False):
         s = _session()
         if s.design is None:
             raise HTTPException(404, detail="No active design.")
+        _mutable_design(s.design)
         from backend.core.part_verification_capture import capture
         return s.design, capture(s.design, preserve_entry_types=preserve_entry_types), s.revision
 
@@ -322,7 +336,7 @@ def capture_design_for_evaluation(request, *, include_session_identity=False, in
         if expected_source is not None and s.design is not expected_source:
             raise HTTPException(409, detail={"code": "source_changed",
                 "detail": "The document session or source changed before evaluation capture"})
-        captured = capture_for_evaluation(s.design, request=request, revision=s.revision)
+        captured = capture_for_evaluation(_mutable_design(s.design), request=request, revision=s.revision)
         result = (s.design, captured, s.revision)
         if include_admission:
             from backend.api.part_publication_permit import admit_evaluation
@@ -414,7 +428,8 @@ def copy_for_persist() -> tuple[Design | None, int]:
     """``(deep copy of current doc's design or None, revision)`` under the lock."""
     with _lock:
         s = _session()
-        snap = _snapshot_copy(s.design) if s.design is not None else None
+        design = _mutable_design(s.design)
+        snap = _snapshot_copy(design) if design is not None else None
         return snap, s.revision
 
 
@@ -546,7 +561,8 @@ def load_design(d: Design | None) -> None:
         _bump_revision(s)
 
 
-def set_design(d: Design, *, expected_revision: int | None = None, expected_source: Design | None = None,
+def set_design(d: Design | StrictPartRevision, *, expected_revision: int | None = None,
+               expected_source: Design | StrictPartRevision | None = None,
                expected_session_identity: str | None = None, expected_policy_generation=None,
                publication_permit=None) -> int:
     with _lock:
@@ -566,8 +582,9 @@ def set_design(d: Design, *, expected_revision: int | None = None, expected_sour
             raise HTTPException(409, detail="Design changed while the feature operations were being prepared. Try again.")
         if expected_source is not None and s.design is not expected_source:
             raise HTTPException(409, detail="Design changed while the feature operations were being prepared. Try again.")
-        _assert_active_loadout_editable(s.design, d)
-        _assert_photoproduct_dependencies(d)
+        if not (_is_immutable(s.design) or _is_immutable(d)):
+            _assert_active_loadout_editable(s.design, d)
+            _assert_photoproduct_dependencies(d)
         from backend.api.part_replacement_transaction import publish_replacement
         return publish_replacement(s, d, publication_permit=publication_permit)
 
@@ -594,7 +611,7 @@ def get_or_404() -> Design:
         s = _session()
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
-        return s.design
+        return _mutable_design(s.design)
 
 
 def undo_depth() -> int:
