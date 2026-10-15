@@ -27,7 +27,7 @@ from fastapi.testclient import TestClient
 from backend.api import part_evaluation_jobs as jobs, state
 from backend.api.doc_context import DocContextMiddleware, reset_current_doc, set_current_doc
 from backend.api.part_evaluation import evaluate
-from backend.api.part_evaluation_capture import COATING_PROFILE
+from backend.api.part_evaluation_capture import COATING_APPEND_ENABLED, COATING_PROFILE
 from backend.api.part_history_verification import _slot
 from backend.api.part_recovery_budget import MAX_RECOVERY_BYTES
 from backend.api.routes_feature_log import router
@@ -87,7 +87,7 @@ def longest_history_fixture(table, sources):
     Every prefix is independently proved by the existing evaluator, and every
     retained snapshot is its real encoded output. This preparation happens
     outside the measured lock samples. No recovery budget or public gate is
-    changed; direct evaluation exercises the still-private append compiler.
+    changed; direct evaluation exercises the native append compiler.
     """
     case = fixture("adsorption", 64, table, sources)
     case["name"] += ":longest-editable-history"
@@ -143,6 +143,38 @@ def longest_history_fixture(table, sources):
         and not refusal.get("candidate_returned", True) and refusal.get("source_unchanged", False)
         and any(issue.get("code") == "command_limit" for issue in refusal.get("issues", [])))
     return case, boundary
+
+
+def retained_draft_fixture(case, shape):
+    """Load-admitted stale metadata must remain cheap and proof-independent.
+
+    This is a portable proposal schema boundary, not evidence that its proposed
+    input values are a valid coating edit. Native command admission is separate.
+    """
+    from backend.core.part_repair_draft import RepairDraft
+
+    def proposal(size):
+        value = list(range(size)) if shape == "nodes" else "x" * size
+        return RepairDraft.model_validate({"version": 1, "draft_id": "retained-proposal",
+            "generation": 0, "base_design_id": case["design"].id,
+            "base": {"version": 1, "root_sha256": "0" * 64,
+                     "commands_sha256": "0" * 64, "sources_sha256": "0" * 64},
+            "repair_version": 1, "actions": [{"action": "set_input",
+                "feature_id": f"unresolved-{index}", "parameter_path": ["diameter_nm"],
+                "expected_old": value, "value": value} for index in range(64)]})
+
+    lower, upper = 0, 1000
+    while lower < upper:
+        middle = (lower + upper + 1) // 2
+        try:
+            proposal(middle)
+        except ValueError:
+            upper = middle - 1
+        else:
+            lower = middle
+    draft = proposal(lower)
+    return {**case, "name": case["name"] + f":retained-draft-{shape}",
+            "design": case["design"].copy_with(repair_draft=draft)}
 
 
 def concurrent_request(client, headers, callback, probe):
@@ -248,7 +280,8 @@ def repeated_case(client, doc, case, repeats, probe, snapshots):
             identity = str(uuid4())
             with jobs._lock:
                 jobs._jobs[identity] = jobs.EvaluationJob(doc, ref(design), revision,
-                    created=monotonic(), status="complete", result=dict(case["prepared"]))
+                    created=monotonic(), status="complete", admitted_operation="edit",
+                    result=dict(case["prepared"]))
             first_snapshot = len(snapshots)
             try:
                 response, measured = concurrent_request(client, headers,
@@ -263,6 +296,7 @@ def repeated_case(client, doc, case, repeats, probe, snapshots):
                         and state.revision() == revision + 1 and state.undo_depth() == 1 and state.redo_depth() == 0
                         and undo is not design and undo is not None and undo.model_dump_json() == design.model_dump_json()
                         and current.input_sources == design.input_sources
+                        and current.repair_draft is design.repair_draft
                         and [row.id for row in current.feature_log] == [row.id for row in design.feature_log])
                 if response.status_code != 200:
                     measured["errors"].append(f"Commit rejected: {response.text}")
@@ -286,6 +320,8 @@ def repeated_case(client, doc, case, repeats, probe, snapshots):
         "repeats": repeats, "source_json_bytes": len(design.model_dump_json().encode()),
         "candidate_json_bytes": len(json.dumps(case["prepared"]["candidate"]).encode()),
         "retained_sources": len(design.input_sources), "history_rows": len(design.feature_log),
+        "retained_draft_json_bytes": (len(design.repair_draft.model_dump_json().encode())
+                                      if design.repair_draft is not None else 0),
         "retained_recovery_encoded_bytes": sum(len(row.design_snapshot_gz_b64) + len(row.post_state_gz_b64 or "")
                                               for row in design.feature_log),
         "capture_refusals": sum(row["http_status"] == 413 for row in capture_rows),
@@ -404,6 +440,8 @@ def main():
     parser.add_argument("--repeats", type=int, default=30)
     parser.add_argument("--long-history-only", action="store_true",
                         help="Qualify only the additional real history/recovery boundary")
+    parser.add_argument("--pending-drafts", action="store_true",
+                        help="Include node/byte-bound portable draft metadata at the retained-history boundary")
     args = parser.parse_args()
     if not 30 <= args.repeats <= 60:
         parser.error("Use 30..60 samples per fixed boundary; smaller runs are not qualification")
@@ -449,6 +487,8 @@ def main():
                 fixtures.append(fixture("adsorption", 1, table, sources, removed=True))
             longest, history_boundary = longest_history_fixture(table, sources)
             fixtures.append(longest)
+            if args.pending_drafts:
+                fixtures.extend(retained_draft_fixture(longest, shape) for shape in ("nodes", "bytes"))
             with TestClient(app) as client:
                 startup = actual_job(client, doc, {"design": create_empty_part("Empty worker startup", "HONEYCOMB"),
                                                    "request": {"operation": "verify"}})
@@ -467,7 +507,7 @@ def main():
     print(json.dumps({"scope": "Actual HTTP evaluation capture and prepared-candidate publication with lock/snapshot probes; separate real spawned lifecycle/cancellation/race observations",
         "repeats_per_boundary": args.repeats, "fixed_coating_profile": dict(COATING_PROFILE),
         "ordinary_verification_and_edit_limits_unchanged": True, "session_cleanup_verified": not leaked,
-        "public_append_enabled": False, "source_files": sizes,
+        "public_append_enabled": COATING_APPEND_ENABLED, "source_files": sizes,
         "long_history_boundary": history_boundary,
         "measurement_notes": [
             "Repeated start samples intercept submission after real capture; they exclude process startup, replay and solver work.",
@@ -475,6 +515,7 @@ def main():
             "Commit samples are independent of capture refusals; they must not be reported as successful end-to-end jobs.",
             "Representative live jobs use real spawned workers and unchanged admission/deadline/transport policies.",
             "The long-history fixture is grown through actual native append and edit evaluation until the first unchanged-budget refusal; no output geometry or recovery bytes are fabricated.",
+            "Optional retained-draft cases approach the portable proposal schema's node/byte bounds. Stale unresolved proposals remain metadata, not proof inputs or valid command edits.",
             "The empty-root worker baseline includes child imports and trivial proof, with no native molecular build. Parent constructor/start-call timings are also reported separately.",
             "Lock probes add Python overhead; no forced sleeps create contention. HTTP includes ASGI scheduling.",
             "Zero observed overlap is not evidence of zero contention. A 100 ms cooperative allowance is not a wall-time ceiling.",

@@ -46,3 +46,11 @@ class RepairDraft(BaseModel):
         # Pydantic constructs nested objects. Shares the existing request limit.
         validate_operation_input(value)
         return value
+
+    @model_validator(mode="after")
+    def bounded_persisted_form(self):
+        # Optional action defaults appear in saved JSON and undo snapshots.
+        # Admitting only the sparse incoming envelope could produce a draft
+        # that cannot be read back under the same unchanged budget (ISSUE-84).
+        validate_operation_input(self.model_dump(mode="json"))
+        return self

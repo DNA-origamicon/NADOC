@@ -20,6 +20,7 @@ regress anything).
 
 | # | Date | Issue / phase | What changed (module) | Repro pinned by | Wall-clock | main.js LOC Δ | tests added | edits-to-green | app-validated | regression caught |
 |---|------|---------------|------------------------|-----------------|-----------|---------------|-------------|----------------|---------------|-------------------|
+| 33 | 2026-10-15 | ISSUE-84 — repair proposal roundtrip budget | Canonical persisted-form admission in `part_repair_draft.py` | Three red maximum-node/byte save/reload cases, plus one control | P5 continuation | 0 | 4 boundary cases | 69 focused schema/API/persistence cases pass | backend only | Raw sparse input fit while serialized optional defaults exceeded the same limit |
 | 32 | 2026-10-14 | ISSUE-82 — producer/consumer regeneration, PARTIAL | Root-based recipe edit module, refreshed snapshots/diffs, revision/source guard | Native bundle→joint edit/delete and failure regressions | P3 continuation | 0 | 31 focused native/regeneration cases | compatibility regressions corrected; audit records checks | backend only | rootless recovery, sweep version parsing and persisted detachment |
 | 31 | 2026-10-14 | ISSUE-81 — long pose history overhead | Type-gated Join/Pattern scans; skip no-op cluster copy | Existing 1,000-pose A/B gates and independent replay oracle | P2 prerequisite audit | 0 | existing behavioral suites retained | all 14 A/B gates pass | backend only | yes — missing-attribute lookups dominated nominally linear scans |
 | 30 | 2026-10-13 | ISSUE-80 — assembly loading / Full GPU limits, PARTIAL | Compact/NDGB transport, readiness/source reuse, prepared CG primitives, semantic/lazy UI work and ordered saves | Exact seven-source parity, final 8,075 frontend/23 smoke, real-frame release benchmarks, frozen source/cleanup proof | completed implementation; limits retained | −2; thin wiring only | focused batches overlap; audit records counts | final frontend/smoke pass; backend retains identical baseline 22/4 failures, zero individual timing violations | Benchy 29.669 s import/33 ms Full; hinge 6.119 s/485 ms Full; load/GPU targets unmet | unique-source CPU, repeated-instance GPU, background readiness and screenshot timing are measured separately |
@@ -655,3 +656,11 @@ source object, bounded stacks, revision and request context, including cancellat
 after revision publication. A ready repair remains available for a successful retry.
 Eight transaction and fifteen repair-job tests pass. One undo copy remains; no
 geometry computation or additional proof was added to ordinary publication.
+
+2026-10-15 — ISSUE-84: raw-envelope budget checks omitted optional fields that
+Pydantic adds on serialization. A load-admitted draft therefore could not
+survive the unchanged snapshot/load validator. Admission now also checks the
+canonical stored form; no size limit or snapshot validator was weakened. The
+repro preceded the fix (three red / one control), then all 35 schema, 18 API
+and 16 persistence cases passed. Retained-draft performance is measured in a
+separate rerun; the aborted benchmark is preserved rather than called a pass.

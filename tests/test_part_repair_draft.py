@@ -103,3 +103,39 @@ def test_fingerprint_is_only_strict_hashes_and_has_no_saved_certificate():
     assert fingerprint.model_dump(mode="json") == data
     with pytest.raises(ValidationError):
         RepairBaseFingerprint.model_validate({**data, "verified": True})
+
+
+@pytest.mark.parametrize("kind", ["set_input", "upgrade_numerical_contract"])
+@pytest.mark.parametrize("shape", ["nodes", "bytes"])
+def test_largest_admitted_draft_with_omitted_defaults_survives_save_reload_and_undo(kind, shape):
+    from backend.api.state import _snapshot_copy
+    from backend.core.models import Design
+
+    def build(size):
+        value = list(range(size)) if shape == "nodes" else "x" * size
+        change = ({"parameter_path": ["diameter_nm"], "expected_old": value, "value": value}
+                  if kind == "set_input" else {"expected_engine": {"id": value}})
+        data = draft()
+        # Omit child_id and expected_template. Saving materializes these null
+        # defaults, and that canonical representation must fit the same limit.
+        data["actions"] = [{"action": kind, "feature_id": f"feature-{index}", **change}
+                           for index in range(64)]
+        return RepairDraft.model_validate(data)
+
+    lower, upper = 0, 2000
+    while lower < upper:
+        middle = (lower + upper + 1) // 2
+        try:
+            build(middle)
+        except ValidationError:
+            upper = middle - 1
+        else:
+            lower = middle
+    accepted = build(lower)
+    assert lower > 0
+    with pytest.raises(ValidationError):
+        build(lower + 1)
+    assert RepairDraft.model_validate_json(accepted.model_dump_json()) == accepted
+    design = Design(repair_draft=accepted)
+    assert Design.model_validate_json(design.model_dump_json()).repair_draft == accepted
+    assert _snapshot_copy(design).repair_draft == accepted

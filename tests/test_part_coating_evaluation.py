@@ -86,7 +86,6 @@ def job_document(monkeypatch, fake_executor):
     identity = f"__coating_append__{uuid4()}"
     token = set_current_doc(identity)
     state.load_design(empty())
-    monkeypatch.setattr(policy, "COATING_APPEND_ENABLED", True)  # Qualification fixture, never production policy.
 
     class Worker:
         def __init__(self, design, request):
@@ -116,13 +115,62 @@ def job_document(monkeypatch, fake_executor):
         reset_current_doc(token)
 
 
-def test_public_enable_gate_stays_closed_before_copy_or_work(job_document, monkeypatch):
+def test_disabled_server_gate_refuses_before_copy_or_work(job_document, monkeypatch):
     monkeypatch.setattr(policy, "COATING_APPEND_ENABLED", False)
     monkeypatch.setattr(policy, "capture", lambda *_a, **_k: pytest.fail("Disabled append copied the source"))
     with pytest.raises(HTTPException) as error:
         jobs.start(body(revision=state.revision(), diameter_nm=20.0))
     assert error.value.status_code == 422
     assert error.value.detail["code"] == "coating_append_unavailable"
+
+
+def test_public_coating_submission_uses_real_worker_then_one_commit_and_cold_replay(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from backend.api.doc_context import DocContextMiddleware
+    from backend.api.routes_feature_log import router
+
+    identity = f"__native_coating_job__{uuid4()}"
+    token = set_current_doc(identity)
+    source = empty()
+    state.load_design(source)
+    revision = state.revision()
+    previous_jobs = set(jobs._jobs)
+    # Real child execution, with deterministic supervision for this route test.
+    # Separate qualification measures asynchronous scheduling and contention.
+    monkeypatch.setattr(jobs, "_submit", jobs._run)
+    app = FastAPI()
+    app.add_middleware(DocContextMiddleware)
+    app.include_router(router, prefix="/api")
+    path = "/api/design/features/evaluation/jobs"
+    try:
+        with TestClient(app) as client:
+            headers = {"X-NADOC-Doc": identity}
+            response = client.post(path, headers=headers, json=body(
+                revision=revision, diameter_nm=20.0, coating={"count_override": 1}))
+            assert response.status_code == 202, response.text
+            job_id = response.json()["job_id"]
+            result = client.get(f"{path}/{job_id}", headers=headers).json()["result"]
+            assert result["status"] == "ready", result
+            assert "candidate" not in result
+            assert state.get_or_404() is source and state.revision() == revision
+            response = client.post(f"{path}/{job_id}/commit", headers=headers)
+            assert response.status_code == 200, response.text
+        committed = state.get_or_404()
+        assert state.revision() == revision + 1 and state.undo_depth() == 1
+        assert len(committed.feature_log) == 2 and committed.nanoparticles[0].coating.target_count == 1
+        result = cold(committed, {"operation": "verify", "expected_revision": 7})
+        assert result["status"] == "reproduced_import", result
+        state.undo()
+        assert not state.get_or_404().nanoparticles and not state.get_or_404().feature_log
+    finally:
+        with jobs._lock:
+            for job_id in set(jobs._jobs) - previous_jobs:
+                jobs._jobs.pop(job_id, None)
+        with state._lock:
+            state._sessions.pop(identity, None)
+        reset_current_doc(token)
 
 
 @pytest.mark.parametrize("fault", ["missing_revision", "client_pin", "client_source", "client_id", "mixed_action"])

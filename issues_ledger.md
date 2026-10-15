@@ -1813,3 +1813,18 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   revision publication, cancellation, and retry of the same evaluated candidate.
   The first test run exposed a fixture teardown still using the injected hook;
   isolated owned-session cleanup corrected that fixture, without a product change.
+
+## ISSUE-84 — Maximum-size saved repair proposals could fail their own roundtrip (2026-10-15, FIXED)
+
+- The retained-draft coating benchmark found that a sparse proposal near its
+  byte limit was accepted, but serialization added optional action defaults.
+  Undo's dump/validate copy then rejected that larger canonical envelope. No
+  user design was involved; prepared publication failed before changing state.
+- Four boundary regressions cover node/byte limits for both repair action
+  variants. Before the fix, three failed at save/reload and one passed.
+  `RepairDraft` now validates its canonical serialized form as well as bounding
+  raw input before construction. Limits and undo validation are unchanged.
+- All 35 schema, 18 draft API and 16 persistence cases pass after the fix.
+  The benchmark's aborted attempt is retained in
+  `docs/audits/feature_history_20261014/coating_jobs_draft_boundary_failure_p4.json`;
+  performance qualification is reported separately from this correctness fix.

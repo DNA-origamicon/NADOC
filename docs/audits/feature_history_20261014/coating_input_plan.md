@@ -601,3 +601,27 @@ Lifecycle checks now additionally cover delete/recreate with retained source
 closure and fresh particle identity, publication-derived count changes on resize
 without an override, and a 32nd bare-gold delete. The evaluation file passes 26
 tests. No formulas, numerical manifests, GC policy or global limits changed.
+
+## Saved proposal boundary and enablement — October 15
+
+The explicit public coating append gate is now enabled after the retained-history
+checkpoint and a further saved-proposal check. No ordinary nanoparticle route or
+mixed-part workflow is migrated by this switch. A real public HTTP submission,
+spawned evaluation, one commit/undo and independent cold replay pass.
+
+`coating_jobs_benchmark_drafts_p4.json` measures the 14-row source without a
+proposal and with 64-action proposals near the portable node/byte bounds. These
+stale unresolved proposal inputs are metadata, not valid coating-command edits.
+All 90 prepared publications and three real complete jobs pass; the exact
+proposal survives publication and the full source survives in undo. Capture
+p95 is 93.6–98.3 ms, with one of 90 deadline refusals. Publication p95 is
+11.6–18.4 ms, but GC-related maxima reach 68.5 ms; concurrent lightweight HTTP
+has outliers up to 104.9 ms. Real cancellation/source change reaps in about 53 ms
+and commit returns 409. Cleanup passes. These are bounded-work observations,
+not hard latency guarantees or permission to enlarge ordinary budgets.
+
+The first attempt aborted on ISSUE-84: serialization inserted optional proposal
+defaults beyond the admitted sparse-envelope budget. Canonical persisted-form
+admission fixes this; the three failing boundary cases now pass. The aborted
+run is retained in `coating_jobs_draft_boundary_failure_p4.json`; no measurements
+from it are represented as a completed qualification. Limits remain unchanged.

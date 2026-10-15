@@ -24,6 +24,7 @@ from backend.core.part_verification_capture import CaptureLimit
 TIME_BUDGET = 180.0
 MAX_RESULTS = 2
 RESULT_TTL = 900.0
+PUBLISHABLE_OPERATIONS = frozenset({"append", "edit", "delete", "repair", "batch"})
 _lock = Lock()
 _jobs = OrderedDict()
 
@@ -32,17 +33,38 @@ _jobs = OrderedDict()
 class EvaluationJob(Job):
     created: float = 0.0
     committed_revision: int | None = None
-    selection_only: bool = False
+    # Set only from the host-validated request. Worker output and saved Design
+    # JSON cannot supply publication authority; absent admission fails closed.
+    admitted_operation: str | None = None
+
+    @property
+    def selection_only(self):
+        return self.admitted_operation == "selection"
+
+
+def _assert_publishable(job):
+    if job.selection_only:
+        raise HTTPException(409, detail="Reference selection is a nonpublishing preview")
+    if job.admitted_operation == "verify":
+        raise HTTPException(409, detail="Verification is a nonpublishing assessment")
+    if job.admitted_operation not in PUBLISHABLE_OPERATIONS:
+        raise HTTPException(409, detail={"code": "invalid_operation_admission",
+            "detail": "This job has no admitted publishing operation"})
 
 
 def _run(job, captured, operation):
     result = supervise(job, captured, lambda d: EvaluationWorker(d, operation),
                        TIME_BUDGET, status_lock=_lock)
-    if job.selection_only and ("candidate" in result or result.get("status") == "ready"):
-        # The host retains the nonpublishing operation type independently of
-        # worker output. A future dispatch defect cannot promote a selector.
+    known_operation = job.admitted_operation in PUBLISHABLE_OPERATIONS | {"verify", "selection"}
+    if not known_operation or (job.admitted_operation not in PUBLISHABLE_OPERATIONS
+                              and ("candidate" in result or result.get("status") == "ready")):
+        # A future dispatch defect cannot promote a read operation or invent
+        # publication authority by returning a ready candidate or actor label.
+        code = ("invalid_selection_result" if job.selection_only else
+                "invalid_verification_result" if job.admitted_operation == "verify" else
+                "invalid_operation_admission")
         result = {"status": "unverified", "native_editable": False,
-                  "issues": [{"code": "invalid_selection_result"}],
+                  "issues": [{"code": code}],
                   "source_revision": job.revision, "design_id": captured.id}
     with _lock:
         job.result = result
@@ -63,17 +85,17 @@ def start(request):
         try:
             source, captured, revision = state.capture_design_for_evaluation(request)
         except CommandContractError as error:
-            conflict = error.code in {"source_changed", "repair_conflict", "selection_conflict"}
+            conflict = error.code in {"source_changed", "repair_conflict", "selection_conflict", "batch_conflict"}
             raise HTTPException(409 if conflict else 422, detail=error.as_issue()) from error
         if request.expected_revision is not None and request.expected_revision != revision:
             raise HTTPException(409, detail="Design changed before evaluation started")
-        if request.operation in {"repair", "selection"}:
-            nested = request.repair if request.operation == "repair" else request.selection
+        if request.operation in {"repair", "selection", "batch"}:
+            nested = getattr(request, request.operation)
             if nested.expected_design_id != captured.id or nested.expected_revision != revision:
                 raise HTTPException(409, detail={"code": f"{request.operation}_conflict",
                     "detail": f"The {request.operation} belongs to a different part or revision."})
         job = EvaluationJob(get_current_doc(), ref(source), revision, created=monotonic(),
-                            selection_only=request.operation == "selection")
+                            admitted_operation=request.operation)
         identity = str(uuid4())
         operation = {"request": request.model_dump(mode="json"), "header": {
             "identity": str(uuid4()), "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -146,8 +168,7 @@ def commit(identity):
     try:
         with _lock:
             job = _lookup(identity)
-            if job.selection_only:
-                raise HTTPException(409, detail="Reference selection is a nonpublishing preview")
+            _assert_publishable(job)
             if job.committed_revision is not None:
                 return {"job_id": identity, "status": "committed", "revision": job.committed_revision}
             if job.cancelled.is_set() or job.status != "complete" or not job.result or job.result["status"] != "ready":
@@ -183,6 +204,7 @@ def commit(identity):
         candidate = preserve_document_state(source, candidate)
         with _lock:
             _lookup(identity)  # expiration is checked again after candidate decoding
+            _assert_publishable(job)
             if job.cancelled.is_set():
                 raise HTTPException(409, detail="Part evaluation was cancelled")
             job.committed_revision = state.set_design(candidate, expected_revision=job.revision, expected_source=source)

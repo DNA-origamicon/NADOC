@@ -5,9 +5,10 @@ module neither acquires job admission nor launches a worker. It chooses one
 capture before copying, never retries a refusal with larger limits, and is not
 used by ordinary edits, drag handlers or verification endpoints.
 
-The 100 ms timer is cooperative. Qualification observed a roughly 148 ms
-capture refusal at a GC/deep-copy boundary. This fixed profile is limited to
-explicit jobs; it is not an ordinary interaction or lock-latency guarantee.
+The 100 ms timer is cooperative. Qualified active/retained-history p95 holds
+were below 100 ms after scalar-atom copy/accounting improvements; occasional
+deadline refusals remain possible. Earlier failed measurements are retained.
+This profile is limited to explicit jobs, not ordinary interaction guarantees.
 """
 
 import math
@@ -24,10 +25,10 @@ from backend.core.part_verification_capture import capture
 
 
 COATING_PROFILE = MappingProxyType({"max_nodes": 100_000, "max_bytes": 4_000_000, "seconds": 0.100})
-# Server-owned qualification gate. The public append path remains unavailable
-# while ordinary request contention/capture refusal rates are investigated.
-# Request data and environment variables cannot change this value.
-COATING_APPEND_ENABLED = False
+# Server-owned availability gate for the qualified single-particle job scope.
+# Request data cannot change it or the fixed profile. See coating_input_plan.md
+# for retained failed runs, final p95 evidence and the recovery-growth boundary.
+COATING_APPEND_ENABLED = True
 MAX_COATING_HISTORY_ROWS = 32
 MAX_COATING_INPUT_SOURCES = MAX_COATING_HISTORY_ROWS + 1
 _GOLD_KINDS = frozenset({"nanoparticle-create", "nanoparticle-patch", "nanoparticle-delete"})
@@ -172,10 +173,14 @@ def capture_for_evaluation(design, *, request, revision, preserve_entry_types=Tr
     before the first coating exists; it never supplies numeric capture limits.
     """
     request = EvaluationRequest.model_validate(request)
+    if request.operation == "batch":
+        from backend.api.part_batch_evaluation import capture_batch
+
+        return capture_batch(design, request, revision=revision, preserve_entry_types=preserve_entry_types)
     _revision(design, request, revision)
     coating_append = request.operation == "append" and request.kind == "streptavidin-coating"
     if coating_append and not COATING_APPEND_ENABLED:
-        _reject("Coating append is unavailable pending capture performance qualification",
+        _reject("Coating append is disabled on this server",
                 code="coating_append_unavailable")
     if not coating_append and not _coating_intent(design):
         return capture(design, preserve_entry_types=preserve_entry_types)

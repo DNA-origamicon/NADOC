@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from backend.api.part_recipe_repair import RepairRequest
 from backend.api.part_repair_selection import SelectionRequest
+from backend.core.part_batch_inputs import BatchRequest
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_history_contract import assess_part_history
 from backend.core.part_history_proof import AUTHORING_FIELDS, ProofBudgetExceeded
@@ -17,7 +18,7 @@ from backend.core.part_operation_input import validate_operation_input
 class EvaluationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    operation: Literal["verify", "append", "edit", "delete", "repair", "selection"]
+    operation: Literal["verify", "append", "edit", "delete", "repair", "selection", "batch"]
     kind: Literal["photoproduct-create", "photoproduct-relax", "duplex-relax", "streptavidin-coating"] | None = None
     params: dict | None = None
     index: StrictInt | None = Field(default=None, ge=0)
@@ -26,11 +27,21 @@ class EvaluationRequest(BaseModel):
     expected_revision: StrictInt | None = Field(default=None, ge=0)
     repair: RepairRequest | None = None
     selection: SelectionRequest | None = None
+    batch: BatchRequest | None = None
 
     @model_validator(mode="after")
     def complete_operation(self):
         validate_operation_input(self.params)
-        if self.operation == "repair":
+        if self.operation == "batch":
+            if (self.batch is None or self.repair is not None or self.selection is not None
+                    or self.kind is not None or self.params is not None or self.index is not None
+                    or self.sub_index is not None or self.cascade):
+                raise ValueError("Batch needs its versioned commands and no other operation inputs")
+            if self.expected_revision is not None and self.expected_revision != self.batch.expected_revision:
+                raise ValueError("Batch revision guards must agree")
+        elif self.batch is not None:
+            raise ValueError("Only batch operations accept a nested batch request")
+        elif self.operation == "repair":
             if self.repair is None or self.selection is not None or self.kind is not None or self.params is not None or self.index is not None or self.sub_index is not None or self.cascade:
                 raise ValueError("Repair needs its versioned repair request and no other operation inputs")
             if self.expected_revision is not None and self.expected_revision != self.repair.expected_revision:
@@ -78,14 +89,16 @@ def _authoring_changes(source, candidate):
 
 def evaluate(source, operation, *, executor=None, dependency_resolver=None):
     """Return a result/candidate without touching a document or decoding recovery."""
-    from backend.api.part_proof_commands import dependencies, execute_long
+    from backend.api.part_proof_commands import dependencies, execute, execute_long
     from backend.api.part_recipe_edit import prepare_change
     from backend.core.validator import validate_design
 
-    executor = executor or execute_long
     dependency_resolver = dependency_resolver or dependencies
     header = operation["header"]
     request = EvaluationRequest.model_validate(operation["request"])
+    # Batches expose only the reviewed ordinary catalog. They cannot cause a
+    # long native prefix to run merely by entering the longer-lived job host.
+    executor = executor or (execute if request.operation == "batch" else execute_long)
     metadata = {}
     try:
         if request.operation == "verify":
@@ -99,7 +112,17 @@ def evaluate(source, operation, *, executor=None, dependency_resolver=None):
             # publication phase. Candidate filtering never calls an executor.
             return prepare_selection(source, request.selection.model_dump(mode="json"),
                 source_revision=header["source_revision"], executor=executor, dependency_resolver=dependency_resolver)
-        if request.operation == "repair":
+        if request.operation == "batch":
+            from backend.api.part_batch_evaluation import evaluate_batch
+
+            result = evaluate_batch(source, request.batch, header,
+                executor=executor, dependency_resolver=dependency_resolver)
+            if result["status"] != "ready":
+                return result
+            candidate, validation = result["candidate"], result["validation"]
+            metadata["batch"] = {**result["batch"], "authoring_changes": _authoring_changes(source, candidate)}
+            metadata["source_assessment"] = result["source_assessment"]
+        elif request.operation == "repair":
             from backend.api.part_recipe_repair import prepare_repair
 
             # The request's revision is an expectation, never evidence of the

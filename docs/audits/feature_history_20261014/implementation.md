@@ -12,7 +12,7 @@ Scope approved October 14, 2026: implement standard-part validation, editability
 | P3 | Native DNA command families and generated construction | 96 versioned kinds with method/action restrictions, joined/connectivity input compilation and bounded native-source CPD conversion/relaxation implemented. See the latest evidence and explicit scope limits below; full generated asset/attachment histories belong to P4 |
 | P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol including unbound particle motion, pinned small protein/catalog/aptamer inputs, supported protein conjugation lifecycle and duplex lifecycle/relaxation implemented. Bounded document transport and explicit inactive-source audits added. Full import/attachment coverage and physical-result provenance remain open |
 | P5 | Standard-part repair, drafts, desktop and part-mode VR | Explicit repair/numerical-upgrade jobs, bounded initial reference selection and revision-bound publication implemented. Draft metadata API and Design/session/loadout/package persistence pass; source staging, draft-bound apply, broader selectors, comparison and UI remain open |
-| P6 | Strict standard-part agent transactions and legacy retirement | Initial pure registered-batch catalog and cold replay tested. Public job integration, server-owned policy, mutation bypass closure, baseline reuse and explicit import permission remain open |
+| P6 | Strict standard-part agent transactions and legacy retirement | Registered-batch catalog and existing job integration pass; batch public gate stays closed pending contention/retained-state qualification. Server-owned policy, mutation bypass closure, baseline reuse and explicit import permission remain open |
 
 Assemblies are not an exit condition for any phase above. Existing assembly compatibility tests may catch collateral changes to shared infrastructure, but new assembly features and fixes remain deferred.
 
@@ -878,3 +878,33 @@ The selector dry-run still reports FAST and deferred FULL; neither broad suite
 ran, and Archive is unavailable. See the [API](../../part_repair_drafts.md),
 [boundary audit](draft_document_boundary.md) and
 [validation record](validation_draft_persistence_p5.json).
+
+## Qualified coating jobs and guarded batch integration — October 15
+
+The narrow coating append job entry point is enabled after actual retained
+history qualification. Its 64-site history reached 14 rows before the unchanged
+8 MB recovery budget refused row 15 atomically. A further run includes portable
+repair proposals near node/byte limits: 90 prepared publications and three
+complete native jobs passed; capture p95 was 93.6–98.3 ms with one of 90 deadline
+refusals; publication p95 was 11.6–18.4 ms. Real cancel/stale workers reaped in
+about 53 ms and refused commit. Occasional longer lock/HTTP outliers remain;
+this does not establish a hard deadline or qualify mixed-part ordinary routes.
+
+That benchmark first exposed ISSUE-84: sparse draft envelopes could fit while
+serialized optional defaults exceeded the same limit. Canonical persisted-form
+admission fixes it without raising limits or bypassing snapshot validation.
+The aborted attempt and failing regression evidence are retained.
+
+Evaluation jobs now retain the host-admitted operation independently of worker
+results. Verify/selection/unknown jobs cannot become publishing jobs through a
+forged ready result. Registered batches reuse capture, worker supervision and
+one exact candidate publication; the public batch gate remains closed for its
+separate responsiveness qualification. Source proof executes once; candidate
+composition is not mislabeled as an independent cold replay or strict policy.
+
+The checkpoint passes **306 focused cases across 13 files** (237 lifecycle and
+69 canonical-draft/persistence cases), plus the retained-draft benchmark. Changed
+Python Ruff and whitespace pass. Broad-suite debt remains unchanged. See
+[batch API](../../part_registered_batches.md),
+[coating evidence](coating_jobs_benchmark_drafts_p4.json) and
+[validation](validation_guarded_jobs_p4_p6.json). P4/P5/P6 remain open.

@@ -52,14 +52,12 @@ are retained, and uncommitted results expire after 15 minutes. These are input,
 work and transport bounds, not a hard process-heap guarantee. Oversized work is
 unverified or rejected without publication; interaction limits are not enlarged.
 
-## Coating append qualification
+## Bounded coating append
 
-The strict `kind:"streptavidin-coating"` append schema and worker compiler are
-implemented, but public submission currently returns
-`coating_append_unavailable`. A server-owned gate remains closed pending capture
-performance qualification. Existing explicit verification, edit and repair jobs
-are unchanged. Ordinary nanoparticle routes and drag handlers do not use this
-append path.
+The strict `kind:"streptavidin-coating"` append workflow is available through
+the explicit evaluation job API. It prepares a private candidate, then requires
+the normal revision-checked commit. Ordinary nanoparticle routes and drag
+handlers do not use this append path.
 
 The request requires an outer `expected_revision` and input-only `params`:
 
@@ -111,10 +109,15 @@ particle, at most 32 flat gold/coating definitions, and default physical and
 presentation state. Its fixed server capture profile is 100,000 nodes/4 MB with
 a cooperative 100 ms allowance; ordinary 30,000-node/2 MB/25 ms capture,
 2 MB worker input, 256 KB operation input and recovery/candidate limits are
-unchanged. Initial live qualification refused 14 of 120 active-coating captures
-and measured capture-lock p95 of 111–118 ms (maximum 133 ms). The timer is not a
-hard latency ceiling. This evidence keeps public append disabled while capture
-cost is addressed, rather than increasing the allowance.
+unchanged. After copy/accounting improvements, active capture p50 was 36–37 ms
+and p95 96–99 ms; two of 120 captures still refused the cooperative clock. A
+14-row retained history captured in p50 39.73 ms/p95 95.11 ms with no refusals
+in 30 samples. Its fifteenth append hit the existing 8 MB cumulative recovery
+bound atomically, before the separate 32-row ceiling. Capacity depends on actual
+encoded recovery, so 32 coating steps are not guaranteed. Admission refusal is
+distinct from invalid geometry and does not trigger automatic budget escalation.
+The timer is not a hard latency ceiling. Measurements and earlier failed runs
+are retained in the [qualification record](audits/feature_history_20261014/coating_input_plan.md).
 
 ## Explicit repair
 
