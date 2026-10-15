@@ -4,6 +4,15 @@ Read-only audit against checkpoint `a000e1c7`, October 15, 2026. No production
 changes, tests or molecular calculations were performed. Assemblies remain
 deferred. Existing placement formulas and canonical geometry are the oracle.
 
+**P4e update:** the initial same-part API contract is implemented. It admits 16
+elements and at most 4,000 protein atoms across selected placements, with an
+explicit valid protein atom selection. Stable output arrays are protected during
+history edits. The standalone endpoint requires expected document identity and
+revision; frozen clipboard behavior is unchanged. Final evidence is in
+`validation_element_copy_p4.json` and `element_copy_benchmark_p4.json`. The
+original 16,000-atom experiment is retained separately; no global capture limit
+was enlarged. Later conjugated/external-copy slices below remain future work.
+
 ## Recommended first slice
 
 Add a versioned **same-part copy feature** for undecorated gold particles,

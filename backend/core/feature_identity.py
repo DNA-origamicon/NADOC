@@ -32,6 +32,7 @@ def preserve_proof_identity(previous, updated, *, kind=None):
              "protein-attach": ("attachment_id", "protein_version"),
              "protein-attach-patch": ("protein_version", "conjugation_version"),
              "protein-attach-delete": ("protein_version", "conjugation_version"),
+             "element-paste": ("copy_version", "protein_output_ids", "nanoparticle_output_ids"),
              "duplex-relax": ("relaxation_version", "engine"),
              "duplex-sync-bindings": ("duplex_ids",),
              "duplex-create": ("duplex_id",),

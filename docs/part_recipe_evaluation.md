@@ -53,7 +53,8 @@ unverified or rejected without publication; interaction limits are not enlarged.
 
 ## CPD source and execution contract
 
-Append currently supports `photoproduct-create` and `photoproduct-relax`.
+CPD append supports `photoproduct-create` and `photoproduct-relax`; the same job
+API also admits the separately pinned `duplex-relax` contract.
 Conversion inputs are:
 
 ```json
@@ -100,3 +101,35 @@ remain available for recovery and explicitly unverified.
 P4 asset/import contracts, P5 repair drafts/UI and P6 registered automation policy
 are tracked in the [architecture review](audits/feature_history_20261014/architecture_review.md)
 and its linked plans. This API alone does not enforce an agent-only trust policy.
+
+## Current-part rigid copy
+
+`POST /api/design/features/copy-elements` records a copy from references to the
+current part. Supply the part's `design.id` and current response `revision`:
+
+```json
+{
+  "expected_design_id": "current-part-id",
+  "expected_revision": 12,
+  "protein_ids": [],
+  "nanoparticle_ids": ["source-particle-id"],
+  "paste_index": 1
+}
+```
+
+The host allocates new identities and returns `pasted_refs` with the ordinary
+design/validation/revision response. The complete batch is one undoable feature.
+An upstream source edit regenerates the copy; editing its source selection
+preserves the copy's output identity. Later ordinary placement/particle features
+can edit or remove the copies. A missing source is a typed dependency failure,
+never a request to recover its saved coordinates.
+
+The initial contract admits 16 elements: undecorated gold/catalog particles and
+free proteins with an explicit selected atom and no owned binder. Each protein
+asset is bounded at 1,000 atoms/4,000 bonds, with 4,000 selected atoms total across
+placements. Whole-document capture limits apply independently. Current import
+provenance remains imported when a copied object depends on an imported source.
+
+This endpoint accepts source IDs, not a client `Design` or output identities.
+Frozen clipboard paste retains its existing endpoint and snapshot semantics;
+it remains unverified until a separate pinned-source contract is implemented.

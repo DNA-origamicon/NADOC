@@ -1,0 +1,95 @@
+{
+  "date": "2026-10-15",
+  "checkpoint_base": "2a1c650a",
+  "scope": "P4 same-part free protein/gold/catalog-particle copy; existing clipboard unchanged; coating admission experiment only",
+  "focused": [
+    {
+      "target": "tests/test_part_element_copy_commands.py",
+      "passed": 64
+    },
+    {
+      "target": "tests/test_native_element_copy_proof.py",
+      "passed": 7
+    },
+    {
+      "target": "tests/test_part_element_copy_routes.py",
+      "passed": 34
+    },
+    {
+      "target": "tests/test_element_copy.py",
+      "passed": 7
+    },
+    {
+      "target": "tests/test_part_protein_placements.py",
+      "passed": 43
+    },
+    {
+      "target": "tests/test_native_nanoparticle_proof.py",
+      "passed": 29
+    },
+    {
+      "target": "tests/test_native_quantum_dot_proof.py",
+      "passed": 22
+    },
+    {
+      "target": "tests/test_part_duplex_relax_contract.py",
+      "passed": 34
+    },
+    {
+      "target": "tests/test_native_duplex_relax_proof.py",
+      "passed": 3
+    },
+    {
+      "target": "tests/test_part_feature_registry.py",
+      "passed": 24
+    },
+    {
+      "target": "tests/test_part_recipe_edit.py",
+      "passed": 8
+    },
+    {
+      "target": "tests/test_part_history_verification.py",
+      "passed": 26
+    },
+    {
+      "target": "tests/test_native_recipe_determinism.py",
+      "passed": 2
+    }
+  ],
+  "focused_total_passed": 303,
+  "review_fixes": [
+    "Require explicit selected protein atom so copied placements support native pose editing.",
+    "Reduce provisional 16000-atom batch work to 4000; validate each selected asset once per call.",
+    "Test copy followed by ordinary move/delete and cold replay while source objects remain unchanged."
+  ],
+  "performance": {
+    "provisional": "element_copy_benchmark_provisional_p4.json",
+    "final": "element_copy_benchmark_p4.json",
+    "full_authoring_equal_cases": 6,
+    "final_capture_refusals": "Five of thirty samples refused node admission, all in the four-distinct-1000-atom-asset fixture; synthetic fixtures are not recipe proof.",
+    "validation_overhead": "Compared with unchecked legacy copy, approximately 0.09 ms at 16 particles and 1.7 ms for 4 distinct assets; original clipboard route unchanged.",
+    "coating_experiment": "coating_capture_experiment_p4.json: no recipe/proof, no production profile change",
+    "ordinary_limits_changed": false
+  },
+  "broad": {
+    "executed": false,
+    "reason": "Archive unavailable; latest selector FULL suite remains uncertified.",
+    "selector_dry_run": "FULL  (FULL suite)  [test-dedicated session OPEN]"
+  },
+  "frontend_changes": false,
+  "main_js_loc_delta": 0,
+  "visual_check": false,
+  "physical_simulation": false,
+  "molecular_algorithms_changed": false,
+  "limits": [
+    "No frozen/external/conjugated copy contract or new frontend control.",
+    "Selection work admission does not guarantee whole-document capture.",
+    "Copy output identity protection changes the conservative duplex implementation pin; no automatic refresh.",
+    "P4 coverage, P5 repair publication/drafts/UI and P6 strict automation remain incomplete."
+  ],
+  "lint": {
+    "changed_python_ruff": "passed",
+    "git_diff_check": "passed",
+    "memory": "6 pre-existing errors, 60 warnings; missing targets outside this increment"
+  }
+}

@@ -11,7 +11,7 @@ Scope approved October 14, 2026: implement standard-part validation, editability
 | P2 | Explicit recipe roots/versions, authoritative-field classification, read-only verification and incremental dependencies | Implementation exit checks complete: independent nonempty replay, content-pinned roots, typed dependencies, fingerprints, bounded capture/jobs and stale/cancel handling. Supported-family expansion continues in P3/P4; validation debt below remains explicit |
 | P3 | Native DNA command families and generated construction | 96 versioned kinds with method/action restrictions, joined/connectivity input compilation and bounded native-source CPD conversion/relaxation implemented. See the latest evidence and explicit scope limits below; full generated asset/attachment histories belong to P4 |
 | P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol including unbound particle motion, pinned small protein/catalog/aptamer inputs, supported protein conjugation lifecycle and duplex lifecycle/relaxation implemented. Bounded document transport and explicit inactive-source audits added. Full import/attachment coverage and physical-result provenance remain open |
-| P5 | Standard-part repair, drafts, desktop and part-mode VR | Pending. Revision-bound impact previews, failed/blocked diagnostics, reference replacement, last-successful-state display, undo/reload |
+| P5 | Standard-part repair, drafts, desktop and part-mode VR | Pure repair/explicit numerical-upgrade foundation started alongside remaining P4 contracts; publication/UI not yet wired. Drafts, reference selection, last-successful-state display, undo/reload remain open |
 | P6 | Strict standard-part agent transactions and legacy retirement | Pending. Pure candidate execution outside long-held locks, expected-revision publication, registered command batches, bypass closure and explicit import exceptions |
 
 Assemblies are not an exit condition for any phase above. Existing assembly compatibility tests may catch collateral changes to shared infrastructure, but new assembly features and fixes remain deferred.
@@ -630,3 +630,55 @@ larger-source/coating and [lattice import contracts](cadnano_scadnano_input_plan
 Coating assets already exceed the default capture node budget before timing;
 their admission needs a separate measured design. P4 remains open, P5 repair and
 P6 strict automation remain pending, and assemblies remain deferred.
+
+## P4e typed same-part rigid copy — October 15
+
+There are now 114 versioned kinds. `element-paste` has an explicit same-part
+contract for free unconjugated proteins with selected atoms and undecorated
+gold/catalog particles. It resolves typed source IDs from the replay prefix,
+shares existing assets and uses the unchanged batch-width/paste-index transform.
+Only declared output IDs and poses change; labels and metadata are not string
+remapped. Existing frozen clipboard paste remains a separate legacy operation.
+
+`POST /api/design/features/copy-elements` requires expected design identity and
+revision, allocates output IDs on the host and publishes one undoable feature.
+Missing or ambiguous selections fail before placement, and failed native work
+never falls back to clipboard snapshots. Upstream source/parameter edits retain
+output identities. Copied protein, gold and QD objects pass ordinary move/delete
+and cold replay, preserving source objects and imported provenance.
+
+The initial 16,000-atom experiment cost about 40 ms for copy and 119 ms for atomic
+recording with distinct assets. Its evidence is retained in
+`element_copy_benchmark_provisional_p4.json`. Admission now caps the total selected
+protein work at 4,000 atoms (counting each placement), alongside 16 elements and
+the existing 1,000-atom/4,000-bond per-asset bounds. Repeated asset validation is
+shared within one call without sharing mutable copied objects or changing math.
+
+The final six paired cases preserve complete authored output. Small copy medians
+were approximately 0.23 ms both with and without unrelated DNA/history; the
+16-particle case was 0.64 ms. Protein work at the 4,000-atom bound was 10.1–11.2 ms,
+with atomic recording at 11.9–30.2 ms. The distinct-asset boundary still exceeded
+the separate whole-document capture node limit in all five samples. These are
+capture refusals, not proof failures or successes. New validation adds about
+0.09 ms in the 16-particle case and 1.7 ms for distinct protein assets compared
+with the old unchecked copy builder. No existing clipboard path changed and no
+global budget was increased. Allocation/GC outliers and this overhead remain
+visible in [final measurements](element_copy_benchmark_p4.json).
+
+Focused validation: **303 passed across 13 files**, including 105 new command,
+route and cold-replay cases. Independent review found and closed admission of
+free legacy proteins without an atom selection: their ordinary native pose
+patch was unsupported. Boundary and atomic 413 regressions were added. Shared
+identity, native particle/protein, legacy copy, numerical duplex and hash-seed
+determinism checks pass. See [validation evidence](validation_element_copy_p4.json).
+The identity protection addition conservatively changes duplex numerical pins;
+no old pins are refreshed silently.
+
+The [coating experiment](coating_capture_experiment_p4.json) confirmed that one
+tetramer exceeds ordinary node admission but fits current worker transport under
+an experimental capture profile. A separately gated explicit job is the next
+qualification target; ordinary budgets remain unchanged. Sixteen embedded assets
+exceed node, worker and recovery bounds and need a separate storage design.
+P5 pure repair/explicit numerical-upgrade work starts alongside remaining P4
+contracts because older pinned recipes need that deliberate path. No repair job,
+draft UI or strict automation policy is yet claimed. Assemblies remain deferred.

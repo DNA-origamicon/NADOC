@@ -111,6 +111,16 @@ def editing_capabilities(kinds):
             "provenance": "Deposited native sites are reproduced_import, not native-only construction",
             "legacy": "Larger, multiple-chain or opaque ownership imports retain unverified recovery receipts",
         },
+        "rigid_copy_contract": {
+            "version": 1,
+            "kinds": ["element-paste"],
+            "endpoint": "POST /api/design/features/copy-elements",
+            "requires": ["expected_design_id", "expected_revision"],
+            "scope": "Current-part free proteins with explicit atom selections and undecorated gold/catalog particles",
+            "limits": ["16 selected elements", "1000 atoms and 4000 bonds per protein asset", "4000 selected protein atoms total"],
+            "identity": "Host-owned stable outputs; source selections and paste index remain editable",
+            "legacy": "Frozen clipboard and conjugated element copies remain separate unverified receipts",
+        },
         "protein_conjugation_contract": {
             "version": 1,
             "kinds": ["protein-conjugate", "protein-attach-patch", "protein-attach-delete"],

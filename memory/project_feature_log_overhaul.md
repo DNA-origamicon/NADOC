@@ -26,7 +26,7 @@ keep assemblies deferred. Consult the implementation ledger for subsequent fixes
 
 ## Native recipe continuation (2026-10-15)
 
-P3 plus current P4 input/attachment slices now has 113 versioned kinds (with method/action restrictions), pure native
+P3 plus current P4 input/attachment slices now has 114 versioned kinds (with method/action restrictions), pure native
 builders shared by routes and proof, source-based continuation references,
 thread-local deterministic routing IDs, actual-failure cascade analysis, and one
 independently rebuilt prefix retained per edit. No saved outputs are proof inputs.
@@ -79,6 +79,15 @@ on its independent cooperative time/node/byte bounds. Benchmarks retain those
 refusals; no proof is added to ordinary edits. Typed rigid copy and larger coating
 capture are separate increments. Existing sulfur-local resize behavior is
 reproduced unchanged, without claiming chemical validity of that behavior.
+P4e adds strict same-part rigid copy of unowned free proteins and undecorated
+gold/QD particles, using typed source/output identities and native placement
+formulas. The host-owned API requires expected document/revision; 16 elements
+and 4000 selected protein atoms bound work. No DNA calculation or unselected
+asset clone occurs in the pure copy builder. Frozen clipboard remains legacy.
+Coating experiments justify only a prospective explicit single-coating job;
+ordinary capture budgets are unchanged. P5 pure repair/explicit engine-upgrade
+foundation is starting in parallel with remaining P4 contracts; UI/jobs are not
+yet wired. New copy identity protection changes duplex pins conservatively.
 
 `part_recipe_capabilities.py` exposes API/editor limitations explicitly. No new
 frontend controls were added. Long jobs evaluate privately, omit candidates from

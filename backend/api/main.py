@@ -76,6 +76,7 @@ from backend.api.routes_export_md import router as export_md_router
 from backend.api.routes_export_structure import router as export_structure_router
 from backend.api.routes_extensions import router as extensions_router
 from backend.api.routes_feature_log import router as feature_log_router
+from backend.api.routes_part_element_copy import router as part_element_copy_router
 from backend.api.routes_sequences import router as sequences_router
 from backend.api.routes_benchmark import router as benchmark_router
 from backend.api.routes_engines import router as engines_router
@@ -439,6 +440,7 @@ app.include_router(chain_sim_router, prefix="/api")
 app.include_router(simulate_router, prefix="/api")
 app.include_router(extensions_router, prefix="/api")
 app.include_router(feature_log_router, prefix="/api")
+app.include_router(part_element_copy_router, prefix="/api")
 app.include_router(deformation_router, prefix="/api")
 app.include_router(display_geometry_router, prefix="/api")
 app.include_router(vr_router, prefix="/api")
