@@ -6,6 +6,20 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 ---
 # Feature Log Overhaul + Tabbed Sidebar (commit 873f3e6, branch feature-log-update, 2026-05-02)
 
+## Architecture review and hardening (2026-10-15)
+
+See [architecture review](../docs/audits/feature_history_20261014/architecture_review.md)
+for the persistent P3–P6 completion sequence and primary Onshape/SOLIDWORKS
+precedents. The input-replay foundation remains sound, but the review found that
+permissive native builders can skip missing targets and falsely verify a no-op;
+explicit reference validation is required. Cooperative deadlines between commands
+also do not bound a long native call or promptly release its admission slot.
+These are open hardening gaps, not completed fixes. Reproducibility, reference
+integrity, scientific validation and useful editability are distinct claims.
+Opaque `connectivity-core` generation also belongs to unfinished P3. Keep broken
+definitions repairable, reserve full proof for explicit/background work, and
+keep assemblies deferred. Consult the implementation ledger for subsequent fixes.
+
 ## Native recipe continuation (2026-10-15)
 
 P3 now has 83 versioned kinds (with method/action restrictions), pure native

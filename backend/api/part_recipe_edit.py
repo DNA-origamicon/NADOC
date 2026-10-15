@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from backend.api import state
 from backend.api.part_proof_commands import dependencies, execute
 from backend.core.design_diff import encode_child_diff
+from backend.core.part_command_errors import ReferenceResolutionError
 from backend.core.feature_identity import preserve_proof_identity
 from backend.core.part_history_contract import FIELD_ROLES, assess_part_history
 from backend.core.part_overlay_commands import (
@@ -47,6 +48,9 @@ class CommandReplayError(Exception):
     def __init__(self, feature_id, reason):
         self.feature_id = feature_id
         self.reason = str(reason)
+        self.issue = reason.as_issue() if isinstance(reason, ReferenceResolutionError) else {
+            "code": "command_failed", "detail": self.reason,
+        }
         super().__init__(self.reason)
 
 
@@ -241,7 +245,7 @@ def change_recipe(index, *, params=None, sub_index=None, cascade=False):
                     if entry.feature_type == "routing-cluster"
                     else {entry.id}
                 )
-            removed, reasons = set(targets), {}
+            removed, reasons, issues = set(targets), {}, {}
             # Conservative graph edges describe possible effects, not commands
             # that must be deleted. Replay survivors to resolve actual failures.
             # A failed builder may mutate its candidate; restart from the root
@@ -260,6 +264,7 @@ def change_recipe(index, *, params=None, sub_index=None, cascade=False):
                 except CommandReplayError as exc:
                     removed.add(exc.feature_id)
                     reasons[exc.feature_id] = exc.reason
+                    issues[exc.feature_id] = exc.issue
             if removed - targets and not cascade:
                 return {
                     "needs_cascade_decision": True,
@@ -272,6 +277,9 @@ def change_recipe(index, *, params=None, sub_index=None, cascade=False):
                             "feature_ids": sorted(ids & (removed - targets)),
                             "reasons": {
                                 fid: reasons[fid] for fid in ids & reasons.keys()
+                            },
+                            "issues": {
+                                fid: issues[fid] for fid in ids & issues.keys()
                             },
                         }
                         for i, e in enumerate(log)

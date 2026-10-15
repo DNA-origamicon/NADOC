@@ -102,6 +102,8 @@ def execute(kind, design, params):
     if "_generated_scope" in params:
         from backend.api.generated_native_scope import execute as scoped_execute
         return scoped_execute(kind, design, params, execute)
+    from backend.api.part_command_references import validate_command_references
+    validate_command_references(kind, design, params)
     if kind in OVERLAY_KINDS:
         from backend.core.part_overlay_commands import build
         return build(kind, design, params)
@@ -110,7 +112,10 @@ def execute(kind, design, params):
     from backend.core.lattice import retry_pending_ligations
     from backend.core.photoproducts import stale_photoproduct_ids
     report = None
-    if kind in PHOTOPRODUCT_KINDS:
+    if kind == "nick-batch":
+        from backend.api.part_command_references import build_strict_nick_batch
+        updated = build_strict_nick_batch(design, params)
+    elif kind in PHOTOPRODUCT_KINDS:
         from backend.api.part_photoproduct_commands import build
         updated = build(kind, design, params)
     elif kind in REFINEMENT_KINDS:

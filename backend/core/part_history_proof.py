@@ -7,6 +7,7 @@ import hashlib
 import json
 
 from backend.core.part_dependencies import Dependencies, DependencyIndex
+from backend.core.part_command_errors import ReferenceResolutionError
 from backend.core.part_history_contract import FIELD_ROLES, create_empty_part
 
 
@@ -118,10 +119,17 @@ def assess(design, *, max_entries, execute, dependencies, checkpoint):
         except ProofBudgetExceeded as exc:
             issues.append({"code": "command_limit", "feature_id": feature_id, "detail": str(exc)})
             return result
+        except ReferenceResolutionError as exc:
+            result["status"] = "failed"
+            issues.append({**exc.as_issue(), "feature_id": feature_id, "kind": kind,
+                           "possible_dependents": sorted(index.affected([feature_id]) - {feature_id})})
+            return result
         except Exception as exc:
             result["status"] = "failed"
-            issues.append({"code": "command_failed", "feature_id": feature_id,
-                           "detail": str(exc), "blocked": sorted(index.affected([feature_id]) - {feature_id})})
+            # The graph is conservative. A later feature is not proven blocked
+            # until its own required references have failed to resolve.
+            issues.append({"code": "command_failed", "feature_id": feature_id, "kind": kind,
+                           "detail": str(exc), "possible_dependents": sorted(index.affected([feature_id]) - {feature_id})})
             return result
         result["checked_commands"] += 1
     check()

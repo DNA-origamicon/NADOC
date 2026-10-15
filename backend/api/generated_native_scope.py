@@ -83,6 +83,13 @@ def execute(kind, design, params, executor):
             if identifier.startswith(marker):
                 inverse[identifier] = identifier[len(marker) :]
                 break
+    # A retained source and a generated object must never become the same
+    # local identity. Native lookups and merge dictionaries would otherwise
+    # apply an edit to the wrong object or silently discard one of its effects.
+    # Different namespace markers must also have distinct inverse identities.
+    aliases = list(inverse.values())
+    if retained.intersection(aliases) or len(set(aliases)) != len(aliases):
+        raise ValueError("Generated scope identity aliases are ambiguous")
     selected = retained | inverse.keys()
     local = {}
     for field, values in data.items():

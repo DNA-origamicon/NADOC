@@ -72,12 +72,12 @@ def test_join_from_native_root_and_parameter_regeneration(monkeypatch):
         assert plan["valid"], plan
         apply(body.model_copy(update={"preview_token": plan["token"]}))
         result = verify_job(monkeypatch)
-        assert result["status"] == "verified", result
+        assert result["status"] == "verified", result.get("issues", result)
         ids = [h.id for h in state.get_or_404().helices]
         crud.edit_feature(3, crud.EditFeatureBody(params={"gap_nm": 0.9}))
         assert [h.id for h in state.get_or_404().helices] == ids
         result = verify_job(monkeypatch)
-        assert result["status"] == "verified", result
+        assert result["status"] == "verified", result.get("issues", result)
     finally:
         state.close_session()
         reset_current_doc(token)

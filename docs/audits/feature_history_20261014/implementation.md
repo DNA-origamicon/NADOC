@@ -231,3 +231,39 @@ session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 ```
 
 All **22 measured latency/equivalence gates pass**: six recording, fourteen recovery/geometry, and two prefix-edit cases. The larger prefix case measured 14.8 ms versus 15.3 ms full replay; this is a selected in-memory workload. Final generated compatibility (2), native generated proof/tamper/scope (4), native annotations/admission (10), overhang/binding/linker/recovery (8), routing (34), refinement (4), hash-seed/thread isolation (2), and Join-worker (1) focused checks pass. Changed-file Ruff and whitespace checks pass. Repository lint retains five unused imports in unchanged files; memory lint retains six errors in unchanged heads. Evidence: [validation_p3_expansion.json](validation_p3_expansion.json), [recording](recording_benchmark_p3_completion.json), [evaluation](evaluation_benchmark_p3_completion.json), [prefix edits](recipe_edit_benchmark_p3.json).
+
+## Architecture review and hardening checkpoint — October 15
+
+The persistent completion goal remains active. See [architecture review](architecture_review.md)
+for researched CAD precedents and [remaining native contracts](remaining_native_contracts.md)
+for the branch/connectivity decomposition. P3 is still incomplete; no P4–P6 or
+assembly completion is claimed.
+
+Strict replay now rejects missing and partially missing batch selections and
+returns typed references with parameter paths. Conservative graph reachability
+is labelled possible impact, not proven blockage. Deletion previews retain the
+structured issue. Generated scopes reject ambiguous retained/generated identity
+aliases before running a builder. Ordinary permissive live batch tools remain
+unchanged; they cannot gain a native certificate by silently skipping inputs.
+
+Background verification now runs in one spawned child, supervised without a
+work queue. Input/results have explicit byte limits and shared-memory buffers;
+normal completion, cancellation, stale source and timeout reap the process and
+unlink buffers before freeing admission. The five-second budget includes cold
+startup. Sync verification and history edits still have cooperative limits;
+CPD conversion remains unadmitted. OS-uninterruptible processes can delay reaping;
+admission stays held rather than launching additional work.
+
+Focused checks at this checkpoint: reference failures 22, proof 14, recipe edits
+8, verification 26, routing 34, overhang 8, generated proof 4, generated alias
+checks 3, worker isolation 10 and lifecycle 12 pass. Both unchanged prefix
+benchmark gates pass (`recipe_edit_benchmark_hardening.json`). Repository lint
+still has the same five unrelated unused imports.
+
+**Open validation finding before the next checkpoint:** the real Join-worker
+test now reports a `flexible_connections` mismatch across processes. Its prior
+thread-based pass did not establish cross-process determinism. Pure derivation
+probes confirm that unordered set traversal reverses A/B anchors and bead order
+under different hash seeds. Checkpoint this state before choosing a canonical
+traversal. Preserve connectivity/constants/formulas; do not weaken comparison or
+remove the field to hide the mismatch. Broad validation follows the correction.

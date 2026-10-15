@@ -74,6 +74,25 @@ def test_delete_producer_warns_then_cascades_consumers():
     assert verify_current_part()["status"] == "verified"
 
 
+def test_deleted_domain_producer_has_structured_cascade_diagnostics():
+    from backend.api.crud import DomainShiftRequest, domain_shift
+
+    strand_id = state.get_or_404().strands[0].id
+    domain_shift(DomainShiftRequest(entries=[
+        {"strand_id": strand_id, "domain_index": 0, "delta_bp": 2}
+    ]))
+    source, revision = state.get_design_with_revision()
+    response = delete_feature(0)
+    assert response["needs_cascade_decision"]
+    issues = [issue for row in response["dependents"] for issue in row["issues"].values()]
+    missing = [issue for issue in issues if issue["code"] == "missing_reference"]
+    assert any(ref["identity"] == strand_id for issue in missing for ref in issue["references"])
+    assert state.get_design_with_revision() == (source, revision)
+    delete_feature(0, cascade=True)
+    assert not state.get_or_404().strands
+    assert verify_current_part()["status"] == "verified"
+
+
 def test_delete_routing_child_removes_actual_joint():
     delete_feature(1, sub_index=0)
     assert not state.get_or_404().cluster_joints

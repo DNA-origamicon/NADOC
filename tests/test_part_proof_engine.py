@@ -69,6 +69,43 @@ def test_deleting_parent_command_fails_on_unresolved_joint():
     assert result["issues"][0]["code"] == "command_failed"
 
 
+def test_possible_impact_is_not_reported_as_proven_blockage():
+    design = imported_history()
+    first, second = design.feature_log[0].children
+
+    def fail(*args):
+        raise ValueError("Cannot construct first feature")
+
+    result = assess_part_history(design, execute=fail, dependencies=dependencies)
+    issue = result["issues"][0]
+    assert issue["feature_id"] == first.id
+    assert issue["possible_dependents"] == [second.id]
+    assert "blocked" not in issue
+
+
+@pytest.mark.parametrize("kind,params,path", [
+    ("nick-batch", {"nicks": [{"helix_id": "missing", "bp_index": 2,
+                               "direction": "FORWARD"}]}, ["nicks", 0, "helix_id"]),
+    ("loop-skip-clear", {"helix_ids": ["missing"], "plane_a_bp": 0,
+                         "plane_b_bp": 5}, ["helix_ids", 0]),
+])
+def test_reproducible_noop_with_missing_selection_is_not_verified(kind, params, path):
+    from backend.core.part_history_contract import create_empty_part
+
+    design = create_empty_part("Broken", "SQUARE")
+    child = MinorMutationLogEntry(op_subtype=kind, label=kind, params={**params, "_proof_version": 1})
+    design.feature_log = [RoutingClusterLogEntry(children=[child])]
+    result = verify(design)
+    assert result["status"] == "failed"
+    assert not result["native_editable"]
+    issue = result["issues"][0]
+    assert issue["code"] == "missing_reference"
+    assert issue["feature_id"] == child.id
+    assert issue["kind"] == kind
+    assert issue["references"][0]["identity"] == "missing"
+    assert issue["references"][0]["parameter_path"] == path
+
+
 def test_unknown_command_version_does_not_use_legacy_replay():
     design = imported_history()
     design.feature_log[0].children[0].params["_proof_version"] = 999
