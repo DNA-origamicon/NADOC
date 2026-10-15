@@ -1,9 +1,10 @@
 # Immutable strict-part revisions: minimum migration
 
-Read-only proposal, October 15, 2026. Depends on the closed strict HTTP boundary
-and its regression checks. No storage implementation, admission increase or
-baseline cache is included in the current checkpoint. Compatibility documents,
-assemblies and molecular algorithms remain unchanged.
+Reviewed migration plan, October 15, 2026. The pure immutable preparation and
+materialization foundation passes 49 focused tests. Session storage integration,
+retention, persistence and responsiveness qualification remain pending. No
+admission increase or baseline cache is included in this checkpoint. Compatibility
+documents, assemblies and molecular algorithms remain unchanged.
 
 ## Decision
 
@@ -110,8 +111,8 @@ large materialization or holding a live mutable alias across a lock boundary.
 The cache audit found a lossy document mapping: `_doc_dir` sanitized characters
 and truncated IDs to 80 characters, aliasing different raw identities and leaving
 literal `.`/`..` intact. ISSUE-88 now rejects unsafe IDs without rewriting them,
-before cache capture or strict HTTP body acquisition; parent validation is
-pending. Normal safe IDs retain their exact paths, and no existing file is moved
+before cache capture or strict HTTP body acquisition; 122 parent-run regressions
+pass. Normal safe IDs retain their exact paths, and no existing file is moved
 or deleted. Do not silently reintroduce arbitrary IDs or rename compatibility
 paths. For typed strict persistence, prefer a separately versioned sibling directory,
 outside `.session`, whose per-document component is the full SHA-256 of the exact
