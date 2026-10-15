@@ -63,7 +63,7 @@ def test_full_request_matches_native_handler_geometry_and_roundtrip(plane, stran
             response = hb.sweep(**params) if headless else create_sweep(SweepRequest(**params))
             design = state.get_or_404().model_copy(deep=True)
             assert response["vr_transaction"]["target_count"] == len(CELLS)
-            assert design.feature_log[-1].params == SweepRequest(**params).model_dump(mode="json")
+            assert design.feature_log[-1].params == {**SweepRequest(**params).model_dump(mode="json"), "_proof_version": 1}
             assert design.deformations[-1].id == "sweep_" + SWEEP_ID
             assert_preview_axes(preview, design)
             assert_geometry_equal(roundtrip_nadoc(design), design)

@@ -57,7 +57,7 @@ class FlexibleSegmentBatchBody(BaseModel):
     replace: bool = False
 
 
-def _flex_mark_from_body(design: Design, b: FlexibleSegmentMarkBody, unpaired=None):
+def _flex_mark_from_body(design: Design, b: FlexibleSegmentMarkBody, unpaired=None, *, identity=None):
     """Validate that the addressed bead is UNPAIRED (no Watson-Crick partner) and
     return a FlexibleSegmentMark. Pass a precomputed *unpaired* set for batches."""
     from backend.core.flexible_segments import unpaired_bead_keys
@@ -78,7 +78,9 @@ def _flex_mark_from_body(design: Design, b: FlexibleSegmentMarkBody, unpaired=No
         raise HTTPException(
             400, detail="Only unpaired (single-stranded) beads can be flexible."
         )
+    from uuid import uuid4
     return FlexibleSegmentMark(
+        id=identity or str(uuid4()),
         strand_id=b.strand_id,
         domain_index=b.domain_index,
         bp_index=b.bp_index,
@@ -214,7 +216,7 @@ def add_flexible_segment(body: FlexibleSegmentMarkBody, response: Response) -> d
 
     return _flex_log_response(
         response, "flexible-segment-mark", "Mark flexible ssDNA",
-        {"mark_ids": [mark.id]}, fn,
+        {"marks": [mark.model_dump(mode="json")], "batch": False}, fn,
         _mark_helix_ids(design, [*design.flexible_segment_marks, mark]),
     )
 
@@ -281,7 +283,7 @@ def batch_flexible_segment(body: FlexibleSegmentBatchBody, response: Response) -
     )
     return _flex_log_response(
         response, op_kind, label,
-        {"n_marks": len(new_marks), "replace": body.replace}, fn,
+        {"marks": [m.model_dump(mode="json") for m in new_marks], "replace": body.replace, "batch": True}, fn,
         changed_helix_ids,
     )
 

@@ -48,6 +48,9 @@ def canonical(design):
         for child in entry.get("children", []):
             child.pop("id", None)
             child.pop("timestamp", None)
+            # Version receipts are an intentional new history field; compare all
+            # authoring and recovery output while measuring their recording cost.
+            child["params"].pop("_proof_version", None)
     return value
 
 

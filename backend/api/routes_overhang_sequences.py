@@ -91,7 +91,7 @@ def generate_overhang_random_sequence(overhang_id: str) -> dict:
     updated, report, _ = design_state.mutate_with_feature_log(
         op_kind="overhang-sequence",
         label=f"Generate overhang sequence: {sequence}",
-        params={"overhang_id": overhang_id, "action": "generate-random"},
+        params={"overhang_id": overhang_id, "action": "generate-random", "sequence": sequence},
         fn=lambda _design: updated,
     )
     return _design_response(updated, report)
@@ -122,7 +122,7 @@ def generate_all_overhang_sequences() -> dict:
     updated, report, _ = design_state.mutate_with_feature_log(
         op_kind="overhang-bulk",
         label="Generate overhang sequences",
-        params={"generated_count": len(generated), "action": "generate-sequences"},
+        params={"sequences": generated, "action": "generate-sequences"},
         fn=lambda _design: updated,
     )
     result = _design_response(updated, report)

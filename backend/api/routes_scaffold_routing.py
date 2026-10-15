@@ -43,7 +43,6 @@ def _run_auto_scaffold_with_feature_log(
     op_kind: str,
     label: str,
     params: dict,
-    runner,
 ):
     """Shared helper: run an auto-scaffold variant under mutate_with_feature_log,
     threading the algorithm's `result` object back out via a closure.
@@ -51,29 +50,18 @@ def _run_auto_scaffold_with_feature_log(
     `runner(design)` must return ``(updated_design, result)``. If ``result.valid``
     is False, raises HTTPException 422.
     """
+    from uuid import uuid4
+    params = {**params, "history_seed": str(uuid4())}
     holder: dict = {}
 
     def _fn(d):
         try:
-            updated, result = runner(d)
-            if not hasattr(result, "valid") or result.valid:
-                from backend.core.cluster_join_constraints import realize_join_constraints
-                pending_count = len(updated.cluster_join_constraints)
-                updated = realize_join_constraints(updated)
-                if pending_count and hasattr(result, "warnings"):
-                    result.warnings.append(f"Realized all {pending_count} saved Join connections; {len(updated.scaffolds())} linear scaffold paths remain.")
+            from backend.api.part_auto_commands import scaffold
+            updated, result = scaffold(op_kind, d, history_seed=params["history_seed"])
         except HTTPException:
             raise
         except Exception as exc:
             raise HTTPException(status_code=422, detail=str(exc))
-        if hasattr(result, "valid") and not result.valid:
-            raise HTTPException(status_code=422, detail="; ".join(result.errors))
-        if op_kind.startswith("auto-scaffold"):
-            updated = updated.copy_with(strands=[
-                strand.model_copy(update={"routing_seed": []})
-                if strand.is_scaffold and not strand.is_reference else strand
-                for strand in updated.strands
-            ])
         holder["result"] = result
         return updated
 
@@ -108,7 +96,6 @@ def auto_scaffold_seamed_endpoint() -> dict:
     extends and connects the far (+hi) face.  All three phases share one snapshot.
     """
     from backend.core.seamed_router import (
-        auto_scaffold_seamed,
         seamed_routability_errors,
     )
 
@@ -118,7 +105,6 @@ def auto_scaffold_seamed_endpoint() -> dict:
         op_kind="auto-scaffold-seamed",
         label="Auto-scaffold (seamed)",
         params={},
-        runner=lambda d: auto_scaffold_seamed(d),
     )
     resp = _design_response_with_geometry(updated, report)
     resp["warnings"] = result.warnings
@@ -139,7 +125,6 @@ def auto_scaffold_matched_endpoint() -> dict:
     stay with the existing periodic tools.
     """
     from backend.core.seamed_router import (
-        auto_scaffold_matched,
         seamed_routability_errors,
     )
 
@@ -149,7 +134,6 @@ def auto_scaffold_matched_endpoint() -> dict:
         op_kind="auto-scaffold-matched",
         label="Auto-scaffold (matched ends)",
         params={},
-        runner=lambda d: auto_scaffold_matched(d),
     )
     resp = _design_response_with_geometry(updated, report)
     resp["warnings"] = result.warnings
@@ -168,13 +152,11 @@ def auto_scaffold_seamless_endpoint() -> dict:
     then places a single end crossover per within-group adjacent pair,
     alternating hi/lo face based on helix parity.
     """
-    from backend.core.seamless_router import auto_scaffold_seamless
 
     updated, report, result = _run_auto_scaffold_with_feature_log(
         op_kind="auto-scaffold-seamless",
         label="Auto-scaffold (seamless)",
         params={},
-        runner=lambda d: auto_scaffold_seamless(d),
     )
     resp = _design_response_with_geometry(updated, report)
     resp["warnings"] = result.warnings
@@ -197,13 +179,11 @@ def route_for_polymerization_endpoint() -> dict:
     helix lacks an unpaired end. Hard-errors (422) only when there is nothing to
     route at all.
     """
-    from backend.core.polymer_router import route_for_polymerization
 
     updated, report, result = _run_auto_scaffold_with_feature_log(
         op_kind="route-for-polymerization",
         label="Route for polymerization",
         params={},
-        runner=lambda d: route_for_polymerization(d),
     )
     resp = _design_response_with_geometry(updated, report)
     resp["warnings"] = result.warnings

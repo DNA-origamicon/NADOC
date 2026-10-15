@@ -6,6 +6,26 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 ---
 # Feature Log Overhaul + Tabbed Sidebar (commit 873f3e6, branch feature-log-update, 2026-05-02)
 
+## Native recipe continuation (2026-10-15)
+
+P3 now has 83 versioned kinds (with method/action restrictions), pure native
+builders shared by routes and proof, source-based continuation references,
+thread-local deterministic routing IDs, actual-failure cascade analysis, and one
+independently rebuilt prefix retained per edit. No saved outputs are proof inputs.
+Generated ordinary DNA steps use the same builders with explicit part scopes;
+legacy compound branch construction and bounded CPD-conversion replay remain
+open, so P3 is **not yet fully complete**. CPD conversion must not execute on the
+ordinary proof worker: a small regression took about 70 seconds. Preflight
+photoproduct authoring remains supported. Asset/NP/duplex work is P4, UI repair is
+P5, strict agent enforcement is P6; assemblies remain deferred.
+
+`part_recipe_capabilities.py` exposes API/editor limitations explicitly. No new
+frontend controls were added. See the latest continuation in
+`docs/audits/feature_history_20261014/implementation.md` and its validation JSON.
+Native regeneration must re-encode recovery data; cluster membership setters
+before a later payload must not erase that payload's new inherited helices.
+`part_overlay_recovery.py` handles this without executing proof on scrub paths.
+
 ## Standard part history foundation (2026-10-14)
 
 The user explicitly deferred assembly history implementation until needed; it
@@ -396,4 +416,4 @@ P2 implementation exit criteria are now met: optional versioned `Design.recipe_r
 
 `POST /api/design/features/verification` remains an explicit, bounded synchronous check. `/verification/jobs` POST/GET/DELETE exposes bounded asynchronous work. No checks run automatically during edits, frames or scrubbing. Oversized capture is rejected with 413 rather than blocking on an unlimited clone. Cancellation/deadlines are cooperative, not hard Python preemption.
 
-P3 has begun with seeded native bundle construction. Cluster/frame IDs derive from a saved UUID namespace via explicit identity factories; bundle parameter edits retain it. Bundle and joint-place/update/delete have proof contracts. Other DNA families and generated construction still need P3 coverage. No assembly work or frontend enforcement was added. Full history/agent enforcement remains later phases. See `docs/audits/feature_history_20261014/implementation.md` for complete limits, test results and performance evidence. The inherited long-pose evaluator regression (ISSUE-81) is fixed; all 14 unchanged A/B gates pass.
+P3 now has 30 audited native command contracts and root-based producer/consumer regeneration for fully covered histories (`part_recipe_edit.py`). Supported edits preserve IDs, rebuild recovery data, reject source mismatches/stale revisions, and support routing-child parameter edits and explicit cascade deletion. Rootless/mixed unsupported histories retain recovery editors and remain unverified. Dependencies are conservative; full P3 coverage, generated construction, pose/grouping/join/auto-routing and frontend editor integration remain open. Pattern seeds and crossover IDs are recorded before construction. No assembly work or frontend enforcement was added. See `docs/audits/feature_history_20261014/implementation.md` for the exact coverage, remaining exit work and validation. P2/first-family P3 was pushed as `6336d1fe`; this continuation is not phase completion.

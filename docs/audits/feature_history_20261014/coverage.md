@@ -1,6 +1,6 @@
 # Operation coverage and implementation batches
 
-As inspected October 14, 2026. A dispatcher branch is an implementation foothold, not a regeneration certificate. All entries still require the phase 1 transaction/registry contract and phase 2 verifier. P3 and P4 below refer to the family completion phases in [the plan](README.md).
+Historical inventory as inspected October 14, 2026. Current native contracts and explicit remaining limitations are recorded in [implementation.md](implementation.md#p3-expanded-native-coverage--october-15-continuation); the table below is not the current executor list. A dispatcher branch is an implementation foothold, not a regeneration certificate. All entries still require the phase 1 transaction/registry contract and phase 2 verifier. P3 and P4 below refer to the family completion phases in [the plan](README.md).
 
 Literal recording sites are direct calls identified by the AST inventory; dynamic forwarding, aliases, copied entries, and generated commands can record additional kinds. “No literal site” means inspect those paths and persisted fixtures before considering removal. Multiple sites may represent different hosts or recording behavior.
 
@@ -67,7 +67,7 @@ Literal recording sites are direct calls identified by the AST inventory; dynami
 | `create-far-ends` | No branch in the three general dispatchers | No literal site; inspect dynamic paths | P3 |
 | `create-near-ends` | No branch in the three general dispatchers | No literal site; inspect dynamic paths | P3 |
 | `curve-path` | inspect generated/legacy adapter | No literal site; inspect dynamic paths | P3 |
-| `element-paste` | No branch in the three general dispatchers | [routes_nanoparticles.py:1024](../../../backend/api/routes_nanoparticles.py#L1024) | P3 |
+| `element-paste` | Protein/nanoparticle asset paste; corrected classification | [routes_nanoparticles.py](../../../backend/api/routes_nanoparticles.py) | P4 |
 | `extrude-continuation` | Part dispatcher | [crud.py:1378](../../../backend/api/crud.py#L1378) | P3 |
 | `extrude-deformed-continuation` | Part dispatcher | [crud.py:1489](../../../backend/api/crud.py#L1489) | P3 |
 | `extrude-frame` | inspect generated/legacy adapter | [routes_frame_extrusion.py:93](../../../backend/api/routes_frame_extrusion.py#L93) | P3 |

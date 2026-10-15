@@ -55,6 +55,7 @@ def apply(body: ClusterJoinRequest | FreeClusterJoinRequest):
     from backend.api.crud import _design_response_with_geometry
 
     report = None
+    identity_seed = body.preview_token[:14] if body.preview_token else None
 
     def build(design):
         nonlocal report
@@ -66,7 +67,7 @@ def apply(body: ClusterJoinRequest | FreeClusterJoinRequest):
                 409, detail="Join preview is stale or missing; preview again."
             )
         try:
-            result, report = (propose_free_cluster_join if isinstance(body, FreeClusterJoinRequest) else propose_cluster_join)(design, body)
+            result, report = (propose_free_cluster_join if isinstance(body, FreeClusterJoinRequest) else propose_cluster_join)(design, body, identity_seed=identity_seed)
         except ValueError as exc:
             raise HTTPException(422, detail=str(exc)) from exc
         return result, MutationReport(
@@ -76,7 +77,7 @@ def apply(body: ClusterJoinRequest | FreeClusterJoinRequest):
     updated, validation, entry = state.mutate_with_feature_log(
         op_kind="cluster-join",
         label="Join clusters",
-        params=body.model_dump(mode="json"),
+        params={**body.model_dump(mode="json"), "bridge_identity_seed": identity_seed},
         fn=build,
         expected_revision=body.expected_revision,
     )

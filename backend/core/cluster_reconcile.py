@@ -71,6 +71,7 @@ class MutationReport:
         Diagnostic only; the reconciler computes these from set diffs.
     """
 
+    cluster_identity_seed: str | None = None
     cluster_disconnected: bool = False
     strand_id_renames: dict[str, str] = field(default_factory=dict)
     new_helix_origins: dict[str, Optional[str]] = field(default_factory=dict)
@@ -103,7 +104,7 @@ def reconcile_cluster_membership(
     eligible = {h.id for h in design_after.helices} - {h.id for h in design_before.helices}
     eligible -= rep.new_helix_origins.keys()  # explicit parents/orphans remain authoritative
     def finish(result):
-        return cluster_unassigned_components(result, eligible) if rep.cluster_disconnected else result
+        return cluster_unassigned_components(result, eligible, identity_seed=rep.cluster_identity_seed) if rep.cluster_disconnected else result
     if not design_before.cluster_transforms or not design_after.cluster_transforms:
         return finish(design_after)
 

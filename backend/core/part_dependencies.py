@@ -13,6 +13,7 @@ class Dependencies:
     reads: frozenset[Resource] = frozenset()
     writes: frozenset[Resource] = frozenset()
     known: bool = True
+    barrier: bool = False
 
 
 class DependencyIndex:
@@ -37,10 +38,11 @@ class DependencyIndex:
         parents = {self.writers[r] for r in contract.reads | contract.writes if r in self.writers}
         if self.barrier is not None:
             parents.add(self.barrier)
-        if not contract.known:
+        if not contract.known or contract.barrier:
             parents.update(self.frontier)
             self.barrier = feature_id
-            self.complete = False
+            if not contract.known:
+                self.complete = False
         self.parents[feature_id] = parents
         self.children[feature_id] = set()
         for parent in parents:

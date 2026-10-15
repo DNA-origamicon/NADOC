@@ -1008,8 +1008,8 @@ def test_edit_extrusion_replays_with_new_length():
     )
 
 
-def test_edit_refused_when_later_snapshots_exist():
-    """If a later snapshot exists, editing returns 409 with a useful message."""
+def test_edit_rebuilds_later_native_snapshots():
+    """A covered producer edit rebuilds its downstream native routing."""
     client.post(
         "/api/design/bundle", json={"cells": [[0, 0]], "length_bp": 42, "name": "B"}
     )
@@ -1035,8 +1035,11 @@ def test_edit_refused_when_later_snapshots_exist():
     new_params["length_bp"] = 7
 
     r = client.post(f"/api/design/features/{seg_idx}/edit", json={"params": new_params})
-    assert r.status_code == 409, r.text
-    assert "later snapshot" in r.text.lower()
+    assert r.status_code == 200, r.text
+    from backend.api.part_history_verification import verify_current_part
+    result = verify_current_part()
+    assert result["status"] == "verified", result
+    assert design_state.get_or_404().feature_log[-1].op_kind == "auto-break"
 
 
 def test_edit_deformation_after_seek_back_saves_and_keeps_later_ops():

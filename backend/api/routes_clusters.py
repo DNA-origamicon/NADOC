@@ -36,7 +36,7 @@ from backend.api import state as design_state
 # _ensure_default_cluster is the shared cluster-bootstrap helper (also called by
 # crud.py's auto-clustering path). Both stay in crud.py and are imported back
 # here (same convention as routes_camera_poses.py / routes_deformation.py).
-from backend.api.crud import _design_response, _ensure_default_cluster
+from backend.api.crud import _design_response
 from backend.api.pattern_features import (
     CircularPatternBody,
     LinearPatternBody,
@@ -95,28 +95,13 @@ def add_cluster(body: AddClusterBody) -> dict:
     from backend.core.validator import validate_design
 
     design = design_state.get_or_404()
-    # Ensure a default cluster exists before splitting so the remainder lands somewhere.
-    # This is a no-op when intentional clusters (e.g. scaffold clusters) already exist.
-    design = _ensure_default_cluster(design)
-
-    new_helix_set = set(body.helix_ids)
-
-    # Strip the new cluster's helices ONLY from the default catch-all cluster.
-    # Non-default clusters (scaffold-imported, user-created) are preserved intact.
-    surviving = []
-    for c in design.cluster_transforms:
-        if c.is_default:
-            remaining = [h for h in c.helix_ids if h not in new_helix_set]
-            if remaining:
-                surviving.append(c.model_copy(update={"helix_ids": remaining}))
-            # Default cluster with no remaining helices is silently dropped.
-        else:
-            surviving.append(c)
-
     domain_ids = [DomainRef(**d) for d in (body.domain_ids or [])]
     ct = ClusterRigidTransform(
         name=body.name, helix_ids=body.helix_ids, domain_ids=domain_ids
     )
+
+    from backend.core.part_overlay_commands import build
+    grouped = build("cluster_create", design, {"cluster": ct.model_dump(mode="json")})
 
     if body.log:
         # Record the cluster-creation step in the feature log so a design's
@@ -126,6 +111,7 @@ def add_cluster(body: AddClusterBody) -> dict:
         if design.feature_log_cursor >= 0:
             log = log[: design.feature_log_cursor + 1]
         log_entry = ClusterCreateLogEntry(
+            proof_version=1,
             cluster_snapshot=ct,
             cluster_id=ct.id,
             name=ct.name,
@@ -133,12 +119,12 @@ def add_cluster(body: AddClusterBody) -> dict:
             domain_ids=list(ct.domain_ids),
         )
         updated = design.copy_with(
-            cluster_transforms=surviving + [ct],
+            cluster_transforms=grouped.cluster_transforms,
             feature_log=log + [log_entry],
             feature_log_cursor=-1,
         )
     else:
-        updated = design.copy_with(cluster_transforms=surviving + [ct])
+        updated = design.copy_with(cluster_transforms=grouped.cluster_transforms)
     design_state.set_design(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
@@ -219,6 +205,8 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
         if design.feature_log_cursor >= 0:
             log = log[: design.feature_log_cursor + 1]
         log_entry = ClusterOpLogEntry(
+            proof_version=1,
+            authored_fields=updated_ct.model_dump(mode="json", include={"name", "helix_ids", "domain_ids", "color", "opacity"}),
             cluster_id=cluster_id,
             translation=list(updated_ct.translation),
             rotation=list(updated_ct.rotation),
@@ -381,12 +369,14 @@ def cluster_paste(body: ClusterPasteBody) -> dict:
     Emits a ``cluster-paste`` feature-log entry, which is what gives the user
     rollback / revert / delete and feature-slider seek for free.
     """
+    from uuid import uuid4
+    params = {**body.model_dump(mode="json"), "history_seed": str(uuid4())}
     holder: dict = {}
 
     def _fn(design):
         try:
             grafted, pasted_helix_ids, report = paste_clusters(
-                design, body.cluster_ids, (body.delta_row, body.delta_col)
+                design, body.cluster_ids, (body.delta_row, body.delta_col), identity_seed=params["history_seed"]
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -403,7 +393,7 @@ def cluster_paste(body: ClusterPasteBody) -> dict:
         op_kind="cluster-paste",
         label=f"Paste {n} cluster{'s' if n != 1 else ''} "
         f"(Δrow {body.delta_row:+d}, Δcol {body.delta_col:+d})",
-        params=body.model_dump(mode="json"),
+        params=params,
         fn=_fn,
     )
 
@@ -423,11 +413,12 @@ def cluster_paste(body: ClusterPasteBody) -> dict:
 
 def _create_pattern(kind, body):
     holder = {}
-    params = body.model_dump(exclude={"expected_revision"})
+    from uuid import uuid4
+    params = {**body.model_dump(exclude={"expected_revision"}), "history_seed": str(uuid4())}
 
     def build(design):
         try:
-            candidate, ids, copy_report = build_pattern(kind, design, params)
+            candidate, ids, copy_report = build_pattern(kind, design, params, id_seed=params["history_seed"])
         except ValueError as exc:
             raise HTTPException(400, detail=str(exc)) from exc
         holder["report"] = copy_report

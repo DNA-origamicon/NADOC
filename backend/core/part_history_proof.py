@@ -61,8 +61,9 @@ def command_rows(design, limit):
                 count += 1
                 if count > limit:
                     raise ValueError("entry_limit")
-            kind = getattr(child, "op_kind", getattr(child, "op_subtype", child.feature_type))
-            yield child.id, kind, getattr(child, "params", {})
+            from backend.core.part_overlay_commands import command_input
+            kind, params = command_input(child)
+            yield child.id, kind, params
 
 
 def assess(design, *, max_entries, execute, dependencies, checkpoint):

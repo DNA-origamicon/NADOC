@@ -9,7 +9,7 @@ Scope approved October 14, 2026: implement standard-part validation, editability
 | P0 | Inventory, field ownership and performance evidence | Source audit complete; initial recording benchmark captured. Add workloads as the affected subsystem changes |
 | P1 | Standard-part recording transactions, executable replay registry and evidenced cleanup | Foundation implemented below. Retain legacy callbacks and compatibility recovery; no claim of general isolated evaluation |
 | P2 | Explicit recipe roots/versions, authoritative-field classification, read-only verification and incremental dependencies | Implementation exit checks complete: independent nonempty replay, content-pinned roots, typed dependencies, fingerprints, bounded capture/jobs and stale/cancel handling. Supported-family expansion continues in P3/P4; validation debt below remains explicit |
-| P3 | Complete native DNA command families and generated construction | In progress: native bundle construction and its existing parameter editor now preserve deterministic identity; native bundle→joint recipes verify. Other DNA families and generated construction remain pending |
+| P3 | Complete native DNA command families and generated construction | 83 versioned command kinds, with action/method restrictions, native generated-part composition and independent regeneration implemented. Final validation below; compound branch generation and bounded CPD-conversion replay remain open, so P3 is not universally complete |
 | P4 | Standard-part assets and attachments | Pending. Explicit import provenance, duplex/protein/nanoparticle commands, physical-result separation and all current part authoring bypasses |
 | P5 | Standard-part repair, drafts, desktop and part-mode VR | Pending. Revision-bound impact previews, failed/blocked diagnostics, reference replacement, last-successful-state display, undo/reload |
 | P6 | Strict standard-part agent transactions and legacy retirement | Pending. Pure candidate execution outside long-held locks, expected-revision publication, registered command batches, bypass closure and explicit import exceptions |
@@ -139,3 +139,95 @@ session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 ```
 
 Final focused rerun after the frame-ID optimization: **83 passed** (11 native bundle, 28 lattice-frame, 11 proof-engine, 7 job-lifecycle, 26 verification checks). Repository memory lint retains six errors in unchanged files and 60 warnings; the touched feature-history memory head was already over the 200-line warning target. No memory lint threshold was changed.
+
+
+## P3 continuation — native contracts and producer regeneration
+
+The P2 foundation and first P3 increment were committed and pushed as `6336d1fe` before this continuation.
+
+`part_recipe_edit.py` now rebuilds fully covered recipes from their explicit root, preserving feature/child identities and regenerating all recovery snapshots and routing diffs. It never decodes saved outputs. Producer edits rebuild consumers; command deletion reports dependent feature IDs before an explicit cascade. Child parameter edits use the existing edit endpoint with `sub_index`. Failed reference resolution, a nonreproducible source, admission limits, or a concurrent revision/document replacement prevent candidate publication. Undo/redo remains one operation. Presentation, physical-result and document-identity fields are retained; this does not certify their validity after topology changes.
+
+Compatibility is deliberate: documents without roots and histories containing unsupported rows continue using established recovery editors. They remain unverified. This avoids prematurely applying P6 strict enforcement and preserves the specialized sweep/pattern editors for mixed histories. The original unsupported-history regeneration limitations have **not** been solved by this fallback.
+
+| Contract group | Covered commands |
+|---|---|
+| Construction | `bundle-create`, `sweep`, `circular-pattern`, `linear-pattern` |
+| Joints | `joint-place`, `joint-update`, `joint-delete` |
+| Helices | `helix-add`, `helix-update`, `helix-delete`, `helix-reorder` |
+| Strands/domains | `strand-add`, `strand-update`, `strand-delete`, `strand-delete-batch`, `domain-add`, `domain-delete`, `domain-shift`, `strand-end-resize`, `strands-color-bulk`, `strands-reference` |
+| Routing | `nick`, `nick-batch`, `crossover-place`, `crossover-place-batch` |
+| Loop/skip | `loop-skip-insert`, `loop-skip-twist`, `loop-skip-bend` |
+| Sequence | `assign-scaffold-sequence`, `assign-staple-sequences` |
+
+Pattern namespaces and crossover IDs are selected before construction and recorded as inputs. Sweep edits retain their namespace and persist schema-normalized detachment parameters. Sweep request parsing accepts only the known version receipt while still forbidding other extra inputs; the receipt is not a new user-facing request option. No topology or molecular geometry algorithm was changed.
+
+Routing uses conservative whole-part dependencies because reconciliation can affect overhangs, domains and pending ligations. Consequently a deletion preview can include independent commands; explicit cascade remains required. Parameter edits replay the whole admitted recipe, including independent commands. Finer dependencies and reusable prefix execution remain necessary before claiming minimal affected-work regeneration.
+
+### Remaining P3 exit work — not deferred to assemblies
+
+- Complete extrusion/continuation/frame/circle/overhang construction identity inputs, including helpers whose IDs currently depend on document identity or random suffixes.
+- Complete remaining helix/strand/domain/ligation/crossover operations, strand/overhang sequence edits, and loop/skip application variants.
+- Version pose/deformation/grouping/overhang-rotation inputs and preserve their specialized edit semantics during downstream regeneration.
+- Audit auto-scaffold/autostaple/break/merge/routing, joins, photoproduct and other P3 rows in `coverage.md`; do not silently mark dispatcher availability as reproducibility.
+- Replace generated nick/result shortcuts and partial construction comparisons with native execution and complete authoring comparisons. Existing generator compatibility remains necessary until this passes.
+- Complete family-specific editor/preview coverage and independent-deletion behavior. The new routing-child parameter API has no new frontend control in this increment.
+- Add broader hash-seed, large-document and interactive measurements for these remaining families. Existing ordinary recording gates are not evidence for every new regeneration workload.
+
+P3 therefore remains **in progress**, not complete. Assembly work remains deferred; strict agent enforcement remains P6.
+
+### Validation for this continuation
+
+Focused regressions cover producer→joint regeneration, poisoned recovery bytes, cascade and child deletion, invalid downstream references, unlogged changes, concurrent publication, undo/redo, native routing, sequences, patterns, sweeps, stable crossover identities and parameter edits. Legacy history, joint, pattern, sweep, detach, headless and VR API suites remain in the regression scope. No browser/headset validation or molecular simulations were performed; `frontend/src/main.js` LOC delta is **0**.
+
+`recording_benchmark_p3.json` passes all six unchanged timing gates against `dfa63eeb` (31 alternating batches × 10 iterations). Candidate medians are about 0.257/0.298 ms for 1-helix snapshot/minor recording, 1.521/1.723 ms for 24 helices, and 2.024/2.301 ms for 24 helices/100 rows. The comparison explicitly allows the intentional minor-command version receipt while comparing authoring and recovery output. No timing threshold changed; HTTP, rendering, cold imports and recipe regeneration are outside this benchmark.
+
+
+Final broad validation selected **FAST (fast suite only)**: **11,163 passed, 21 skipped, 23 failed, 8 errors**, 189.10 seconds pytest / 205 seconds outer guard. All failing node IDs match the retained baseline (`validation_p3_continuation.json`). The initial run exposed 50 additional compatibility failures; the corrections above removed them. The aggregate timing warning remains, with **zero individual violators**; no test markers, guard thresholds or scientific assertions were weakened.
+
+After that broad run, focused validation found and repaired a first-helix provenance gap: response-time default-cluster creation was outside the logged command. Helix creation now invokes the shared pure structural builder, which includes deterministic default-cluster creation before recording. The new empty-root regression failed before this correction and passes afterward. Sweep parameter-normalization errors now return HTTP 400 without publication. The final targeted group passed **75 tests** (26 native routing/construction, six recipe-edit, 11 proof-engine, 32 recording-transaction). Previously failing legacy joint/history/pattern/sweep/detach suites and the corrected headless/VR API suites also passed focused reruns. This last small correction was covered by focused tests after the broad run; the broad count does not include its new regression.
+
+```text
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+```
+
+Native recipe edits are bounded by the same capture admission and a five-second cooperative regeneration deadline. Large recipes can therefore be refused without mutation; eliminating that editing limitation requires incremental/prefix evaluation and larger-document evidence. This is an open P3 usability limit, not a claim of universal edit latency or complete coverage.
+
+Final additional checks: **26 cadnano-editor API tests passed** after the first-helix correction. All **14 evaluator equivalence/latency gates passed** (`evaluation_benchmark_p3.json`); combined with six recording gates, all 20 measured gates passed unchanged. Changed-file Ruff and whitespace checks pass. This remains backend validation; no browser/headset or end-to-end latency claim.
+
+
+## P3 expanded native coverage — October 15 continuation
+
+This section supersedes the 30-command continuation above. The registry now exposes **83 command kinds** and **16 explicit overhang-bulk actions**. These are available contracts, not a coverage percentage or a certificate for a document. Method restrictions, source roots, full-history coverage, complete authoring comparison and admission limits still apply.
+
+- Shared pure builders now cover frame/continuation/circle extrusion, cell/helix extent and scaffold painting, all active Fine Routing CRUD/ligation/crossover variants, strand/overhang sequences, loop/skip planning/application/clearing, auto routing/autostapling, joins, cluster paste, poses, nucleotide transforms, flexible marks, overhang subdomains/bindings/linkers, and selected refinement marks. Original routers are thin adapters to the same algorithms; the extracted duplicate bodies were removed. `linker-patch` and loop-clear actions now record history instead of changing authoring state invisibly.
+- Identity namespaces are selected before construction. Routing uses a nested, thread-local context only around opted-in constructors; legacy callers retain their original random identities. Continuations record explicit source-helix references. Cross-process hash-seed and thread/nesting tests cover determinism and isolation. Molecular geometry algorithms and locked constants were not changed.
+- Pure refinement selection no longer reads or changes the live document. Framed cluster copy now carries/remaps the referenced frames and placements. Compatibility imports still used by other modules remain; the unused `lattice.Crossover` import was removed after checking importers.
+- Deletion replays surviving commands to identify actual failures instead of deleting every possible dependent from the coarse graph. Independent later work survives. The source verification retains one independently rebuilt prefix per edit; suffix regeneration never reads poisoned snapshots. There is no cross-request cache or per-frame proof work.
+- Generated ordinary extrusion, sweep, auto-scaffold, autostaple, nick, overhang and sequencing steps execute native commands. Scoped input references plus an identity namespace isolate generated DNA from existing independent work; no arbitrary Design/Python command or stored geometry is supplied to the executor. All authoritative fields are compared. Sequence recording no longer decodes generated result snapshots. Old generated-v1 compatibility remains active.
+- Native extrusion's inherited cluster membership is now explicitly released before independently transporting a generated carrier. Recovery respects payload boundaries: old membership/name/appearance setters cannot overwrite membership added by a later extrusion. Regression checks cover both recovery modes and backward/forward scrubbing.
+- `GET /api/design/features/capabilities` now describes the history-edit API, routing-child target, existing specialized UI fields, API-only editors, supported bulk actions and method restrictions. This is static information, not a document scan. No frontend code changed; `main.js` LOC delta **0**.
+
+### Explicit remaining limitations and phase boundaries
+
+1. **P3 compound branch generation remains open.** Existing `generate-design` branch/section/budget variants still lack complete native feature inputs. The compiler leaves these unverified and returns `history_unverified_steps` with reasons. They have not been relabeled as assemblies or as valid native recipes. Generated NP/duplex/attachment operations also remain unverified, but those are the separately planned **P4 part-local asset** work.
+2. **CPD conversion is not admitted to replay.** A small conversion-plus-replay regression took 70.70 seconds and overran the synchronous verification deadline during native placement. Ordinary verification rejects `photoproduct-create` with method `convert` before calling that solver. Native preflight authoring and deletion have contracts; conversion remains available through its existing endpoint with explicit identity inputs. A bounded conversion contract is still required; neither the ordinary worker deadline nor a saved placement is treated as proof.
+3. Historical parameter editing requires the API for families without existing specialized history controls. Existing desktop/VR editors retain their current field sets and later-snapshot restrictions. Historical preview and mixed/rootless histories retain recovery editors. These are explicit editor limitations permitted by the per-family exit criterion; P5 owns unified UI diagnostics/repair. No browser or headset behavior is claimed.
+4. Capture remains bounded (30,000 values / 2 MB / 25 ms), verification has the existing cooperative deadlines, and edits use a five-second regeneration deadline. Large edits may be refused atomically. Prefix reuse is measured; fine-grained independent suffix reuse and interactive end-to-end latency are not claimed. No budgets or guard thresholds were raised.
+5. `element-paste` in the original inventory is protein/nanoparticle paste (`routes_nanoparticles.paste_rigid_elements`), so it belongs to P4. The old `auto-scaffold` and near/far-end literals have no active native recording route; persisted compatibility types are retained. Unknown overhang-bulk actions (including connection-version asset application) stay unverified.
+
+P3 has therefore advanced substantially but is **not marked fully complete** while items 1–2 remain. P4/P5/P6 and assembly implementation have not been silently folded into this continuation. Strict agent enforcement is still P6.
+
+### Current validation evidence
+
+The compact completion-attempt report and benchmark JSON files record the final checks for this continuation. Earlier reports above remain historical evidence. Focused tests include native empty-root replay, poisoned recovery payloads, stable identities, producer edits, cascades/independent survival, generated scoped construction and non-strand tamper rejection, annotation/subdomain/linker/binding lifecycle, frame/cell/copy compatibility, and recovery membership boundaries. No molecular simulations were run. The absent Archive mount prevents bulk browser artifacts; no browser run or user-workspace design mutation was attempted.
+
+
+Final broad run: **FAST**, **11,227 passed, 21 skipped, 24 failed, 8 errors** in 181.00 s pytest / 197 s guard. Twenty-three failed nodes and all eight errors match the retained baseline. The additional Join proof test hit the intended synchronous 0.5 s deadline under parallel load; it now uses the existing bounded worker and passed focused verification without changing production deadlines. Zero individual timing violators; the aggregate timing warning remains. Full-suite debt remains:
+
+```text
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+```
+
+All **22 measured latency/equivalence gates pass**: six recording, fourteen recovery/geometry, and two prefix-edit cases. The larger prefix case measured 14.8 ms versus 15.3 ms full replay; this is a selected in-memory workload. Final generated compatibility (2), native generated proof/tamper/scope (4), native annotations/admission (10), overhang/binding/linker/recovery (8), routing (34), refinement (4), hash-seed/thread isolation (2), and Join-worker (1) focused checks pass. Changed-file Ruff and whitespace checks pass. Repository lint retains five unused imports in unchanged files; memory lint retains six errors in unchanged heads. Evidence: [validation_p3_expansion.json](validation_p3_expansion.json), [recording](recording_benchmark_p3_completion.json), [evaluation](evaluation_benchmark_p3_completion.json), [prefix edits](recipe_edit_benchmark_p3.json).

@@ -115,5 +115,8 @@ def test_capabilities_distinguish_executors_from_proof_contracts():
     result = get_part_feature_capabilities()
     assert "bundle-create" in result["proof_commands"]
     assert "nick" in result["minor_commands"]
-    assert "nick" not in result["proof_commands"]
+    assert "nick" in result["proof_commands"]
+    assert "crossover-place" in result["proof_commands"]
+    assert "overhang-extrude" in result["proof_commands"]
+    assert "nanoparticle-create" not in result["proof_commands"]
     assert result["certifies_history"] is False

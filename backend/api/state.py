@@ -398,10 +398,12 @@ def load_design(d: Design | None) -> None:
         _bump_revision(s)
 
 
-def set_design(d: Design, *, expected_revision: int | None = None) -> None:
+def set_design(d: Design, *, expected_revision: int | None = None, expected_source: Design | None = None) -> None:
     with _lock:
         s = _session()
         if expected_revision is not None and s.revision != expected_revision:
+            raise HTTPException(409, detail="Design changed while the feature operations were being prepared. Try again.")
+        if expected_source is not None and s.design is not expected_source:
             raise HTTPException(409, detail="Design changed while the feature operations were being prepared. Try again.")
         _assert_active_loadout_editable(s.design, d)
         _assert_photoproduct_dependencies(d)

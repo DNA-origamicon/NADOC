@@ -63,8 +63,11 @@ def capture(design, *, max_nodes=30_000, max_bytes=2_000_000, seconds=0.025):
 
     def header(entry):
         # Copy only fields proof mode actually reads. Never visit a payload.
-        data = {"id": entry.id, "op_subtype": getattr(entry, "op_kind", getattr(entry, "op_subtype", entry.feature_type)),
-                "params": getattr(entry, "params", {})}
+        from backend.core.part_overlay_commands import command_input
+        if entry.feature_type in {"deformation", "cluster_create", "cluster_op"}:
+            charge(entry)
+        kind, params = command_input(entry)
+        data = {"id": entry.id, "op_subtype": kind, "params": params}
         charge(data)
         # model_construct intentionally preserves unsupported legacy kinds for
         # fail-closed coverage diagnostics without attempting a schema migration.

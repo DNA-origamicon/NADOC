@@ -287,20 +287,24 @@ def _add_root(
                         NickRequest(helix_id=hid, bp_index=cut, direction=d.direction),
                     )
                 )
+                if history and history.standard and not endpoint:
+                    from backend.api.part_proof_commands import execute
+                    trial = execute("nick", design, {"helix_id": hid, "bp_index": cut,
+                        "direction": d.direction.value, "_proof_version": 1})
                 nicked = trial
-                trial, _ = _build_overhang_extrude(
-                    trial,
-                    OverhangExtrudeRequest(
-                        helix_id=hid,
-                        bp_index=bp,
-                        direction=d.direction,
-                        is_five_prime=five_prime,
-                        neighbor_row=neighbor[0],
-                        neighbor_col=neighbor[1],
-                        length_bp=length,
-                        reuse_existing_helix=not independent_carriers,
-                    ),
+                overhang_request = OverhangExtrudeRequest(
+                    helix_id=hid, bp_index=bp, direction=d.direction,
+                    is_five_prime=five_prime, neighbor_row=neighbor[0],
+                    neighbor_col=neighbor[1], length_bp=length,
+                    reuse_existing_helix=not independent_carriers,
+                    history_seed=str(uuid.uuid4()),
                 )
+                if history and history.standard:
+                    from backend.api.part_proof_commands import execute
+                    trial = execute("overhang-extrude", trial,
+                        {**overhang_request.model_dump(mode="json"), "_proof_version": 1})
+                else:
+                    trial, _ = _build_overhang_extrude(trial, overhang_request)
             except ValueError:
                 continue
             added = next(
@@ -329,7 +333,8 @@ def _add_root(
                     "nick",
                     f"Nick staple for nanoparticle {particle_number}",
                     {
-                        "bp_index": bp,
+                        **({"_proof_version": 1} if history and history.standard else {}),
+                        "bp_index": cut,
                         "cut_bp_index": cut,
                         "helix_id": hid,
                         "direction": d.direction.value,
@@ -343,19 +348,24 @@ def _add_root(
                 trial,
                 "overhang-extrude",
                 f"Extrude nanoparticle {particle_number} overhang",
-                {
-                    "length_bp": length,
-                    "helix_id": hid,
-                    "bp_index": bp,
-                    "direction": d.direction.value,
-                    "is_five_prime": five_prime,
-                    "neighbor_row": neighbor[0],
-                    "neighbor_col": neighbor[1],
-                    "reuse_existing_helix": not independent_carriers,
-                },
+                {**overhang_request.model_dump(mode="json"),
+                 **({"_proof_version": 1} if history and history.standard else {})},
                 f"overhang:{index}",
                 ("length_bp",),
             )
+            if history and history.standard and independent_carriers:
+                # The manual extrusion reconciler inherits the parent's pose.
+                # This planner transports an independent carrier explicitly in
+                # the next step. Record releasing that inherited membership,
+                # rather than silently skipping the native reconciler.
+                carrier_ids = {h.id for h in trial.helices} - {h.id for h in nicked.helices}
+                grouped = trial.copy_with(cluster_transforms=[c.model_copy(update={
+                    "helix_ids": [hid for hid in c.helix_ids if hid not in carrier_ids]})
+                    for c in trial.cluster_transforms])
+                if grouped.cluster_transforms != trial.cluster_transforms:
+                    _record(history, trial, grouped, "cluster-pose", "Release independent attachment carrier",
+                            {}, f"carrier-membership:{index}")
+                    trial = grouped
             return trial, added.id
     raise ValueError(
         "No legal same-side staple attachment site was available near a particle. Try another duplex length or particle separation."
@@ -435,11 +445,13 @@ def materialize(
         request = SweepRequest.model_validate({**candidate.summary["sweep_request"], "sweep_id": uuid.uuid4()})
         rod = build_sweep(before, request)
     elif standard:
-        from backend.api.crud import _build_extrude_segment, BundleSegmentRequest
+        from backend.api.crud import BundleSegmentRequest
         # The slice-plane extrude adds DNA to the current part. Create Bundle
         # is a fresh-document command and would discard the nanoparticles.
-        rod, _ = _build_extrude_segment(before, BundleSegmentRequest(
-            cells=candidate.summary["cells"], length_bp=bp["length_bp"], ligate_adjacent=False))
+        from backend.api.part_proof_commands import execute
+        request = BundleSegmentRequest(cells=candidate.summary["cells"],
+            length_bp=bp["length_bp"], ligate_adjacent=False, history_seed=uuid.uuid4())
+        rod = execute("extrude-segment", before, {**request.model_dump(mode="json"), "_proof_version": 1})
     else:
         rod = make_bundle_design(
             candidate.summary["cells"], bp["length_bp"],
@@ -459,7 +471,7 @@ def materialize(
         rod,
         "generate-design" if branched else "sweep" if swept else "extrude-segment" if standard else "bundle-create",
         "Create independent Join branches" if joined else "Create curved branched sections" if forked else "Create branched lattice sections" if branched else "Sweep nanoparticle path" if swept else "Extrude segment" if standard else f"Create {shape} bundle",
-        request.model_dump(mode="json") if swept else {
+        ({**request.model_dump(mode="json"), "_proof_version": 1} if standard and not branched else request.model_dump(mode="json")) if swept or (standard and not branched) else {
             **bp,
             "cells": candidate.summary["cells"],
             "lattice_type": source.lattice_type.value,
@@ -488,6 +500,13 @@ def materialize(
     elif branched:
         from backend.core.branched_generator import route_branches
         rod, routing = route_branches(rod, candidate.summary)
+    elif standard:
+        from backend.api.part_auto_commands import scaffold
+        from backend.core.cluster_reconcile import reconcile_cluster_membership
+        from backend.core.lattice import retry_pending_ligations
+        routing_params = {"history_seed": str(uuid.uuid4()), "_proof_version": 1}
+        rod, routing = scaffold("auto-scaffold-seamed", rod, history_seed=routing_params["history_seed"])
+        rod = retry_pending_ligations(before, reconcile_cluster_membership(before, rod))
     else:
         rod, routing = auto_scaffold_seamed(rod)
     if not routing.valid:
@@ -498,7 +517,7 @@ def materialize(
         rod,
         "auto-scaffold-seamed",
         f"Route {shape} scaffold",
-        {},
+        routing_params if standard and not branched else {},
         "scaffold",
     )
     if swept:
@@ -598,10 +617,15 @@ def materialize(
         )
     progress("Full autostaple", "Assign scaffold sequence, route crossovers and break staples", .28)
     before = rod
-    with scratch_session(source.lattice_type):
-        state.set_design(rod)
-        rod = full_autostaple(sequence_params["scaffold_name"]).model_copy(deep=True)
-    rod = rod.copy_with(feature_log=[], cluster_transforms=rod.cluster_transforms if swept or joined else [])
+    if standard:
+        from backend.api.part_proof_commands import execute
+        sequence_params = {**sequence_params, "history_seed": str(uuid.uuid4()), "_proof_version": 1}
+        rod = execute("full-autostaple", rod, sequence_params)
+    else:
+        with scratch_session(source.lattice_type):
+            state.set_design(rod)
+            rod = full_autostaple(sequence_params["scaffold_name"]).model_copy(deep=True)
+    rod = rod.copy_with(feature_log=[], cluster_transforms=rod.cluster_transforms if standard or swept or joined else [])
     _record(
         history,
         before,
@@ -640,19 +664,21 @@ def materialize(
             "curve-marks",
         )
         before = rod
-        with scratch_session(source.lattice_type):
-            state.set_design(rod)
-            rod = full_sequence(sequence_params["scaffold_name"]).model_copy(deep=True)
-            sequenced_entries = rod.feature_log[-2:]
-        rod = rod.copy_with(feature_log=[], cluster_transforms=rod.cluster_transforms if swept or joined else [])
-        if history and history.standard:
-            # full_sequence is two existing commands: scaffold sequence, then
-            # staple complements. Retain both original command boundaries.
-            for j, entry in enumerate(sequenced_entries):
-                _record(history, state.decode_design_snapshot(entry.design_snapshot_gz_b64),
-                    state.decode_design_snapshot(entry.post_state_gz_b64), entry.op_kind,
-                    entry.label, entry.params, f"curve-sequences:{j}")
+        if standard:
+            from backend.api.part_proof_commands import execute
+            steps = [("assign-scaffold-sequence", {"scaffold_name": sequence_params["scaffold_name"], "strand_id": s.id})
+                     for s in rod.scaffolds() if not s.is_reference]
+            steps.append(("assign-staple-sequences", {}))
+            for j, (kind, arguments) in enumerate(steps):
+                arguments = {**arguments, "_proof_version": 1}
+                prior = rod
+                rod = execute(kind, rod, arguments)
+                _record(history, prior, rod, kind, "Resequence curved rod", arguments, f"curve-sequences:{j}")
         else:
+            with scratch_session(source.lattice_type):
+                state.set_design(rod)
+                rod = full_sequence(sequence_params["scaffold_name"]).model_copy(deep=True)
+            rod = rod.copy_with(feature_log=[], cluster_transforms=rod.cluster_transforms if swept or joined else [])
             _record(history, before, rod, "assign-staple-sequences", "Resequence curved rod", {}, "curve-sequences")
     if (join_curved or (forked and candidate.summary.get("budget_trim_nt"))) and physical_scaffold_nt(rod) != budget:
         raise ValueError("Staple routing changed the full-budget scaffold count; this candidate needs replanning.")
@@ -850,23 +876,17 @@ def materialize(
         rc = sequence.upper().translate(str.maketrans("ACGT", "TGCA"))[::-1]
         before = rod
         sp = _params(history, f"sequence:{index}", {"sequence": rc}, ("sequence",))
-        rod, _, _ = _build_overhang_patch(
-            rod,
-            oid,
-            OverhangPatchRequest(
-                sequence=sp["sequence"], label=f"NP {particle_index + 1} anchor"
-            ),
-        )
-        _record(
-            history,
-            before,
-            rod,
-            "overhang-sequence",
-            f"Sequence nanoparticle {particle_index + 1} overhang",
-            sp,
-            f"sequence:{index}",
-            ("sequence",),
-        )
+        patch_params = {**sp, "overhang_id": oid, "label": f"NP {particle_index + 1} anchor"}
+        if standard:
+            from backend.api.part_proof_commands import execute
+            patch_params["_proof_version"] = 1
+            rod = execute("overhang-sequence", rod, patch_params)
+        else:
+            rod, _, _ = _build_overhang_patch(rod, oid, OverhangPatchRequest(
+                sequence=sp["sequence"], label=patch_params["label"]))
+        _record(history, before, rod, "overhang-sequence",
+            f"Sequence nanoparticle {particle_index + 1} overhang", patch_params,
+            f"sequence:{index}", ("sequence",))
         connections.append(
             dict(
                 particle_id=owner.nanoparticle_id,

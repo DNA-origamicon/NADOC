@@ -1761,6 +1761,7 @@ class FeatureLogProvenance(BaseModel):
 class DeformationLogEntry(FeatureLogProvenance):
     """Feature log entry for a bend or twist deformation operation."""
 
+    proof_version: Optional[Literal[1]] = None
     feature_type: Literal["deformation"] = "deformation"
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     deformation_id: str  # references a DeformationOp.id in design.deformations
@@ -1775,6 +1776,8 @@ class ClusterOpLogEntry(FeatureLogProvenance):
     can tell e.g. relax-driven cluster updates from manual ones at a glance.
     """
 
+    authored_fields: dict = Field(default_factory=dict)
+    proof_version: Optional[Literal[1]] = None
     feature_type: Literal["cluster_op"] = "cluster_op"
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     cluster_id: str
@@ -1799,6 +1802,7 @@ class ClusterCreateLogEntry(FeatureLogProvenance):
     graph (the three-layer law), exactly like ``ClusterOpLogEntry``.
     """
 
+    proof_version: Optional[Literal[1]] = None
     feature_type: Literal["cluster_create"] = "cluster_create"
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     # Preserve parent/domain ownership for automatically grouped duplexes too.
@@ -1830,6 +1834,7 @@ class OverhangRotationLogEntry(FeatureLogProvenance):
     """
 
     feature_type: Literal["overhang_rotation"] = "overhang_rotation"
+    proof_version: Literal[1] | None = None
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     overhang_ids: List[str]
     rotations: List[List[float]]  # [qx, qy, qz, qw] per overhang_id (parallel list)
@@ -1956,6 +1961,7 @@ SnapshotOpKind = Literal[
     "flexible-segment-unmark",
     "flexible-relax",
     "linker-add",
+    "linker-patch",
     "linker-delete",
     "assembly-overhang-bind",
     "assembly-overhang-bind-patch",
@@ -2129,6 +2135,8 @@ MinorOpSubtype = Literal[
     "domain-delete",
     "domain-shift",
     "loop-skip-insert",
+    "loop-skip-clear",
+    "loop-skip-clear-all",
     "loop-skip-twist",
     "loop-skip-bend",
     "strand-patch",

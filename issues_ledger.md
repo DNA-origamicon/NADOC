@@ -1785,3 +1785,15 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
 - Join/Pattern recovery scanned every pose using `getattr(entry, "op_kind", None)`. On Pydantic variants without that field, repeated fallback/exception handling dominated the work. Empty cluster-creation scans also copied an unchanged design.
 - Added feature-type discrimination before snapshot-only access and returned the unchanged design when there are no cluster creations. No molecular algorithms, phase constants, history semantics, or timing thresholds changed.
 - All 14 evaluator equivalence/timing gates now pass; 1,000-pose cases are about 0.30–0.32 ms. Join, pattern, creation-history and evaluator focused tests pass. Evidence: `docs/audits/feature_history_20261014/evaluation_benchmark_p2_completion.json` and the preserved failing baseline samples. No app/browser claim; backend-only optimization.
+
+
+## ISSUE-82 — Producer parameter edits retain stale downstream routing (2026-10-14, PARTIAL)
+
+- The old snapshot editor rebuilt only the selected producer and carried later routing rows forward without executing their commands. A bundle length edit could retain a joint log entry while dropping its authored joint state.
+- Fully covered recipes now regenerate from inputs, rebuild recovery data, and publish with an expected revision/source identity. Tests in `test_part_recipe_edit.py` cover downstream joints, poisoned payloads, cascade, undo/redo, invalid references, unlogged changes and concurrent edits.
+- Unsupported/legacy histories retain recovery compatibility; their general regeneration remains open. This issue is therefore partial, not globally fixed.
+- Broad regression caught newly stamped sweep parameters rejected by the strict request schema and versioned rows in rootless documents routed into native proof editing. Both compatibility boundaries were corrected. Native sweep edits also now persist normalized detachment parameters rather than only normalizing during execution.
+- A final focused first-helix test exposed unlogged response-time default-cluster creation. The native helix builder now includes deterministic default placement before recording; the empty-root proof regression passes. This does not claim all response-time authoring bypasses are closed.
+
+
+2026-10-15 — ISSUE-82 continuation: native contracts expanded to 83 kinds with explicit method/action restrictions. Independent deletion now resolves actual failed commands; producer edits reuse one independently proved prefix. Added empty-root lifecycle, generated-scope, hash-seed/thread-isolation and poisoned-payload regressions. Framed paste retained missing frames; refinement selection was made independent of live session state; older cluster membership setters no longer erase later extrusion membership during recovery. Compound branch generation and unbounded CPD conversion remain unverified, and existing history UI limits are published by capabilities. ISSUE-82 remains PARTIAL; no blanket legacy/agent-enforcement claim.

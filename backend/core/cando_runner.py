@@ -729,6 +729,7 @@ def _run_autorefine_job(job: CandoJob, workspace_dir: Path) -> None:
             label = f"CanDo autorefine ({n_skip} skips, {n_loop} loops)"
             params = {
                 "source": "cando-autorefine-job",
+                "marks": marks,
                 "job_id": job.job_id,
                 "mode": res.get("mode"),
                 "edits_kept": len(res.get("edits_kept") or []),

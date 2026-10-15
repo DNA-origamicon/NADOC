@@ -38,6 +38,8 @@ invariants in tests/test_section_router.py guard it.
 
 from __future__ import annotations
 
+from backend.core.routing_identity import crossover as routing_crossover
+
 from collections import defaultdict
 
 from backend.core.models import (
@@ -374,7 +376,7 @@ def _pull_window_turns(
                 far,
             )
         new_x.append(
-            Crossover(
+            routing_crossover(
                 half_a=HalfCrossover(helix_id=a.helix_id, index=t, strand=a.strand),
                 half_b=HalfCrossover(helix_id=b.helix_id, index=t, strand=b.strand),
                 process_id=xo.process_id,
@@ -505,7 +507,7 @@ def route_sections(design: Design, *, seamless: bool = False, partition=None, sp
         sW = Direction.FORWARD if _is_forward(rW, cW) else Direction.REVERSE
         for bp in (X, X + 1):
             all_x.append(
-                Crossover(
+                routing_crossover(
                     half_a=HalfCrossover(helix_id=Tid, index=bp, strand=sT),
                     half_b=HalfCrossover(helix_id=wh, index=bp, strand=sW),
                     process_id=_SECTION_PROCESS_ID,

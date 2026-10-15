@@ -40,6 +40,8 @@ Three-Layer Law: only topology + the seamed router's helix-axis extension.
 
 from __future__ import annotations
 
+from backend.core.routing_identity import forced_ligation as routing_ligation
+
 from backend.core.models import Design, ForcedLigation
 from backend.core.scaffold_invariants import scaffold_routing_invariants
 from backend.core.seamed_router import (
@@ -125,7 +127,7 @@ def route_hinge(design: Design) -> tuple[Design, SeamedResult] | None:
         if key not in gap_pairs:
             continue
         new_fls.append(
-            ForcedLigation(
+            routing_ligation(
                 three_prime_helix_id=a_dom.helix_id,
                 three_prime_bp=a_dom.end_bp,
                 three_prime_direction=a_dom.direction,
