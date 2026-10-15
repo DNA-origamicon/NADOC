@@ -72,11 +72,12 @@ def _capture(source, selection):
 def describe_inputs(kind, params):
     """Reviewed field adapters; command-kind membership alone grants nothing."""
     from backend.api.part_proof_commands import dependencies
+    from backend.api.part_repair_contracts import recognize_gold_inputs
     from backend.api.part_repair_selection import reference_slot
     from backend.api.part_repair_source_policy import admit_descriptor
     from backend.core.part_input_sources import command_source_bindings
 
-    result = {"definition_supported": False, "reason": None, "fields": []}
+    result = {"definition_supported": False, "inputs_valid": None, "reason": None, "fields": []}
 
     def unsupported(code, detail):
         result.update(reason={"code": code, "detail": detail}, fields=[])
@@ -86,8 +87,14 @@ def describe_inputs(kind, params):
         return unsupported("unsupported_repair_inputs", "Generated scopes require a separate input editor")
     values = {key: value for key, value in params.items() if key != "_generator"}
     try:
-        if not dependencies(kind, values).known:
-            return unsupported("missing_proof_contract", "This definition has no admitted native input contract")
+        executable = dependencies(kind, values).known
+        recognition = None if executable else recognize_gold_inputs(kind, values)
+        if not executable and recognition is None:
+            return unsupported("missing_proof_contract", "This definition has no recognized native input contract")
+        result["inputs_valid"] = executable
+        if not executable:
+            result["reason"] = {"code": "invalid_editable_inputs",
+                "detail": "The native feature is recognized, but its diameter or pose must be corrected before regeneration."}
         fields = result["fields"]
 
         def add(name, label, input_type, **constraints):
@@ -107,8 +114,9 @@ def describe_inputs(kind, params):
         if kind in {"nanoparticle-create", "nanoparticle-patch", "nanoparticle-delete"} and not {
                 "coating_version", "thiol_version"}.intersection(values):
             from backend.api.part_nanoparticle_commands import parse_command
-            parse_command(kind, values)
-            if kind != "nanoparticle-create":
+            if executable:
+                parse_command(kind, values)
+            if executable and kind != "nanoparticle-create":
                 reference(["nanoparticle_id"], "Particle")
             add("diameter_nm", "Diameter (nm)", "number", exclusive_minimum=0, maximum=1000,
                 nullable=kind == "nanoparticle-patch")

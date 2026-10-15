@@ -82,7 +82,7 @@ def test_response_owns_nested_values_and_never_invents_absent_defaults(document)
 
 
 @pytest.mark.parametrize("changes", [{"_proof_version": True}, {"_proof_version": 2},
-    {"nanoparticle_version": "1"}, {"diameter_nm": -1}, {"unknown": "value"},
+    {"nanoparticle_version": "1"}, {"unknown": "value"},
     {"_generated_scope": {}}, {"coating_version": 1}, {"thiol_version": 1}])
 def test_legacy_unknown_owned_and_invalid_contracts_do_not_gain_editors(changes):
     result = metadata.describe_inputs("nanoparticle-patch", gold(**changes))

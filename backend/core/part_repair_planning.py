@@ -61,7 +61,7 @@ def _at(params, path, action, error_type):
     return value
 
 
-def plan_actions(source, actions, *, dependencies=None, copy_value=deepcopy,
+def plan_actions(source, actions, *, dependencies=None, recognize_invalid=None, copy_value=deepcopy,
                  check_expectations=True, error_type=RepairInputError,
                  annotate_contract_errors=False):
     """Return private target inputs in first-action order.
@@ -70,6 +70,8 @@ def plan_actions(source, actions, *, dependencies=None, copy_value=deepcopy,
     skips hashing, protected-input/contract checks and empty-group admission;
     it exists solely to discover named proposed sources before leaving the lock.
     Numerical upgrades are recorded for a later caller-owned numerical phase.
+    An optional reviewed recognition callback can admit an invalid old editable
+    value; it never replaces final dependency/schema checks or native replay.
     """
     entries, identities, empty_groups = {}, set(), False
     for entry in source.feature_log:
@@ -99,7 +101,8 @@ def plan_actions(source, actions, *, dependencies=None, copy_value=deepcopy,
             raise error_type("This repair version edits snapshot or explicit routing-child definitions",
                              code="unsupported_repair_target", action=action)
         kind, previous = command_input(entry)
-        if check_expectations and dependencies is not None and not dependencies(kind, previous).known:
+        if (check_expectations and dependencies is not None and not dependencies(kind, previous).known
+                and not (recognize_invalid is not None and recognize_invalid(kind, previous))):
             detail = "Repair cannot promote a legacy or unknown command contract"
             if annotate_contract_errors:
                 raise error_type(detail, code="missing_proof_contract", action=action)

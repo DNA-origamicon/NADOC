@@ -95,8 +95,11 @@ def _upgrade(kind, previous, action, provider):
 
 
 def _definitions(source, request, dependency_resolver, numerical_provider):
+    from backend.api.part_repair_contracts import recognizes_invalid_inputs
+
     list(command_rows(source, 2000))  # retain the existing entry-limit admission
-    targets = plan_actions(source, request.actions, dependencies=dependency_resolver)
+    targets = plan_actions(source, request.actions, dependencies=dependency_resolver,
+                           recognize_invalid=recognizes_invalid_inputs)
     upgrades = []
     for target in targets.values():
         if target.upgrade is not None:

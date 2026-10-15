@@ -60,6 +60,7 @@ def mutate_draft(request):
     """Prepare privately, then publish one revision with no geometry undo entry."""
     from backend.api import state as host
     from backend.api.part_proof_commands import dependencies
+    from backend.api.part_repair_contracts import recognizes_invalid_inputs
 
     # A typed HTTP request is owned by the host. Dumping it also prevents a
     # direct caller's mutable action JSON from becoming persisted draft aliases.
@@ -84,6 +85,7 @@ def mutate_draft(request):
                 proposed_actions=actions, include_definitions=not isinstance(request, DiscardDraft))
             doc_id = doc_context.get_current_doc()
         prepared = prepare_draft(captured, request, dependencies=dependencies,
+            recognize_invalid=recognizes_invalid_inputs,
             new_draft_id=str(uuid4()) if isinstance(request, CreateDraft) else None)
         # Serialize before publication: a serialization failure cannot leave a
         # successful metadata mutation hidden behind a failed HTTP response.

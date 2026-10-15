@@ -699,9 +699,12 @@ Autosave reports unsupported IDs and continues valid documents. Baseline29failed
 
 2026-10-15 — ISSUE-89 identified an admission/execution mismatch: dependency and
 scoped replay exclude inert generator annotations, but ordinary strict native
-builders still receive them. The isolated valid-gold cold-proof dossier is saved
-before production changes. Red execution and the narrowly reviewed execution
-boundary correction are pending; no passing fix is claimed yet.
+builders still receive them. The isolated valid-gold cold-proof dossier failed
+five cases with 11 controls passing in 3.68 seconds, including a real spawned
+worker. The shared execution boundary now excludes only `_generator` after the
+existing scope handoff, retaining recorded metadata and all input/identity
+guards. Corrective validation passed all 16 annotation cases and 377 related
+invalid-input, draft, source, scope and native-particle regressions (393 total).
 
 2026-10-15 — ISSUE-87 fixed: committed and uncertain publication survive failed
 display/transport, exact original-document revision/session checks guard refresh,

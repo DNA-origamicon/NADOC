@@ -130,7 +130,7 @@ def _fail(selection, detail, code):
     raise RepairSourceError(detail, code=code, selection=selection)
 
 
-def select_source(captured, selection, *, dependencies, admit_descriptor):
+def select_source(captured, selection, *, dependencies, admit_descriptor, recognize_invalid=None):
     """Resolve a typed named binding, with no native builder or file parsing."""
     source = captured.definitions
     draft = source.draft
@@ -161,7 +161,7 @@ def select_source(captured, selection, *, dependencies, admit_descriptor):
         if selection.source.sha256 in published:
             _fail(selection, "This digest is used by a published feature; explicitly restore that binding",
                   "restore_published_required")
-        targets = plan_actions(source, draft.actions, dependencies=dependencies,
+        targets = plan_actions(source, draft.actions, dependencies=dependencies, recognize_invalid=recognize_invalid,
             error_type=DraftInputError, annotate_contract_errors=True)
         for target in targets.values():
             validate_target(target, dependencies, error_type=DraftInputError, annotate_contract_errors=True)

@@ -211,6 +211,10 @@ def _execute(kind, design, params, *, expensive):
     if "_generated_scope" in params:
         from backend.api.generated_native_scope import execute as scoped_execute
         return scoped_execute(kind, design, params, lambda k, d, p: _execute(k, d, p, expensive=expensive))
+    if "_generator" in params:
+        # Match dependency/scoped admission: preserve the recorded annotation,
+        # but never pass it into reference resolution or native command inputs.
+        params = {key: value for key, value in params.items() if key != "_generator"}
     from backend.api.part_command_references import validate_command_references
     validate_command_references(kind, design, params)
     if kind in OVERLAY_KINDS:

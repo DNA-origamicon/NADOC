@@ -71,7 +71,8 @@ def _conflict(detail):
     raise DraftInputError(detail, code="draft_conflict")
 
 
-def prepare_draft(captured, request, *, dependencies, new_draft_id=None, checkpoint=lambda: None):
+def prepare_draft(captured, request, *, dependencies, recognize_invalid=None,
+                  new_draft_id=None, checkpoint=lambda: None):
     """Return a new RepairDraft or None; caller owns final compare-and-swap.
 
     The injected dependencies resolver must perform cheap schema admission only.
@@ -105,7 +106,8 @@ def prepare_draft(captured, request, *, dependencies, new_draft_id=None, checkpo
     if isinstance(request, UpdateDraft) and previous.base != base:
         raise DraftInputError("Published definitions changed; explicitly rebase the draft", code="draft_rebase_required")
     actions = previous.actions if isinstance(request, RebaseDraft) and request.actions is None else request.actions
-    for kind, params in proposed_inputs(captured, actions, dependencies=dependencies):
+    for kind, params in proposed_inputs(captured, actions, dependencies=dependencies,
+                                        recognize_invalid=recognize_invalid):
         checkpoint()
         command_source_bindings(kind, params)  # source bytes may still be missing
     if isinstance(request, CreateDraft) and new_draft_id is None:

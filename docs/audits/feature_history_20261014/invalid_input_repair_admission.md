@@ -1,6 +1,6 @@
 # Repairing a recognized feature with invalid inputs
 
-Research and read-only code review, 2026-10-15. No planner, registry, numerical pin, source policy or model change is implemented by this document.
+Research and implementation review, 2026-10-15. The narrow gold recognition adapter described below is implemented; 393 parent-run corrective and related regressions pass. The separately discovered inert-annotation execution inconsistency is fixed. Numerical pins, source policy and scientific models are unchanged.
 
 A failed feature must remain identifiable and editable even when its current inputs cannot execute. The minimum safe change is to separate **recognized authored contract** from **valid executable inputs**, while retaining full candidate regeneration as the publication gate. Do not replace the old-input check with command-name membership alone.
 
@@ -55,7 +55,17 @@ Resolve this before claiming scalar UI completion. Prefer a server-produced boun
 
 **Authorized transport decision, 2026-10-15:** optional `expected_old_json` contains the server's canonical JSON for the existing value. A bounded codec rejects duplicate keys, nonfinite/overflowing numbers, excess depth and noncanonical encodings. The displayed old value must match the decoded structure, allowing only finite integer/float representation differences; booleans remain distinct. The decoder restores the exact old value before constructing `SetInput`, retains the encoding for subsequent browser/persistence roundtrips, and charges both values within the existing aggregate request/draft envelope. `same_input` is unchanged and still compares against the captured original definition. The receipt is an encoding, not an authorization token. No-receipt actions retain their existing semantics and omit the optional null field on serialization.
 
-The actual Node action builder plus HTTP submission reproduced both diameter and pose failures before implementation: two failed in 2.71 seconds, both HTTP 409 `repair_conflict`. The codec, metadata emission, frontend forwarding and persistence/native-evaluation regressions are now implemented; all 43 codec and eight actual transport cases now pass, plus 229 related repair regressions. Track this separately as fixed ISSUE-86. The recognition/planner changes proposed elsewhere in this document remain unimplemented.
+The actual Node action builder plus HTTP submission reproduced both diameter and pose failures before implementation: two failed in 2.71 seconds, both HTTP 409 `repair_conflict`. The codec, metadata emission, frontend forwarding and persistence/native-evaluation regressions are now implemented; all 43 codec and eight actual transport cases now pass, plus 229 related repair regressions. Track this separately as fixed ISSUE-86.
+
+## Narrow gold implementation status
+
+`api/part_repair_contracts.py` recognizes only the exact reviewed unscoped source-free gold v1 envelope. It checks bounded JSON, required identity/version fields and an explicit native-schema field inventory, then masks only existing diameter/pose values in a private classification probe. No probe/default value becomes authored input or output. A future native field addition requires a new recognition review rather than gaining repair authority automatically.
+
+The optional recognition callback is shared by worker repair, draft preparation/rebase and combined source-proposal planning. Final patched schema/dependencies, protected identities, exact expectations and full native regeneration remain mandatory. Metadata reports `inputs_valid: false`, the actual invalid old input and its exact transport receipt; reference selection stays unavailable until the current complete schema passes. Source restoration's own admission is unchanged.
+
+The original 45-case target reproduced 23 failures with 22 existing protection cases passing in 2.81 seconds before production changes (root-run evidence, checkpoint `7d02a5f2`). Three additional regressions cover schema expansion, missing required editable inputs, and real HTTP combined gold/source draft inspection. The initial 48-case integration run passed 44 and failed four in 2.73 seconds: three assertions compared a native `Mat4x4` with a raw list and are corrected; the fourth exposed ISSUE-89 below. Corrective validation now passes all 48 cases in 2.71 seconds. The old metadata parameter case grouping a negative gold diameter with unknown contracts was pruned; genuinely unknown/owned/version cases remain.
+
+ISSUE-89 is a separate pre-existing execution inconsistency: dependency/scoped admission ignores `_generator`, but ordinary strict builders received it as an extra input. A new valid-gold dossier independently reproduced five failures and 11 passing scope/identity controls in 3.68 seconds, including fresh-worker proof. The shared executor now strips only that inert annotation after scoped handoff and before reference/native validation, preserving the logged value. Native schemas and generated scope admission are unchanged; recognition does not confer authority through annotations.
 
 ## Implementation and regression map
 

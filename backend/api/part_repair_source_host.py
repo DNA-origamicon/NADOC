@@ -44,6 +44,7 @@ def capture_source_request(value, *, mutation=False):
     """Capture definitions/immutable source refs, then admit the named binding."""
     from backend.api import state as host
     from backend.api.part_proof_commands import dependencies
+    from backend.api.part_repair_contracts import recognizes_invalid_inputs
 
     try:
         request = parse_source_request(value, mutation=mutation)
@@ -63,7 +64,8 @@ def capture_source_request(value, *, mutation=False):
                 host._assert_active_loadout_editable(source)
             captured = capture_source_inputs(source, source_revision=revision)
             doc_id = doc_context.get_current_doc()
-        select_source(captured, request, dependencies=dependencies, admit_descriptor=admit_descriptor)
+        select_source(captured, request, dependencies=dependencies, admit_descriptor=admit_descriptor,
+                      recognize_invalid=recognizes_invalid_inputs)
         checked = check_blob_expectation(captured, request) if mutation else None
         return CapturedUpload(request, captured, session, source, doc_id, checked)
     except (CaptureLimit, ValueError) as error:

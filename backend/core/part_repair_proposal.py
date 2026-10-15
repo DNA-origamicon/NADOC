@@ -11,14 +11,16 @@ class DraftInputError(RepairInputError):
     """Draft metadata errors retain the same structured action diagnostics."""
 
 
-def proposed_inputs(source, actions, *, copy_value=deepcopy, check_expectations=True, dependencies=None):
+def proposed_inputs(source, actions, *, copy_value=deepcopy, check_expectations=True, dependencies=None,
+                    recognize_invalid=None):
     """Return private proposed inputs, never current pins or a publishable model.
 
     Source capture uses the planner's nonhashing discovery mode. Draft admission
     adds numerical-family/old-pin checks without importing a numerical builder.
     Only the existing isolated job may select upgraded implementation pins.
     """
-    targets = plan_actions(source, actions, dependencies=dependencies, copy_value=copy_value,
+    targets = plan_actions(source, actions, dependencies=dependencies, recognize_invalid=recognize_invalid,
+        copy_value=copy_value,
         check_expectations=check_expectations, error_type=DraftInputError, annotate_contract_errors=True)
     result = []
     for target in targets.values():

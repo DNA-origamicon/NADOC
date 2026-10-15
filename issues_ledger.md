@@ -1934,7 +1934,7 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   and no-body-acquisition cases; no tests were executed by the implementation
   agent. Existing restore and pruning policies are unchanged.
 
-## ISSUE-89 — Inert generator annotations pass admission but fail strict native replay (2026-10-15, IN PROGRESS)
+## ISSUE-89 — Inert generator annotations pass admission but fail strict native replay (2026-10-15, FIXED)
 
 - The shared dependency resolver deliberately removes `_generator` annotation
   metadata, and scoped execution does the same. Ordinary `execute`/`execute_long`
@@ -1946,11 +1946,18 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   uses valid gold create/patch rows with poisoned recovery, direct and spawned
   independent proof, both executor modes, scoped controls and forged/missing
   native identities/versions. It verifies that recorded annotations are retained
-  verbatim and excluded before reference validation/building. Root red execution
-  is pending against reversible checkpoint `08af575e`; no production correction
-  is included yet.
+  verbatim and excluded before reference validation/building. Against reversible
+  checkpoint `08af575e`, the root-run red target produced **five failed and 11
+  passed in 3.68 seconds**, including failed proof in a real fresh worker. Scope
+  and forged/missing-authority controls already passed.
 - Reviewed correction: after the existing scoped handoff, remove only the inert
   `_generator` key from a private execution-parameter dictionary. Keep original
   recorded parameters, native schemas, `_generated_scope` validation, versions,
   output IDs and actual typed reference resolution unchanged. Do not normalize
   other unknown fields or infer missing inputs from metadata.
+- That shared execution filter is now implemented. Unannotated commands avoid
+  an extra parameter copy; annotated rows keep their original recorded JSON.
+  Parent-run corrective and related regression validation passed 393 cases,
+  including all 16 annotation regressions and the 48 invalid-gold repair cases.
+  Fresh-worker proof, saved-draft evaluation, source restoration and generated
+  scope guards remain covered; no molecular model or version changed.

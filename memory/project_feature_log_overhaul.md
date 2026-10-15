@@ -47,8 +47,12 @@ revision ownership is the next step after the closed HTTP boundary. Saved source
 restoration has a real HTTP-to-cold-replay regression requiring explicit rebase.
 Reviewed repair input metadata preserves canonical `expected_old_json` text
 through JavaScript so integral floats do not falsely conflict (ISSUE-86). Actual
-Node/HTTP draft save, reload, rebase and native preparation pass. Desktop workflow
-integration is validating; comparison and native VR remain separate increments.
+Node/HTTP draft save, reload, rebase and native preparation pass. Desktop UI-1
+automated integration passed 8,181 frontend tests (one skipped); live app checks
+remain pending. Recognized invalid gold diameter/pose values can now be repaired
+without weakening final schema, protected identity or full regeneration. Its
+393 focused regressions include the inert-generator execution fix (ISSUE-89).
+Comparison and native VR remain separate increments.
 
 Focused tests and small in-memory qualification run serially. The Archive
 filesystem is unavailable in this environment; broader suite, app, visual and
