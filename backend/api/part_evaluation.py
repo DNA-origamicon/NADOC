@@ -18,7 +18,7 @@ class EvaluationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     operation: Literal["verify", "append", "edit", "delete", "repair", "selection"]
-    kind: Literal["photoproduct-create", "photoproduct-relax", "duplex-relax"] | None = None
+    kind: Literal["photoproduct-create", "photoproduct-relax", "duplex-relax", "streptavidin-coating"] | None = None
     params: dict | None = None
     index: StrictInt | None = Field(default=None, ge=0)
     sub_index: StrictInt | None = Field(default=None, ge=0)
@@ -45,6 +45,11 @@ class EvaluationRequest(BaseModel):
         elif self.operation == "append":
             if self.kind is None or self.params is None or self.index is not None or self.sub_index is not None or self.cascade:
                 raise ValueError("Append needs a supported long-operation kind and authored inputs only")
+            if self.kind == "streptavidin-coating":
+                from backend.api.part_coating_append import parse_request
+                if self.expected_revision is None:
+                    raise ValueError("Coating append requires expected_revision")
+                parse_request(self.params)
         elif self.operation in {"edit", "delete"}:
             if self.index is None or self.kind is not None:
                 raise ValueError("Recipe edit/delete needs a feature index")
@@ -55,62 +60,6 @@ class EvaluationRequest(BaseModel):
         elif self.kind is not None or self.params is not None or self.index is not None or self.sub_index is not None or self.cascade:
             raise ValueError("Verification does not accept mutation inputs")
         return self
-
-
-def _append(source, request, header, executor, dependencies):
-    from backend.api import state
-    from backend.api.part_cpd_commands import prepare_command
-    from backend.api.part_recipe_prefix import ReplayPrefix
-    from backend.core.models import SnapshotLogEntry
-    from backend.core.part_history_proof import command_rows, root_design
-
-    try:
-        # Reserve the new row inside the same 2000-entry proof allowance before
-        # spending any solver work. Routing group headers count toward it too.
-        for _ in command_rows(source, 1999):
-            pass
-    except ValueError as exc:
-        if str(exc) == "entry_limit":
-            raise ProofBudgetExceeded("Appending a feature exceeds the recipe entry budget") from exc
-        raise
-
-    prefix = ReplayPrefix(source, len(source.feature_log))
-    last = None
-
-    def run(kind, current, params):
-        nonlocal last
-        last = prefix.execute(executor, kind, current, params)
-        return last
-
-    proof = assess_part_history(source, execute=run, dependencies=dependencies)
-    if proof["status"] not in {"verified", "reproduced_import"}:
-        return proof
-    current = (last if last is not None else root_design(source.recipe_root, input_sources=source.input_sources)).copy_with(
-        id=source.id, feature_log=prefix.log,
-    )
-    inputs = dict(request.params)
-    if request.kind in {"photoproduct-create", "duplex-relax"}:
-        inputs["history_seed"] = header["identity"]
-    if request.kind == "duplex-relax":
-        from backend.api.part_duplex_commands import prepare_command as prepare_duplex
-        params = prepare_duplex(request.kind, current, inputs)
-    else:
-        params = prepare_command(request.kind, inputs)
-    updated = executor(request.kind, current, params)
-    pre, pre_size = state.encode_design_snapshot(current)
-    post, post_size = state.encode_design_snapshot(updated)
-    prefix.budget.charge(pre, post)
-    entry = SnapshotLogEntry(
-        id=header["identity"], timestamp=header["timestamp"],
-        op_kind=request.kind,
-        label={"photoproduct-create": "Convert native extra thymines to CPD",
-               "photoproduct-relax": "Relax native CPD bonds",
-               "duplex-relax": "Relax native duplex"}[request.kind],
-        params=params, design_snapshot_gz_b64=pre, snapshot_size_bytes=pre_size,
-        post_state_gz_b64=post, post_state_size_bytes=post_size,
-    )
-    return updated.copy_with(feature_log=[*prefix.log, entry], feature_log_cursor=-1,
-                             feature_log_sub_cursor=None)
 
 
 def _authoring_changes(source, candidate):
@@ -164,7 +113,9 @@ def evaluate(source, operation, *, executor=None, dependency_resolver=None):
             candidate, validation = result["candidate"], result["validation"]
             metadata["repair"] = {**result["repair"], "authoring_changes": _authoring_changes(source, candidate)}
         elif request.operation == "append":
-            candidate = _append(source, request, header, executor, dependency_resolver)
+            from backend.api.part_evaluation_append import append_features
+
+            candidate = append_features(source, request, header, executor, dependency_resolver, metadata=metadata)
             if isinstance(candidate, dict):
                 return candidate
             validation = validate_design(candidate)

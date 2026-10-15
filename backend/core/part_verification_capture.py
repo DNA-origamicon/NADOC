@@ -20,10 +20,11 @@ def capture(design, *, max_nodes=30_000, max_bytes=2_000_000, seconds=0.025,
     No snapshot blobs or physical results enter the captured proof input.
     """
     from backend.core.models import MinorMutationLogEntry, RoutingClusterLogEntry
+    from backend.core.part_capture_copy import seed_scalar_atom_copy
     deadline = monotonic() + seconds
     remaining = [max_nodes, max_bytes]
 
-    def charge(value):
+    def charge(value, copy_memo=None):
         pending = [value]
         seen = set()
         while pending:
@@ -39,6 +40,8 @@ def capture(design, *, max_nodes=30_000, max_bytes=2_000_000, seconds=0.025,
                 seen.add(id(item))
                 if isinstance(item, BaseModel):
                     children = item.__dict__.values()
+                    if copy_memo is not None:
+                        seed_scalar_atom_copy(item, copy_memo)
                 elif isinstance(item, dict):
                     if len(item) * 2 > remaining[0]:
                         raise CaptureLimit("Part verification capture node budget exceeded")
@@ -55,8 +58,12 @@ def capture(design, *, max_nodes=30_000, max_bytes=2_000_000, seconds=0.025,
     for name in type(design).model_fields:
         if FIELD_ROLES.get(name) not in {"presentation", "physical", "history"}:
             value = getattr(design, name)
-            charge(value)
-            fields[name] = deepcopy(value)
+            # Specialize scalar atoms only within nanoparticle authoring.
+            # Keep traversal/budgets identical; memo preserves atom aliases
+            # within the captured field without sharing atoms with the source.
+            copy_memo = {} if name == "nanoparticles" else None
+            charge(value, copy_memo)
+            fields[name] = deepcopy(value, copy_memo)
     charge(design.recipe_root)
     fields["recipe_root"] = design.recipe_root  # frozen root, immutable scalar fields
     fields["feature_log_cursor"] = design.feature_log_cursor

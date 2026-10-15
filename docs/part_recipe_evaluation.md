@@ -52,6 +52,70 @@ are retained, and uncommitted results expire after 15 minutes. These are input,
 work and transport bounds, not a hard process-heap guarantee. Oversized work is
 unverified or rejected without publication; interaction limits are not enlarged.
 
+## Coating append qualification
+
+The strict `kind:"streptavidin-coating"` append schema and worker compiler are
+implemented, but public submission currently returns
+`coating_append_unavailable`. A server-owned gate remains closed pending capture
+performance qualification. Existing explicit verification, edit and repair jobs
+are unchanged. Ordinary nanoparticle routes and drag handlers do not use this
+append path.
+
+The request requires an outer `expected_revision` and input-only `params`:
+
+```json
+{
+  "operation": "append",
+  "kind": "streptavidin-coating",
+  "expected_revision": 12,
+  "params": {
+    "action": "create",
+    "diameter_nm": 20,
+    "coating": {"mode": "adsorption", "count_override": 1, "seed": 1}
+  }
+}
+```
+
+| Action | Inputs and resulting feature definitions |
+|---|---|
+| `create` | Diameter and optional `coating` settings; gold-create followed by coating-set |
+| `set` | `nanoparticle_id`, optional `coating` settings and optional replacement diameter; coating-set |
+| `repack` | Target and required diameter; coating-set preserving the active set feature's recorded settings and source descriptors |
+| `move` | Target and explicit `pose` and/or `gizmo_move`; coating-move using existing native precedence |
+| `remove` | Target with an active coating; coating-remove |
+| `delete` | Target; coating-remove followed by gold-delete, or one gold-delete when already uncoated |
+
+Settings retain native defaults: adsorption, 40 nm² footprint, seed 1, no count
+override or publication selection, and spacer 0.3 nm for adsorption or 4 nm for
+biotin tethering. The compiler records resolved defaults. Requested sites are
+limited to 64 without silently reducing the count. Public inputs cannot contain
+engine/version pins, source bytes, filesystem paths, URLs, output identities or
+sampled geometry. The host derives stable feature and new particle identities;
+the scientific random seed remains a separate authored choice.
+
+The existing recipe must independently reproduce before any new source is read
+or merged. New `create`/`set` preparation reads the fixed verified PDB and optional
+bounded publication JSON inside the existing worker, outside document locks.
+Publication bytes are selected and pinned at evaluation time, and commit retains
+that exact evaluated closure. Repack uses the prior feature's pinned sources;
+motion, removal, deletion and historical replay never reread installed assets.
+Appending cannot repair missing old bytes or silently upgrade an old engine.
+
+All new steps share one prefix replay, cumulative recovery budget, candidate and
+undoable commit. A failed second step cannot publish the first. Polling includes
+only compact `append` metadata (action, feature IDs and particle ID), alongside
+the normal validation result; candidate geometry stays private.
+
+Qualification is limited to an explicit empty root, zero or one unowned gold
+particle, at most 32 flat gold/coating definitions, and default physical and
+presentation state. Its fixed server capture profile is 100,000 nodes/4 MB with
+a cooperative 100 ms allowance; ordinary 30,000-node/2 MB/25 ms capture,
+2 MB worker input, 256 KB operation input and recovery/candidate limits are
+unchanged. Initial live qualification refused 14 of 120 active-coating captures
+and measured capture-lock p95 of 111–118 ms (maximum 133 ms). The timer is not a
+hard latency ceiling. This evidence keeps public append disabled while capture
+cost is addressed, rather than increasing the allowance.
+
 ## Explicit repair
 
 Repair addresses a stable feature ID, an optional routing-child ID and an exact

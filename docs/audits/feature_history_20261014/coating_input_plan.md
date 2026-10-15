@@ -525,3 +525,37 @@ Coating's seed-dependent discrete rejection makes it a clear case for the
 established stronger contract. A future common upgrade policy should inventory
 other solver/discrete-selection families without adding runtime probing to
 ordinary edits or changing their algorithms.
+
+## Scalar atom copy experiment — gate remains closed
+
+`coating_capture_profile_initial_p4.json` diagnoses the first failed live run.
+Generic deepcopy accounts for about two thirds of profiled capture work; three
+generation-2 collections added approximately 45–46 ms each in 30 unprofiled
+captures. Its two-second diagnostic clock prevents profiler-induced refusal and
+is not a production allowance. No GC policy was changed.
+
+`part_capture_copy` seeds deepcopy's memo with shallow Pydantic copies only for
+the exact nine-field scalar `ProteinAtom` shape within nanoparticle authoring.
+Model dictionaries and fields sets stay isolated; atom and field-dictionary
+aliases stay consistent inside the captured field. Subclasses, future fields,
+mutable values and extra/private state fall back to ordinary deepcopy. All
+declared fields still receive their original node/byte charge. The pre-existing
+generic traversal does not charge Pydantic extra/private containers; this change
+does not establish a sandbox or a new bound for arbitrary mutated model state.
+
+The identical 30-sample live harness is retained in
+`coating_jobs_benchmark_copy_p4.json`. Active capture medians decreased from
+54–55 ms to 46–49 ms, but 13 of 120 captures still refused the budget. Their p95
+lock holds were approximately 100.3 ms, with a 120.0 ms maximum. Concurrent
+revision HTTP medians remained 26–28 ms. All 150 independently prepared
+publications and five real spawned complete jobs passed; this run's cancellation
+case refused capture before any worker started, so it adds no cancellation
+evidence. Source-change reaping/commit refusal and session cleanup passed.
+
+The public append compiler/evaluator is implemented behind the server-owned
+`COATING_APPEND_ENABLED=False` gate. It emits ordinary gold/coating rows, proves
+the old recipe once before reading new fixed assets, and shares prefix/recovery
+budgets. Existing CPD/duplex append behavior remains supported. Native lifecycle,
+cold input replay, source/pin failure, atomic combined operations and job guard
+tests pass, but latency qualification remains incomplete. Do not enable the
+public workflow or raise ordinary limits on this evidence.

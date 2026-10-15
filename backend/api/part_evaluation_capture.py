@@ -6,8 +6,8 @@ capture before copying, never retries a refusal with larger limits, and is not
 used by ordinary edits, drag handlers or verification endpoints.
 
 The 100 ms timer is cooperative. Qualification observed a roughly 148 ms
-capture refusal at a GC/deep-copy boundary; actual job/commit lock contention
-must be measured before this unwired policy is enabled publicly.
+capture refusal at a GC/deep-copy boundary. This fixed profile is limited to
+explicit jobs; it is not an ordinary interaction or lock-latency guarantee.
 """
 
 import math
@@ -24,6 +24,10 @@ from backend.core.part_verification_capture import capture
 
 
 COATING_PROFILE = MappingProxyType({"max_nodes": 100_000, "max_bytes": 4_000_000, "seconds": 0.100})
+# Server-owned qualification gate. The public append path remains unavailable
+# while ordinary request contention/capture refusal rates are investigated.
+# Request data and environment variables cannot change this value.
+COATING_APPEND_ENABLED = False
 MAX_COATING_HISTORY_ROWS = 32
 MAX_COATING_INPUT_SOURCES = MAX_COATING_HISTORY_ROWS + 1
 _GOLD_KINDS = frozenset({"nanoparticle-create", "nanoparticle-patch", "nanoparticle-delete"})
@@ -103,7 +107,7 @@ def _scope(design):
             _reject("Current coating exceeds the bounded single-particle contract")
 
 
-def _history(design):
+def _history(design, *, require_coating=True):
     from backend.api import part_nanoparticle_commands as gold
     from backend.api import part_streptavidin_commands as coating
 
@@ -113,7 +117,7 @@ def _history(design):
     if any(type(entry) is not SnapshotLogEntry or entry.feature_type != "snapshot"
            or entry.op_kind not in _GOLD_KINDS for entry in rows):
         _reject("Coating evaluation requires flat native gold/coating definitions")
-    if not any(type(entry.params) is dict and "coating_version" in entry.params for entry in rows):
+    if require_coating and not any(type(entry.params) is dict and "coating_version" in entry.params for entry in rows):
         _reject("Coating evaluation requires a versioned coating definition")
     # Bound the combined authored header/parameter envelope before validation.
     # Recovery strings are intentionally not read, decoded, copied or measured.
@@ -164,21 +168,26 @@ def capture_for_evaluation(design, *, request, revision, preserve_entry_types=Tr
 
     Existing ordinary jobs retain their normal capture. Extended coating
     capture also requires an explicit revision expectation; repair already
-    supplies one. A future public append adapter must add its own strict intent
-    before requesting this profile for a new coating, not pass numeric limits.
+    supplies one. A strict public coating append supplies explicit intent even
+    before the first coating exists; it never supplies numeric capture limits.
     """
     request = EvaluationRequest.model_validate(request)
     _revision(design, request, revision)
-    if not _coating_intent(design):
+    coating_append = request.operation == "append" and request.kind == "streptavidin-coating"
+    if coating_append and not COATING_APPEND_ENABLED:
+        _reject("Coating append is unavailable pending capture performance qualification",
+                code="coating_append_unavailable")
+    if not coating_append and not _coating_intent(design):
         return capture(design, preserve_entry_types=preserve_entry_types)
     if request.operation == "selection":
         _reject("Coating reference selection requires its separately reviewed catalog",
                 code="unsupported_reference_slot")
     if request.expected_revision is None and request.operation != "repair":
         _reject("Coating evaluation requires expected_revision before capture", code="invalid_capture_context")
-    if request.operation == "append":
-        _reject("Coating append requires its separately admitted public input contract")
+    if request.operation == "append" and not coating_append:
+        _reject("This append operation does not admit the coating capture profile")
     _scope(design)
-    _history(design)
+    _history(design, require_coating=not coating_append or any(
+        particle.coating is not None for particle in design.nanoparticles))
     _source_envelope(design)
     return capture(design, preserve_entry_types=preserve_entry_types, **COATING_PROFILE)
