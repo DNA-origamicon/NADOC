@@ -31,6 +31,7 @@ export function createPartRepairEndpoints({ request, rawRequest = (...args) => f
     poll: (id, options) => json('GET', jobPath(id), undefined, options),
     cancel: (id, options) => json('DELETE', jobPath(id), undefined, options),
     commit: (id, options) => json('POST', `${jobPath(id)}/commit`, undefined, options),
+    compare: (id, body, options) => json('POST', `${jobPath(id)}/comparison`, body, options),
     async refreshCommitted(receipt, options = {}) {
       const context = options.context
       if (receipt?.status !== 'committed' || typeof receipt.job_id !== 'string' || !receipt.job_id

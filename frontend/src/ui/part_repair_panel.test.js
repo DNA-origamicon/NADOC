@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { initPartRepairPanel, focusPartRepairRow } from './part_repair_panel.js'
 import { createMockStore } from '../test-helpers/mock_store.js'
+import { comparisonEnvelope } from '../test-helpers/part_comparison.js'
 import { RepairRequestError } from '../api/part_repair_endpoints.js'
 
 const change = { action: 'set_input', feature_id: 'import', child_id: null,
@@ -16,7 +17,7 @@ const button = text => [...document.querySelectorAll('button')].find(item => ite
 const click = async text => { const found = button(text); expect(found, text).toBeTruthy(); found.click(); await flush() }
 const deferred = () => { let resolve; const promise = new Promise(yes => { resolve = yes }); return { promise, resolve } }
 
-function setup({ draft = null, protectedLoadout = false, fields = [nameField], featureLog, cursor = -1 } = {}) {
+function setup({ draft = null, protectedLoadout = false, fields = [nameField], featureLog, cursor = -1, createComparisonViewer } = {}) {
   let revision = 4, nextJob = 0
   const store = createMockStore({ currentDesign: { id: 'part', active_loadout_id: 'main',
     loadouts: [{ id: 'main', protected: protectedLoadout }], feature_log_cursor: cursor,
@@ -40,6 +41,8 @@ function setup({ draft = null, protectedLoadout = false, fields = [nameField], f
     poll: vi.fn(async () => ({ status: 'running', result: null })),
     cancel: vi.fn(async () => ({})),
     commit: vi.fn(async id => ({ job_id: id, status: 'committed', design_id: 'part', revision: revision + 1 })),
+    compare: vi.fn(async (id, body) => ({ ...comparisonEnvelope(), job_id: id, design_id: body.expected_design_id,
+      source_revision: body.expected_revision, repair_draft: { draft_id: body.expected_draft_id, generation: body.expected_generation } })),
     refreshCommitted: vi.fn(async receipt => ({ design: { ...store.getState().currentDesign,
       helices: { regenerated: true } }, revision: receipt.revision, nucleotides: [], helix_axes: [] })),
     apply: vi.fn(async json => { revision = json.revision; store.setState({ currentDesign: json.design }) }),
@@ -50,7 +53,7 @@ function setup({ draft = null, protectedLoadout = false, fields = [nameField], f
   const host = document.createElement('div'); document.body.append(host)
   const focusFeature = vi.fn()
   const panel = initPartRepairPanel({ store, api: { partRepairAPI: endpoints, currentRevisionWatermark: () => revision }, host,
-    getDocumentId: () => 'document', focusFeature })
+    getDocumentId: () => 'document', focusFeature, createComparisonViewer })
   panels.push(panel)
   return { panel, store, endpoints, focusFeature, host, revision: () => revision }
 }
@@ -84,13 +87,52 @@ describe('desktop part recipe repair panel', () => {
     await evaluateReady(h)
     expect(h.endpoints.apply).not.toHaveBeenCalled()
     expect(document.querySelector('.part-repair__muted').textContent).toBeTruthy()
-    expect(document.body.textContent).toContain('Visual comparison is not available')
+    expect(document.body.textContent).toContain('Comparison covers complete uncoated')
+    expect(button('Compare authored geometry').disabled).toBe(false)
     expect(button('Apply evaluated proposal').disabled).toBe(false)
     await click('Apply evaluated proposal')
     expect(h.endpoints.commit).toHaveBeenCalledTimes(1); expect(h.endpoints.apply).toHaveBeenCalledTimes(1)
     expect(h.panel.controller.getState().draft.draft_id).toBe('draft')
     expect(button('Apply evaluated proposal').disabled).toBe(true)
     expect(h.store.getState().currentDesign.helices).toEqual({ regenerated: true })
+  })
+
+  it('compares privately, closes only the view, and applies through the existing single commit', async () => {
+    const viewers = [], createComparisonViewer = vi.fn(() => {
+      const value = { dispose: vi.fn(), resetView: vi.fn() }; viewers.push(value); return value
+    })
+    const h = setup({ draft: saved(), createComparisonViewer })
+    const original = h.store.getState().currentDesign, geometry = [{ id: 'published-render-data' }]
+    h.store.setState({ currentGeometry: geometry })
+    await open(h); await evaluateReady(h); await click('Compare authored geometry')
+    expect(h.endpoints.compare).toHaveBeenCalledExactlyOnceWith('job-1', {
+      projection_version: 1, expected_design_id: 'part', expected_revision: 4,
+      expected_draft_id: 'draft', expected_generation: 0,
+    }, expect.objectContaining({ context: expect.objectContaining({ docId: 'document' }) }))
+    expect(createComparisonViewer).toHaveBeenCalledOnce()
+    expect(h.store.getState().currentDesign).toBe(original)
+    expect(h.store.getState().currentGeometry).toBe(geometry)
+    expect(h.endpoints.apply).not.toHaveBeenCalled(); expect(h.endpoints.commit).not.toHaveBeenCalled()
+    h.endpoints.cancel.mockClear()
+    await click('Close comparison')
+    expect(viewers[0].dispose).toHaveBeenCalledOnce()
+    expect(h.endpoints.cancel).not.toHaveBeenCalled()
+    expect(button('Apply evaluated proposal').disabled).toBe(false)
+    await click('Compare authored geometry'); await click('Apply evaluated proposal')
+    expect(viewers[1].dispose).toHaveBeenCalledOnce()
+    expect(h.endpoints.commit).toHaveBeenCalledOnce(); expect(h.endpoints.apply).toHaveBeenCalledOnce()
+  })
+
+  it('reports unsupported complete comparison without discarding the evaluated repair', async () => {
+    const createComparisonViewer = vi.fn(), h = setup({ draft: saved(), createComparisonViewer })
+    await open(h); await evaluateReady(h)
+    h.endpoints.compare.mockRejectedValueOnce(new RepairRequestError(422,
+      { code: 'unsupported_comparison_scope', detail: 'Comparison does not yet cover helices' }))
+    await click('Compare authored geometry')
+    expect(document.body.textContent).toContain('Comparison does not yet cover helices')
+    expect(createComparisonViewer).not.toHaveBeenCalled()
+    expect(button('Apply evaluated proposal').disabled).toBe(false)
+    expect(h.panel.controller.getState().ready).toBe(true)
   })
 
   it('selects a typed failing routing child without seeking recovery geometry', async () => {

@@ -3,9 +3,46 @@
 2026-10-15. Backend comparison foundation and compatibility endpoint implemented
 and validated. Parent ran 180 focused tests: 31 pure projection, 31 owner-lifecycle,
 three worker, 13 HTTP and 102 existing lifecycle/strict-route regressions, including
-a real spawned display process. Frontend production implementation follows this
-backend checkpoint; no browser, native build or scientific check run.
+a real spawned display process. The first frontend implementation has 115 unique
+focused cases green after the pose adapter correction below; the full frontend
+suite passed 8,263 cases with one skipped across 714 files in 311.62 seconds.
+No browser, native build or scientific check run.
 Assemblies remain deferred.
+
+## First frontend increment
+
+`part_comparison_model` admits only the exact complete version-one display packet;
+`part_comparison_controller` subscribes to the existing repair workflow, retaining
+only an in-memory display binding/request epoch. Explicit Compare uses original
+document context and aborts/discards obsolete responses. Closing this read never
+cancels or commits the evaluated repair. Source/job/draft/revision changes,
+document reset and conservative remaining-job expiry remove both panes. Saved
+proposal JSON never grants display or Apply readiness.
+
+`part_comparison_surface` is inline in the existing repair modal. It labels the
+published authored source as unverified and the proposed pane as evaluated,
+states that physical/presentation layers are excluded, and lists unplaced assets.
+Unsupported/failed comparison leaves the repair available for ordinary guarded
+Apply and never shows a partial success. No normal store, export, simulation or
+`main.js` integration is introduced.
+
+`part_comparison_viewer` owns one WebGL renderer, two scissored scenes and one
+camera/OrbitControls. It draws on orbit/resize/fit without a permanent animation
+loop. Existing particle pose/sphere/material construction was extracted verbatim
+into `nanoparticle_display`; the normal subsystem reuses it without changing
+coating, selection, glow or physical-pose behavior. Existing protein trace and
+no-C-alpha ovoid construction are reused. The comparison adapter wraps raw pose
+arrays as native Transform values: its initial missing wrapper was caught by
+the focused translation test (114 passed/one failed), then fixed with exact
+world-rotation coverage (eight viewer cases passed). All owned geometries,
+materials, controls, observers/listeners, canvas and GPU context are disposed,
+including initialization failure. Inputs and published geometry remain untouched.
+
+The prepared e2e scenario now checks private Compare, same published/export data,
+close/reopen/cancel and ordinary Apply. It remains unrun: see MV-47, Archive
+availability and the existing artifact inventory. Finite 128-placement/4,096-atom
+ceilings do not establish worst-case browser responsiveness; near-limit CPU/GPU
+cost qualification remains an explicit completion gate.
 
 ## First backend increment
 

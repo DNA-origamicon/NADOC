@@ -32,8 +32,10 @@ to render/scrub paths, or reuse a cached baseline while mutable aliases and
 unclassified write paths remain. Private host policy/admission, exact-candidate
 batch permits and a closed strict HTTP route table are implemented. Strict HTTP
 refuses unknown routes before body acquisition and exposes only reviewed scalar
-reads, empty creation and existing batch/verify jobs. Public batch stays gated;
-immutable revision ownership and complete strict lifecycle remain open. This is
+reads, empty creation and existing batch/verify jobs. Public batch stays gated.
+Internal immutable revision ownership and outside-lock batch/verify capture and
+publication are implemented. Typed durable recovery, public lifecycle wiring and
+actual HTTP latency qualification remain open. This is
 not authentication or a sandbox for unrestricted local Python.
 
 An experimental ordinary free-protein importer records pinned original bytes and
@@ -42,8 +44,9 @@ retained-history capture refusals. Existing ordinary import behavior remains
 available. Its scalar-atom copy optimization preserves exact admission accounting;
 no source deadline or GC policy was relaxed. Allocation-light private candidate
 admission removes a redundant copy; a retained-protein refusal now has measured
-45 ms generation-2 GC overlap during locked source isolation. Immutable strict
-revision ownership is the next step after the closed HTTP boundary. Saved source
+45 ms generation-2 GC overlap during locked source isolation. Internal immutable
+strict revisions now retain sealed bytes and scalar metadata under the state
+lock; private decoding and candidate sealing run outside it. Saved source
 restoration has a real HTTP-to-cold-replay regression requiring explicit rebase.
 Reviewed repair input metadata preserves canonical `expected_old_json` text
 through JavaScript so integral floats do not falsely conflict (ISSUE-86). Actual
@@ -52,7 +55,13 @@ automated integration passed 8,181 frontend tests (one skipped); live app checks
 remain pending. Recognized invalid gold diameter/pose values can now be repaired
 without weakening final schema, protected identity or full regeneration. Its
 393 focused regressions include the inert-generator execution fix (ISSUE-89).
-Comparison and native VR remain separate increments.
+Private desktop comparison now covers complete uncoated gold/QD and free-protein
+parts, bound to the existing repair job, draft, revision and expiry. One isolated
+renderer shares a camera across published and evaluated views; no candidate is
+installed in ordinary display, export or simulation state. Full frontend checks
+passed 8,263 tests (one skipped). App/E2E review is MV-47 pending. Complete DNA
+comparison and native VR remain separate increments; coarse comparison does not
+authorize a molecular geometry upgrade.
 
 oxDNA/NAMD job APIs now expose additive physical `input_freshness`: equal legacy
 partial hashes remain unknown, while known comparable changes are stale. This

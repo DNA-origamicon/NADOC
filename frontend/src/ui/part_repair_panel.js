@@ -1,8 +1,10 @@
 import { createPartRepairController } from '../features/part_repair_controller.js'
+import { createPartComparisonController } from '../features/part_comparison_controller.js'
 import { cloneRepairInput, resolveRepairFeature, sameRepairContext } from '../features/part_repair_model.js'
 import { actionFromRepairField, replacementRepairSource, updateRepairActions } from '../features/part_repair_fields.js'
 import { getDocId } from '../shared/doc_id.js'
 import { createRepairInputEditor } from './part_repair_input_editor.js'
+import { createPartComparisonSurface } from './part_comparison_surface.js'
 import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
 import { el } from './primitives/dom.js'
@@ -16,7 +18,7 @@ const short = value => { const text = typeof value === 'string' ? value : JSON.s
 
 /** Standard-part host. The controller owns requests; this module owns only the view/edit buffer. */
 export function initPartRepairPanel({ store, api, host, isPartContext = () => !store.getState().assemblyActive,
-  focusFeature = () => {}, getDocumentId = getDocId, digestSource }) {
+  focusFeature = () => {}, getDocumentId = getDocId, digestSource, createComparisonViewer }) {
   if (!host || !api.partRepairAPI) return null
   const getDesign = () => store.getState().currentDesign
   function getContext() {
@@ -32,6 +34,10 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
   }
   const controller = createPartRepairController({ api: api.partRepairAPI, getContext,
     subscribeContext: callback => store.subscribe(callback) })
+  const comparison = createPartComparisonController({ api: api.partRepairAPI, repair: controller })
+  const comparisonHost = el('div')
+  const comparisonSurface = createPartComparisonSurface({ host: comparisonHost, controller: comparison,
+    ...(createComparisonViewer ? { createViewer: createComparisonViewer } : {}) })
   let modal, latest = controller.getState(), actions = [], dirty = false, lastDraft = null,
     renderedCatalog = null, selectedTarget = null, sourceWork = 0, sourceBusy = false, closing = false,
     localError = '', note = ''
@@ -142,6 +148,7 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
     evaluate: createButton({ label: 'Evaluate proposal', onClick: () => { clearNotice(); return controller.evaluate() } }),
     cancel: createButton({ label: 'Cancel evaluation', onClick: () => { clearNotice(); sourceWork++; sourceBusy = false; controller.cancel() } }),
     apply: createButton({ label: 'Apply evaluated proposal', variant: 'primary', onClick: () => { clearNotice(); return controller.apply() } }),
+    compare: createButton({ label: 'Compare authored geometry', onClick: () => { clearNotice(); return comparison.open() } }),
     refresh: createButton({ label: 'Refresh committed result', onClick: () => { clearNotice(); return controller.refreshCommitted() } }),
     resolve: createButton({ label: 'Check publication status', onClick: () => { clearNotice(); return controller.resolvePublication() } }),
   }
@@ -172,7 +179,7 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
     }
     const changed = next.result?.repair?.authoring_changes?.changed_fields
     if (next.requiresReview) changes.textContent = 'Numerical contract changes need the separate atom and junction comparison review before evaluation or Apply.'
-    else if (changed) changes.textContent = `Evaluated changes: ${changed.join(', ') || 'none'}. Visual comparison is not available in this panel.`
+    else if (changed) changes.textContent = `Evaluated changes: ${changed.join(', ') || 'none'}. Comparison covers complete uncoated gold/quantum-dot and free protein models; other geometry is explicitly unavailable.`
     else if (next.result?.repair?.not_evaluated?.length) changes.textContent = `${next.result.repair.not_evaluated.length} later feature(s) were not evaluated after the failure.`
     else changes.textContent = note
     buttons.check.disabled = busy || !current || publicationPending
@@ -182,6 +189,7 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
     buttons.discard.disabled = busy || !editable || !next.draft
     buttons.evaluate.disabled = busy || !editable || !next.draft || dirty || next.requiresReview
     buttons.apply.disabled = busy || !editable || !next.ready || dirty || next.requiresReview
+    buttons.compare.disabled = busy || !editable || !next.ready || dirty || next.requiresReview
     buttons.cancel.disabled = next.busy === 'apply' || (!busy && !next.job)
     buttons.refresh.hidden = !next.refreshNeeded
     buttons.refresh.disabled = busy || !next.refreshNeeded
@@ -193,12 +201,13 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
   const body = el('div', { className: 'part-repair', children: [status,
     el('div', { className: 'part-repair__tools', children: [buttons.check, buttons.inspect] }), error, issues,
     el('label', { children: ['Feature inputs', selector] }), editor.root,
-    el('h3', { text: 'Proposed input changes' }), proposal, changes] })
+    el('h3', { text: 'Proposed input changes' }), proposal, changes,
+    el('div', { className: 'part-repair__tools', children: [buttons.compare] }), comparisonHost] })
   modal = createModal({ title: 'Check and repair part recipe', size: 'lg', body,
     actions: [buttons.save, buttons.rebase, buttons.discard, buttons.evaluate, buttons.cancel, buttons.apply, buttons.refresh, buttons.resolve],
     onClose: () => {
       closing = true
-      try { sourceWork++; sourceBusy = false; controller.cancel(); pendingFiles.clear(); dirty = false; clearNotice(); return true }
+      try { sourceWork++; sourceBusy = false; comparison.close(); controller.cancel(); pendingFiles.clear(); dirty = false; clearNotice(); return true }
       finally { closing = false }
     } })
   const unsubscribe = controller.subscribe(renderState)
@@ -211,7 +220,7 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
     void controller.inspect()
   }
   return { open, controller, dispose() {
-    modal.close(); unsubscribe(); controller.dispose(); launcher.remove(); pendingFiles.clear()
+    modal.close(); unsubscribe(); comparisonSurface.dispose(); comparison.dispose(); controller.dispose(); launcher.remove(); pendingFiles.clear()
     window.removeEventListener('nadoc:document-reset', resetView)
   } }
 }

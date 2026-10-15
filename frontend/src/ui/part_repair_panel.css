@@ -19,3 +19,9 @@
 .part-repair__issues { display: flex; flex-direction: column; gap: 6px; }
 .part-repair__issues > div { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .fl-repair-focus { box-shadow: inset 0 0 0 2px var(--color-accent, #58a6ff); }
+.part-comparison { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--color-border-default); }
+.part-comparison[hidden], .part-comparison [hidden] { display: none; }
+.part-comparison__labels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: var(--text-xs); }
+.part-comparison__canvas { height: clamp(220px, 35vh, 420px); min-width: 0; position: relative; }
+.part-comparison__canvas canvas { width: 100%; height: 100%; display: block; outline-offset: -2px; }
+.part-comparison__canvas::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--color-border-default); pointer-events: none; }

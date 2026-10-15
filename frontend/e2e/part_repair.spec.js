@@ -10,7 +10,8 @@ const jobs = new Set()
 // - One __e2e__ in-memory document; any autosaved .nadoc/project revisions keep
 //   that prefix and are removed by global-teardown.js/project_artifact_cleanup.
 // - Session cache disabled by config. No source fixture, download, native build,
-//   simulation or user file is read/written. Export bodies stay in browser memory.
+//   simulation or user file is read/written. Export/comparison bodies stay in
+//   browser memory; the comparison owns one disposable WebGL context.
 // - Private job IDs are cancelled below even after assertions fail, then the
 //   document is dropped. Browser context owns its transient session/local storage.
 // - Config may create failure traces/screenshots and Vite bridge credentials;
@@ -93,8 +94,36 @@ test('saved native repair selects an exact reference and applies only its regene
   await panel.getByRole('button', { name: 'Evaluate proposal', exact: true }).click()
   await expect(panel.getByRole('button', { name: 'Apply evaluated proposal', exact: true })).toBeEnabled({ timeout: 15000 })
   await expect.poll(particles).toEqual(fixture.published)
-  await expect(panel.getByText('Visual comparison is not available', { exact: false })).toBeVisible()
+  const geometryBefore = await page.evaluate(() => JSON.stringify(window.__nadocTest.store.getState().currentGeometry))
+  const comparisonResponse = page.waitForResponse(response => /\/features\/evaluation\/jobs\/[^/]+\/comparison$/.test(response.url()))
+  await panel.getByRole('button', { name: 'Compare authored geometry', exact: true }).click()
+  const compared = await comparisonResponse
+  expect(compared.ok()).toBe(true)
+  const projection = await compared.json()
+  expect(projection.coverage.complete).toBe(true)
+  expect(projection.coverage.scientific_qualification).toBe(false)
+  expect(projection.published.particles.map(p => [p.id, p.diameter_nm])).toEqual([[fixture.first, 12], [fixture.second, 8]])
+  expect(projection.proposed.particles.map(p => [p.id, p.diameter_nm])).toEqual([[fixture.first, 10], [fixture.second, 14]])
+  const comparison = panel.getByRole('region', { name: 'Private proposal comparison' })
+  await expect(comparison.getByText('Published authored geometry · unverified', { exact: true })).toBeVisible()
+  await expect(comparison.getByText('Evaluated proposal', { exact: true })).toBeVisible()
+  await expect(comparison.locator('canvas')).toBeVisible()
+  await expect.poll(particles).toEqual(fixture.published)
+  expect(await page.evaluate(() => JSON.stringify(window.__nadocTest.store.getState().currentGeometry))).toBe(geometryBefore)
+  const exported = await page.evaluate(async documentId => {
+    const response = await fetch('/api/design/export', { headers: { 'X-NADOC-Doc': documentId } })
+    if (!response.ok) throw new Error('Could not inspect published export during comparison')
+    return (await response.json()).nanoparticles
+  }, DOC)
+  expect(exported).toEqual(fixture.published)
+  await comparison.getByRole('button', { name: 'Fit comparison', exact: true }).click()
+  await comparison.getByRole('button', { name: 'Close comparison', exact: true }).click()
+  await expect(comparison.locator('canvas')).toHaveCount(0)
+  await expect(panel.getByRole('button', { name: 'Apply evaluated proposal', exact: true })).toBeEnabled()
+  await panel.getByRole('button', { name: 'Compare authored geometry', exact: true }).click()
+  await expect(comparison.locator('canvas')).toBeVisible()
   await panel.getByRole('button', { name: 'Cancel evaluation', exact: true }).click()
+  await expect(comparison.locator('canvas')).toHaveCount(0)
   await expect(panel.getByRole('button', { name: 'Apply evaluated proposal', exact: true })).toBeDisabled()
   await panel.getByRole('button', { name: 'Evaluate proposal', exact: true }).click()
   await expect(panel.getByRole('button', { name: 'Apply evaluated proposal', exact: true })).toBeEnabled({ timeout: 15000 })
@@ -102,9 +131,9 @@ test('saved native repair selects an exact reference and applies only its regene
   const diameters = () => page.evaluate(() => window.__nadocTest.store.getState().currentDesign.nanoparticles.map(p => [p.id, p.diameter_nm]))
   await expect.poll(diameters).toEqual([[fixture.first, 10], [fixture.second, 14]])
   await panel.getByRole('button', { name: 'Check published recipe', exact: true }).click()
-  await expect(panel.getByRole('status')).toContainText('regenerated successfully', { timeout: 15000 })
+  await expect(panel.locator('.part-repair > [role="status"]')).toContainText('regenerated successfully', { timeout: 15000 })
   await panel.getByRole('button', { name: 'Evaluate proposal', exact: true }).click()
-  await expect(panel.getByRole('alert')).toContainText(/rebase/i)
+  await expect(panel.locator('.part-repair > [role="alert"]')).toContainText(/rebase/i)
   await expect(panel.getByRole('button', { name: 'Apply evaluated proposal', exact: true })).toBeDisabled()
   await panel.getByRole('button', { name: 'Close', exact: true }).click()
 

@@ -956,3 +956,24 @@ passes. App/smoke/headset remains PENDING; no browser was launched without Archi
 
 MV-46 automated update: 39 focused cases and the full frontend suite (8,192
 passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
+
+- **MV-47 — PENDING — Private authored repair comparison (2026-10-15).**
+  On the isolated native gold fixture in `frontend/e2e/part_repair.spec.js`, save
+  and evaluate the proposal, then Compare authored geometry. Confirm the two
+  panes visibly differ at the expected particle, share one camera/frame, and
+  remain labeled published authored/unverified versus evaluated proposal.
+  Exercise orbit, keyboard rotation/F fit, narrow windows, close/reopen, and
+  cancellation or expiry while visible. Check that ordinary scene, export and
+  simulation inputs remain unchanged before Apply. Repeat with a small free
+  protein (including a no-C-alpha ovoid) and quantum dot. Unsupported DNA,
+  coatings or anchored proteins must report unavailable without showing a
+  partial model. Confirm document/loadout/proposal changes dispose both panes,
+  and one Apply still uses the normal guarded publication/refresh path.
+  The 115 unique focused frontend cases cover lifecycle, bounds, native nm/pose
+  adaptation and GPU cleanup, following one caught/fixed pose-wrapper mismatch;
+  they do not establish visual correctness, device responsiveness or near-limit
+  display cost. Full frontend validation passed 8,263 cases with one skipped
+  across 714 files in 311.62 seconds. **NOT VERIFIED IN APP**:
+  Archive remains unavailable, and no browser or native/headset run was made.
+  Assemblies and molecular-engine comparison authorization remain outside this
+  display scope. The existing dedicated e2e isolation/output cleanup rules apply.
