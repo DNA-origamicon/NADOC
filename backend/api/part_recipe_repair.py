@@ -103,6 +103,8 @@ def _current_numerical_pins(kind, _params):
         from backend.core.part_cpd_contract import contract_defaults
     elif kind == "duplex-relax":
         from backend.core.part_duplex_relax_contract import contract_defaults
+    elif kind == "nanoparticle-patch":
+        from backend.core.part_streptavidin_contract import contract_defaults
     else:
         raise CommandContractError("This command has no supported numerical upgrade", code="unsupported_numerical_upgrade")
     return contract_defaults()
@@ -115,6 +117,17 @@ def _numerical_parser(kind):
     if kind == "duplex-relax":
         from backend.core.part_duplex_relax_contract import parse_command
         return parse_command
+    if kind == "nanoparticle-patch":
+        from backend.api.part_streptavidin_commands import SetRequest, parse_command
+
+        def parse_coating(params):
+            command = parse_command(kind, params)
+            if not isinstance(command, SetRequest):
+                raise CommandContractError("Only coating set/repack has a numerical upgrade",
+                                           code="unsupported_numerical_upgrade")
+            return command
+
+        return parse_coating
     raise CommandContractError("This command has no supported numerical upgrade", code="unsupported_numerical_upgrade")
 
 
@@ -125,7 +138,8 @@ def _upgrade(kind, previous, action, provider):
             previous.get("template"), action.expected_template):
         _reject("repair_conflict", "The numerical contract changed after this repair was prepared", action)
     defaults = provider(kind, deepcopy(previous))
-    allowed = {"engine", "template", "_proof_version", "conversion_version", "relaxation_version"}
+    allowed = {"engine", "template", "_proof_version", "conversion_version", "relaxation_version",
+               "coating_version", "importer_version"}
     if set(defaults) - allowed or "engine" not in defaults:
         raise ValueError("Numerical provider returned fields outside the pin contract")
     updated = {**previous, **deepcopy(defaults)}
@@ -134,7 +148,7 @@ def _upgrade(kind, previous, action, provider):
     # it does not migrate algorithms, command versions or template families.
     if previous["engine"]["id"] != updated["engine"]["id"]:
         raise ValueError("Numerical upgrade cannot change the engine family")
-    for key in ("_proof_version", "conversion_version", "relaxation_version"):
+    for key in ("_proof_version", "conversion_version", "relaxation_version", "coating_version", "importer_version"):
         if previous.get(key) != updated.get(key):
             raise ValueError("Numerical upgrade cannot change command versions")
     if "template" in previous and any(previous["template"][key] != updated["template"][key]

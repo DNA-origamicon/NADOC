@@ -238,6 +238,15 @@ def test_unchanged_supported_overlay_replays_but_overlay_definition_edit_is_defe
 
 
 def numerical(kind):
+    if kind == "nanoparticle-patch":
+        from backend.api.part_streptavidin_commands import PDB_SHA256, PDB_SIZE
+
+        return {"_proof_version": 1, "coating_version": 1, "importer_version": 1,
+            "action": "set", "nanoparticle_id": "gold", "mode": "adsorption", "footprint_nm2": 40.0,
+            "spacer_nm": 0.3, "seed": 1, "coverage_source": None, "coverage_reference": None,
+            "count_override": 1, "pdb_source": {"version": 1, "sha256": PDB_SHA256, "size_bytes": PDB_SIZE,
+                "format": "pdb", "media_type": "chemical/x-pdb"},
+            "engine": {"id": "nadoc.streptavidin-native.v1", "implementation_sha256": "0" * 64, "runtime_sha256": "0" * 64}}
     if kind == "duplex-relax":
         return {"_proof_version": 1, "relaxation_version": 1, "source": {"kind": "native"},
             "history_seed": str(UUID(int=99)), "duplex_id": "duplex", "driver_overhang_id": "driver",
@@ -257,10 +266,10 @@ def upgrade_action(params, **extra):
 
 def current_pins(_kind, params):
     return {key: ({**value, "implementation_sha256": "1" * 64, "runtime_sha256": "2" * 64} if key == "engine" else value)
-            for key, value in params.items() if key in {"engine", "template", "_proof_version", "conversion_version", "relaxation_version"}}
+            for key, value in params.items() if key in {"engine", "template", "_proof_version", "conversion_version", "relaxation_version", "coating_version", "importer_version"}}
 
 
-@pytest.mark.parametrize("kind", ["photoproduct-create", "photoproduct-relax", "duplex-relax"])
+@pytest.mark.parametrize("kind", ["photoproduct-create", "photoproduct-relax", "duplex-relax", "nanoparticle-patch"])
 def test_explicit_server_upgrade_changes_only_pins_and_reports_provenance(kind):
     design = source()
     params = numerical(kind)
@@ -297,6 +306,20 @@ def test_ordinary_input_repair_does_not_refresh_numerical_pins():
         executor=old_engine, numerical_provider=lambda *_a: pytest.fail("Automatic numerical migration"))
     assert result["status"] == "unverified" and result["issues"][0]["code"] == "engine_mismatch"
     assert result["repair"]["completed_prefix"] == [] and result["repair"]["not_evaluated"] == ["later"]
+
+
+@pytest.mark.parametrize("action", ["remove", "move", "source-free"])
+def test_coating_upgrade_cannot_be_applied_to_nonpacking_particle_commands(action):
+    params = ({"_proof_version": 1, "nanoparticle_version": 1, "nanoparticle_id": "gold", "diameter_nm": 10.0}
+              if action == "source-free" else {"_proof_version": 1, "coating_version": 1,
+                                                "nanoparticle_id": "gold", "action": action})
+    if action == "move":
+        params["pose"] = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+    design = source().copy_with(feature_log=[row("numerical", "nanoparticle-patch", params)])
+    result = evaluate(design, request(upgrade_action(numerical("nanoparticle-patch"))),
+        executor=lambda *_a: pytest.fail("Nonpacking upgrade executed"),
+        numerical_provider=lambda *_a: pytest.fail("Nonpacking upgrade selected pins"))
+    assert result["status"] in {"failed", "unverified"} and "candidate" not in result
 
 
 @pytest.mark.parametrize("failure", ["expected_engine", "expected_template", "unknown_engine", "unknown_source", "qualification", "provider_fields"])

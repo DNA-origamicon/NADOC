@@ -52,6 +52,37 @@ def cold(design):
         worker.close()
 
 
+def test_explicit_coating_upgrade_rebuilds_old_pin_even_after_coating_removal(sources):
+    design = append(recipe(sources), "nanoparticle-patch", action("remove"))
+    entry = design.feature_log[1]
+    entry.params["engine"] = {**entry.params["engine"], "implementation_sha256": "0" * 64}
+    before = design.model_dump_json()
+    old_engine = dict(entry.params["engine"])
+    assert proof(design)["issues"][0]["code"] == "engine_mismatch"
+    request = {"operation": "repair", "repair": {"repair_version": 1,
+        "expected_design_id": design.id, "expected_revision": 7,
+        "actions": [{"action": "upgrade_numerical_contract", "feature_id": entry.id,
+                     "expected_engine": old_engine}]}}
+    # Removal leaves a small materialized state. This deliberately fits the
+    # unchanged ordinary capture envelope; no larger live profile is enabled.
+    worker = EvaluationWorker(capture(design, preserve_entry_types=True), {
+        "request": request, "header": {"source_design_id": design.id, "source_revision": 7}})
+    try:
+        worker.start()
+        assert worker.wait(30)
+        result = worker.result()
+        assert result["status"] == "ready", result
+    finally:
+        worker.close()
+    candidate = Design.model_validate(result["candidate"])
+    assert candidate.nanoparticles[0].coating is None
+    assert candidate.feature_log[1].id == entry.id
+    assert result["repair"]["numerical_upgrades"][0]["before"]["engine"] == old_engine
+    assert candidate.feature_log[1].params["engine"] != old_engine
+    assert design.model_dump_json() == before
+    assert cold(Design.model_validate_json(candidate.model_dump_json()))["status"] == "reproduced_import"
+
+
 @pytest.mark.parametrize("mode", ["adsorption", "biotin_tether"])
 def test_registered_lifecycle_cold_rebuilds_pinned_inputs_and_ignores_recovery(sources, mode):
     design = recipe(sources, mode)

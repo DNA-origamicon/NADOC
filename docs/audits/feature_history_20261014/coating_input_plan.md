@@ -402,8 +402,8 @@ not an expansion of the earlier measured 16-site envelope or a production
 capture change. Pure tests passed before the numerical-pin increment; registered
 proof, pin, transport and 64-site results must be reported separately.
 
-`scripts/benchmark_coating_contract.py` is an unexecuted qualification harness
-at this writing. It constructs 1/16/64-site recipes in both modes, then measures
+`scripts/benchmark_coating_contract.py` is the qualification harness. It constructs
+1/16/64-site recipes in both modes, then measures
 set, resize, move and removal separately, with real history/recovery pairs,
 source closure, JSON reload, default capture refusals, the experimental
 100k-node/4 MB/100 ms profile, and registered spawned cold proof. Worker input
@@ -455,6 +455,34 @@ checkpointed upgrade path is available. Pins detect incompatibility; NADOC does
 not yet archive executable environments or promise replay on arbitrary machines.
 Do not mark numerical reproducibility complete solely because same-runtime
 tests pass.
+
+## Worker qualification update (2026-10-15)
+
+The first run is retained in `coating_contract_benchmark_initial_p4.json`: all
+24 in-process proofs reproduced, but all 24 script-spawned workers refused the
+runtime pin. Python's spawn bootstrap imported the benchmark before entering the
+worker target, so numerical libraries could initialize before environment
+variables were set. The disposable child now preloads the known numerical module
+set and applies `threadpool_limits(limits=1)` around evaluation. The regression
+preloads two-thread pools in a real spawned script, verifies one thread inside
+evaluation, and confirms that the parent's environment and pools are unchanged.
+No numerical formula, seed or engine manifest changed.
+
+The corrected run, `coating_contract_benchmark_p4.json`, passed all 24 warm and
+24 cold proofs over set, resize, move and removal in both modes at 1/16/64
+requested sites. Existing native clash rejection still determines actual site
+counts. Of 216 experimental captures, 215 succeeded and one exceeded the
+cooperative clock at 147.52 ms. Active-coating capture medians were 48–59 ms;
+removed-coating capture was approximately 1 ms. Maximum captured pickle was
+888,305 bytes and cumulative recovery 2,302,956 bytes, within unchanged worker
+and recovery limits. Set/repack cost approximately 149–767 ms; cold startup plus
+proof cost 1.2–2.38 s. These are isolated measurements, not live-lock qualification.
+
+Explicit repair can now upgrade the same coating numerical family, preserving
+all non-pin inputs and feature identities. A real spawned repair of an old pin
+after coating removal cold-reproduces after reload. Ordinary parameter edits
+cannot change pins. Production large capture and public coating append remain
+disabled pending their separate publication/latency gates.
 
 This matches the direction of CAD versioning without claiming equivalent
 infrastructure: Onshape links external custom features to specific document

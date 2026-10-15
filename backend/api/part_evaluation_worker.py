@@ -8,6 +8,7 @@ import json
 import os
 import pickle
 import struct
+from importlib import import_module
 from multiprocessing.shared_memory import SharedMemory
 
 from backend.api.part_verification_worker import (
@@ -29,9 +30,20 @@ def _evaluate(input_name, input_size, output_name):
         try:
             source = SharedMemory(name=input_name)
             request = pickle.loads(source.buf[:input_size])
-            from backend.api.part_evaluation import evaluate
+            # Spawn imports __mp_main__ before entering this target. A caller's
+            # entry point can therefore load BLAS/OpenMP before the environment
+            # policy above takes effect. Preload the numerical contract's known
+            # pools, then enforce the same policy on already loaded libraries.
+            # This process is disposable; application/server pools are untouched.
+            for module in ("numpy", "scipy.linalg", "scipy.optimize", "scipy.spatial.transform",
+                           "scipy.spatial.distance", "scipy.interpolate"):
+                import_module(module)
+            from threadpoolctl import threadpool_limits
 
-            result = evaluate(**request)
+            with threadpool_limits(limits=1):
+                from backend.api.part_evaluation import evaluate
+
+                result = evaluate(**request)
         except BaseException as exc:
             result = failure("evaluation_error", exc)
         encoded = _result_bytes(result, limit=MAX_CANDIDATE_BYTES)

@@ -498,7 +498,11 @@ Stable targets and exact expected inputs protect against stale replacement.
 Explicit CPD/duplex engine upgrades retain provenance and undo; a real duplex
 upgrade/commit/reload/cold-proof regression passes. Source audits now report both
 coating inputs with exact repair paths. Coating live capture/publication remains
-disabled: script-spawn qualification exposed numerical pools initialized before
-the worker's environment settings; see retained failure evidence and the next
-worker fix. Ordinary capture budgets remain unchanged. P5 discovery/drafts/UI
-and P6 enforcement remain open.
+disabled pending live capture/publication qualification. The script-spawn pool
+initialization failure is fixed with child-only runtime thread limits; all 24
+cold coating stages now reproduce. The initial failure remains recorded. Explicit
+coating numerical upgrades are supported alongside CPD/duplex. The pure P5b
+selection adapter replays the exact prefix and returns bounded typed candidates,
+without geometry or a whole-command validity claim; job integration is next.
+Ordinary capture budgets remain unchanged. P5 drafts/UI and P6 enforcement remain
+open. See the implementation ledger for measured capture and HTTP overhead.

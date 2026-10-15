@@ -743,3 +743,35 @@ one 110 ms refusal; its approximately 49–51 ms median is not ordinary interact
 latency. [Initial evidence](coating_contract_benchmark_initial_p4.json) remains
 unchanged. Fix and requalify before enabling larger coating jobs. P4, P5b–d and
 P6 remain open; assemblies remain deferred.
+
+## P4 worker and publication qualification — October 15
+
+The script-spawn numerical initialization failure above is fixed in the isolated
+worker. Runtime thread limits apply after spawn-time imports; the parent remains
+unchanged. The corrected coating benchmark passes all 24 warm and 24 cold stages.
+The 64-site boundary fits unchanged worker/recovery transport, but experimental
+capture still refused once at 147.52 ms, with active-coating medians 48–59 ms.
+The initial failed run remains as evidence. No ordinary capture limit or live
+coating entry point is expanded. Explicit coating set/repack engine upgrades
+join CPD and duplex upgrades; a spawned repair/reload/cold-proof regression passes.
+
+The caDNAno HTTP benchmark publishes 27 isolated imports and confirms cleanup.
+Median publication-lock holds were 0.065–0.112 ms; the maximum was 1.337 ms.
+Concurrent lightweight request medians rose to 2.98–6.32 ms from 0.92–1.06 ms
+baselines. The 87 KB case had a 52.79 ms concurrent p95 and 97.79 ms maximum,
+despite negligible lock waits. CPU and HTTP scheduling costs remain visible;
+these results do not establish zero overhead or browser-wide responsiveness.
+See [route evidence](cadnano_route_contract.md) and
+[coating qualification](coating_input_plan.md#worker-qualification-update-2026-10-15).
+
+P5b's pure reference-selection foundation rebuilds the exact preceding prefix
+and returns bounded typed candidates. It does not use saved geometry or recovery,
+does not evaluate a solver for each candidate, and never returns a publishable
+Design. Initial reviewed slots cover simple gold/QD targets, free protein
+asset/attachment targets and same-part rigid-copy inputs. Compound, owned and
+generated-scope selectors remain explicitly unsupported. Full repair decides
+whether a selected replacement actually makes the recipe valid. The pure module
+passes 62 focused tests; job integration is a following increment.
+
+The post-checkpoint validation record separates these new checks from the prior
+622-test checkpoint. P4, P5 and P6 remain incomplete; assemblies remain deferred.
