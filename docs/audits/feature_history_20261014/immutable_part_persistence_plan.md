@@ -9,8 +9,21 @@ The unmounted file-layer implementation now passes **53 parent-run cases in
 2.96 seconds**, including bounded/corrupt inputs, filesystem ownership, stale
 leases, contention and injected write failures. An earlier fixture-only failure
 is recorded in [validation](validation_immutable_cache_p6.json). This checkpoint
-does not yet install typed autosave or recovery authority; those remain separate
-integration work. Public storage and batch gates remain false.
+does not grant recovery authority. The subsequent typed autosave adapter passes
+**27 focused cases in 2.87 seconds**, plus **109 cache identity, pruning and
+file-layer regressions in 3.51 seconds**; see the [typed persistence validation](validation_immutable_persistence_p6.json).
+Public storage and batch gates remain false.
+
+The adapter captures only the sealed handle and actual session/revision under
+the state lock. Writes run afterward against bounded, weak-source file bindings.
+Successful autosave marks the captured revision, and failed writes stay pending.
+A pending, corrupt or unavailable typed record blocks older part restore,
+pruning, close cleanup and compatibility part/workspace-head writes; assemblies
+remain independent. Existing legacy behavior remains when typed storage is absent.
+This checkpoint does not yet expose restore, bind public empty creation to a
+durable record, or qualify end-to-end restart behavior. In particular, public
+creation must serialize against an already-admitted compatibility autosave, not
+only check for a record before writing.
 
 ## Durable record
 
