@@ -27,6 +27,7 @@ import { showDependentsDecision } from './primitives/dependents_dialog.js'
 import { editFeature, isEditable as _isOpEditable } from './edit_feature_popover.js'
 import { generatedFeatureSchema, canReplayGenerated } from './generated_feature_fields.js'
 import { canonicalSelection } from '../scene/selection_model.js'
+import { initPartRepairPanel, focusPartRepairRow } from './part_repair_panel.js'
 
 const FEATURE_LOG_BOTTOM_TOLERANCE_PX = 8
 
@@ -2109,6 +2110,12 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
     panelBody.insertBefore(_pickBannerEl, panelBody.firstChild)
   }
 
+  const repair = initPartRepairPanel({ store, api, host: toolbar,
+    isPartContext: () => !_activePartTargetId() && !store.getState().assemblyActive,
+    focusFeature: target => {
+      if (target.childId) { _clusterExpanded.set(target.featureId, true); _rebuild(_latestDesign) }
+      focusPartRepairRow(list, target)
+    } })
   const vr = createFeatureLogVR({ list, target: assemblyTargetSelect,
     prepare: () => { if (_collapsed) _renderCurrentView() },
     context: () => {
@@ -2122,5 +2129,6 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         status: thumb.dataset.readiness === 'error' ? thumb.title : '' }
     }, seek: _seek, seekConfig: _seekAssemblyConfig,
   })
-  return { setPartContext, clearPartContext, enterPickMode, exitPickMode, vr }
+  return { setPartContext, clearPartContext, enterPickMode, exitPickMode, vr, repair,
+    dispose: () => repair?.dispose() }
 }

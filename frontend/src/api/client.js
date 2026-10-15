@@ -12,6 +12,8 @@ import { initAssemblyInstanceDesignCache } from './assembly_instance_design_cach
 import { recordAssemblyResponse } from './assembly_response_authority.js'
 import { readGeometryResponse } from '../viewer/native_geometry_binary.js'
 import { welcomeVisible } from '../shared/welcome_visibility.js'
+import { createPartRepairEndpoints } from './part_repair_endpoints.js'
+import { createPartRepairResponse } from './part_repair_response.js'
 
 const _documentRequests = createDocumentRequestScope()
 const _seekHistory = createSeekHistoryAcknowledgement()
@@ -56,7 +58,7 @@ function _signalDesignChanged({
 import { showToast } from '../ui/toast.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel } from '../ui/op_progress.js'
 import { notifyRequestFailure, notifyRequestSuccess, pokeProbe } from '../shared/connection_monitor.js'
-import { docHeaders, docHeadersFor, docKey, docKeyFor } from '../shared/doc_id.js'
+import { docHeaders, docHeadersFor, docKey, docKeyFor, getDocId } from '../shared/doc_id.js'
 import { createAssemblySimulationContext } from './simulation_context.js'
 import { activeOperationTiming, beginOperationTiming, finishOperationAfterRender, finishOperationTiming, withOperationTiming, markOperationTiming, whenOperationIdle } from '../perf/operation_timing.js'
 import { buildVRJobSnapshot, VR_JOB_SNAPSHOT_LIMIT } from '../scene/vr_job_snapshot.js'
@@ -73,6 +75,9 @@ const LS_MODE_KEY     = 'nadoc:mode'  // 'assembly' | 'part-edit:{id}' | null (s
 import { createDesignRevisionTracker } from './design_revisions.js'
 
 const _designRevisions = createDesignRevisionTracker()
+const _partRepairResponse = createPartRepairResponse({ store, revisions: _designRevisions, getDocId, syncDesign: _syncFromDesignResponse })
+export const partRepairAPI = createPartRepairEndpoints({ request: _request, headersFor: docHeadersFor,
+  acknowledge: _partRepairResponse.acknowledge, apply: _partRepairResponse.apply })
 const _assemblyRevisions = createDesignRevisionTracker()
 let _assemblyRevisionId = null
 
@@ -115,6 +120,7 @@ export function resetRevisionWatermark() {
   _designRevisions.reset()
   _assemblyRevisions.reset()
   _assemblyRevisionId = null
+  store.setState({ repairMetadata: null })
 }
 
 /** Latest observed server revision, including metadata, for optimistic concurrency. */
@@ -395,7 +401,7 @@ async function _ensureAssemblySimulation(path, { method = 'GET', timeoutMs = _RE
   })
 }
 
-export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true, skipSimulationPrepare = false, excludeFromTiming = false, deferGeometry = false } = {}) {
+export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true, skipSimulationPrepare = false, excludeFromTiming = false, deferGeometry = false, onError } = {}) {
   if (store.getState().featureSeekPending && method !== 'GET'
       && /^\/(design|assembly)(?:\/|$)/.test(path)
       && path !== '/design/loadouts/activate-editable'
@@ -581,11 +587,12 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
         const retryBody = path === '/design/features/seek'
           ? { ...body, preview_token: null, known_revision: null } : body
         return _request(method, path, retryBody, {
-          signal, suppressBusy, docId, timeoutMs, protectedRetry: false, deferGeometry,
+          signal, suppressBusy, docId, timeoutMs, protectedRetry: false, deferGeometry, onError,
         })
       }
     }
     store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
+    onError?.(r.status, json?.detail ?? r.statusText)
     return null
   }
   store.setState({ lastError: null })
@@ -709,7 +716,7 @@ async function _applyDesignResponse(json, {
     json.design = _mergeFeatureLogPayloads(json.design, store.getState().currentDesign)
   }
   _designSyncTransient = transient
-  const updates = {}
+  const updates = _partRepairResponse.summaryPatch(json)
   if (json.design)     updates.currentDesign     = json.design
   if (json.validation) {
     updates.validationReport = json.validation

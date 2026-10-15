@@ -1865,7 +1865,7 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   metadata/planning/draft/persistence/source/repair regressions (280 total).
   Invalid-parameter contract recognition remains separate work.
 
-## ISSUE-87 — Repair Apply mistakes a commit receipt for a full design (2026-10-15, IN PROGRESS)
+## ISSUE-87 — Repair Apply mistakes a commit receipt for a full design (2026-10-15, FIXED)
 
 - Integration audit found that the actual evaluation commit endpoint publishes
   one revision and returns only job/design/revision metadata. The new desktop
@@ -1886,7 +1886,18 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   identity-less legacy response fixtures without changing those fixtures.
   Initial full result: 8,155 passed, one skipped, six failed in 308.92 seconds.
   Eight targeted commit/refresh regressions then failed before implementation
-  (789 ms); corrected integration validation is pending.
+  (789 ms); final corrected validation is recorded below.
+
+- Lost/failed commit transport now retains a separate original job identity and
+  unknown-publication notice. Explicit status inspection can confirm publication;
+  there is no automatic recommit or cancellation of a possibly published result.
+- Root review also found the default-document sentinel mismatch: browser null
+  differs from server `__default__`. Three of ten refresh tests failed before the
+  exact mapping fix (779 ms); absent/null server identities are now rejected.
+- Final focused desktop validation: 86 passed across 12 files (4.92 seconds).
+  Full `just test-frontend`: **8,181 passed, one skipped, 708 files** in309.16
+  seconds. App/smoke remains unrun because Archive is unavailable (MV-45); this
+  is tested integration code, not a claim of visual/headset qualification.
 
 ## ISSUE-88 — Session cache aliases unsafe document identities (2026-10-15, FIXED)
 
@@ -1922,3 +1933,24 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   resolved identities before reading the body. Added canonical-type/whitespace
   and no-body-acquisition cases; no tests were executed by the implementation
   agent. Existing restore and pruning policies are unchanged.
+
+## ISSUE-89 — Inert generator annotations pass admission but fail strict native replay (2026-10-15, IN PROGRESS)
+
+- The shared dependency resolver deliberately removes `_generator` annotation
+  metadata, and scoped execution does the same. Ordinary `execute`/`execute_long`
+  instead pass the annotation into strict native schemas. A valid annotated gold
+  row is admitted but cannot regenerate; invalid-input repair exposed this older
+  inconsistency. This is a development audit finding, not an observed data-loss
+  incident. Metadata must not supply command parameters or output identities.
+- The isolated regression dossier `tests/test_part_generator_annotations.py`
+  uses valid gold create/patch rows with poisoned recovery, direct and spawned
+  independent proof, both executor modes, scoped controls and forged/missing
+  native identities/versions. It verifies that recorded annotations are retained
+  verbatim and excluded before reference validation/building. Root red execution
+  is pending against reversible checkpoint `08af575e`; no production correction
+  is included yet.
+- Reviewed correction: after the existing scoped handoff, remove only the inert
+  `_generator` key from a private execution-parameter dictionary. Keep original
+  recorded parameters, native schemas, `_generated_scope` validation, versions,
+  output IDs and actual typed reference resolution unchanged. Do not normalize
+  other unknown fields or infer missing inputs from metadata.

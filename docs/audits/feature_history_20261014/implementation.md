@@ -11,7 +11,7 @@ Scope approved October 14, 2026: implement standard-part validation, editability
 | P2 | Explicit recipe roots/versions, authoritative-field classification, read-only verification and incremental dependencies | Implementation exit checks complete: independent nonempty replay, content-pinned roots, typed dependencies, fingerprints, bounded capture/jobs and stale/cancel handling. Supported-family expansion continues in P3/P4; validation debt below remains explicit |
 | P3 | Native DNA command families and generated construction | DNA implementation exit checks recorded below, including joined/connectivity input compilation and bounded native-source CPD conversion/relaxation. The combined P3/P4 registry currently has 115 versioned kinds with method/action restrictions; this count is not universal operation coverage. Generated asset/attachment histories remain in P4 |
 | P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol including unbound particle motion, pinned small protein/catalog/aptamer inputs, supported protein conjugation lifecycle and duplex lifecycle/relaxation implemented. Bounded document transport and explicit inactive-source audits added. Full import/attachment coverage and physical-result provenance remain open |
-| P5 | Standard-part repair, drafts, desktop and part-mode VR | Saved draft evaluation/apply, bounded reference selection, explicit source staging/restoration and persistence pass. Reviewed input metadata is implemented. Lossless browser expectations pass; desktop controls are being validated; invalid-input recognition, broader selectors, candidate comparison and native VR remain open |
+| P5 | Standard-part repair, drafts, desktop and part-mode VR | Saved draft evaluation/apply, bounded reference selection, explicit source staging/restoration and persistence pass. Reviewed input metadata is implemented. Lossless browser expectations and desktop UI-1 automated integration pass; invalid-input recognition, broader selectors, candidate comparison and native VR remain open |
 | P6 | Strict standard-part agent transactions and legacy retirement | Private host policy, one-use publication permits and state/known-route guards pass. Closed strict HTTP dispatch and scalar revision reads pass. Public batch gate stays closed pending ownership and responsiveness qualification; immutable revision storage, typed additional operations, baseline reuse and explicit import permission remain open |
 
 Assemblies are not an exit condition for any phase above. Existing assembly compatibility tests may catch collateral changes to shared infrastructure, but new assembly features and fixes remain deferred.
@@ -1083,3 +1083,32 @@ whitespace pass. Only tiny pytest-owned sentinels were used; no production cache
 thread or workspace writer ran. This closes the identifier prerequisite for
 immutable persistence; it does not itself enable native restore or public batch.
 See [validation](validation_cache_identity_p6.json). P4/P5/P6 remain open.
+
+
+## Desktop repair workflow UI-1 — October 15
+
+The feature-log launcher now opens a modular standard-part repair workflow with
+explicit Check, earliest-error navigation, reviewed scalar/reference/source
+inputs, saved proposal/rebase/discard, evaluation/cancel and Apply. Metadata
+acknowledgements do not fetch or replace displayed geometry. The controller binds
+all work to document/design/loadout/revision and an epoch; no readiness is saved.
+Two superseded local parameter-builder helpers were pruned after the backend
+input catalog became authoritative. `main.js` remains unchanged.
+
+ISSUE-87 is fixed: Apply retains the actual publication receipt and privately
+refreshes the exact committed design/geometry before one normal synchronization.
+Read failure offers explicit Refresh. Lost commit transport retains an unknown
+publication state and original job for explicit status resolution, never an
+automatic recommit. Default-document null maps to the exact server `__default__`
+sentinel; missing/other server identities refuse. Protected/history contexts and
+numerical upgrades requiring separate molecular review remain explicit.
+
+**86 focused cases pass; full Vitest passes 8,181 tests with one skipped across
+708 files (309.16 seconds).** Earlier red/null/default-document evidence is
+retained. `NOT VERIFIED IN APP`: Archive is not mounted, so browser/smoke/headset
+work remains MV-45. A prefixed, failure-cleaned isolated Playwright scenario is
+prepared but unrun. No app models, screenshots, native builds or scientific
+outputs were created; normal tiny Vitest caches and existing placement journal
+are preserved. Visual candidate comparison and native VR are the next UI slices.
+See [validation](validation_repair_ui1_p5.json) and [UI contract](repair_ui_plan.md).
+P4/P5/P6 remain open.

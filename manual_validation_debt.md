@@ -919,3 +919,25 @@ quiet host condition before claiming complete four-profile coverage.
   fields; missing telemetry must not become zero activity.
   Reusable workflow: Debug → VR Tours & Tests → Controls & layout → SteamVR final
   output · capture and calibration; original manual recordings remain preserved.
+
+- **MV-45 — PENDING — Standard-part recipe repair panel (2026-10-15).**
+  Exercise Check / repair recipe from the desktop Feature Log using an isolated
+  `__e2e__` native part. Inspect a missing reference, choose a valid prefix target,
+  change a scalar/pose input, save/reload/rebase the proposal, evaluate privately,
+  cancel, Apply once, and Undo while retaining proposal metadata. Confirm source
+  replacement uses the selected original file and preserves upload limits.
+  Switch document/loadout during requests and confirm no stale result reaches
+  the scene. Simulate display-refresh failure after successful Apply: publication
+  must remain acknowledged and Refresh must only read, never recommit. Verify
+  keyboard focus, narrow-window layout, readable diagnostics, and cleanup after
+  both successful and interrupted runs. Unit tests and HTTP/Node transport tests
+  do not establish this app/visual behavior. App and smoke runs remain unexecuted:
+  Archive is unavailable for the browser runtime/capture output policy. The
+  dedicated Playwright scenario is `frontend/e2e/part_repair.spec.js`; its output
+  inventory and isolation prerequisites are in the feature-history repair UI
+  plan. Candidate visual comparison and native VR repair are separate unfinished
+  phase work, not features certified by this entry.
+
+MV-45 automated update (2026-10-15):86 focused and full8,181 passed/one skipped
+across708 frontend files. Receipt/unknown-publication/default-document integration
+passes. App/smoke/headset remains PENDING; no browser was launched without Archive.

@@ -696,3 +696,15 @@ exact bounded identity admission. Unsupported IDs cannot alias valid files or
 address the cache root/parent; strict HTTP refuses them before body acquisition.
 Autosave reports unsupported IDs and continues valid documents. Baseline29failed/
 9passed; final122 focused cases pass. Existing files and pruning are unchanged.
+
+2026-10-15 — ISSUE-89 identified an admission/execution mismatch: dependency and
+scoped replay exclude inert generator annotations, but ordinary strict native
+builders still receive them. The isolated valid-gold cold-proof dossier is saved
+before production changes. Red execution and the narrowly reviewed execution
+boundary correction are pending; no passing fix is claimed yet.
+
+2026-10-15 — ISSUE-87 fixed: committed and uncertain publication survive failed
+display/transport, exact original-document revision/session checks guard refresh,
+and default-document null maps only to the explicit server `__default__` sentinel.
+Final86 focused tests and full8,181 passed/one skipped (708 files,309.16s).
+No app/smoke/headset validation; MV-45 remains pending because Archive is absent.
