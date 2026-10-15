@@ -1,7 +1,10 @@
 # Standard-part repair implementation plan
 
-Audited October 15, 2026. P5a backend repair evaluation/publication is implemented;
-its numerical integration validation is in progress. P5b–P5d remain pending.
+Audited October 15, 2026. P5a backend repair evaluation/publication and its
+numerical integration regressions pass. P5b has a bounded direct-ID selection
+catalog and isolated nonpublishing job API. P5c has shared schemas and a durable
+definition/source fingerprint; Design persistence and host lifecycle remain open.
+P5d remains pending.
 Assemblies are deferred; desktop
 and part-mode VR should share the standard-part repair contract.
 
@@ -162,4 +165,7 @@ These are documented product behaviors, not claims about vendor internals.
   [FeatureScript regeneration and profiling](https://cad.onshape.com/FsDoc/debugging-in-feature-studios.html),
   [Feature list controls](https://cad.onshape.com/help/Content/PartStudio/features_and_parts_lists.htm)
 
-No implementation or tests were performed for this audit.
+The original audit was read-only. Subsequent implementation and focused results
+are recorded in `implementation.md` and its validation records. The completion
+gates above remain the overall plan; the initial selection catalog does not yet
+cover topology-domain, compound, generated-scope or ownership-aware selectors.

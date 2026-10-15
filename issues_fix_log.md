@@ -648,3 +648,10 @@ in `.development-artifacts/vr-join-20261013/verification-summary.json`.
 
 
 2026-10-15 — ISSUE-82: broad regression exposed five refinement failures because an extracted helper still read/changed the active session; scaffold selection now sequences its input design only. Native lifecycle tests exposed missing linker-patch/loop-clear log variants and framed-copy frame references; those are recorded/preserved. Generated recovery exposed an earlier absolute membership setter overwriting a newer extrusion snapshot; payload-aware membership restoration fixes both recovery modes. A small CPD conversion took ~70 s; its method is explicitly unverified and blocked before the solver on proof paths, rather than weakening deadlines or claiming snapshot replay is proof. See feature-history implementation audit for remaining scope and measured validation.
+
+2026-10-15 — ISSUE-83: extracted `part_replacement_transaction.publish_replacement`
+under the existing state lock. Failed prepared-model commits now restore the exact
+source object, bounded stacks, revision and request context, including cancellation
+after revision publication. A ready repair remains available for a successful retry.
+Eight transaction and fifteen repair-job tests pass. One undo copy remains; no
+geometry computation or additional proof was added to ordinary publication.

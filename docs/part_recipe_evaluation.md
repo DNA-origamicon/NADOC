@@ -24,7 +24,7 @@ The long-job API is available before the repair UI:
 
 | Request | Purpose |
 |---|---|
-| `POST /api/design/features/evaluation/jobs` | Evaluate `verify`, `append`, `edit`, `delete` or `repair` |
+| `POST /api/design/features/evaluation/jobs` | Evaluate `verify`, `append`, `edit`, `delete`, `repair` or a nonpublishing `selection` |
 | `GET /api/design/features/evaluation/jobs/{job_id}` | Poll compact status/diagnostics; candidate bytes stay private |
 | `DELETE /api/design/features/evaluation/jobs/{job_id}` | Cancel and discard a publishable candidate |
 | `POST /api/design/features/evaluation/jobs/{job_id}/commit` | Publish the exact evaluated candidate once |
@@ -35,8 +35,8 @@ A delete supplies the index and optional `cascade`. Delete analysis can return a
 preview requiring a separate request with `cascade:true`. Ordinary edits still
 require the existing source to reproduce. Explicit repair can rebuild broken definitions.
 
-`expected_revision` is optional for ordinary jobs; repair requires both document
-identity and revision in its nested request. Every result is bound internally to the
+`expected_revision` is optional for ordinary jobs; repair and selection require both document
+identity and revision in their nested requests. Every result is bound internally to the
 captured document session, exact source object and revision. A ready result is
 not automatically installed. Commit rechecks those identities, cancellation,
 expiry and exact authoring after transport decoding, then publishes one undoable
@@ -89,15 +89,70 @@ A ready result reports changed authored fields/counts relative to the captured
 materialized state, explicitly without claiming that prior state was verified.
 The normal explicit job commit publishes once and is undoable.
 
-`upgrade_numerical_contract` is a separate action for native CPD v1 or native
-duplex relaxation v1. Supply the stable target and its exact `expected_engine`
+`upgrade_numerical_contract` is a separate action for native CPD v1, native
+duplex relaxation v1 or native streptavidin packing v1. Supply the stable target and its exact `expected_engine`
 (plus `expected_template` for CPD). The server selects current pins within the
 same recognized family, rebuilds the complete recipe and reports old/new pins.
 It never certifies the older engine's output or silently refreshes ordinary edits.
 
-Repair drafts, replacement pickers and on-demand visual comparison remain
+Repair drafts, replacement picker UI and on-demand visual comparison remain
 pending. Current job results expire after 15 minutes. The changed-field/count
 summary is neither a geometry preview nor scientific qualification.
+
+## Replacement reference selection
+
+The same job endpoint can suggest references from the independently rebuilt
+state immediately before a selected feature:
+
+```json
+{
+  "operation": "selection",
+  "selection": {
+    "selection_version": 1,
+    "expected_design_id": "current-part-id",
+    "expected_revision": 12,
+    "feature_id": "dependent-feature-id",
+    "parameter_path": ["nanoparticle_id"],
+    "expected_old": "missing-particle-id",
+    "limit": 100
+  }
+}
+```
+
+The request requires an exact current reference value and stable feature ID;
+array indices are integer path tokens, for example `["protein_ids", 0]`.
+An optional outer `expected_revision` must agree with the nested value. The
+server checks the captured part and revision before submission and again inside
+the worker. It does not require proof of the old displayed state. Saved recovery
+and objects created after the target feature do not supply replacement choices.
+
+Successful polling returns `result.status: "preview"` and `result.selection`
+with `resource_kind`, `candidates`, `eligible_count`, `limit`, and `truncated`.
+Each descriptor contains only `kind`, `identity`, and a bounded `label`; at most
+100 are returned in source collection order. `completed_prefix` and
+`not_evaluated` identify the evaluated boundary. Prefix failures retain the
+first structured failure and return no choices.
+
+The initial slot catalog admits unscoped undecorated gold/QD patch/delete
+`nanoparticle_id`, free protein attachment `asset_id`, free protein patch/delete
+`attachment_id`, and rigid copy `protein_ids`/`nanoparticle_ids` list entries.
+Ownership and explicit atom references filter choices without running the target
+command or a solver for each candidate. Scoped, compound, output, engine,
+coating, thiol, and owned-conjugate selections remain explicitly unsupported.
+The request supports a stable `child_id`, but no currently admitted selector
+command is a routing-child kind; those child slots remain unsupported.
+
+Selection is a nonpublishing preview: it returns no `Design`, geometry, candidate
+or final validation. Its job cannot be committed. Use a separate explicit
+`repair` action with the chosen ID to validate the complete command and recipe.
+An offered reference does not guarantee that the other inputs or later features
+will succeed. Stale, busy or cancelled polling hides the choice list and marks
+it invalidated; request a new selection against the current revision.
+
+Selection uses the existing job admission, cancellation, 180-second deadline,
+15-minute expiry, input bounds and cumulative recovery budget. Prefix replay
+currently reuses recovery encoding; avoiding that work requires a shared replay
+visitor and measured evidence, not a larger interaction budget.
 
 ## CPD source and execution contract
 

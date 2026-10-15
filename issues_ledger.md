@@ -1797,3 +1797,19 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
 
 
 2026-10-15 — ISSUE-82 continuation: native contracts expanded to 83 kinds with explicit method/action restrictions. Independent deletion now resolves actual failed commands; producer edits reuse one independently proved prefix. Added empty-root lifecycle, generated-scope, hash-seed/thread-isolation and poisoned-payload regressions. Framed paste retained missing frames; refinement selection was made independent of live session state; older cluster membership setters no longer erase later extrusion membership during recovery. Compound branch generation and unbounded CPD conversion remain unverified, and existing history UI limits are published by capabilities. ISSUE-82 remains PARTIAL; no blanket legacy/agent-enforcement claim.
+
+## ISSUE-83 — Interrupted prepared-model publication can leave a partial commit (2026-10-15, FIXED)
+
+- Audit found that `state.set_design` appended undo, cleared redo and replaced
+  the design before publishing its revision, without rollback around that tail.
+  An injected exception or cancellation after the swap reproduced the risk;
+  this was not an observed user-data incident.
+- The extracted replacement transaction preserves the exact source reference,
+  full bounded undo/redo stacks, revision and request markers on `BaseException`.
+  It retains the existing single undo snapshot and does not change callbacks,
+  molecular builders or validation policy.
+- Eight state transaction tests and fifteen repair job tests pass, including
+  full-stack eviction, empty source, failed snapshot, stale admission, partial
+  revision publication, cancellation, and retry of the same evaluated candidate.
+  The first test run exposed a fixture teardown still using the injected hook;
+  isolated owned-session cleanup corrected that fixture, without a product change.

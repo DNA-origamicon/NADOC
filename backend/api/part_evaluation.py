@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from backend.api.part_recipe_repair import RepairRequest
+from backend.api.part_repair_selection import SelectionRequest
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_history_contract import assess_part_history
 from backend.core.part_history_proof import AUTHORING_FIELDS, ProofBudgetExceeded
@@ -16,7 +17,7 @@ from backend.core.part_operation_input import validate_operation_input
 class EvaluationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    operation: Literal["verify", "append", "edit", "delete", "repair"]
+    operation: Literal["verify", "append", "edit", "delete", "repair", "selection"]
     kind: Literal["photoproduct-create", "photoproduct-relax", "duplex-relax"] | None = None
     params: dict | None = None
     index: StrictInt | None = Field(default=None, ge=0)
@@ -24,17 +25,23 @@ class EvaluationRequest(BaseModel):
     cascade: bool = False
     expected_revision: StrictInt | None = Field(default=None, ge=0)
     repair: RepairRequest | None = None
+    selection: SelectionRequest | None = None
 
     @model_validator(mode="after")
     def complete_operation(self):
         validate_operation_input(self.params)
         if self.operation == "repair":
-            if self.repair is None or self.kind is not None or self.params is not None or self.index is not None or self.sub_index is not None or self.cascade:
+            if self.repair is None or self.selection is not None or self.kind is not None or self.params is not None or self.index is not None or self.sub_index is not None or self.cascade:
                 raise ValueError("Repair needs its versioned repair request and no other operation inputs")
             if self.expected_revision is not None and self.expected_revision != self.repair.expected_revision:
                 raise ValueError("Repair revision guards must agree")
-        elif self.repair is not None:
-            raise ValueError("Only a repair operation accepts repair actions")
+        elif self.operation == "selection":
+            if self.selection is None or self.repair is not None or self.kind is not None or self.params is not None or self.index is not None or self.sub_index is not None or self.cascade:
+                raise ValueError("Selection needs its versioned reference request and no mutation inputs")
+            if self.expected_revision is not None and self.expected_revision != self.selection.expected_revision:
+                raise ValueError("Selection revision guards must agree")
+        elif self.repair is not None or self.selection is not None:
+            raise ValueError("Only repair or selection operations accept their nested requests")
         elif self.operation == "append":
             if self.kind is None or self.params is None or self.index is not None or self.sub_index is not None or self.cascade:
                 raise ValueError("Append needs a supported long-operation kind and authored inputs only")
@@ -134,6 +141,15 @@ def evaluate(source, operation, *, executor=None, dependency_resolver=None):
     try:
         if request.operation == "verify":
             return assess_part_history(source, execute=executor, dependencies=dependency_resolver)
+        if request.operation == "selection":
+            from backend.api.part_repair_selection import prepare_selection
+
+            if type(header.get("source_revision")) is not int or header.get("source_design_id") != source.id:
+                raise CommandContractError("Selection is missing its trusted capture context", code="invalid_capture_context")
+            # A prefix preview has no authoring candidate, validation pass or
+            # publication phase. Candidate filtering never calls an executor.
+            return prepare_selection(source, request.selection.model_dump(mode="json"),
+                source_revision=header["source_revision"], executor=executor, dependency_resolver=dependency_resolver)
         if request.operation == "repair":
             from backend.api.part_recipe_repair import prepare_repair
 

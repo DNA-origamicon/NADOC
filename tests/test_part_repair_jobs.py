@@ -249,3 +249,31 @@ def test_existing_http_job_routes_accept_repair_and_keep_geometry_out_of_polling
         assert result["repair"]["authoring_changes"]["visual_comparison"] is False
         committed = client.post(f"{path}/commit")
         assert committed.status_code == 200 and committed.json()["status"] == "committed"
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+def test_interrupted_publication_preserves_ready_candidate_for_retry(controlled, monkeypatch, cancel):
+    finish(controlled)
+    bump = state._bump_revision
+
+    class PublicationCancelled(BaseException):
+        pass
+
+    error = PublicationCancelled if cancel else RuntimeError
+
+    def fail(session):
+        bump(session)
+        raise error("interrupted publication")
+
+    monkeypatch.setattr(state, "_bump_revision", fail)
+    with pytest.raises(error, match="interrupted publication"):
+        jobs.commit(controlled.id)
+    unchanged(controlled)
+    assert state.get_or_404() is controlled.original
+    assert jobs.inspect(controlled.id)["result"]["status"] == "ready"
+    assert _slot.acquire(blocking=False)
+    _slot.release()
+    monkeypatch.setattr(state, "_bump_revision", bump)
+    committed = jobs.commit(controlled.id)
+    assert committed["revision"] == controlled.revision + 1
+    assert state.undo_depth() == controlled.depth + 1

@@ -506,3 +506,14 @@ selection adapter replays the exact prefix and returns bounded typed candidates,
 without geometry or a whole-command validity claim; job integration is next.
 Ordinary capture budgets remain unchanged. P5 drafts/UI and P6 enforcement remain
 open. See the implementation ledger for measured capture and HTTP overhead.
+
+P5b now exposes selection through the existing isolated jobs, with independent
+host nonpublication and stale-choice invalidation. P5c shared action/draft schemas
+and durable root/command/source fingerprints are implemented but not persisted
+on Design yet. Exact transported recipe/authoring hashes protect every candidate
+commit from decoder alias changes. Prepared replacement publication rolls back
+source identity, full bounded stacks and request/revision state on cancellation
+or exception (ISSUE-83), retaining one undo copy. Single-coating explicit jobs
+use a fixed scoped capture profile; ordinary budgets are unchanged. Live-lock
+qualification and public coating append remain pending. No draft UI or strict
+automation policy is enabled; see current ledger rather than earlier phase notes.

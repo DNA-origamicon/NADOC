@@ -243,6 +243,18 @@ def capture_design_for_verification(*, preserve_entry_types=False):
         return s.design, capture(s.design, preserve_entry_types=preserve_entry_types), s.revision
 
 
+def capture_design_for_evaluation(request):
+    """Explicit job capture: fixed policy and revision checked before copying."""
+    from backend.api.part_evaluation_capture import capture_for_evaluation
+
+    with _lock:
+        s = _session()
+        if s.design is None:
+            raise HTTPException(404, detail="No active design.")
+        captured = capture_for_evaluation(s.design, request=request, revision=s.revision)
+        return s.design, captured, s.revision
+
+
 def verification_source_matches(doc_id, source, revision, *, blocking=True):
     """Return None for a busy nonblocking probe; never treat it as a match."""
     if not _lock.acquire(blocking=blocking):
@@ -412,12 +424,8 @@ def set_design(d: Design, *, expected_revision: int | None = None, expected_sour
             raise HTTPException(409, detail="Design changed while the feature operations were being prepared. Try again.")
         _assert_active_loadout_editable(s.design, d)
         _assert_photoproduct_dependencies(d)
-        if s.design is not None:
-            s.history.append(_snapshot_copy(s.design))
-        s.redo.clear()
-        s.design = d
-        _bump_revision(s)
-        return s.revision
+        from backend.api.part_replacement_transaction import publish_replacement
+        return publish_replacement(s, d)
 
 
 def set_design_branch(d: Design, *, expected_revision: int | None = None) -> None:

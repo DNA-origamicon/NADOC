@@ -17,6 +17,7 @@ from backend.api.part_evaluation import EvaluationRequest
 from backend.api.part_evaluation_worker import EvaluationWorker
 from backend.api.part_history_verification import _slot
 from backend.api.part_verification_jobs import Job, supervise
+from backend.core.part_command_errors import CommandContractError
 from backend.core.part_verification_capture import CaptureLimit
 
 
@@ -31,11 +32,18 @@ _jobs = OrderedDict()
 class EvaluationJob(Job):
     created: float = 0.0
     committed_revision: int | None = None
+    selection_only: bool = False
 
 
 def _run(job, captured, operation):
     result = supervise(job, captured, lambda d: EvaluationWorker(d, operation),
                        TIME_BUDGET, status_lock=_lock)
+    if job.selection_only and ("candidate" in result or result.get("status") == "ready"):
+        # The host retains the nonpublishing operation type independently of
+        # worker output. A future dispatch defect cannot promote a selector.
+        result = {"status": "unverified", "native_editable": False,
+                  "issues": [{"code": "invalid_selection_result"}],
+                  "source_revision": job.revision, "design_id": captured.id}
     with _lock:
         job.result = result
         job.status = "complete"
@@ -52,15 +60,20 @@ def start(request):
         raise HTTPException(429, detail="A part history operation is already running")
     identity = None
     try:
-        source, captured, revision = state.capture_design_for_verification(preserve_entry_types=True)
+        try:
+            source, captured, revision = state.capture_design_for_evaluation(request)
+        except CommandContractError as error:
+            conflict = error.code in {"source_changed", "repair_conflict", "selection_conflict"}
+            raise HTTPException(409 if conflict else 422, detail=error.as_issue()) from error
         if request.expected_revision is not None and request.expected_revision != revision:
             raise HTTPException(409, detail="Design changed before evaluation started")
-        if request.operation == "repair" and (
-            request.repair.expected_design_id != captured.id or request.repair.expected_revision != revision
-        ):
-            raise HTTPException(409, detail={"code": "repair_conflict",
-                "detail": "The repair belongs to a different part or revision."})
-        job = EvaluationJob(get_current_doc(), ref(source), revision, created=monotonic())
+        if request.operation in {"repair", "selection"}:
+            nested = request.repair if request.operation == "repair" else request.selection
+            if nested.expected_design_id != captured.id or nested.expected_revision != revision:
+                raise HTTPException(409, detail={"code": f"{request.operation}_conflict",
+                    "detail": f"The {request.operation} belongs to a different part or revision."})
+        job = EvaluationJob(get_current_doc(), ref(source), revision, created=monotonic(),
+                            selection_only=request.operation == "selection")
         identity = str(uuid4())
         operation = {"request": request.model_dump(mode="json"), "header": {
             "identity": str(uuid4()), "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -116,6 +129,11 @@ def inspect(identity, *, cancel=False):
     if result is not None and (stale or busy or job.cancelled.is_set()):
         result.update(status="unverified", native_editable=False)
         result["issues"].append({"code": "cancelled" if job.cancelled.is_set() else "source_changed" if stale else "source_busy"})
+        if job.selection_only and isinstance(result.get("selection"), dict):
+            selection = result["selection"]
+            selection.update(candidates=[], candidates_invalidated=True)
+            selection.pop("eligible_count", None)
+            selection.pop("truncated", None)
     return {"job_id": identity, "status": status, "stale": stale, "source_busy": busy, "result": result}
 
 
@@ -128,6 +146,8 @@ def commit(identity):
     try:
         with _lock:
             job = _lookup(identity)
+            if job.selection_only:
+                raise HTTPException(409, detail="Reference selection is a nonpublishing preview")
             if job.committed_revision is not None:
                 return {"job_id": identity, "status": "committed", "revision": job.committed_revision}
             if job.cancelled.is_set() or job.status != "complete" or not job.result or job.result["status"] != "ready":
@@ -137,26 +157,26 @@ def commit(identity):
                 job.result.pop("candidate", None)
                 raise HTTPException(409, detail="Design changed; evaluate the current recipe again")
             data = job.result["candidate"]
-            repairing = "repair" in job.result
+        # Pydantic Any-valued params/metadata can retain transport aliases.
+        # Fingerprint both bounded JSON projections before decoding, outside
+        # the state lock, without retaining another full molecular graph.
+        from backend.core.part_history_proof import AUTHORING_FIELDS, digest
+        recipe_fields = {"recipe_root", "feature_log", "input_sources", "feature_log_cursor", "feature_log_sub_cursor"}
+        expected_recipe = digest({name: data[name] for name in recipe_fields})
+        expected_authoring = digest({name: data[name] for name in AUTHORING_FIELDS})
         candidate = Design.model_validate(data)
-        from backend.core.part_history_proof import AUTHORING_FIELDS
-        if candidate.model_dump(mode="json", include=AUTHORING_FIELDS) != {
-            name: data[name] for name in AUTHORING_FIELDS
-        }:
+        if digest(candidate.model_dump(mode="json", include=AUTHORING_FIELDS)) != expected_authoring:
             with _lock:
                 job.result.pop("candidate", None)
                 job.result.update(status="unverified", issues=[{"code": "candidate_decode_changed_authoring"}])
             raise HTTPException(409, detail="Candidate changed during decoding; evaluation cannot be committed")
-        if repairing:
-            # Pins, stable command identities and source descriptors are part
-            # of the evaluated recipe too. Preserve their exact transported
-            # representation; recovery is regenerated and compared as recorded.
-            recipe_fields = {"recipe_root", "feature_log", "input_sources", "feature_log_cursor", "feature_log_sub_cursor"}
-            if candidate.model_dump(mode="json", include=recipe_fields) != {name: data[name] for name in recipe_fields}:
-                with _lock:
-                    job.result.pop("candidate", None)
-                    job.result.update(status="unverified", issues=[{"code": "candidate_decode_changed_recipe"}])
-                raise HTTPException(409, detail="Recipe changed during decoding; repair cannot be committed")
+        # Pins, stable command identities and source descriptors belong to
+        # every evaluated recipe, including appends and ordinary edits.
+        if digest(candidate.model_dump(mode="json", include=recipe_fields)) != expected_recipe:
+            with _lock:
+                job.result.pop("candidate", None)
+                job.result.update(status="unverified", issues=[{"code": "candidate_decode_changed_recipe"}])
+            raise HTTPException(409, detail="Recipe changed during decoding; evaluation cannot be committed")
         # The worker intentionally omitted physical/display state. Preserve
         # it from the unchanged live source; it never becomes replay evidence.
         from backend.core.part_recipe_publication import preserve_document_state

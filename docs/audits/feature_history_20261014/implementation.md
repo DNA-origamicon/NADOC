@@ -775,3 +775,42 @@ passes 62 focused tests; job integration is a following increment.
 
 The post-checkpoint validation record separates these new checks from the prior
 622-test checkpoint. P4, P5 and P6 remain incomplete; assemblies remain deferred.
+
+## P5b selection jobs and P5c draft foundation — October 15
+
+Typed selection now uses the existing bounded isolated job lifecycle. A host-held
+nonpublishing flag prevents commit even if a worker accidentally returns a
+candidate. Stale, busy or cancelled results clear their replacement choices.
+The API exposes the initial reviewed direct-ID catalog and its unsupported
+boundaries; selection never claims that a candidate repairs the whole command.
+
+Repair action schemas moved into core without changing the evaluator contract.
+A portable bounded draft schema and separate durable fingerprint now preserve
+root inputs, ordered feature/group/child identities and published input source
+availability/integrity. Recovery, geometry and draft-only sources are excluded.
+Malformed source descriptors explicitly refuse this initial fingerprint; valid
+descriptors with missing/corrupt bytes remain identifiable for repair. These
+helpers are not yet a Design field, saved draft endpoint or UI.
+
+Prepared-model publication now rolls back on any exception/cancellation after
+the model swap, preserving the source object, full bounded undo/redo stacks,
+revision and request markers. It retains one undo snapshot. Every evaluated
+candidate also compares independent pre-decode authoring and recipe hashes;
+shared nested decoder aliases cannot hide changed inputs. Hashing is outside
+the state lock and only on explicit job commits. See ISSUE-83.
+
+The fixed single-coating capture policy is wired only to explicit evaluation
+jobs, with expected-revision admission before copying. Ordinary verification,
+editing, scrubbing and rendering retain their original budgets. Scope/profile
+tests pass; live-lock qualification is still pending, so this checkpoint is not
+permission to enable ordinary coating routes. No public coating append or
+capture-limit request option is exposed.
+
+Focused validation: **423 passed across 15 files**. Changed Python and whitespace
+pass; global lint retains the same five F401 findings. The dry-run selector now
+reports **FAST (fast suite only)** and defers FULL because the prior test session
+is no longer open; no fast or full sweep was executed with Archive unavailable.
+The verbatim debt and fixture correction are retained in
+[validation evidence](validation_selection_drafts_p5.json). No frontend, visual,
+headset or molecular change; `main.js` LOC delta is zero. P4, P5c/d and P6 remain
+open, with broader P5b selector families also pending. Assemblies remain deferred.

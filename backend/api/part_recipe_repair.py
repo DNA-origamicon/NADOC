@@ -6,56 +6,20 @@ the numerical process policy remain responsibilities of the existing job host.
 """
 
 from copy import deepcopy
-from typing import Annotated, Any, Literal
 
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from backend.core.feature_identity import preserve_proof_identity
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_history_contract import FIELD_ROLES
 from backend.core.part_history_proof import ProofBudgetExceeded, command_rows, digest
-from backend.core.part_operation_input import validate_operation_input
 from backend.core.part_overlay_commands import command_input
-
-
-MAX_REPAIR_ACTIONS = 64
-_Id = Annotated[str, Field(strict=True, min_length=1, max_length=256)]
-_Token = _Id | Annotated[StrictInt, Field(ge=0)]
-
-
-class _Target(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    feature_id: _Id
-    child_id: _Id | None = None
-
-
-class SetInput(_Target):
-    action: Literal["set_input"]
-    parameter_path: list[_Token] = Field(min_length=1, max_length=16)
-    expected_old: Any
-    value: Any
-
-
-class UpgradeNumericalContract(_Target):
-    action: Literal["upgrade_numerical_contract"]
-    expected_engine: dict[str, Any]
-    expected_template: dict[str, Any] | None = None
-
-
-class RepairRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    repair_version: StrictInt = Field(ge=1, le=1)
-    expected_design_id: _Id
-    expected_revision: StrictInt = Field(ge=0)
-    actions: list[Annotated[SetInput | UpgradeNumericalContract, Field(discriminator="action")]] = Field(
-        min_length=1, max_length=MAX_REPAIR_ACTIONS)
-
-    @model_validator(mode="before")
-    @classmethod
-    def bounded_json(cls, value):
-        validate_operation_input(value)
-        return value
+from backend.core.part_repair_inputs import (
+    MAX_REPAIR_ACTIONS as MAX_REPAIR_ACTIONS,
+    RepairRequest as RepairRequest,
+    SetInput as SetInput,
+    UpgradeNumericalContract as UpgradeNumericalContract,
+)
 
 
 class RepairInputError(CommandContractError):

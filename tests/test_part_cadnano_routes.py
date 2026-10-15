@@ -242,9 +242,9 @@ def test_exact_source_limit_is_retained_without_dropping_bytes():
 
 
 @pytest.mark.parametrize("raw,code,status", [
-    (b"invalid JSON", "unsupported_source", 422),
-    (b'{"vstrands":[],"photoproduct_junctions":[]}', "unsupported_source", 422),
-    (b"x" * (routes.MAX_SOURCE_BYTES + 1), "source_limit", 413),
+    pytest.param(b"invalid JSON", "unsupported_source", 422, id="invalid-json"),
+    pytest.param(b'{"vstrands":[],"photoproduct_junctions":[]}', "unsupported_source", 422, id="unknown-field"),
+    pytest.param(b"x" * (routes.MAX_SOURCE_BYTES + 1), "source_limit", 413, id="source-over-budget"),
 ])
 def test_invalid_source_is_atomic_with_no_legacy_fallback(client, monkeypatch, raw, code, status):
     from backend.api import crud
