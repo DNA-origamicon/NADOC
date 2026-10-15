@@ -5,7 +5,6 @@ thread, existing workspace or user file participates in these regressions.
 """
 
 import asyncio
-from uuid import uuid4
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -33,7 +32,9 @@ def test_unsafe_document_cache_identity_is_rejected_without_mapping(tmp_path, mo
 @pytest.mark.parametrize("doc_id", [
     "__default__", "shared-arm", "named.part_1", "__headless_build_1__",
     "__headless_oxdna_1__", "__headless_assembly_1__", "a" * 80,
-    str(uuid4()), uuid4().hex,
+    # Collection must be identical in every xdist worker. Both UUID spellings
+    # are still real browser/headless identity shapes without random test IDs.
+    "7ed758e1-02b7-4ebf-a5b1-9ce0327d08ea", "7ed758e102b74ebfa5b19ce0327d08ea",
 ])
 def test_supported_document_cache_identity_is_preserved_exactly(tmp_path, monkeypatch, doc_id):
     monkeypatch.setattr(session_cache, "_session_dir", tmp_path)
