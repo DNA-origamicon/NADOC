@@ -12,7 +12,7 @@ def build(design, params):
     values = {
         k: v
         for k, v in params.items()
-        if k not in {"_proof_version", "bridge_identity_seed"}
+        if k not in {"_proof_version", "bridge_identity_seed", "flexible_choices"}
     }
     # These guards protect live publication; the isolated candidate has its own
     # identity. Neither a preview hash nor the recorded revision supplies geometry.
@@ -27,6 +27,9 @@ def build(design, params):
         schema.model_validate(values),
         identity_seed=params["bridge_identity_seed"],
     )
+    from backend.core.part_flexible_choices import apply_flexible_choices
+
+    updated = apply_flexible_choices(updated, params.get("flexible_choices"))
     return updated, MutationReport(
         new_helix_origins={
             b["helix_id"]: None for b in report["bridges"] if "helix_id" in b

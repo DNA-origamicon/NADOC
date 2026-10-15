@@ -41,6 +41,7 @@ def editing_capabilities(kinds):
                 "Historical-preview edits and mixed/legacy recipes retain recovery editors and cannot gain native proof from snapshots.",
                 "Regeneration uses bounded capture and a five-second cooperative deadline; an oversized edit is refused atomically.",
                 "Generated native subpart scopes are immutable references; legacy compound branch/asset construction remains unverified.",
+                "Native Join requires preview-selected flexible orientation references; older Join receipts without them remain unverified.",
             ],
         },
         "command_editors": {

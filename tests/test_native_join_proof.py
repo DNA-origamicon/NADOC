@@ -3,6 +3,7 @@
 from backend.api import crud, state
 from backend.api.doc_context import set_current_doc, reset_current_doc
 from threading import Event
+import pytest
 from backend.api import part_verification_jobs as jobs
 
 
@@ -30,7 +31,8 @@ def verify_job(monkeypatch):
                 jobs._jobs.pop(job_id, None)
 
 
-def test_join_from_native_root_and_parameter_regeneration(monkeypatch):
+@pytest.mark.parametrize("routed", [True, False])
+def test_join_from_native_root_and_parameter_regeneration(monkeypatch, routed):
     from backend.api.routes_scaffold_routing import auto_scaffold_seamed_endpoint
     from backend.api.routes_clusters import _create_pattern
     from backend.api.pattern_features import LinearPatternBody
@@ -46,7 +48,8 @@ def test_join_from_native_root_and_parameter_regeneration(monkeypatch):
                 lattice_type="SQUARE",
             )
         )
-        auto_scaffold_seamed_endpoint()
+        if routed:
+            auto_scaffold_seamed_endpoint()
         cid = state.get_or_404().cluster_transforms[0].id
         _create_pattern(
             "linear-pattern",
@@ -67,6 +70,7 @@ def test_join_from_native_root_and_parameter_regeneration(monkeypatch):
             second=dict(cluster_id=second["cluster_id"], port_id=second["id"]),
             expected_design_id=state.get_or_404().id,
             expected_revision=state.revision(),
+            gap_nm=0.8 if routed else 2.0,
         )
         plan = preview(body)
         assert plan["valid"], plan
@@ -74,7 +78,8 @@ def test_join_from_native_root_and_parameter_regeneration(monkeypatch):
         result = verify_job(monkeypatch)
         assert result["status"] == "verified", result.get("issues", result)
         ids = [h.id for h in state.get_or_404().helices]
-        crud.edit_feature(3, crud.EditFeatureBody(params={"gap_nm": 0.9}))
+        crud.edit_feature(len(state.get_or_404().feature_log) - 1,
+                          crud.EditFeatureBody(params={"gap_nm": 0.9 if routed else 2.2}))
         assert [h.id for h in state.get_or_404().helices] == ids
         result = verify_job(monkeypatch)
         assert result["status"] == "verified", result.get("issues", result)

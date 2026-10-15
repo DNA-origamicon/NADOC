@@ -233,7 +233,8 @@ def propose_free_cluster_join(design, body, *, selected_ports=None, identity_see
         )
     if deferred:
         return join_precursors(
-            design, result, body, pairs, candidate_count, clearance, rot, translation
+            design, result, body, pairs, candidate_count, clearance, rot, translation,
+            identity_seed=identity_seed,
         )
     # Route placeholders refer to the complete candidate array.
     selected_index = {original: selected for selected, original in enumerate(indices)}

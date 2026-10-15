@@ -267,3 +267,27 @@ probes confirm that unordered set traversal reverses A/B anchors and bead order
 under different hash seeds. Checkpoint this state before choosing a canonical
 traversal. Preserve connectivity/constants/formulas; do not weaken comparison or
 remove the field to hide the mismatch. Broad validation follows the correction.
+
+### Join cold-replay correction
+
+The mismatch above is resolved by retaining the actual preview's discrete anchor
+orientation and component order as reference-only inputs. Native replay still
+derives connectivity, contour, identity and bead membership itself, then resolves
+and applies the chosen ordering. No stored coordinate array, derived connection
+object or recovery payload is accepted as proof. Missing, ambiguous, repeated or
+incomplete choices fail explicitly. Indexed matching scales with native beads and
+choice count. Existing molecular placement/display formulas remain unchanged.
+
+Preview inputs are bounded to 16 receipts of 128 KB for five minutes, scoped to
+document, design and revision. A content token cannot silently replace different
+choices. Failed atomic commits can retry their receipt. Both preview and apply
+choose the same explicit bridge identity; precursor Joins now honor that identity
+as routed Joins already did. Older receipts without choices remain unverified;
+saved documents are not migrated or silently assigned a new displayed choice.
+
+Focused validation: 19 reference-choice tests, six preview-cache tests, 17 Join
+API compatibility tests, 14 precursor/constraint tests, and two real spawned-worker
+proof-and-edit cases pass. The latter cover routed and precursor Joins from an
+empty native root across processes. The two original synchronous geometry
+algorithms remain unchanged. This checkpoint precedes generated-scope schema
+refactoring; required broad validation is still pending for the combined changes.

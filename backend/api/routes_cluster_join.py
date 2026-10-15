@@ -33,12 +33,18 @@ def candidates(cluster_id: str | None = None):
 
 @router.post("/design/cluster-join/preview")
 def preview(body: ClusterJoinRequest | FreeClusterJoinRequest):
+    from backend.api import part_join_preview
+    from backend.core.part_flexible_choices import capture_flexible_choices
+
     design, revision = state.copy_for_persist()
     if design is None:
         raise HTTPException(404, detail="No active design.")
     _guard(design, revision, body)
     try:
-        _, report = (propose_free_cluster_join if isinstance(body, FreeClusterJoinRequest) else propose_cluster_join)(design, body)
+        identity_seed = join_preview_token(design, body)[:14]
+        candidate, report = (propose_free_cluster_join if isinstance(body, FreeClusterJoinRequest) else propose_cluster_join)(design, body, identity_seed=identity_seed)
+        part_join_preview.remember(report["token"], design.id, revision,
+                                   capture_flexible_choices(candidate))
         return report
     except ValueError as exc:
         return dict(
@@ -53,9 +59,12 @@ def preview(body: ClusterJoinRequest | FreeClusterJoinRequest):
 @router.post("/design/cluster-join/apply")
 def apply(body: ClusterJoinRequest | FreeClusterJoinRequest):
     from backend.api.crud import _design_response_with_geometry
+    from backend.api import part_join_preview
+    from backend.core.part_flexible_choices import apply_flexible_choices
 
     report = None
     identity_seed = body.preview_token[:14] if body.preview_token else None
+    params = {**body.model_dump(mode="json"), "bridge_identity_seed": identity_seed}
 
     def build(design):
         nonlocal report
@@ -67,7 +76,10 @@ def apply(body: ClusterJoinRequest | FreeClusterJoinRequest):
                 409, detail="Join preview is stale or missing; preview again."
             )
         try:
+            choices = part_join_preview.resolve(body.preview_token, design.id, body.expected_revision)
+            params["flexible_choices"] = choices
             result, report = (propose_free_cluster_join if isinstance(body, FreeClusterJoinRequest) else propose_cluster_join)(design, body, identity_seed=identity_seed)
+            result = apply_flexible_choices(result, choices)
         except ValueError as exc:
             raise HTTPException(422, detail=str(exc)) from exc
         return result, MutationReport(
@@ -77,7 +89,7 @@ def apply(body: ClusterJoinRequest | FreeClusterJoinRequest):
     updated, validation, entry = state.mutate_with_feature_log(
         op_kind="cluster-join",
         label="Join clusters",
-        params={**body.model_dump(mode="json"), "bridge_identity_seed": identity_seed},
+        params=params,
         fn=build,
         expected_revision=body.expected_revision,
     )

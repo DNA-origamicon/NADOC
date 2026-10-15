@@ -56,7 +56,9 @@ def dependencies(kind, params):
         return Dependencies(known=False)
     if kind in {"photoproduct-create", "cluster-paste", "overhang-extrude", "nucleotide-transform", "nucleotide-transform-batch"} and not params.get("history_seed"):
         return Dependencies(known=False)
-    if kind == "cluster-join" and not params.get("bridge_identity_seed"):
+    if kind == "cluster-join" and (
+        not params.get("bridge_identity_seed") or "flexible_choices" not in params
+    ):
         return Dependencies(known=False)
     if kind == "sweep" and not params.get("sweep_id"):
         return Dependencies(known=False)

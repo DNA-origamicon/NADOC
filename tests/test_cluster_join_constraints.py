@@ -119,6 +119,44 @@ def test_manual_unrouted_join_also_creates_real_connections(unrouted, kinds):
     assert_bridges_realized(after, report)
 
 
+@pytest.mark.parametrize("mode", ["free", "manual"])
+def test_precursor_join_identity_survives_replay_document_and_revision(unrouted, mode):
+    design, free_body = unrouted
+    body = free_body if mode == "free" else request(design, kinds=("side", "end"), gap=2)
+    builder = propose_free_cluster_join if mode == "free" else propose_cluster_join
+    seed = "recorded-join-identity"
+    first, first_report = builder(design, body, identity_seed=seed)
+    replay_source = design.copy_with(id="isolated-replay-document")
+    replay, replay_report = builder(
+        replay_source,
+        {**body, "expected_design_id": replay_source.id, "expected_revision": 0},
+        identity_seed=seed,
+    )
+
+    assert first_report["token"] != replay_report["token"]
+    assert first_report["bridges"] == replay_report["bridges"]
+    assert first_report["bridges"]
+    assert all(bridge["helix_id"].startswith(f"join_plan_{seed}_")
+               for bridge in first_report["bridges"])
+    for field in ("helices", "strands", "forced_ligations", "flexible_segment_marks",
+                  "cluster_transforms", "cluster_join_constraints"):
+        assert getattr(first, field) == getattr(replay, field), field
+    assert_bridges_realized(replay, replay_report)
+
+
+def test_precursor_join_without_seed_preserves_preview_token_identity(unrouted):
+    from backend.core.cluster_join import join_preview_token
+    from backend.core.cluster_join_free import FreeClusterJoinRequest
+
+    design, body = unrouted
+    expected = join_preview_token(design, FreeClusterJoinRequest.model_validate(body))[:14]
+    _, report = propose_free_cluster_join(design, body)
+    assert [bridge["helix_id"] for bridge in report["bridges"]] == [
+        f"join_plan_{expected}_{pair}_ss_{leg}"
+        for pair in range(report["connection_count"]) for leg in range(2)
+    ]
+
+
 def test_legacy_saved_connections_remain_realizable(unrouted):
     from backend.core.models import ClusterJoinConstraint, JoinAttachment, JoinEndpoint
 

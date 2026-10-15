@@ -11,10 +11,13 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 See [architecture review](../docs/audits/feature_history_20261014/architecture_review.md)
 for the persistent P3–P6 completion sequence and primary Onshape/SOLIDWORKS
 precedents. The input-replay foundation remains sound, but the review found that
-permissive native builders can skip missing targets and falsely verify a no-op;
-explicit reference validation is required. Cooperative deadlines between commands
-also do not bound a long native call or promptly release its admission slot.
-These are open hardening gaps, not completed fixes. Reproducibility, reference
+permissive native builders could skip missing targets and falsely verify a no-op.
+Targeted batch/selection preconditions now reject those missing references with
+typed parameter paths. Background proof uses one spawned process with bounded
+shared-memory transport, terminating and reaping before releasing admission;
+sync proof and edits retain cooperative deadlines. Join records reference-only
+preview orientation choices and explicit precursor identities, preserving the
+displayed native tether without relying on process set order. Reproducibility, reference
 integrity, scientific validation and useful editability are distinct claims.
 Opaque `connectivity-core` generation also belongs to unfinished P3. Keep broken
 definitions repairable, reserve full proof for explicit/background work, and
