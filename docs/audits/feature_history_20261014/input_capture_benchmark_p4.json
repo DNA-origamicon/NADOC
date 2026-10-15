@@ -1,0 +1,71 @@
+{
+  "scope": "warm in-memory explicit capture and input replay; no physical outputs",
+  "repeats": 9,
+  "capture_limits_unchanged": {
+    "nodes": 30000,
+    "bytes": 2000000,
+    "cooperative_seconds": 0.025
+  },
+  "cases": [
+    {
+      "features": 1,
+      "atoms": 3,
+      "deduplicated_source_bytes": 241,
+      "source_count": 1,
+      "capture_median_ms": 1.0716969991335645,
+      "capture_max_ms": 2.2623909990215907,
+      "proof_median_ms": 0.41549900015525054,
+      "statuses": [
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import"
+      ]
+    },
+    {
+      "features": 32,
+      "atoms": 96,
+      "deduplicated_source_bytes": 241,
+      "source_count": 1,
+      "capture_median_ms": 3.968986000472796,
+      "capture_max_ms": 5.149881000761525,
+      "proof_median_ms": 7.381473998975707,
+      "statuses": [
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import"
+      ]
+    },
+    {
+      "features": 128,
+      "atoms": 384,
+      "deduplicated_source_bytes": 241,
+      "source_count": 1,
+      "capture_median_ms": 14.058648999707657,
+      "capture_max_ms": 19.77722899937362,
+      "proof_median_ms": 30.259990999184083,
+      "statuses": [
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import",
+        "reproduced_import"
+      ]
+    }
+  ]
+}

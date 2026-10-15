@@ -401,6 +401,40 @@ def _resolve_protein_asset(asset_id: str):
     return None
 
 
+def _native_placement_eligible(design: Design, attachment) -> bool:
+    """Only captured assets and unowned part placements have a native contract."""
+    from backend.api.part_protein_commands import _bound_target
+
+    return (
+        attachment.target.kind in {"free", "overhang"}
+        and not attachment.binder_strand_id
+        and not attachment.azide_end
+        and not _bound_target(design, attachment.target)
+        and any(asset.id == attachment.asset_id for asset in design.protein_assets)
+    )
+
+
+def _record_native_placement(kind, label, params, *, prepare=None):
+    """Resolve authored defaults, evaluate and record under the document lock."""
+    from backend.api.part_protein_commands import build
+    from backend.core.part_command_errors import CommandContractError
+
+    params.update(_proof_version=1, protein_version=1)
+
+    def apply(design):
+        if prepare is not None:
+            prepare(design, params)
+        return build(kind, design, params)
+
+    try:
+        updated, report, _entry = design_state.mutate_with_feature_log(kind, label, params, apply)
+    except CommandContractError as error:
+        raise HTTPException(422, detail={"status": error.status, **error.as_issue()}) from error
+    except ValueError as error:
+        raise HTTPException(422, detail=str(error)) from error
+    return updated, report
+
+
 class ProteinAttachRequest(BaseModel):
     asset_id: str
     overhang_id: str
@@ -422,6 +456,33 @@ def create_protein_attachment(body: ProteinAttachRequest) -> dict:
     from backend.core.protein import reverse_complement
 
     design = design_state.get_or_404()
+    if (any(asset.id == body.asset_id for asset in design.protein_assets)
+            and not any(domain.binds_overhang_id == body.overhang_id
+                        for strand in design.strands for domain in strand.domains)):
+        from backend.api.part_protein_commands import _selected
+
+        attachment_id = str(uuid.uuid4())
+        params = {
+            "attachment_id": attachment_id, "asset_id": body.asset_id,
+            "target": {"kind": "overhang", "overhang_id": body.overhang_id, "attach_end": body.attach_end},
+            "handle_complement_bp": body.handle_complement_bp,
+            "handle_spacer_nt": body.handle_spacer_nt,
+        }
+
+        def prepare(current, captured):
+            asset = _selected(current.protein_assets, body.asset_id, "protein_asset", ["asset_id"])
+            captured["conjugation_atom_serial"] = (
+                body.conjugation_atom_serial if body.conjugation_atom_serial is not None
+                else asset.default_conjugation_atom_serial
+            )
+
+        updated, report = _record_native_placement(
+            "protein-attach", "Attach protein to overhang", params, prepare=prepare,
+        )
+        response = _design_response(updated, report)
+        response["attachment_id"] = attachment_id
+        return response
+
     asset = _resolve_protein_asset(body.asset_id)
     if asset is None:
         raise HTTPException(404, detail=f"Protein asset {body.asset_id} not found.")
@@ -743,6 +804,12 @@ def patch_protein_attachment(
     current_attachment = next(
         a for a in design.protein_attachments if a.id == attachment_id
     )
+    if _native_placement_eligible(design, current_attachment):
+        params = {"attachment_id": attachment_id, **body.model_dump(mode="json", exclude_unset=True)}
+        label = "Move protein" if body.pose is not None or body.gizmo_move is not None else "Edit protein attachment"
+        updated, report = _record_native_placement("protein-attach-patch", label, params)
+        return _design_response(updated, report)
+
     selected_candidate = None
     if body.conjugation_atom_serial is not None:
         from backend.core.conjugation import conjugation_candidate_for_serial
@@ -885,6 +952,11 @@ def delete_protein_attachment(attachment_id: str) -> dict:
         raise HTTPException(
             404, detail=f"Protein attachment {attachment_id} not found."
         )
+    if _native_placement_eligible(design, attachment):
+        updated, report = _record_native_placement(
+            "protein-attach-delete", "Detach protein", {"attachment_id": attachment_id},
+        )
+        return _design_response(updated, report)
 
     binder_id = None
     overhang_id = getattr(attachment.target, "overhang_id", None)

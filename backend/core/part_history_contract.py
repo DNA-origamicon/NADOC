@@ -45,6 +45,7 @@ FIELD_ROLES = MappingProxyType({
     **dict.fromkeys(_PRESENTATION, "presentation"),
     **dict.fromkeys(_PHYSICAL, "physical"),
     **dict.fromkeys(_HISTORY, "history"),
+    "input_sources": "input_source",
     "id": "document_identity",
 })
 

@@ -11,14 +11,9 @@ from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
 from copy import deepcopy
-from functools import lru_cache
 import hashlib
-from importlib import import_module
-from importlib.metadata import version
 import json
 from pathlib import Path
-import platform
-import sys
 from typing import Annotated, Literal
 import uuid
 
@@ -38,7 +33,7 @@ TEMPLATE_SHA256 = "cfb5cd66b05f210b8e6f5e95478373ad169d9de3dfbfcff91a2b0c9fe908c
 # Empty-family guards are part of the closure too (aptamer, linker and biotin
 # helpers). Imports of unrelated simulation/export functions are not execution.
 SOURCE_PATHS = tuple(f"backend/core/{name}.py" for name in (
-    "part_cpd_contract", "cpd_design", "cpd_product", "atomistic",
+    "part_cpd_contract", "part_numerical_runtime", "cpd_design", "cpd_product", "atomistic",
     "atomistic_helpers", "atomistic_minimisers", "atomistic_validation",
     "base_keys", "constants", "geometry", "design_geometry", "deformation",
     "deformation_scope", "sweep_path", "native_full_placement",
@@ -159,23 +154,9 @@ def _digest(value):
                                      allow_nan=False).encode()).hexdigest()
 
 
-@lru_cache(maxsize=128)
-def _cached_file_digest(path, signature):
-    with Path(path).open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
-
-
 def _file_digest(path):
-    try:
-        stat = path.stat()
-        signature = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
-        result = _cached_file_digest(str(path), signature)
-        after = path.stat()
-        if signature != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
-            raise CPDContractError("CPD engine file changed while being read", code="engine_mismatch")
-        return result
-    except OSError as error:
-        raise CPDContractError("A pinned CPD engine file is unavailable", code="engine_unavailable") from error
+    from backend.core.part_numerical_runtime import file_digest
+    return file_digest(path, error_type=CPDContractError, label="CPD")
 
 
 def implementation_manifest():
@@ -191,50 +172,13 @@ def implementation_manifest():
 
 
 def _numerical_libraries():
-    # Load both numerical libraries before inspecting the pools: SciPy's BLAS
-    # may be a different binary from NumPy's. This does not run a solver.
-    for module in ("numpy", "scipy.linalg", "scipy.optimize", "scipy.spatial.transform",
-                   "scipy.spatial.distance", "scipy.interpolate"):
-        import_module(module)
-    from threadpoolctl import threadpool_info
-
-    libraries = []
-    for pool in threadpool_info():
-        if pool.get("user_api") not in {"blas", "openmp"}:
-            continue
-        path = Path(pool["filepath"]).resolve()
-        if pool.get("num_threads") != 1:
-            raise CPDContractError("Native CPD execution requires one numerical thread in its worker",
-                                   code="runtime_mismatch")
-        libraries.append({
-            **{key: pool.get(key) for key in ("user_api", "internal_api", "prefix", "version",
-                                              "threading_layer", "architecture")},
-            "sha256": _file_digest(path),
-        })
-    if not any(pool["user_api"] == "blas" for pool in libraries):
-        raise CPDContractError("The installed numerical runtime is not covered by the CPD engine contract",
-                               code="runtime_mismatch")
-    return sorted(libraries, key=lambda item: json.dumps(item, sort_keys=True))
+    from backend.core.part_numerical_runtime import numerical_libraries
+    return numerical_libraries(file_digest_fn=_file_digest, error_type=CPDContractError, label="CPD")
 
 
 def runtime_fingerprint():
-    import numpy as np
-
-    libraries = _numerical_libraries()
-    # Private build introspection is version-pinned; absence fails closed.
-    features = getattr(np._core._multiarray_umath, "__cpu_features__", None)
-    if not isinstance(features, dict):
-        raise CPDContractError("Numerical CPU dispatch cannot be identified", code="runtime_mismatch")
-    return {
-        "python": {"implementation": sys.implementation.name, "version": platform.python_version()},
-        "platform": {"system": platform.system(), "machine": platform.machine(),
-                     "byteorder": sys.byteorder, "libc": list(platform.libc_ver())},
-        "packages": {name: version(name) for name in ("numpy", "scipy", "pydantic", "pydantic-core", "threadpoolctl")},
-        "cpu_features": features,
-        "numpy_error_policy": np.geterr(),
-        "native_threads": 1,
-        "libraries": libraries,
-    }
+    from backend.core.part_numerical_runtime import runtime_fingerprint as fingerprint
+    return fingerprint(libraries=_numerical_libraries(), error_type=CPDContractError)
 
 
 def _qualified_template():

@@ -12,6 +12,7 @@ from backend.core import models
 from backend.core.base_keys import parse_base_key
 from backend.core.part_command_errors import ReferenceResolutionError
 from backend.core.part_history_proof import AUTHORING_FIELDS
+from backend.core.part_saved_topology import remap_snapshot, snapshot_for, validate_owner
 
 
 @dataclass(frozen=True)
@@ -57,11 +58,11 @@ _schema("OverhangConnection", "overhang_connection",
 _schema("OverhangBinding", "overhang_binding",
         refs={"sub_domain_a_id": "sub_domain", "sub_domain_b_id": "sub_domain", "overhang_a_id": "overhang", "overhang_b_id": "overhang", "target_joint_id": "joint", "driver_oh_id": "overhang", "driven_oh_id": "overhang"},
         plain="name created_at bound binding_mode locked_angle_deg prior_min_angle_deg prior_max_angle_deg allow_n_wildcard unbound_angle_deg bound_angle_deg connection_type",
-        blocked="prior_driven_topology")
+        special="prior_driven_topology")
 _schema("ConnectionVersion", "connection_version", refs={"overhang_a_id": "overhang", "overhang_b_id": "overhang"},
         plain="name created_at connection_type overhang_a_seq overhang_b_seq bridge_length bridge_seq applied")
 _schema("Duplex", "duplex", refs={"target_joint_id": "joint"}, children="left right",
-        plain="name created_at driver bound binding_mode allow_n_wildcard locked_angle_deg connection_type", blocked="prior_driven_topology")
+        plain="name created_at driver bound binding_mode allow_n_wildcard locked_angle_deg connection_type", special="prior_driven_topology")
 _schema("DuplexEnd", refs={"overhang_id": "overhang"}, plain="start_bp end_bp")
 _schema("ClusterRigidTransform", "cluster", children="domain_ids",
         refs={"helix_ids": "helix", "parent_cluster_id": "cluster", "overhang_duplex_driver_id": "overhang"},
@@ -179,6 +180,29 @@ def identity_index(design):
     return records, owners
 
 
+def scope_identity_index(design):
+    """Reserve restorable identities without presenting them as live geometry."""
+    records, owners = identity_index(design)
+    live = set(records)
+    for owner in [*design.overhang_bindings, *design.duplexes]:
+        owner_key = ("duplex" if isinstance(owner, models.Duplex) else "overhang_binding", owner.id)
+        try:
+            snapshot = snapshot_for(owner)
+        except NotImplementedError:
+            # Unsupported restoration state outside a selection stays legacy.
+            # A selected owner is parsed strictly by remap_design below.
+            continue
+        if snapshot is None:
+            continue
+        for key, definition in snapshot.definitions():
+            if key in live:
+                continue
+            if key in records and owners[key] != owner_key:
+                raise NotImplementedError("Saved topology has ambiguous historical identity ownership")
+            records[key], owners[key] = definition, owner_key
+    return records, owners
+
+
 def linker_owners(records):
     """Canonical linker identities are derived from the connection owner."""
     possible = {}
@@ -268,6 +292,16 @@ def referenced_resources(model):
         if isinstance(value, models.PhotoproductJunction):
             for key in [value.base_key_1, value.base_key_2, *value.design_coordinates]:
                 _base_key(key, reference)
+        snapshot = snapshot_for(value)
+        if snapshot is not None:
+            for field in ("driver_oh_id", "driven_oh_id"):
+                reference("overhang", snapshot.value[field])
+            reference("strand", snapshot.value["strand_id"])
+            saved = {key for key, _ in snapshot.definitions()}
+            for _, definition in snapshot.definitions():
+                # Saved definitions own their historical references. External
+                # dependencies still participate in incoming-removal checks.
+                references.update(referenced_resources(definition) - saved)
 
     visit(model)
     return frozenset(references)
@@ -276,7 +310,8 @@ def referenced_resources(model):
 def remap_design(design, mapping):
     """Map declared references and require complete ownership/dependency closure."""
     records, _ = identity_index(design)
-    check_injective({key: mapping.get(key, key[1]) for key in records})
+    scoped_records, _ = scope_identity_index(design)
+    check_injective({key: mapping.get(key, key[1]) for key in scoped_records})
 
     def reference(kind, identity):
         if identity is None:
@@ -286,42 +321,57 @@ def remap_design(design, mapping):
             raise _issue("Generated scope omits a required referenced object", kind, identity)
         return mapping.get(key, identity)
 
-    def mapped(model):
+    def mapped(model, resolve=reference):
         schema = _schema_for(model)
         result = model.model_dump(mode="json")
         if schema.identity:
-            result["id"] = reference(schema.identity, model.id)
+            result["id"] = resolve(schema.identity, model.id)
         for field, kind in schema.refs.items():
             value = getattr(model, field)
-            result[field] = ([reference(kind, item) for item in value]
-                             if isinstance(value, list) else reference(kind, value))
+            result[field] = ([resolve(kind, item) for item in value]
+                             if isinstance(value, list) else resolve(kind, value))
         for field in schema.children:
             value = getattr(model, field)
-            result[field] = ([mapped(item) for item in value] if isinstance(value, list)
-                             else mapped(value) if value is not None else None)
+            result[field] = ([mapped(item, resolve) for item in value] if isinstance(value, list)
+                             else mapped(value, resolve) if value is not None else None)
         if isinstance(model, models.DeformationOp):
-            result["targets"] = _targets(model.targets, reference)
+            result["targets"] = _targets(model.targets, resolve)
         if isinstance(model, models.PhotoproductJunction):
             for field in ("base_key_1", "base_key_2"):
-                result[field] = _base_key(getattr(model, field), reference)
+                result[field] = _base_key(getattr(model, field), resolve)
             result["design_coordinates"] = {
-                _base_key(key, reference): atoms for key, atoms in model.design_coordinates.items()
+                _base_key(key, resolve): atoms for key, atoms in model.design_coordinates.items()
             }
+        snapshot = snapshot_for(model)
+        if snapshot is not None:
+            validate_owner(snapshot, records)
+            saved = {key for key, _ in snapshot.definitions()}
+
+            def historical(kind, identity):
+                if (kind, identity) in saved:
+                    return mapping.get((kind, identity), identity)
+                return reference(kind, identity)
+
+            result["prior_driven_topology"] = remap_snapshot(snapshot, reference, historical, mapped)
         return result
 
     # A dangling canonical linker must not become an apparently ordinary helix.
-    for key, (owner, suffix) in linker_owners(records).items():
+    for key, (owner, suffix) in linker_owners(scoped_records).items():
         expected = f"__lnk__{reference('overhang_connection', owner)}{suffix}"
         if mapping.get(key, key[1]) != expected:
             raise _issue("Generated linker identity disagrees with its connection owner", *key, code="invalid_selection")
     data = design.model_dump(mode="json", include=GLOBALS)
     data.update({field: [mapped(model) for model in getattr(design, field)] for field in COLLECTIONS})
+    # External input hashes are immutable source identities, not generated
+    # geometry IDs. Each local replay needs the captured table; copy its mutable
+    # mapping while retaining the frozen byte records without serialization.
+    data["input_sources"] = dict(design.input_sources)
     return models.Design.model_validate(data)
 
 
 def namespace_mapping(design, group, retained=()):
     """Allocate typed IDs, deriving linker children from their allocated owner."""
-    records, owners = identity_index(design)
+    records, owners = scope_identity_index(design)
     retained = set(retained)
     retained |= {key for key, owner in owners.items() if owner in retained}
     mapping = {}
@@ -339,7 +389,7 @@ def namespace_mapping(design, group, retained=()):
 
 
 def namespace_design(design, group, retained_ids=()):
-    records, _ = identity_index(design)
+    records, _ = scope_identity_index(design)
     retained_ids = set(retained_ids)
     retained = {key for key in records if key[1] in retained_ids}
     return remap_design(design, namespace_mapping(design, group, retained))

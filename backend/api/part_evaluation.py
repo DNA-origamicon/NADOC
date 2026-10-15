@@ -16,7 +16,7 @@ class EvaluationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     operation: Literal["verify", "append", "edit", "delete"]
-    kind: Literal["photoproduct-create", "photoproduct-relax"] | None = None
+    kind: Literal["photoproduct-create", "photoproduct-relax", "duplex-relax"] | None = None
     params: dict | None = None
     index: StrictInt | None = Field(default=None, ge=0)
     sub_index: StrictInt | None = Field(default=None, ge=0)
@@ -28,7 +28,7 @@ class EvaluationRequest(BaseModel):
         validate_operation_input(self.params)
         if self.operation == "append":
             if self.kind is None or self.params is None or self.index is not None or self.sub_index is not None or self.cascade:
-                raise ValueError("Append needs a CPD kind and authored inputs only")
+                raise ValueError("Append needs a supported long-operation kind and authored inputs only")
         elif self.operation in {"edit", "delete"}:
             if self.index is None or self.kind is not None:
                 raise ValueError("Recipe edit/delete needs a feature index")
@@ -69,13 +69,17 @@ def _append(source, request, header, executor, dependencies):
     proof = assess_part_history(source, execute=run, dependencies=dependencies)
     if proof["status"] not in {"verified", "reproduced_import"}:
         return proof
-    current = (last if last is not None else root_design(source.recipe_root)).copy_with(
+    current = (last if last is not None else root_design(source.recipe_root, input_sources=source.input_sources)).copy_with(
         id=source.id, feature_log=prefix.log,
     )
     inputs = dict(request.params)
-    if request.kind == "photoproduct-create":
+    if request.kind in {"photoproduct-create", "duplex-relax"}:
         inputs["history_seed"] = header["identity"]
-    params = prepare_command(request.kind, inputs)
+    if request.kind == "duplex-relax":
+        from backend.api.part_duplex_commands import prepare_command as prepare_duplex
+        params = prepare_duplex(request.kind, current, inputs)
+    else:
+        params = prepare_command(request.kind, inputs)
     updated = executor(request.kind, current, params)
     pre, pre_size = state.encode_design_snapshot(current)
     post, post_size = state.encode_design_snapshot(updated)
@@ -83,7 +87,9 @@ def _append(source, request, header, executor, dependencies):
     entry = SnapshotLogEntry(
         id=header["identity"], timestamp=header["timestamp"],
         op_kind=request.kind,
-        label="Convert native extra thymines to CPD" if request.kind == "photoproduct-create" else "Relax native CPD bonds",
+        label={"photoproduct-create": "Convert native extra thymines to CPD",
+               "photoproduct-relax": "Relax native CPD bonds",
+               "duplex-relax": "Relax native duplex"}[request.kind],
         params=params, design_snapshot_gz_b64=pre, snapshot_size_bytes=pre_size,
         post_state_gz_b64=post, post_state_size_bytes=post_size,
     )

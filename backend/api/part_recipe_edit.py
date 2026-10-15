@@ -10,7 +10,8 @@ from backend.api.part_proof_commands import dependencies, execute
 from backend.core.design_diff import encode_child_diff
 from backend.core.part_command_errors import CommandContractError
 from backend.core.feature_identity import preserve_proof_identity
-from backend.core.part_history_contract import FIELD_ROLES, assess_part_history
+from backend.core.part_history_contract import assess_part_history
+from backend.core.part_recipe_publication import preserve_document_state
 from backend.core.part_overlay_commands import (
     KINDS as OVERLAY_KINDS,
     command_input,
@@ -87,7 +88,7 @@ def regenerate(source, log, checkpoint, *, identify_failures=False, prefix=None,
     current = (
         prefix.design.model_copy(deep=True)
         if prefix is not None
-        else root_design(source.recipe_root).copy_with(id=source.id)
+        else root_design(source.recipe_root, input_sources=source.input_sources).copy_with(id=source.id)
     )
     rebuilt_log = list(prefix.log) if prefix is not None else []
     for entry in log[len(rebuilt_log) :]:
@@ -152,13 +153,7 @@ def regenerate(source, log, checkpoint, *, identify_failures=False, prefix=None,
             )
         )
         current = current.copy_with(feature_log=list(rebuilt_log))
-    preserved = {
-        name: getattr(source, name)
-        for name, role in FIELD_ROLES.items()
-        if role in {"presentation", "physical", "document_identity"}
-    }
-    return current.copy_with(
-        **preserved,
+    return preserve_document_state(source, current).copy_with(
         feature_log=rebuilt_log,
         feature_log_cursor=-1,
         feature_log_sub_cursor=None,

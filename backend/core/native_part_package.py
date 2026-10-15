@@ -11,6 +11,7 @@ from pathlib import Path, PurePosixPath
 
 from backend.core.job_cleanup import _job_classes, _norm
 from backend.core.models import Design
+from backend.core.part_input_sources import portable_sources
 
 FORMAT = "nadoc.native-part-package"
 VERSION = 1
@@ -45,7 +46,8 @@ def create_package(
         raise ValueError("part path escapes the workspace") from exc
     if not part.is_file() or part.suffix.lower() != ".nadoc":
         raise ValueError("package source must be an existing .nadoc part")
-    Design.from_json(part.read_text(encoding="utf-8"))
+    design = Design.from_json(part.read_text(encoding="utf-8"))
+    sources = portable_sources(design)
 
     jobs = list(associated_job_dirs(workspace, source_path))
     selected_job_ids = set(selected_job_ids or ())
@@ -74,6 +76,7 @@ def create_package(
         "version": VERSION,
         "mode": mode,
         "part": {"archive_path": f"part/{part.name}", "source_path": _norm(source_path)},
+        "authoring_inputs": [source.model_dump(mode="json") for source in sources.values()],
         "simulations": [
             {
                 "tree": tree,
@@ -110,7 +113,11 @@ def create_package(
 
 
 def _safe_members(archive: zipfile.ZipFile) -> None:
+    names = set()
     for info in archive.infolist():
+        if info.filename in names:
+            raise ValueError(f"duplicate archive member: {info.filename}")
+        names.add(info.filename)
         path = PurePosixPath(info.filename)
         if path.is_absolute() or ".." in path.parts or path.parts[:1] == ("",):
             raise ValueError(f"unsafe archive path: {info.filename}")
@@ -146,7 +153,11 @@ def import_package(workspace: Path, package: Path, dest_path: str, *, overwrite_
             raise ValueError("manifest does not identify a part file")
         try:
             design_text = archive.read(part_member).decode("utf-8")
-            Design.from_json(design_text)
+            design = Design.from_json(design_text)
+            sources = portable_sources(design)
+            declared = manifest.get("authoring_inputs")
+            if declared is not None and declared != [source.model_dump(mode="json") for source in sources.values()]:
+                raise ValueError("Package authoring input manifest does not match the portable part")
         except (KeyError, UnicodeDecodeError, ValueError) as exc:
             raise ValueError("package contains an invalid NADOC part") from exc
 
@@ -195,6 +206,8 @@ def import_package(workspace: Path, package: Path, dest_path: str, *, overwrite_
                 job_json.write_text(json.dumps(data, indent=2), encoding="utf-8")
                 staged_jobs.append((staged, target))
 
+            from backend.core.project_revisions import ProjectRevisionStore
+            ProjectRevisionStore(workspace).stage_design_inputs(design)
             staged_part = staging / destination.name
             staged_part.write_text(design_text, encoding="utf-8")
             destination.parent.mkdir(parents=True, exist_ok=True)

@@ -1,8 +1,52 @@
 # Standard-part assets, imports and conjugates: P4 source audit
 
-Planning audit, October 15, 2026. No P4 implementation or validation is claimed
-here. Assemblies, including assembly protein targets, remain deferred. The
-existing scientific builders and placement formulas remain the oracle.
+Audit and implementation ledger, October 15, 2026. P4a uncoated gold and the
+initial P4b pinned-protein/duplex slices are implemented; this document also
+contains the remaining work. Assemblies, including assembly protein targets,
+remain deferred. Existing scientific builders and placement formulas remain
+the oracle.
+
+## P4b implemented boundaries
+
+- `Design.input_sources` is a bounded, deduplicated portable source table. Frozen
+  source descriptors identify SHA-256, length, format and media type. Input bytes
+  are separate from generated authoring output and are charged by existing
+  verification capture limits. Scoped execution retains these immutable bytes.
+- `POST /api/design/features/import/protein` takes source/data, parser choices
+  and a required revision. It verifies bytes before recording and atomically
+  adds the source and imported asset. The initial contract permits 250 KB,
+  1000 atom records and 4000 parsed bonds. Existing free/library import remains
+  a legacy workflow until it can emit separate import and placement commands.
+- Versioned free/part-overhang placement, patch and delete share pure builders
+  with eligible live routes. Defaults are selected once under the recording
+  lock. Explicit identities and atom serials survive replay; missing targets
+  cannot become native no-ops. Conjugated/owned placements remain outside this
+  slice. Native builders create stable default clusters before publication.
+- An imported command makes whole-part provenance `reproduced_import`, including
+  when the root was empty. Its supported native parameter rows remain editable.
+  Missing or corrupt source evidence is `unverified` with a typed repair target;
+  it cannot justify geometry cascade deletion.
+- Revision snapshots, peer transfer and all package modes retain embedded inputs.
+  Packages declare active authoring source descriptors. Project-store blobs are
+  derived caches, restored only from independently verified inline bytes. Cache
+  write failure does not block a portable save; explicit cache reads fail closed.
+- Native files bypass legacy inference during deserialization/load/response
+  formatting. Rootless files retain compatibility migrations. Authored absence
+  of crossovers, duplexes or clusters survives save/reload. Two duplicate load
+  migration chains were consolidated.
+- Duplex create/connect/patch/delete and explicit sync use exact endpoints,
+  selected binding IDs, stable outputs and creation times. Reversible saved
+  topology has a typed codec that separates current owners from historical
+  definitions; ambiguous historical co-ownership remains unsupported.
+
+Remaining source work includes large-input transport/capture measurements,
+validation of inactive loadout closure, source restoration/repair UI, full
+conjugation/NP decoration and placement coverage, topology-format imports, typed
+rigid copy and explicit physical-source provenance. Recovery blobs deliberately
+remain outside input proof; poisoned recovery bytes must not invalidate an
+otherwise reproducible native recipe. No source garbage collection is enabled.
+See `implementation.md` and `validation_inputs_duplex_p4.json` for executed checks.
+The architectural sections below preserve the fuller P4 plan.
 
 ## Architectural decisions
 

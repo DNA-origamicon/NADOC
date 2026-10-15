@@ -118,5 +118,9 @@ def test_capabilities_distinguish_executors_from_proof_contracts():
     assert "nick" in result["proof_commands"]
     assert "crossover-place" in result["proof_commands"]
     assert "overhang-extrude" in result["proof_commands"]
-    assert "nanoparticle-create" not in result["proof_commands"]
+    assert "nanoparticle-create" in result["proof_commands"]
+    # Coverage membership does not upgrade older receipts to a native contract.
+    from backend.api.part_proof_commands import dependencies
+    assert not dependencies("nanoparticle-create", {"_proof_version": 1}).known
+    assert result["nanoparticle_contract"]["scope"].startswith("uncoated gold")
     assert result["certifies_history"] is False

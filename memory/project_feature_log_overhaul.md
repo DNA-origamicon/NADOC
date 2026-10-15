@@ -26,7 +26,7 @@ keep assemblies deferred. Consult the implementation ledger for subsequent fixes
 
 ## Native recipe continuation (2026-10-15)
 
-P3 plus the first P4 particle slice now has 99 versioned kinds (with method/action restrictions), pure native
+P3 plus initial P4 input/placement/duplex slices now has 109 versioned kinds (with method/action restrictions), pure native
 builders shared by routes and proof, source-based continuation references,
 thread-local deterministic routing IDs, actual-failure cascade analysis, and one
 independently rebuilt prefix retained per edit. No saved outputs are proof inputs.
@@ -52,6 +52,16 @@ builders. Diameter/pose/gizmo inputs and stable particle identity are retained;
 owned DNA/decorations/connections are outside this slice. Legacy same-kind rows
 without `nanoparticle_version` remain unverified. Cold proof, early parameter
 editing, cascade/undo and existing particle workflows pass focused checks.
+
+P4b adds portable SHA/length-verified `input_sources`, a revision-checked pinned
+PDB import endpoint, unowned free/overhang placement commands, and explicit
+duplex lifecycle/sync plus bounded native relaxation. Whole-part import provenance
+stays `reproduced_import`; unavailable bytes are unverified repair targets, never
+cascade reasons. Scoped replay preserves source tables and uses typed historical
+relocation definitions without treating them as live geometry. Native roots skip
+legacy load/response inference; builders must author default clusters explicitly.
+Project blobs are optional derived caches; portable inline inputs remain authority.
+Large-input transport, inactive-loadout closure and further P4 families remain.
 
 `part_recipe_capabilities.py` exposes API/editor limitations explicitly. No new
 frontend controls were added. Long jobs evaluate privately, omit candidates from

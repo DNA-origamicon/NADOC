@@ -1,6 +1,6 @@
 # Standard-part duplex input contracts
 
-Audited October 15, 2026. P4 implementation is pending. Assemblies are deferred.
+Audited October 15, 2026. P4 implementation is in progress. Assemblies are deferred.
 This extraction preserves molecular formulas, topology decisions and locked
 constants; algorithm changes retain the separate molecular authorization gate.
 
@@ -116,5 +116,88 @@ comments that claim duplex fields have no consumers.
    output identity remains stable and independent cold replay reproduces output.
 
 P4 duplex work is complete only after all active producers above are covered,
-not when six routes are registered. Root coordinates all validation runs. No
-implementation or tests were performed for this audit.
+not when six routes are registered. Root coordinates all validation runs.
+
+## Identity-tracking decision during extraction
+
+Onshape describes queries as criteria resilient to upstream edits and provides
+`startTrackingIdentity` / `makeRobustQueriesBatched` for inherited and strict
+identity tracking ([modeling](https://cad.onshape.com/FsDoc/modeling.html),
+[standard library](https://cad.onshape.com/FsDoc/library.html#startTrackingIdentity-Context-Query)).
+The NADOC adapter applies that principle narrowly: a relocated register can
+follow the same unique overhang, owning strand and domain position only when
+nucleotide count and non-placement domain metadata are unchanged. Existing
+`bp_to_offset` / `offset_to_bp` preserve the selected nucleotide offsets. Missing,
+ambiguous, resized or reordered correspondence fails with a structured reference
+diagnostic; there is no nearest-geometry or polarity inference.
+
+Connect refreshes its derived register through unchanged `connect_register`
+after unchanged relocation, matching the established nanoparticle Apply path.
+Driver edits track all affected partial registers through the exact correspondence
+above. These edits change reference metadata only; parity tests compare the
+complete resulting native topology, poses and restoration snapshots.
+
+## Selected sync and native reload
+
+The sync command records parallel ordered `binding_ids`, `duplex_ids` and
+`created_at` lists, plus its version/identity seed. Lists must align and contain
+unique identities. Authoring captures the first currently missing pair; replay
+uses only that captured selection. Missing selected bindings, subdomains,
+overhang/domain ownership or target joints are errors. A pair claimed by another
+duplex is also an error, rather than a silent replay no-op. Existing bindings'
+creation times, driver, binding mode, wildcard policy, joint metadata and
+connection type are retained. The native sync retains legacy mismatch
+classification; its new guards enforce reference, occupancy and register bounds.
+
+`core.duplex.synthesize_duplex_from_binding` shares the unchanged register math
+with legacy whole-binding migration. Legacy unresolved-input skipping remains
+available only on that legacy migration path. Recipe-bearing documents must
+bypass `Design.from_json` crossover/ligation migration and the native-open
+legacy repair chain in `crud`: a deliberate empty graph is authored state, not
+an invitation to regenerate random records on load. Rootless legacy files keep
+their existing compatibility migration.
+
+## Relaxation contract and compatibility boundary
+
+`core.direct_relax.relax_direct_binding` already uses deterministic starts and
+fixed solver settings: one-joint chord optimization; multiple-joint Powell with
+`xtol=1e-6`, `ftol=1e-10`, `maxiter=800`; 24-angle clash selection at 1.8 nm.
+Do not alter those settings, the 0.67 nm target, geometry providers or placements.
+Full-model fitting geometry, the multi-joint solve and clash queries are the
+potential costly stages. Run the unchanged command through the existing isolated
+long-command job policy; ordinary 5-second verification remains bounded and
+must report unverified if its allowance is insufficient.
+
+The native adapter records an explicit duplex target, driver/driven overhang refs,
+ordered selected joint refs, algorithm/runtime contract and the existing child
+cluster identity where present. Selection must match the solver's existing
+dematerialized context: factor its preparation/selection into one shared helper
+if needed, rather than guessing owners from the still-materialized child cluster
+or declaring every unrelated joint a dependency. This preserves actual selection
+order and avoids needless failures when unrelated joints change. The shared
+structural selection helper removes the duplex child from its ownership view;
+its overhang pose cannot affect parent-cluster/joint selection. Solver selection
+uses the same helper at its original point after actual dematerialization.
+
+The solver currently appends `OverhangRotationLogEntry`/`ClusterOpLogEntry`
+records at lines 624–684. The native adapter should retain the incoming history
+and cursor and let the atomic feature transaction record one command. It already
+reuses the existing child-cluster ID when rematerializing; a legacy overlay-only
+input keeps its overlay behavior. A genuine native cold replay must compare all
+authoring fields, with cancellation/stale-source tests using the existing worker
+lifecycle. Native authoring uses the explicit bounded evaluation-job path. The
+existing synchronous HTTP duplex-relax route remains a legacy compatibility
+path pending P5 UI/P6 enforcement; its output is not silently upgraded to native
+proof. The new solver contract currently admits native DNA/direct-duplex sources
+and rejects imported residue geometry, reference strands, proteins, particles,
+extensions, linker connections and CPD geometry before execution.
+
+The numerical fingerprint is shared with CPD through
+`part_numerical_runtime.py`; extraction retains CPD's fingerprint shape/error
+codes and adds the shared file to both implementation manifests. Pinning follows
+the established versioned-library principle in [Onshape's top-level/import
+documentation](https://cad.onshape.com/FsDoc/top-level.html). The unchanged
+Powell options are explicit solver inputs documented by
+[SciPy](https://docs.scipy.org/doc/scipy/reference/optimize.minimize-powell.html).
+This is an engineering choice for exact floating-point authoring replay, not a
+claim that Onshape uses NADOC's runtime fingerprint format.

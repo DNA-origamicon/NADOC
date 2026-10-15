@@ -10,7 +10,7 @@ Scope approved October 14, 2026: implement standard-part validation, editability
 | P1 | Standard-part recording transactions, executable replay registry and evidenced cleanup | Foundation implemented below. Retain legacy callbacks and compatibility recovery; no claim of general isolated evaluation |
 | P2 | Explicit recipe roots/versions, authoritative-field classification, read-only verification and incremental dependencies | Implementation exit checks complete: independent nonempty replay, content-pinned roots, typed dependencies, fingerprints, bounded capture/jobs and stale/cancel handling. Supported-family expansion continues in P3/P4; validation debt below remains explicit |
 | P3 | Native DNA command families and generated construction | 96 versioned kinds with method/action restrictions, joined/connectivity input compilation and bounded native-source CPD conversion/relaxation implemented. See the latest evidence and explicit scope limits below; full generated asset/attachment histories belong to P4 |
-| P4 | Standard-part assets and attachments | In progress. Source-free gold CRUD implemented; pinned inputs/protein import and duplex work underway. Full import/attachment coverage and physical-result provenance remain open |
+| P4 | Standard-part assets and attachments | In progress. Source-free gold, pinned small protein inputs/placements and duplex lifecycle implemented; bounded native duplex relaxation added. Full import/attachment coverage and physical-result provenance remain open |
 | P5 | Standard-part repair, drafts, desktop and part-mode VR | Pending. Revision-bound impact previews, failed/blocked diagnostics, reference replacement, last-successful-state display, undo/reload |
 | P6 | Strict standard-part agent transactions and legacy retirement | Pending. Pure candidate execution outside long-held locks, expected-revision publication, registered command batches, bypass closure and explicit import exceptions |
 
@@ -465,3 +465,57 @@ existing nanoparticles 18 in 3.44 s, generated-native compatibility 4 in 2.55 s)
 No full proof or new snapshot copy was added to ordinary particle edits. No
 scientific placement algorithm changed. No frontend changes or visual checks;
 `main.js` LOC delta remains zero. Broad validation debt above remains open.
+
+
+## P4b pinned inputs and reversible duplex authoring — October 15
+
+Portable pinned protein sources now regenerate parsed assets and supported free/
+part-overhang placements, without a mutable library or network fallback. Source
+admission is bounded and revision checked; source bytes, asset and feature row
+publish atomically. Input resources survive worker capture, generated scopes,
+undo, project revision/peer transfer and all native package modes. Whole-part
+provenance records imported sources. Corrupt or missing evidence stays unverified
+with an exact source reference and is never a cascade-deletion reason.
+
+Duplex create/connect/patch/delete and explicit selected-binding sync now record
+complete inputs. Missing/ambiguous endpoints fail before mutation; register
+tracking uses exact retained nucleotide offsets and rejects unprovable changes.
+Saved relocation topology is typed separately from live references, allowing
+namespaced restoration without inventing live geometry or rewriting labels.
+The existing direct-relax solver has a bounded native-source contract, explicit
+selected joints/clusters and numerical pins. It uses the shared evaluation job
+lifecycle; the older synchronous relax route remains a compatibility path until
+UI/strict-route work. Shared runtime fingerprint helpers were extracted from
+CPD without changing solver settings or formulas. Engine pins include changed
+source modules, so old pins are not silently refreshed.
+
+Loading and response formatting no longer infer authoring changes for documents
+with explicit roots. Rootless legacy migrations remain available, and duplicated
+load handling was consolidated. Required default clusters are authored by native
+builders. Recipe publication preserves display/physical data while removing only
+presentation links to attachments deleted by that operation; undo restores them.
+The source blob cache is optional and cannot obstruct a portable save because of
+cache-specific filesystem damage.
+
+There are 109 registered versioned kinds with explicit scope restrictions; this
+is not whole-application coverage. Large input transfer, inactive-loadout source
+checks, further protein/NP/topology import/copy contracts and physical-source
+provenance remain P4 work. P5 repair drafts/UI and P6 strict automation remain
+pending, and assemblies stay deferred. No frontend or scientific algorithm
+changes are included in this checkpoint.
+
+`input_capture_benchmark_p4.json` records nine warm samples of independent pinned
+protein imports sharing one 241-byte input. Median capture/proof time was
+1.07/0.42 ms for one feature, 3.97/7.38 ms for 32, and 14.06/30.26 ms for 128;
+all cases reproduced their imported source. Existing 30k-node/2 MB/25 ms
+cooperative capture limits were unchanged. These small synthetic cases do not
+qualify large protein throughput or interaction latency. No proof, full hashing
+or dependency scan was added to ordinary edit/render/scrub paths.
+
+Focused validation: **643 passed** across 35 files, including real
+spawned duplex relaxation and separate cold replay, and native CPD conversion/
+relaxation after the shared runtime extraction. Changed Python files pass Ruff;
+`git diff --check` passes. Memory lint remains at its existing 6 errors/60
+warnings. Detailed results and limitations are recorded in
+`validation_inputs_duplex_p4.json`. Existing broad-suite/archive limitations
+remain open; no browser/headset or physical simulation run is claimed.

@@ -17,6 +17,8 @@ from backend.api.part_section_commands import KINDS as SECTION_KINDS
 from backend.api.part_connectivity_commands import KINDS as CONNECTIVITY_KINDS
 from backend.api.part_joined_path_commands import KINDS as JOINED_PATH_KINDS
 from backend.api.part_nanoparticle_commands import KINDS as NANOPARTICLE_KINDS
+from backend.api.part_duplex_commands import KINDS as DUPLEX_KINDS
+from backend.api.part_protein_commands import KINDS as PROTEIN_KINDS
 
 
 TOPOLOGY_MINOR_KINDS = frozenset({
@@ -25,7 +27,7 @@ TOPOLOGY_MINOR_KINDS = frozenset({
     "crossover-place", "crossover-place-batch",
 })
 EXTRUSION_COMMANDS = frozenset({"extrude-segment", "extrude-continuation", "extrude-deformed-continuation", "circle-segment", "extrude-frame"})
-PROOF_SNAPSHOT_KINDS = NANOPARTICLE_KINDS | JOINED_PATH_KINDS | CONNECTIVITY_KINDS | SECTION_KINDS | PATH_KINDS | BRANCH_KINDS | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS | frozenset({"photoproduct-relax", "bundle-create", "sweep", "cluster-join", "strand-sequence", "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste"})
+PROOF_SNAPSHOT_KINDS = PROTEIN_KINDS | DUPLEX_KINDS | NANOPARTICLE_KINDS | JOINED_PATH_KINDS | CONNECTIVITY_KINDS | SECTION_KINDS | PATH_KINDS | BRANCH_KINDS | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS | frozenset({"photoproduct-relax", "bundle-create", "sweep", "cluster-join", "strand-sequence", "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste"})
 PROOF_MINOR_KINDS = MOVE_KINDS | CELL_KINDS | LIGATION_KINDS | TOPOLOGY_MINOR_KINDS | LOOP_COMMANDS | STRUCTURAL_KINDS | frozenset({"joint-place", "joint-update", "joint-delete", "strand-patch"})
 PROOF_VERSION = 1
 PART_TOPOLOGY = Resource("part", "topology")
@@ -43,6 +45,28 @@ def capabilities():
 def dependencies(kind, params):
     if type(params.get("_proof_version")) is not int or params["_proof_version"] != PROOF_VERSION:
         return Dependencies(known=False)
+    # Composition metadata belongs to the scope executor, not the underlying
+    # strict command schema. Preserve source provenance during scoped admission.
+    params = {key: value for key, value in params.items()
+              if key not in {"_generated_scope", "_generator"}}
+    if kind in PROTEIN_KINDS:
+        from backend.api.part_protein_commands import resources
+        try:
+            contract = resources(kind, params)
+        except ValueError:
+            return Dependencies(known=False)
+        sources = frozenset(Resource("input_source", source.sha256)
+                            for source in contract["sources"])
+        return Dependencies(frozenset({PART_TOPOLOGY}) | sources,
+                            frozenset({PART_TOPOLOGY}), barrier=True,
+                            imported_sources=sources if contract["imports"] else frozenset())
+    if kind in DUPLEX_KINDS:
+        from backend.api.part_duplex_commands import parse_command
+        try:
+            parse_command(kind, params)
+        except ValueError:
+            return Dependencies(known=False)
+        return Dependencies(frozenset({PART_TOPOLOGY}), frozenset({PART_TOPOLOGY}), barrier=True)
     if kind in NANOPARTICLE_KINDS:
         from backend.api.part_nanoparticle_commands import parse_command
         try:
@@ -161,6 +185,19 @@ def _execute(kind, design, params, *, expensive):
     elif kind == "nick-batch":
         from backend.api.part_command_references import build_strict_nick_batch
         updated = build_strict_nick_batch(design, params)
+    elif kind in PROTEIN_KINDS:
+        from backend.api.part_protein_commands import build
+        from backend.core.part_input_sources import EmbeddedResolver
+        updated = build(kind, design, params, resolver=EmbeddedResolver(design.input_sources))
+    elif kind in DUPLEX_KINDS:
+        if kind == "duplex-relax" and not expensive:
+            from backend.core.part_command_errors import CommandContractError
+            from backend.core.part_duplex_relax_contract import validate_inputs
+            validate_inputs(design, params)
+            raise CommandContractError("Duplex relaxation requires an explicit bounded evaluation job",
+                                       code="long_job_required")
+        from backend.api.part_duplex_commands import build
+        updated = build(kind, design, params)
     elif kind in NANOPARTICLE_KINDS:
         from backend.api.part_nanoparticle_commands import build
         updated = build(kind, design, params)

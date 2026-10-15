@@ -43,6 +43,28 @@ purpose and must not silently relax that gate.
 repaired; poisoned snapshots/diffs have no effect; cold replay reproduces the
 result; stale, cancelled, failed and oversized work leaves model/undo/redo intact.
 
+### Explicit numerical-contract upgrade
+
+P4 numerical commands pin implementation and runtime identity. This deliberately
+makes an older recipe unverified when covered code or its numerical environment
+changes; ordinary parameter editing must not silently replace those pins.
+The current manifests conservatively include shared model code, so an unrelated
+schema addition can also require an upgrade. Old executable engines are not yet
+bundled. Reproducibility on another installation is therefore conditional on
+availability of the recorded contract, not a permanent archival guarantee.
+
+Add a separate, explicit repair-draft action for upgrading a supported numerical
+contract. The server chooses current pins for the same recognized source/solver
+family; callers cannot inject an arbitrary digest or relax source admission.
+Regenerate from the explicit root and authored definitions in the existing
+bounded worker. Show changed numerical provenance and compare resulting geometry
+before revision-bound publication. Preserve stable output identities. Keep the
+old revision and pins available for reversal; never label the new evaluation as
+proof that the older engine produced the same output. Unknown algorithms or
+unsupported source families remain unverified. This is required P5 repair work,
+not an automatic load migration. Longer-term executable-version retention can be
+added independently, following Onshape's explicit versioned FeatureScript imports.
+
 ## P5b — reference selection and diagnostics
 
 Report the first failed feature, its structured references, the successfully

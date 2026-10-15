@@ -14,6 +14,7 @@ class Dependencies:
     writes: frozenset[Resource] = frozenset()
     known: bool = True
     barrier: bool = False
+    imported_sources: frozenset[Resource] = frozenset()
 
 
 class DependencyIndex:

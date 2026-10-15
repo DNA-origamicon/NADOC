@@ -226,6 +226,10 @@ def _export_filename_stem(name: str | None, fallback: str = "design") -> str:
 def _ensure_default_cluster(design: Design, *, persist: bool = True) -> Design:
     """If the design has helices but no clusters, auto-create a default cluster
     containing all helices and persist it silently (no undo snapshot)."""
+    # Authored recipes must not acquire topology while formatting a response.
+    # Their native builders create any required placement cluster explicitly.
+    if design.recipe_root is not None:
+        return design
     from backend.core.cluster_autodetect import repair_empty_auto_clusters
 
     repaired = repair_empty_auto_clusters(design)
@@ -1723,12 +1727,6 @@ def load_design(body: FilePathRequest) -> dict:
     coordinates are arbitrary. The user can manually trigger recentering via
     POST ``/design/center``.
     """
-    from backend.core.lattice import (
-        migrate_split_staple_domains,
-        autodetect_all_overhangs,
-    )
-    from backend.core.validator import validate_design
-
     path = os.path.abspath(body.path)
     if not os.path.isfile(path):
         raise HTTPException(400, detail=f"File not found: {path}")
@@ -1738,51 +1736,31 @@ def load_design(body: FilePathRequest) -> dict:
         design = Design.from_json(text)
     except Exception as exc:
         raise HTTPException(400, detail=f"Failed to load design: {exc}") from exc
-    from backend.core.lattice_frame_compatibility import repair_lattice_frame_membership
-    design = repair_lattice_frame_membership(design)
-    design = migrate_split_staple_domains(design)
-    # Full detection (Pass 1 autodetect + Pass 2 reconcile), not just reconcile:
-    # idempotent for already-tagged overhangs, but also catches overhangs the
-    # original import missed (e.g. cross-over tails entirely outside scaffold —
-    # the stap_36_331 case), so existing .nadoc files self-correct on load.
-    design = autodetect_all_overhangs(design)
-    design = _fix_stale_ovhg_pivots(design)
-    design = _backfill_sub_domains_if_empty(design)
-    design = _derive_duplexes_if_empty(design)
-    design = _materialize_duplex_clusters_on_load(design)
-    design = _recompute_flexible_connections(design)
-    design_state.load_design(design)
-    report = validate_design(design)
-    # New lineage (fresh load/import) — nothing in the client's cache matches this
-    # design's history, but shipping every feature-log snapshot body up front made a
-    # design with heavy edit history (e.g. VoltronCoreArmV2: 42 MB vs 2.4 MB slim) the
-    # dominant cost of opening it. Ship the slim response; the client backfills full
-    # bodies from GET /design/feature-log/full once geometry has rendered.
-    return _design_response(design, report, full_feature_log=False)
+    return _install_loaded_design(design)
 
 
 def _install_loaded_design(design: Design) -> dict:
-    """Shared tail of a native .nadoc open: self-correcting migrations, install as the
-    session baseline, validate, and build the slim response."""
+    """Install saved recipes exactly; migrate only rootless legacy documents."""
     from backend.core.lattice import (
         migrate_split_staple_domains,
         autodetect_all_overhangs,
     )
     from backend.core.validator import validate_design
 
-    from backend.core.lattice_frame_compatibility import repair_lattice_frame_membership
-    design = repair_lattice_frame_membership(design)
-    design = migrate_split_staple_domains(design)
-    # Full detection (Pass 1 autodetect + Pass 2 reconcile), not just reconcile:
-    # idempotent for already-tagged overhangs, but also catches overhangs the
-    # original import missed (e.g. cross-over tails entirely outside scaffold —
-    # the stap_36_331 case), so existing .nadoc files self-correct on load.
-    design = autodetect_all_overhangs(design)
-    design = _fix_stale_ovhg_pivots(design)
-    design = _backfill_sub_domains_if_empty(design)
-    design = _derive_duplexes_if_empty(design)
-    design = _materialize_duplex_clusters_on_load(design)
-    design = _recompute_flexible_connections(design)
+    if design.recipe_root is None:
+        from backend.core.lattice_frame_compatibility import repair_lattice_frame_membership
+        design = repair_lattice_frame_membership(design)
+        design = migrate_split_staple_domains(design)
+        # Full detection (Pass 1 autodetect + Pass 2 reconcile), not just reconcile:
+        # idempotent for already-tagged overhangs, but also catches overhangs the
+        # original import missed (e.g. cross-over tails entirely outside scaffold —
+        # the stap_36_331 case), so existing .nadoc files self-correct on load.
+        design = autodetect_all_overhangs(design)
+        design = _fix_stale_ovhg_pivots(design)
+        design = _backfill_sub_domains_if_empty(design)
+        design = _derive_duplexes_if_empty(design)
+        design = _materialize_duplex_clusters_on_load(design)
+        design = _recompute_flexible_connections(design)
     design_state.load_design(design)
     report = validate_design(design)
     # New lineage (fresh load/import) — see the matching comment in load_design above:
@@ -5264,6 +5242,8 @@ def _derive_duplexes_if_empty(design: Design) -> Design:
     a design that already carries duplexes is returned unchanged. See
     ``memory/project_overhang_duplex_foundation.md``.
     """
+    if design.recipe_root is not None:
+        return design
     if design.duplexes or not design.overhang_bindings:
         return design
     from backend.core.duplex import synthesize_duplexes_from_bindings
@@ -5280,6 +5260,8 @@ def _materialize_duplex_clusters_on_load(design: Design) -> Design:
     existing .nadoc shows the duplex as a sidebar-listed, gizmo-movable, drift-free cluster.
     Geometry+axis neutral (proven on 2x2_OH_test). Idempotent: skips a driver that already
     has a duplex cluster. [[overhang-duplex-cluster]] P1b."""
+    if design.recipe_root is not None:
+        return design
     from backend.core.duplex_cluster import (
         duplex_cluster_for,
         materialize_duplex_cluster,

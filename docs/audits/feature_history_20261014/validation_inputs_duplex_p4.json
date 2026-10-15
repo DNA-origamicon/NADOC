@@ -1,0 +1,217 @@
+{
+  "date": "2026-10-15",
+  "checkpoint_base": "9084838c",
+  "scope": "P4 bounded portable protein inputs/placements, native duplex lifecycle and pinned relaxation; assemblies deferred",
+  "focused": [
+    {
+      "target": "tests/test_part_input_sources.py",
+      "passed": 30,
+      "seconds": 2.63
+    },
+    {
+      "target": "tests/test_part_protein_commands.py",
+      "passed": 25,
+      "seconds": 2.4
+    },
+    {
+      "target": "tests/test_part_protein_placements.py",
+      "passed": 43,
+      "seconds": 2.48
+    },
+    {
+      "target": "tests/test_part_protein_route_commands.py",
+      "passed": 13,
+      "seconds": 2.72
+    },
+    {
+      "target": "tests/test_part_input_routes.py",
+      "passed": 19,
+      "seconds": 2.61
+    },
+    {
+      "target": "tests/test_native_protein_input_proof.py",
+      "passed": 16,
+      "seconds": 4.35
+    },
+    {
+      "target": "tests/test_recipe_load_preservation.py",
+      "passed": 7,
+      "seconds": 2.57
+    },
+    {
+      "target": "tests/test_generated_saved_topology.py",
+      "passed": 12,
+      "seconds": 2.67
+    },
+    {
+      "target": "tests/test_generated_scope_sources.py",
+      "passed": 4,
+      "seconds": 2.47
+    },
+    {
+      "target": "tests/test_generated_scope_references.py",
+      "passed": 29,
+      "seconds": 2.61
+    },
+    {
+      "target": "tests/test_generated_scope_aliases.py",
+      "passed": 3,
+      "seconds": 2.35
+    },
+    {
+      "target": "tests/test_part_duplex_sync.py",
+      "passed": 19,
+      "seconds": 2.6
+    },
+    {
+      "target": "tests/test_part_duplex_commands.py",
+      "passed": 24,
+      "seconds": 2.68
+    },
+    {
+      "target": "tests/test_duplex_crud.py",
+      "passed": 20,
+      "seconds": 2.61
+    },
+    {
+      "target": "tests/test_duplex_relocate.py",
+      "passed": 1,
+      "seconds": 2.37
+    },
+    {
+      "target": "tests/test_duplex_length_preserve.py",
+      "passed": 1,
+      "seconds": 2.47
+    },
+    {
+      "target": "tests/test_project_revisions.py",
+      "passed": 22,
+      "seconds": 2.79
+    },
+    {
+      "target": "tests/test_native_part_package.py",
+      "passed": 7,
+      "seconds": 2.38
+    },
+    {
+      "target": "tests/test_part_history_verification.py",
+      "passed": 26,
+      "seconds": 2.72
+    },
+    {
+      "target": "tests/test_part_recipe_edit.py",
+      "passed": 8,
+      "seconds": 2.56
+    },
+    {
+      "target": "tests/test_part_evaluation.py",
+      "passed": 14,
+      "seconds": 3.57
+    },
+    {
+      "target": "tests/test_part_evaluation_jobs.py",
+      "passed": 10,
+      "seconds": 2.64
+    },
+    {
+      "target": "tests/test_native_bundle_proof.py",
+      "passed": 11,
+      "seconds": 4.48
+    },
+    {
+      "target": "tests/test_cluster_autodetect_core.py",
+      "passed": 5,
+      "seconds": 5.28
+    },
+    {
+      "target": "tests/test_protein.py",
+      "passed": 72,
+      "seconds": 5.29
+    },
+    {
+      "target": "tests/test_part_feature_registry.py",
+      "passed": 24,
+      "seconds": 2.55
+    },
+    {
+      "target": "tests/test_part_verification_worker.py",
+      "passed": 12,
+      "seconds": 3.73
+    },
+    {
+      "target": "tests/test_part_verification_jobs.py",
+      "passed": 14,
+      "seconds": 3.02
+    },
+    {
+      "target": "tests/test_part_duplex_relax_contract.py",
+      "passed": 34,
+      "seconds": 2.82
+    },
+    {
+      "target": "tests/test_part_cpd_contract.py",
+      "passed": 61,
+      "seconds": 2.71
+    },
+    {
+      "target": "tests/test_duplex_relax.py",
+      "passed": 6,
+      "seconds": 2.85
+    },
+    {
+      "target": "tests/test_native_duplex_relax_proof.py",
+      "passed": 3,
+      "seconds": 4.67
+    },
+    {
+      "target": "tests/test_native_cpd_proof.py",
+      "passed": 3,
+      "seconds": 66.05
+    },
+    {
+      "target": "tests/test_feature_log_snapshot.py",
+      "passed": 35,
+      "seconds": 3.3
+    },
+    {
+      "target": "tests/test_feature_seek_preview.py",
+      "passed": 10,
+      "seconds": 2.37
+    }
+  ],
+  "focused_total_passed": 643,
+  "corrected_findings": [
+    "Native response formatting created an unrecorded default cluster. Native roots now bypass inference and protein builders create deterministic clusters before recording.",
+    "Cache corruption policy was corrected: verified authoritative inline bytes restore a derived cache; invalid replacement bytes remain rejected.",
+    "Two saved-topology test fixtures exercised invalid intermediate registers or unequal legacy binding lengths. Complete native register refresh and compatible fixture now pass unchanged validation.",
+    "Older bundle capability test assumed nanoparticle-create was unsupported. Updated to require versioned coverage while rejecting legacy inputs.",
+    "New load test initially imported a nonexistent helper. Corrected to compare declared AUTHORING_FIELDS."
+  ],
+  "broad": {
+    "executed": false,
+    "reason": "Required Archive mount unavailable; prior broad baseline results are not certification of this increment.",
+    "selector_dry_run": "FULL  (FULL suite)  [test-dedicated session OPEN]"
+  },
+  "performance": "input_capture_benchmark_p4.json; warm synthetic source-sharing fixture only; no render/UI/large-protein qualification",
+  "frontend_changes": false,
+  "main_js_loc_delta": 0,
+  "visual_check": false,
+  "molecular_algorithms_changed": false,
+  "physical_simulation": false,
+  "limits": [
+    "Protein import <=250KB, 1000 atom records, 4000 bonds; existing capture admission may reject larger composed designs.",
+    "Whole-part imported provenance stays reproduced_import. A proof is not scientific qualification.",
+    "Legacy free/library import, coupled/conjugated placement, synchronous duplex relax and remaining asset families remain explicit compatibility gaps.",
+    "Inactive loadout source closure and preallocation transport bounds need further P4 work.",
+    "Historical topology with ambiguous co-ownership remains unsupported.",
+    "Numerical source/runtime pins change with covered code; old engines are not bundled or silently refreshed.",
+    "P5 UI/drafts/repair and P6 strict automation remain pending."
+  ],
+  "lint": {
+    "changed_python": "Ruff passed",
+    "diff_check": "passed",
+    "memory_baseline_errors": 6,
+    "memory_baseline_warnings": 60
+  },
+  "review": "Independent read-only checkpoint review found no additional blocker; recorded source/transport/engine-upgrade limitations remain."
+}

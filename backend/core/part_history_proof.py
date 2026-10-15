@@ -33,18 +33,21 @@ def import_root(source):
                           source_sha256=hashlib.sha256(raw.encode()).hexdigest())
 
 
-def root_design(root):
+def root_design(root, *, input_sources=None):
     from backend.core.models import Design
     if root.kind == "empty":
         if root.source_json is not None or root.source_sha256 is not None:
             raise ValueError("Empty root cannot contain imported state")
-        return create_empty_part(root.initial_name, root.lattice_type)
+        return create_empty_part(root.initial_name, root.lattice_type).copy_with(
+            input_sources=dict(input_sources or {}))
     if not root.source_json or hashlib.sha256(root.source_json.encode()).hexdigest() != root.source_sha256:
         raise ValueError("Import source digest mismatch")
     source = Design.model_validate_json(root.source_json)
     if source.feature_log or source.recipe_root is not None:
         raise ValueError("Import source contains nested recipe/history")
     source.recipe_root = root
+    if input_sources is not None:
+        source = source.copy_with(input_sources=dict(input_sources))
     return source
 
 
@@ -108,7 +111,7 @@ def assess(design, *, max_entries, execute, dependencies, checkpoint):
     if issues:
         return result
     try:
-        rebuilt = root_design(root)
+        rebuilt = root_design(root, input_sources=design.input_sources)
     except (ValueError, TypeError) as exc:
         issues.append({"code": "invalid_recipe_root", "detail": str(exc)})
         return result
@@ -138,6 +141,9 @@ def assess(design, *, max_entries, execute, dependencies, checkpoint):
         result["status"] = "mismatch"
         issues.append({"code": "authoring_state_mismatch", "fields": mismatches})
     else:
-        result["status"] = "verified" if root.kind == "empty" else "reproduced_import"
-        result["native_editable"] = root.kind == "empty"
+        imported = sorted({resource for _, _, _, contract in rows for resource in contract.imported_sources})
+        result["imported_sources"] = [{"kind": resource.kind, "identity": resource.identity} for resource in imported]
+        native = root.kind == "empty" and not imported
+        result["status"] = "verified" if native else "reproduced_import"
+        result["native_editable"] = native
     return result

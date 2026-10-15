@@ -24,5 +24,13 @@ def preserve_proof_identity(previous, updated, *, kind=None):
              "nanoparticle-create": ("nanoparticle_id", "nanoparticle_version"),
              "nanoparticle-patch": ("nanoparticle_version",),
              "nanoparticle-delete": ("nanoparticle_version",),
+             "protein-import": ("asset_id", "protein_version", "importer_version"),
+             "protein-attach": ("attachment_id", "protein_version"),
+             "protein-attach-patch": ("protein_version",),
+             "protein-attach-delete": ("protein_version",),
+             "duplex-relax": ("relaxation_version", "engine"),
+             "duplex-sync-bindings": ("duplex_ids",),
+             "duplex-create": ("duplex_id",),
+             "duplex-connect": ("duplex_id",),
              "crossover-constraint-create": ("constraint_id",)}.get(kind, ())
     return {**updated, **{key: previous[key] for key in keys if key in previous}}

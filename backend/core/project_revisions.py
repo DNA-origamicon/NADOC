@@ -151,6 +151,51 @@ class ProjectRevisionStore:
             raise ValueError("invalid snapshot checksum")
         return self._project(project_id) / "snapshots" / f"{snapshot_sha256}.nadoc.gz"
 
+    def input_path(self, project_id: str, sha256: str) -> Path:
+        """An immutable recipe input, independent of a revision or branch head."""
+        if len(sha256) != 64 or any(c not in "0123456789abcdef" for c in sha256):
+            raise ValueError("invalid input checksum")
+        return self._project(project_id) / "inputs" / f"{sha256}.blob"
+
+    def stage_input(self, project_id: str, source, data: bytes) -> Path:
+        from backend.core.part_input_sources import SourceContractError, read_verified, verify
+
+        verify(source, data)
+        path = self.input_path(project_id, source.sha256)
+        if path.exists():
+            try:
+                read_verified(path, source)
+                return path
+            except SourceContractError:
+                # Inline bytes were independently verified above. Restore this
+                # derived cache without changing the content-addressed identity.
+                pass
+        _atomic_bytes(path, data)
+        return path
+
+    def read_input(self, project_id: str, source) -> bytes:
+        from backend.core.part_input_sources import read_verified
+
+        return read_verified(self.input_path(project_id, source.sha256), source)
+
+    def stage_design_inputs(self, design: Design) -> None:
+        from backend.core.part_input_sources import EmbeddedResolver, portable_sources
+
+        sources = portable_sources(design)
+        resolve = EmbeddedResolver(design.input_sources)
+        for source in sources.values():
+            data = resolve(source)
+            try:
+                self.stage_input(design.id, source, data)
+            except OSError:
+                # The snapshot embeds the authoritative verified bytes. This
+                # derived cache is optional; its I/O failure must not prevent a
+                # portable revision/package from being saved or received.
+                import logging
+                logging.getLogger(__name__).warning(
+                    "Could not materialize derived recipe input cache %s", source.sha256)
+
+
     def branch_head(self, project_id: str, loadout_id: str) -> str | None:
         path = self.ref_path(project_id, loadout_id)
         if not path.is_file():
@@ -181,6 +226,7 @@ class ProjectRevisionStore:
         Cross-process ref locking is introduced with peer sync; this local CAS
         already closes stale-client conflicts and keeps the storage contract.
         """
+        self.stage_design_inputs(design)
         stripped = design.model_copy(update={"loadouts": [], "active_loadout_id": None, "last_editable_loadout_id": None})
         snapshot = stripped.model_dump_json().encode("utf-8")
         snapshot_sha = hashlib.sha256(snapshot).hexdigest()
@@ -464,6 +510,7 @@ class ProjectRevisionStore:
         design = Design.model_validate_json(raw)
         if design.id != project_id:
             raise ValueError("project snapshot identity mismatch")
+        self.stage_design_inputs(design)
         destination = self.snapshot_path(project_id, snapshot_sha256)
         if not destination.exists():
             _atomic_bytes(destination, gzip.compress(raw, mtime=0))
@@ -506,7 +553,10 @@ class ProjectRevisionStore:
             )
         if hashlib.sha256(raw).hexdigest() != data.get("snapshot_sha256"):
             raise ValueError("project revision snapshot checksum mismatch")
-        return Design.model_validate_json(raw)
+        design = Design.model_validate_json(raw)
+        from backend.core.part_input_sources import portable_sources
+        portable_sources(design)
+        return design
 
     def read_revision(self, project_id: str, revision_id: str) -> StoredRevision:
         data = json.loads(

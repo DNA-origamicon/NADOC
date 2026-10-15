@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from backend.core.dimensions import Dimension
 from backend.core.lattice_frame_model import LatticeFrame, validate_frame_references
 from backend.core.part_history_contract import PartRecipeRoot
+from backend.core.part_input_sources import Digest, EmbeddedInput, MAX_SOURCES
 
 
 # ── Enumerations ──────────────────────────────────────────────────────────────
@@ -581,21 +582,16 @@ class Duplex(BaseModel):
     against ``right`` walked 3'→5'. Many duplexes may sit on one overhang
     (multivalency); the only integrity invariant is that no bp pairs twice on the
     same overhang. Unpaired bp are simply uncovered; a maximal uncovered run is a
-    toehold (derived, later phase).
+    toehold derived by the pairing helpers.
 
     v1 (Q3): both ends are EQUAL length — mismatches (non-WC bases) are allowed
     and coloured, but bulges (length-asymmetric, gapped) are deferred. The per-base
-    Watson-Crick classification lives in ``backend.core.duplex`` (Phase 1).
+    Watson-Crick classification lives in ``backend.core.duplex``.
 
     ``driver`` (Q4) names which side's helix HOSTS the duplex when applied (the
     other side rides it). User-set via a toggle; for multivalent cases the build
-    rule is "longest overhang drives". The geometry-coupling fields
-    (``target_joint_id`` / ``locked_angle_deg``) are reserved for the Phase-4
-    derivation and unused today.
-
-    Phase 0: this model exists and validates but NOTHING consumes ``Design.duplexes``
-    yet — migration from legacy ``OverhangBinding`` is available in
-    ``backend.core.duplex`` but not auto-run, so load behavior is unchanged.
+    rule is "longest overhang drives". Geometry-coupling fields retain the
+    associated joint and angle when a binding workflow supplies them.
     """
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -607,7 +603,7 @@ class Duplex(BaseModel):
     bound: bool = False
     binding_mode: Literal["duplex", "toehold"] = "duplex"
     allow_n_wildcard: bool = True
-    # Reserved for the Phase-4 geometry derivation (unused in Phases 0-3).
+    # Optional coupling to a bound joint's authored pose.
     target_joint_id: Optional[str] = None
     locked_angle_deg: Optional[float] = None
     connection_type: Optional[str] = None
@@ -1917,6 +1913,12 @@ class OverhangRotationLogEntry(FeatureLogProvenance):
 # `extrude-*` are continuation/segment ops that grow an existing design.
 # `overhang-extrude` adds a single-helix overhang stub from a nick.
 SnapshotOpKind = Literal[
+    "duplex-relax",
+    "duplex-sync-bindings",
+    "duplex-create",
+    "duplex-connect",
+    "duplex-patch",
+    "duplex-delete",
     "branch-seed",
     "independent-section-seed",
     "auto-scaffold-bounded-section",
@@ -3135,6 +3137,9 @@ class Design(BaseModel):
     # Absent on legacy documents. Never infer an empty/import root from a saved
     # recovery snapshot; explicit provenance is required for proof replay.
     recipe_root: Optional[PartRecipeRoot] = None
+    # Immutable imported bytes travel with portable documents. Commands name
+    # their digest; parsed geometry remains independently regenerated output.
+    input_sources: Dict[Digest, EmbeddedInput] = Field(default_factory=dict, max_length=MAX_SOURCES)
     dimensions: List[Dimension] = Field(default_factory=list)
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     lattice_frames: List[LatticeFrame] = Field(default_factory=list)
@@ -3151,9 +3156,8 @@ class Design(BaseModel):
     overhang_connections: List[OverhangConnection] = Field(default_factory=list)
     overhang_bindings: List[OverhangBinding] = Field(default_factory=list)
     connection_versions: List[ConnectionVersion] = Field(default_factory=list)
-    # Proposal-B overhang pairing graph (register-bearing Duplex edges). Phase 0:
-    # present + validated, but nothing consumes it yet — legacy designs load with
-    # this empty and behavior is unchanged. See project_overhang_duplex_foundation.md.
+    # Register-bearing overhang pairing edges, consumed by pairing/relocation
+    # and binding workflows. Legacy files may omit the graph.
     duplexes: List[Duplex] = Field(default_factory=list)
     # Flexible ssDNA segments (pose & explore mechanisms): user-marked ssDNA beads
     # (marks) + derived ties between EXISTING clusters (connections). The rigid
@@ -3645,6 +3649,10 @@ class Design(BaseModel):
         This keeps old .nadoc files working correctly without a migration step.
         """
         design = cls.model_validate(json.loads(text))
+        # Recipe-backed documents preserve authored absence as well as presence.
+        # Legacy inference would silently add topology outside their feature log.
+        if design.recipe_root is not None:
+            return design
         from backend.core.backbone_continuations import backbone_continuation_edges
 
         continuations = backbone_continuation_edges(design)

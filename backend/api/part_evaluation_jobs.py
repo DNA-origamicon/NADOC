@@ -17,7 +17,6 @@ from backend.api.part_evaluation import EvaluationRequest
 from backend.api.part_evaluation_worker import EvaluationWorker
 from backend.api.part_history_verification import _slot
 from backend.api.part_verification_jobs import Job, supervise
-from backend.core.part_history_contract import FIELD_ROLES
 from backend.core.part_verification_capture import CaptureLimit
 
 
@@ -143,10 +142,8 @@ def commit(identity):
             raise HTTPException(409, detail="Candidate changed during decoding; evaluation cannot be committed")
         # The worker intentionally omitted physical/display state. Preserve
         # it from the unchanged live source; it never becomes replay evidence.
-        candidate = candidate.copy_with(**{
-            name: getattr(source, name) for name, role in FIELD_ROLES.items()
-            if role in {"presentation", "physical", "document_identity"}
-        })
+        from backend.core.part_recipe_publication import preserve_document_state
+        candidate = preserve_document_state(source, candidate)
         with _lock:
             _lookup(identity)  # expiration is checked again after candidate decoding
             if job.cancelled.is_set():

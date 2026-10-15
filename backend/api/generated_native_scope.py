@@ -11,8 +11,8 @@ from uuid import UUID
 from backend.core.part_command_errors import ReferenceResolutionError
 from backend.core.part_history_proof import AUTHORING_FIELDS
 from backend.core.part_scope_references import (
-    COLLECTIONS, check_injective, identity_index, namespace_mapping,
-    referenced_resources, remap_design,
+    COLLECTIONS, check_injective, namespace_mapping, referenced_resources,
+    remap_design, scope_identity_index as identity_index,
 )
 
 
