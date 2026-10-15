@@ -8268,42 +8268,9 @@ def delete_feature(
 
 
 def _edit_dispatch_run(op_kind: str, pre_state: Design, params: dict) -> Design:
-    """Validate ``params`` against the schema for ``op_kind`` and return the
-    new design produced by replaying the op on ``pre_state``. Raises HTTP 400
-    on schema mismatch, HTTP 422 on op-runtime errors."""
-    if op_kind == "sweep":
-        from backend.core.sweep import SweepRequest, build_sweep
-        return build_sweep(pre_state, SweepRequest.model_validate(params))
-    # Old saved features retain the clustering policy under which they were made.
-    params = {"separate_fresh_extrusions": False, **params}
-    if op_kind == "bundle-create":
-        body = BundleRequest.model_validate(params)
-        cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
-        return _build_bundle(cells, body)
-    if op_kind == "extrude-segment":
-        body = BundleSegmentRequest.model_validate(params)
-        updated, report = _build_extrude_segment(pre_state, body)
-        from backend.core.cluster_reconcile import reconcile_cluster_membership
-        return reconcile_cluster_membership(pre_state, updated, report)
-    if op_kind == "extrude-continuation":
-        body = BundleContinuationRequest.model_validate(params)
-        updated, report = _build_extrude_continuation(pre_state, body)
-        from backend.core.cluster_reconcile import reconcile_cluster_membership
-        return reconcile_cluster_membership(pre_state, updated, report)
-    if op_kind == "extrude-deformed-continuation":
-        body = BundleDeformedContinuationRequest.model_validate(params)
-        updated, report = _build_extrude_deformed_continuation(pre_state, body)
-        from backend.core.cluster_reconcile import reconcile_cluster_membership
-        return reconcile_cluster_membership(pre_state, updated, report)
-    if op_kind == "overhang-extrude":
-        body = OverhangExtrudeRequest.model_validate(params)
-        updated, _ = _build_overhang_extrude(pre_state, body)
-        return updated
-    raise HTTPException(
-        400,
-        detail=f"op_kind {op_kind!r} is not editable via this endpoint. "
-        "Auto-ops (auto-scaffold, auto-break, etc.) should be reverted and re-run.",
-    )
+    """Replay a supported part snapshot command through the shared registry."""
+    from backend.api.part_feature_commands import replay_snapshot
+    return replay_snapshot(op_kind, pre_state, params)
 
 
 class EditFeatureBody(BaseModel):
@@ -8793,94 +8760,9 @@ def _rebase_joints_to_cts(design: "Design", new_cts: list) -> list:
 
 
 def _replay_minor_op(design: Design, op_subtype: str, params: dict) -> Design:
-    """Replay one minor mutation against ``design`` and return the new design.
-
-    Used by mid-cluster slider seek: when seeking to ``(position=K,
-    sub_position=j)``, we hydrate the cluster's pre-state and then replay
-    ``children[0..j]`` in order via this dispatcher.
-
-    Each branch validates ``params`` against the original request model and
-    calls the same ``_build_<op>`` pure builder used by the live endpoint.
-    Raises ``NotImplementedError`` for subtypes whose builders haven't been
-    extracted yet — the caller (``_seek_snapshot_base``) catches this and
-    falls back to cluster post-state (no granular mid-cluster seek for those
-    subtypes; deferred to v2).
-    Raises ``HTTPException`` for genuine replay failures (target removed,
-    invalid params).
-    """
-    if op_subtype == "nick":
-        return _build_nick(design, NickRequest.model_validate(params))
-    if op_subtype == "nick-batch":
-        return _build_nick_batch(design, NickBatchRequest.model_validate(params))
-    if op_subtype == "crossover-place":
-        d, _x, _ligated = _build_place_crossover(
-            design, PlaceCrossoverRequest.model_validate(params)
-        )
-        return d
-    if op_subtype == "crossover-place-batch":
-        d, _xs, _skipped = _build_place_crossover_batch(
-            design, PlaceCrossoverBatchRequest.model_validate(params)
-        )
-        return d
-    if op_subtype == "strand-end-resize":
-        return _build_strand_end_resize(
-            design, StrandEndResizeRequest.model_validate(params)
-        )
-    if op_subtype == "domain-shift":
-        return _build_domain_shift(design, DomainShiftRequest.model_validate(params))
-    if op_subtype == "strand-delete":
-        return _build_delete_strand(design, params["strand_id"])
-    if op_subtype == "strand-delete-batch":
-        return _build_delete_strands_batch(
-            design, StrandBatchDeleteRequest.model_validate(params)
-        )
-    if op_subtype == "domain-delete":
-        return _build_delete_domain(design, params["strand_id"], params["domain_index"])
-    if op_subtype == "helix-delete":
-        out = design.model_copy(deep=True)
-        idx = next(
-            (i for i, h in enumerate(out.helices) if h.id == params["helix_id"]), None
-        )
-        if idx is None:
-            raise HTTPException(
-                404, detail=f"Helix {params['helix_id']!r} not found at replay."
-            )
-        out.helices.pop(idx)
-        return out
-    if op_subtype == "crossover-delete":
-        cid = params["crossover_id"]
-        xover = next((x for x in design.crossovers if x.id == cid), None)
-        if xover is None:
-            raise HTTPException(404, detail=f"Crossover {cid!r} missing at replay.")
-        new_strands = _desplice_strands_for_crossover(
-            design, xover.half_a, xover.half_b
-        )
-        out = design.model_copy(deep=True)
-        out.crossovers = [x for x in out.crossovers if x.id != cid]
-        out.strands = new_strands
-        return out
-    if op_subtype in ("joint-place", "joint-update", "joint-delete"):
-        # Builders live in routes_cluster_joints.py (extracted). Import them
-        # function-locally: that module imports _design_response back from this
-        # one, so a top-level import would be circular.
-        from backend.api.routes_cluster_joints import (
-            _build_add_joint,
-            _build_update_joint,
-            _build_delete_joint,
-        )
-
-        if op_subtype == "joint-place":
-            return _build_add_joint(design, params)
-        if op_subtype == "joint-update":
-            return _build_update_joint(design, params)
-        return _build_delete_joint(design, params)
-
-    # Subtype recognized but builder not yet extracted; treat as v2-deferred.
-    # _seek_snapshot_base catches this and falls back to cluster post-state.
-    raise NotImplementedError(
-        f"Mid-cluster replay for op_subtype {op_subtype!r} is not implemented in v1. "
-        "Falling back to cluster post-state."
-    )
+    """Replay a routing child; unsupported legacy kinds retain the caller fallback."""
+    from backend.api.part_feature_commands import replay_minor
+    return replay_minor(op_subtype, design, params)
 
 
 def _topology_substitute(design: Design, snap_design: Design) -> Design:

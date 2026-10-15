@@ -6,6 +6,31 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 ---
 # Feature Log Overhaul + Tabbed Sidebar (commit 873f3e6, branch feature-log-update, 2026-05-02)
 
+## Standard part history foundation (2026-10-14)
+
+The user explicitly deferred assembly history implementation until needed; it
+must not block standard-part validation work. The current sequence and deferred
+ledger are in `docs/audits/feature_history_20261014/implementation.md` and
+`assembly_deferred.md`.
+
+`api/feature_recording.py` now owns failure-atomic snapshot/minor recording,
+including restore of full bounded undo/redo, revision and request markers on
+callback, reconcile, encode/diff, validation or publication failure/cancellation.
+Undo/revision publish only after validation. This preserves editable drafts and
+the existing single design copy; legacy callbacks still run under the state lock.
+It is not a pure isolated evaluator or a history certification gate.
+
+`core/feature_registry.py` declares six snapshot and 14 minor executors;
+`api/part_feature_commands.py` resolves their existing schemas/builders. Crud
+entry points remain compatibility adapters, and dependency replayability derives
+from the registry. `/design/features/capabilities` exposes executor availability,
+explicitly not reproducibility certification. Frontend edit schemas are unchanged.
+
+Unused payload clearing/accounting, the old eviction alias, obsolete budget
+constant and unused delta-type set were removed. Part recording no longer calls
+the no-op eviction hook; the hook remains for the deferred assembly adapter.
+Tests assert retention directly instead of monkeypatching an inert budget.
+
 ## Sweep edits after downstream work (2026-10-09)
 
 Sweep Edit is available after snapshots and Fine Routing. `sweep_history.py`
@@ -324,7 +349,7 @@ geometry baked into a later snapshot's POST-state).
 - **Don't use `design_state.snapshot()` + `set_design_silent_reconciled()` for new auto-op endpoints.** Use `mutate_with_feature_log` instead. The two patterns coexist (older non-snapshot routes still use the former) but new endpoints should standardize on the wrapper.
 - **`_DESIGN_PANEL_IDS` at [main.js:3288](frontend/src/main.js#L3288)** still includes the four moved sections (`#physics-section`, etc.). Lookup is by `getElementById`, so the move is transparent — keep them in the list so they remain hidden during assembly mode.
 - **`_recenter_design` is for caDNAno / scadnano imports only.** Native `.nadoc` loads (`/design/load`, `/design/import`) do NOT recenter — see `feedback_native_files_preserve_positions.md`.
-- **`mutate_with_feature_log` pushes to undo on entry**, then runs `fn`. If `fn` raises, it restores the design, undo stack, and redo stack atomically. Invalid pattern requests must preserve redo.
+- **Feature/minor recording publishes undo only after recording and validation succeed.** Exceptions or cancellation anywhere in that transaction restore design, full undo/redo, revision and request markers. Invalid pattern requests must preserve redo. Existing invalid-draft validation reports remain permitted; strict agent enforcement is separate future work.
 - **The `body` param in `params` is `body.model_dump(mode='json')`** — must be JSON-serializable. Pydantic Direction enums become strings, etc. Edit endpoint validates by reconstructing `BundleSegmentRequest.model_validate(params)` etc.
 - **Snapshot decode without recursion guarantee:** `encode_design_snapshot` strips `feature_log` and `feature_log_cursor` before encoding. If you ever want to embed the log itself in a snapshot, you'd need a different mechanism — currently the recursion check is enforced by the encode side, not the schema.
 - **Tests must not introduce flakiness.** The `test_seamless_router::test_teeth_closing_zig` is a known pre-existing flake (UUID ordering). Five other tests are pre-existing failures on master, deselected in the standard test command. New tests should NOT depend on UUID ordering.

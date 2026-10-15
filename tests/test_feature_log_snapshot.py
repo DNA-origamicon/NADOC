@@ -567,9 +567,8 @@ def test_old_nadoc_loads_without_snapshot_entries():
 # ── Test 7: budget-driven eviction ────────────────────────────────────────────
 
 
-def test_chained_auto_ops_never_evict_revert_payloads(monkeypatch):
-    """Even the former tiny budget must not make visible history irreversible."""
-    monkeypatch.setattr(design_state, "MAX_SNAPSHOT_BUDGET_BYTES", 100)
+def test_chained_auto_ops_retain_revert_payloads():
+    """Every recorded operation retains its recovery payloads."""
 
     client.post("/api/design/auto-break")
     client.post("/api/design/auto-merge")
@@ -673,23 +672,23 @@ def test_seek_between_two_snapshots():
     )
 
 
-def test_seek_keeps_all_snapshots_under_former_budget(monkeypatch):
+def test_seek_retains_all_snapshot_payloads():
     """Seeking remains exact because no historical payload is discarded."""
-    monkeypatch.setattr(design_state, "MAX_SNAPSHOT_BUDGET_BYTES", 100)
 
-    _post("/api/design/auto-break")  # will be evicted
-    _post("/api/design/auto-merge")  # will be evicted
+    _post("/api/design/auto-break")  # retained
+    _post("/api/design/auto-merge")  # retained
     _post("/api/design/auto-break")  # newest — kept
 
     log = design_state.get_or_404().feature_log
     assert all(not entry.evicted for entry in log)
+    expected = design_state.decode_design_snapshot(log[0].post_state_gz_b64)
 
-    # Seeking to position 0 (oldest snapshot, evicted) must not raise; falls
-    # back to the next non-evicted snapshot's pre-state.
+    # Seeking to the oldest snapshot restores its recorded post-state.
     _post("/api/design/features/seek", {"position": 0})
     d = design_state.get_or_404()
-    # Coherent state: at least scaffold + staples present, no exception.
-    assert any(s.strand_type.value == "scaffold" for s in d.strands)
+    # Retention promises the recorded topology, not just a nonempty result.
+    for field in ("helices", "strands", "crossovers", "overhangs", "forced_ligations"):
+        assert getattr(d, field) == getattr(expected, field)
 
 
 # ── Extrusion logging + F0 = empty workspace + editability ──────────────────

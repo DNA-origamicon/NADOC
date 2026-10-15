@@ -116,6 +116,13 @@ def preview_instance_features(instance_id: str, body: SeekFeaturesBody):
             "transform": instance.transform.values}
 
 
+@router.get("/design/features/capabilities")
+def get_part_feature_capabilities() -> dict:
+    """Executor availability only; this endpoint does not certify a design."""
+    from backend.core.feature_registry import part_replay_capabilities
+    return part_replay_capabilities()
+
+
 @router.get("/design/features/evaluation-plan")
 def get_evaluation_plan(position: int = -1, sub_position: int | None = None) -> dict:
     """Explain target-local overwrite proofs without changing state or decoding history."""

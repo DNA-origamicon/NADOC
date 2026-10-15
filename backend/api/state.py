@@ -25,7 +25,6 @@ Usage
 from __future__ import annotations
 
 import base64
-import datetime as _dt
 import gzip
 import threading
 from collections import deque
@@ -39,7 +38,7 @@ from backend.api.doc_context import (
     current_request_feature_log_entry_id as _doc_current_request_feature_log_entry_id,
     get_current_doc,
     set_request_revision,
-    set_request_feature_log_entry_id,
+    set_request_feature_log_entry_id as set_request_feature_log_entry_id,
 )
 from backend.core.cluster_reconcile import (
     MutationReport,
@@ -50,7 +49,6 @@ from backend.core.models import (
     MinorMutationLogEntry,
     MinorOpSubtype,
     ProteinAsset,
-    RoutingClusterLogEntry,
     SnapshotLogEntry,
     SnapshotOpKind,
 )
@@ -82,12 +80,6 @@ def _snapshot_copy(design: Design) -> Design:
 
 
 MAX_UNDO_STEPS = 50
-
-# Retained for API/test compatibility. Feature history is intentionally no
-# longer evicted: every visible feature-log entry must remain revertable. Wire
-# responses are slimmed separately in ``backend.api.crud`` so keeping canonical
-# recovery snapshots does not put them back on the click-to-render hot path.
-MAX_SNAPSHOT_BUDGET_BYTES = 5_000_000
 
 
 def current_request_revision() -> int | None:
@@ -620,42 +612,6 @@ def decode_design_snapshot(payload_b64: str) -> Design:
     return Design.model_validate_json(raw)
 
 
-def _payload_total_bytes(entry: SnapshotLogEntry | RoutingClusterLogEntry) -> int:
-    """Combined compressed payload size (pre + post, plus per-child diffs for a
-    cluster) for a payload-bearing entry."""
-    if isinstance(entry, SnapshotLogEntry):
-        return len(entry.design_snapshot_gz_b64) + len(entry.post_state_gz_b64)
-    # RoutingClusterLogEntry — pre/post plus the per-child diff payloads.
-    total = len(entry.pre_state_gz_b64) + len(entry.post_state_gz_b64)
-    if not entry.diffs_evicted:
-        for c in entry.children:
-            total += (
-                len(c.diff_added_b64)
-                + len(c.diff_removed_b64)
-                + len(c.diff_modified_b64)
-            )
-    return total
-
-
-def _clear_payload(entry: SnapshotLogEntry | RoutingClusterLogEntry) -> None:
-    """Drop both pre+post bytes from a snapshot OR cluster entry; flip evicted=True.
-    For a cluster, also drop the per-child diff payloads (diffs_evicted=True) —
-    once pre/post are gone the cluster is non-revertable anyway, so its diffs
-    are useless. Entry + (cluster) children remain visible historically."""
-    if isinstance(entry, SnapshotLogEntry):
-        entry.design_snapshot_gz_b64 = ""
-        entry.post_state_gz_b64 = ""
-    else:
-        entry.pre_state_gz_b64 = ""
-        entry.post_state_gz_b64 = ""
-        for c in entry.children:
-            c.diff_added_b64 = ""
-            c.diff_removed_b64 = ""
-            c.diff_modified_b64 = ""
-        entry.diffs_evicted = True
-    entry.evicted = True
-
-
 def _evict_oldest_payloads_if_over_budget(design: Design) -> None:
     """Compatibility no-op: canonical feature snapshots are never discarded.
 
@@ -666,10 +622,6 @@ def _evict_oldest_payloads_if_over_budget(design: Design) -> None:
     recovery payload.
     """
     return None
-
-
-# Backward-compat alias; old call site name. Prefer the new name in new code.
-_evict_oldest_snapshots_if_over_budget = _evict_oldest_payloads_if_over_budget
 
 
 def mutate_with_feature_log(
@@ -704,115 +656,19 @@ def mutate_with_feature_log(
     auto-break, auto-merge, auto-crossover, create-near/far-ends) and bulk
     overhang manager operations.
     """
+    from backend.api.feature_recording import record_feature
+
     with _lock:
         s = _session()
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
         if expected_revision is not None and s.revision != expected_revision:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "message": "Design changed while this operation was being prepared.",
-                    "expected_revision": expected_revision,
-                    "current_revision": s.revision,
-                },
-            )
+            raise HTTPException(409, detail={
+                "message": "Design changed while this operation was being prepared.",
+                "expected_revision": expected_revision, "current_revision": s.revision,
+            })
         _assert_active_loadout_editable(s.design)
-        before = _snapshot_copy(s.design)
-        history_before = deque(s.history, maxlen=s.history.maxlen)
-        redo_before = deque(s.redo, maxlen=s.redo.maxlen)
-        s.history.append(before)
-        s.redo.clear()
-
-        payload_b64, uncompressed_size = encode_design_snapshot(before)
-        try:
-            result = fn(s.design)
-        except Exception:
-            # A callback may mutate in place before discovering an invalid or
-            # duplicate operation. Restore all transaction-owned state so a
-            # rejected request changes neither the design nor undo/redo.
-            s.design = before
-            s.history.clear()
-            s.history.extend(history_before)
-            s.redo.extend(redo_before)
-            raise
-        # Three return shapes supported:
-        #   - Design                      : pure-functional, no custom report.
-        #   - (Design, MutationReport)    : pure-functional + custom reconcile hint.
-        #   - MutationReport / None       : in-place mutation; report optional.
-        if (
-            isinstance(result, tuple)
-            and len(result) == 2
-            and isinstance(result[0], Design)
-        ):
-            s.design = result[0]
-            report = result[1] if isinstance(result[1], MutationReport) else None
-        elif isinstance(result, Design):
-            s.design = result
-            report: MutationReport | None = None
-        else:
-            report = result if isinstance(result, MutationReport) else None
-
-        reconciled = reconcile_cluster_membership(before, s.design, report)
-        if op_kind in ("auto-break", "full-autostaple", "cluster-join"):
-            # Autobreak / full-autostaple deliberately leave crossovers unligated
-            # so staples stay at or below the length cap.  Retrying pre-existing
-            # unligated crossovers here would re-ligate across those breaks,
-            # busting the 56-nt cap and undoing the routed topology. Join also
-            # preserves existing fine-routing nicks outside its explicit splice.
-            s.design = reconciled
-        else:
-            s.design = _retry_pending_ligations(before, reconciled)
-
-        # A canonical product endpoint may not silently become stale or non-T.
-        # Reject the enclosing edit inside this same undo transaction; the user
-        # can remove the lesion explicitly and retry. Legacy scadnano-only IDs
-        # remain losslessly stored and are handled by the simulation gate.
-        from backend.core.photoproducts import stale_photoproduct_ids
-
-        stale_cpd_ids = stale_photoproduct_ids(s.design)
-        if stale_cpd_ids:
-            s.design = before
-            s.history.clear()
-            s.history.extend(history_before)
-            s.redo.clear()
-            s.redo.extend(redo_before)
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "photoproduct_dependency",
-                    "message": "This edit would delete or change a formed TT-CPD endpoint. Remove the photoproduct first, then retry.",
-                    "photoproduct_ids": stale_cpd_ids,
-                },
-            )
-
-        # Capture POST-state AFTER reconcile + retry so back-and-forth seeking
-        # can restore the live topology even after the slider has been scrubbed
-        # back through this entry.
-        post_b64, post_size = encode_design_snapshot(s.design)
-
-        snap_entry = SnapshotLogEntry(
-            op_kind=op_kind,
-            label=label,
-            timestamp=_dt.datetime.now(_dt.timezone.utc).isoformat(),
-            params=params,
-            design_snapshot_gz_b64=payload_b64,
-            snapshot_size_bytes=uncompressed_size,
-            post_state_gz_b64=post_b64,
-            post_state_size_bytes=post_size,
-        )
-        s.design.feature_log.append(snap_entry)
-        _evict_oldest_payloads_if_over_budget(s.design)
-
-        validation = validate_design(s.design)
-        _bump_revision(s)
-        # So _design_response's default blob-stripping preserves THIS entry's
-        # body even when the calling route forgets to pass
-        # preserve_feature_log_id explicitly — the client has never seen this
-        # id before, so its cache-merge can't backfill a missing body the way
-        # it can for an existing (already-cached) entry.
-        set_request_feature_log_entry_id(snap_entry.id)
-        return s.design, validation, snap_entry
+        return record_feature(s, op_kind, label, params, fn)
 
 
 def mutate_with_minor_log(
@@ -844,111 +700,14 @@ def mutate_with_minor_log(
 
     Returns ``(design, validation_report, minor_entry)``.
     """
+    from backend.api.feature_recording import record_minor
+
     with _lock:
         s = _session()
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
         _assert_active_loadout_editable(s.design)
-        before = _snapshot_copy(s.design)
-        redo_before = deque(s.redo, maxlen=s.redo.maxlen)
-        s.history.append(before)
-        s.redo.clear()
-
-        # Detect open cluster: last entry must be a non-evicted RoutingClusterLogEntry.
-        last_entry = s.design.feature_log[-1] if s.design.feature_log else None
-        is_append = (
-            isinstance(last_entry, RoutingClusterLogEntry)
-            and not last_entry.evicted
-            and last_entry.pre_state_gz_b64 != ""
-        )
-
-        # Capture pre-state ONLY for new clusters; append mode reuses the
-        # cluster's existing pre-state.
-        if not is_append:
-            pre_b64, pre_size = encode_design_snapshot(before)
-
-        # Run the user's mutation.
-        result = fn(s.design)
-        if isinstance(result, Design):
-            s.design = result
-            report: MutationReport | None = None
-        else:
-            report = result if isinstance(result, MutationReport) else None
-
-        reconciled = reconcile_cluster_membership(before, s.design, report)
-        s.design = _retry_pending_ligations(before, reconciled)
-
-        from backend.core.photoproducts import stale_photoproduct_ids
-
-        stale_cpd_ids = stale_photoproduct_ids(s.design)
-        if stale_cpd_ids:
-            s.design = before
-            s.history.pop()
-            s.redo.extend(redo_before)
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "photoproduct_dependency",
-                    "message": "This edit would delete or change a formed TT-CPD endpoint. Remove the photoproduct first, then retry.",
-                    "photoproduct_ids": stale_cpd_ids,
-                },
-            )
-
-        # Re-encode post-state after reconcile + retry so back-and-forth
-        # seeking restores the live topology even after the slider has been
-        # scrubbed back through the cluster.
-        post_b64, post_size = encode_design_snapshot(s.design)
-
-        # Per-child topology diff (pre-child boundary → post-reconcile state).
-        # `before` is ALWAYS the pre-child boundary: for a new cluster it equals
-        # the cluster pre_state; for an append it equals the previous child's
-        # resulting state (the live design before this fn ran). Captured AFTER
-        # reconcile + ligation retry, so the diff already includes those effects
-        # and reconstruction never re-reconciles. See backend.core.design_diff.
-        from backend.core.design_diff import encode_child_diff
-
-        d_added, d_removed, d_modified, d_size = encode_child_diff(before, s.design)
-
-        now_iso = _dt.datetime.now(_dt.timezone.utc).isoformat()
-        minor_entry = MinorMutationLogEntry(
-            op_subtype=op_subtype,
-            label=label,
-            timestamp=now_iso,
-            params=params,
-            diff_added_b64=d_added,
-            diff_removed_b64=d_removed,
-            diff_modified_b64=d_modified,
-            diff_size_bytes=d_size,
-        )
-
-        if is_append:
-            cluster = s.design.feature_log[-1]
-            cluster.children.append(minor_entry)
-            cluster.post_state_gz_b64 = post_b64
-            cluster.post_state_size_bytes = post_size
-        else:
-            cluster = RoutingClusterLogEntry(
-                label="Fine Routing",
-                timestamp=now_iso,
-                children=[minor_entry],
-                pre_state_gz_b64=pre_b64,
-                pre_state_size_bytes=pre_size,
-                post_state_gz_b64=post_b64,
-                post_state_size_bytes=post_size,
-            )
-            s.design.feature_log.append(cluster)
-
-        _evict_oldest_payloads_if_over_budget(s.design)
-
-        validation = validate_design(s.design)
-        _bump_revision(s)
-        # Preserve the PARENT cluster entry, not the child: _strip_feature_log_payloads
-        # only matches preserve_entry_ids against top-level entry ids, and a
-        # preserved parent keeps all its children's diff blobs too (see its
-        # docstring). Matters most for a brand-new cluster (is_append is
-        # False) — its id has never reached the client before.
-        set_request_feature_log_entry_id(cluster.id)
-        return s.design, validation, minor_entry
+        return record_minor(s, op_subtype, label, params, fn)
 
 
 def _restore_edit_snapshot(snapshot: Design, current: Design) -> Design:
