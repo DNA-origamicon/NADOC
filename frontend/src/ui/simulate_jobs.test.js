@@ -1095,3 +1095,13 @@ describe('external simulation storage availability', () => {
     expect(mdPanel.refresh).toHaveBeenCalledTimes(1)
   })
 })
+
+
+it('shows last synced on a resumed Alpine progress readout', () => {
+  const text = _stepText({ execution_target: 'alpine', status: 'running',
+    progress_fraction: .34, progress_synced: true, steps: 50000000,
+    live_metrics: { retrieved_at: 1792096800 } })
+  expect(text).toContain('synced')
+  expect(text).toContain('Last synced')
+  expect(text).toContain('34')
+})

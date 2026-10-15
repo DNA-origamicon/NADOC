@@ -233,7 +233,7 @@ def parse_progress_listing(text: str) -> tuple[set[str], set[str]]:
         if name.endswith(".coor"):
             finished.add(name[: -len(".coor")])
         elif name.endswith(".log"):
-            started.add(name[: -len(".log")])
+            started.add(name[: -len(".log")].removesuffix(".resume"))
     return finished, started
 
 
@@ -771,6 +771,27 @@ async def poll_remote_progress(job: MdJob, *, conn=None) -> bool:
         metrics["dcd_size_bytes"] = dcd_bytes
         metrics["total_size_bytes"] = total_bytes
         metrics_blob = json.dumps(metrics)
+    # Already-running allocations may still use the old collector, which looks
+    # for <segment>.resume.restart.xsc although NAMD writes <segment>.restart.xsc.
+    # Read the small checkpoint header for these legacy continuation collectors.
+    try:
+        metrics = json.loads(metrics_blob.strip())
+    except (ValueError, TypeError):
+        metrics = {}
+    if isinstance(metrics, dict) and str(metrics.get("segment", "")).endswith(".resume"):
+        canonical = metrics["segment"].removesuffix(".resume")
+        if any(s.name == canonical for s in job.segments):
+            checkpoint = await conn.run(
+                f"cat {_shq(scratch + '/output/' + canonical + '.restart.xsc')} 2>/dev/null"
+            )
+            for line in reversed((checkpoint.stdout or "").splitlines()):
+                if line.strip() and not line.lstrip().startswith("#"):
+                    try:
+                        metrics["step"] = max(int(float(line.split()[0])), int(metrics.get("step") or 0))
+                    except (ValueError, IndexError, TypeError):
+                        pass
+                    break
+            metrics_blob = json.dumps(metrics)
     finished, started = parse_progress_listing(listing)
     advanced = apply_remote_progress(job, finished, started)
     health_changed = apply_live_health(job, health_blob)
@@ -801,6 +822,11 @@ def apply_live_metrics(job: MdJob, blob: str) -> bool:
         return False
     if not isinstance(data, dict) or not data:
         return False
+    segment = data.get("segment")
+    if isinstance(segment, str) and segment.endswith(".resume"):
+        canonical = segment.removesuffix(".resume")
+        if any(s.name == canonical for s in job.segments):
+            data["segment"] = canonical
     # `collected_at` inside the blob is the COMPUTE NODE's clock.  Progress is
     # extrapolated from this reading between sign-ins, so it needs an anchor on
     # NADOC's own clock — otherwise any host/node skew becomes fake progress.
@@ -976,6 +1002,11 @@ async def resume_job(
         resume_conf_for=resume_conf_for or None,
         early_stop_relax=early_stop,
     )
+    from backend.core import remote_live_metrics
+    await _put_text(
+        conn, Path(remote_live_metrics.__file__).read_text(),
+        f"{scratch}/nadoc_live_metrics.py", workspace_dir, job,
+    )
     # Re-stage transition helpers straight into scratch. A recovery must not depend on
     # the original helper surviving scratch cleanup or on the exact source version
     # uploaded by the failed attempt.
@@ -1012,6 +1043,7 @@ async def resume_job(
     job.status = MdStatus.queued
     job.queued_at = time.time()
     job.slurm_started_at = None
+    job.slurm_diagnostics = None
     job.resubmit_count = (job.resubmit_count or 0) + 1
     job.resumable = False
     job.error = None

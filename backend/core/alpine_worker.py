@@ -134,10 +134,12 @@ class WorkerClient:
     async def fetch_outputs(self, job, workspace):
         from backend.core.alpine_transfer_state import apply_transfer_state
         # Persist intent before RPC so even death before the worker accepts is recoverable.
-        from backend.core.alpine_transfer_state import read_state
-        if not read_state(job, workspace):
+        from backend.core.alpine_transfer_state import read_state, matches_submission, submission_identity
+        record = read_state(job, workspace)
+        if not record or not matches_submission(record, job, workspace):
             atomic_json(state_path(job, workspace), {
                 'id': uuid.uuid4().hex, 'done': False,
+                'submission': submission_identity(job),
                 'download_status': {'state': 'downloading'},
             })
         result = await self._rpc('fetch_outputs', job_id=job.job_id,
@@ -166,7 +168,9 @@ class Worker:
         workspace = Path(workspace)
         job = MdJob.load(job_id, workspace)
         transfer_id = uuid.uuid4().hex
-        record = {'id': transfer_id, 'done': False}
+        from backend.core.alpine_transfer_state import submission_identity
+        record = {'id': transfer_id, 'done': False,
+                  'submission': submission_identity(job)}
 
         def save_transfer(_workspace):
             status = dict(job.download_status or {})

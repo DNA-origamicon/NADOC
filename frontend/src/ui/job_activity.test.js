@@ -508,3 +508,11 @@ describe('confirmNoConcurrentJob', () => {
     expect(showConfirm).toHaveBeenCalledOnce()
   })
 })
+
+
+it('shows the current Alpine allocation and last sync in the welcome tooltip', () => {
+  const text = jobActivityTooltip({ engine: 'md', status: 'running', execution_target: 'alpine',
+    slurm_job_id: '34226173', slurm_state: 'RUNNING', last_synced_at: 1792096800 })
+  expect(text).toContain('SLURM 34226173 RUNNING')
+  expect(text).toContain('Last synced')
+})

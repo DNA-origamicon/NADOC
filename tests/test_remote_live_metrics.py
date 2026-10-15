@@ -137,3 +137,12 @@ def test_module_is_python36_safe():
     assert not any(ln.startswith("@dataclass") for ln in code)
     for banned in ("import numpy", "import scipy", "import MDAnalysis"):
         assert not any(ln.startswith(banned) for ln in code)  # stdlib only
+
+
+def test_continuation_reports_canonical_segment_and_checkpoint_step(tmp_path):
+    (tmp_path / "production.resume.log").write_text(BENCH + "\nInfo: TIMESTEP 4\n")
+    (tmp_path / "output").mkdir()
+    (tmp_path / "output/production.restart.xsc").write_text("# NAMD\n20500000 100 0 0\n")
+    data = rlm.collect(str(tmp_path))
+    assert data["segment"] == "production"
+    assert data["step"] == 20500000
