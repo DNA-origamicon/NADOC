@@ -9,10 +9,10 @@ Scope approved October 14, 2026: implement standard-part validation, editability
 | P0 | Inventory, field ownership and performance evidence | Source audit complete; initial recording benchmark captured. Add workloads as the affected subsystem changes |
 | P1 | Standard-part recording transactions, executable replay registry and evidenced cleanup | Foundation implemented below. Retain legacy callbacks and compatibility recovery; no claim of general isolated evaluation |
 | P2 | Explicit recipe roots/versions, authoritative-field classification, read-only verification and incremental dependencies | Implementation exit checks complete: independent nonempty replay, content-pinned roots, typed dependencies, fingerprints, bounded capture/jobs and stale/cancel handling. Supported-family expansion continues in P3/P4; validation debt below remains explicit |
-| P3 | Native DNA command families and generated construction | 96 versioned kinds with method/action restrictions, joined/connectivity input compilation and bounded native-source CPD conversion/relaxation implemented. See the latest evidence and explicit scope limits below; full generated asset/attachment histories belong to P4 |
+| P3 | Native DNA command families and generated construction | DNA implementation exit checks recorded below, including joined/connectivity input compilation and bounded native-source CPD conversion/relaxation. The combined P3/P4 registry currently has 115 versioned kinds with method/action restrictions; this count is not universal operation coverage. Generated asset/attachment histories remain in P4 |
 | P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol including unbound particle motion, pinned small protein/catalog/aptamer inputs, supported protein conjugation lifecycle and duplex lifecycle/relaxation implemented. Bounded document transport and explicit inactive-source audits added. Full import/attachment coverage and physical-result provenance remain open |
-| P5 | Standard-part repair, drafts, desktop and part-mode VR | Explicit repair/numerical-upgrade jobs, bounded initial reference selection and revision-bound publication implemented. Draft metadata API and Design/session/loadout/package persistence pass; source staging, draft-bound apply, broader selectors, comparison and UI remain open |
-| P6 | Strict standard-part agent transactions and legacy retirement | Registered-batch catalog and existing job integration pass; batch public gate stays closed pending contention/retained-state qualification. Server-owned policy, mutation bypass closure, baseline reuse and explicit import permission remain open |
+| P5 | Standard-part repair, drafts, desktop and part-mode VR | Saved draft evaluation/apply, bounded reference selection, explicit source staging/restoration and persistence pass. Reviewed input metadata is implemented. Lossless browser expectations pass; desktop controls are being validated; invalid-input recognition, broader selectors, candidate comparison and native VR remain open |
+| P6 | Strict standard-part agent transactions and legacy retirement | Private host policy, one-use publication permits and state/known-route guards pass. Closed strict HTTP dispatch and scalar revision reads pass. Public batch gate stays closed pending ownership and responsiveness qualification; immutable revision storage, typed additional operations, baseline reuse and explicit import permission remain open |
 
 Assemblies are not an exit condition for any phase above. Existing assembly compatibility tests may catch collateral changes to shared infrastructure, but new assembly features and fixes remain deferred.
 
@@ -1031,3 +1031,36 @@ See [validation](validation_publication_foundation_p6.json),
 [batch evidence](registered_batch_jobs_benchmark_permits_p6.json) and
 [GC evidence](protein_free_import_benchmark_admission_2000_gc_p4.json).
 P4/P5/P6 remain incomplete; assemblies are deferred.
+
+
+## Closed strict HTTP and lossless repair expectations — October 15
+
+The outer ASGI dispatcher now selects an exact strict route table before legacy
+handlers or body acquisition. Only explicit empty creation, scalar policy/revision
+reads and existing batch/verification job lifecycle handlers are admitted. JSON
+acquisition is byte/time bounded; unknown routes, WebSockets, multipart bodies and
+unsupported operations refuse without compatibility fallback. The existing
+lifespan and session/job services remain shared. Policy generation is rechecked
+inside locked job admission and final publication. This is a host construction
+policy, not authentication; an agent-only surface needs a dedicated strict default.
+
+Browser repair actions now retain canonical `expected_old_json` text so JavaScript
+number serialization cannot turn unchanged `12.0` into a false conflict. Exact
+backend expectation, identity, schema and whole-envelope bounds remain in force.
+The real Node action builder passes HTTP draft save/reload/rebase and native repair
+preparation. Invalid-value contract recognition remains the next independent step.
+
+**478 backend cases across 18 files and 12 pure frontend cases pass.** The
+500-request in-memory dispatch probe completed with cleanup: strict revision
+median 1.076 ms, p95 1.362 ms, maximum 1.730 ms. Paired compatibility overhead
+median -0.006 ms is measurement noise, not a claimed speedup. This probe excludes
+large capture, publication, network and rendering; the public batch gate remains
+false. Immutable strict session storage is the next ownership/performance step.
+
+The selector was a dry-run: FAST/deferred FULL, neither suite executed. Full
+desktop integration is a separate pending checkpoint after the first full Vitest
+run exposed six metadata-summary failures (8,155 passed, one skipped). Archive is
+unavailable; no app, browser, headset, native or scientific check ran. `main.js`
+LOC delta remains zero. All test fixtures are scoped and benchmark models stayed
+in memory; only compact evidence is retained. See [validation](validation_strict_http_repair_transport_p5_p6.json)
+and [dispatch measurements](strict_http_benchmark_p6.json). P4/P5/P6 remain open.

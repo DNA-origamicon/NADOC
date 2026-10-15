@@ -1842,3 +1842,75 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   during worker execution and during candidate decode; missing context; locked
   nonblocking probes; and idempotent commits within the original session.
   Existing verification and default three-value capture remain compatible.
+
+## ISSUE-86 — Browser number serialization rejects unchanged repair expectations (2026-10-15, FIXED)
+
+- Input metadata can contain an exact authored float such as `12.0`, but browser
+  `JSON.stringify` returns `12`. The repair planner deliberately distinguishes
+  these JSON representations, so the unchanged field incorrectly reports
+  `repair_conflict`. Python-only HTTP fixtures had preserved the decimal text.
+- The real Node/browser action builder followed by HTTP draft submission
+  reproduced both diameter and pose failures: **two failed in 2.71 seconds**,
+  each with HTTP 409 at the selected field. This was a development audit finding,
+  not an observed user-data incident.
+- Input metadata now supplies bounded canonical `expected_old_json` text. The
+  browser carries it unchanged; action parsing checks its displayed value,
+  restores the exact old representation, and retains the encoding in the draft.
+  Duplicate keys, nonfinite numbers, excess depth and aggregate envelope excess
+  are rejected. Boolean/number equivalence is never permitted. Strict planning
+  expectations, output identities, versions and final regeneration are unchanged.
+- Regression coverage includes actual browser/HTTP roundtrips, portable reload,
+  rebase, native repair evaluation and rejection without publication. All 43
+  codec and eight actual transport cases pass, together with 229 related
+  metadata/planning/draft/persistence/source/repair regressions (280 total).
+  Invalid-parameter contract recognition remains separate work.
+
+## ISSUE-87 — Repair Apply mistakes a commit receipt for a full design (2026-10-15, IN PROGRESS)
+
+- Integration audit found that the actual evaluation commit endpoint publishes
+  one revision and returns only job/design/revision metadata. The new desktop
+  repair controller passed that receipt into a response adapter requiring a
+  complete Design. Its unit mocks returned a full model and concealed the gap.
+- The visible consequence would be a successful server commit followed by an
+  error and stale displayed geometry. A second Apply or cancellation must not
+  be presented as though the model had never been published.
+- The correction retains the committed receipt, privately fetches design and
+  geometry from the original document, checks exact revision/design identity
+  and the original job's session status, then synchronizes once. A failed read
+  leaves an explicit refresh action; it does not recommit or cancel publication.
+  This uses the compatibility host's existing revisioned mutation contract and
+  is separate from future immutable strict storage and candidate previews.
+- The first full frontend run also caught six failures in the new metadata
+  summary adapter: two absent identities compared equal through optional
+  chaining, then dereferenced a null prior summary. The fix must tolerate
+  identity-less legacy response fixtures without changing those fixtures.
+  Initial full result: 8,155 passed, one skipped, six failed in 308.92 seconds.
+  Eight targeted commit/refresh regressions then failed before implementation
+  (789 ms); corrected integration validation is pending.
+
+## ISSUE-88 — Session cache aliases unsafe document identities (2026-10-15, OPEN)
+
+- Static audit found that `_doc_dir` replaces non-filename characters and
+  truncates document IDs to 80 characters. Distinct live identities therefore
+  share a cache directory: `a/b`, `a?b` and `a_b`, or any IDs with the same first
+  80 characters. Exact `.` and `..` instead address the cache root and its
+  parent. This is a development finding, not observed user data loss.
+- Regression dossier: `tests/test_session_cache_identity.py` checks refusal
+  before state capture or file access, collision and dot-entry deletion against
+  pytest-owned sentinel files, unchanged supported paths, and strict creation
+  refusing unsafe identities before it creates a session. No workspace files,
+  cache lifespan or background threads participate. Failing baseline execution
+  and the production correction are pending the strict HTTP checkpoint.
+- Reviewed correction: require exact nonempty `[A-Za-z0-9_.-]` identities of at
+  most 80 characters, excluding `.` and `..`; reject rather than sanitize or
+  truncate. A shared pure validator will gate cache paths and new strict HTTP
+  contexts. Unsafe autosave must report an explicit unsupported identity and
+  allow other valid documents to flush. No existing cache files are renamed,
+  migrated or deleted by this correction.
+- Current UUID/default identities, browser `shared-arm`, and headless
+  `__headless_build_*__`, `__headless_oxdna_*__` and `__headless_assembly_*__`
+  all remain exact supported paths. Existing pruning tests do not depend on
+  sanitizer behavior. Root cause: a lossy filename sanitizer was used as the
+  persistence identity boundary while live sessions retain the original ID.
+  Typed immutable-cache namespaces and restore qualification remain separate
+  later work.

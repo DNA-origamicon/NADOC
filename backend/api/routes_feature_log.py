@@ -69,6 +69,12 @@ from backend.core.feature_evaluation import batch_target_groups, optimization_en
 router = APIRouter()
 
 
+@router.get("/design/revision")
+def get_part_revision():
+    from backend.api.part_revision_status import revision_status
+    return revision_status()
+
+
 @router.post("/design/features/repair-inputs")
 def inspect_part_repair_inputs(body: RepairInputSelection):
     from backend.api.part_repair_input_metadata import inspect_inputs
@@ -111,8 +117,12 @@ async def upload_part_repair_draft_source(request: Request):
 
 
 @router.post("/design/features/evaluation/jobs", status_code=202)
-def start_part_evaluation(body: EvaluationRequest):
+def start_part_evaluation(body: EvaluationRequest, request: Request = None):
     from backend.api.part_evaluation_jobs import start
+    from backend.api.part_strict_reads import CONTEXT_KEY, require_context
+    if request is not None and CONTEXT_KEY in request.scope:
+        context, _policy = require_context(request)
+        return start(body, expected_policy_generation=context.policy_generation)
     return start(body)
 
 

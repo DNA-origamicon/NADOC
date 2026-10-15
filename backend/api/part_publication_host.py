@@ -31,15 +31,22 @@ def require_compatibility(operation, *, doc_id=None):
         return policy.require_compatibility(doc_id or get_current_doc(), operation)
 
 
-def create_empty_part(name="Untitled", lattice_type="HONEYCOMB"):
+def _create_empty_part_locked(name, lattice_type):
+    """State-lock-owned primitive shared by embedding and scalar HTTP output."""
     from backend.api import state
     from backend.api.doc_context import get_current_doc
     from backend.api.part_publication_permit import prepare_empty_creation
     from backend.api.part_replacement_transaction import publish_replacement
 
+    session = state._session()
+    candidate, permit = prepare_empty_creation(get_current_doc(), session,
+        name=name, lattice_type=lattice_type)
+    publish_replacement(session, candidate, publication_permit=permit)
+    return candidate
+
+
+def create_empty_part(name="Untitled", lattice_type="HONEYCOMB"):
+    from backend.api import state
+
     with state._lock:
-        session = state._session()
-        candidate, permit = prepare_empty_creation(get_current_doc(), session,
-            name=name, lattice_type=lattice_type)
-        publish_replacement(session, candidate, publication_permit=permit)
-        return candidate
+        return _create_empty_part_locked(name, lattice_type)

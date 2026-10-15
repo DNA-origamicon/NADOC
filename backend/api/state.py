@@ -286,7 +286,8 @@ def capture_design_for_verification(*, preserve_entry_types=False):
 
 
 def capture_design_for_evaluation(request, *, include_session_identity=False, include_admission=False,
-                                  expected_source=None, expected_session_identity=None):
+                                  expected_source=None, expected_session_identity=None,
+                                  expected_policy_generation=None):
     """Explicit job capture with optional trusted host guards checked before copy.
 
     The optional fourth value binds the same locked session as the existing
@@ -294,7 +295,7 @@ def capture_design_for_evaluation(request, *, include_session_identity=False, in
     """
     from backend.api.part_evaluation import EvaluationRequest
     from backend.api.part_evaluation_capture import capture_for_evaluation
-    from backend.api.part_publication_policy import require_evaluation
+    from backend.api.part_publication_policy import require_evaluation, resolve
 
     request = request if isinstance(request, EvaluationRequest) else EvaluationRequest.model_validate(request)
     request_digest = None
@@ -309,6 +310,11 @@ def capture_design_for_evaluation(request, *, include_session_identity=False, in
         request_digest = digest(definition)
 
     with _lock:
+        if expected_policy_generation is not None and (
+                type(expected_policy_generation) is not int
+                or resolve(get_current_doc()).generation != expected_policy_generation):
+            raise HTTPException(409, detail={"code": "policy_changed",
+                "detail": "Host construction policy changed before evaluation admission"})
         require_evaluation(get_current_doc(), request.operation)
         s = _session_for_identity(expected_session_identity)
         if s.design is None:

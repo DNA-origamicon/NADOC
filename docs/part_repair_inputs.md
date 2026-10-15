@@ -11,6 +11,16 @@ unsupported, and bounded `fields`. Each field has its exact `parameter_path`,
 `expected_old`, label, input type and applicable finite-size/value constraints.
 Only existing authored slots are exposed; absent defaults are not invented.
 
+Each field also supplies `expected_old_json`, the canonical JSON text of that
+exact old value. Forward this string unchanged in a `set_input` action alongside
+`expected_old`: browser JSON otherwise turns values such as `12.0` into `12`.
+The bounded decoder checks both values agree, restores the original numeric
+representation, and retains the text through saved-proposal roundtrips. This
+encoding grants no authority; strict comparison against the captured definition
+still rejects stale or forged expectations. Boolean/number equivalence, duplicate
+keys and nonfinite values are refused. The existing aggregate input limits apply
+to both the displayed value and its encoding together.
+
 Current scalar/pose adapters cover unowned gold/catalog particles, free proteins
 and same-part rigid copy inputs. References expose an explicit selection-job
 resource kind. Named original-source fields reuse the existing upload policy and

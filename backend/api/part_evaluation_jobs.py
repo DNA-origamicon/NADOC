@@ -135,7 +135,7 @@ def _submit(job, captured, operation):
            name="part-evaluation-supervisor", daemon=False).start()
 
 
-def start(request, *, expected_source=None, expected_session_identity=None):
+def start(request, *, expected_source=None, expected_session_identity=None, expected_policy_generation=None):
     """Admit a request, optionally bound to a privately prepared draft source."""
     request = EvaluationRequest.model_validate(request)
     if not _slot.acquire(blocking=False):
@@ -148,7 +148,8 @@ def start(request, *, expected_source=None, expected_session_identity=None):
         try:
             source, captured, revision, session_identity, admission = state.capture_design_for_evaluation(request,
                 include_admission=True, expected_source=expected_source,
-                expected_session_identity=expected_session_identity)
+                expected_session_identity=expected_session_identity,
+                expected_policy_generation=expected_policy_generation)
         except CommandContractError as error:
             conflict = error.code in {"source_changed", "repair_conflict", "selection_conflict", "batch_conflict"}
             raise HTTPException(409 if conflict else 422, detail=error.as_issue()) from error

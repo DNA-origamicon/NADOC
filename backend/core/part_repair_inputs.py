@@ -10,6 +10,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from backend.core.part_operation_input import validate_operation_input
+from backend.core.part_repair_expectations import MAX_EXPECTATION_JSON_CHARS, normalize_expected_old
 
 
 MAX_REPAIR_ACTIONS = 64
@@ -27,7 +28,16 @@ class SetInput(_Target):
     action: Literal["set_input"]
     parameter_path: list[RepairToken] = Field(min_length=1, max_length=16)
     expected_old: Any
+    # Retain the exact encoding across draft GET/browser/update. No receipt
+    # means the original strict expectation behavior; no persisted null bloat.
+    expected_old_json: Annotated[str, Field(strict=True, max_length=MAX_EXPECTATION_JSON_CHARS)] | None = Field(
+        default=None, exclude_if=lambda value: value is None)
     value: Any
+
+    @model_validator(mode="before")
+    @classmethod
+    def lossless_expectation(cls, value):
+        return normalize_expected_old(value)
 
 
 class UpgradeNumericalContract(_Target):

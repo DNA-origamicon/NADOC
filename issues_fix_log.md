@@ -671,3 +671,22 @@ handle even if its public revision and source object match. Trusted guards use
 a noncreating session lookup so stale publication cannot reopen a closed tab.
 All 21 session cases and the affected ordinary lifecycle files pass. This closes
 the evaluation lifetime gap; it is not the broader strict automation policy.
+
+2026-10-15 — ISSUE-86: the actual JavaScript action/JSON transport collapsed
+authored integer-valued floats, contradicting the planner's exact old-value
+comparison. The two HTTP regressions failed before the fix (2.71 seconds,
+HTTP 409 for diameter and pose). A bounded canonical JSON encoding now travels
+with the displayed old value and restores it before action construction; it
+persists through draft reloads. This encoding grants no authority: unchanged
+strict conflict/identity checks and native regeneration still decide acceptance.
+Malformed, duplicate-key, nonfinite, over-depth, boolean/number and aggregate
+budget cases are covered. All 280 focused codec/transport and related repair
+regressions pass; full desktop integration remains separately tracked in ISSUE-87.
+
+2026-10-15 — ISSUE-87: desktop repair integration assumed the commit API returned
+a full model, but the actual contract returns only a publication receipt. Retain
+that receipt separately from display refresh and bind all refresh reads to the
+original document/revision/session before syncing geometry. First full Vitest
+also exposed a null prior-summary dereference in the new metadata adapter (six
+failures; 8,155 passed and one skipped). Corrections and focused regressions are
+in progress; no green integration result is claimed yet.

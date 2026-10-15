@@ -1,7 +1,7 @@
 # First strict part-publication checkpoint
 
 Audit and implementation record, October 15, 2026. The private host foundation
-is implemented; complete HTTP enforcement is not enabled or claimed. This is not
+and closed strict route table are implemented; public batch publication remains gated. This is not
 an authentication system or baseline cache. Assemblies remain out of scope.
 Function names below are the stable inventory; line anchors describe the reviewed
 checkout and will move as the state facade is extended.
@@ -277,6 +277,47 @@ history/source ownership and undo cost.
 
 ## Remaining HTTP closure: closed strict application
 
+The implementation is prepared in `part_strict_http.py` and
+`part_strict_reads.py`, with `tests/test_part_strict_http.py` as its focused target.
+After pushed checkpoint `cec8aa55`, it is wired as the outermost user middleware
+in `main.py`, before compatibility CORS/preflight and route middleware. The policy
+default remains compatibility. Parent-run checks passed 61 strict HTTP and five
+scalar revision cases; broader regressions and HTTP measurement are separate
+qualification steps. The strict paths are
+`POST /api/design/registered-empty`, `GET /api/design/construction-policy`,
+`GET /api/design/revision`, and the existing evaluation-job start, inspect, cancel
+and commit paths. The four job handlers are reused directly, without mounting
+their containing router. The strict capability projection reports the existing
+batch gate; it cannot enable it.
+
+Known JSON input is UTF-8 `application/json`, with at most 8,192 raw bytes for
+empty creation or 256,000 for evaluation. Acquisition has a five-second total
+deadline and stops on disconnect or policy-generation change. Duplicate framing
+headers, unsupported encodings/media and declared oversize are rejected before
+body reads; streamed oversize is rejected before appending the excess chunk.
+Malformed/nonfinite/duplicate-key JSON and unsupported evaluation operations fail
+before shared handlers. Existing structural, command, capture, worker and
+publication limits still apply independently. Unknown paths/methods and strict
+WebSockets are refused without reading their body or invoking compatibility.
+
+The implementation reuses the exact canonical document resolver and binds it via
+the existing document middleware. Scalar reads use `_sessions.get` under the
+state lock, so absent-session reads do not create a session. No live Design or
+legacy geometry response helper leaves that read boundary. Empty creation holds
+the same lock through host publication and returns owned scalar metadata only.
+Policy generation is rechecked after acquisition, before handler entry, and by
+the existing shared admission/final-publication guards. The original application
+alone receives lifespan events. A compatibility-context request to the known
+`/api/documents/{doc_id}` close path is also refused when the path target is strict;
+this closes the concrete header/path-target mismatch, not global authorization.
+
+The same owned scalar revision projection is exposed to compatibility clients
+through `part_revision_status.py` and `GET /api/design/revision`. It returns only
+document ID, design ID or null, revision and presence; strict reads add the host
+policy generation. It does not acknowledge geometry, create absent sessions or
+perform history validation. This supports explicit post-commit UI refresh without
+introducing a new full-Design status response.
+
 Use a small ASGI application selected by trusted host policy before invoking any
 compatibility handler, dependency or body reader. Preserve the existing
 application for compatibility documents. Reuse the existing document-context
@@ -379,3 +420,19 @@ features when inputs or upstream features change. Requiring individually editabl
 NADOC steps is therefore NADOC's product policy, not a claimed CAD-wide ban on
 scripts or LLMs. No special LLM authentication or construction exemption is inferred
 from these sources. [Feature types](https://cad.onshape.com/FsDoc/feature-types.html)
+
+
+## Closed dispatch validation checkpoint
+
+The exact HTTP slice above is mounted as outermost user middleware, with no
+compatibility fallback for selected strict requests. Root-run focused checks pass
+61 strict HTTP and five scalar revision cases plus 132 publication/evaluation
+regressions (198 total). They cover pre-body rejection, generation races, absent
+session noncreation, nonreentrant-lock safety and path-target close refusal.
+
+The 500-request in-memory probe passes with cleanup: strict revision median
+1.076 ms/p95 1.362 ms, compatibility paired median overhead -0.006 ms (noise).
+It does not qualify model capture or public batch enablement. The known mutable
+source/undo alias issue is addressed next through exclusive immutable revisions;
+no getter-wide copying or baseline cache was introduced. Cache identifier safety
+is a prerequisite to expanding persistence. See [evidence](strict_http_benchmark_p6.json).

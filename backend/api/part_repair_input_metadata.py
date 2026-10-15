@@ -14,6 +14,7 @@ from backend.api.part_proof_commands import PROOF_MINOR_KINDS
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_repair_capture import _Copier
 from backend.core.part_repair_inputs import RepairIdentity
+from backend.core.part_repair_expectations import encode_expected_old
 from backend.core.part_verification_capture import CaptureLimit
 
 
@@ -92,12 +93,14 @@ def describe_inputs(kind, params):
         def add(name, label, input_type, **constraints):
             if name in values:
                 fields.append({"parameter_path": [name], "expected_old": values[name],
+                               "expected_old_json": encode_expected_old(values[name]),
                                "label": label, "input_type": input_type, **constraints})
 
         def reference(path, label):
             slot = reference_slot(kind, values, path)
             old = values[path[0]] if len(path) == 1 else values[path[0]][path[1]]
             fields.append({"parameter_path": path, "expected_old": old, "label": label,
+                           "expected_old_json": encode_expected_old(old),
                            "input_type": "reference", "reference_selection": {
                                "resource_kind": slot.resource_kind, "max_candidates": 100}})
 
@@ -144,6 +147,7 @@ def describe_inputs(kind, params):
         for parameter, source in command_source_bindings(kind, values):
             source_policy = admit_descriptor(kind, values, parameter, source)
             fields.append({"parameter_path": [parameter], "expected_old": values[parameter],
+                "expected_old_json": encode_expected_old(values[parameter]),
                 "label": parameter.replace("_", " ").capitalize(), "input_type": "source",
                 "source_binding": {"parameter": parameter, "source": source.model_dump(mode="json"),
                     **source_policy, "operation": "restore_published", "inspection_required": True}})
