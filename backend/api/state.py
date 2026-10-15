@@ -233,6 +233,22 @@ def get_design_with_revision() -> tuple[Design | None, int]:
         return s.design, s.revision
 
 
+def capture_design_for_verification():
+    """Explicit audit only: isolate mutable state and capture its revision."""
+    with _lock:
+        s = _session()
+        if s.design is None:
+            raise HTTPException(404, detail="No active design.")
+        from backend.core.part_verification_capture import capture
+        return s.design, capture(s.design), s.revision
+
+
+def verification_source_matches(doc_id, source, revision):
+    with _lock:
+        session = _sessions.get(doc_id)
+        return session is not None and session.design is source and session.revision == revision
+
+
 def has_design_unlocked() -> bool:
     """Whether the current doc holds a design, WITHOUT taking ``_lock``.
 

@@ -26,6 +26,7 @@ import numpy as np
 from pydantic import BaseModel, Field, field_validator, model_validator
 from backend.core.dimensions import Dimension
 from backend.core.lattice_frame_model import LatticeFrame, validate_frame_references
+from backend.core.part_history_contract import PartRecipeRoot
 
 
 # ── Enumerations ──────────────────────────────────────────────────────────────
@@ -3111,6 +3112,9 @@ class Design(BaseModel):
     structure; all geometry and physics are derived from it.
     """
 
+    # Absent on legacy documents. Never infer an empty/import root from a saved
+    # recovery snapshot; explicit provenance is required for proof replay.
+    recipe_root: Optional[PartRecipeRoot] = None
     dimensions: List[Dimension] = Field(default_factory=list)
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     lattice_frames: List[LatticeFrame] = Field(default_factory=list)

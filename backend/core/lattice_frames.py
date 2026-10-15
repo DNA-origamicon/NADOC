@@ -111,7 +111,7 @@ def append_frame_cell(design, frame_id, row, col, *, length_bp=42, populate_stra
         cluster_transforms=clusters), helix
 
 
-def register_created_bundle_frames(design, plane, cells, *, single_cluster=False):
+def register_created_bundle_frames(design, plane, cells, *, single_cluster=False, identity_seed=None):
     """Attach canonical cells, placement clusters and identities to a fresh bundle.
 
     Source plane comes from the authoring request, never inferred from the view.
@@ -121,19 +121,24 @@ def register_created_bundle_frames(design, plane, cells, *, single_cluster=False
     if design.lattice_frames or any(h.lattice_frame_id for h in design.helices):
         raise ValueError('fresh bundle already has lattice frame identities')
     from backend.core.cluster_autodetect import _cluster_bundle_regions, with_default_cluster
+    from backend.core.feature_identity import identity_factory
+    factory = identity_factory(identity_seed) if identity_seed is not None else None
     validate_painted_footprint({'lattice_type':design.lattice_type.value, 'cells':[list(c) for c in cells]})
     design = design.copy_with(helices=[h.model_copy(update={'grid_pos':tuple(cell)})
         for h, cell in zip(design.helices, cells, strict=True)])
     if single_cluster:
         design = design.copy_with(cluster_transforms=[ClusterRigidTransform(
-            id=str(uuid.uuid4()), name='Cluster 1',
+            id=factory("cluster", [h.id for h in design.helices]) if factory else str(uuid.uuid4()), name='Cluster 1',
             helix_ids=[h.id for h in design.helices], auto_created=True, is_default=True)])
     else:
-        design = with_default_cluster(_cluster_bundle_regions(design))
+        design = with_default_cluster(_cluster_bundle_regions(design, identity_factory=factory), identity_factory=factory)
     membership = {}
     frames = []
     for cluster in design.cluster_transforms:
-        frame = LatticeFrame(id=str(uuid.uuid4()), plane=plane, placement_cluster_id=cluster.id)
+        # Fresh bundles have exactly one frame per placement cluster. A typed
+        # prefix retains that identity without hashing the same ownership twice.
+        frame = LatticeFrame(id=f"frame:{cluster.id}" if factory else str(uuid.uuid4()),
+                             plane=plane, placement_cluster_id=cluster.id)
         for identifier in cluster.helix_ids:
             if identifier in membership:
                 raise ValueError('fresh bundle has ambiguous placement membership')

@@ -389,3 +389,11 @@ fixes the `workspace/2x2_strutted_corner.nadoc` F2 case: deleting the independen
 flexible mark/relax, and cluster move entries survive. Non-additive rollback cases such as
 auto-break still use the older pre-state/replay path so removed or modified existing strands can
 be restored correctly.
+
+### P2 proof infrastructure / P3 native bundle (2026-10-14)
+
+P2 implementation exit criteria are now met: optional versioned `Design.recipe_root` (empty or explicit content-pinned import); complete authoring comparison and recipe/source fingerprints; typed append-incremental dependencies; isolated native command replay; bounded capture; one cancellable verification worker with eight retained results; revision/document invalidation during and after work. Import replay returns `reproduced_import` with native editability false. Unsupported commands remain unverified. Proof is distinct from integrity/scientific validity.
+
+`POST /api/design/features/verification` remains an explicit, bounded synchronous check. `/verification/jobs` POST/GET/DELETE exposes bounded asynchronous work. No checks run automatically during edits, frames or scrubbing. Oversized capture is rejected with 413 rather than blocking on an unlimited clone. Cancellation/deadlines are cooperative, not hard Python preemption.
+
+P3 has begun with seeded native bundle construction. Cluster/frame IDs derive from a saved UUID namespace via explicit identity factories; bundle parameter edits retain it. Bundle and joint-place/update/delete have proof contracts. Other DNA families and generated construction still need P3 coverage. No assembly work or frontend enforcement was added. Full history/agent enforcement remains later phases. See `docs/audits/feature_history_20261014/implementation.md` for complete limits, test results and performance evidence. The inherited long-pose evaluator regression (ISSUE-81) is fixed; all 14 unchanged A/B gates pass.

@@ -15,7 +15,7 @@ def _execute(spec, design, params):
     builder = getattr(module, spec.builder)
     request = getattr(module, spec.schema).model_validate(params) if spec.schema else params
     if spec.adapter == "bundle":
-        return builder([tuple(cell) for cell in request.cells], request)
+        return builder([tuple(cell) for cell in request.cells], request).copy_with(recipe_root=design.recipe_root)
     if spec.parameter_keys:
         return builder(design, *(params[key] for key in spec.parameter_keys))
     result = builder(design, request)

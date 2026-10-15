@@ -81,6 +81,10 @@ def record_feature(session, op_kind, label, params, fn):
         pre, pre_size = state.encode_design_snapshot(before)
         _run(session, before, fn, state,
              retry=op_kind not in {"auto-break", "full-autostaple", "cluster-join"})
+        if op_kind == "bundle-create" and params.get("history_seed"):
+            from backend.api.part_proof_commands import PROOF_VERSION
+            params = {**params, "_proof_version": PROOF_VERSION}
+            session.design.recipe_root = before.recipe_root
         post, post_size = state.encode_design_snapshot(session.design)
         entry = SnapshotLogEntry(
             op_kind=op_kind, label=label, params=params,
@@ -96,6 +100,10 @@ def record_feature(session, op_kind, label, params, fn):
 def record_minor(session, op_subtype, label, params, fn):
     from backend.api import state
     from backend.core.design_diff import encode_child_diff
+    from backend.api.part_proof_commands import PROOF_MINOR_KINDS, PROOF_VERSION
+
+    if op_subtype in PROOF_MINOR_KINDS:
+        params = {**params, "_proof_version": PROOF_VERSION}
 
     with _transaction(session, state) as before:
         last = session.design.feature_log[-1] if session.design.feature_log else None

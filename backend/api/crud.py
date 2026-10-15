@@ -111,7 +111,6 @@ from backend.core.models import (
     DeformationLogEntry,
     Design,
     DesignLoadout,
-    DesignMetadata,
     Direction,
     Domain,
     HalfCrossover,
@@ -819,6 +818,7 @@ class OpenLibraryPartRequest(BaseModel):
 
 
 class BundleRequest(BaseModel):
+    history_seed: Optional[_uuid.UUID] = None
     separate_fresh_extrusions: bool = True
     cells: List[List[int]]  # [[row, col], ...]
     length_bp: int
@@ -1521,10 +1521,9 @@ def create_bundle(body: BundleRequest) -> dict:
         raise HTTPException(400, detail=str(exc)) from exc
 
     # Reset to a canonical empty workspace so the snapshot's pre-state is empty.
-    empty = Design(
-        metadata=DesignMetadata(name=body.name),
-        lattice_type=body.lattice_type,
-    )
+    from backend.core.part_history_contract import create_empty_part
+    body = body.model_copy(update={"history_seed": body.history_seed or _uuid.uuid4()})
+    empty = create_empty_part(body.name, body.lattice_type)
     design_state.load_design(empty)
 
     trace = _TimingTrace()
@@ -1563,18 +1562,16 @@ def _build_bundle(cells, body: "BundleRequest") -> Design:
             new_design = ligate_new_strands(new_design, new_ids)
     from backend.core.lattice_frames import register_created_bundle_frames
     return register_created_bundle_frames(new_design, body.plane, cells,
-        single_cluster=body.separate_fresh_extrusions)
+        single_cluster=body.separate_fresh_extrusions, identity_seed=body.history_seed)
 
 
 @router.post("/design", status_code=201)
 def create_design(body: CreateDesignRequest) -> dict:
     """Create and activate a new empty design, discarding any current design."""
     from backend.core.validator import validate_design
+    from backend.core.part_history_contract import create_empty_part
 
-    new_design = Design(
-        metadata=DesignMetadata(name=body.name),
-        lattice_type=body.lattice_type,
-    )
+    new_design = create_empty_part(body.name, body.lattice_type)
     design_state.load_design(new_design)
     report = validate_design(new_design)
     # New lineage — nothing in the client's cache matches this design's history.
@@ -8428,6 +8425,8 @@ def edit_feature(index: int, body: EditFeatureBody) -> dict:
     pre_state = design_state.decode_design_snapshot(entry.design_snapshot_gz_b64)
     params = {"separate_fresh_extrusions": entry.params.get("separate_fresh_extrusions", False),
               **body.params}
+    from backend.core.feature_identity import preserve_proof_identity
+    params = preserve_proof_identity(entry.params, params)
     try:
         new_post = _edit_dispatch_run(entry.op_kind, pre_state, params)
     except HTTPException:

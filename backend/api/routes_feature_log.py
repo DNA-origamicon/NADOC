@@ -64,6 +64,30 @@ from backend.core.feature_evaluation import batch_target_groups, optimization_en
 router = APIRouter()
 
 
+@router.post("/design/features/verification/jobs", status_code=202)
+def start_part_verification():
+    from backend.api.part_verification_jobs import start
+    return start()
+
+
+@router.get("/design/features/verification/jobs/{job_id}")
+def get_part_verification(job_id: str):
+    from backend.api.part_verification_jobs import inspect
+    return inspect(job_id)
+
+
+@router.delete("/design/features/verification/jobs/{job_id}")
+def cancel_part_verification(job_id: str):
+    from backend.api.part_verification_jobs import inspect
+    return inspect(job_id, cancel=True)
+
+
+@router.post("/design/features/verification")
+def verify_part_history():
+    from backend.api.part_history_verification import verify_current_part
+    return verify_current_part()
+
+
 class SeekFeaturesBody(BaseModel):
     position: int  # -2 = empty (no features); -1 = end (all active); ≥0 = index of last active entry
     sub_position: Optional[int] = None
@@ -119,8 +143,8 @@ def preview_instance_features(instance_id: str, body: SeekFeaturesBody):
 @router.get("/design/features/capabilities")
 def get_part_feature_capabilities() -> dict:
     """Executor availability only; this endpoint does not certify a design."""
-    from backend.core.feature_registry import part_replay_capabilities
-    return part_replay_capabilities()
+    from backend.api.part_proof_commands import capabilities
+    return capabilities()
 
 
 @router.get("/design/features/evaluation-plan")

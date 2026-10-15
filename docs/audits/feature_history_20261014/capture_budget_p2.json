@@ -1,0 +1,230 @@
+{
+  "method": "17 GC-enabled in-memory captures; production admission limits; no recovery blobs or physical/presentation fields copied",
+  "results": [
+    {
+      "helices": 1,
+      "rows": 0,
+      "median_ms": 0.749192,
+      "samples": [
+        {
+          "ms": 0.771008,
+          "outcome": "captured"
+        },
+        {
+          "ms": 0.749192,
+          "outcome": "captured"
+        },
+        {
+          "ms": 0.772842,
+          "outcome": "captured"
+        },
+        {
+          "ms": 0.914834,
+          "outcome": "captured"
+        },
+        {
+          "ms": 0.716375,
+          "outcome": "captured"
+        },
+        {
+          "ms": 0.628833,
+          "outcome": "captured"
+        },
+        {
+          "ms": 0.671183,
+          "outcome": "captured"
+        },
+        {
+          "ms": 0.739016,
+          "outcome": "captured"
+        },
+        {
+          "ms": 0.950675,
+          "outcome": "captured"
+        },
+        {
+          "ms": 0.670084,
+          "outcome": "captured"
+        },
+        {
+          "ms": 0.621225,
+          "outcome": "captured"
+        },
+        {
+          "ms": 0.659358,
+          "outcome": "captured"
+        },
+        {
+          "ms": 0.729025,
+          "outcome": "captured"
+        },
+        {
+          "ms": 0.833525,
+          "outcome": "captured"
+        },
+        {
+          "ms": 1.469051,
+          "outcome": "captured"
+        },
+        {
+          "ms": 1.491967,
+          "outcome": "captured"
+        },
+        {
+          "ms": 1.177733,
+          "outcome": "captured"
+        }
+      ]
+    },
+    {
+      "helices": 24,
+      "rows": 100,
+      "median_ms": 4.324192,
+      "samples": [
+        {
+          "ms": 4.203284,
+          "outcome": "captured"
+        },
+        {
+          "ms": 4.663725,
+          "outcome": "captured"
+        },
+        {
+          "ms": 5.808734,
+          "outcome": "captured"
+        },
+        {
+          "ms": 4.264517,
+          "outcome": "captured"
+        },
+        {
+          "ms": 4.324192,
+          "outcome": "captured"
+        },
+        {
+          "ms": 6.066775,
+          "outcome": "captured"
+        },
+        {
+          "ms": 5.337567,
+          "outcome": "captured"
+        },
+        {
+          "ms": 4.716801,
+          "outcome": "captured"
+        },
+        {
+          "ms": 4.1712,
+          "outcome": "captured"
+        },
+        {
+          "ms": 4.060009,
+          "outcome": "captured"
+        },
+        {
+          "ms": 4.036633,
+          "outcome": "captured"
+        },
+        {
+          "ms": 4.060834,
+          "outcome": "captured"
+        },
+        {
+          "ms": 4.58425,
+          "outcome": "captured"
+        },
+        {
+          "ms": 4.305217,
+          "outcome": "captured"
+        },
+        {
+          "ms": 4.184858,
+          "outcome": "captured"
+        },
+        {
+          "ms": 16.074668,
+          "outcome": "captured"
+        },
+        {
+          "ms": 4.717075,
+          "outcome": "captured"
+        }
+      ]
+    },
+    {
+      "helices": 256,
+      "rows": 2000,
+      "median_ms": 25.639718,
+      "samples": [
+        {
+          "ms": 25.652551,
+          "outcome": "budget_rejected"
+        },
+        {
+          "ms": 25.573351,
+          "outcome": "budget_rejected"
+        },
+        {
+          "ms": 25.298626,
+          "outcome": "budget_rejected"
+        },
+        {
+          "ms": 25.639718,
+          "outcome": "budget_rejected"
+        },
+        {
+          "ms": 26.364893,
+          "outcome": "budget_rejected"
+        },
+        {
+          "ms": 25.297984,
+          "outcome": "budget_rejected"
+        },
+        {
+          "ms": 25.492501,
+          "outcome": "budget_rejected"
+        },
+        {
+          "ms": 25.727352,
+          "outcome": "budget_rejected"
+        },
+        {
+          "ms": 40.271918,
+          "outcome": "budget_rejected"
+        },
+        {
+          "ms": 25.445751,
+          "outcome": "budget_rejected"
+        },
+        {
+          "ms": 25.747152,
+          "outcome": "budget_rejected"
+        },
+        {
+          "ms": 25.388826,
+          "outcome": "budget_rejected"
+        },
+        {
+          "ms": 25.607818,
+          "outcome": "budget_rejected"
+        },
+        {
+          "ms": 26.244168,
+          "outcome": "budget_rejected"
+        },
+        {
+          "ms": 25.467935,
+          "outcome": "budget_rejected"
+        },
+        {
+          "ms": 25.68546,
+          "outcome": "budget_rejected"
+        },
+        {
+          "ms": 26.880518,
+          "outcome": "budget_rejected"
+        }
+      ]
+    }
+  ]
+}
