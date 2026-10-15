@@ -1064,3 +1064,22 @@ unavailable; no app, browser, headset, native or scientific check ran. `main.js`
 LOC delta remains zero. All test fixtures are scoped and benchmark models stayed
 in memory; only compact evidence is retained. See [validation](validation_strict_http_repair_transport_p5_p6.json)
 and [dispatch measurements](strict_http_benchmark_p6.json). P4/P5/P6 remain open.
+
+
+## Exact cache document identity — October 15
+
+ISSUE-88 reproduced cache path collisions (`a/b` and `a_b`, or truncated IDs)
+and dot IDs addressing the cache root/parent. A shared pure validator now requires
+exact 1–80 character ASCII alphanumeric/underscore/hyphen/period IDs excluding
+`.` and `..`. Cache writes refuse before capture; unsafe autosave logs a bounded
+diagnostic and lets valid documents continue. Strict HTTP refuses these contexts
+before body acquisition/session creation. Normal UUID/default/named/headless IDs
+retain their exact paths. No existing cache files were moved or deleted; startup
+restore/pruning behavior is unchanged.
+
+The baseline was 29 failed/nine passed. All **122 focused regressions pass**,
+including existing cache pruning and strict dispatch. Changed Python Ruff and
+whitespace pass. Only tiny pytest-owned sentinels were used; no production cache
+thread or workspace writer ran. This closes the identifier prerequisite for
+immutable persistence; it does not itself enable native restore or public batch.
+See [validation](validation_cache_identity_p6.json). P4/P5/P6 remain open.

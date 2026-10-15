@@ -107,12 +107,13 @@ registry and document list. `list_doc_ids`, `has_design` and revision metadata m
 recognize both representations. Avoid turning background flush into a hidden
 large materialization or holding a live mutable alias across a lock boundary.
 
-The existing cache path is not an injective document mapping:
-`session_cache._doc_dir` sanitizes characters and truncates IDs to 80 characters.
-Different raw IDs can therefore address the same cache directory. It also leaves
-literal `.`/`..` intact, which must never become new strict cache path components.
-Do not extend this mapping to arbitrary strict document IDs or silently rename
-old compatibility paths. Prefer a separately versioned sibling cache directory,
+The cache audit found a lossy document mapping: `_doc_dir` sanitized characters
+and truncated IDs to 80 characters, aliasing different raw identities and leaving
+literal `.`/`..` intact. ISSUE-88 now rejects unsafe IDs without rewriting them,
+before cache capture or strict HTTP body acquisition; parent validation is
+pending. Normal safe IDs retain their exact paths, and no existing file is moved
+or deleted. Do not silently reintroduce arbitrary IDs or rename compatibility
+paths. For typed strict persistence, prefer a separately versioned sibling directory,
 outside `.session`, whose per-document component is the full SHA-256 of the exact
 canonical document ID. A bounded typed manifest retains and verifies that exact
 ID before read, write or restore. Digest/address equality without manifest

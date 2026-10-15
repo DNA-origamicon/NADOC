@@ -23,8 +23,8 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import logging
 import os
-import re
 import shutil
 import threading
 import time
@@ -34,6 +34,7 @@ from pathlib import Path
 from backend.api import assembly_state, server_info
 from backend.api import state as design_state
 from backend.api.doc_context import DEFAULT_DOC_ID
+from backend.api.document_identity import UnsafeDocumentIdentity, require_document_identity
 from backend.core.models import Assembly, Design
 
 # Write at most this long after the most recent change in a burst.
@@ -65,18 +66,24 @@ _last_flushed: dict[str, tuple[int, int]] = {}
 _seen: dict[str, tuple[int, int]] = {}
 _stable_since: float | None = None
 
-_SAFE_DOC_RE = re.compile(r"[^A-Za-z0-9_.-]")
+_log = logging.getLogger(__name__)
 
 
 def _doc_dir(doc_id: str) -> Path:
-    """Per-doc cache directory, with a filesystem-safe name.
+    """Per-document cache path without lossy identity rewriting."""
+    return _session_dir / require_document_identity(doc_id)
 
-    doc_ids are minted as uuid hex or the ``__default__`` sentinel (both safe),
-    but the id ultimately comes from a client header, so sanitize defensively
-    to keep writes inside the session dir.
-    """
-    safe = _SAFE_DOC_RE.sub("_", doc_id)[:80] or "_"
-    return _session_dir / safe
+
+def _autosave_identity_supported(doc_id: str) -> bool:
+    try:
+        require_document_identity(doc_id)
+    except UnsafeDocumentIdentity as error:
+        # Bound and escape the client-controlled diagnostic. Unsupported IDs
+        # must not abort autosaving unrelated supported documents.
+        hint = repr(doc_id[:80]) if type(doc_id) is str else type(doc_id).__name__
+        _log.warning("Session autosave skipped %s: %s; %s", hint, error.code, error)
+        return False
+    return True
 
 
 # ── Public lifecycle ─────────────────────────────────────────────────────────
@@ -268,25 +275,32 @@ def _flush(force: bool) -> None:
 
     # Docs that vanished (closed) → remove their cache dirs.
     for doc_id in set(_last_flushed) - set(current):
-        _remove_doc_dir(doc_id)
+        if _autosave_identity_supported(doc_id):
+            _remove_doc_dir(doc_id)
 
     # Docs whose combined revision changed → rewrite.
+    supported = {}
     for doc_id, rev in current.items():
+        if not _autosave_identity_supported(doc_id):
+            continue
+        supported[doc_id] = rev
         if _last_flushed.get(doc_id) == rev:
             continue
         _write_doc(doc_id)
 
-    _write_registry(current)
+    _write_registry(supported)
+    # Also remember refused revisions, avoiding an identical warning each poll.
+    # A later change still emits its explicit unsupported-autosave diagnostic.
     _last_flushed = current
 
 
 def _write_doc(doc_id: str) -> None:
+    d = _doc_dir(doc_id)
     design, _ = design_state.copy_doc_for_persist(doc_id)
     assembly, _ = assembly_state.copy_doc_for_persist(doc_id)
     if design is None and assembly is None:
         _remove_doc_dir(doc_id)
         return
-    d = _doc_dir(doc_id)
     d.mkdir(parents=True, exist_ok=True)
     _write_or_unlink(d / _DESIGN_FILE, design.to_json() if design is not None else None)
     _write_or_unlink(

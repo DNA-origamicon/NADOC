@@ -1,0 +1,25 @@
+{
+  "date": "2026-10-15",
+  "issue": "ISSUE-88",
+  "red": {
+    "failed": 29,
+    "passed": 9,
+    "seconds": 2.99
+  },
+  "focused": {
+    "test_session_cache_identity.py": 50,
+    "test_session_cache_prune.py": 6,
+    "test_part_strict_http.py": 61,
+    "test_part_revision_status.py": 5
+  },
+  "total_passed": 122,
+  "ruff": "changed Python passed",
+  "diff_check": "passed",
+  "artifacts": "Only pytest-owned tiny sentinel files; no live cache, lifespan, user files or background writer. No migration/deletion of existing data.",
+  "limits": [
+    "Case-sensitive filesystem identity contract; arbitrary local filesystem access is outside API threat boundary.",
+    "Strict immutable revision persistence/restore remains separate.",
+    "Selector and broad-suite debt unchanged from7d02a5f2; no app/browser/native/scientific run.",
+    "Frontend full run8177passed1skipped precedes separately found default-document refresh fix; not part of this backend checkpoint."
+  ]
+}

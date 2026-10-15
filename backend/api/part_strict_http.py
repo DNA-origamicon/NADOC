@@ -17,6 +17,7 @@ from starlette.routing import compile_path
 
 from backend.api import part_publication_policy as policy
 from backend.api.doc_context import DocContextMiddleware, _extract_doc_id
+from backend.api.document_identity import UnsafeDocumentIdentity, require_document_identity
 from backend.api.part_strict_reads import (
     CONTEXT_KEY, StrictRequestContext, construction_policy, create_registered_empty,
     require_context, revision_metadata,
@@ -187,8 +188,10 @@ class StrictPartDispatch:
         if limit is None or selected_target:
             await _error(403, "construction_policy", "This endpoint is outside the strict part route table")(scope, receive, send)
             return
-        if len(doc) > 1024:
-            await _error(422, "strict_document_limit", "Document context exceeds the bounded strict allowance")(scope, receive, send)
+        try:
+            require_document_identity(doc)
+        except UnsafeDocumentIdentity as error:
+            await _error(422, error.code, str(error))(scope, receive, send)
             return
         error = _headers(scope, limit)
         if error is not None:

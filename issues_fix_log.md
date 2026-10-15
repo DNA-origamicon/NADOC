@@ -690,3 +690,9 @@ original document/revision/session before syncing geometry. First full Vitest
 also exposed a null prior-summary dereference in the new metadata adapter (six
 failures; 8,155 passed and one skipped). Corrections and focused regressions are
 in progress; no green integration result is claimed yet.
+
+2026-10-15 — ISSUE-88: replaced lossy document-cache filename sanitization with
+exact bounded identity admission. Unsupported IDs cannot alias valid files or
+address the cache root/parent; strict HTTP refuses them before body acquisition.
+Autosave reports unsupported IDs and continues valid documents. Baseline29failed/
+9passed; final122 focused cases pass. Existing files and pruning are unchanged.

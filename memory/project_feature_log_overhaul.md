@@ -29,9 +29,12 @@ is still closed. Its first benchmark confirms that full-source undo cost cannot
 be inferred from authoring-only capture: large excluded physical state and long
 history need separate admission. Do not raise global capture limits, add proof
 to render/scrub paths, or reuse a cached baseline while mutable aliases and
-unclassified write paths remain. Private host policy/admission and exact-candidate batch permits are implemented,
-but the closed strict HTTP surface and mutable read/write alias closure remain
-open. No complete strict-session or general LLM enforcement claim is justified.
+unclassified write paths remain. Private host policy/admission, exact-candidate
+batch permits and a closed strict HTTP route table are implemented. Strict HTTP
+refuses unknown routes before body acquisition and exposes only reviewed scalar
+reads, empty creation and existing batch/verify jobs. Public batch stays gated;
+immutable revision ownership and complete strict lifecycle remain open. This is
+not authentication or a sandbox for unrestricted local Python.
 
 An experimental ordinary free-protein importer records pinned original bytes and
 separate import/placement inputs, but its server-owned gate remains false after
@@ -40,8 +43,12 @@ available. Its scalar-atom copy optimization preserves exact admission accountin
 no source deadline or GC policy was relaxed. Allocation-light private candidate
 admission removes a redundant copy; a retained-protein refusal now has measured
 45 ms generation-2 GC overlap during locked source isolation. Immutable strict
-revision ownership is planned after the closed HTTP boundary. Saved source restoration now has a real
-HTTP-to-cold-replay regression requiring explicit rebase before evaluation.
+revision ownership is the next step after the closed HTTP boundary. Saved source
+restoration has a real HTTP-to-cold-replay regression requiring explicit rebase.
+Reviewed repair input metadata preserves canonical `expected_old_json` text
+through JavaScript so integral floats do not falsely conflict (ISSUE-86). Actual
+Node/HTTP draft save, reload, rebase and native preparation pass. Desktop workflow
+integration is validating; comparison and native VR remain separate increments.
 
 Focused tests and small in-memory qualification run serially. The Archive
 filesystem is unavailable in this environment; broader suite, app, visual and

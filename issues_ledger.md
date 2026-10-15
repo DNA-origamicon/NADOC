@@ -1888,7 +1888,7 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   Eight targeted commit/refresh regressions then failed before implementation
   (789 ms); corrected integration validation is pending.
 
-## ISSUE-88 — Session cache aliases unsafe document identities (2026-10-15, OPEN)
+## ISSUE-88 — Session cache aliases unsafe document identities (2026-10-15, FIXED)
 
 - Static audit found that `_doc_dir` replaces non-filename characters and
   truncates document IDs to 80 characters. Distinct live identities therefore
@@ -1899,8 +1899,9 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   before state capture or file access, collision and dot-entry deletion against
   pytest-owned sentinel files, unchanged supported paths, and strict creation
   refusing unsafe identities before it creates a session. No workspace files,
-  cache lifespan or background threads participate. Failing baseline execution
-  and the production correction are pending the strict HTTP checkpoint.
+  cache lifespan or background threads participate. Parent ran the baseline
+  after checkpoint `7d02a5f2`: **29 failed, nine passed in 2.99 seconds**. The
+  nine existing-safe-path cases passed; all unsafe-admission cases failed.
 - Reviewed correction: require exact nonempty `[A-Za-z0-9_.-]` identities of at
   most 80 characters, excluding `.` and `..`; reject rather than sanitize or
   truncate. A shared pure validator will gate cache paths and new strict HTTP
@@ -1914,3 +1915,10 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   persistence identity boundary while live sessions retain the original ID.
   Typed immutable-cache namespaces and restore qualification remain separate
   later work.
+- The narrow correction passes 122 parent-run regressions: 50 identity, six
+  cache pruning, 61 strict HTTP and five scalar revision cases. Cache
+  writes now reject before capture, flushes report bounded unsupported-identity
+  warnings and continue supported documents, and strict HTTP rejects unsafe
+  resolved identities before reading the body. Added canonical-type/whitespace
+  and no-body-acquisition cases; no tests were executed by the implementation
+  agent. Existing restore and pruning policies are unchanged.
