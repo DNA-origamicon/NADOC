@@ -1,6 +1,10 @@
 # P5c repair draft persistence
 
-## Foundation implemented, host integration pending
+## Foundation and document boundaries implemented, metadata endpoints pending
+
+The coordinated Design/exclusion/publication/persistence slice is documented
+in `draft_document_boundary.md`; the original staged completion gates below
+remain useful for the still-pending metadata endpoint and evaluate/apply work.
 
 `core/part_repair_inputs.py` owns the existing version-1 action/request schemas.
 `api/part_recipe_repair.py` re-exports their former public names; evaluation,

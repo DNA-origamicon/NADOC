@@ -1,7 +1,7 @@
 """A portable proposed repair, independent of geometry and job results.
 
-This foundation is not yet a Design field or a publication API. A host must
-capture a stable base, check the draft generation and explicitly rebase stale
+Design persists this as branch metadata, separately from feature recovery and
+proof inputs. A host must capture a stable base, check the draft generation and explicitly rebase stale
 proposals before turning their actions into a fresh RepairRequest. Never infer
 verification from a matching fingerprint.
 """

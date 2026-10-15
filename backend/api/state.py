@@ -255,6 +255,18 @@ def capture_design_for_evaluation(request):
         return s.design, captured, s.revision
 
 
+def get_repair_draft():
+    """Read the bounded proposal independently of geometry and replay."""
+    from backend.api.part_repair_drafts import inspect_draft
+    return inspect_draft()
+
+
+def mutate_repair_draft(request):
+    """Publish repair metadata without a geometry snapshot or feature row."""
+    from backend.api.part_repair_drafts import mutate_draft
+    return mutate_draft(request)
+
+
 def verification_source_matches(doc_id, source, revision, *, blocking=True):
     """Return None for a busy nonblocking probe; never treat it as a match."""
     if not _lock.acquire(blocking=blocking):
@@ -614,7 +626,8 @@ def encode_design_snapshot(design: Design) -> tuple[str, int]:
 
     The design's own ``feature_log`` and ``feature_log_cursor`` are stripped
     before encoding to prevent recursive nesting (a snapshot must never embed
-    other snapshots).
+    other snapshots). Repair proposals belong to the live branch and are
+    excluded before serialization, so recovery cannot resurrect old proposals.
 
     Returns ``(payload_b64, uncompressed_byte_length)``.
     """
@@ -627,7 +640,7 @@ def encode_design_snapshot(design: Design) -> tuple[str, int]:
             "active_loadout_id": None,
         }
     )
-    raw = stripped.model_dump_json().encode("utf-8")
+    raw = stripped.model_dump_json(exclude={"repair_draft"}).encode("utf-8")
     # Interactive edits write both pre- and post-state snapshots. Level 3 keeps
     # nearly all of gzip's size reduction while taking roughly one third of the
     # CPU time of level 6 on Voltron-scale designs; eviction is governed by the
@@ -762,10 +775,15 @@ def _restore_edit_snapshot(snapshot: Design, current: Design) -> Design:
 
     Annotations are display-only view metadata saved through their own route (no undo
     entry), so undo/redo must neither rewind them to an older list nor resurrect a
-    deleted one — the current annotations always win.
+    deleted one — the current annotations always win. Repair proposals also
+    remain current within the same branch; cross-branch undo restores that
+    branch's own proposal. Source retention may refuse before stacks change.
     """
     if snapshot.id != current.id:
         return snapshot
+    if snapshot.active_loadout_id == current.active_loadout_id:
+        from backend.api.part_repair_document import restore_recovery_metadata
+        snapshot = restore_recovery_metadata(current, snapshot)
     return snapshot.model_copy(update={
         "annotations": current.annotations,
         "annotations_enabled": current.annotations_enabled,
@@ -786,8 +804,10 @@ def undo() -> tuple[Design, ValidationReport]:
         _assert_active_loadout_editable(s.design)
         if not s.history:
             raise HTTPException(status_code=404, detail="Nothing to undo.")
+        restored = _restore_edit_snapshot(s.history[-1], s.design)
         s.redo.append(_snapshot_copy(s.design))
-        s.design = _restore_edit_snapshot(s.history.pop(), s.design)
+        s.history.pop()
+        s.design = restored
         report = validate_design(s.design)
         _bump_revision(s)
         return s.design, report
@@ -803,8 +823,10 @@ def redo() -> tuple[Design, ValidationReport]:
         _assert_active_loadout_editable(s.design)
         if not s.redo:
             raise HTTPException(status_code=404, detail="Nothing to redo.")
+        restored = _restore_edit_snapshot(s.redo[-1], s.design)
         s.history.append(_snapshot_copy(s.design))
-        s.design = _restore_edit_snapshot(s.redo.pop(), s.design)
+        s.redo.pop()
+        s.design = restored
         report = validate_design(s.design)
         _bump_revision(s)
         return s.design, report

@@ -50,6 +50,8 @@ def _run(session, before, fn, state, *, retry=True):
         report = result
     reconciled = state.reconcile_cluster_membership(before, session.design, report)
     session.design = state._retry_pending_ligations(before, reconciled) if retry else reconciled
+    from backend.core.part_repair_document import preserve_repair_draft
+    session.design = preserve_repair_draft(before, session.design)
     # Preserve the established photoproduct gate and diagnostic exactly.
     from backend.core.photoproducts import stale_photoproduct_ids
     stale = stale_photoproduct_ids(session.design)

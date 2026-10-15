@@ -121,6 +121,8 @@ from backend.core.models import (
 )
 from backend.core.constants import STAPLE_PALETTE
 from backend.core.validator import ValidationReport
+from backend.core.part_repair_document import draft_summary
+from backend.api.part_repair_document import preserve_feature_recovery_metadata
 from backend.core.design_loadouts import (
     encode_snapshot as _encode_loadout_design_snapshot,
     ensure_loadouts as _ensure_loadouts,
@@ -283,7 +285,9 @@ def _design_response(
     full_feature_log: bool = False,
 ) -> dict:
     design = _ensure_default_cluster(design)
-    design_dict = design.to_dict()
+    # Proposals may contain bounded but sizeable action JSON. Never visit it on
+    # ordinary response serialization; explicit draft reads own the full body.
+    design_dict = design.model_dump(exclude={"repair_draft"})
     from backend.core.cpd_representation import inject_cpd_representation
     inject_cpd_representation(design_dict)
     # Loadout branch payloads are full compressed design snapshots. They must
@@ -346,6 +350,7 @@ def _design_response(
         # the strand to break the cycle.
         "unligated_crossover_ids": unligated_crossover_ids(design),
         "revision": rev,
+        "repair_draft": draft_summary(design.repair_draft),
     }
     if feature_log_partial:
         resp["feature_log_payloads_partial"] = True
@@ -6094,7 +6099,7 @@ def _delete_snapshot_feature_by_replay(
         else:
             new_entries.append(e)
 
-    base = state.copy_with(feature_log=new_entries)
+    base = preserve_feature_recovery_metadata(design, state.copy_with(feature_log=new_entries))
     updated = _seek_feature_log(base, -1)
     design_state.set_design(updated)
     report = validate_design(updated)
@@ -6594,7 +6599,8 @@ def edit_feature(index: int, body: EditFeatureBody, sub_index: int | None = None
     # logic best-effort applies them.
     from backend.core.validator import validate_design as _validate_design
 
-    final = new_post.copy_with(feature_log=new_log, feature_log_cursor=-1)
+    final = preserve_feature_recovery_metadata(
+        design, new_post.copy_with(feature_log=new_log, feature_log_cursor=-1))
     design_state.set_design(final)
     report = _validate_design(final)
     # Snapshot edits typically change topology (extrusion params), so the
@@ -6807,10 +6813,8 @@ def revert_to_before_feature(index: int, sub_index: int | None = None) -> dict:
     restored = restored.copy_with(
         feature_log=truncated_log,
         feature_log_cursor=-1,
-        loadouts=design.loadouts,
-        active_loadout_id=design.active_loadout_id,
-        last_editable_loadout_id=design.last_editable_loadout_id,
     )
+    restored = preserve_feature_recovery_metadata(design, restored)
 
     design_state.set_design(restored)
     report = validate_design(restored)
@@ -6870,6 +6874,7 @@ def _revert_before_routing_child(
         feature_log_cursor=-1,
         feature_log_sub_cursor=None,
     )
+    restored = preserve_feature_recovery_metadata(design, restored)
     design_state.set_design(restored)
     report = validate_design(restored)
     return _design_response_with_geometry(restored, report)

@@ -11,7 +11,7 @@ Scope approved October 14, 2026: implement standard-part validation, editability
 | P2 | Explicit recipe roots/versions, authoritative-field classification, read-only verification and incremental dependencies | Implementation exit checks complete: independent nonempty replay, content-pinned roots, typed dependencies, fingerprints, bounded capture/jobs and stale/cancel handling. Supported-family expansion continues in P3/P4; validation debt below remains explicit |
 | P3 | Native DNA command families and generated construction | 96 versioned kinds with method/action restrictions, joined/connectivity input compilation and bounded native-source CPD conversion/relaxation implemented. See the latest evidence and explicit scope limits below; full generated asset/attachment histories belong to P4 |
 | P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol including unbound particle motion, pinned small protein/catalog/aptamer inputs, supported protein conjugation lifecycle and duplex lifecycle/relaxation implemented. Bounded document transport and explicit inactive-source audits added. Full import/attachment coverage and physical-result provenance remain open |
-| P5 | Standard-part repair, drafts, desktop and part-mode VR | Explicit repair/numerical-upgrade jobs, bounded initial reference selection and revision-bound publication implemented. Shared draft schema/planning/capture foundations pass; Design persistence, broader selectors, comparison and UI remain open |
+| P5 | Standard-part repair, drafts, desktop and part-mode VR | Explicit repair/numerical-upgrade jobs, bounded initial reference selection and revision-bound publication implemented. Draft metadata API and Design/session/loadout/package persistence pass; source staging, draft-bound apply, broader selectors, comparison and UI remain open |
 | P6 | Strict standard-part agent transactions and legacy retirement | Initial pure registered-batch catalog and cold replay tested. Public job integration, server-owned policy, mutation bypass closure, baseline reuse and explicit import permission remain open |
 
 Assemblies are not an exit condition for any phase above. Existing assembly compatibility tests may catch collateral changes to shared infrastructure, but new assembly features and fixes remain deferred.
@@ -851,3 +851,30 @@ and existing lint debt remain explicit; no physical simulation or visual/headset
 validation was run. An unrelated remote Alpine continuation/progress update was
 merged without conflicts and preserved; it is not part of these phase claims.
 P4/P5/P6 remain incomplete. [Validation record](validation_draft_batch_p5_p6.json).
+
+## Portable repair proposals and explicit metadata API — October 15
+
+Repair proposals now persist as a separate Design/branch field through JSON,
+server sessions, loadouts, project revisions and packages. Proof, numerical
+authoring projections, import roots and feature recovery exclude this field.
+Ordinary same-branch geometry recovery retains the current proposal and staged
+source bytes, including explicit absence after discard; branch navigation
+restores the destination proposal. Source-union refusal happens before undo
+stacks change. Broader pre-existing undo exception atomicity is not claimed.
+
+The explicit metadata API creates, updates, rebases, reads and discards bounded
+proposals. Preparation hashes definitions outside the document lock; publication
+checks session/source identity, revision and draft generation, then assigns one
+revision without geometry execution, a feature row or a geometry undo snapshot.
+Protected simulation branches remain read-only. Ordinary responses expose only
+a constant-size pending/unchecked summary. Source staging and draft-bound apply
+remain pending; matching draft metadata never certifies a rebuilt part.
+
+The checkpoint passes **187 focused cases across 13 files**, including independent
+CPD/duplex cold rebuilds and all affected persistence boundaries. The new model
+field changes conservative numerical source pins without changing algorithms;
+old pins require explicit upgrade. Changed Python Ruff and whitespace pass.
+The selector dry-run still reports FAST and deferred FULL; neither broad suite
+ran, and Archive is unavailable. See the [API](../../part_repair_drafts.md),
+[boundary audit](draft_document_boundary.md) and
+[validation record](validation_draft_persistence_p5.json).

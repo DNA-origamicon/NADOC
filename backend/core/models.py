@@ -28,6 +28,7 @@ from backend.core.dimensions import Dimension
 from backend.core.lattice_frame_model import LatticeFrame, validate_frame_references
 from backend.core.part_history_contract import PartRecipeRoot
 from backend.core.part_input_sources import Digest, EmbeddedInput, MAX_SOURCES
+from backend.core.part_repair_draft import RepairDraft
 
 
 # ── Enumerations ──────────────────────────────────────────────────────────────
@@ -3141,6 +3142,9 @@ class Design(BaseModel):
     # Immutable imported bytes travel with portable documents. Commands name
     # their digest; parsed geometry remains independently regenerated output.
     input_sources: Dict[Digest, EmbeddedInput] = Field(default_factory=dict, max_length=MAX_SOURCES)
+    # Proposed input edits are portable branch metadata, never geometry, proof
+    # inputs, recovery state or a persisted verification result.
+    repair_draft: Optional[RepairDraft] = None
     dimensions: List[Dimension] = Field(default_factory=list)
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     lattice_frames: List[LatticeFrame] = Field(default_factory=list)

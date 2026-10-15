@@ -38,6 +38,7 @@ from pydantic import BaseModel
 
 from backend.api import state as design_state
 from backend.api.part_evaluation import EvaluationRequest
+from backend.core.part_repair_draft_host import DraftRequest
 
 # Shared kernel/infra helpers that stay in crud.py and are imported back
 # (same convention as routes_camera_poses.py / routes_loop_skip.py):
@@ -63,6 +64,16 @@ from backend.core.display_placement import measured_display_placement
 from backend.core.feature_evaluation import batch_target_groups, optimization_enabled
 
 router = APIRouter()
+
+
+@router.get("/design/features/repair-draft")
+def get_part_repair_draft():
+    return design_state.get_repair_draft()
+
+
+@router.post("/design/features/repair-draft")
+def update_part_repair_draft(body: DraftRequest):
+    return design_state.mutate_repair_draft(body)
 
 
 @router.post("/design/features/evaluation/jobs", status_code=202)

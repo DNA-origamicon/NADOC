@@ -65,9 +65,9 @@ def _current(query):
         if set(type(source).model_fields) != set(FIELD_ROLES):
             raise ValueError("Part schema contains unclassified fields")
         fields = {name for name, role in FIELD_ROLES.items()
-                  if role in {"input_source", "presentation", "physical"}}
+                  if role in {"input_source", "presentation", "physical", "repair_draft"}}
         if any(getattr(source, name) != getattr(baseline, name) for name in fields):
-            raise ValueError("Part retains source, presentation or physical state")
+            raise ValueError("Part retains source, presentation, physical or repair draft state")
     except ValueError as error:
         raise HTTPException(422, detail={"code": "fresh_empty_part_required",
             "detail": "Create a fresh empty part or tab for pinned caDNAno import. The existing upload route supports ordinary document replacement."}) from error

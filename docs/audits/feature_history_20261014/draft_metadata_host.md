@@ -1,8 +1,10 @@
 # P5c definition capture and metadata preparation
 
-This slice adds pure host foundations only. It does not add Design fields,
-routes, session mutation, persistence wiring, caches or UI. The preceding schema
-and fingerprint foundation is documented in `draft_persistence.md`.
+The original slice added pure host foundations. Design persistence and explicit
+metadata routes are now wired; see [the API contract](../../part_repair_drafts.md)
+and `draft_document_boundary.md`. Source staging, draft-bound evaluation/apply
+and UI remain separate work. The preceding schema and fingerprint foundation
+is documented in `draft_persistence.md`.
 
 `core/part_repair_capture.py` copies private root/feature input headers, including
 overlay inputs and routing parent/child identities. Snapshot/diff bodies,

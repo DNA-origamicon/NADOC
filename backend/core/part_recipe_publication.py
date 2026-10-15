@@ -1,6 +1,7 @@
 """Preserve document/display state when publishing regenerated authoring state."""
 
 from backend.core.part_history_contract import FIELD_ROLES
+from backend.core.part_repair_document import preserve_repair_draft
 
 
 def preserve_document_state(source, candidate):
@@ -26,4 +27,4 @@ def preserve_document_state(source, candidate):
             elif kept or override.segments:
                 overrides.append(override.model_copy(update={"protein_attachment_ids": kept}))
         preserved["representation_overrides"] = overrides
-    return candidate.copy_with(**preserved)
+    return preserve_repair_draft(source, candidate.copy_with(**preserved))

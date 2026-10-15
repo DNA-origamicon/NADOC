@@ -28,7 +28,7 @@ def import_root(source):
     from backend.core.part_history_contract import PartRecipeRoot
     if source.feature_log or source.recipe_root is not None:
         raise ValueError("Import source must be an explicit history-free source document")
-    raw = source.model_dump_json()
+    raw = source.model_dump_json(exclude={"repair_draft"})
     return PartRecipeRoot(kind="import", source_json=raw,
                           source_sha256=hashlib.sha256(raw.encode()).hexdigest())
 
@@ -45,6 +45,8 @@ def root_design(root, *, input_sources=None):
     source = Design.model_validate_json(root.source_json)
     if source.feature_log or source.recipe_root is not None:
         raise ValueError("Import source contains nested recipe/history")
+    if source.repair_draft is not None:
+        raise ValueError("Import source contains repair draft metadata")
     source.recipe_root = root
     if input_sources is not None:
         source = source.copy_with(input_sources=dict(input_sources))
@@ -73,7 +75,7 @@ def command_rows(design, limit):
 def assess(design, *, max_entries, execute, dependencies, checkpoint):
     result = {"scope": "part", "contract_version": 1, "status": "unverified", "issues": [],
               "verification_scope": "authoring_reproducibility", "integrity_checked": False,
-              "excluded_roles": ["presentation", "physical", "document_identity"],
+              "excluded_roles": ["presentation", "physical", "document_identity", "repair_draft"],
               "checked_commands": 0, "proof_coverage": "versioned_commands", "native_editable": False}
     issues = result["issues"]
     check = checkpoint or (lambda: None)

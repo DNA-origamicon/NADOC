@@ -65,7 +65,7 @@ def capture(design, *, max_nodes=30_000, max_bytes=2_000_000, seconds=0.025,
 
     fields = {}
     for name in type(design).model_fields:
-        if FIELD_ROLES.get(name) not in {"presentation", "physical", "history"}:
+        if FIELD_ROLES.get(name) not in {"presentation", "physical", "history", "repair_draft"}:
             value = getattr(design, name)
             # Specialize scalar atoms only within nanoparticle authoring.
             # Keep traversal/budgets identical; memo preserves atom aliases
