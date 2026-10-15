@@ -559,3 +559,45 @@ budgets. Existing CPD/duplex append behavior remains supported. Native lifecycle
 cold input replay, source/pin failure, atomic combined operations and job guard
 tests pass, but latency qualification remains incomplete. Do not enable the
 public workflow or raise ordinary limits on this evidence.
+
+## Retained-history qualification — October 15
+
+The atom-record accounting run (`coating_jobs_benchmark_atom_records_p4.json`)
+retains all original node/byte charges while checking the fixed nine-scalar atom
+at one cooperative boundary. Four active cases have capture p50 36–37 ms and
+p95 96–99 ms. Two of 120 captures refused the clock near 100 ms; these remain
+admission refusals, not invalid-geometry reports. All 150 separately prepared
+publications and five real complete jobs passed. Cancellation and source-change
+jobs both started, reaped in approximately 53–55 ms and refused commit.
+
+The additional `coating_jobs_benchmark_long_history_p4.json` grows real native
+append/edit histories, with actual recovery encoding and unchanged limits.
+Fourteen rows retain 7,576,988 encoded recovery bytes and remain editable. The
+fifteenth append exceeds the existing 8 MB cumulative recovery allowance; it
+returns no candidate and leaves the source unchanged. This recovery allowance
+is reached before the separate 32-row bound. Do not advertise 32 coating steps
+as guaranteed capacity.
+
+All 30 captures of that longest editable history succeeded: lock p50 39.73 ms,
+p95 95.11 ms and max 95.51 ms. Concurrent lightweight HTTP p50 was 23.36 ms,
+p95 91.91 ms and max 98.36 ms. All 30 independently prepared publications passed;
+publication-lock p50 was 9.83 ms, p95 11.50 ms and max 11.78 ms. Full commit HTTP
+p50 was 81.75 ms, p95 87.74 ms and max 137.67 ms; its concurrent lightweight
+HTTP p95 was 34.53 ms, with a 92.88 ms maximum. Candidate JSON was 8,651,805 bytes.
+One real complete job reaped in 2.46 seconds and committed in 77.21 ms. Cancel
+and source-change cases reaped in 53.16/136.98 ms respectively, refused commit
+and preserved the expected source/revision. Session cleanup passed.
+
+The provisional p95 lock target is met for this explicit bounded workflow.
+There is no hard real-time guarantee, zero-contention claim, ordinary-route
+qualification or larger/mixed-asset permission. The two short-history deadline
+refusals remain visible and never trigger automatic escalation. The planned
+enablement is limited to the existing explicit job API and its fixed one-gold,
+64-requested-site scope. This evidence is checkpointed before changing the gate.
+Multi-particle/mixed-DNA coating and growth beyond the recovery bound still need
+the separately planned immutable-resource/storage work.
+
+Lifecycle checks now additionally cover delete/recreate with retained source
+closure and fresh particle identity, publication-derived count changes on resize
+without an override, and a 32nd bare-gold delete. The evaluation file passes 26
+tests. No formulas, numerical manifests, GC policy or global limits changed.

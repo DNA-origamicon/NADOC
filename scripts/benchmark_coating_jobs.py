@@ -29,7 +29,9 @@ from backend.api.doc_context import DocContextMiddleware, reset_current_doc, set
 from backend.api.part_evaluation import evaluate
 from backend.api.part_evaluation_capture import COATING_PROFILE
 from backend.api.part_history_verification import _slot
+from backend.api.part_recovery_budget import MAX_RECOVERY_BYTES
 from backend.api.routes_feature_log import router
+from backend.core.models import Design
 from backend.core.part_history_contract import create_empty_part
 from backend.core.part_streptavidin_contract import contract_defaults
 from scripts.benchmark_cadnano_route import LockProbe, _PHASE, phase_wrapper, stats
@@ -77,6 +79,70 @@ def fixture(mode, count, table, sources, *, removed=False):
     return {"name": name, "mode": mode, "requested_sites": count, "actual_sites_before_removal": actual_sites,
         "removed": removed, "design": design, "request": request, "prepared": prepared,
         "separate_native_candidate_evaluation_ms": (perf_counter() - begin) * 1000}
+
+
+def longest_history_fixture(table, sources):
+    """Grow actual input rows until ordinary append/edit recovery refuses.
+
+    Every prefix is independently proved by the existing evaluator, and every
+    retained snapshot is its real encoded output. This preparation happens
+    outside the measured lock samples. No recovery budget or public gate is
+    changed; direct evaluation exercises the still-private append compiler.
+    """
+    case = fixture("adsorption", 64, table, sources)
+    case["name"] += ":longest-editable-history"
+    attempts = []
+    boundary = {"flat_row_limit": 32, "cumulative_recovery_limit_bytes": MAX_RECOVERY_BYTES,
+                "last_admitted_append_rows": len(case["design"].feature_log), "attempts": attempts}
+    for row_count in range(len(case["design"].feature_log) + 1, 34):
+        design = case["design"]
+        before = design.model_dump_json()
+        request = {"operation": "append", "kind": "streptavidin-coating", "expected_revision": 0,
+            "params": {"action": "move", "nanoparticle_id": "gold", "gizmo_move": {
+                "pivot": [0.0, 0.0, 0.0], "translation": [1.0, 0.0, 0.0],
+                "rotation": [0.0, 0.0, 0.0, 1.0]}}}
+        begin = perf_counter()
+        result = evaluate(design, {"request": request, "header": {
+            "identity": str(uuid4()), "timestamp": "2026-10-15T12:00:00Z",
+            "source_revision": 0, "source_design_id": design.id}})
+        attempt = {"proposed_rows": row_count, "append_ms": (perf_counter() - begin) * 1000,
+                   "append_status": result["status"], "append_issues": result.get("issues", []),
+                   "source_unchanged": design.model_dump_json() == before}
+        attempts.append(attempt)
+        if result["status"] != "ready":
+            boundary["first_refusal"] = {"operation": "append", "proposed_rows": row_count,
+                "status": result["status"], "issues": result.get("issues", []),
+                "candidate_returned": "candidate" in result, "source_unchanged": attempt["source_unchanged"]}
+            break
+        candidate = Design.model_validate(result["candidate"])
+        boundary["last_admitted_append_rows"] = len(candidate.feature_log)
+        attempt["retained_recovery_encoded_bytes"] = sum(
+            len(row.design_snapshot_gz_b64) + len(row.post_state_gz_b64 or "") for row in candidate.feature_log)
+        # Qualify an edit of the final move as well as append admission. Prefix
+        # replay and rewritten suffix share the production RecoveryBudget.
+        edit = {"operation": "edit", "index": len(candidate.feature_log) - 1,
+            "params": {"gizmo_move": {"pivot": [0.0, 0.0, 0.0], "translation": [2.0, 0.0, 0.0],
+                "rotation": [0.0, 0.0, 0.0, 1.0]}}}
+        candidate_before = candidate.model_dump_json()
+        begin = perf_counter()
+        prepared = evaluate(candidate, {"request": edit, "header": {}})
+        elapsed = (perf_counter() - begin) * 1000
+        attempt.update(edit_status=prepared["status"], edit_issues=prepared.get("issues", []),
+                       edit_ms=elapsed, edit_source_unchanged=candidate.model_dump_json() == candidate_before)
+        if prepared["status"] != "ready":
+            boundary["first_refusal"] = {"operation": "edit-after-append", "proposed_rows": row_count,
+                "status": prepared["status"], "issues": prepared.get("issues", []),
+                "candidate_returned": "candidate" in prepared,
+                "source_unchanged": attempt["edit_source_unchanged"]}
+            break
+        case = {**case, "design": candidate, "request": edit, "prepared": prepared,
+                "separate_native_candidate_evaluation_ms": elapsed}
+    boundary["longest_editable_rows"] = len(case["design"].feature_log)
+    refusal = boundary.get("first_refusal", {})
+    boundary["expected_atomic_refusal"] = (refusal.get("status") == "unverified"
+        and not refusal.get("candidate_returned", True) and refusal.get("source_unchanged", False)
+        and any(issue.get("code") == "command_limit" for issue in refusal.get("issues", [])))
+    return case, boundary
 
 
 def concurrent_request(client, headers, callback, probe):
@@ -336,6 +402,8 @@ def actual_job(client, doc, case, mode="complete"):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repeats", type=int, default=30)
+    parser.add_argument("--long-history-only", action="store_true",
+                        help="Qualify only the additional real history/recovery boundary")
     args = parser.parse_args()
     if not 30 <= args.repeats <= 60:
         parser.error("Use 30..60 samples per fixed boundary; smaller runs are not qualification")
@@ -375,9 +443,12 @@ def main():
     state._snapshot_copy = snapshot
     try:
         with threadpool_limits(limits=1):
-            fixtures = [fixture(mode, count, table, sources)
-                        for mode in ("adsorption", "biotin_tether") for count in (1, 64)]
-            fixtures.append(fixture("adsorption", 1, table, sources, removed=True))
+            fixtures = [] if args.long_history_only else [fixture(mode, count, table, sources)
+                for mode in ("adsorption", "biotin_tether") for count in (1, 64)]
+            if not args.long_history_only:
+                fixtures.append(fixture("adsorption", 1, table, sources, removed=True))
+            longest, history_boundary = longest_history_fixture(table, sources)
+            fixtures.append(longest)
             with TestClient(app) as client:
                 startup = actual_job(client, doc, {"design": create_empty_part("Empty worker startup", "HONEYCOMB"),
                                                    "request": {"operation": "verify"}})
@@ -397,11 +468,13 @@ def main():
         "repeats_per_boundary": args.repeats, "fixed_coating_profile": dict(COATING_PROFILE),
         "ordinary_verification_and_edit_limits_unchanged": True, "session_cleanup_verified": not leaked,
         "public_append_enabled": False, "source_files": sizes,
+        "long_history_boundary": history_boundary,
         "measurement_notes": [
             "Repeated start samples intercept submission after real capture; they exclude process startup, replay and solver work.",
             "Repeated commit samples use one separately natively evaluated candidate and measure decode, independent transport digests, source snapshot and publication.",
             "Commit samples are independent of capture refusals; they must not be reported as successful end-to-end jobs.",
             "Representative live jobs use real spawned workers and unchanged admission/deadline/transport policies.",
+            "The long-history fixture is grown through actual native append and edit evaluation until the first unchanged-budget refusal; no output geometry or recovery bytes are fabricated.",
             "The empty-root worker baseline includes child imports and trivial proof, with no native molecular build. Parent constructor/start-call timings are also reported separately.",
             "Lock probes add Python overhead; no forced sleeps create contention. HTTP includes ASGI scheduling.",
             "Zero observed overlap is not evidence of zero contention. A 100 ms cooperative allowance is not a wall-time ceiling.",
@@ -418,7 +491,10 @@ def main():
         or not row["source_guard_correct"])) for row in races)
     bad_startup = (startup["start_http_status"] != 202 or startup["commit_http_status"] != 409
         or startup["poll"]["result"]["status"] != "verified" or not startup["source_guard_correct"])
-    return int(leaked or bad_samples or bad_live or bad_races or bad_startup)
+    return int(leaked or bad_samples or bad_live or bad_races or bad_startup
+               or not history_boundary["expected_atomic_refusal"]
+               or any(not row["source_unchanged"] or not row.get("edit_source_unchanged", True)
+                      for row in history_boundary["attempts"]))
 
 
 if __name__ == "__main__":

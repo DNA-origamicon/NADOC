@@ -71,3 +71,22 @@ provides historical reference views while editing the current definition.
 separates deferred edits from displayed geometry. These inform the explicit
 proposal/apply distinction; NADOC's durable base guards and independent draft
 undo policy are implementation choices, not claims about Onshape internals.
+
+## Metadata publication transaction foundation
+
+`api/part_repair_draft_transaction.publish_draft` now accepts the host's current
+lock-owned session and the privately captured session/source objects. It checks
+session incarnation by object identity, document context, Design ID, revision
+and draft identity/generation before transferring an already prepared proposal
+into a shallow Design replacement. Close/reopen cannot reuse a stale capture
+even when the same model object and revision were reinstated. It checks only
+scalar preparation invariants, assigns one revision and rolls back the exact
+source object, revision and request markers on exceptions or cancellation.
+
+The helper owns no session registry or lock and imports no Design/state module.
+No action, geometry, history, snapshot, source decode or fingerprint is traversed
+while publishing. Its 35 focused cases use a small host schema while the
+production Design boundary remains frozen. State/routes/Design persistence are
+still pending; this helper alone is not a public draft API. Initial Apply will
+retain the proposal; explicit discard is separate until generation-bound
+consumption has its own reviewed transaction.

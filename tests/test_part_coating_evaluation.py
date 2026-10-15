@@ -186,6 +186,67 @@ def test_combined_create_and_delete_each_publish_once_and_undo_as_one(job_docume
     assert state.get_or_404().nanoparticles == created.nanoparticles
 
 
+def test_delete_then_recreate_retains_sources_and_old_recipe_with_new_particle_identity(job_document):
+    def commit(request):
+        source, revision = state.get_design_with_revision()
+        depth = state.undo_depth()
+        job = jobs.start({**request, "expected_revision": revision})["job_id"]
+        assert jobs.inspect(job)["result"]["status"] == "ready"
+        assert state.get_design_with_revision() == (source, revision)
+        jobs.commit(job)
+        assert state.revision() == revision + 1 and state.undo_depth() == depth + 1
+        return state.get_or_404()
+
+    created = commit(body(diameter_nm=20.0, coating={"count_override": 1, "coverage_reference": "gold_2007"}))
+    original_identity = created.nanoparticles[0].id
+    original_sources = dict(created.input_sources)
+    deleted = commit(body("delete", identity=original_identity))
+    assert not deleted.nanoparticles and deleted.input_sources == original_sources
+    definition_fields = {"id", "op_kind", "params", "label", "timestamp"}
+    old_rows = [row.model_dump(include=definition_fields) for row in deleted.feature_log]
+    recreated = commit(body(diameter_nm=12.0, coating={
+        "count_override": 2, "coverage_reference": "gold_2007", "seed": 9}))
+    assert recreated.nanoparticles[0].id != original_identity
+    assert recreated.nanoparticles[0].diameter_nm == 12.0
+    assert recreated.nanoparticles[0].coating.seed == 9
+    assert recreated.nanoparticles[0].coating.target_count == 2
+    assert recreated.input_sources == original_sources and len(recreated.input_sources) == 2
+    assert len(recreated.feature_log) == 6
+    assert [row.model_dump(include=definition_fields) for row in recreated.feature_log[:4]] == old_rows
+    state.undo()
+    assert not state.get_or_404().nanoparticles
+    assert state.get_or_404().input_sources == original_sources
+    state.redo()
+    assert state.get_or_404().nanoparticles == recreated.nanoparticles
+
+
+def test_uncoated_delete_uses_the_single_remaining_thirty_second_row(job_document):
+    from backend.api.part_recipe_edit import regenerate
+
+    # Actual native rows and recovery, not a padded list of invalid receipts.
+    source = empty()
+    base = {"_proof_version": 1, "nanoparticle_version": 1, "nanoparticle_id": "bare-gold"}
+    rows = [m.SnapshotLogEntry(id=str(uuid4()), op_kind="nanoparticle-create", label="Create bare gold",
+        params={**base, "diameter_nm": 10.0})]
+    rows.extend(m.SnapshotLogEntry(id=str(uuid4()), op_kind="nanoparticle-patch", label="Resize bare gold",
+        params={**base, "diameter_nm": 10.0 + index / 10.0}) for index in range(1, 31))
+    source = regenerate(source, rows, lambda: None)
+    assert len(source.feature_log) == 31 and source.nanoparticles[0].coating is None
+    state.load_design(source)
+    revision, depth = state.revision(), state.undo_depth()
+    job = jobs.start(body("delete", revision=revision, identity="bare-gold"))["job_id"]
+    result = jobs.inspect(job)["result"]
+    assert result["status"] == "ready", result
+    assert len(result["append"]["feature_ids"]) == 1
+    jobs.commit(job)
+    candidate = state.get_or_404()
+    assert len(candidate.feature_log) == 32 and not candidate.nanoparticles
+    assert candidate.feature_log[-1].op_kind == "nanoparticle-delete"
+    assert state.revision() == revision + 1 and state.undo_depth() == depth + 1
+    proof = assess_part_history(candidate, execute=execute_long, dependencies=dependencies)
+    assert proof["status"] == "verified", proof
+
+
 @pytest.mark.parametrize("fault", ["cancel", "stale"])
 def test_ready_candidate_cancel_or_stale_cannot_publish(job_document, fault):
     job = jobs.start(body(revision=state.revision(), diameter_nm=20.0, coating={"count_override": 1}))["job_id"]
@@ -317,6 +378,33 @@ def test_real_native_lifecycle_defaults_sources_and_input_replay(sources):
     assert result["status"] == "ready" and len(result["append"]["feature_ids"]) == 2
     assert not m.Design.model_validate(result["candidate"]).nanoparticles
     assert original.model_dump_json() == before
+
+
+def test_publication_driven_resize_recomputes_count_from_retained_pin_without_override(sources, monkeypatch):
+    design = empty()
+    created = evaluate(design, operation(design, body(diameter_nm=5.0, coating={
+        "coverage_reference": "gurtovenko_2019", "footprint_nm2": 100.0})))
+    assert created["status"] == "ready", created
+    design = m.Design.model_validate(created["candidate"])
+    original_sources = dict(design.input_sources)
+    recorded = deepcopy(design.feature_log[-1].params)
+    assert recorded["count_override"] is None
+    assert design.nanoparticles[0].coating.target_count == 1
+    # The retained publication's 50 nm² area determines 6 sites at 10 nm;
+    # using the authored 100 nm² fallback footprint would incorrectly give 3.
+    monkeypatch.setattr(compiler, "_DATA", Path("/__nadoc_test_no_repack_assets__"))
+    result = evaluate(design, operation(design, body("repack", identity=design.nanoparticles[0].id,
+        diameter_nm=10.0)))
+    assert result["status"] == "ready", result
+    candidate = m.Design.model_validate(result["candidate"])
+    assert candidate.nanoparticles[0].diameter_nm == 10.0
+    assert candidate.nanoparticles[0].coating.target_count == 6
+    assert candidate.nanoparticles[0].coating.count_override is None
+    assert 1 <= len(candidate.nanoparticles[0].coating.poses) <= 6
+    assert candidate.feature_log[-1].params == {**recorded, "diameter_nm": 10.0}
+    assert candidate.input_sources == original_sources and len(original_sources) == 2
+    proof = assess_part_history(candidate, execute=execute_long, dependencies=dependencies)
+    assert proof["status"] == "reproduced_import", proof
 
 
 def _evaluate_without_bundles(input_name, input_size, output_name):
