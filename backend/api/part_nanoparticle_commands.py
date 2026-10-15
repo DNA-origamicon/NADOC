@@ -57,6 +57,9 @@ class DeleteRequest(_Input):
 
 
 def parse_command(kind, params):
+    if "thiol_version" in params:
+        from backend.api.part_thiol_patch_commands import parse_command as parse_thiol_patch
+        return parse_thiol_patch(kind, params)
     if "quantum_dot_version" in params:
         from backend.api.part_quantum_dot_commands import parse_command as parse_quantum_dot
         return parse_quantum_dot(kind, params)
@@ -68,6 +71,9 @@ def parse_command(kind, params):
 
 
 def resources(kind, params):
+    if "thiol_version" in params:
+        from backend.api.part_thiol_patch_commands import resources as thiol_resources
+        return thiol_resources(kind, params)
     if "quantum_dot_version" in params:
         from backend.api.part_quantum_dot_commands import resources as quantum_dot_resources
         return quantum_dot_resources(kind, params)
@@ -110,6 +116,9 @@ def route_source_free_target(design, identity):
 
 
 def build(kind, design, params, *, resolver=None):
+    if "thiol_version" in params:
+        from backend.api.part_thiol_patch_commands import build as build_thiol_patch
+        return build_thiol_patch(kind, design, params)
     if "quantum_dot_version" in params:
         from backend.api.part_quantum_dot_commands import build as build_quantum_dot
         return build_quantum_dot(kind, design, params, resolver=resolver)

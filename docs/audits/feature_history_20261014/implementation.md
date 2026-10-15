@@ -10,7 +10,7 @@ Scope approved October 14, 2026: implement standard-part validation, editability
 | P1 | Standard-part recording transactions, executable replay registry and evidenced cleanup | Foundation implemented below. Retain legacy callbacks and compatibility recovery; no claim of general isolated evaluation |
 | P2 | Explicit recipe roots/versions, authoritative-field classification, read-only verification and incremental dependencies | Implementation exit checks complete: independent nonempty replay, content-pinned roots, typed dependencies, fingerprints, bounded capture/jobs and stale/cancel handling. Supported-family expansion continues in P3/P4; validation debt below remains explicit |
 | P3 | Native DNA command families and generated construction | 96 versioned kinds with method/action restrictions, joined/connectivity input compilation and bounded native-source CPD conversion/relaxation implemented. See the latest evidence and explicit scope limits below; full generated asset/attachment histories belong to P4 |
-| P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol, pinned small protein/catalog inputs, supported protein conjugation lifecycle and duplex lifecycle/relaxation implemented. Bounded document transport and explicit inactive-source audits added. Full import/attachment coverage and physical-result provenance remain open |
+| P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol including unbound particle motion, pinned small protein/catalog/aptamer inputs, supported protein conjugation lifecycle and duplex lifecycle/relaxation implemented. Bounded document transport and explicit inactive-source audits added. Full import/attachment coverage and physical-result provenance remain open |
 | P5 | Standard-part repair, drafts, desktop and part-mode VR | Pending. Revision-bound impact previews, failed/blocked diagnostics, reference replacement, last-successful-state display, undo/reload |
 | P6 | Strict standard-part agent transactions and legacy retirement | Pending. Pure candidate execution outside long-held locks, expected-revision publication, registered command batches, bypass closure and explicit import exceptions |
 
@@ -570,3 +570,63 @@ then the [bounded topology-import sequence](topology_import_plan.md). Coatings,
 biotin/coupled attachment contracts, typed rigid copy, larger asset capture and
 physical-source provenance still need independent admission/validation. P5
 repair drafts/UI and P6 strict automation are pending. Assemblies remain deferred.
+
+## P4d pinned aptamers and unbound particle motion — October 15
+
+The registry now admits 113 versioned kinds with explicit scope limits.
+Single-chain aptamers reconstruct the unchanged importer's native sites from
+captured UTF-8 PDB bytes. The contract retains the first-model, alternate-location,
+residue-address, backbone and RNA rules, and replaces only generated identities.
+The selected name/source annotation remain editable; output helix/strand/cluster
+IDs remain stable. Replay never resolves a template name or filesystem path.
+Deposited coordinates retain `reproduced_import` provenance; a matching source
+hash cannot certify changed output sites. Larger/multiple-chain or opaque legacy
+imports keep their compatibility path without a native receipt.
+
+First imports now initialize and publish through one shared atomic recording
+boundary, for native and legacy aptamer routes. Cancellation or failure restores
+the no-document state, full undo/redo, revision and request markers. Existing
+documents retain their roots and metadata. Successful initialization creates one
+undoable feature; undo returns to the explicit empty part for native imports.
+
+Unbound thiol particles now retain exact conjugation selectors during move/resize.
+Shared ownership checks resolve each owned strand/helix/overhang and refuse
+external consumers before native geometry work. Missing supported references
+produce structured failures; unsupported larger/coupled/opaque cases choose
+compatibility before mutation. Existing native pose/resize calculations are
+unchanged. One known existing limitation is explicitly retained: resize updates
+axes/coverage but not `SurfaceStrand.sulfur_local_nm`. Reproducibility does not
+qualify the chemical correctness of that existing resize behavior.
+
+The 150 KB/1,000-first-model-record aptamer admission was qualified against all
+three bundled templates, repeated imports and an adversarial complete boundary
+fixture. Of 90 warm capture/proof attempts, 85 reproduced their imported inputs
+and five hit the existing cooperative capture budget. All ten separate fresh
+workers reproduced their inputs. Single-import median capture was 3.9–7.2 ms;
+atomic recording was approximately 6.6–11.4 ms, excluding the route's initial
+parse and response rendering. Candidate JSON stayed below 873 KB and captured
+pickle below 378 KB in these cases. Four-copy growth and all refusals remain in
+[raw evidence](aptamer_capture_benchmark_p4.json); there is no hard latency claim.
+
+Thiol movement admission medians were 0.06/2.95/2.25 ms for 1/128/100 handles,
+with build medians 0.21/4.43/3.30 ms. Twenty-six of 27 warm proof attempts verified;
+one 128-handle capture refused on time. [Raw evidence](thiol_motion_benchmark_p4.json)
+retains the 43.5 ms capture and 90.1 ms proof maxima. No global capture, worker,
+recovery or transport limit was increased. No full proof was added to ordinary
+editing or rendering.
+
+Focused validation: **461 passed across 24 files**. Changed Python files pass
+Ruff and whitespace checks. One new RNA fixture initially selected a PDB header
+mentioning an atom name; selecting an actual ATOM record corrected the test,
+without changing importer behavior. Details are in
+[validation evidence](validation_aptamer_motion_p4.json). The selector still says
+**FULL (FULL suite) [test-dedicated session OPEN]**; Archive remains unavailable,
+so no broad pass is claimed. Memory lint retains six errors/60 warnings. No
+frontend changes, visual/headset check or physical simulation; `main.js` LOC delta
+is zero. Molecular algorithms and numerical pin source files were unchanged.
+
+Next work is [typed rigid copy](element_copy_plan.md), then independently bounded
+larger-source/coating and [lattice import contracts](cadnano_scadnano_input_plan.md).
+Coating assets already exceed the default capture node budget before timing;
+their admission needs a separate measured design. P4 remains open, P5 repair and
+P6 strict automation remain pending, and assemblies remain deferred.

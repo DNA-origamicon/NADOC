@@ -136,7 +136,7 @@ def command_sources(kind, params) -> tuple[InputSource, ...]:
     This cheap declaration is shared by portability and explicit source audit;
     executor schemas still decide whether a command is admitted for proof.
     """
-    source_bearing = kind == "protein-import" or (
+    source_bearing = kind in {"protein-import", "aptamer-import"} or (
         kind == "nanoparticle-create" and "quantum_dot_version" in params)
     if (not source_bearing or params.get("_proof_version") != 1 or "source" not in params):
         return ()

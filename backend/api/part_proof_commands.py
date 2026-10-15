@@ -21,6 +21,7 @@ from backend.api.part_duplex_commands import KINDS as DUPLEX_KINDS
 from backend.api.part_protein_commands import KINDS as PROTEIN_KINDS
 from backend.api.part_protein_conjugation_commands import KINDS as PROTEIN_CONJUGATION_KINDS
 from backend.api.part_thiol_commands import KINDS as THIOL_KINDS
+from backend.api.part_aptamer_commands import KINDS as APTAMER_KINDS
 
 
 TOPOLOGY_MINOR_KINDS = frozenset({
@@ -29,7 +30,7 @@ TOPOLOGY_MINOR_KINDS = frozenset({
     "crossover-place", "crossover-place-batch",
 })
 EXTRUSION_COMMANDS = frozenset({"extrude-segment", "extrude-continuation", "extrude-deformed-continuation", "circle-segment", "extrude-frame"})
-PROOF_SNAPSHOT_KINDS = THIOL_KINDS | PROTEIN_CONJUGATION_KINDS | PROTEIN_KINDS | DUPLEX_KINDS | NANOPARTICLE_KINDS | JOINED_PATH_KINDS | CONNECTIVITY_KINDS | SECTION_KINDS | PATH_KINDS | BRANCH_KINDS | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS | frozenset({"photoproduct-relax", "bundle-create", "sweep", "cluster-join", "strand-sequence", "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste"})
+PROOF_SNAPSHOT_KINDS = APTAMER_KINDS | THIOL_KINDS | PROTEIN_CONJUGATION_KINDS | PROTEIN_KINDS | DUPLEX_KINDS | NANOPARTICLE_KINDS | JOINED_PATH_KINDS | CONNECTIVITY_KINDS | SECTION_KINDS | PATH_KINDS | BRANCH_KINDS | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS | frozenset({"photoproduct-relax", "bundle-create", "sweep", "cluster-join", "strand-sequence", "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste"})
 PROOF_MINOR_KINDS = MOVE_KINDS | CELL_KINDS | LIGATION_KINDS | TOPOLOGY_MINOR_KINDS | LOOP_COMMANDS | STRUCTURAL_KINDS | frozenset({"joint-place", "joint-update", "joint-delete", "strand-patch"})
 PROOF_VERSION = 1
 PART_TOPOLOGY = Resource("part", "topology")
@@ -51,8 +52,10 @@ def dependencies(kind, params):
     # strict command schema. Preserve source provenance during scoped admission.
     params = {key: value for key, value in params.items()
               if key not in {"_generated_scope", "_generator"}}
-    if kind in PROTEIN_KINDS | PROTEIN_CONJUGATION_KINDS | THIOL_KINDS:
-        if kind in THIOL_KINDS:
+    if kind in PROTEIN_KINDS | PROTEIN_CONJUGATION_KINDS | THIOL_KINDS | APTAMER_KINDS:
+        if kind in APTAMER_KINDS:
+            from backend.api.part_aptamer_commands import resources
+        elif kind in THIOL_KINDS:
             from backend.api.part_thiol_commands import resources
         elif kind in PROTEIN_CONJUGATION_KINDS:
             from backend.api.part_protein_conjugation_commands import resources
@@ -195,6 +198,10 @@ def _execute(kind, design, params, *, expensive):
     elif kind == "nick-batch":
         from backend.api.part_command_references import build_strict_nick_batch
         updated = build_strict_nick_batch(design, params)
+    elif kind in APTAMER_KINDS:
+        from backend.api.part_aptamer_commands import build
+        from backend.core.part_input_sources import EmbeddedResolver
+        updated = build(kind, design, params, resolver=EmbeddedResolver(design.input_sources))
     elif kind in THIOL_KINDS:
         from backend.api.part_thiol_commands import build
         updated = build(kind, design, params)

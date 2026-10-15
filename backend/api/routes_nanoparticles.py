@@ -171,6 +171,12 @@ def patch_nanoparticle(nanoparticle_id: str, body: NanoparticlePatch) -> dict:
             f"{'Resize' if body.diameter_nm is not None else 'Move'} quantum dot",
             {"nanoparticle_id": nanoparticle_id, **body.model_dump(exclude_unset=True)})
         return _design_response(updated, report)
+    from backend.api.part_thiol_patch_commands import native_route_eligible as native_thiol, record as record_thiol
+    if body.coating is None and native_thiol(current, nanoparticle_id):
+        updated, report, _ = record_thiol("nanoparticle-patch",
+            f"{'Resize' if body.diameter_nm is not None else 'Move'} gold nanosphere",
+            {"nanoparticle_id": nanoparticle_id, **body.model_dump(exclude_unset=True)})
+        return _design_response(updated, report)
     from backend.api.part_nanoparticle_commands import record, route_source_free_target
     if body.coating is None and route_source_free_target(current, nanoparticle_id):
         updated, report, _ = record("nanoparticle-patch",

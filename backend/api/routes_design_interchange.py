@@ -481,6 +481,7 @@ def aptamer_catalog() -> dict:
 def import_aptamer_design(body: AptamerImportRequest) -> dict:
     from backend.core.aptamer import CATALOG, import_aptamer, template_content
     from backend.api.crud import _design_response_with_geometry
+    from backend.api.part_aptamer_commands import native_route_eligible, record_import
 
     if bool(body.template_id) == bool(body.content):
         raise HTTPException(400, detail="Choose one aptamer template or a PDB file")
@@ -490,34 +491,31 @@ def import_aptamer_design(body: AptamerImportRequest) -> dict:
             raise HTTPException(413, detail="Aptamer PDB exceeds 50 MB")
         entry = next((e for e in CATALOG if e["id"] == body.template_id), None)
         name = entry["name"] if entry else body.name
-        imported = import_aptamer(content, name, entry["url"] if entry else "local PDB")
+        source_label = entry["url"] if entry else "local PDB"
+        imported = import_aptamer(content, name, source_label)
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
 
-    from backend.core.models import Design
+    if native_route_eligible(content, imported, design_state.get_design()):
+        design, report, _ = record_import(content, name, source_label,
+                                         expected_revision=body.expected_revision)
+    else:
+        from backend.core.models import Design
 
-    # Import is a topology operation even when this is the first object in a
-    # session. Seed an empty document so the snapshot has a real pre-state and
-    # both timeline seek and undo can remove/recreate the imported UUIDs.
-    expected_revision = body.expected_revision
-    if design_state.get_design() is None:
-        if expected_revision is not None and expected_revision != design_state.revision():
-            raise HTTPException(409, detail="Design changed while preparing aptamer import")
-        design_state.load_design(Design(metadata=imported.metadata))
-        expected_revision = design_state.revision()
+        # Larger or multiple-chain imports retain their legacy recovery receipt.
+        # Native evaluation failures above never fall back to this path.
+        def merge(d):
+            return d.copy_with(
+                helices=[*d.helices, *imported.helices],
+                strands=[*d.strands, *imported.strands],
+                cluster_transforms=[*d.cluster_transforms, *imported.cluster_transforms],
+            )
 
-    def merge(d):
-        return d.copy_with(
-            helices=[*d.helices, *imported.helices],
-            strands=[*d.strands, *imported.strands],
-            cluster_transforms=[*d.cluster_transforms, *imported.cluster_transforms],
+        design, report, _ = design_state.mutate_with_feature_log(
+            "aptamer-import", f"Import aptamer {name}",
+            {"template_id": body.template_id, "name": name}, merge,
+            expected_revision=body.expected_revision, initial_design=Design(metadata=imported.metadata),
         )
-
-    design, report, _ = design_state.mutate_with_feature_log(
-        "aptamer-import", f"Import aptamer {name}",
-        {"template_id": body.template_id, "name": name}, merge,
-        expected_revision=expected_revision,
-    )
     result = _design_response_with_geometry(design, report)
     result["import_warnings"] = [
         "Imported folded DNA geometry. K+ response is source annotation, not a concentration-driven simulation. "

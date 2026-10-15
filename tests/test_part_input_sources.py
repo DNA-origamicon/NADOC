@@ -131,11 +131,12 @@ def test_resolver_bounds_aggregate_sources_before_copy_or_decode(source):
         EmbeddedResolver({"../../source": blob})
 
 
-def test_portable_closure_uses_the_same_normalized_receipts_as_proof(source):
+@pytest.mark.parametrize("kind", ["protein-import", "aptamer-import"])
+def test_portable_closure_uses_the_same_normalized_receipts_as_proof(source, kind):
     from backend.core.models import Design, MinorMutationLogEntry, RoutingClusterLogEntry
     from backend.core.part_input_sources import portable_sources
 
-    child = MinorMutationLogEntry.model_construct(op_subtype="protein-import", params={
+    child = MinorMutationLogEntry.model_construct(op_subtype=kind, params={
         "_proof_version": 1, "source": source.model_dump()})
     design = Design(feature_log=[RoutingClusterLogEntry(children=[child])])
     with pytest.raises(SourceContractError) as error:

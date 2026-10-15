@@ -125,6 +125,11 @@ def native_route_eligible(design, identity, *, count=0, sequence="", seed=1):
             and not any(item.nanoparticle_id == identity for item in design.nanoparticle_connection_versions))
     if not bounded:
         return False
+    return typed_ownership_supported(design)
+
+
+def typed_ownership_supported(design):
+    """Distinguish unsupported opaque inputs before choosing a live route."""
     try:
         # Read only reference descriptors, never geometry, asset bytes or
         # recovery snapshots. Unsupported opaque ownership keeps its existing
@@ -140,20 +145,25 @@ def native_route_eligible(design, identity, *, count=0, sequence="", seed=1):
     return True
 
 
-def _owned(design, command, index):
-    """Resolve the entire declared radial child graph before deleting anything."""
+def resolve_owned_handles(design, nanoparticle_id, conjugation_ids, index, *, parameter="replace_conjugation_ids"):
+    """Resolve an exact radial child graph for native removal or rigid motion.
+
+    The caller supplies one live identity index and the actual selector field so
+    diagnostics address its command inputs. This resolves ownership only; the
+    separate incoming check protects consumers before any geometry is changed.
+    """
     owned = [item for item in design.nanoparticle_conjugations
-             if item.nanoparticle_id == command.nanoparticle_id]
-    expected = set(command.replace_conjugation_ids)
+             if item.nanoparticle_id == nanoparticle_id]
+    expected = set(conjugation_ids)
     actual = {item.id for item in owned}
     if expected != actual:
         identity = sorted(expected - actual or actual - expected)[0]
-        path = (["replace_conjugation_ids", command.replace_conjugation_ids.index(identity)]
-                if identity in expected else ["replace_conjugation_ids"])
-        _fail("Thiol replacement must select exactly the particle's current conjugations",
+        path = ([parameter, conjugation_ids.index(identity)]
+                if identity in expected else [parameter])
+        _fail("Thiol selection must match exactly the particle's current conjugations",
               "nanoparticle_conjugation", identity, path, missing=identity not in actual)
     if sum(len(item.surface_strands) for item in owned) > MAX_HANDLES:
-        raise CommandContractError("Native thiol removal exceeds its 128-handle admission", code="unsupported_thiol_source")
+        raise CommandContractError("Native thiol selection exceeds its 128-handle admission", code="unsupported_thiol_source")
     removed = {("nanoparticle_conjugation", item.id) for item in owned}
 
     def selected(kind, identity, path):
@@ -166,12 +176,12 @@ def _owned(design, command, index):
         return index[key]
 
     for item in owned:
-        path = ["replace_conjugation_ids", command.replace_conjugation_ids.index(item.id)]
+        path = [parameter, conjugation_ids.index(item.id)]
         if len(item.surface_strands) != item.requested_count:
             _fail("Thiol surface record count disagrees with its owner", "nanoparticle_conjugation", item.id, path)
         for record in item.surface_strands:
             if record.bound_overhang_id is not None:
-                _fail("Unbind nanoparticle strands before replacing or deleting conjugation",
+                _fail("This native thiol command requires unbound nanoparticle strands",
                       "overhang", record.bound_overhang_id, path)
             helix = selected("helix", record.helix_id, path)
             strand = selected("strand", record.strand_id, path)
@@ -194,7 +204,7 @@ def _owned(design, command, index):
     return removed
 
 
-def _incoming(design, removed, outputs):
+def check_incoming(design, removed, outputs=frozenset(), *, parameter="replace_conjugation_ids"):
     """One typed reference pass; no geometry construction or snapshot decoding."""
     try:
         for field, kind in COLLECTIONS.items():
@@ -210,12 +220,12 @@ def _incoming(design, removed, outputs):
                 if not touched:
                     continue
                 if field == "staple_groups":
-                    continue  # Existing group helper removes only the owned members.
+                    continue  # Membership is preserved on motion, pruned on removal.
                 if (field == "cluster_transforms" and item.is_default and not item.domain_ids
                         and item.parent_cluster_id is None and item.overhang_duplex_driver_id is None):
-                    continue  # Prune whole-helix default membership; preserve its pose.
+                    continue  # Whole-helix default membership never adds a consumer.
                 key = sorted(touched)[0]
-                _fail(f"Thiol resource is still used by {kind} {item.id}", *key, ["replace_conjugation_ids"])
+                _fail(f"Thiol resource is still used by {kind} {item.id}", *key, [parameter])
     except NotImplementedError as error:
         raise CommandContractError(f"Thiol ownership cannot be resolved: {error}", code="unsupported_thiol_source") from error
 
@@ -230,7 +240,7 @@ def build(kind, design, params):
         _fail("Remove nanoparticle connection ownership before replacing or deleting conjugation",
               "nanoparticle", particle.id, ["nanoparticle_id"])
     index, _ = identity_index(design)
-    removed = _owned(design, command, index)
+    removed = resolve_owned_handles(design, command.nanoparticle_id, command.replace_conjugation_ids, index)
     strand_ids = {identity for resource, identity in removed if resource == "strand"}
     helix_ids = {identity for resource, identity in removed if resource == "helix"}
     overhang_ids = {identity for resource, identity in removed if resource == "overhang"}
@@ -276,7 +286,7 @@ def build(kind, design, params):
         candidate = with_default_cluster(candidate, identity_factory=lambda *_: factory("thiol-default-cluster", []))
         outputs.update(("cluster", item.id) for item in candidate.cluster_transforms
                        if ("cluster", item.id) not in index)
-    _incoming(design, removed, outputs)
+    check_incoming(design, removed, outputs)
     return candidate
 
 

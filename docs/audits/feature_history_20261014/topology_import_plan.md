@@ -5,6 +5,13 @@ constant, geometry lock, fixture or user design changed during this audit.
 Runtime measurements below are proposed unless explicitly identified as existing
 evidence. Assemblies remain deferred.
 
+**P4d implementation update:** the bounded single-chain contract below is now
+implemented and admitted. `aptamer_capture_benchmark_p4.json` records actual
+source/output/worker/recovery/publication measurements. Native import and legacy
+first import both use the shared atomic initial-design boundary. Existing
+multi-chain and larger inputs remain legacy/unverified. The rest of this audit
+describes the original gaps and the remaining importer work.
+
 ## Recommended order and current contracts
 
 1. **Single-chain aptamer import.**

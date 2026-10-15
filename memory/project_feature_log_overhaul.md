@@ -26,7 +26,7 @@ keep assemblies deferred. Consult the implementation ledger for subsequent fixes
 
 ## Native recipe continuation (2026-10-15)
 
-P3 plus current P4 input/attachment slices now has 112 versioned kinds (with method/action restrictions), pure native
+P3 plus current P4 input/attachment slices now has 113 versioned kinds (with method/action restrictions), pure native
 builders shared by routes and proof, source-based continuation references,
 thread-local deterministic routing IDs, actual-failure cascade analysis, and one
 independently rebuilt prefix retained per edit. No saved outputs are proof inputs.
@@ -70,6 +70,15 @@ Document reads/decompression are bounded separately from proof capture, and
 explicit inactive-loadout source audits retain broken drafts with typed warnings.
 Ordinary edits do not run those audits. Further import/decoration families,
 large-asset capture qualification and physical provenance remain P4 work.
+P4d adds exact-ownership unbound thiol particle motion/resize and bounded pinned
+single-chain aptamer import. The unchanged importer reconstructs deposited sites
+from captured PDB bytes; provenance remains imported. New-session imports use
+the shared atomic initial-design boundary, including legacy imports. Admission
+is 150 KB/1000 first-model atom records; whole-document capture can still refuse
+on its independent cooperative time/node/byte bounds. Benchmarks retain those
+refusals; no proof is added to ordinary edits. Typed rigid copy and larger coating
+capture are separate increments. Existing sulfur-local resize behavior is
+reproduced unchanged, without claiming chemical validity of that behavior.
 
 `part_recipe_capabilities.py` exposes API/editor limitations explicitly. No new
 frontend controls were added. Long jobs evaluate privately, omit candidates from

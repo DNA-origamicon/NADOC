@@ -43,7 +43,7 @@ def record(kind, fn):
 
 def signature(s):
     return (
-        s.design.model_dump(), [d.model_dump() for d in s.history],
+        s.design.model_dump() if s.design is not None else None, [d.model_dump() for d in s.history],
         [d.model_dump() for d in s.redo], s.revision,
         current_request_revision(), current_request_feature_log_entry_id(),
     )
@@ -160,3 +160,83 @@ def test_validation_findings_do_not_prevent_saving_an_editable_draft(session, mo
     assert design.metadata.name == "Draft"
     assert result is report
     assert not result.passed
+
+
+@pytest.mark.parametrize("stage", ["pre-encode", "callback", "reconcile", "validate", "revision", "cancel"])
+def test_first_feature_failure_restores_no_document_and_all_transaction_state(session, monkeypatch, stage):
+    from backend.core.part_history_contract import create_empty_part
+
+    session.design = None
+    before = signature(session)
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("first feature failure")
+
+    def mutation(design):
+        design.metadata.name = "changed"
+        if stage == "cancel":
+            raise KeyboardInterrupt()
+        if stage == "callback":
+            fail()
+
+    if stage in {"pre-encode", "reconcile", "validate"}:
+        name = {"pre-encode": "encode_design_snapshot", "reconcile": "reconcile_cluster_membership",
+                "validate": "validate_design"}[stage]
+        monkeypatch.setattr(state, name, fail)
+    elif stage == "revision":
+        bump = state._bump_revision
+
+        def publish(value):
+            bump(value)
+            fail()
+
+        monkeypatch.setattr(state, "_bump_revision", publish)
+    with pytest.raises(KeyboardInterrupt if stage == "cancel" else RuntimeError):
+        state.mutate_with_feature_log("aptamer-import", "First feature", {}, mutation,
+            initial_design=create_empty_part("Initial", "HONEYCOMB"), expected_revision=session.revision)
+    assert signature(session) == before
+
+
+def test_first_feature_creates_one_revision_and_undoable_empty_root(session):
+    from backend.core.part_history_contract import create_empty_part
+
+    state.load_design(None)
+    initial = create_empty_part("Initial", "HONEYCOMB")
+    revision = session.revision
+    result, _, entry = state.mutate_with_feature_log("aptamer-import", "First feature", {},
+        lambda design: design.copy_with(metadata=design.metadata.model_copy(update={"name": "Imported"})),
+        initial_design=initial, expected_revision=revision)
+    assert session.revision == revision + 1
+    assert len(session.history) == 1 and not session.redo
+    assert result.recipe_root == initial.recipe_root
+    assert result.feature_log == [entry]
+    state.undo()
+    assert session.design.metadata.name == "Initial"
+    assert session.design.feature_log == []
+    state.redo()
+    assert session.design.metadata.name == "Imported"
+
+
+def test_initial_document_never_overwrites_existing_session(session):
+    from backend.core.part_history_contract import create_empty_part
+
+    original = session.design
+    initial = create_empty_part("Unused", "HONEYCOMB")
+    result, _, _ = state.mutate_with_feature_log("aptamer-import", "Existing", {}, lambda design: design,
+                                                initial_design=initial)
+    assert result.id == original.id != initial.id
+    assert result.recipe_root is None
+
+
+def test_stale_first_feature_never_initializes_document(session):
+    from fastapi import HTTPException
+    from backend.core.part_history_contract import create_empty_part
+
+    session.design = None
+    before = signature(session)
+    with pytest.raises(HTTPException) as error:
+        state.mutate_with_feature_log("aptamer-import", "First feature", {},
+            lambda _: pytest.fail("Stale callback ran"), expected_revision=session.revision - 1,
+            initial_design=create_empty_part("Unused", "HONEYCOMB"))
+    assert error.value.status_code == 409
+    assert signature(session) == before

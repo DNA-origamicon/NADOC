@@ -655,6 +655,7 @@ def mutate_with_feature_log(
     fn: Callable[[Design], Design | MutationReport | None],
     *,
     expected_revision: int | None = None,
+    initial_design: Design | None = None,
 ) -> tuple[Design, ValidationReport, SnapshotLogEntry]:
     """Capture a pre-state snapshot, apply ``fn``, append a SnapshotLogEntry,
     reconcile cluster membership, validate, and push undo.
@@ -674,7 +675,11 @@ def mutate_with_feature_log(
     merges its cached copies before persistence.
 
     Returns ``(design, validation_report, snapshot_entry)``.  Raises HTTP 404
-    if no active design.
+    if no active design and no explicit ``initial_design`` was supplied. The
+    optional initial document is used only for an empty session, under the same
+    lock and transaction as its first feature. Failure restores the empty
+    session; success keeps the initial empty model as the undo target. An active
+    document is never replaced by this option.
 
     Use this for the eight major auto-op routes (auto-scaffold variants,
     auto-break, auto-merge, auto-crossover, create-near/far-ends) and bulk
@@ -684,15 +689,25 @@ def mutate_with_feature_log(
 
     with _lock:
         s = _session()
-        if s.design is None:
+        if s.design is None and initial_design is None:
             raise HTTPException(status_code=404, detail="No active design.")
         if expected_revision is not None and s.revision != expected_revision:
             raise HTTPException(409, detail={
                 "message": "Design changed while this operation was being prepared.",
                 "expected_revision": expected_revision, "current_revision": s.revision,
             })
-        _assert_active_loadout_editable(s.design)
-        return record_feature(s, op_kind, label, params, fn)
+        initialized = s.design is None
+        if initialized:
+            s.design = initial_design
+        try:
+            _assert_active_loadout_editable(s.design)
+            return record_feature(s, op_kind, label, params, fn)
+        except BaseException:
+            if initialized:
+                # record_feature restores its undo/revision/request state;
+                # the outer creation boundary additionally restores no model.
+                s.design = None
+            raise
 
 
 def mutate_with_minor_log(

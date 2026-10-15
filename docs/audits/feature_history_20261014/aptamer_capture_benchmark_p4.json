@@ -1,0 +1,687 @@
+{
+  "scope": "Input derivation, capture, worker, recovery and atomic recording; no rendering or physics",
+  "repeats": 9,
+  "provisional_route_enabled": false,
+  "limits_unchanged": {
+    "capture_nodes": 30000,
+    "capture_bytes": 2000000,
+    "capture_cooperative_seconds": 0.025,
+    "worker_input_bytes": 2000000,
+    "candidate_bytes": 16000000,
+    "cumulative_recovery_bytes": 8000000
+  },
+  "cases": [
+    {
+      "case": "148D",
+      "features": 1,
+      "source_bytes": 60680,
+      "source_count": 1,
+      "first_model_atom_records": 488,
+      "authoring_nodes": 2629,
+      "parsed_atoms": 488,
+      "build_total_ms": 8.861872000125004,
+      "recovery_encode_total_ms": 2.3812769995856797,
+      "recovery_encoded_bytes": 56828,
+      "candidate_json_bytes": 167427,
+      "capture_median_ms": 3.919134000170743,
+      "capture_max_ms": 4.027222999866353,
+      "capture_refusals": 0,
+      "pickle_bytes_max": 121554,
+      "proof_median_ms": 6.016037999870605,
+      "proof_max_ms": 6.80686400119157,
+      "statuses": [
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        }
+      ],
+      "cold_worker": {
+        "status": "reproduced_import",
+        "issues": [],
+        "spawn_and_proof_ms": 952.2980870005995
+      },
+      "publication_record_ms": [
+        7.338295999943512
+      ],
+      "publication_final_revision": 2
+    },
+    {
+      "case": "148D",
+      "features": 2,
+      "source_bytes": 60680,
+      "source_count": 1,
+      "first_model_atom_records": 488,
+      "authoring_nodes": 5208,
+      "parsed_atoms": 976,
+      "build_total_ms": 39.29173100004846,
+      "recovery_encode_total_ms": 5.294193997542607,
+      "recovery_encoded_bytes": 126052,
+      "candidate_json_bytes": 264636,
+      "capture_median_ms": 7.368192998910672,
+      "capture_max_ms": 7.668165000723093,
+      "capture_refusals": 0,
+      "pickle_bytes_max": 159192,
+      "proof_median_ms": 11.950353999054641,
+      "proof_max_ms": 12.851867000790662,
+      "statuses": [
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        }
+      ],
+      "cold_worker": {
+        "status": "reproduced_import",
+        "issues": [],
+        "spawn_and_proof_ms": 890.1120749997062
+      },
+      "publication_record_ms": [
+        6.574153998371912,
+        8.90382400029921
+      ],
+      "publication_final_revision": 6
+    },
+    {
+      "case": "148D",
+      "features": 4,
+      "source_bytes": 60680,
+      "source_count": 1,
+      "first_model_atom_records": 488,
+      "authoring_nodes": 10366,
+      "parsed_atoms": 1952,
+      "build_total_ms": 19.04942500004836,
+      "recovery_encode_total_ms": 13.169307001589914,
+      "recovery_encoded_bytes": 278744,
+      "candidate_json_bytes": 473298,
+      "capture_median_ms": 14.167671999530285,
+      "capture_max_ms": 45.09539199898427,
+      "capture_refusals": 2,
+      "pickle_bytes_max": 234451,
+      "proof_median_ms": 23.682734001340577,
+      "proof_max_ms": 24.491291000231286,
+      "statuses": [
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "capture_limit",
+          "detail": "Part verification capture budget exceeded"
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "capture_limit",
+          "detail": "Part verification capture budget exceeded"
+        }
+      ],
+      "cold_worker": {
+        "status": "reproduced_import",
+        "issues": [],
+        "spawn_and_proof_ms": 899.9590690000332
+      },
+      "publication_record_ms": [
+        6.59457399888197,
+        8.716184000149951,
+        10.108653999850503,
+        12.25066799997876
+      ],
+      "publication_final_revision": 12
+    },
+    {
+      "case": "2HY9",
+      "features": 1,
+      "source_bytes": 88868,
+      "source_count": 1,
+      "first_model_atom_records": 843,
+      "authoring_nodes": 4459,
+      "parsed_atoms": 843,
+      "build_total_ms": 7.37572599973646,
+      "recovery_encode_total_ms": 3.4322629999223864,
+      "recovery_encoded_bytes": 88476,
+      "candidate_json_bytes": 255591,
+      "capture_median_ms": 6.426842001019395,
+      "capture_max_ms": 6.72859999940556,
+      "capture_refusals": 0,
+      "pickle_bytes_max": 185635,
+      "proof_median_ms": 10.110254999744939,
+      "proof_max_ms": 11.299983998469543,
+      "statuses": [
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        }
+      ],
+      "cold_worker": {
+        "status": "reproduced_import",
+        "issues": [],
+        "spawn_and_proof_ms": 889.9588300009782
+      },
+      "publication_record_ms": [
+        10.427391000121133
+      ],
+      "publication_final_revision": 15
+    },
+    {
+      "case": "2HY9",
+      "features": 2,
+      "source_bytes": 88868,
+      "source_count": 1,
+      "first_model_atom_records": 843,
+      "authoring_nodes": 8868,
+      "parsed_atoms": 1686,
+      "build_total_ms": 14.452759998675901,
+      "recovery_encode_total_ms": 9.425600002941792,
+      "recovery_encoded_bytes": 212836,
+      "candidate_json_bytes": 426867,
+      "capture_median_ms": 12.514861000454403,
+      "capture_max_ms": 43.327673000021605,
+      "capture_refusals": 1,
+      "pickle_bytes_max": 249753,
+      "proof_median_ms": 20.12214549995406,
+      "proof_max_ms": 20.726609998746426,
+      "statuses": [
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "capture_limit",
+          "detail": "Part verification capture budget exceeded"
+        }
+      ],
+      "cold_worker": {
+        "status": "reproduced_import",
+        "issues": [],
+        "spawn_and_proof_ms": 906.1380179991829
+      },
+      "publication_record_ms": [
+        10.483584999747109,
+        15.347005999501562
+      ],
+      "publication_final_revision": 19
+    },
+    {
+      "case": "2HY9",
+      "features": 4,
+      "source_bytes": 88868,
+      "source_count": 1,
+      "first_model_atom_records": 843,
+      "authoring_nodes": 17686,
+      "parsed_atoms": 3372,
+      "build_total_ms": 29.072537001411547,
+      "recovery_encode_total_ms": 26.393148000352085,
+      "recovery_encoded_bytes": 564812,
+      "candidate_json_bytes": 872675,
+      "capture_median_ms": 23.845544999858248,
+      "capture_max_ms": 25.282134000008227,
+      "capture_refusals": 0,
+      "pickle_bytes_max": 377999,
+      "proof_median_ms": 39.82770199945662,
+      "proof_max_ms": 75.75180800085946,
+      "statuses": [
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        }
+      ],
+      "cold_worker": {
+        "status": "reproduced_import",
+        "issues": [],
+        "spawn_and_proof_ms": 963.9142619998893
+      },
+      "publication_record_ms": [
+        10.49375799993868,
+        14.87287700001616,
+        19.126327999401838,
+        21.622921000016504
+      ],
+      "publication_final_revision": 25
+    },
+    {
+      "case": "1C35",
+      "features": 1,
+      "source_bytes": 125793,
+      "source_count": 1,
+      "first_model_atom_records": 506,
+      "authoring_nodes": 2619,
+      "parsed_atoms": 486,
+      "build_total_ms": 5.270665998978075,
+      "recovery_encode_total_ms": 3.5079120007139863,
+      "recovery_encoded_bytes": 83840,
+      "candidate_json_bytes": 281808,
+      "capture_median_ms": 3.9864720001787646,
+      "capture_max_ms": 31.943572999807657,
+      "capture_refusals": 1,
+      "pickle_bytes_max": 208224,
+      "proof_median_ms": 6.679750500552473,
+      "proof_max_ms": 7.2762010004225885,
+      "statuses": [
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "capture_limit",
+          "detail": "Part verification capture budget exceeded"
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        }
+      ],
+      "cold_worker": {
+        "status": "reproduced_import",
+        "issues": [],
+        "spawn_and_proof_ms": 964.8632039989025
+      },
+      "publication_record_ms": [
+        7.969927999511128
+      ],
+      "publication_final_revision": 28
+    },
+    {
+      "case": "1C35",
+      "features": 2,
+      "source_bytes": 125793,
+      "source_count": 1,
+      "first_model_atom_records": 506,
+      "authoring_nodes": 5188,
+      "parsed_atoms": 972,
+      "build_total_ms": 10.334227001294494,
+      "recovery_encode_total_ms": 7.626755997989676,
+      "recovery_encoded_bytes": 179980,
+      "candidate_json_bytes": 406485,
+      "capture_median_ms": 7.513765000112471,
+      "capture_max_ms": 8.399790998737444,
+      "capture_refusals": 0,
+      "pickle_bytes_max": 245716,
+      "proof_median_ms": 13.218783999036532,
+      "proof_max_ms": 14.1309070004354,
+      "statuses": [
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        }
+      ],
+      "cold_worker": {
+        "status": "reproduced_import",
+        "issues": [],
+        "spawn_and_proof_ms": 925.4841870006203
+      },
+      "publication_record_ms": [
+        8.028405000004568,
+        10.775267001008615
+      ],
+      "publication_final_revision": 32
+    },
+    {
+      "case": "1C35",
+      "features": 4,
+      "source_bytes": 125793,
+      "source_count": 1,
+      "first_model_atom_records": 506,
+      "authoring_nodes": 10326,
+      "parsed_atoms": 1944,
+      "build_total_ms": 20.256145999155706,
+      "recovery_encode_total_ms": 17.711267000777298,
+      "recovery_encoded_bytes": 388040,
+      "candidate_json_bytes": 671619,
+      "capture_median_ms": 14.39235500038194,
+      "capture_max_ms": 14.921126999979606,
+      "capture_refusals": 0,
+      "pickle_bytes_max": 320683,
+      "proof_median_ms": 26.407872001072974,
+      "proof_max_ms": 60.941321000427706,
+      "statuses": [
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        }
+      ],
+      "cold_worker": {
+        "status": "reproduced_import",
+        "issues": [],
+        "spawn_and_proof_ms": 932.4336499994388
+      },
+      "publication_record_ms": [
+        7.90592200064566,
+        11.78247100142471,
+        12.278954000066733,
+        13.889522999306791
+      ],
+      "publication_final_revision": 38
+    },
+    {
+      "case": "boundary-unphysical-1000-records-150KB",
+      "features": 1,
+      "source_bytes": 150000,
+      "source_count": 1,
+      "first_model_atom_records": 1000,
+      "authoring_nodes": 5119,
+      "parsed_atoms": 1000,
+      "build_total_ms": 8.47721799982537,
+      "recovery_encode_total_ms": 1.8028020003839629,
+      "recovery_encoded_bytes": 21176,
+      "candidate_json_bytes": 283020,
+      "capture_median_ms": 7.182500999988406,
+      "capture_max_ms": 37.257396999848424,
+      "capture_refusals": 1,
+      "pickle_bytes_max": 278373,
+      "proof_median_ms": 11.509575500895153,
+      "proof_max_ms": 11.739339999621734,
+      "statuses": [
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "capture_limit",
+          "detail": "Part verification capture budget exceeded"
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        }
+      ],
+      "cold_worker": {
+        "status": "reproduced_import",
+        "issues": [],
+        "spawn_and_proof_ms": 897.7795000009792
+      },
+      "publication_record_ms": [
+        11.354275000485359
+      ],
+      "publication_final_revision": 41
+    }
+  ]
+}

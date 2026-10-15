@@ -7,6 +7,7 @@ command, or confer a certificate. Verification remains an explicit operation.
 
 def editing_capabilities(kinds):
     from backend.api.part_overhang_commands import ACTIONS
+    from backend.api.part_aptamer_commands import NATIVE_ROUTE_ENABLED
 
     # Existing history editors; other authoring tools edit current objects, not
     # their historical input commands, so must not be advertised as equivalents.
@@ -74,8 +75,9 @@ def editing_capabilities(kinds):
         },
         "thiol_contract": {
             "version": 1,
-            "kinds": ["nanoparticle-conjugate", "nanoparticle-conjugation-delete"],
+            "kinds": ["nanoparticle-conjugate", "nanoparticle-conjugation-delete", "nanoparticle-patch"],
             "scope": "Unbound radial DNA on uncoated gold; explicit exact replacement ownership",
+            "motion": "Exact current conjugation selection; existing native movement and resize calculations",
             "limits": ["128 surface handles", "50000 generated nucleotides"],
             "legacy": "Larger, asset-backed or opaque ownership remains unverified",
         },
@@ -97,6 +99,17 @@ def editing_capabilities(kinds):
             "placement_scope": "Free and part-overhang placements without owned binders",
             "provenance": "An imported source is reproduced_import even when the recipe starts empty",
             "legacy": "Receipts without protein_version remain unverified",
+        },
+        "aptamer_contract": {
+            "version": 1,
+            "kinds": ["aptamer-import"],
+            "import_endpoint": "POST /api/design/import/aptamer",
+            "native_route_enabled": NATIVE_ROUTE_ENABLED,
+            "scope": "One complete logical DNA chain using the existing deposited-structure importer",
+            "source": "Pinned UTF-8 PDB bytes; no catalog, library or network fallback during replay",
+            "limits": ["150 KB source", "1000 first-model atom records"],
+            "provenance": "Deposited native sites are reproduced_import, not native-only construction",
+            "legacy": "Larger, multiple-chain or opaque ownership imports retain unverified recovery receipts",
         },
         "protein_conjugation_contract": {
             "version": 1,
