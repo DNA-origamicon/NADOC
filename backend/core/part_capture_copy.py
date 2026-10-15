@@ -13,12 +13,13 @@ _SCALARS = frozenset({int, float, str})
 
 
 def seed_scalar_atom_copy(value, memo):
-    """Use Pydantic's shallow model copy only for the exact scalar-only shape.
+    """Copy the exact scalar-only shape; return its field node/byte charge.
 
     Every value is immutable, while model_copy makes independent __dict__ and
     fields-set containers. A subclass, future schema, cached value, extra or
     private state, or mutated non-scalar field takes ordinary deepcopy instead.
-    The caller still charges every atom field against the capture budgets.
+    Returning the charge lets the caller account for this fixed-size record at
+    one cooperative clock boundary. Every field retains its original charge.
     """
     if (type(value) is not ProteinAtom
             or ProteinAtom.model_fields.keys() != _ATOM_FIELDS
@@ -26,10 +27,17 @@ def seed_scalar_atom_copy(value, memo):
             or value.__pydantic_extra__ is not None
             or value.__pydantic_private__ is not None):
         return
-    if all(type(item) in _SCALARS for item in value.__dict__.values()):
-        copied = value.model_copy(deep=False)
-        # deepcopy also memoizes the model's field dict. Preserve aliases from
-        # metadata or another atom to that dict, not just aliases to the atom.
-        fields = memo.setdefault(id(value.__dict__), copied.__dict__)
-        object.__setattr__(copied, "__dict__", fields)
-        memo[id(value)] = copied
+    size = 0
+    for item in value.__dict__.values():
+        kind = type(item)
+        if kind not in _SCALARS:
+            return
+        if kind is str:
+            size += len(item) * 4
+    copied = value.model_copy(deep=False)
+    # deepcopy also memoizes the model's field dict. Preserve aliases from
+    # metadata or another atom to that dict, not just aliases to the atom.
+    fields = memo.setdefault(id(value.__dict__), copied.__dict__)
+    object.__setattr__(copied, "__dict__", fields)
+    memo[id(value)] = copied
+    return len(_ATOM_FIELDS), size

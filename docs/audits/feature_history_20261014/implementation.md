@@ -11,8 +11,8 @@ Scope approved October 14, 2026: implement standard-part validation, editability
 | P2 | Explicit recipe roots/versions, authoritative-field classification, read-only verification and incremental dependencies | Implementation exit checks complete: independent nonempty replay, content-pinned roots, typed dependencies, fingerprints, bounded capture/jobs and stale/cancel handling. Supported-family expansion continues in P3/P4; validation debt below remains explicit |
 | P3 | Native DNA command families and generated construction | 96 versioned kinds with method/action restrictions, joined/connectivity input compilation and bounded native-source CPD conversion/relaxation implemented. See the latest evidence and explicit scope limits below; full generated asset/attachment histories belong to P4 |
 | P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol including unbound particle motion, pinned small protein/catalog/aptamer inputs, supported protein conjugation lifecycle and duplex lifecycle/relaxation implemented. Bounded document transport and explicit inactive-source audits added. Full import/attachment coverage and physical-result provenance remain open |
-| P5 | Standard-part repair, drafts, desktop and part-mode VR | Backend explicit repair/CPD-duplex upgrade jobs and revision-bound publication implemented and tested. Drafts, reference selection, on-demand comparison and UI remain open |
-| P6 | Strict standard-part agent transactions and legacy retirement | Pending. Pure candidate execution outside long-held locks, expected-revision publication, registered command batches, bypass closure and explicit import exceptions |
+| P5 | Standard-part repair, drafts, desktop and part-mode VR | Explicit repair/numerical-upgrade jobs, bounded initial reference selection and revision-bound publication implemented. Shared draft schema/planning/capture foundations pass; Design persistence, broader selectors, comparison and UI remain open |
+| P6 | Strict standard-part agent transactions and legacy retirement | Initial pure registered-batch catalog and cold replay tested. Public job integration, server-owned policy, mutation bypass closure, baseline reuse and explicit import permission remain open |
 
 Assemblies are not an exit condition for any phase above. Existing assembly compatibility tests may catch collateral changes to shared infrastructure, but new assembly features and fixes remain deferred.
 
@@ -814,3 +814,40 @@ The verbatim debt and fixture correction are retained in
 [validation evidence](validation_selection_drafts_p5.json). No frontend, visual,
 headset or molecular change; `main.js` LOC delta is zero. P4, P5c/d and P6 remain
 open, with broader P5b selector families also pending. Assemblies remain deferred.
+
+## Shared repair planning, registered batches and capture cost — October 15
+
+Draft preparation now captures only root/definition inputs and named sources;
+its metadata host uses explicit design/revision/draft-generation guards and
+never guesses replacement expectations on rebase. Draft preparation and the
+repair worker share one target/path/overlap/protected-input planner. Numerical
+pin selection remains in the isolated worker. The temporary duplicate planner
+and equivalence oracle were replaced by one implementation and direct behavior
+tests. Design persistence and publication wiring remain pending.
+
+The initial pure registered-batch compiler admits seven reviewed command kinds:
+helix/strand additions, source-free gold create/patch/delete, whole-helix group
+creation and cluster pose. It rejects arbitrary model/code/output payloads and
+private proof inputs. Typed declared producer UUIDs remain separate from
+host-generated feature IDs. A source proof executes once, then the existing
+regenerator/recovery budget executes ordered ordinary rows. No intermediate
+candidate publishes; cold replay tests independently reproduce the mixed log.
+This is a pure foundation, not a public transaction API or strict session policy.
+See [batch contract and remaining gates](registered_batch_foundation.md).
+
+Capture accounting now processes the exact nine-scalar atom record at one
+cooperative boundary, preserving identical node/byte admission and copied
+aliases. The second live run has active medians 36–37 ms and p95 96–99 ms;
+two of 120 captures still refused the deadline. All 150 separately prepared
+publications and five live complete jobs passed; cancellation/source-change
+cases reaped in approximately 53–55 ms and refused commit. The public coating
+append gate remains closed pending retained-history/recovery qualification.
+The two earlier failed experiments remain in the audit record; no limits or GC
+policy were changed. These timings do not establish a hard latency ceiling.
+
+This checkpoint passes **315 focused cases across 12 files**: repair/draft 214,
+batch 73 and capture/proof 28. Changed Python and whitespace pass. Broad-suite
+and existing lint debt remain explicit; no physical simulation or visual/headset
+validation was run. An unrelated remote Alpine continuation/progress update was
+merged without conflicts and preserved; it is not part of these phase claims.
+P4/P5/P6 remain incomplete. [Validation record](validation_draft_batch_p5_p6.json).

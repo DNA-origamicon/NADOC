@@ -124,3 +124,28 @@ def test_ordinary_protein_asset_capture_retains_existing_copy_path(monkeypatch):
     copied = capture(source, seconds=1)
     copied.protein_assets[0].atoms[0].x = 10
     assert source.protein_assets[0].atoms[0].x == 1
+
+
+@pytest.mark.parametrize("budget", ["max_nodes", "max_bytes"])
+def test_atom_record_accounting_preserves_exact_generic_admission_boundary(monkeypatch, budget):
+    from backend.core import part_capture_copy
+
+    source = design_with_atoms()
+    source.nanoparticles[0].coating.protein.atoms[0].name = "Unicode atom \u03b1"
+
+    def minimum_budget():
+        low, high = 0, 10000
+        while low < high:
+            value = (low + high) // 2
+            try:
+                capture(source, seconds=1, **{budget: value})
+            except CaptureLimit:
+                low = value + 1
+            else:
+                high = value
+        assert low < 10000
+        return low
+
+    optimized = minimum_budget()
+    monkeypatch.setattr(part_capture_copy, "seed_scalar_atom_copy", lambda *_args: None)
+    assert minimum_budget() == optimized

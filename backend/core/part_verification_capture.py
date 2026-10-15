@@ -41,7 +41,16 @@ def capture(design, *, max_nodes=30_000, max_bytes=2_000_000, seconds=0.025,
                 if isinstance(item, BaseModel):
                     children = item.__dict__.values()
                     if copy_memo is not None:
-                        seed_scalar_atom_copy(item, copy_memo)
+                        scalar_charge = seed_scalar_atom_copy(item, copy_memo)
+                        if scalar_charge is not None:
+                            nodes, size = scalar_charge
+                            if nodes + len(pending) > remaining[0]:
+                                raise CaptureLimit("Part verification capture node budget exceeded")
+                            remaining[0] -= nodes
+                            remaining[1] -= size
+                            if remaining[1] < 0 or monotonic() > deadline:
+                                raise CaptureLimit("Part verification capture budget exceeded")
+                            continue
                 elif isinstance(item, dict):
                     if len(item) * 2 > remaining[0]:
                         raise CaptureLimit("Part verification capture node budget exceeded")

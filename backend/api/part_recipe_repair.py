@@ -9,11 +9,9 @@ from copy import deepcopy
 
 from fastapi import HTTPException
 
-from backend.core.feature_identity import preserve_proof_identity
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_history_contract import FIELD_ROLES
-from backend.core.part_history_proof import ProofBudgetExceeded, command_rows, digest
-from backend.core.part_overlay_commands import command_input
+from backend.core.part_history_proof import ProofBudgetExceeded, command_rows
 from backend.core.part_repair_inputs import (
     MAX_REPAIR_ACTIONS as MAX_REPAIR_ACTIONS,
     RepairRequest as RepairRequest,
@@ -21,44 +19,17 @@ from backend.core.part_repair_inputs import (
     UpgradeNumericalContract as UpgradeNumericalContract,
 )
 
-
-class RepairInputError(CommandContractError):
-    status = "failed"
-
-    def __init__(self, detail, *, code, action=None):
-        super().__init__(detail, code=code)
-        self.action = action
-
-    def as_issue(self):
-        issue = super().as_issue()
-        if self.action is not None:
-            issue["feature_id"] = self.action.feature_id
-            if self.action.child_id is not None:
-                issue["child_id"] = self.action.child_id
-            if isinstance(self.action, SetInput):
-                issue["parameter_path"] = list(self.action.parameter_path)
-        return issue
+from backend.core.part_repair_planning import (
+    RepairInputError as RepairInputError,
+    check_numerical_expectations,
+    plan_actions,
+    same_input as _same,
+    validate_target,
+)
 
 
 def _reject(code, detail, action=None):
     raise RepairInputError(detail, code=code, action=action)
-
-
-def _same(left, right):
-    # JSON comparison must distinguish bool/int and integer/float expectations.
-    return digest(left) == digest(right)
-
-
-def _at(params, path, action):
-    value = params
-    for token in path:
-        if type(value) is dict and type(token) is str and token in value:
-            value = value[token]
-        elif type(value) is list and type(token) is int and 0 <= token < len(value):
-            value = value[token]
-        else:
-            _reject("invalid_parameter_path", "Repair paths must identify an existing authored input", action)
-    return value
 
 
 def _current_numerical_pins(kind, _params):
@@ -98,9 +69,7 @@ def _numerical_parser(kind):
 def _upgrade(kind, previous, action, provider):
     parse = _numerical_parser(kind)
     parse(previous)  # Old recognized schema/family, without validating old pins.
-    if not _same(previous["engine"], action.expected_engine) or not _same(
-            previous.get("template"), action.expected_template):
-        _reject("repair_conflict", "The numerical contract changed after this repair was prepared", action)
+    check_numerical_expectations(previous, action)
     defaults = provider(kind, deepcopy(previous))
     allowed = {"engine", "template", "_proof_version", "conversion_version", "relaxation_version",
                "coating_version", "importer_version"}
@@ -126,70 +95,26 @@ def _upgrade(kind, previous, action, provider):
 
 
 def _definitions(source, request, dependency_resolver, numerical_provider):
-    rows = list(command_rows(source, 2000))
-    identities = [entry.id for entry in source.feature_log]
-    identities.extend(child.id for entry in source.feature_log if entry.feature_type == "routing-cluster"
-                      for child in entry.children)
-    if len(identities) != len(set(identities)):
-        _reject("ambiguous_feature_identity", "Feature and routing-child identities must be unique")
-    if any(kind == "empty-routing-cluster" for _, kind, _ in rows):
-        raise CommandContractError("Empty routing groups have no replay contract", code="empty_routing_cluster")
-    entries = {entry.id: entry for entry in source.feature_log}
-    targets, paths, upgrades = {}, {}, []
-    # Resolve every expectation against the original definitions, so action
-    # ordering cannot turn stale or overlapping edits into a different repair.
-    for action in request.actions:
-        entry = entries.get(action.feature_id)
-        if entry is None:
-            _reject("missing_feature", "The selected repair feature no longer exists", action)
-        if action.child_id is not None:
-            if entry.feature_type != "routing-cluster":
-                _reject("invalid_repair_target", "A routing-child target needs its containing group", action)
-            child = next((item for item in entry.children if item.id == action.child_id), None)
-            if child is None:
-                _reject("missing_feature", "The selected routing child no longer exists in this group", action)
-            entry = child
-        elif entry.feature_type != "snapshot":
-            _reject("unsupported_repair_target", "This repair version edits snapshot or explicit routing-child definitions", action)
-        kind, previous = command_input(entry)
-        if not dependency_resolver(kind, previous).known:
-            raise CommandContractError("Repair cannot promote a legacy or unknown command contract",
-                                       code="missing_proof_contract")
-        target = targets.setdefault(entry.id, {"entry": entry, "kind": kind, "params": deepcopy(previous), "upgrade": None})
-        if isinstance(action, SetInput):
-            path = tuple(action.parameter_path)
-            old_paths = paths.setdefault(entry.id, [])
-            if any(path[:len(other)] == other or other[:len(path)] == path for other in old_paths):
-                _reject("overlapping_repair_paths", "Repair actions cannot overlap within a definition", action)
-            old_paths.append(path)
-            if not _same(_at(previous, path, action), action.expected_old):
-                _reject("repair_conflict", "The selected input changed after this repair was prepared", action)
-            container = _at(target["params"], path[:-1], action)
-            container[path[-1]] = deepcopy(action.value)
-            if not _same(preserve_proof_identity(previous, target["params"], kind=kind), target["params"]):
-                _reject("protected_recipe_identity", "Repair cannot replace output identities, versions, namespaces or closed scopes", action)
-        else:
-            if target["upgrade"] is not None:
-                _reject("duplicate_numerical_upgrade", "A definition can be upgraded only once per repair", action)
-            target["upgrade"] = action
+    list(command_rows(source, 2000))  # retain the existing entry-limit admission
+    targets = plan_actions(source, request.actions, dependencies=dependency_resolver)
+    upgrades = []
     for target in targets.values():
-        if target["upgrade"] is not None:
+        if target.upgrade is not None:
             try:
-                target["params"], provenance = _upgrade(target["kind"], target["params"], target["upgrade"], numerical_provider)
+                target.params, provenance = _upgrade(target.kind, target.params, target.upgrade, numerical_provider)
             except CommandContractError as error:
-                raise _ReplayStopped(error.status, {**error.as_issue(), "feature_id": target["entry"].id,
-                                                    "kind": target["kind"]}) from error
+                raise _ReplayStopped(error.status, {**error.as_issue(), "feature_id": target.entry.id,
+                                                    "kind": target.kind}) from error
             upgrades.append(provenance)
-        if not dependency_resolver(target["kind"], target["params"]).known:
-            _reject("invalid_repaired_contract", "Patched inputs do not satisfy the registered native command schema")
+        validate_target(target, dependency_resolver)
     log = []
     for entry in source.feature_log:
         if entry.feature_type == "routing-cluster":
-            children = [child.model_copy(update={"params": targets[child.id]["params"]})
+            children = [child.model_copy(update={"params": targets[child.id].params})
                         if child.id in targets else child for child in entry.children]
             entry = entry.model_copy(update={"children": children})
         elif entry.id in targets:
-            entry = entry.model_copy(update={"params": targets[entry.id]["params"]})
+            entry = entry.model_copy(update={"params": targets[entry.id].params})
         log.append(entry)
     return log, upgrades
 
