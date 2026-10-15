@@ -1,0 +1,24 @@
+{
+  "date": "2026-10-15",
+  "scope": "Shared simulation-row physical input evidence labels",
+  "focused": {
+    "passed": 39,
+    "files": 3,
+    "seconds": 1.7
+  },
+  "full_frontend": {
+    "passed": 8192,
+    "skipped": 1,
+    "files": 709,
+    "seconds": 310.21
+  },
+  "app": "NOT VERIFIED IN APP — Archive mount unavailable; MV-46",
+  "main_js_delta": 0,
+  "guarantees": [
+    "No run, restore or model write from an evidence label.",
+    "Existing stale warning remains independently actionable.",
+    "Shared render signature tracks visible evidence and preserves unchanged polling.",
+    "Unavailable or partial evidence never displays as complete current."
+  ],
+  "artifacts": "No browser, screenshot, native build or simulation launched; only standard Vitest output."
+}

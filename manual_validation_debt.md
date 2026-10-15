@@ -941,3 +941,18 @@ quiet host condition before claiming complete four-profile coverage.
 MV-45 automated update (2026-10-15):86 focused and full8,181 passed/one skipped
 across708 frontend files. Receipt/unknown-publication/default-document integration
 passes. App/smoke/headset remains PENDING; no browser was launched without Archive.
+
+- **MV-46 — PENDING — Physical input freshness labels (2026-10-15).**
+  Inspect oxDNA, NAMD and unified simulation job rows with matching legacy,
+  changed and unavailable inputs. Confirm `Inputs unverified` is readable at
+  narrow panel widths and beside run/health/storage status; matching partial
+  evidence must not read as a complete current result. Confirm the existing
+  stale warning still opens its normal protected-loadout action and an evidence
+  label triggers no run, repair or model mutation. Check unchanged polling does
+  not restart row spinners and changed evidence updates its label/tooltip.
+  Automated DOM/model checks pass; app/smoke remains unexecuted because Archive
+  is unavailable for browser runtime/capture output. No native/headset behavior
+  changed in this increment.
+
+MV-46 automated update: 39 focused cases and the full frontend suite (8,192
+passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.

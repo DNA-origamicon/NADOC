@@ -57,7 +57,9 @@ Comparison and native VR remain separate increments.
 oxDNA/NAMD job APIs now expose additive physical `input_freshness`: equal legacy
 partial hashes remain unknown, while known comparable changes are stale. This
 adds no model hashing or job writes. Existing booleans/guards remain compatible;
-complete consumed-input/solver/source/restart receipts and UI labels are pending.
+complete consumed-input/solver/source/restart receipts are pending. Shared job
+rows now display unknown/changed evidence independently from run status; full
+frontend validation passed 8,192 tests (one skipped). App review is MV-46 pending.
 The 59 focused regressions preserve both legacy migration and native recipe
 snapshots without silently adding an unlogged cluster.
 

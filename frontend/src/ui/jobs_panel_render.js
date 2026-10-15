@@ -112,6 +112,15 @@ export function renderJobRow(m, { doc = document, onClick, onAction, onWarning, 
     row.append(info)
   }
 
+  if (m.inputFreshness) {
+    const evidence = Object.assign(doc.createElement('span'), { textContent: m.inputFreshness.text })
+    evidence.className = 'job-input-freshness'
+    evidence.title = m.inputFreshness.title
+    evidence.setAttribute('aria-label', `${m.inputFreshness.text}. ${m.inputFreshness.title}`)
+    evidence.style.cssText = `flex-shrink:0;font-size:10px;color:${m.colors.dim}`
+    row.append(evidence)
+  }
+
   // Archive and status are stable columns: every row reserves the same space even
   // when it is not archived or active. This stops the important state glyphs from
   // wandering as variable-width job information changes.

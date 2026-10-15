@@ -15,7 +15,7 @@ are unchanged for compatibility; it is not an alias for a complete current verdi
 The adapter reuses each existing fingerprint once per response and performs no
 new model traversal, filesystem access, hashing, job write or simulation. It does
 not yet add complete receipts, qualify consumed-model projections, certify source
-bytes, or change frontend labels. Those remain required follow-up checkpoints.
+bytes. Those remain required follow-up checkpoints.
 The now-unused MD boolean response wrapper was pruned. Misleading v4 comments
 claiming complete engine coverage were corrected without changing legacy hashes.
 
@@ -26,6 +26,16 @@ file while retaining a newly authored recipe root. It now explicitly distinguish
 legacy snapshots (migration required) from authored snapshots (no unlogged cluster
 insertion). Existing frozen-result and return-loadout assertions remain. No
 production restoration or placement algorithm was changed to make that test pass.
+
+The shared simulation-row model and renderer now show `Inputs unverified` for
+unknown or incomplete evidence, with a distinct partial-match tooltip. Known
+changes show `Inputs changed`; the existing warning action and run-completion
+status remain independent. The shared render signature includes the displayed
+evidence, avoiding unchanged-poll rerenders while reflecting actual status changes.
+This covers oxDNA, NAMD and normalized unified rows without per-panel copies.
+The 39 focused frontend cases pass; the full suite passes 8,192 tests with one
+skipped across 709 files in 310.21 seconds.
+App inspection is still pending under MV-46 because Archive is unavailable.
 
 ## Existing foundation and gaps
 

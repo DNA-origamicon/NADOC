@@ -55,6 +55,26 @@ import { statusKeyFor } from './job_status_symbol.js'
 const _DEFAULT_ACTIVE = (job) => ['queued', 'preparing', 'running'].includes(job?.status)
 const _DEFAULT_COLORS = { dim: '#8a8a8a', warn: '#e0a800' }
 
+/** Evidence labels are independent from run completion, health and run guards. */
+function inputFreshnessMarker(job) {
+  const evidence = job?.input_freshness
+  if (!evidence || typeof evidence !== 'object') return null
+  if (evidence.status === 'stale') return {
+    text: 'Inputs changed',
+    title: 'Recorded simulation inputs differ from the active design. The saved result is retained.',
+  }
+  if (evidence.status === 'current' && evidence.coverage?.complete === true) return {
+    text: 'Inputs match',
+    title: 'The compared simulation inputs match. This does not assess the scientific quality of the result.',
+  }
+  return {
+    text: 'Inputs unverified',
+    title: evidence.model_match === true
+      ? 'The recorded partial model matches, but complete simulation input provenance is unavailable.'
+      : 'Complete comparable simulation input evidence is unavailable for the active design.',
+  }
+}
+
 /**
  * Pure: one job → a canonical row descriptor. `pos` carries the tree position
  * ({ depth, index, listIndex }) computed by buildJobListModel.
@@ -98,6 +118,7 @@ export function buildJobRowModel(job, ctx, { depth = 0, index = 0, listIndex = 0
     archived,
     archivePath,
     storageUnavailable: job?.storage_available === false,
+    inputFreshness: inputFreshnessMarker(job),
     stale: ctx.isStale ? !!ctx.isStale(job) : false,
     staleClass: ctx.staleClass || null,
     // staleTitle may be a static string (shared by all rows) or a per-job function
@@ -155,7 +176,8 @@ export function buildJobListModel(jobs, ctx) {
 export function jobListSignature(jobs, ctx) {
   const sorted = (jobs || []).slice().sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
   const per = ctx.rowSig || ((j) => `${j.job_id}:${j.status}`)
-  return sorted.map(j => per(j) + JSON.stringify(j.restart_events || [])).join(',') + `|sel=${ctx.selectedId ?? ''}`
+  return sorted.map(j => per(j) + JSON.stringify(j.restart_events || [])
+    + JSON.stringify(inputFreshnessMarker(j))).join(',') + `|sel=${ctx.selectedId ?? ''}`
 }
 
 /**
