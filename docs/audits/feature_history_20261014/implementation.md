@@ -9,10 +9,10 @@ Scope approved October 14, 2026: implement standard-part validation, editability
 | P0 | Inventory, field ownership and performance evidence | Source audit complete; initial recording benchmark captured. Add workloads as the affected subsystem changes |
 | P1 | Standard-part recording transactions, executable replay registry and evidenced cleanup | Foundation implemented below. Retain legacy callbacks and compatibility recovery; no claim of general isolated evaluation |
 | P2 | Explicit recipe roots/versions, authoritative-field classification, read-only verification and incremental dependencies | Implementation exit checks complete: independent nonempty replay, content-pinned roots, typed dependencies, fingerprints, bounded capture/jobs and stale/cancel handling. Supported-family expansion continues in P3/P4; validation debt below remains explicit |
-| P3 | Native DNA command families and generated construction | DNA implementation exit checks recorded below, including joined/connectivity input compilation and bounded native-source CPD conversion/relaxation. The combined P3/P4 registry currently has 115 versioned kinds with method/action restrictions; this count is not universal operation coverage. Generated asset/attachment histories remain in P4 |
-| P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol including unbound particle motion, pinned small protein/catalog/aptamer inputs, supported protein conjugation lifecycle and duplex lifecycle/relaxation implemented. Bounded document transport and explicit inactive-source audits added. Full import/attachment coverage and physical-result provenance remain open |
-| P5 | Standard-part repair, drafts, desktop and part-mode VR | Saved draft evaluation/apply, bounded reference selection, explicit source staging/restoration and persistence pass. Reviewed input metadata, lossless browser expectations, desktop UI-1 automated integration and narrow invalid-gold input repair pass. Broader invalid-family recognition/selectors, candidate comparison and native VR remain open |
-| P6 | Strict standard-part agent transactions and legacy retirement | Private host policy, one-use publication permits and state/known-route guards pass. Closed strict HTTP dispatch and scalar revision reads pass. Public batch gate stays closed pending ownership and responsiveness qualification; immutable revision storage, typed additional operations, baseline reuse and explicit import permission remain open |
+| P3 | Native DNA command families and generated construction | DNA implementation exit checks recorded below, including joined/connectivity input compilation and bounded native-source CPD conversion/relaxation. Registered kinds retain method/action restrictions; their count is not universal operation coverage. Generated asset/attachment histories remain in P4 |
+| P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol, pinned small protein/catalog/aptamer inputs, supported protein conjugation and duplex lifecycle/relaxation implemented. Native unapplied NP connection create/rename/delete now pass independent replay; motion with pending connections and applied connections are next. Full import/attachment coverage and complete physical-input receipts remain open |
+| P5 | Standard-part repair, drafts, desktop and part-mode VR | Saved draft evaluation/apply, reference selection, source staging/restoration and persistence pass. Desktop UI-1 and narrow invalid-gold repair pass. Private complete gold/QD/free-protein comparisons pass automated UI checks; complete DNA comparison, broader invalid-family selectors and native VR remain open. App review remains pending |
+| P6 | Strict standard-part agent transactions and legacy retirement | Private policy/permits, closed strict HTTP dispatch, immutable internal ownership and outside-lock evaluation/publication pass. Atomic typed records and pending-safe autosave pass. Public immutable creation/batch stay disabled until cold restore, complete lifecycle and responsiveness qualification. Catalog expansion, explicit imports and later replay reuse remain open |
 
 Assemblies are not an exit condition for any phase above. Existing assembly compatibility tests may catch collateral changes to shared infrastructure, but new assembly features and fixes remain deferred.
 
@@ -61,7 +61,27 @@ No frontend behavior was changed in this foundation; no molecular geometry algor
 
 ## Current implementation entry point
 
-P0–P3 implementation exit checks are recorded below; chronological entries retain their original phase status. P4 is the active implementation phase. Keep unsupported contracts unverified, retain the import/native distinction, and keep full proof off automatic edit, frame and scrub paths. Broad-suite/environment debt is separate from these implementation gates.
+P0–P3 implementation exit checks are recorded below; chronological entries retain
+their original phase status. P4–P6 proceed in independently reversible slices,
+following [the remaining standard-part checkpoints](remaining_standard_part_checkpoints.md).
+Keep unsupported contracts unverified, retain the import/native distinction, and
+keep full proof off automatic edit, frame and scrub paths.
+
+Latest completed checkpoints are private comparison UI (`30acd990`, 8,263 full
+frontend tests passed, one skipped), typed pending-safe persistence (`13ce0289`,
+136 focused tests), and native pending NP connection metadata (`ee90a927`, 161
+distinct focused tests). Their detailed limits and failures remain in the linked
+validation ledgers. NP correctness passed 30 repeated lifecycles per case, but
+larger-model median requests rose from about 17 to 24 ms and latency qualification
+is still open. Internal immutable capture/publication passes real strict HTTP and
+cold replay; separate performance evidence must precede public enablement.
+
+Broad-suite/environment debt is separate: the latest FAST selection collected
+no executable tests because the archived CPD fixture was absent and a new
+UUID-parametrization collection mismatch was found. The latter was corrected in
+`cc5e96e9` and passed all 50 cache-identity tests on four workers. The absent
+fixture and FULL deferral remain; this is not a broad-suite pass. Archive, live
+app, browser and headset validation remain unavailable/unrun.
 
 ## P2 first increment — explicit provenance and assessment
 

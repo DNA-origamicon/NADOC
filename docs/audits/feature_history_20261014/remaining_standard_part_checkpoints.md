@@ -5,9 +5,9 @@ new claim that every registered kind or legacy receipt regenerates. Assemblies
 remain outside the agreed scope. Existing molecular builders and constants stay
 unchanged; each new adapter must preserve their complete admitted output.
 
-## Next P4 checkpoint: pending nanoparticle connection candidates
+## Completed pending candidates; next P4 checkpoint: coupled motion and application
 
-Implement the existing `nanoparticle-connection-version-create`, `-patch` and
+Implemented in `ee90a927`: the existing `nanoparticle-connection-version-create`, `-patch` and
 `-delete` kinds for **unapplied candidates only**. The visible overhang panel
 creates these before applying them. This closes an ordinary structural-authoring
 gap without calling `fitting_geometry`, relocation or relaxation.
@@ -29,13 +29,17 @@ part topology dependency barrier because common executor postprocessing still
 has broader effects. No output geometry, source reconstruction or new numerical
 pin is needed for these metadata operations.
 
-Exit: native empty-root gold/graft/target → create/rename/delete cold proof,
+Completed correctness checks: native empty-root gold/graft/target → create/rename/delete cold proof,
 exact input edits, missing/deleted producer diagnostics, unchanged unrelated
 authoring, ordinary visible route parity, one atomic row/undo/revision, stale and
 session-ABA rejection, and a bounded 1/16-handle route benchmark including retained
-history. Final admission ceilings follow that measurement; existing global
-capture/recovery limits do not change. This checkpoint alone does not qualify
-connection application.
+history. The 161 distinct focused cases pass. Thirty repetitions per case retain
+correct publication and five native cold proofs, but larger-model medians rose
+from about 17 to 24 ms, with native request outliers reaching 88.57 ms. Latency
+remains unqualified; remove duplicate transaction-local reference scans and
+measure allocation/GC overlap before expanding this path. Existing global
+capture/recovery limits do not change. Motion with pending versions is the next
+input contract; application remains a separate topology-changing continuation.
 
 ## Finite P4 remainder
 

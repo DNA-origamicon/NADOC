@@ -1,0 +1,594 @@
+{
+  "scope": "Staged immutable actual strict HTTP batch/verify/commit; persistence excluded",
+  "repeats": 3,
+  "completed": false,
+  "failure": null,
+  "session_cleanup_verified": true,
+  "cleanup_errors": [],
+  "cases": [
+    {
+      "name": "32-gold-commands",
+      "completed": true,
+      "errors": [],
+      "source_sealing_ms": 7.187696002802113,
+      "source_bytes": 141090,
+      "source_rows": 32,
+      "source_recovery_bytes": 113368,
+      "candidate_bytes": 312478,
+      "candidate_rows": 64,
+      "cold_verification": {
+        "status": "verified",
+        "native_editable": true,
+        "issues": []
+      },
+      "capture": {
+        "http": {
+          "count": 3,
+          "p50_ms": 17.23941999807721,
+          "p95_ms": 17.855664002127014,
+          "max_ms": 17.855664002127014
+        },
+        "baseline_revision_http": {
+          "count": 3,
+          "p50_ms": 1.0917139989032876,
+          "p95_ms": 2.636107998114312,
+          "max_ms": 2.636107998114312
+        },
+        "revision_http": {
+          "count": 6,
+          "p50_ms": 9.261762499590986,
+          "p95_ms": 14.755865002371138,
+          "max_ms": 14.755865002371138
+        },
+        "capture_lock_hold": {
+          "count": 6,
+          "p50_ms": 0.0218345012399368,
+          "p95_ms": 0.09739300003275275,
+          "max_ms": 0.09739300003275275
+        },
+        "capture_lock_wait": {
+          "count": 6,
+          "p50_ms": 0.0013404987839749083,
+          "p95_ms": 0.0017240017768926919,
+          "max_ms": 0.0017240017768926919
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 12,
+          "p50_ms": 0.009432500519324094,
+          "p95_ms": 0.027866997697856277,
+          "max_ms": 0.027866997697856277
+        },
+        "light_request_lock_wait": {
+          "count": 12,
+          "p50_ms": 0.000957999873207882,
+          "p95_ms": 0.0020120023691561073,
+          "max_ms": 0.0020120023691561073
+        },
+        "overlapping_revision_requests": 4
+      },
+      "publication": {
+        "http": {
+          "count": 3,
+          "p50_ms": 21.271965000778437,
+          "p95_ms": 21.824718001880683,
+          "max_ms": 21.824718001880683
+        },
+        "baseline_revision_http": {
+          "count": 3,
+          "p50_ms": 1.0190290013269987,
+          "p95_ms": 1.0930559983535204,
+          "max_ms": 1.0930559983535204
+        },
+        "revision_http": {
+          "count": 6,
+          "p50_ms": 11.002233499311842,
+          "p95_ms": 18.166228001064155,
+          "max_ms": 18.166228001064155
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 6,
+          "p50_ms": 0.023653499738429673,
+          "p95_ms": 0.9113900014199317,
+          "max_ms": 0.9113900014199317
+        },
+        "publication_lock_wait": {
+          "count": 6,
+          "p50_ms": 0.0011494994396343827,
+          "p95_ms": 0.0016279991541523486,
+          "max_ms": 0.0016279991541523486
+        },
+        "light_request_lock_hold": {
+          "count": 12,
+          "p50_ms": 0.009863499144557863,
+          "p95_ms": 0.014844001270830631,
+          "max_ms": 0.014844001270830631
+        },
+        "light_request_lock_wait": {
+          "count": 12,
+          "p50_ms": 0.0009574996511219069,
+          "p95_ms": 0.0017240017768926919,
+          "max_ms": 0.0017240017768926919
+        },
+        "overlapping_revision_requests": 6
+      },
+      "private_materialization": {
+        "count": 7,
+        "p50_ms": 2.814899999066256,
+        "p95_ms": 3.9148509968072176,
+        "max_ms": 3.9148509968072176
+      },
+      "private_sealing": {
+        "count": 3,
+        "p50_ms": 11.262091000389773,
+        "p95_ms": 11.334009999700356,
+        "max_ms": 11.334009999700356
+      },
+      "sample_count": 3,
+      "successful_publications": 3,
+      "refused_samples": [],
+      "publication_check_failures": []
+    },
+    {
+      "name": "mixed-prefix-37-rows-plus-27-commands",
+      "completed": false,
+      "errors": [
+        {
+          "phase": "http_publication",
+          "exception": "RuntimeError",
+          "detail": "Publication did not retain exact immutable content/undo"
+        }
+      ],
+      "source_sealing_ms": 7.0438580005429685,
+      "source_bytes": 102694,
+      "source_rows": 37,
+      "source_recovery_bytes": 77232,
+      "capture": {
+        "http": {
+          "count": 1,
+          "p50_ms": 12.922167999931844,
+          "p95_ms": 12.922167999931844,
+          "max_ms": 12.922167999931844
+        },
+        "baseline_revision_http": {
+          "count": 1,
+          "p50_ms": 1.5705369987699669,
+          "p95_ms": 1.5705369987699669,
+          "max_ms": 1.5705369987699669
+        },
+        "revision_http": {
+          "count": 2,
+          "p50_ms": 7.11146800131246,
+          "p95_ms": 11.721568000211846,
+          "max_ms": 11.721568000211846
+        },
+        "capture_lock_hold": {
+          "count": 2,
+          "p50_ms": 0.020781501007149927,
+          "p95_ms": 0.022505002561956644,
+          "max_ms": 0.022505002561956644
+        },
+        "capture_lock_wait": {
+          "count": 2,
+          "p50_ms": 0.0012925011105835438,
+          "p95_ms": 0.0013400021998677403,
+          "max_ms": 0.0013400021998677403
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 4,
+          "p50_ms": 0.008953500582720153,
+          "p95_ms": 0.01235299714608118,
+          "max_ms": 0.01235299714608118
+        },
+        "light_request_lock_wait": {
+          "count": 4,
+          "p50_ms": 0.0009574996511219069,
+          "p95_ms": 0.000957999873207882,
+          "max_ms": 0.000957999873207882
+        },
+        "overlapping_revision_requests": 1
+      },
+      "publication": {
+        "http": {
+          "count": 1,
+          "p50_ms": 20.690793000539998,
+          "p95_ms": 20.690793000539998,
+          "max_ms": 20.690793000539998
+        },
+        "baseline_revision_http": {
+          "count": 1,
+          "p50_ms": 1.1964160003117286,
+          "p95_ms": 1.1964160003117286,
+          "max_ms": 1.1964160003117286
+        },
+        "revision_http": {
+          "count": 2,
+          "p50_ms": 10.516773498238763,
+          "p95_ms": 16.162536998308497,
+          "max_ms": 16.162536998308497
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 2,
+          "p50_ms": 0.029798000468872488,
+          "p95_ms": 0.055987002269830555,
+          "max_ms": 0.055987002269830555
+        },
+        "publication_lock_wait": {
+          "count": 2,
+          "p50_ms": 0.0013654989743372425,
+          "p95_ms": 0.001657997927395627,
+          "max_ms": 0.001657997927395627
+        },
+        "light_request_lock_hold": {
+          "count": 4,
+          "p50_ms": 0.012046000847476535,
+          "p95_ms": 0.022239000827539712,
+          "max_ms": 0.022239000827539712
+        },
+        "light_request_lock_wait": {
+          "count": 4,
+          "p50_ms": 0.0011214997357456014,
+          "p95_ms": 0.0024379987735301256,
+          "max_ms": 0.0024379987735301256
+        },
+        "overlapping_revision_requests": 2
+      },
+      "private_materialization": {
+        "count": 2,
+        "p50_ms": 2.884519499275484,
+        "p95_ms": 2.973482998640975,
+        "max_ms": 2.973482998640975
+      },
+      "private_sealing": {
+        "count": 1,
+        "p50_ms": 11.010906000592513,
+        "p95_ms": 11.010906000592513,
+        "max_ms": 11.010906000592513
+      },
+      "sample_count": 1,
+      "successful_publications": 0,
+      "refused_samples": [],
+      "publication_check_failures": []
+    },
+    {
+      "name": "public-50000-authored-residues",
+      "completed": false,
+      "errors": [
+        {
+          "phase": "http_publication",
+          "exception": "RuntimeError",
+          "detail": "Publication did not retain exact immutable content/undo"
+        }
+      ],
+      "source_sealing_ms": 8.61963599891169,
+      "source_bytes": 41566,
+      "source_rows": 32,
+      "source_recovery_bytes": 14300,
+      "capture": {
+        "http": {
+          "count": 1,
+          "p50_ms": 12.471653000829974,
+          "p95_ms": 12.471653000829974,
+          "max_ms": 12.471653000829974
+        },
+        "baseline_revision_http": {
+          "count": 1,
+          "p50_ms": 1.607251000677934,
+          "p95_ms": 1.607251000677934,
+          "max_ms": 1.607251000677934
+        },
+        "revision_http": {
+          "count": 2,
+          "p50_ms": 7.095732498783036,
+          "p95_ms": 11.89188100033789,
+          "max_ms": 11.89188100033789
+        },
+        "capture_lock_hold": {
+          "count": 2,
+          "p50_ms": 0.022873500711284578,
+          "p95_ms": 0.024288001441163942,
+          "max_ms": 0.024288001441163942
+        },
+        "capture_lock_wait": {
+          "count": 2,
+          "p50_ms": 0.001365000571240671,
+          "p95_ms": 0.0013650023902300745,
+          "max_ms": 0.0013650023902300745
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 4,
+          "p50_ms": 0.009314999260823242,
+          "p95_ms": 0.0197020017367322,
+          "max_ms": 0.0197020017367322
+        },
+        "light_request_lock_wait": {
+          "count": 4,
+          "p50_ms": 0.00102400008472614,
+          "p95_ms": 0.0013659991964232177,
+          "max_ms": 0.0013659991964232177
+        },
+        "overlapping_revision_requests": 1
+      },
+      "publication": {
+        "http": {
+          "count": 1,
+          "p50_ms": 27.768431002186844,
+          "p95_ms": 27.768431002186844,
+          "max_ms": 27.768431002186844
+        },
+        "baseline_revision_http": {
+          "count": 1,
+          "p50_ms": 1.6505579988006502,
+          "p95_ms": 1.6505579988006502,
+          "max_ms": 1.6505579988006502
+        },
+        "revision_http": {
+          "count": 2,
+          "p50_ms": 14.010333998157876,
+          "p95_ms": 22.636309997324133,
+          "max_ms": 22.636309997324133
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 2,
+          "p50_ms": 0.031554000088362955,
+          "p95_ms": 0.05696299922419712,
+          "max_ms": 0.05696299922419712
+        },
+        "publication_lock_wait": {
+          "count": 2,
+          "p50_ms": 0.0013165008567739278,
+          "p95_ms": 0.0013650023902300745,
+          "max_ms": 0.0013650023902300745
+        },
+        "light_request_lock_hold": {
+          "count": 4,
+          "p50_ms": 0.011850999726448208,
+          "p95_ms": 0.02048299938905984,
+          "max_ms": 0.02048299938905984
+        },
+        "light_request_lock_wait": {
+          "count": 4,
+          "p50_ms": 0.001219499608851038,
+          "p95_ms": 0.001658001565374434,
+          "max_ms": 0.001658001565374434
+        },
+        "overlapping_revision_requests": 2
+      },
+      "private_materialization": {
+        "count": 2,
+        "p50_ms": 3.04322300144122,
+        "p95_ms": 3.198018002876779,
+        "max_ms": 3.198018002876779
+      },
+      "private_sealing": {
+        "count": 1,
+        "p50_ms": 17.28248099971097,
+        "p95_ms": 17.28248099971097,
+        "max_ms": 17.28248099971097
+      },
+      "sample_count": 1,
+      "successful_publications": 0,
+      "refused_samples": [],
+      "publication_check_failures": []
+    },
+    {
+      "name": "public-63-source-rows-plus-one",
+      "completed": true,
+      "errors": [],
+      "source_sealing_ms": 11.437445999035845,
+      "source_bytes": 306798,
+      "source_rows": 63,
+      "source_recovery_bytes": 261468,
+      "candidate_bytes": 312114,
+      "candidate_rows": 64,
+      "cold_verification": {
+        "status": "verified",
+        "native_editable": true,
+        "issues": []
+      },
+      "capture": {
+        "http": {
+          "count": 3,
+          "p50_ms": 20.9815569978673,
+          "p95_ms": 21.79634200001601,
+          "max_ms": 21.79634200001601
+        },
+        "baseline_revision_http": {
+          "count": 3,
+          "p50_ms": 1.1627589992713183,
+          "p95_ms": 1.2500620032369625,
+          "max_ms": 1.2500620032369625
+        },
+        "revision_http": {
+          "count": 6,
+          "p50_ms": 10.68118399962259,
+          "p95_ms": 20.586089998687385,
+          "max_ms": 20.586089998687385
+        },
+        "capture_lock_hold": {
+          "count": 6,
+          "p50_ms": 0.021114999981364235,
+          "p95_ms": 0.037552999856416136,
+          "max_ms": 0.037552999856416136
+        },
+        "capture_lock_wait": {
+          "count": 6,
+          "p50_ms": 0.0010730000212788582,
+          "p95_ms": 0.011996999091934413,
+          "max_ms": 0.011996999091934413
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 12,
+          "p50_ms": 0.00887449823494535,
+          "p95_ms": 0.02389699875493534,
+          "max_ms": 0.02389699875493534
+        },
+        "light_request_lock_wait": {
+          "count": 12,
+          "p50_ms": 0.0009750001481734216,
+          "p95_ms": 0.0010730000212788582,
+          "max_ms": 0.0010730000212788582
+        },
+        "overlapping_revision_requests": 5
+      },
+      "publication": {
+        "http": {
+          "count": 3,
+          "p50_ms": 22.32384099988849,
+          "p95_ms": 23.083637999661732,
+          "max_ms": 23.083637999661732
+        },
+        "baseline_revision_http": {
+          "count": 3,
+          "p50_ms": 1.0234969995508436,
+          "p95_ms": 1.1600280013226438,
+          "max_ms": 1.1600280013226438
+        },
+        "revision_http": {
+          "count": 6,
+          "p50_ms": 11.152119501275592,
+          "p95_ms": 21.01323800161481,
+          "max_ms": 21.01323800161481
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 6,
+          "p50_ms": 0.022284000806394033,
+          "p95_ms": 0.04427599924383685,
+          "max_ms": 0.04427599924383685
+        },
+        "publication_lock_wait": {
+          "count": 6,
+          "p50_ms": 0.0009750001481734216,
+          "p95_ms": 0.0010730000212788582,
+          "max_ms": 0.0010730000212788582
+        },
+        "light_request_lock_hold": {
+          "count": 12,
+          "p50_ms": 0.010044501323136501,
+          "p95_ms": 0.012483000318752602,
+          "max_ms": 0.012483000318752602
+        },
+        "light_request_lock_wait": {
+          "count": 12,
+          "p50_ms": 0.0009265004337066785,
+          "p95_ms": 0.0013649987522512674,
+          "max_ms": 0.0013649987522512674
+        },
+        "overlapping_revision_requests": 5
+      },
+      "private_materialization": {
+        "count": 7,
+        "p50_ms": 4.227836998325074,
+        "p95_ms": 4.869583000981947,
+        "max_ms": 4.869583000981947
+      },
+      "private_sealing": {
+        "count": 3,
+        "p50_ms": 11.702877000061562,
+        "p95_ms": 11.911379999219207,
+        "max_ms": 11.911379999219207
+      },
+      "sample_count": 3,
+      "successful_publications": 3,
+      "refused_samples": [],
+      "publication_check_failures": []
+    }
+  ],
+  "latency_qualified": false,
+  "evidence_retention": "Successful per-request arrays pruned after aggregate review; failure/refusal samples, summaries, counts, cold results and cleanup retained."
+}
