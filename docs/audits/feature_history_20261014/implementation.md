@@ -908,3 +908,35 @@ Python Ruff and whitespace pass. Broad-suite debt remains unchanged. See
 [batch API](../../part_registered_batches.md),
 [coating evidence](coating_jobs_benchmark_drafts_p4.json) and
 [validation](validation_guarded_jobs_p4_p6.json). P4/P5/P6 remain open.
+
+## Saved repair evaluation and explicit source repair — October 15
+
+Saved proposals now start the existing isolated repair lifecycle after an
+explicit base-fingerprint check outside the state lock. The host passes the
+same captured source and session identity into job admission. Evaluation never
+silently rebases a proposal or rewrites its expected old values. Apply publishes
+the exact candidate once, with one undo, and retains the proposal for deliberate
+review/discard. An HTTP regression repairs a missing native reference and then
+reproduces the result in a second fresh process with poisoned recovery.
+
+Named source inspection/staging/restoration accepts original bytes only for
+reviewed command inputs. Each upload binds to the part/revision/proposal and an
+explicit receipt for the old encoded bytes. Published-source restoration requires
+explicit rebase; proposed-only staging leaves the published base unchanged.
+Acquisition has one nonqueued slot and a bounded body deadline. Hashing and
+preparation occur outside the lock; publication adds one metadata revision and
+no geometry undo or feature. Current admitted source-owning kinds are snapshots;
+real minor children cannot invent an input contract by carrying source JSON.
+
+Evaluation now binds to a host-only session identity as well as source/revision.
+Close/reopen cannot revive a stale candidate or committed handle, and a rejected
+late commit cannot recreate the closed document (ISSUE-85). Default capture and
+ordinary verification remain compatible. Repair metadata publishers share one
+small compare-and-swap/rollback helper instead of duplicating transaction tails.
+
+The checkpoint passes **331 focused cases across 17 files**. The source fixture
+corrections and dry-run selector's verbatim FAST/deferred FULL output are in the
+[validation record](validation_saved_repair_jobs_p5.json). Neither broad suite ran;
+Archive is unavailable. No frontend/main.js, molecular algorithm, numerical pin
+or global-budget change. P4 coverage, P5 UI and P6 enforcement remain incomplete.
+See [saved evaluation](draft_evaluation.md) and [source contract](repair_source_staging.md).

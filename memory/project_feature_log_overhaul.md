@@ -6,6 +6,37 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 ---
 # Feature Log Overhaul + Tabbed Sidebar (commit 873f3e6, branch feature-log-update, 2026-05-02)
 
+## Current delivery status (2026-10-15)
+
+The sections below retain earlier implementation context; use the latest
+[implementation checkpoint](../docs/audits/feature_history_20261014/implementation.md)
+for current availability and measured limits. P3's native DNA execution foundation
+is implemented. P4 asset/attachment coverage, P5 repair UI and P6 trusted automation
+enforcement remain incomplete; assembly work is explicitly deferred.
+
+Portable `Design.repair_draft` proposals now persist across document/session,
+loadout, project and package boundaries. Explicit metadata APIs support
+create/update/rebase/discard, and ordinary responses expose a compact unchecked
+summary. Draft metadata is excluded from replay and numerical authoring. A saved
+proposal is never proof or publication authority. Canonical serialized-form
+budgets prevent optional defaults from making a previously admitted draft
+unloadable (ISSUE-84).
+
+Explicit single-particle coating jobs are enabled within their measured bounded
+scope; ordinary mixed-part coating routes are not covered. Registered batch
+evaluation uses the existing isolated lifecycle, but its public availability gate
+is still closed. Its first benchmark confirms that full-source undo cost cannot
+be inferred from authoring-only capture: large excluded physical state and long
+history need separate admission. Do not raise global capture limits, add proof
+to render/scrub paths, or reuse a cached baseline while mutable aliases and
+unclassified write paths remain. No strict-session or general LLM enforcement
+claim is justified yet.
+
+Focused tests and small in-memory qualification run serially. The Archive
+filesystem is unavailable in this environment; broader suite, app, visual and
+headset validation debt is recorded separately and must not be described as a
+pass. The persistent goal remains active.
+
 ## Architecture review and hardening (2026-10-15)
 
 See [architecture review](../docs/audits/feature_history_20261014/architecture_review.md)

@@ -162,9 +162,13 @@ duplex relaxation v1 or native streptavidin packing v1. Supply the stable target
 same recognized family, rebuilds the complete recipe and reports old/new pins.
 It never certifies the older engine's output or silently refreshes ordinary edits.
 
-Repair drafts, replacement picker UI and on-demand visual comparison remain
-pending. Current job results expire after 15 minutes. The changed-field/count
-summary is neither a geometry preview nor scientific qualification.
+[Saved repair proposals](part_repair_drafts.md) support bounded persistence,
+explicit source restoration/staging and draft-bound evaluation through this
+same job lifecycle. Applying a proposal retains it; a changed base requires
+explicit rebase before another evaluation. Replacement-picker UI and on-demand
+visual comparison remain pending. Current job results expire after 15 minutes.
+The changed-field/count summary is neither a geometry preview nor scientific
+qualification.
 
 ## Replacement reference selection
 

@@ -1828,3 +1828,17 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   The benchmark's aborted attempt is retained in
   `docs/audits/feature_history_20261014/coating_jobs_draft_boundary_failure_p4.json`;
   performance qualification is reported separately from this correctness fix.
+
+## ISSUE-85 — Evaluated candidates could outlive their document session (2026-10-15, FIXED)
+
+- Source identity and revision alone did not distinguish a dropped document
+  session from a recreated session containing that same object/revision. This
+  was an audit finding, not an observed user-data incident.
+- Evaluation capture now retains a host-only session identity under the same
+  lock. Supervision, polling, commit and already-committed handle reuse check
+  that identity. Saved files, worker output and request fields cannot supply it.
+  Guarded capture/publication refuses a closed session without recreating it.
+- All 21 session regressions pass, including close/reopen before admission,
+  during worker execution and during candidate decode; missing context; locked
+  nonblocking probes; and idempotent commits within the original session.
+  Existing verification and default three-value capture remain compatible.

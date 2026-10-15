@@ -13,19 +13,9 @@ def _conflict(detail):
     raise DraftInputError(detail, code="draft_conflict")
 
 
-def publish_draft(session, prepared_draft, *, expected_session, expected_source, expected_doc_id,
-                  expected_design_id, expected_revision, expected_draft_id,
-                  expected_generation, bump_revision, context):
-    """Compare-and-swap one proposal; return the assigned session revision.
-
-    ``context`` supplies the existing doc_context accessors and setters.
-    ``bump_revision`` may modify only session.revision and request context, as
-    state._bump_revision does. Neither callback may release the host's lock.
-    ``expected_session`` and ``expected_source`` are private runtime handles
-    retained at capture, never values accepted from JSON or persisted drafts.
-    No geometry, feature history, undo stack or draft action is visited here.
-    The caller must never mutate prepared_draft after successful publication.
-    """
+def _current(session, *, expected_session, expected_source, expected_doc_id,
+             expected_design_id, expected_revision, expected_draft_id,
+             expected_generation, context):
     if type(expected_revision) is not int or expected_revision < 0:
         raise ValueError("Draft publication requires a trusted nonnegative revision")
     if (expected_draft_id is None) != (expected_generation is None) or (
@@ -41,6 +31,50 @@ def publish_draft(session, prepared_draft, *, expected_session, expected_source,
     actual = (None, None) if current is None else (current.draft_id, current.generation)
     if actual != (expected_draft_id, expected_generation):
         _conflict("The repair draft was replaced, changed or discarded")
+    return before
+
+
+def _publish_field(session, before, field, value, *, bump_revision, context):
+    # Strictly internal: public publishers below choose the sole allowed field.
+    # Never accept an arbitrary request-provided Design update dictionary.
+    if field not in {"repair_draft", "input_sources"}:
+        raise ValueError("Unsupported repair metadata field")
+    revision = session.revision
+    request_revision = context.current_request_revision()
+    request_entry = context.current_request_feature_log_entry_id()
+    try:
+        candidate = before.model_copy(update={field: value})
+        session.design = candidate
+        bump_revision(session)
+        if session.revision != revision + 1 or context.current_request_revision() != session.revision:
+            raise RuntimeError("Draft publication did not assign exactly one request revision")
+        return session.revision
+    except BaseException:
+        session.design = before
+        session.revision = revision
+        context.set_request_revision(request_revision)
+        context.set_request_feature_log_entry_id(request_entry)
+        raise
+
+
+def publish_draft(session, prepared_draft, *, expected_session, expected_source, expected_doc_id,
+                  expected_design_id, expected_revision, expected_draft_id,
+                  expected_generation, bump_revision, context):
+    """Compare-and-swap one proposal; return the assigned session revision.
+
+    ``context`` supplies the existing doc_context accessors and setters.
+    ``bump_revision`` may modify only session.revision and request context, as
+    state._bump_revision does. Neither callback may release the host's lock.
+    ``expected_session`` and ``expected_source`` are private runtime handles
+    retained at capture, never values accepted from JSON or persisted drafts.
+    No geometry, feature history, undo stack or draft action is visited here.
+    The caller must never mutate prepared_draft after successful publication.
+    """
+    before = _current(session, expected_session=expected_session, expected_source=expected_source,
+        expected_doc_id=expected_doc_id, expected_design_id=expected_design_id,
+        expected_revision=expected_revision, expected_draft_id=expected_draft_id,
+        expected_generation=expected_generation, context=context)
+    current = before.repair_draft
 
     # These are trusted preparation-output invariants, not another schema
     # validation pass under the lock. Creation starts at zero; edit/rebase
@@ -54,19 +88,24 @@ def publish_draft(session, prepared_draft, *, expected_session, expected_source,
           or (current is not None and prepared_draft.draft_id != current.draft_id)):
         raise ValueError("Prepared repair draft does not match its publication generation")
 
-    revision = session.revision
-    request_revision = context.current_request_revision()
-    request_entry = context.current_request_feature_log_entry_id()
-    try:
-        candidate = before.model_copy(update={"repair_draft": prepared_draft})
-        session.design = candidate
-        bump_revision(session)
-        if session.revision != revision + 1 or context.current_request_revision() != session.revision:
-            raise RuntimeError("Draft publication did not assign exactly one request revision")
-        return session.revision
-    except BaseException:
-        session.design = before
-        session.revision = revision
-        context.set_request_revision(request_revision)
-        context.set_request_feature_log_entry_id(request_entry)
-        raise
+    return _publish_field(session, before, "repair_draft", prepared_draft,
+                          bump_revision=bump_revision, context=context)
+
+
+def publish_sources(session, prepared_sources, *, expected_session, expected_source, expected_doc_id,
+                    expected_design_id, expected_revision, expected_draft_id,
+                    expected_generation, bump_revision, context):
+    """Transfer one privately admitted source table without changing the proposal.
+
+    The source host verifies binding/old-byte expectations and bounds before
+    entry. This publisher cannot update geometry, inputs, draft generation/base
+    or readiness. Source-table ownership transfers on success, as for drafts.
+    """
+    before = _current(session, expected_session=expected_session, expected_source=expected_source,
+        expected_doc_id=expected_doc_id, expected_design_id=expected_design_id,
+        expected_revision=expected_revision, expected_draft_id=expected_draft_id,
+        expected_generation=expected_generation, context=context)
+    if before.repair_draft is None or type(prepared_sources) is not dict:
+        raise ValueError("Source publication requires a saved proposal and prepared source table")
+    return _publish_field(session, before, "input_sources", prepared_sources,
+                          bump_revision=bump_revision, context=context)

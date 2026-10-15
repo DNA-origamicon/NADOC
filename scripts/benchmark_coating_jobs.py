@@ -278,10 +278,12 @@ def repeated_case(client, doc, case, repeats, probe, snapshots):
             # This is a publication cost sample, not an admitted end-to-end job.
             revision = reset_source(doc, design)
             identity = str(uuid4())
+            with state._lock:
+                session_identity = state._sessions[doc].identity
             with jobs._lock:
                 jobs._jobs[identity] = jobs.EvaluationJob(doc, ref(design), revision,
                     created=monotonic(), status="complete", admitted_operation="edit",
-                    result=dict(case["prepared"]))
+                    session_identity=session_identity, result=dict(case["prepared"]))
             first_snapshot = len(snapshots)
             try:
                 response, measured = concurrent_request(client, headers,

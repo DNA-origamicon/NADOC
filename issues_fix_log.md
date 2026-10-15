@@ -664,3 +664,10 @@ canonical stored form; no size limit or snapshot validator was weakened. The
 repro preceded the fix (three red / one control), then all 35 schema, 18 API
 and 16 persistence cases passed. Retained-draft performance is measured in a
 separate rerun; the aborted benchmark is preserved rather than called a pass.
+
+2026-10-15 — ISSUE-85: bind every publishing evaluation to the actual host
+session captured alongside source/revision. A new session cannot reuse the old
+handle even if its public revision and source object match. Trusted guards use
+a noncreating session lookup so stale publication cannot reopen a closed tab.
+All 21 session cases and the affected ordinary lifecycle files pass. This closes
+the evaluation lifetime gap; it is not the broader strict automation policy.

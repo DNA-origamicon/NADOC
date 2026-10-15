@@ -30,6 +30,7 @@ import threading
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable
+from uuid import uuid4
 
 from fastapi import HTTPException
 
@@ -109,6 +110,9 @@ class _DesignSession:
     revision: int = 0
     # Persistence cursors belong to the document session, not undoable content.
     workspace_heads: dict[tuple[str, str], set[str]] = field(default_factory=dict)
+    # Host lifetime only: never persisted on Design, restored from a file or
+    # included in undo. A recreated session cannot revive an old job's permit.
+    identity: str = field(default_factory=lambda: str(uuid4()))
 
 
 _lock = threading.Lock()
@@ -147,6 +151,17 @@ def _session() -> _DesignSession:
         s = _DesignSession()
         _sessions[doc] = s
     return s
+
+
+def _session_for_identity(expected_identity):
+    """A trusted capture/publication guard must not recreate a closed session."""
+    if expected_identity is None:
+        return _session()
+    session = _sessions.get(get_current_doc())
+    if session is None or session.identity != expected_identity:
+        raise HTTPException(409, detail={"code": "source_changed",
+            "detail": "The document session changed before evaluation capture or publication"})
+    return session
 
 
 # ── Document registry helpers (multi-document) ───────────────────────────────
@@ -243,16 +258,25 @@ def capture_design_for_verification(*, preserve_entry_types=False):
         return s.design, capture(s.design, preserve_entry_types=preserve_entry_types), s.revision
 
 
-def capture_design_for_evaluation(request):
-    """Explicit job capture: fixed policy and revision checked before copying."""
+def capture_design_for_evaluation(request, *, include_session_identity=False,
+                                  expected_source=None, expected_session_identity=None):
+    """Explicit job capture with optional trusted host guards checked before copy.
+
+    The optional fourth value binds the same locked session as the existing
+    source/capture/revision triple. Neither guard is a client-authored input.
+    """
     from backend.api.part_evaluation_capture import capture_for_evaluation
 
     with _lock:
-        s = _session()
+        s = _session_for_identity(expected_session_identity)
         if s.design is None:
             raise HTTPException(404, detail="No active design.")
+        if expected_source is not None and s.design is not expected_source:
+            raise HTTPException(409, detail={"code": "source_changed",
+                "detail": "The document session or source changed before evaluation capture"})
         captured = capture_for_evaluation(s.design, request=request, revision=s.revision)
-        return s.design, captured, s.revision
+        result = (s.design, captured, s.revision)
+        return (*result, s.identity) if include_session_identity else result
 
 
 def get_repair_draft():
@@ -267,13 +291,43 @@ def mutate_repair_draft(request):
     return mutate_draft(request)
 
 
-def verification_source_matches(doc_id, source, revision, *, blocking=True):
+def evaluate_repair_draft(request):
+    """Start the existing repair job for an explicitly selected saved proposal."""
+    from backend.api.part_repair_draft_evaluation import start_draft_evaluation
+    return start_draft_evaluation(request)
+
+
+def inspect_repair_draft_source(request):
+    """Read the exact old-byte receipt for a named published/proposed input."""
+    from backend.api.part_repair_source_host import inspect_source
+    return inspect_source(request)
+
+
+async def stage_repair_draft_source(request):
+    """Acquire bounded original bytes and publish one source metadata revision."""
+    from backend.api.part_repair_source_transport import upload_source
+    return await upload_source(request)
+
+
+def verification_source_matches(doc_id, source, revision, *, blocking=True, expected_session_identity=None):
     """Return None for a busy nonblocking probe; never treat it as a match."""
     if not _lock.acquire(blocking=blocking):
         return None
     try:
         session = _sessions.get(doc_id)
-        return session is not None and session.design is source and session.revision == revision
+        return (session is not None and session.design is source and session.revision == revision
+                and (expected_session_identity is None or session.identity == expected_session_identity))
+    finally:
+        _lock.release()
+
+
+def evaluation_session_matches(doc_id, identity, *, blocking=True):
+    """Check an old job's session even after its successful source replacement."""
+    if not _lock.acquire(blocking=blocking):
+        return None
+    try:
+        session = _sessions.get(doc_id)
+        return type(identity) is str and bool(identity) and session is not None and session.identity == identity
     finally:
         _lock.release()
 
@@ -427,9 +481,10 @@ def load_design(d: Design | None) -> None:
         _bump_revision(s)
 
 
-def set_design(d: Design, *, expected_revision: int | None = None, expected_source: Design | None = None) -> int:
+def set_design(d: Design, *, expected_revision: int | None = None, expected_source: Design | None = None,
+               expected_session_identity: str | None = None) -> int:
     with _lock:
-        s = _session()
+        s = _session_for_identity(expected_session_identity)
         if expected_revision is not None and s.revision != expected_revision:
             raise HTTPException(409, detail="Design changed while the feature operations were being prepared. Try again.")
         if expected_source is not None and s.design is not expected_source:

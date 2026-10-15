@@ -32,13 +32,15 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel
 
 from backend.api import state as design_state
 from backend.api.part_evaluation import EvaluationRequest
 from backend.core.part_repair_draft_host import DraftRequest
+from backend.core.part_repair_draft_evaluation import DraftEvaluationRequest
+from backend.core.part_repair_sources import SourceSelection
 
 # Shared kernel/infra helpers that stay in crud.py and are imported back
 # (same convention as routes_camera_poses.py / routes_loop_skip.py):
@@ -74,6 +76,31 @@ def get_part_repair_draft():
 @router.post("/design/features/repair-draft")
 def update_part_repair_draft(body: DraftRequest):
     return design_state.mutate_repair_draft(body)
+
+
+@router.post("/design/features/repair-draft/evaluate", status_code=202)
+def evaluate_part_repair_draft(body: DraftEvaluationRequest):
+    """Check the saved base, then start one existing isolated repair job."""
+    return design_state.evaluate_repair_draft(body)
+
+
+@router.post("/design/features/repair-draft/source/inspect")
+def inspect_part_repair_draft_source(body: SourceSelection):
+    """Inspect a named binding and return its explicit prior-byte expectation."""
+    return design_state.inspect_repair_draft_source(body)
+
+
+@router.post("/design/features/repair-draft/source", openapi_extra={
+    "requestBody": {"required": True, "content": {"application/octet-stream": {
+        "schema": {"type": "string", "format": "binary"},
+        "description": "Original source bytes; exact selected command size/SHA and family bounds apply."}}},
+    "parameters": [{"name": "X-NADOC-Repair-Source", "in": "header", "required": True,
+        "schema": {"type": "string", "maxLength": 8192},
+        "description": "ASCII JSON returned by source/inspect, including the exact expected_blob receipt."}],
+})
+async def upload_part_repair_draft_source(request: Request):
+    """Stage a proposed source or explicitly restore a published binding."""
+    return await design_state.stage_repair_draft_source(request)
 
 
 @router.post("/design/features/evaluation/jobs", status_code=202)

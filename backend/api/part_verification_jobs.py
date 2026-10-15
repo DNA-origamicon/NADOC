@@ -74,7 +74,8 @@ def supervise(job, design, worker_factory, seconds, *, status_lock=None):
             raise Stopped("cancelled")
         if monotonic() >= deadline:
             raise Stopped("time_limit")
-        matches = state.verification_source_matches(job.doc, job.source(), job.revision, blocking=False)
+        matches = state.verification_source_matches(job.doc, job.source(), job.revision, blocking=False,
+            expected_session_identity=getattr(job, "session_identity", None))
         if matches is False:
             raise Stopped("source_changed")
         return matches

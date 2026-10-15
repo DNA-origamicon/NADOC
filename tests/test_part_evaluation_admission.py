@@ -130,7 +130,8 @@ def test_commit_rechecks_host_admission_even_when_retained_result_is_replaced(do
     doc, design, revision = document
     identity = str(uuid4())
     job = jobs.EvaluationJob(doc, ref(design), revision, created=monotonic(),
-        admitted_operation=operation, status="complete", result={"status": "ready", "issues": [],
+        admitted_operation=operation, session_identity=state._sessions[doc].identity,
+        status="complete", result={"status": "ready", "issues": [],
             "admitted_operation": "edit", "candidate": design.model_dump(mode="json")})
     with jobs._lock:
         jobs._jobs[identity] = job
@@ -147,7 +148,8 @@ def test_commit_rechecks_host_admission_even_when_retained_result_is_replaced(do
 @pytest.mark.parametrize("admission", [None, "unknown", "future-operation"])
 def test_missing_or_unknown_admission_discards_worker_result_in_supervisor(document, monkeypatch, admission):
     doc, design, revision = document
-    job = jobs.EvaluationJob(doc, ref(design), revision, admitted_operation=admission)
+    job = jobs.EvaluationJob(doc, ref(design), revision, admitted_operation=admission,
+        session_identity=state._sessions[doc].identity)
     monkeypatch.setattr(jobs, "supervise", lambda *_a, **_k: {"status": "ready", "issues": [],
         "admitted_operation": "edit", "candidate": design.model_dump(mode="json")})
     jobs._run(job, design, {"request": {"operation": "edit"}})
