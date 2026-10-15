@@ -1,3 +1,4 @@
+import { formatJobTime } from '../scene/trajectory_range.js'
 /**
  * job_activity.js — cross-engine (MD + oxDNA) job-activity helpers shared by the
  * welcome screen and the simulation panels.
@@ -82,9 +83,14 @@ export function jobActivityTooltip(job) {
   const eng = job.engine === 'oxdna' ? 'oxDNA' : 'MD'
   const verb = job.status === 'preparing' ? 'preparing' : 'running'
   const eta = formatEta(job.eta_seconds)
-  return eta
+  let text = eta
     ? `${eng} simulation ${verb} · ETA ${eta}`
     : `${eng} simulation ${verb}…`
+  if (job.execution_target === 'alpine') {
+    if (job.slurm_job_id) text += ` · SLURM ${job.slurm_job_id} ${job.slurm_state || ''}`
+    if (Number.isFinite(job.last_synced_at)) text += ` · Last synced ${formatJobTime(job.last_synced_at)}`
+  }
+  return text
 }
 
 /** Pure: compact execution-location tag shown after a busy design's part name. */

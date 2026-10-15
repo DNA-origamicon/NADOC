@@ -297,6 +297,9 @@ def _collect_active() -> list[dict]:
                     # ignores remote jobs (they can't contend for the local GPU/disk).
                     "execution_target": getattr(j, "execution_target", "local"),
                     "accelerator_name": _md_accelerator_name(j, ws),
+                    "slurm_job_id": j.slurm_job_id,
+                    "slurm_state": j.slurm_state,
+                    "last_synced_at": (j.live_metrics or {}).get("retrieved_at"),
                     # NAMD always runs GPU-resident here, so a local MD job holds the GPU.
                     # The frontend guard only makes two GPU jobs block each other; a CPU-only
                     # run (a CPU-backend oxDNA job) may launch alongside it.

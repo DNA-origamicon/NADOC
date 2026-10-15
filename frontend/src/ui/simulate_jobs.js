@@ -334,10 +334,13 @@ export function masterStepText(node) {
   }
   const total = _stepTotal(node)
   const est = _estPrefix(node)
-  const tail = progressIsEstimated(node)
+  let tail = progressIsEstimated(node)
     ? ' · estimated from last cluster sync'
     : node?.progress_synced ? ' · synced'
     : node?.progress_last_known ? ' · last known' : ''
+  if (node?.execution_target === 'alpine' && Number.isFinite(node.live_metrics?.retrieved_at)) {
+    tail += ` · Last synced ${formatJobTime(node.live_metrics.retrieved_at)}`
+  }
   if (!(total > 0)) return `${est}${pct}%${_etaSuffix(node)}${tail}`
   const explicit = Number(node.current_step ?? node.completed_steps ?? node.steps_completed)
   // Derive the step count from the RAW fraction, not the displayed percent: rounding to

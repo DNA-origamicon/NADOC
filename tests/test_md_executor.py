@@ -893,6 +893,11 @@ def test_resume_job_mid_segment_from_checkpoint(tmp_path, alpine):
     job.live_metrics = {"segment": "stale"}
     job.live_frame = {"segment": "stale"}
     job.download_status = {"state": "verified"}
+    from backend.core.alpine_transfer_state import atomic_json, state_path
+    atomic_json(state_path(job, tmp_path), {
+        "id": "old-download", "done": True,
+        "download_status": {"state": "verified", "worker_transfer_id": "old-download"},
+    })
     job.fetch_attempts = 3
     # seg 1 started but not finished (log, no .coor); its restart.xsc has a step.
     conn = FakeConn(
@@ -912,6 +917,9 @@ def test_resume_job_mid_segment_from_checkpoint(tmp_path, alpine):
     assert out.live_metrics is None
     assert out.live_frame is None
     assert out.download_status is None
+    reloaded = MdJob.load(job.job_id, tmp_path)
+    assert reloaded.download_status is None
+    assert ex._needs_remote_reconcile(reloaded)
     assert out.fetch_attempts == 0
     assert any(k.endswith("/nadoc_settle_retarget.py") for k in conn.put_contents)
     assert any(k.endswith("/nadoc_cell_recovery.py") for k in conn.put_contents)
@@ -1831,3 +1839,19 @@ def test_a_header_only_dcd_does_not_count():
         (out / "tiny.dcd").write_bytes(b"x" * 100)
         assert ex._segment_has_trajectory(out, "tiny") is False
         assert ex._segment_has_trajectory(out, "absent") is False
+
+
+def test_legacy_continuation_collector_uses_real_checkpoint(tmp_path, alpine):
+    job = _make_resumable_job(tmp_path, alpine)
+    name = job.segments[0].name
+    conn = FakeConn(canned={
+        "ls -1 output": RunResult(0, name + '.resume.log\n---NADOC-METRICS---\n'
+            + json.dumps({'segment': name + '.resume', 'collected_at': 123})
+            + '\n---NADOC-HEALTH---\n{}\n---NADOC-SIZES---\n10\n20', ''),
+        ".restart.xsc": RunResult(0, '# NAMD\n144000 100 0 0\n', ''),
+    })
+    assert _run(ex.poll_remote_progress(job, conn=conn))
+    assert job.live_metrics['segment'] == name
+    assert job.live_metrics['step'] == 144000
+    assert job.live_metrics['retrieved_at'] > 0
+    assert name in ex.parse_progress_listing(name + '.resume.log')[1]

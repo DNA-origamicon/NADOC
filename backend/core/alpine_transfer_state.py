@@ -31,12 +31,35 @@ def read_state(job, workspace: Path) -> dict:
         return {}
 
 
+def submission_identity(job) -> dict:
+    """Bind a transfer to the allocation whose results it downloaded."""
+    return {'slurm_job_id': job.slurm_job_id, 'queued_at': job.queued_at}
+
+
+def matches_submission(record: dict, job, workspace: Path) -> bool:
+    if 'submission' in record:
+        return record['submission'] == submission_identity(job)
+    # Older workers did not record an allocation. Their sidecar predates a later
+    # continuation's queue timestamp. Keep legacy terminal/snapshot downloads valid.
+    if job.queued_at:
+        try:
+            return state_path(job, workspace).stat().st_mtime >= job.queued_at
+        except OSError:
+            return False
+    return True
+
+
 def apply_transfer_state(job, workspace: Path) -> None:
     record = read_state(job, workspace)
     status = record.get('download_status')
     if not status:
         return
     current = job.download_status or {}
+    if not matches_submission(record, job, workspace):
+        # Also repair records previously saved after adopting the stale sidecar.
+        if record.get('id') and current.get('worker_transfer_id') == record['id']:
+            job.download_status = None
+        return
     # Once this transfer has been adopted, backend indexing owns processing state.
     if (current.get('worker_transfer_id') == record.get('id')
             and current.get('state') in {'processing', 'verified'}):
@@ -59,7 +82,8 @@ async def recover_downloads(workspace: Path, conn, *, reconnect: bool = False) -
         if state != 'downloading' and not (reconnect and state == 'interrupted'):
             continue
         # Legacy scheduler downloads retain their existing reconciliation path.
-        if not read_state(job, workspace):
+        record = read_state(job, workspace)
+        if not record or not matches_submission(record, job, workspace):
             continue
         try:
             await fetch_outputs(job, workspace, conn=conn)
