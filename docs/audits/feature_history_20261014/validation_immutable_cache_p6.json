@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-15",
+  "executor": "root, serialized focused validation",
+  "target": "tests/test_part_immutable_cache.py",
+  "passed": 53,
+  "failed": 0,
+  "seconds": 2.96,
+  "earlier_run": {
+    "passed": 52,
+    "failed": 1,
+    "seconds": 3.01,
+    "cause": "Test fixture omitted required name/lattice arguments to create_empty_part; fixture corrected without production change"
+  },
+  "static": {"changed_python_ruff": "passed", "git_diff_check": "passed"},
+  "scope": "Unmounted strict file layer only; no restore or publication authority",
+  "properties": [
+    "Exact canonical bounded manifest and unchanged full Design bytes",
+    "Exact hashed document identity and no-follow regular-file admission",
+    "Private store-owned leases, stale replacement refusal and create-if-absent",
+    "Nonblocking cooperating-writer directory lock",
+    "Failure-safe own temporary cleanup and preservation of complete published records",
+    "Bounded nondeleting discovery, pending records block fresh creation"
+  ],
+  "limitations": [
+    "No state, autosave, recovery route or cold restore integration in this file-layer checkpoint",
+    "Hard crash between initial hard link and own temporary unlink may leave two preserved names requiring later recovery handling",
+    "Advisory lock serializes cooperating NADOC writers, not arbitrary external filesystem writes",
+    "50-record count and 16 MB payload limits are bounded reuse, not performance qualification",
+    "Public immutable storage and registered batch gates remain false"
+  ],
+  "artifacts": "Only pytest-owned temporary directories and small sentinel files; no application lifespan, user workspace, cache thread or production data"
+}

@@ -5,6 +5,13 @@ switch. Switching strict creation requires this recovery path and the existing
 evaluation jobs' immutable-handle adaptation. A private storage seal alone
 cannot grant restore or publication authority.
 
+The unmounted file-layer implementation now passes **53 parent-run cases in
+2.96 seconds**, including bounded/corrupt inputs, filesystem ownership, stale
+leases, contention and injected write failures. An earlier fixture-only failure
+is recorded in [validation](validation_immutable_cache_p6.json). This checkpoint
+does not yet install typed autosave or recovery authority; those remain separate
+integration work. Public storage and batch gates remain false.
+
 ## Durable record
 
 Use a versioned sibling of the existing `.session` directory, never a child of
@@ -35,6 +42,15 @@ Exclusive temporary creation, bounded writes, flush/fsync and atomic replacement
 must preserve either the old complete record or the new complete record. A first
 write uses atomic create-if-absent, never replacement of an unknown prior record.
 No request supplies a filesystem path.
+
+The file-layer prototype uses a nonblocking advisory directory lock; contention
+returns `strict_cache_busy`, never an unbounded wait in a status or creation
+request. First publication uses hard-link create-if-absent, then removes its own
+temporary name. Ordinary exceptions after linking retry that owned temporary
+cleanup while preserving the complete published record. A process/power loss
+between those calls can retain both names (link count two); discovery preserves
+and reports that state rather than deleting or trusting it. Automatic recovery
+of such interrupted ownership is not claimed by the file layer.
 
 ## Host ownership and overwrite prevention
 
