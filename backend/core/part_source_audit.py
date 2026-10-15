@@ -7,7 +7,7 @@ No source is substituted, discarded, or fetched from a cache or network.
 
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_document_io import MAX_DOCUMENT_BYTES, decode_snapshot_bytes
-from backend.core.part_input_sources import EmbeddedResolver, InputSource, command_sources
+from backend.core.part_input_sources import EmbeddedResolver, InputSource, command_source_bindings
 
 MAX_LOADOUTS = 256
 MAX_AUDIT_BYTES = 512 * 1024 * 1024
@@ -22,9 +22,12 @@ def audit_current_sources(design, *, loadout_id=None):
     if loadout_id is not None:
         result["loadout_id"] = loadout_id
 
-    def issue(error, *, feature_id=None):
+    def issue(error, *, feature_id=None, parameter=None):
         detail = error.as_issue() if isinstance(error, CommandContractError) else {
             "code": "invalid_source_contract", "detail": str(error)}
+        if parameter is not None and "references" in detail:
+            detail["references"] = [{**reference, "parameter_path": [parameter]}
+                                    for reference in detail["references"]]
         result["issues"].append({"status": "unverified", **detail,
             **({"loadout_id": loadout_id} if loadout_id is not None else {}),
             **({"feature_id": feature_id} if feature_id is not None else {})})
@@ -56,7 +59,7 @@ def audit_current_sources(design, *, loadout_id=None):
                 return result
             try:
                 kind, params = command_input(child)
-                for source in command_sources(kind, params):
+                for parameter, source in command_source_bindings(kind, params):
                     descriptors[source.sha256] = source.model_dump(mode="json")
                     key = source.sha256, source.size_bytes
                     if key not in checked:
@@ -66,7 +69,7 @@ def audit_current_sources(design, *, loadout_id=None):
                         except CommandContractError as error:
                             checked[key] = error
                     if checked[key] is not None:
-                        raise checked[key]
+                        issue(checked[key], feature_id=child.id, parameter=parameter)
             except (ValueError, TypeError) as error:
                 issue(error, feature_id=child.id)
     # Retained bytes can be used by undo or a later explicit repair. Check them

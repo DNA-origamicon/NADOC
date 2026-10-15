@@ -24,7 +24,7 @@ The long-job API is available before the repair UI:
 
 | Request | Purpose |
 |---|---|
-| `POST /api/design/features/evaluation/jobs` | Evaluate `verify`, `append`, `edit` or `delete` |
+| `POST /api/design/features/evaluation/jobs` | Evaluate `verify`, `append`, `edit`, `delete` or `repair` |
 | `GET /api/design/features/evaluation/jobs/{job_id}` | Poll compact status/diagnostics; candidate bytes stay private |
 | `DELETE /api/design/features/evaluation/jobs/{job_id}` | Cancel and discard a publishable candidate |
 | `POST /api/design/features/evaluation/jobs/{job_id}/commit` | Publish the exact evaluated candidate once |
@@ -33,9 +33,10 @@ For example, start verification with `{"operation":"verify"}`. An edit supplies
 `operation`, feature `index`, optional routing `sub_index` and partial `params`.
 A delete supplies the index and optional `cascade`. Delete analysis can return a
 preview requiring a separate request with `cascade:true`. Ordinary edits still
-require the existing source to reproduce; repair of broken definitions is P5.
+require the existing source to reproduce. Explicit repair can rebuild broken definitions.
 
-`expected_revision` is optional at start. Every result is bound internally to the
+`expected_revision` is optional for ordinary jobs; repair requires both document
+identity and revision in its nested request. Every result is bound internally to the
 captured document session, exact source object and revision. A ready result is
 not automatically installed. Commit rechecks those identities, cancellation,
 expiry and exact authoring after transport decoding, then publishes one undoable
@@ -50,6 +51,53 @@ cascade attempts. Candidate transport is capped at 16 MB. At most two long jobs
 are retained, and uncommitted results expire after 15 minutes. These are input,
 work and transport bounds, not a hard process-heap guarantee. Oversized work is
 unverified or rejected without publication; interaction limits are not enlarged.
+
+## Explicit repair
+
+Repair addresses a stable feature ID, an optional routing-child ID and an exact
+existing input path. For example, replace a missing particle selection:
+
+```json
+{
+  "operation": "repair",
+  "repair": {
+    "repair_version": 1,
+    "expected_design_id": "current-part-id",
+    "expected_revision": 12,
+    "actions": [{
+      "action": "set_input",
+      "feature_id": "dependent-feature-id",
+      "parameter_path": ["nanoparticle_id"],
+      "expected_old": "missing-particle-id",
+      "value": "replacement-particle-id"
+    }]
+  }
+}
+```
+
+The replacement must exist in the independently rebuilt prefix at that feature.
+Objects visible only in the saved model or produced by later rows cannot satisfy
+the selection. Up to 64 actions may patch nonoverlapping paths, each at most 16
+tokens deep. Output IDs, versions, identity namespaces and closed generated
+scopes remain protected. This version edits snapshot definitions or explicitly
+selected routing children; unchanged overlay features replay normally.
+
+Repair starts from the declared root and never reads saved recovery as input.
+A failed result includes the first failure, successfully executed prefix and
+later rows as `not_evaluated`; it contains no partial publishable candidate.
+A ready result reports changed authored fields/counts relative to the captured
+materialized state, explicitly without claiming that prior state was verified.
+The normal explicit job commit publishes once and is undoable.
+
+`upgrade_numerical_contract` is a separate action for native CPD v1 or native
+duplex relaxation v1. Supply the stable target and its exact `expected_engine`
+(plus `expected_template` for CPD). The server selects current pins within the
+same recognized family, rebuilds the complete recipe and reports old/new pins.
+It never certifies the older engine's output or silently refreshes ordinary edits.
+
+Repair drafts, replacement pickers and on-demand visual comparison remain
+pending. Current job results expire after 15 minutes. The changed-field/count
+summary is neither a geometry preview nor scientific qualification.
 
 ## CPD source and execution contract
 
@@ -133,3 +181,26 @@ provenance remains imported when a copied object depends on an imported source.
 This endpoint accepts source IDs, not a client `Design` or output identities.
 Frozen clipboard paste retains its existing endpoint and snapshot semantics;
 it remains unverified until a separate pinned-source contract is implemented.
+
+## Pinned caDNAno import
+
+`POST /api/design/features/import/cadnano` accepts the original UTF-8 caDNAno v2
+JSON bytes as `application/json`. Supply required query parameters
+`expected_design_id` and `expected_revision`, plus optional `name_override`.
+Create a fresh empty part/tab first. This endpoint rejects retained history,
+sources, presentation and physical data so its undo snapshot remains small.
+The existing `/api/design/import/cadnano` upload keeps ordinary file replacement.
+
+The new endpoint incrementally admits at most 100,000 bytes, prepares a new
+empty-root recipe and one Import feature outside the state lock, then publishes
+with both source-object and revision guards. It returns the full ordinary
+design/validation/revision response; undo restores the empty host. No failed
+native import falls back to saved output.
+
+The initial contract supports at most 32 helices, 8,192 source array slots,
+16,384 declared nucleotides, 128 strands and a conservative 512-domain bound.
+Multiple module scaffolds remain unsupported. Imported topology is
+`reproduced_import`, with the source bytes embedded by digest. Name edits retain
+output IDs; replacing the source bytes changes their identity namespace and
+requires explicit repair of downstream selections. This does not reconstruct
+the external file's original design history.

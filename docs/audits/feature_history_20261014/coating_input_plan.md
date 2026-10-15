@@ -385,3 +385,90 @@ latency allowance. [Onshape regeneration controls](https://cad.onshape.com/help/
 SOLIDWORKS similarly documents freezing unchanged feature regions to avoid
 rebuilding them on every model change, while noting that other rebuild costs
 remain. [SOLIDWORKS Feature Freeze](https://blogs.solidworks.com/products/solidworks/solidworks-freeze-saves-you-time/).
+
+## Bounded pure contract and numerical compatibility (2026-10-15)
+
+The pure adapter now exposes `nanoparticle-patch` with strict `coating_version=1`
+and explicit `set`, `move`, and `remove` actions. `set` records the complete PDB
+descriptor, nullable coverage descriptor and selection, mode, footprint, spacer,
+seed and count override; optional diameter means recompute from those inputs.
+The unchanged preparation and packing bodies now accept explicit source text
+and data. Legacy bundle wrappers retain their original math and evaluation
+order. `move` preserves the local coating and uses native rigid movement;
+`remove` needs no new source read. One unowned gold particle, no other authored
+geometry, the known 1STP digest, bounded coverage schema and at most 64 requested
+sites form the software contract. The 64-site cap is **pending qualification**,
+not an expansion of the earlier measured 16-site envelope or a production
+capture change. Pure tests passed before the numerical-pin increment; registered
+proof, pin, transport and 64-site results must be reported separately.
+
+`scripts/benchmark_coating_contract.py` is an unexecuted qualification harness
+at this writing. It constructs 1/16/64-site recipes in both modes, then measures
+set, resize, move and removal separately, with real history/recovery pairs,
+source closure, JSON reload, default capture refusals, the experimental
+100k-node/4 MB/100 ms profile, and registered spawned cold proof. Worker input
+remains 2 MB. This memory-only harness does not qualify the global state lock,
+live publication or concurrent lightweight requests; those earlier exit gates
+still apply. The registered test's longer capture clock only removes CI timing
+flakiness, and is not the prospective production profile.
+
+**Decision: pin the set/repack numerical engine before public enablement.** A
+seed is insufficient evidence of replay compatibility across library upgrades.
+NumPy limits its repeatable-stream guarantee to matching generator, seed, call
+sequence, build, environment and machine. It permits stream changes and changes
+to `default_rng`'s default generator. These are documented limits rather than
+an observed NADOC regression. [NumPy random compatibility policy](https://numpy.org/doc/stable/reference/random/compatibility.html).
+SciPy documents using a supplied generator for repeatability and its transition
+from `random_state` to `rng`; it does not promise cross-release bitwise rotation
+results. The native call still passes its existing generator unchanged; this
+work does not migrate RNG APIs or substitute a new generator.
+[SciPy Rotation.random](https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.transform.Rotation.random.html).
+
+The practical consequence is stronger than small coordinate drift: a changed
+sample or floating-point result can cross the native radial or 0.25 nm clash
+threshold and change which sites survive. NADOC's current full-authoring
+comparison would detect a mismatch when verifying an old model, but an explicit
+edit could otherwise adopt changed packing without identifying the environment
+change. A numerical pin makes this dependency and failure actionable.
+
+The implementation uses `part_streptavidin_contract.py` and the existing
+`part_numerical_runtime` helper, with a fixed engine family, server-generated
+implementation/runtime hashes, and checks immediately before native atom
+preparation and after candidate construction. Its manifest covers executed
+preparation, PDB parser/bond inference, tether rotation, gold replacement,
+models and the adapter; imported simulation/rendering functions are excluded.
+PDB and coverage are separate content-addressed feature inputs, with neither
+bundled data nor output coordinates smuggled into the implementation manifest.
+Library/platform/thread identity follows the already established CPD and duplex
+relaxation policy. Whole-file hashing is conservative: an unrelated edit inside
+one listed scientific module can require requalification. Avoid broad unrelated
+application files, but do not claim function-level version retention that NADOC
+does not implement.
+
+Ordinary source/reference admission does not initialize the numerical runtime.
+Only `set` carries a mandatory engine pin; pose-only movement and removal do
+not add new packing execution or a new pin. Replay never fills in or refreshes a
+missing/stale pin. The future public append adapter must select current pins in
+its isolated worker and reject caller-supplied pins. Engine/runtime mismatch is
+an unverified dependency, preserving geometry and history until an explicit,
+checkpointed upgrade path is available. Pins detect incompatibility; NADOC does
+not yet archive executable environments or promise replay on arbitrary machines.
+Do not mark numerical reproducibility complete solely because same-runtime
+tests pass.
+
+This matches the direction of CAD versioning without claiming equivalent
+infrastructure: Onshape links external custom features to specific document
+versions and makes later versions an optional explicit update. Feature Studios
+also expose standard-library version selection. NADOC should retain the old pin
+and offer an explicit requalification/update operation, rather than silently
+adopting the installed engine. [Onshape custom feature updates](https://cad.onshape.com/help/Content/PartStudio/add_custom_features.htm),
+[Onshape standard-library version selection](https://cad.onshape.com/help/Content/FeatureStudio/feature_studios.htm).
+
+Other existing procedural NADOC commands mostly use semantic command versions,
+identity scopes and native geometry builders, while CPD/duplex already pin their
+numerical environments. This is an incremental boundary, not proof that every
+existing procedural command is portable across arbitrary runtime upgrades.
+Coating's seed-dependent discrete rejection makes it a clear case for the
+established stronger contract. A future common upgrade policy should inventory
+other solver/discrete-selection families without adding runtime probing to
+ordinary edits or changing their algorithms.

@@ -130,24 +130,32 @@ def read_verified(path: Path, source: InputSource) -> bytes:
     return verify(source, data)
 
 
-def command_sources(kind, params) -> tuple[InputSource, ...]:
-    """Descriptors owned by supported source-bearing command families.
+def command_source_bindings(kind, params) -> tuple[tuple[str, InputSource], ...]:
+    """Parameter names and descriptors owned by source-bearing command families.
 
     This cheap declaration is shared by portability and explicit source audit;
     executor schemas still decide whether a command is admitted for proof.
     """
-    source_bearing = kind in {"protein-import", "aptamer-import"} or (
+    if (kind == "nanoparticle-patch" and params.get("_proof_version") == 1
+            and "coating_version" in params and params.get("action") == "set"):
+        return tuple((key, InputSource.model_validate(params[key]))
+                     for key in ("pdb_source", "coverage_source") if params.get(key) is not None)
+    source_bearing = kind in {"protein-import", "aptamer-import", "cadnano-import"} or (
         kind == "nanoparticle-create" and "quantum_dot_version" in params)
     if (not source_bearing or params.get("_proof_version") != 1 or "source" not in params):
         return ()
-    return (InputSource.model_validate(params["source"]),)
+    return (("source", InputSource.model_validate(params["source"])),)
+
+
+def command_sources(kind, params) -> tuple[InputSource, ...]:
+    return tuple(source for _, source in command_source_bindings(kind, params))
 
 
 def portable_sources(design) -> dict[str, InputSource]:
     """Validate portable byte closure without parsing or regenerating geometry.
 
-    Source-bearing contracts use the reserved ``source`` descriptor. Legacy
-    protein receipts without one are left legacy; this does not invent sources.
+    Source-bearing contracts declare their named input descriptors. Legacy
+    receipts without them are left legacy; this does not invent sources.
     Unreferenced retained inputs are checked too, so undo/drafts can reuse them.
     """
     from backend.core.part_overlay_commands import command_input

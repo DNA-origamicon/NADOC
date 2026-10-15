@@ -11,7 +11,7 @@ Scope approved October 14, 2026: implement standard-part validation, editability
 | P2 | Explicit recipe roots/versions, authoritative-field classification, read-only verification and incremental dependencies | Implementation exit checks complete: independent nonempty replay, content-pinned roots, typed dependencies, fingerprints, bounded capture/jobs and stale/cancel handling. Supported-family expansion continues in P3/P4; validation debt below remains explicit |
 | P3 | Native DNA command families and generated construction | 96 versioned kinds with method/action restrictions, joined/connectivity input compilation and bounded native-source CPD conversion/relaxation implemented. See the latest evidence and explicit scope limits below; full generated asset/attachment histories belong to P4 |
 | P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol including unbound particle motion, pinned small protein/catalog/aptamer inputs, supported protein conjugation lifecycle and duplex lifecycle/relaxation implemented. Bounded document transport and explicit inactive-source audits added. Full import/attachment coverage and physical-result provenance remain open |
-| P5 | Standard-part repair, drafts, desktop and part-mode VR | Pure repair/explicit numerical-upgrade foundation started alongside remaining P4 contracts; publication/UI not yet wired. Drafts, reference selection, last-successful-state display, undo/reload remain open |
+| P5 | Standard-part repair, drafts, desktop and part-mode VR | Backend explicit repair/CPD-duplex upgrade jobs and revision-bound publication implemented and tested. Drafts, reference selection, on-demand comparison and UI remain open |
 | P6 | Strict standard-part agent transactions and legacy retirement | Pending. Pure candidate execution outside long-held locks, expected-revision publication, registered command batches, bypass closure and explicit import exceptions |
 
 Assemblies are not an exit condition for any phase above. Existing assembly compatibility tests may catch collateral changes to shared infrastructure, but new assembly features and fixes remain deferred.
@@ -682,3 +682,64 @@ exceed node, worker and recovery bounds and need a separate storage design.
 P5 pure repair/explicit numerical-upgrade work starts alongside remaining P4
 contracts because older pinned recipes need that deliberate path. No repair job,
 draft UI or strict automation policy is yet claimed. Assemblies remain deferred.
+
+## P4f inputs and P5a repair checkpoint — October 15
+
+There are 115 versioned kinds. Pinned `cadnano-import` reuses the complete native
+import/recenter/overhang/cluster/integrity pipeline, then normalizes typed output
+identities. The extracted recenter helper is unchanged and still re-exported by
+CRUD. Limits are 100 KB source, 32 helices, 8,192 array slots, 16,384 declared
+nucleotides, 128 strands, 512 conservative domains and at most one module
+scaffold. Source replacement deliberately invalidates output IDs; name changes
+retain them. Imported topology remains `reproduced_import`.
+
+The new raw-JSON endpoint requires a fresh empty active part and exact document/
+revision guards. It bounds streaming before retaining bytes, prepares the full
+recipe/response outside the state lock, then publishes one undoable replacement.
+The fresh-empty restriction avoids snapshotting arbitrary large old documents
+under the global lock. Existing ordinary import routes are unchanged. Retained
+sources, history, physical and presentation data require a new empty tab.
+
+Seven admission cases passed all 63 warm and seven cold replays. Capture medians
+were 0.98–7.76 ms; max was 8.82 ms, with no refusals. The 87 KB representative
+source prepared in 93.9 ms and had a 222,350-byte worker input. HTTP/commit-lock
+latency qualification remains separate. See [raw evidence](cadnano_benchmark_p4.json).
+
+`part_recipe_repair` reuses `regenerate` and its existing recovery budget. It
+accepts at most 64 explicit nonoverlapping input replacements or server-selected
+CPD/duplex numerical upgrades. Protected identities/scopes and command versions
+remain unchanged. A broken source can be repaired without proving its saved
+geometry. Only a fully executed candidate is publishable; failures identify the
+first issue, successful prefix and later `not_evaluated` rows. The existing
+worker, admission, expiry, cancellation and commit paths are reused. Polling
+returns changed fields/counts and pin provenance, never candidate geometry.
+Transport decoding also checks exact recipe/root/source state before repair
+publication. A real spawned duplex upgrade retained old pins until commit,
+cold-reproduced after reload, and restored the old pin with undo. This does not
+prove old-engine output or complete visual comparison/draft UX.
+
+The pure coating contract admits one unowned gold particle and pinned complete
+1STP/optional coverage bytes, with set/repack, move and remove actions. Native
+preparation/packing is extracted without changing math or evaluation order. Set
+requires a fixed-family implementation/runtime pin because seeded random samples
+and discrete clash decisions are not portable across arbitrary runtime upgrades.
+Source audits report each missing input with its own repair path. No production
+capture profile or public append adapter is enabled.
+
+Focused validation: **622 passed across 26 files**. Global lint retains the same
+five unrelated F401 findings; changed Python and whitespace pass. Full-suite
+selection remains **FULL (FULL suite) [test-dedicated session OPEN]**; Archive is
+unavailable, so no broad pass is claimed. No frontend/visual/headset change or
+physical simulation; `main.js` LOC delta is zero. Shared model/identity changes
+conservatively change numerical pins; old pins are not refreshed automatically.
+[Validation record](validation_inputs_repair_p4_p5.json).
+
+**Qualification failure retained for the next checkpoint:** the 24-stage coating
+benchmark reproduced in-process, but every cold script worker refused the
+single-thread runtime contract. Script spawn imports can initialize NumPy before
+the worker sets environment variables. The child needs to enforce the existing
+thread policy against already-loaded libraries. Experimental capture also had
+one 110 ms refusal; its approximately 49–51 ms median is not ordinary interaction
+latency. [Initial evidence](coating_contract_benchmark_initial_p4.json) remains
+unchanged. Fix and requalify before enabling larger coating jobs. P4, P5b–d and
+P6 remain open; assemblies remain deferred.

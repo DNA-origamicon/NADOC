@@ -26,7 +26,7 @@ keep assemblies deferred. Consult the implementation ledger for subsequent fixes
 
 ## Native recipe continuation (2026-10-15)
 
-P3 plus current P4 input/attachment slices now has 114 versioned kinds (with method/action restrictions), pure native
+P3 plus current P4 input/attachment slices now has 115 versioned kinds (with method/action restrictions), pure native
 builders shared by routes and proof, source-based continuation references,
 thread-local deterministic routing IDs, actual-failure cascade analysis, and one
 independently rebuilt prefix retained per edit. No saved outputs are proof inputs.
@@ -489,3 +489,16 @@ P2 implementation exit criteria are now met: optional versioned `Design.recipe_r
 `POST /api/design/features/verification` remains an explicit, bounded synchronous check. `/verification/jobs` POST/GET/DELETE exposes bounded asynchronous work. No checks run automatically during edits, frames or scrubbing. Oversized capture is rejected with 413 rather than blocking on an unlimited clone. Cancellation/deadlines are cooperative, not hard Python preemption.
 
 P3 now has 30 audited native command contracts and root-based producer/consumer regeneration for fully covered histories (`part_recipe_edit.py`). Supported edits preserve IDs, rebuild recovery data, reject source mismatches/stale revisions, and support routing-child parameter edits and explicit cascade deletion. Rootless/mixed unsupported histories retain recovery editors and remain unverified. Dependencies are conservative; full P3 coverage, generated construction, pose/grouping/join/auto-routing and frontend editor integration remain open. Pattern seeds and crossover IDs are recorded before construction. No assembly work or frontend enforcement was added. See `docs/audits/feature_history_20261014/implementation.md` for the exact coverage, remaining exit work and validation. P2/first-family P3 was pushed as `6336d1fe`; this continuation is not phase completion.
+
+P4f/P5a adds bounded pinned caDNAno import into a fresh empty part via
+`/design/features/import/cadnano`, explicit repair through the existing evaluation
+job lifecycle, and pure pinned coating contracts. Repair rebuilds broken inputs
+from their declared root; it never uses the old materialized model as proof.
+Stable targets and exact expected inputs protect against stale replacement.
+Explicit CPD/duplex engine upgrades retain provenance and undo; a real duplex
+upgrade/commit/reload/cold-proof regression passes. Source audits now report both
+coating inputs with exact repair paths. Coating live capture/publication remains
+disabled: script-spawn qualification exposed numerical pools initialized before
+the worker's environment settings; see retained failure evidence and the next
+worker fix. Ordinary capture budgets remain unchanged. P5 discovery/drafts/UI
+and P6 enforcement remain open.

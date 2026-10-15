@@ -22,7 +22,7 @@ def preserve_proof_identity(previous, updated, *, kind=None):
              "photoproduct-create": ("conversion_version", "template", "engine"),
              "photoproduct-relax": ("conversion_version", "template", "engine"),
              "nanoparticle-create": ("nanoparticle_id", "nanoparticle_version", "quantum_dot_version"),
-             "nanoparticle-patch": ("nanoparticle_version", "quantum_dot_version"),
+             "nanoparticle-patch": ("nanoparticle_version", "quantum_dot_version", "coating_version", "importer_version", "engine"),
              "nanoparticle-delete": ("nanoparticle_version", "quantum_dot_version"),
              "nanoparticle-conjugate": ("conjugation_id", "thiol_version"),
              "nanoparticle-conjugation-delete": ("thiol_version",),

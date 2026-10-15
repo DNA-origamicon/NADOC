@@ -4,6 +4,40 @@ Read-only audit, October 15, 2026. No importer, solver, test, benchmark or user
 file was executed or changed for this audit. This supplements
 [topology_import_plan.md](topology_import_plan.md). Assemblies remain deferred.
 
+## Implemented qualification candidate (not live-enabled)
+
+`api/part_cadnano_commands.py` now contains the pure v1 command; source preflight
+lives in `core/part_cadnano_source.py`. `_recenter_design` moved verbatim into
+`core/lattice_import_normalization.py`, with the original CRUD re-export and
+route behavior retained. The command's required `name_override` is explicitly
+null or authored text; a name-only edit preserves every output identity. The
+entire source digest and UUID `history_seed` determine the output namespace.
+Inline-overhang owner prefixes and whole-subdomain UUID5 conventions remain
+functional after typed remapping. Source strings are not remapped as references.
+
+The provisional native envelope is 100,000 UTF-8 bytes, 32 declared helices,
+2,048 slots per helix, 8,192 total helix-array slots, 16,384 conservative declared
+nucleotides including both copies of loops, 128 traced strands and 512
+conservative post-normalization domains. JSON nesting is bounded to 16 before
+decoding; integers, finite numbers, duplicate fields, source grid addresses and
+ignored legacy loop fields are checked explicitly. Nonempty `scafLoop`/
+`stapLoop` are excluded because the current importer does not interpret them.
+Sources with more than one module scaffold (the existing three-distinct-helix
+threshold) are excluded before automatic clustering, retaining all existing tie
+selection semantics. Other legacy imports remain unchanged.
+
+`tests/test_part_cadnano_commands.py` covers the complete legacy pipeline oracle,
+geometry identity parity, rejection boundaries and cold process hash-seed
+reproduction. `tests/test_native_cadnano_proof.py` covers registered replay,
+reload, poisoned recovery, source loss/corruption, output tampering, editable
+names and conservative source-replacement dependency failures.
+`scripts/benchmark_cadnano_inputs.py` measures the two real small fixtures and
+independent synthetic source/topology boundaries using the existing capture and
+worker budgets. It distinguishes private preparation and the existing document
+load boundary from the future live import adapter. Root-managed test results,
+measurements, registry integration and live admission remain completion gates;
+the implementation alone does not qualify or enable the route.
+
 ## Recommendation
 
 Implement **small caDNAno v2 import first**, then scadnano with independent

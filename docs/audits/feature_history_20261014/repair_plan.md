@@ -1,14 +1,16 @@
 # Standard-part repair implementation plan
 
-Audited October 15, 2026. P5 remains pending. Assemblies are deferred; desktop
+Audited October 15, 2026. P5a backend repair evaluation/publication is implemented;
+its numerical integration validation is in progress. P5b–P5d remain pending.
+Assemblies are deferred; desktop
 and part-mode VR should share the standard-part repair contract.
 
 ## Existing foundation and exact gaps
 
 | Area | Reusable implementation | Missing behavior |
 |---|---|---|
-| Regeneration | `backend/api/part_recipe_edit.py::regenerate` executes native definitions and replaces recovery data | `prepare_change` requires the old source to reproduce before applying patches, preventing repair of already broken recipes |
-| Isolated work | `part_evaluation.py`, `part_evaluation_worker.py`, `part_evaluation_jobs.py` provide bounded candidates, cancellation, revision checks and one-time commit | No explicit repair operation |
+| Regeneration | `backend/api/part_recipe_edit.py::regenerate` executes native definitions and replaces recovery data; `part_recipe_repair.prepare_repair` reuses it for broken inputs | Typed replacement discovery and persistent drafts remain open; ordinary editing retains its old-source proof gate |
+| Isolated work | `part_evaluation.py`, `part_evaluation_worker.py`, `part_evaluation_jobs.py` provide repair alongside bounded candidates, cancellation, revision checks and one-time commit | On-demand visual comparison and numerical-upgrade UX remain open |
 | Diagnostics | `ReferenceResolutionError` supplies typed identities and parameter paths; proof reports the first failure and possible dependents | No replacement-selection API or persistent repair draft |
 | Dependencies | `part_dependencies.DependencyIndex` incrementally builds a conservative graph | Most topology commands remain barriers; graph descendants are possible dependents, not proven failed commands |
 | Successful state | Failed edits preserve the live document; `ReplayPrefix` retains one independently rebuilt prefix per request | No separately identified healthy comparison state or draft lifecycle |

@@ -1939,6 +1939,7 @@ SnapshotOpKind = Literal[
     "cluster-join",
     "extrude-frame",
     "aptamer-import",
+    "cadnano-import",
     "bundle-create",
     "cluster-paste",
     "element-paste",

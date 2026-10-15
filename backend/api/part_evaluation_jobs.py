@@ -55,10 +55,16 @@ def start(request):
         source, captured, revision = state.capture_design_for_verification(preserve_entry_types=True)
         if request.expected_revision is not None and request.expected_revision != revision:
             raise HTTPException(409, detail="Design changed before evaluation started")
+        if request.operation == "repair" and (
+            request.repair.expected_design_id != captured.id or request.repair.expected_revision != revision
+        ):
+            raise HTTPException(409, detail={"code": "repair_conflict",
+                "detail": "The repair belongs to a different part or revision."})
         job = EvaluationJob(get_current_doc(), ref(source), revision, created=monotonic())
         identity = str(uuid4())
         operation = {"request": request.model_dump(mode="json"), "header": {
             "identity": str(uuid4()), "timestamp": datetime.now(timezone.utc).isoformat(),
+            "source_revision": revision, "source_design_id": captured.id,
         }}
         with _lock:
             while len(_jobs) >= MAX_RESULTS:
@@ -131,6 +137,7 @@ def commit(identity):
                 job.result.pop("candidate", None)
                 raise HTTPException(409, detail="Design changed; evaluate the current recipe again")
             data = job.result["candidate"]
+            repairing = "repair" in job.result
         candidate = Design.model_validate(data)
         from backend.core.part_history_proof import AUTHORING_FIELDS
         if candidate.model_dump(mode="json", include=AUTHORING_FIELDS) != {
@@ -140,6 +147,16 @@ def commit(identity):
                 job.result.pop("candidate", None)
                 job.result.update(status="unverified", issues=[{"code": "candidate_decode_changed_authoring"}])
             raise HTTPException(409, detail="Candidate changed during decoding; evaluation cannot be committed")
+        if repairing:
+            # Pins, stable command identities and source descriptors are part
+            # of the evaluated recipe too. Preserve their exact transported
+            # representation; recovery is regenerated and compared as recorded.
+            recipe_fields = {"recipe_root", "feature_log", "input_sources", "feature_log_cursor", "feature_log_sub_cursor"}
+            if candidate.model_dump(mode="json", include=recipe_fields) != {name: data[name] for name in recipe_fields}:
+                with _lock:
+                    job.result.pop("candidate", None)
+                    job.result.update(status="unverified", issues=[{"code": "candidate_decode_changed_recipe"}])
+                raise HTTPException(409, detail="Recipe changed during decoding; repair cannot be committed")
         # The worker intentionally omitted physical/display state. Preserve
         # it from the unchanged live source; it never becomes replay evidence.
         from backend.core.part_recipe_publication import preserve_document_state

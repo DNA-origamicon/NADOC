@@ -23,6 +23,7 @@ from backend.api.part_protein_conjugation_commands import KINDS as PROTEIN_CONJU
 from backend.api.part_thiol_commands import KINDS as THIOL_KINDS
 from backend.api.part_aptamer_commands import KINDS as APTAMER_KINDS
 from backend.api.part_element_copy_commands import KINDS as ELEMENT_COPY_KINDS
+from backend.api.part_cadnano_commands import KINDS as CADNANO_KINDS
 
 
 TOPOLOGY_MINOR_KINDS = frozenset({
@@ -31,7 +32,15 @@ TOPOLOGY_MINOR_KINDS = frozenset({
     "crossover-place", "crossover-place-batch",
 })
 EXTRUSION_COMMANDS = frozenset({"extrude-segment", "extrude-continuation", "extrude-deformed-continuation", "circle-segment", "extrude-frame"})
-PROOF_SNAPSHOT_KINDS = ELEMENT_COPY_KINDS | APTAMER_KINDS | THIOL_KINDS | PROTEIN_CONJUGATION_KINDS | PROTEIN_KINDS | DUPLEX_KINDS | NANOPARTICLE_KINDS | JOINED_PATH_KINDS | CONNECTIVITY_KINDS | SECTION_KINDS | PATH_KINDS | BRANCH_KINDS | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS | frozenset({"photoproduct-relax", "bundle-create", "sweep", "cluster-join", "strand-sequence", "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste"})
+PROOF_SNAPSHOT_KINDS = (
+    CADNANO_KINDS | ELEMENT_COPY_KINDS | APTAMER_KINDS | THIOL_KINDS
+    | PROTEIN_CONJUGATION_KINDS | PROTEIN_KINDS | DUPLEX_KINDS | NANOPARTICLE_KINDS
+    | JOINED_PATH_KINDS | CONNECTIVITY_KINDS | SECTION_KINDS | PATH_KINDS | BRANCH_KINDS
+    | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS
+    | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS
+    | frozenset({"photoproduct-relax", "bundle-create", "sweep", "cluster-join", "strand-sequence",
+                 "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste"})
+)
 PROOF_MINOR_KINDS = MOVE_KINDS | CELL_KINDS | LIGATION_KINDS | TOPOLOGY_MINOR_KINDS | LOOP_COMMANDS | STRUCTURAL_KINDS | frozenset({"joint-place", "joint-update", "joint-delete", "strand-patch"})
 PROOF_VERSION = 1
 PART_TOPOLOGY = Resource("part", "topology")
@@ -53,6 +62,17 @@ def dependencies(kind, params):
     # strict command schema. Preserve source provenance during scoped admission.
     params = {key: value for key, value in params.items()
               if key not in {"_generated_scope", "_generator"}}
+    if kind == "nanoparticle-patch" and "coating_version" in params:
+        from backend.api.part_streptavidin_commands import resources
+        try:
+            contract = resources(kind, params)
+        except ValueError:
+            return Dependencies(known=False)
+        sources = frozenset(Resource("input_source", source.sha256) for source in contract["sources"])
+        particle = Resource("nanoparticle", params["nanoparticle_id"])
+        return Dependencies(frozenset({PART_TOPOLOGY, particle}) | sources,
+                            frozenset({PART_TOPOLOGY, particle}), barrier=True,
+                            imported_sources=sources if contract["imports"] else frozenset())
     if kind in ELEMENT_COPY_KINDS:
         from backend.api.part_element_copy_commands import parse_command
         try:
@@ -67,8 +87,10 @@ def dependencies(kind, params):
             reads.update(Resource(resource, identity) for identity in sources)
             writes.update(Resource(resource, identity) for identity in outputs)
         return Dependencies(frozenset(reads), frozenset(writes), barrier=True)
-    if kind in PROTEIN_KINDS | PROTEIN_CONJUGATION_KINDS | THIOL_KINDS | APTAMER_KINDS:
-        if kind in APTAMER_KINDS:
+    if kind in PROTEIN_KINDS | PROTEIN_CONJUGATION_KINDS | THIOL_KINDS | APTAMER_KINDS | CADNANO_KINDS:
+        if kind in CADNANO_KINDS:
+            from backend.api.part_cadnano_commands import resources
+        elif kind in APTAMER_KINDS:
             from backend.api.part_aptamer_commands import resources
         elif kind in THIOL_KINDS:
             from backend.api.part_thiol_commands import resources
@@ -216,6 +238,10 @@ def _execute(kind, design, params, *, expensive):
     elif kind in ELEMENT_COPY_KINDS:
         from backend.api.part_element_copy_commands import build
         updated = build(kind, design, params)
+    elif kind in CADNANO_KINDS:
+        from backend.api.part_cadnano_commands import build
+        from backend.core.part_input_sources import EmbeddedResolver
+        updated = build(kind, design, params, resolver=EmbeddedResolver(design.input_sources))
     elif kind in APTAMER_KINDS:
         from backend.api.part_aptamer_commands import build
         from backend.core.part_input_sources import EmbeddedResolver
@@ -239,6 +265,16 @@ def _execute(kind, design, params, *, expensive):
                                        code="long_job_required")
         from backend.api.part_duplex_commands import build
         updated = build(kind, design, params)
+    elif kind == "nanoparticle-patch" and "coating_version" in params:
+        from backend.api.part_streptavidin_commands import build, validate_inputs
+        from backend.core.part_input_sources import EmbeddedResolver
+        resolver = EmbeddedResolver(design.input_sources)
+        if not expensive:
+            from backend.core.part_command_errors import CommandContractError
+            validate_inputs(kind, design, params, resolver=resolver)
+            raise CommandContractError("Coating regeneration requires an explicit bounded evaluation job",
+                                       code="long_job_required")
+        updated = build(kind, design, params, resolver=resolver)
     elif kind in NANOPARTICLE_KINDS:
         from backend.api.part_nanoparticle_commands import build
         from backend.core.part_input_sources import EmbeddedResolver

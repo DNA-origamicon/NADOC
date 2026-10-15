@@ -174,3 +174,22 @@ def test_open_current_broken_draft_warns_without_inactive_decode(monkeypatch):
     response = crud._install_loaded_design(broken)
     assert response["source_warnings"][0]["code"] == "source_unavailable"
     assert installed == [broken]
+
+
+def test_multiple_source_inputs_report_each_exact_repair_path_even_with_cached_errors():
+    pdb = describe(b"missing assembly", format="pdb", media_type="chemical/x-pdb")
+    coverage = describe(b"missing publication", format="json", media_type="application/json")
+    coating = SnapshotLogEntry(id="coating", op_kind="nanoparticle-patch", label="Coating", params={
+        "_proof_version": 1, "coating_version": 1, "action": "set",
+        "pdb_source": pdb.model_dump(), "coverage_source": coverage.model_dump()})
+    other = SnapshotLogEntry(id="import", op_kind="protein-import", label="Import", params={
+        "_proof_version": 1, "source": pdb.model_dump()})
+    design = Design(feature_log=[coating, other])
+    before = design.model_dump_json()
+    result = audit_current_sources(design)
+    assert result["complete"] and len(result["sources"]) == 2
+    assert [(issue["feature_id"], issue["references"][0]["parameter_path"])
+            for issue in result["issues"]] == [
+        ("coating", ["pdb_source"]), ("coating", ["coverage_source"]), ("import", ["source"])]
+    assert all(issue["code"] == "source_unavailable" for issue in result["issues"])
+    assert design.model_dump_json() == before

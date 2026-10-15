@@ -131,7 +131,7 @@ def test_resolver_bounds_aggregate_sources_before_copy_or_decode(source):
         EmbeddedResolver({"../../source": blob})
 
 
-@pytest.mark.parametrize("kind", ["protein-import", "aptamer-import"])
+@pytest.mark.parametrize("kind", ["protein-import", "aptamer-import", "cadnano-import"])
 def test_portable_closure_uses_the_same_normalized_receipts_as_proof(source, kind):
     from backend.core.models import Design, MinorMutationLogEntry, RoutingClusterLogEntry
     from backend.core.part_input_sources import portable_sources
