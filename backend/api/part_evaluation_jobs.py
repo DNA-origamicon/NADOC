@@ -277,8 +277,21 @@ def commit(identity):
             raise HTTPException(409, detail="Recipe changed during decoding; evaluation cannot be committed")
         # The worker intentionally omitted physical/display state. Preserve
         # it from the unchanged live source; it never becomes replay evidence.
-        from backend.core.part_recipe_publication import preserve_document_state
-        candidate = preserve_document_state(source, candidate)
+        from backend.api.part_immutable_storage import content_identity, is_immutable
+
+        if is_immutable(source):
+            from backend.api.part_immutable_evaluation import prepare_candidate
+
+            try:
+                candidate = prepare_candidate(source, candidate)
+            except CaptureLimit as error:
+                raise HTTPException(413, detail={"code": "immutable_candidate_limit", "detail": str(error)}) from error
+            except CommandContractError as error:
+                raise HTTPException(422, detail=error.as_issue()) from error
+        else:
+            from backend.core.part_recipe_publication import preserve_document_state
+
+            candidate = preserve_document_state(source, candidate)
         with _lock:
             _lookup(identity)  # expiration is checked again after candidate decoding
             _assert_publishable(job)
@@ -296,7 +309,7 @@ def commit(identity):
             job.result.pop("candidate", None)
             job.status = "committed"
             return {"job_id": identity, "status": "committed", "revision": job.committed_revision,
-                    "design_id": candidate.id}
+                    "design_id": content_identity(candidate)}
     finally:
         _slot.release()
 

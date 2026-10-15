@@ -9,7 +9,7 @@ REGISTERED_BATCH_ENABLED = False
 
 
 def capture_batch(design, request, *, revision, preserve_entry_types=True):
-    """Run under the caller's state lock, with the ordinary fixed capture budget."""
+    """Capture lock-owned or privately materialized input with fixed bounds."""
     if not REGISTERED_BATCH_ENABLED:
         raise CommandContractError("Registered batches are not enabled on this server",
                                    code="registered_batch_unavailable")

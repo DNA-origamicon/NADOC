@@ -1,6 +1,7 @@
 """Server-owned capture policy for explicitly requested coating evaluation.
 
-The caller owns the state lock and supplies the actual live revision. This
+The caller either owns the state lock for mutable content or supplies a private
+materialization of a sealed immutable source with its captured revision. This
 module neither acquires job admission nor launches a worker. It chooses one
 capture before copying, never retries a refusal with larger limits, and is not
 used by ordinary edits, drag handlers or verification endpoints.
@@ -171,7 +172,7 @@ def _source_envelope(design):
 
 
 def capture_for_evaluation(design, *, request, revision, preserve_entry_types=True):
-    """Select exactly one capture under the host's lock; never claim proof.
+    """Select exactly one capture from host-owned input; never claim proof.
 
     Existing ordinary jobs retain their normal capture. Extended coating
     capture also requires an explicit revision expectation; repair already

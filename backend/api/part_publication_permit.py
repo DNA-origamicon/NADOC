@@ -77,7 +77,7 @@ def admission_context(admission):
 
 
 def admit_evaluation(doc_id, session, *, operation, request_sha256):
-    """Called only after locked host capture has admitted the actual request."""
+    """Lock-owned admission after capture and exact live-source revalidation."""
     effective = policy.require_evaluation(doc_id, operation)
     if operation not in {"verify", "selection", "append", "edit", "delete", "repair", "batch"}:
         _refusal("Unknown evaluation operation", code="invalid_operation_admission")

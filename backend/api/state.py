@@ -304,8 +304,9 @@ def capture_design_for_evaluation(request, *, include_session_identity=False, in
                                   expected_policy_generation=None):
     """Explicit job capture with optional trusted host guards checked before copy.
 
-    The optional fourth value binds the same locked session as the existing
-    source/capture/revision triple. Neither guard is a client-authored input.
+    Immutable content is retained under the lock and prepared privately, then
+    rechecked before admission. Mutable content retains its locked capture. The
+    optional identity binds that same session; trusted guards are not client input.
     """
     from backend.api.part_evaluation import EvaluationRequest
     from backend.api.part_evaluation_capture import capture_for_evaluation
@@ -329,20 +330,32 @@ def capture_design_for_evaluation(request, *, include_session_identity=False, in
                 or resolve(get_current_doc()).generation != expected_policy_generation):
             raise HTTPException(409, detail={"code": "policy_changed",
                 "detail": "Host construction policy changed before evaluation admission"})
-        require_evaluation(get_current_doc(), request.operation)
+        configuration = require_evaluation(get_current_doc(), request.operation)
         s = _session_for_identity(expected_session_identity)
         if s.design is None:
             raise HTTPException(404, detail="No active design.")
         if expected_source is not None and s.design is not expected_source:
             raise HTTPException(409, detail={"code": "source_changed",
                 "detail": "The document session or source changed before evaluation capture"})
-        captured = capture_for_evaluation(_mutable_design(s.design), request=request, revision=s.revision)
-        result = (s.design, captured, s.revision)
-        if include_admission:
-            from backend.api.part_publication_permit import admit_evaluation
-            admission = admit_evaluation(get_current_doc(), s, operation=request.operation, request_sha256=request_digest)
-            return (*result, s.identity, admission)
-        return (*result, s.identity) if include_session_identity else result
+        if _is_immutable(s.design):
+            from backend.api.part_immutable_evaluation import check_request
+
+            check_request(s.design, request, s.revision, configuration)
+            source, revision = s.design, s.revision
+            doc_id, generation = get_current_doc(), configuration.generation
+        else:
+            captured = capture_for_evaluation(s.design, request=request, revision=s.revision)
+            result = (s.design, captured, s.revision)
+            if include_admission:
+                from backend.api.part_publication_permit import admit_evaluation
+                admission = admit_evaluation(get_current_doc(), s, operation=request.operation, request_sha256=request_digest)
+                return (*result, s.identity, admission)
+            return (*result, s.identity) if include_session_identity else result
+
+    from backend.api.part_immutable_evaluation import capture_reserved
+
+    return capture_reserved(doc_id, s, source, revision, generation, request, request_digest,
+        include_session_identity=include_session_identity, include_admission=include_admission)
 
 
 def get_repair_draft():

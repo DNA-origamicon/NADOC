@@ -282,13 +282,9 @@ def test_cancelled_handle_publication_leaves_content_and_retention_unchanged(doc
     assert session.design is source and session.revision == revision and not session.history
 
 
-@pytest.mark.parametrize("operation", ["verify", "evaluate"])
-def test_old_capture_facades_fail_explicitly_until_handle_adapter_lands(document, monkeypatch, operation):
+def test_old_mutable_verification_capture_refuses_immutable_content(document, monkeypatch):
     create()
     monkeypatch.setattr(revisions, "materialize_revision", lambda *a, **k: pytest.fail("Hidden decode"))
     with pytest.raises(HTTPException) as error:
-        if operation == "verify":
-            state.capture_design_for_verification()
-        else:
-            state.capture_design_for_evaluation({"operation": "verify"})
+        state.capture_design_for_verification()
     assert error.value.detail["code"] == "immutable_design_access"

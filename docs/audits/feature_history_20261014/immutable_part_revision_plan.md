@@ -4,11 +4,28 @@ Reviewed migration plan, October 15, 2026. The pure immutable preparation and
 materialization foundation passes 49 focused tests. The staged internal
 session-content union and retention path now pass their focused regressions;
 276 parent-run cases cover the state slice and existing permit, HTTP, scalar
-read and cache behavior. Public immutable creation remains disabled. Typed
-persistence, qualified restore, evaluation integration and responsiveness
-qualification remain pending. No
+read and cache behavior. The next internal evaluation adapter now passes 168
+focused cases, including strict HTTP, real spawned batch publication and cold
+verification. Public immutable creation remains disabled. Typed persistence,
+qualified restore and responsiveness qualification remain pending. No
 admission increase or baseline cache is included in this checkpoint. Compatibility
 documents, assemblies and molecular algorithms remain unchanged.
+
+The evaluation adapter retains the sealed source and actual session/revision/
+policy under the shared lock. It materializes and applies the existing capture
+profile outside that lock, then rechecks the exact context before admission.
+Jobs retain the source handle, never the disposable decoded model. Candidate
+transport still must retain both exact digests; non-proof state is carried from
+a private source materialization before full candidate sealing outside the lock.
+The existing private permit and atomic replacement publish the new handle with
+the original handle as undo. Capture/transport/recovery/work limits and the false
+public batch gate are unchanged. Repeated decode, allocation and GIL costs still
+need measurement; outside-lock work alone does not establish responsiveness.
+
+The obsolete test requiring evaluation to refuse immutable input was replaced
+with the actual capture/commit lifecycle coverage. The old mutable verification
+facade still refuses handles; strict verification uses the admitted evaluation
+job path. See [evaluation validation](validation_immutable_evaluation_p6.json).
 
 ## Decision
 
