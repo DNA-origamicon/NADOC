@@ -23,9 +23,9 @@ def admit_descriptor(kind, params, parameter, source):
         limit, expected_format, media = MAX_CATALOG_BYTES, "quantum-dot-catalog", "application/json"
     elif kind == "nanoparticle-patch" and "coating_version" in params and params.get("action") == "set":
         if parameter == "pdb_source":
-            from backend.api.part_streptavidin_commands import _pdb_descriptor
+            from backend.api.part_streptavidin_commands import MAX_PDB_BYTES, _pdb_descriptor
             _pdb_descriptor(source)
-            return
+            return {"max_size_bytes": MAX_PDB_BYTES, "replacement_supported": False}
         if parameter != "coverage_source":
             raise RepairSourceError("Unsupported named coating input", code="unsupported_source")
         from backend.api.part_streptavidin_commands import MAX_COVERAGE_BYTES
@@ -36,3 +36,4 @@ def admit_descriptor(kind, params, parameter, source):
         raise RepairSourceError("Source exceeds the selected command's byte allowance", code="source_limit")
     if source.format != expected_format or source.media_type != media:
         raise RepairSourceError("Source format does not satisfy the selected named command input", code="unsupported_source")
+    return {"max_size_bytes": limit, "replacement_supported": True}

@@ -972,3 +972,18 @@ See [contract](protein_free_import_contract.md),
 [initial report](protein_free_import_benchmark_p4.json),
 [retained-state failures](protein_free_import_benchmark_optimized_p4.json), and
 [validation](validation_gated_protein_p4.json).
+
+## On-demand repair input catalog — October 15
+
+An explicit revision-bound endpoint now exposes reviewed scalar, pose, reference
+and named-source fields for one selected definition. It returns exact input paths
+and old values, shares upload limits with source admission, and grants no proof or
+publication authority. The bounded lock-owned read never visits geometry, recovery
+or source bytes; schema discovery runs privately afterward. Unknown, legacy,
+generated and malformed definitions remain explanatory rather than receiving a
+generic JSON editor. Broader invalid-scalar recognition is a separate follow-up.
+
+**63 focused cases pass**: 27 input-metadata cases and 36 existing source-policy
+cases. Changed Python Ruff and whitespace pass; frontend app/visual work is still
+in progress and not validated here. `main.js` LOC delta is zero. See the
+[endpoint contract](../../part_repair_inputs.md). P5 remains incomplete.

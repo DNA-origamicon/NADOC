@@ -41,6 +41,7 @@ from backend.api.part_evaluation import EvaluationRequest
 from backend.core.part_repair_draft_host import DraftRequest
 from backend.core.part_repair_draft_evaluation import DraftEvaluationRequest
 from backend.core.part_repair_sources import SourceSelection
+from backend.api.part_repair_input_metadata import RepairInputSelection
 
 # Shared kernel/infra helpers that stay in crud.py and are imported back
 # (same convention as routes_camera_poses.py / routes_loop_skip.py):
@@ -66,6 +67,12 @@ from backend.core.display_placement import measured_display_placement
 from backend.core.feature_evaluation import batch_target_groups, optimization_enabled
 
 router = APIRouter()
+
+
+@router.post("/design/features/repair-inputs")
+def inspect_part_repair_inputs(body: RepairInputSelection):
+    from backend.api.part_repair_input_metadata import inspect_inputs
+    return inspect_inputs(body)
 
 
 @router.get("/design/features/repair-draft")
