@@ -484,6 +484,31 @@ after coating removal cold-reproduces after reload. Ordinary parameter edits
 cannot change pins. Production large capture and public coating append remain
 disabled pending their separate publication/latency gates.
 
+## Live capture gate failed (2026-10-15)
+
+`coating_jobs_benchmark_initial_p4.json` retains 30 actual HTTP capture and 30
+prepared-candidate commit samples for each 1/64-site boundary in both modes,
+plus a removed-coating case with retained inputs/history. Four active-coating
+cases refused 14 of 120 captures. Their lock-hold p95 values were 110.55,
+113.69, 116.24 and 117.58 ms (maximum 132.74 ms), exceeding the provisional
+100 ms p95 target. Concurrent revision requests reached 128.70 ms. The 25–31 ms
+median revision latency during capture also materially exceeds the approximately
+1.4 ms baseline. This is a failed latency/admission qualification, despite the
+harness exiting successfully because the refusals were correctly handled.
+
+All 150 prepared-candidate publications were correct. Active-coating publication
+lock medians were 8.7–9.1 ms, with a 73.06 ms maximum; most of that time was the
+single source undo snapshot. Removed-state capture had no refusal and a 2.44 ms
+lock median. Five separately observed real spawned jobs completed and committed
+in 1.68–2.26 seconds to supervisor completion, excluding the subsequent commit.
+Actual cancellation and stale-source races reaped workers in approximately
+54 ms and rejected publication. Cleanup was verified. Prepared-candidate samples
+are not end-to-end job successes, and repeated captures did not execute solvers.
+
+Keep public coating append disabled. Investigate bounded capture copying and
+allocation costs; do not increase the time/node/transport budgets. Retain this
+run unchanged and repeat the same live measurements after a justified change.
+
 This matches the direction of CAD versioning without claiming equivalent
 infrastructure: Onshape links external custom features to specific document
 versions and makes later versions an optional explicit update. Feature Studios
