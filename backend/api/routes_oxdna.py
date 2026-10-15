@@ -1206,6 +1206,7 @@ async def list_oxdna_jobs() -> list[dict]:
 
 def _list_oxdna_jobs() -> tuple[list[dict], list]:
     from backend.core.design_disk_usage import dir_size_bytes_cached_only
+    from backend.core.physical_input_freshness import legacy_job_status
 
     ws = _workspace()
     jobs = [reconcile_oxdna_status(j, ws) for j in OxdnaJob.list_jobs(ws)]
@@ -1214,7 +1215,7 @@ def _list_oxdna_jobs() -> tuple[list[dict], list]:
     to_warm: list = []
     for j in jobs:
         d = j.to_dict()
-        d["out_of_date"] = _job_is_out_of_date(j, current_fp)
+        d.update(legacy_job_status(_job_fingerprint(j), current_fp, engine="oxdna"))
         if d.get("status") == "running":
             from backend.core.oxdna_runner import job_overall_fraction, load_stage_specs
             try:
@@ -1236,9 +1237,11 @@ def _list_oxdna_jobs() -> tuple[list[dict], list]:
 
 @router.get("/oxdna/jobs/{job_id}")
 async def get_oxdna_job(job_id: str) -> dict:
+    from backend.core.physical_input_freshness import legacy_job_status
+
     job = _load_job(job_id)
     d = job.to_dict()
-    d["out_of_date"] = _job_is_out_of_date(job, _current_design_fingerprint())
+    d.update(legacy_job_status(_job_fingerprint(job), _current_design_fingerprint(), engine="oxdna"))
     return d
 
 

@@ -1961,3 +1961,21 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   including all 16 annotation regressions and the 48 invalid-gold repair cases.
   Fresh-worker proof, saved-draft evaluation, source restoration and generated
   scope guards remain covered; no molecular model or version changed.
+
+## ISSUE-91 — Missing physical-input evidence is indistinguishable from a match in job APIs (2026-10-15, API FIXED; FULL RECEIPTS/UI OPEN)
+
+- Legacy `out_of_date: false` includes equal, missing and incomparable hashes;
+  the shared v4 projection also omits consumed cluster/nucleotide transforms and
+  ordinary proteins. Equality cannot establish complete physical freshness.
+- Additive `input_freshness` reports stale for a known partial-model difference,
+  otherwise unknown with explicit reasons and nullable `model_match`. List/detail
+  handlers reuse existing fingerprints once; no additional traversal, hashing,
+  disk walk, job rewrite or scientific work. Existing booleans/guards stay compatible.
+- The first 29-case target failed before implementation; all 29 now pass, plus
+  18 oxDNA and 12 MD regressions. One old MD fixture failed independently with
+  unchanged `7886cd42` route/fingerprint modules: its alleged pre-recipe file
+  retained a native recipe root. Corrected the fixture and added the complementary
+  no-unlogged-topology assertion; production restoration is unchanged.
+- Complete engine-specific input/solver/source/restart receipts, result-selection
+  qualification and explicit UI unknown labels remain open under the physical
+  freshness plan. No historical simulation receives a current certificate.

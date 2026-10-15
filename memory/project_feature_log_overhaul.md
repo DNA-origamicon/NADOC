@@ -54,6 +54,13 @@ without weakening final schema, protected identity or full regeneration. Its
 393 focused regressions include the inert-generator execution fix (ISSUE-89).
 Comparison and native VR remain separate increments.
 
+oxDNA/NAMD job APIs now expose additive physical `input_freshness`: equal legacy
+partial hashes remain unknown, while known comparable changes are stale. This
+adds no model hashing or job writes. Existing booleans/guards remain compatible;
+complete consumed-input/solver/source/restart receipts and UI labels are pending.
+The 59 focused regressions preserve both legacy migration and native recipe
+snapshots without silently adding an unlogged cluster.
+
 Focused tests and small in-memory qualification run serially. The Archive
 filesystem is unavailable in this environment; broader suite, app, visual and
 headset validation debt is recorded separately and must not be described as a

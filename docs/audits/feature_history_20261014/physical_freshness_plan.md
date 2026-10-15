@@ -1,6 +1,31 @@
-# Physical-result freshness — proposed
+# Physical-result freshness — staged implementation
 
-Read-only audit, 2026-10-15. No simulations or scientific changes were run. Assemblies remain deferred. Authoring reproducibility and physical-result freshness must remain separate claims.
+Audit and first additive API checkpoint, 2026-10-15. No simulations or scientific changes were run. Assemblies remain deferred. Authoring reproducibility and physical-result freshness remain separate claims.
+
+## Implemented first checkpoint
+
+oxDNA/NAMD list and detail responses now include `input_freshness` with status,
+reasons, partial coverage, comparison subject and nullable `model_match`. Matching
+legacy hashes report **unknown**, never complete current; known comparable
+projection changes report stale. Missing, malformed, unsupported and differing
+versions remain unknown. An unavailable archived MD record requires no snapshot
+read to report unknown. The existing `out_of_date` predicate and selection guards
+are unchanged for compatibility; it is not an alias for a complete current verdict.
+
+The adapter reuses each existing fingerprint once per response and performs no
+new model traversal, filesystem access, hashing, job write or simulation. It does
+not yet add complete receipts, qualify consumed-model projections, certify source
+bytes, or change frontend labels. Those remain required follow-up checkpoints.
+The now-unused MD boolean response wrapper was pruned. Misleading v4 comments
+claiming complete engine coverage were corrected without changing legacy hashes.
+
+Validation: 29 new pure/route tests, 18 oxDNA staleness cases and 12 MD cases pass
+(59 total). The old MD migration fixture failed both current and unchanged
+`7886cd42` route/fingerprint modules because it claimed to represent a pre-recipe
+file while retaining a newly authored recipe root. It now explicitly distinguishes
+legacy snapshots (migration required) from authored snapshots (no unlogged cluster
+insertion). Existing frozen-result and return-loadout assertions remain. No
+production restoration or placement algorithm was changed to make that test pass.
 
 ## Existing foundation and gaps
 

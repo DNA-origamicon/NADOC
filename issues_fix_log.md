@@ -711,3 +711,9 @@ display/transport, exact original-document revision/session checks guard refresh
 and default-document null maps only to the explicit server `__default__` sentinel.
 Final86 focused tests and full8,181 passed/one skipped (708 files,309.16s).
 No app/smoke/headset validation; MV-45 remains pending because Archive is absent.
+
+2026-10-15 — ISSUE-91 API correction: physical input freshness is now explicit
+in oxDNA/NAMD list/detail responses. A matching legacy partial fingerprint stays
+unknown; known comparable differences are stale. No extra model/file work or job
+mutation. 59 focused cases pass; obsolete legacy MD fixture repaired with paired
+legacy/native assertions. Full receipts, projection qualification and UI remain open.
