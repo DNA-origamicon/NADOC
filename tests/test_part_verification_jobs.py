@@ -122,6 +122,33 @@ def test_time_limit_is_a_nonverified_result(controlled_job, monkeypatch):
     assert result["issues"][0]["code"] == "time_limit"
 
 
+@pytest.mark.parametrize("stop", ["cancelled", "time_limit"])
+def test_busy_state_lock_cannot_block_child_cancellation_or_deadline(controlled_job, monkeypatch, stop):
+    from threading import current_thread, main_thread
+
+    job = controlled_job
+    attempted = Event()
+    source_matches = state.verification_source_matches
+
+    def observed(*args, **kwargs):
+        if current_thread() is not main_thread():
+            attempted.set()
+        return source_matches(*args, **kwargs)
+
+    monkeypatch.setattr(state, "verification_source_matches", observed)
+    with state._lock:
+        assert attempted.wait(5), "Supervisor did not probe its source"
+        if stop == "cancelled":
+            jobs.inspect(job.id, cancel=True)
+        else:
+            clock = jobs.monotonic()
+            monkeypatch.setattr(jobs, "monotonic", lambda: clock + 60)
+        # The ordinary mutation still owns its lock. Cleanup cannot wait for it.
+        assert job.completed.wait(5)
+        assert job.closed.is_set()
+    assert jobs.inspect(job.id)["result"]["issues"][0]["code"] == stop
+
+
 def test_admission_remains_held_until_worker_is_reaped(controlled_job):
     job = controlled_job
     job.cleanup.clear()
@@ -235,7 +262,7 @@ def test_worker_failure_after_construction_finishes_and_releases_slot(immediate_
         assert result["result"]["status"] == "unverified"
         expected = "worker_cleanup_error" if stage == "close" else "verification_error"
         assert result["result"]["issues"][0]["code"] == expected
-    assert len(closed) == 2
+    assert len(closed) == 2 * (jobs.REAPED_CLEANUP_ATTEMPTS if stage == "close" else 1)
 
 
 def test_worker_failure_releases_admission_and_results_are_bounded(monkeypatch):

@@ -6,6 +6,56 @@ and proposed decomposition, not completed implementation or test evidence.
 Preserve existing scientific builders, phase constants and geometry. Assemblies
 remain deferred; part-local nanoparticles, proteins and duplexes belong to P4.
 
+## October 15 checkpoint review
+
+The original gap inventory below is historical planning context. Read-only code
+review of the current P3 increment finds implemented contracts for the sparse
+seed/partition router, curved forks, independent joined sections and crossbar
+paths, and connectivity paths/routing. New standard connectivity materialization
+executes inputs; copying `candidate.design` remains confined to the explicitly
+legacy `standard=False` branch. CPD conversion/relaxation now has a separate
+pinned native-source contract and bounded evaluation worker. Current validation
+results belong in the implementation ledger, not in this planning document.
+
+Joined compilation deep-copies its source summary, retains an explicit
+`join_section_cluster_ids` planning-to-runtime map, and emits ordinary cluster
+creation/pose rows. `generated_history.record` independently executes those
+ordinary inputs against the destination and compares every authoring field.
+The materialization report exposes only the cluster identity map. Numeric path
+recipes retain endpoint/junction stations and tail counts; saved station/frame
+arrays are not command inputs. The extracted native curve/frame formulas are
+unchanged.
+
+Acceptance recorded for this checkpoint (see validation_native_jobs.json):
+
+- The real joined triangle materialization passes after the Join-safe terminal
+  fit guard changes (187.66 seconds including setup). The guard must retain uniquely occupied ligation sites,
+  actual directed backbone bonds, flexible anchors/beads and unchanged owners;
+  pending Join constraints remain unsupported rather than silently discarded.
+- The extended routed-Join regression passes (26.33 seconds for its file): it translates one
+  crossbar's numeric source stations, retains both downstream Join definitions,
+  checks regenerated prefixes and stable identities, then performs cold proof
+  and undo. Earlier passing tests covered path editing before routing and
+  group-name editing after Join; they did not establish this producer-edit case.
+- The CPD evidence boundary remains explicit: the real cold conversion/relaxation fixture
+  uses an explicit imported root. It proves regeneration of those commands,
+  not native construction of the fixture's original molecular topology.
+- Preserve explicit parameter limits. Joined paths whose edited station count
+  differs from the separately authored seed extent fail with a target
+  diagnostic; coordinated seed/path edits and invalid-draft repair are not
+  supplied by the current single-row edit API. New families have API editors,
+  not new desktop/VR controls.
+- Current coverage/status and validation evidence are recorded in the ledger
+  for this increment. Joined construction currently searches a native Join,
+  executes the selected input locally, then executes it again for destination
+  equality. This is conservative correctness work with real cost; prior scope
+  microbenchmarks alone do not establish full generator latency.
+
+The review found no additional joined source/identity-composition blocker. It
+did not run tests and does not replace the checkpoints above. Fully generated
+parts still contain explicitly unverified nanoparticle/attachment operations
+until P4; DNA compiler completion must not be presented as whole-model proof.
+
 ## Confirmed recording gaps
 
 - [`branch_seed`](../../../backend/core/branched_generator.py#L27) combines sparse

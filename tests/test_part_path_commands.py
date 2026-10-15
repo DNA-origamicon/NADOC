@@ -193,6 +193,173 @@ def test_budget_fit_rejects_wrong_scaffold_and_attached_targets_before_trim(monk
         build("scaffold-budget-fit", multiple, {"scaffold_id": multiple.scaffolds()[0].id, "target_nt": 127})
 
 
+def joined_budget_source():
+    """A small routed scaffold with a real derived tether between rigid arms."""
+    from backend.core.flexible_segments import derive_flexible_connections
+    from backend.core.models import (
+        ClusterRigidTransform, Direction, Domain, FlexibleSegmentMark, ForcedLigation,
+    )
+
+    source = make_bundle_design([(0, 0), (0, 1), (0, 2)], 64)
+    first, second, bridge = source.helices
+    scaffold, donor, _ = source.scaffolds()
+    bridge_domain = Domain(helix_id=bridge.id, start_bp=0, end_bp=4,
+                           direction=Direction.FORWARD)
+    scaffold = scaffold.model_copy(update={
+        "domains": [*scaffold.domains, bridge_domain, *donor.domains], "sequence": None,
+    })
+    marks = [FlexibleSegmentMark(id=f"join-mark-{bp}", strand_id=scaffold.id,
+                                 domain_index=1, bp_index=bp, direction=Direction.FORWARD)
+             for bp in range(5)]
+    # Native Join records both directed bonds at the connector boundaries.
+    ligations = [ForcedLigation(
+        id=f"join-bond-{i}", three_prime_helix_id=a.helix_id,
+        three_prime_bp=a.end_bp, three_prime_direction=a.direction,
+        five_prime_helix_id=b.helix_id, five_prime_bp=b.start_bp,
+        five_prime_direction=b.direction,
+    ) for i, (a, b) in enumerate(zip(scaffold.domains, scaffold.domains[1:]))]
+    source = source.copy_with(
+        strands=[scaffold, *[strand for strand in source.staples()
+                            if strand.domains[0].helix_id != bridge.id]],
+        cluster_transforms=[ClusterRigidTransform(id="arm-a", helix_ids=[first.id]),
+                            ClusterRigidTransform(id="arm-b", helix_ids=[second.id])],
+        flexible_segment_marks=marks,
+        forced_ligations=ligations,
+    )
+    connections = derive_flexible_connections(source)
+    assert len(connections) == 1
+    return source.copy_with(flexible_connections=connections)
+
+
+def test_budget_fit_allows_distant_terminal_trim_with_unchanged_join_references():
+    from backend.core.branch_optimizer import trim_to_budget
+    from backend.core.curved_rod_generator import physical_scaffold_nt
+
+    source = joined_budget_source()
+    before = source.model_dump_json()
+    scaffold = source.scaffolds()[0]
+    target = physical_scaffold_nt(source) - 1
+    result = build("scaffold-budget-fit", source,
+                   {"scaffold_id": scaffold.id, "target_nt": target})
+    assert result == trim_to_budget(source, target)
+    assert physical_scaffold_nt(result) == target
+    assert result.flexible_connections == source.flexible_connections
+    assert result.flexible_segment_marks == source.flexible_segment_marks
+    assert result.forced_ligations == source.forced_ligations
+    assert result.cluster_transforms == source.cluster_transforms
+    assert result.helices == source.helices
+    assert source.model_dump_json() == before
+
+
+@pytest.mark.parametrize("changed", [
+    "anchor", "anchor-neighbour", "bead", "mark", "owner", "wrong-owner", "renamed-staple",
+])
+def test_budget_fit_rejects_consumed_or_changed_join_references_atomically(changed):
+    from backend.core.curved_rod_generator import physical_scaffold_nt
+    from backend.core.models import FlexibleAnchor, FlexibleSegmentMark
+
+    source = joined_budget_source()
+    scaffold = source.scaffolds()[0]
+    domain = scaffold.domains[0]
+    site = FlexibleAnchor(strand_id=scaffold.id, domain_index=0,
+                          bp_index=domain.start_bp, direction=domain.direction)
+    connection = source.flexible_connections[0]
+    # Derivation's set traversal can orient a tether either way; select its
+    # first-arm endpoint by ownership, rather than assuming anchor_a is first.
+    side = "a" if connection.cluster_a_id == "arm-a" else "b"
+    if changed in {"anchor", "anchor-neighbour", "renamed-staple"}:
+        if changed == "anchor-neighbour":
+            site = site.model_copy(update={"bp_index": domain.start_bp + 1})
+        elif changed == "renamed-staple":
+            staple = next(strand for strand in source.staples()
+                          if strand.domains[0].helix_id == domain.helix_id)
+            site = site.model_copy(update={"strand_id": staple.id,
+                "bp_index": 32, "direction": staple.domains[0].direction})
+        connection = connection.model_copy(update={f"anchor_{side}": site})
+    elif changed == "bead":
+        connection = connection.model_copy(update={"segment_bead_keys": [site]})
+    elif changed == "mark":
+        mark = FlexibleSegmentMark(id="consumed", **site.model_dump())
+        source = source.copy_with(flexible_segment_marks=[*source.flexible_segment_marks, mark])
+    else:
+        connection = connection.model_copy(update={
+            f"cluster_{side}_id": "missing" if changed == "owner" else "arm-b",
+        })
+    source = source.copy_with(flexible_connections=[connection])
+    before = source.model_dump_json()
+    with pytest.raises(ReferenceResolutionError, match="Join reference") as caught:
+        build("scaffold-budget-fit", source, {"scaffold_id": scaffold.id,
+              "target_nt": physical_scaffold_nt(source) - 1})
+    assert caught.value.as_issue()["references"] == [{
+        "kind": "strand", "identity": scaffold.id, "parameter_path": ["scaffold_id"],
+    }]
+    assert source.model_dump_json() == before
+
+
+@pytest.mark.parametrize("changed", ["consumed", "neighbour", "dangling", "not-a-bond", "reversed", "ambiguous"])
+def test_budget_fit_rejects_changed_or_invalid_join_ligations(changed):
+    from backend.core.curved_rod_generator import physical_scaffold_nt
+    from backend.core.models import ForcedLigation, StrandType
+
+    source = joined_budget_source()
+    scaffold = source.scaffolds()[0]
+    domain = scaffold.domains[0]
+    ligation = source.forced_ligations[0]
+    if changed in {"consumed", "neighbour"}:
+        bp = domain.start_bp + (changed == "neighbour")
+        ligation = ForcedLigation(id="terminal-bond", three_prime_helix_id=domain.helix_id,
+            three_prime_bp=bp, three_prime_direction=domain.direction,
+            five_prime_helix_id=domain.helix_id, five_prime_bp=bp + 1,
+            five_prime_direction=domain.direction)
+    elif changed == "dangling":
+        ligation = ligation.model_copy(update={"three_prime_helix_id": "missing"})
+    elif changed == "not-a-bond":
+        ligation = ligation.model_copy(update={"five_prime_bp": 1})
+    elif changed == "reversed":
+        ligation = ligation.model_copy(update={
+            "three_prime_helix_id": ligation.five_prime_helix_id,
+            "three_prime_bp": ligation.five_prime_bp,
+            "three_prime_direction": ligation.five_prime_direction,
+            "five_prime_helix_id": ligation.three_prime_helix_id,
+            "five_prime_bp": ligation.three_prime_bp,
+            "five_prime_direction": ligation.three_prime_direction,
+        })
+    else:
+        duplicate = scaffold.model_copy(update={"id": "ambiguous-owner",
+            "strand_type": StrandType.STAPLE, "domains": [domain]})
+        source = source.copy_with(strands=[*source.strands, duplicate])
+    source = source.copy_with(forced_ligations=[ligation, *source.forced_ligations[1:]])
+    before = source.model_dump_json()
+    with pytest.raises(ReferenceResolutionError, match="Join reference"):
+        build("scaffold-budget-fit", source, {"scaffold_id": scaffold.id,
+              "target_nt": physical_scaffold_nt(source) - 1})
+    assert source.model_dump_json() == before
+
+
+def test_budget_fit_keeps_unrealized_join_constraints_outside_trim_contract(monkeypatch):
+    from backend.core import branch_optimizer
+    from backend.core.models import ClusterJoinConstraint, JoinAttachment, JoinEndpoint
+
+    source = joined_budget_source()
+    scaffold = source.scaffolds()[0]
+
+    def attachment(cluster, domain):
+        return JoinAttachment(cluster_id=cluster,
+            source=JoinEndpoint(helix_id=domain.helix_id, bp_index=domain.start_bp,
+                                direction=domain.direction),
+            target=JoinEndpoint(helix_id=domain.helix_id, bp_index=domain.end_bp,
+                                direction=domain.direction))
+
+    pending = ClusterJoinConstraint(id="unrealized", reach_nm=3,
+        first=attachment("arm-a", scaffold.domains[0]),
+        second=attachment("arm-b", scaffold.domains[-1]))
+    source = source.copy_with(cluster_join_constraints=[pending])
+    monkeypatch.setattr(branch_optimizer, "trim_to_budget",
+                        lambda *_: pytest.fail("Unrealized Join reached the native fitter"))
+    with pytest.raises(ReferenceResolutionError, match="unsupported cluster_join_constraints"):
+        build("scaffold-budget-fit", source, {"scaffold_id": scaffold.id, "target_nt": 132})
+
+
 def test_selected_fork_plan_and_reinforcement_retain_numeric_recipe():
     from backend.core.curved_branches import _candidate, _path
     from backend.core.branch_optimizer import reinforce_stem

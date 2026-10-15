@@ -19,13 +19,14 @@ sync proof and edits retain cooperative deadlines. Join records reference-only
 preview orientation choices and explicit precursor identities, preserving the
 displayed native tether without relying on process set order. Reproducibility, reference
 integrity, scientific validation and useful editability are distinct claims.
-Opaque `connectivity-core` generation also belongs to unfinished P3. Keep broken
+Opaque legacy `connectivity-core` receipts remain unverified; new generation now
+emits native path/routing commands. Keep broken
 definitions repairable, reserve full proof for explicit/background work, and
 keep assemblies deferred. Consult the implementation ledger for subsequent fixes.
 
 ## Native recipe continuation (2026-10-15)
 
-P3 now has 92 versioned kinds (with method/action restrictions), pure native
+P3 now has 96 versioned kinds (with method/action restrictions), pure native
 builders shared by routes and proof, source-based continuation references,
 thread-local deterministic routing IDs, actual-failure cascade analysis, and one
 independently rebuilt prefix retained per edit. No saved outputs are proof inputs.
@@ -35,14 +36,21 @@ constraints, section routing, curvature encoding and optional budget fitting.
 Native semantic no-ops remain in the recipe. Seeds author their stable default
 cluster before publication; response-time legacy normalization must not add an
 unrecorded cluster. Independent-section seed/bounded-route contracts are the
-foundation for joined generation, whose full compiler and connectivity/CPD work
-remain open, so P3 is **not yet fully complete**. CPD conversion must not execute on the
-ordinary proof worker: conversion plus replay previously took 70.70 seconds. Preflight
-photoproduct authoring remains supported. Asset/NP/duplex work is P4, UI repair is
+foundation for the now implemented joined and connectivity compilers. Their
+numeric inputs regenerate paths, routing and explicit Joins; budget fitting
+checks that all retained Join sites, bonds and owners survive unchanged. CPD
+conversion/relaxation uses explicit native source and pinned template/engine
+contracts in separate 180-second evaluation jobs. Ordinary proof still rejects
+expensive execution after cheap reference checks. The real CPD fixture has an
+explicit imported topology and correctly remains `reproduced_import`. Preflight
+photoproduct authoring remains supported. P3 is the DNA execution foundation;
+full generated asset/attachment histories remain unverified. Asset/NP/duplex work is P4, UI repair is
 P5, strict agent enforcement is P6; assemblies remain deferred.
 
 `part_recipe_capabilities.py` exposes API/editor limitations explicitly. No new
-frontend controls were added. See the latest continuation in
+frontend controls were added. Long jobs evaluate privately, omit candidates from
+polling and commit once with document/revision/cancel/expiry checks. Input,
+recovery and candidate retention limits are not hard process heap caps. See the latest continuation in
 `docs/audits/feature_history_20261014/implementation.md` and its validation JSON.
 Native regeneration must re-encode recovery data; cluster membership setters
 before a later payload must not erase that payload's new inherited helices.

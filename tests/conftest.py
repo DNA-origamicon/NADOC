@@ -569,6 +569,12 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # Actual pinned CPD conversion/relaxation and independent spawned replay.
+    "test_native_cpd_append_and_independent_cold_proof_ignore_recovery_and_physics",
+    # Native routing + Join search / independent cold replay are intentional
+    # integration checks (9.86 s and 16.33 s isolated); path/schema cases stay fast.
+    "test_joined_routing_records_each_native_section_and_join",
+    "test_generated_joined_route_cold_replay_and_upstream_path_edit",
     # Starts three real pytest processes to verify failure persistence, explicit
     # acknowledgment, and a green rerun (33.75 s in the October 13 fast sweep).
     # The other placement-review unit checks remain in the fast suite.
@@ -1010,6 +1016,7 @@ def _slow_area_for(module: str) -> str:
         "atomistic" in module
         or module == "test_native_placement_review_gate"
         or module == "test_cpd_design"
+        or module == "test_native_cpd_proof"
         or module == "test_vr_representation_loading"
         or module == "test_vr_extra_representations"
         or "pdb_export" in module
@@ -1020,7 +1027,9 @@ def _slow_area_for(module: str) -> str:
         return "atomistic"
     if module.startswith("test_md") or "openmm" in module or "benchmark" in module:
         return "md"
-    if "headless" in module or "spec_build" in module or module in {"test_generated_commands", "test_generated_fork_proof"}:
+    if "headless" in module or "spec_build" in module or module in {
+        "test_generated_commands", "test_generated_fork_proof", "test_generated_joined_steps", "test_generated_joined_proof",
+    }:
         return "headless"
     # cluster autodetect's heavy test is heavy because it builds a fully ROUTED 18hb
     # through the headless build API — so a headless/routing change is what should

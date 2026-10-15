@@ -189,14 +189,21 @@ class GeneratedHistory:
                 last_editable_loadout_id=self.design.last_editable_loadout_id,
             )
         native_params = None
+        overlay_entry = None
         if self.standard and params.get("_proof_version") == 1:
             from backend.api.part_proof_commands import execute
             from backend.core.part_history_proof import AUTHORING_FIELDS
-            native_params = {**params, "_generated_scope": {
-                "version": 2,
-                "group_id": self.group_id,
-                "input_ids": sorted(self.source_ids & set(_ids(before.model_dump()))),
-            }} if scoped and kind != "sweep" else dict(params)
+            from backend.api.generated_overlay_entries import KINDS as OVERLAY_KINDS, entry_for
+            if kind in OVERLAY_KINDS:
+                overlay_entry, native_params = entry_for(kind, before, after, params,
+                    group=self.group_id, retained=self.source_ids,
+                    identity=self.entry_ids.get(key, str(uuid.uuid4())), scoped=scoped)
+            else:
+                native_params = {**params, "_generated_scope": {
+                    "version": 2,
+                    "group_id": self.group_id,
+                    "input_ids": sorted(self.source_ids & set(_ids(before.model_dump()))),
+                }} if scoped and kind != "sweep" else dict(params)
             native = execute(kind, self.design, native_params)
             mismatches = sorted(f for f in AUTHORING_FIELDS if getattr(native, f) != getattr(updated, f))
             if mismatches:
@@ -223,7 +230,9 @@ class GeneratedHistory:
 
         from backend.api.part_proof_commands import PROOF_MINOR_KINDS
 
-        if native_params is not None and kind in PROOF_MINOR_KINDS:
+        if overlay_entry is not None:
+            entries = [overlay_entry]
+        elif native_params is not None and kind in PROOF_MINOR_KINDS:
             # Minor kinds have their own history schema; constructing a
             # SnapshotLogEntry first would reject valid native operations.
             from backend.api.generated_commands import fine_routing

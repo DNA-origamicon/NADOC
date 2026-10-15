@@ -29,10 +29,13 @@ The checkpoint before this review is `a8bc9fc9` (pushed).
    capability declarations. Consolidate versioned command metadata as contracts
    mature, keeping legacy decoders until persisted compatibility tests pass.
    Do not attempt a broad unmeasured rewrite of working native algorithms.
-5. P3 also includes opaque `connectivity-core` generation. Compound branch
-   construction/routing/budget work and CPD conversion remain incomplete.
+5. P3 also includes opaque `connectivity-core` generation. At review time compound
+   branch construction/routing/budget work and CPD conversion were incomplete.
    A generator must emit native commands and their actual inputs. A copied
    candidate Design is not an executable construction recipe.
+   The subsequent native joined/connectivity compiler and pinned CPD job
+   contracts close this execution gap; see the latest `implementation.md`
+   checkpoint and `validation_native_jobs.json` for evidence and limits.
 6. Reproducibility, reference integrity and scientific validation are separate
    results. Existing `integrity_checked: false` is truthful; a verified replay
    alone must not become a general valid-design badge. Physical results remain

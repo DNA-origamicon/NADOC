@@ -39,7 +39,7 @@ def editing_capabilities(kinds):
                 "Existing desktop/VR editors expose only their existing fields; other historical parameters require the API.",
                 "Existing UI controls can still restrict earlier rows with later snapshots; API regeneration has broader coverage.",
                 "Historical-preview edits and mixed/legacy recipes retain recovery editors and cannot gain native proof from snapshots.",
-                "Regeneration uses bounded capture and a five-second cooperative deadline; an oversized edit is refused atomically.",
+                "Ordinary regeneration uses bounded capture and a five-second cooperative deadline; longer work requires an explicit evaluation job.",
                 "Generated native subpart scopes are immutable references; legacy compound branch/asset construction remains unverified.",
                 "Native Join requires preview-selected flexible orientation references; older Join receipts without them remain unverified.",
             ],
@@ -53,9 +53,25 @@ def editing_capabilities(kinds):
             }
             for kind in sorted(kinds)
         },
-        "photoproduct_create_methods": ["preflight"],
+        "evaluation_jobs": {
+            "start": "POST /api/design/features/evaluation/jobs",
+            "inspect": "GET /api/design/features/evaluation/jobs/{job_id}",
+            "cancel": "DELETE /api/design/features/evaluation/jobs/{job_id}",
+            "commit": "POST /api/design/features/evaluation/jobs/{job_id}/commit",
+            "operations": ["verify", "append", "edit", "delete"],
+            "append_kinds": ["photoproduct-create", "photoproduct-relax"],
+            "time_budget_seconds": 180,
+            "publication": "explicit revision-bound commit of the evaluated candidate",
+            "limits": ["2 MB captured input", "256 KB operation input", "8 MB cumulative recovery encoding",
+                       "16 MB candidate transport", "two retained jobs", "15 minute result lifetime"],
+        },
+        "photoproduct_create_methods": ["preflight", "convert"],
+        "long_job_methods": {
+            "photoproduct-create:convert": "Explicit native-source contract with pinned template and numerical engine",
+            "photoproduct-relax": "Existing native CPD with pinned template and numerical engine",
+        },
         "unverified_methods": {
-            "photoproduct-create:convert": "Native placement solve has no bounded replay contract"
+            "legacy photoproduct-create:convert": "Receipts without an explicit native source and engine pins remain unverified",
         },
         "overhang_bulk_actions": sorted(ACTIONS),
         "assemblies": "deferred",

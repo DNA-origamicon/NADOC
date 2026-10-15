@@ -233,20 +233,25 @@ def get_design_with_revision() -> tuple[Design | None, int]:
         return s.design, s.revision
 
 
-def capture_design_for_verification():
+def capture_design_for_verification(*, preserve_entry_types=False):
     """Explicit audit only: isolate mutable state and capture its revision."""
     with _lock:
         s = _session()
         if s.design is None:
             raise HTTPException(404, detail="No active design.")
         from backend.core.part_verification_capture import capture
-        return s.design, capture(s.design), s.revision
+        return s.design, capture(s.design, preserve_entry_types=preserve_entry_types), s.revision
 
 
-def verification_source_matches(doc_id, source, revision):
-    with _lock:
+def verification_source_matches(doc_id, source, revision, *, blocking=True):
+    """Return None for a busy nonblocking probe; never treat it as a match."""
+    if not _lock.acquire(blocking=blocking):
+        return None
+    try:
         session = _sessions.get(doc_id)
         return session is not None and session.design is source and session.revision == revision
+    finally:
+        _lock.release()
 
 
 def has_design_unlocked() -> bool:
@@ -398,7 +403,7 @@ def load_design(d: Design | None) -> None:
         _bump_revision(s)
 
 
-def set_design(d: Design, *, expected_revision: int | None = None, expected_source: Design | None = None) -> None:
+def set_design(d: Design, *, expected_revision: int | None = None, expected_source: Design | None = None) -> int:
     with _lock:
         s = _session()
         if expected_revision is not None and s.revision != expected_revision:
@@ -412,6 +417,7 @@ def set_design(d: Design, *, expected_revision: int | None = None, expected_sour
         s.redo.clear()
         s.design = d
         _bump_revision(s)
+        return s.revision
 
 
 def set_design_branch(d: Design, *, expected_revision: int | None = None) -> None:

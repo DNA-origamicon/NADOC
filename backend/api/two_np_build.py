@@ -437,8 +437,13 @@ def materialize(
     before = Design(lattice_type=source.lattice_type, nanoparticles=particles)
     standard = history is not None and history.standard
     native_branches = standard and branched and not joined
+    native_joined = standard and joined
     swept = curved and candidate.summary.get("path_feature") == "sweep" and (history is None or standard)
-    if native_branches:
+    if native_joined:
+        from backend.api.generated_joined_steps import build_joined_sections
+        rod, summary = build_joined_sections(before, candidate.summary, history)
+        candidate = RodCandidate(candidate.design, summary)
+    elif native_branches:
         from backend.api.part_branch_commands import compile_sparse_seed_params
         from backend.api.part_proof_commands import execute
         seed_params = compile_sparse_seed_params(candidate.summary, uuid.uuid4())
@@ -463,7 +468,7 @@ def materialize(
             candidate.summary["cells"], bp["length_bp"],
             name=f"Generated {len(particles)}-NP {shape}", lattice_type=source.lattice_type)
     rod = rod.copy_with(nanoparticles=particles)
-    if joined:
+    if joined and not native_joined:
         # Native move entries must own the initial poses as well as later global
         # placement, so seeking a Join cannot reset the fixed stem to identity.
         initial_join_poses = rod.cluster_transforms
@@ -480,20 +485,21 @@ def materialize(
     else:
         construction_params = {**bp, "cells": candidate.summary["cells"],
                                "lattice_type": source.lattice_type.value}
-    _record(
-        history,
-        before,
-        rod,
-        "branch-seed" if native_branches else "generate-design" if branched else "sweep" if swept else "extrude-segment" if standard else "bundle-create",
-        "Create independent Join branches" if joined else "Create sparse fork tracks" if native_branches and forked else "Create curved branched sections" if forked else "Create branched lattice sections" if branched else "Sweep nanoparticle path" if swept else "Extrude segment" if standard else f"Create {shape} bundle",
-        construction_params,
-        "branched-sections" if branched else "sweep" if swept else "bundle",
-        () if swept or branched else ("length_bp",),
-    )
+    if not native_joined:
+        _record(
+            history,
+            before,
+            rod,
+            "branch-seed" if native_branches else "generate-design" if branched else "sweep" if swept else "extrude-segment" if standard else "bundle-create",
+            "Create independent Join branches" if joined else "Create sparse fork tracks" if native_branches and forked else "Create curved branched sections" if forked else "Create branched lattice sections" if branched else "Sweep nanoparticle path" if swept else "Extrude segment" if standard else f"Create {shape} bundle",
+            construction_params,
+            "branched-sections" if branched else "sweep" if swept else "bundle",
+            () if swept or branched else ("length_bp",),
+        )
     if native_branches and forked:
         from backend.api.generated_branch_steps import apply_fork_steps
         rod = apply_fork_steps(rod, candidate.summary, history)
-    if joined:
+    if joined and not native_joined:
         before = rod
         rod = rod.copy_with(cluster_transforms=initial_join_poses)
         _record(history, before, rod, "cluster-pose", "Position independent branch bundles",
@@ -506,7 +512,11 @@ def materialize(
                 {"entries": entries}, "section-profile", ())
         before = rod
     progress("Route scaffold", "Seamed scaffold routing", .15)
-    if joined:
+    if native_joined:
+        from backend.api.generated_joined_steps import route_joined_sections
+        rod, routing = route_joined_sections(rod, candidate.summary, history)
+        before = rod
+    elif joined:
         from backend.core.joined_branches import route_joined_branches
         rod, routing = route_joined_branches(rod, candidate.summary,
             record=lambda *args: _record(history, *args))
@@ -621,7 +631,7 @@ def materialize(
     budget = {"M13mp18": 7249, "p8064": 8064}.get(sequence_params["scaffold_name"])
     if budget is None:
         raise ValueError("Choose M13mp18 or p8064 for generation.")
-    if standard and forked and settings.branch_sizing == "optimized":
+    if standard and ((forked and settings.branch_sizing == "optimized") or join_curved):
         from backend.api.generated_branch_steps import fit_fork_budget
         rod = fit_fork_budget(rod, candidate.summary, budget, history)
     elif (forked and settings.branch_sizing == "optimized") or join_curved:
@@ -669,7 +679,7 @@ def materialize(
 
         before = rod
         progress("Insert loops/skips", "Apply the selected manual insertion/deletion positions", .50)
-        if standard and forked:
+        if standard and (forked or join_curved):
             from backend.api.generated_branch_steps import encode_fork_curvature
             rod = encode_fork_curvature(rod, history)
         elif swept or forked or join_curved:
@@ -681,7 +691,7 @@ def materialize(
             raise ValueError(
                 "The curved rod's insertions exceed the scaffold budget. Shorten the bundle."
             )
-        if not (standard and forked):
+        if not (standard and (forked or join_curved)):
             _record(
                 history,
                 before,
@@ -1224,10 +1234,13 @@ def materialize(
         {},
         "final-sequences",
     )
-    return rod, {
+    placement = {
         "connections": connections,
         "generated_helix_ids": sorted(rod_ids),
         "attachment_residuals_nm": residuals,
         "rod_offset_nm": offset,
         "platform_offset_nm": offset if platform else None,
     }
+    if native_joined:
+        placement["join_section_cluster_ids"] = dict(candidate.summary["join_section_cluster_ids"])
+    return rod, placement

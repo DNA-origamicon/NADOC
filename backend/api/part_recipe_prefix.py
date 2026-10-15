@@ -8,10 +8,11 @@ Only one isolated model (the state before the selected top-level entry) is kept.
 from backend.api import state
 from backend.core.design_diff import encode_child_diff
 from backend.core.part_overlay_commands import KINDS as OVERLAY_KINDS
+from backend.api.part_recovery_budget import RecoveryBudget
 
 
 class ReplayPrefix:
-    def __init__(self, source, count):
+    def __init__(self, source, count, *, budget=None):
         self.source = source
         self.count = count
         self.log = []
@@ -19,6 +20,7 @@ class ReplayPrefix:
         self.child_index = 0
         self.children = []
         self.pre = None
+        self.budget = budget or RecoveryBudget()
 
     def execute(self, executor, kind, current, params):
         if len(self.log) == self.count:
@@ -40,10 +42,12 @@ class ReplayPrefix:
             self.pre = state.encode_design_snapshot(
                 current.copy_with(id=self.source.id)
             )
+            self.budget.charge(self.pre[0])
         updated = executor(kind, current, params)
         if entry.feature_type == "routing-cluster":
             child = entry.children[self.child_index]
             a, r, m, size = encode_child_diff(current, updated)
+            self.budget.charge(a, r, m)
             self.children.append(
                 child.model_copy(
                     update={
@@ -73,6 +77,7 @@ class ReplayPrefix:
                 "pre_state_from_previous": False,
             }
         post, size = state.encode_design_snapshot(updated.copy_with(id=self.source.id))
+        self.budget.charge(post)
         self.log.append(
             entry.model_copy(
                 update={

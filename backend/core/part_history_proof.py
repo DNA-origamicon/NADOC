@@ -7,7 +7,7 @@ import hashlib
 import json
 
 from backend.core.part_dependencies import Dependencies, DependencyIndex
-from backend.core.part_command_errors import ReferenceResolutionError
+from backend.core.part_command_errors import CommandContractError
 from backend.core.part_history_contract import FIELD_ROLES, create_empty_part
 
 
@@ -119,8 +119,8 @@ def assess(design, *, max_entries, execute, dependencies, checkpoint):
         except ProofBudgetExceeded as exc:
             issues.append({"code": "command_limit", "feature_id": feature_id, "detail": str(exc)})
             return result
-        except ReferenceResolutionError as exc:
-            result["status"] = "failed"
+        except CommandContractError as exc:
+            result["status"] = exc.status
             issues.append({**exc.as_issue(), "feature_id": feature_id, "kind": kind,
                            "possible_dependents": sorted(index.affected([feature_id]) - {feature_id})})
             return result

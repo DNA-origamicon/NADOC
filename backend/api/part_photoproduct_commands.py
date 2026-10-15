@@ -1,7 +1,8 @@
-"""Re-run native photoproduct authoring with explicit method and identities.
+"""Re-run ordinary photoproduct preflight/deletion with explicit identities.
 
 Scientific preflight/template gates remain authoritative and fail closed when
 required evidence is unavailable. A history verdict is not scientific approval.
+Conversion and relaxation use the separate pinned, bounded CPD adapter.
 """
 
 KINDS = frozenset({"photoproduct-create", "photoproduct-delete"})
@@ -20,17 +21,8 @@ def build(kind, design, params):
                 if p.id != params["photoproduct_id"]
             ]
         )
-    if params.get("method") == "convert":
-        from backend.core.cpd_design import convert_extra_pair
-
-        return convert_extra_pair(
-            design,
-            params["base_keys"],
-            params["stereochemistry"],
-            identity_seed=params["history_seed"],
-        )[0]
     if params.get("method") != "preflight":
-        raise ValueError("Photoproduct creation method is required")
+        raise ValueError("Ordinary photoproduct authoring requires method='preflight'")
     from backend.core.photoproducts import (
         preflight_photoproduct,
         create_photoproduct_from_preflight,

@@ -14,6 +14,8 @@ from backend.api.part_structural_commands import KINDS as STRUCTURAL_KINDS
 from backend.api.part_branch_commands import KINDS as BRANCH_KINDS
 from backend.api.part_path_commands import KINDS as PATH_KINDS
 from backend.api.part_section_commands import KINDS as SECTION_KINDS
+from backend.api.part_connectivity_commands import KINDS as CONNECTIVITY_KINDS
+from backend.api.part_joined_path_commands import KINDS as JOINED_PATH_KINDS
 
 
 TOPOLOGY_MINOR_KINDS = frozenset({
@@ -22,7 +24,7 @@ TOPOLOGY_MINOR_KINDS = frozenset({
     "crossover-place", "crossover-place-batch",
 })
 EXTRUSION_COMMANDS = frozenset({"extrude-segment", "extrude-continuation", "extrude-deformed-continuation", "circle-segment", "extrude-frame"})
-PROOF_SNAPSHOT_KINDS = SECTION_KINDS | PATH_KINDS | BRANCH_KINDS | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS | frozenset({"bundle-create", "sweep", "cluster-join", "strand-sequence", "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste"})
+PROOF_SNAPSHOT_KINDS = JOINED_PATH_KINDS | CONNECTIVITY_KINDS | SECTION_KINDS | PATH_KINDS | BRANCH_KINDS | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS | frozenset({"photoproduct-relax", "bundle-create", "sweep", "cluster-join", "strand-sequence", "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste"})
 PROOF_MINOR_KINDS = MOVE_KINDS | CELL_KINDS | LIGATION_KINDS | TOPOLOGY_MINOR_KINDS | LOOP_COMMANDS | STRUCTURAL_KINDS | frozenset({"joint-place", "joint-update", "joint-delete", "strand-patch"})
 PROOF_VERSION = 1
 PART_TOPOLOGY = Resource("part", "topology")
@@ -40,10 +42,15 @@ def capabilities():
 def dependencies(kind, params):
     if type(params.get("_proof_version")) is not int or params["_proof_version"] != PROOF_VERSION:
         return Dependencies(known=False)
-    if kind == "photoproduct-create" and params.get("method") != "preflight":
-        # Template conversion performs an expensive placement solve. It needs
-        # a separately bounded contract; never run it on the proof worker.
-        return Dependencies(known=False)
+    if kind == "photoproduct-relax" or (kind == "photoproduct-create" and params.get("method") != "preflight"):
+        if params.get("conversion_version") != 1:
+            return Dependencies(known=False)
+        from backend.core.part_cpd_contract import parse_command
+        try:
+            parse_command(kind, params)
+        except ValueError:
+            return Dependencies(known=False)
+        return Dependencies(frozenset({PART_TOPOLOGY}), frozenset({PART_TOPOLOGY}), barrier=True)
     if kind == "overhang-bulk":
         from backend.api.part_overhang_commands import ACTIONS
         if params.get("action") not in ACTIONS:
@@ -56,6 +63,8 @@ def dependencies(kind, params):
     if kind == "bundle-create" and params.get("history_seed"):
         return Dependencies(writes=frozenset({PART_TOPOLOGY}), barrier=True)
     if kind in SECTION_KINDS | BRANCH_KINDS | PATTERN_COMMANDS | EXTRUSION_COMMANDS | (AUTO_KINDS - {"auto-break", "auto-merge"}) and not params.get("history_seed"):
+        return Dependencies(known=False)
+    if kind == "auto-scaffold-connectivity-section" and not params.get("history_seed"):
         return Dependencies(known=False)
     if kind in {"photoproduct-create", "cluster-paste", "overhang-extrude", "nucleotide-transform", "nucleotide-transform-batch"} and not params.get("history_seed"):
         return Dependencies(known=False)
@@ -90,6 +99,15 @@ def dependencies(kind, params):
 
 
 def execute(kind, design, params):
+    return _execute(kind, design, params, expensive=False)
+
+
+def execute_long(kind, design, params):
+    """Worker-only executor; numerical/source contracts still gate each solver."""
+    return _execute(kind, design, params, expensive=True)
+
+
+def _execute(kind, design, params, *, expensive):
     if not dependencies(kind, params).known:
         raise NotImplementedError("Command lacks a versioned proof contract")
     from backend.core.part_history_proof import ProofBudgetExceeded
@@ -106,7 +124,7 @@ def execute(kind, design, params):
             raise ProofBudgetExceeded("Sweep exceeds proof path budget")
     if "_generated_scope" in params:
         from backend.api.generated_native_scope import execute as scoped_execute
-        return scoped_execute(kind, design, params, execute)
+        return scoped_execute(kind, design, params, lambda k, d, p: _execute(k, d, p, expensive=expensive))
     from backend.api.part_command_references import validate_command_references
     validate_command_references(kind, design, params)
     if kind in OVERLAY_KINDS:
@@ -117,7 +135,18 @@ def execute(kind, design, params):
     from backend.core.lattice import retry_pending_ligations
     from backend.core.photoproducts import stale_photoproduct_ids
     report = None
-    if kind == "nick-batch":
+    if kind == "photoproduct-relax" or (kind == "photoproduct-create" and params.get("method") == "convert"):
+        if not expensive:
+            from backend.core.part_command_errors import CommandContractError
+            from backend.core.part_cpd_contract import validate_inputs
+            # A missing endpoint is actionable without constructing atoms or
+            # initializing a numerical runtime. Cost admission must not hide it.
+            validate_inputs(kind, design, params)
+            raise CommandContractError("CPD regeneration requires an explicit bounded evaluation job",
+                                       code="long_job_required")
+        from backend.api.part_cpd_commands import build
+        updated = build(kind, design, params)
+    elif kind == "nick-batch":
         from backend.api.part_command_references import build_strict_nick_batch
         updated = build_strict_nick_batch(design, params)
     elif kind in BRANCH_KINDS:
@@ -125,6 +154,12 @@ def execute(kind, design, params):
         updated = build(kind, design, params)
     elif kind in SECTION_KINDS:
         from backend.api.part_section_commands import build
+        updated = build(kind, design, params)
+    elif kind in CONNECTIVITY_KINDS:
+        from backend.api.part_connectivity_commands import build
+        updated = build(kind, design, params)
+    elif kind in JOINED_PATH_KINDS:
+        from backend.api.part_joined_path_commands import build
         updated = build(kind, design, params)
     elif kind in PATH_KINDS:
         from backend.api.part_path_commands import build

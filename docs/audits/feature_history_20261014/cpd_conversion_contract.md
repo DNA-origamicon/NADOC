@@ -4,6 +4,16 @@ Audit date: 2026-10-15. Scope: standard parts only. This is a source audit and
 implementation proposal; no solver, tests, molecular placement or production
 behavior was changed for this audit.
 
+**Implementation update (October 15):** the explicit native-source conversion
+and relaxation contracts and bounded job API are now implemented. See
+[the API guide](../../part_recipe_evaluation.md) and the latest
+[implementation evidence](implementation.md). The analysis below records the
+decision and historical gaps; it is not the current delivery checklist. Real
+placement and relaxation replay exactly in fresh worker processes on the pinned
+runtime. Their regression fixture starts from an explicit imported topology, so
+the whole design correctly remains `reproduced_import`. No physical-reference
+conversion, engine-upgrade UI, or general asset-source support is claimed here.
+
 **Decision:** make conversion an explicit, versioned, expensive native feature.
 Keep the current scientific algorithm and ordinary five-second verification
 budget. Add a separate bounded process job for creation, verification and recipe

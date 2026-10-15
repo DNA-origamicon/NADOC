@@ -143,10 +143,16 @@ def _selection(design, body):
 
 
 def route(design, params):
+    from backend.core.seamed_router import auto_scaffold_seamed_bounded
+
+    return _route(design, params, auto_scaffold_seamed_bounded)
+
+
+def _route(design, params, router):
+    """Share closed selection and canonical IDs without changing router choices."""
     from backend.api.generated_native_scope import merge_changes
     from backend.core.part_scope_references import remap_design
     from backend.core.routing_identity import identity_scope
-    from backend.core.seamed_router import auto_scaffold_seamed_bounded
 
     body = SectionRouteRequest.model_validate(params)
     selected = _selection(design, body)
@@ -156,7 +162,7 @@ def route(design, params):
                  for helix in selected.helices}
     local = remap_design(selected, canonical)
     with identity_scope(body.history_seed):
-        updated, report = auto_scaffold_seamed_bounded(local)
+        updated, report = router(local)
     scaffolds = [strand for strand in updated.scaffolds() if not strand.is_reference]
     if not report.valid or len(scaffolds) != 1:
         raise ValueError("Independent section could not be routed as one scaffold")

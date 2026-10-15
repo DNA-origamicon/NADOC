@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from backend.api import state
 from backend.api.part_proof_commands import dependencies, execute
 from backend.core.design_diff import encode_child_diff
-from backend.core.part_command_errors import ReferenceResolutionError
+from backend.core.part_command_errors import CommandContractError
 from backend.core.feature_identity import preserve_proof_identity
 from backend.core.part_history_contract import FIELD_ROLES, assess_part_history
 from backend.core.part_overlay_commands import (
@@ -16,7 +16,7 @@ from backend.core.part_overlay_commands import (
     command_input,
     edit_entry,
 )
-from backend.core.part_history_proof import command_rows, root_design
+from backend.core.part_history_proof import ProofBudgetExceeded, command_rows, root_design
 from backend.core.part_verification_capture import CaptureLimit
 from backend.core.validator import validate_design
 
@@ -48,7 +48,7 @@ class CommandReplayError(Exception):
     def __init__(self, feature_id, reason):
         self.feature_id = feature_id
         self.reason = str(reason)
-        self.issue = reason.as_issue() if isinstance(reason, ReferenceResolutionError) else {
+        self.issue = reason.as_issue() if isinstance(reason, CommandContractError) else {
             "code": "command_failed", "detail": self.reason,
         }
         super().__init__(self.reason)
@@ -66,15 +66,19 @@ def without_commands(log, removed):
     return retained
 
 
-def regenerate(source, log, checkpoint, *, identify_failures=False, prefix=None):
+def regenerate(source, log, checkpoint, *, identify_failures=False, prefix=None, executor=None):
     """Execute input commands only; replace every recovery snapshot and child diff."""
+
+    executor = executor or execute
+    from backend.api.part_recovery_budget import RecoveryBudget
+    budget = prefix.budget if prefix is not None else RecoveryBudget()
 
     def run(entry, current):
         kind, arguments = command_input(entry)
         try:
-            return execute(kind, current, arguments)
+            return executor(kind, current, arguments)
         except (ValueError, HTTPException) as exc:
-            if not identify_failures or (
+            if (isinstance(exc, CommandContractError) and exc.status == "unverified") or not identify_failures or (
                 isinstance(exc, HTTPException) and exc.status_code in {408, 429}
             ):
                 raise
@@ -100,12 +104,14 @@ def regenerate(source, log, checkpoint, *, identify_failures=False, prefix=None)
             continue
         before = current.copy_with(feature_log=list(rebuilt_log))
         pre, pre_size = state.encode_design_snapshot(before)
+        budget.charge(pre)
         if entry.feature_type == "routing-cluster":
             children = []
             for child in entry.children:
                 checkpoint()
                 updated = run(child, current)
                 a, r, m, size = encode_child_diff(current, updated)
+                budget.charge(a, r, m)
                 children.append(
                     child.model_copy(
                         update={
@@ -134,6 +140,7 @@ def regenerate(source, log, checkpoint, *, identify_failures=False, prefix=None)
                 "pre_state_from_previous": False,
             }
         post, post_size = state.encode_design_snapshot(current)
+        budget.charge(post)
         rebuilt_log.append(
             entry.model_copy(
                 update={
@@ -158,6 +165,154 @@ def regenerate(source, log, checkpoint, *, identify_failures=False, prefix=None)
     )
 
 
+def prepare_change(source, captured, index, checkpoint, *, params=None, sub_index=None,
+                   cascade=False, executor=None, dependency_resolver=None):
+    """Build an isolated candidate or cascade preview; never publish session state.
+
+    The ordinary editor and bounded process jobs share exactly this evaluator.
+    Recovery payloads are re-encoded from execution, never consumed as inputs.
+    """
+    executor = executor or execute
+    dependency_resolver = dependency_resolver or dependencies
+    if index < 0 or index >= len(source.feature_log):
+        raise HTTPException(400, detail="Feature index out of range")
+    from backend.api.part_recipe_prefix import ReplayPrefix
+
+    prefix = ReplayPrefix(source, index)
+    proof = assess_part_history(
+        captured,
+        execute=lambda kind, d, p: prefix.execute(executor, kind, d, p),
+        dependencies=dependency_resolver,
+        checkpoint=checkpoint,
+    )
+    if proof["status"] not in {"verified", "reproduced_import"}:
+        raise HTTPException(
+            409, detail={"code": "recipe_not_reproducible", "assessment": proof}
+        )
+    # Original entries supply labels/provenance only. Recovery bytes are never decoded.
+    log = list(source.feature_log)
+    if index < 0 or index >= len(log):
+        raise HTTPException(400, detail="Feature index out of range")
+    entry = log[index]
+    candidate = None
+    if params is not None:
+        if sub_index is not None:
+            if entry.feature_type != "routing-cluster" or not 0 <= sub_index < len(
+                entry.children
+            ):
+                raise HTTPException(400, detail="Routing child index out of range")
+            child = entry.children[sub_index]
+            children = list(entry.children)
+            children[sub_index] = child.model_copy(
+                update={
+                    "params": preserve_proof_identity(
+                        child.params, {**child.params, **params}, kind=command_input(child)[0]
+                    )
+                }
+            )
+            log[index] = entry.model_copy(update={"children": children})
+        elif entry.feature_type in OVERLAY_KINDS:
+            log[index] = edit_entry(entry, params)
+        elif entry.feature_type == "snapshot":
+            log[index] = entry.model_copy(
+                update={
+                    "params": preserve_proof_identity(
+                        entry.params, {**entry.params, **params}, kind=entry.op_kind
+                    )
+                }
+            )
+        else:
+            raise HTTPException(
+                400, detail="Use a child target to edit a routing command"
+            )
+        if entry.feature_type == "snapshot" and entry.op_kind == "sweep":
+            from backend.core.sweep import SweepRequest
+
+            normalized = SweepRequest.model_validate(log[index].params).model_dump(
+                mode="json"
+            )
+            log[index] = log[index].model_copy(
+                update={"params": preserve_proof_identity(entry.params, normalized)}
+            )
+    else:
+        if sub_index is not None:
+            if entry.feature_type != "routing-cluster" or not 0 <= sub_index < len(
+                entry.children
+            ):
+                raise HTTPException(400, detail="Routing child index out of range")
+            targets = {entry.children[sub_index].id}
+        else:
+            targets = (
+                {c.id for c in entry.children}
+                if entry.feature_type == "routing-cluster"
+                else {entry.id}
+            )
+        removed, reasons, issues = set(targets), {}, {}
+        # Conservative graph edges describe possible effects, not commands
+        # that must be deleted. Replay survivors to resolve actual failures.
+        # A failed builder may mutate its candidate; restart from the root
+        # after removing that row, never continue from partially changed data.
+        while True:
+            checkpoint()
+            try:
+                candidate = regenerate(
+                    source,
+                    without_commands(log, removed),
+                    checkpoint,
+                    identify_failures=True,
+                    prefix=prefix, executor=executor,
+                )
+                break
+            except CommandReplayError as exc:
+                removed.add(exc.feature_id)
+                reasons[exc.feature_id] = exc.reason
+                issues[exc.feature_id] = exc.issue
+        if removed - targets and not cascade:
+            return {
+                "needs_cascade_decision": True,
+                "target_index": index,
+                "target_label": getattr(entry, "label", entry.feature_type),
+                "dependents": [
+                    {
+                        "index": i,
+                        "label": getattr(e, "label", e.feature_type),
+                        "feature_ids": sorted(ids & (removed - targets)),
+                        "reasons": {
+                            fid: reasons[fid] for fid in ids & reasons.keys()
+                        },
+                        "issues": {
+                            fid: issues[fid] for fid in ids & issues.keys()
+                        },
+                    }
+                    for i, e in enumerate(log)
+                    if (
+                        ids := (
+                            {c.id for c in e.children}
+                            if e.feature_type == "routing-cluster"
+                            else {e.id}
+                        )
+                    )
+                    & (removed - targets)
+                ],
+            }
+    try:
+        if candidate is None:
+            candidate = regenerate(source, log, checkpoint, prefix=prefix, executor=executor)
+    except CommandContractError as exc:
+        raise HTTPException(409, detail=exc.as_issue()) from exc
+    except ValidationError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
+    except (HTTPException, ProofBudgetExceeded):
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            409, detail={"code": "regeneration_failed", "message": str(exc)}
+        ) from exc
+    report = validate_design(candidate)
+    checkpoint()
+    return candidate, report
+
+
 def change_recipe(index, *, params=None, sub_index=None, cascade=False):
     from backend.api.crud import _design_replace_response
     from backend.api.part_history_verification import _slot
@@ -172,145 +327,16 @@ def change_recipe(index, *, params=None, sub_index=None, cascade=False):
             if monotonic() > deadline:
                 raise HTTPException(408, detail="Recipe regeneration time limit")
 
-        if index < 0 or index >= len(source.feature_log):
-            raise HTTPException(400, detail="Feature index out of range")
-        from backend.api.part_recipe_prefix import ReplayPrefix
-
-        prefix = ReplayPrefix(source, index)
-        proof = assess_part_history(
-            captured,
-            execute=lambda kind, d, p: prefix.execute(execute, kind, d, p),
-            dependencies=dependencies,
-            checkpoint=checkpoint,
-        )
-        if proof["status"] not in {"verified", "reproduced_import"}:
-            raise HTTPException(
-                409, detail={"code": "recipe_not_reproducible", "assessment": proof}
-            )
-        # Original entries supply labels/provenance only. Recovery bytes are never decoded.
-        log = list(source.feature_log)
-        if index < 0 or index >= len(log):
-            raise HTTPException(400, detail="Feature index out of range")
-        entry = log[index]
-        candidate = None
-        if params is not None:
-            if sub_index is not None:
-                if entry.feature_type != "routing-cluster" or not 0 <= sub_index < len(
-                    entry.children
-                ):
-                    raise HTTPException(400, detail="Routing child index out of range")
-                child = entry.children[sub_index]
-                children = list(entry.children)
-                children[sub_index] = child.model_copy(
-                    update={
-                        "params": preserve_proof_identity(
-                            child.params, {**child.params, **params}
-                        )
-                    }
-                )
-                log[index] = entry.model_copy(update={"children": children})
-            elif entry.feature_type in OVERLAY_KINDS:
-                log[index] = edit_entry(entry, params)
-            elif entry.feature_type == "snapshot":
-                log[index] = entry.model_copy(
-                    update={
-                        "params": preserve_proof_identity(
-                            entry.params, {**entry.params, **params}, kind=entry.op_kind
-                        )
-                    }
-                )
-            else:
-                raise HTTPException(
-                    400, detail="Use a child target to edit a routing command"
-                )
-            if entry.feature_type == "snapshot" and entry.op_kind == "sweep":
-                from backend.core.sweep import SweepRequest
-
-                normalized = SweepRequest.model_validate(log[index].params).model_dump(
-                    mode="json"
-                )
-                log[index] = log[index].model_copy(
-                    update={"params": preserve_proof_identity(entry.params, normalized)}
-                )
-        else:
-            if sub_index is not None:
-                if entry.feature_type != "routing-cluster" or not 0 <= sub_index < len(
-                    entry.children
-                ):
-                    raise HTTPException(400, detail="Routing child index out of range")
-                targets = {entry.children[sub_index].id}
-            else:
-                targets = (
-                    {c.id for c in entry.children}
-                    if entry.feature_type == "routing-cluster"
-                    else {entry.id}
-                )
-            removed, reasons, issues = set(targets), {}, {}
-            # Conservative graph edges describe possible effects, not commands
-            # that must be deleted. Replay survivors to resolve actual failures.
-            # A failed builder may mutate its candidate; restart from the root
-            # after removing that row, never continue from partially changed data.
-            while True:
-                checkpoint()
-                try:
-                    candidate = regenerate(
-                        source,
-                        without_commands(log, removed),
-                        checkpoint,
-                        identify_failures=True,
-                        prefix=prefix,
-                    )
-                    break
-                except CommandReplayError as exc:
-                    removed.add(exc.feature_id)
-                    reasons[exc.feature_id] = exc.reason
-                    issues[exc.feature_id] = exc.issue
-            if removed - targets and not cascade:
-                return {
-                    "needs_cascade_decision": True,
-                    "target_index": index,
-                    "target_label": getattr(entry, "label", entry.feature_type),
-                    "dependents": [
-                        {
-                            "index": i,
-                            "label": getattr(e, "label", e.feature_type),
-                            "feature_ids": sorted(ids & (removed - targets)),
-                            "reasons": {
-                                fid: reasons[fid] for fid in ids & reasons.keys()
-                            },
-                            "issues": {
-                                fid: issues[fid] for fid in ids & issues.keys()
-                            },
-                        }
-                        for i, e in enumerate(log)
-                        if (
-                            ids := (
-                                {c.id for c in e.children}
-                                if e.feature_type == "routing-cluster"
-                                else {e.id}
-                            )
-                        )
-                        & (removed - targets)
-                    ],
-                }
-        try:
-            if candidate is None:
-                candidate = regenerate(source, log, checkpoint, prefix=prefix)
-        except ValidationError as exc:
-            raise HTTPException(400, detail=str(exc)) from exc
-        except HTTPException:
-            raise
-        except Exception as exc:
-            raise HTTPException(
-                409, detail={"code": "regeneration_failed", "message": str(exc)}
-            ) from exc
-        report = validate_design(candidate)
-        checkpoint()
+        prepared = prepare_change(source, captured, index, checkpoint,
+                                  params=params, sub_index=sub_index, cascade=cascade)
+        if isinstance(prepared, dict):
+            return prepared
+        candidate, report = prepared
         state.set_design(candidate, expected_revision=revision, expected_source=source)
         return _design_replace_response(source, candidate, report)
     except ValidationError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
-    except CaptureLimit as exc:
+    except (CaptureLimit, ProofBudgetExceeded) as exc:
         raise HTTPException(413, detail=str(exc)) from exc
     finally:
         _slot.release()

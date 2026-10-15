@@ -41,13 +41,14 @@ def failure(code, detail=None):
     return {"status": "unverified", "native_editable": False, "issues": [issue]}
 
 
-def _result_bytes(result):
+def _result_bytes(result, *, limit=None):
+    limit = MAX_RESULT_BYTES if limit is None else limit
     chunks = []
     size = 0
     for chunk in json.JSONEncoder(allow_nan=False, separators=(",", ":")).iterencode(result):
         encoded = chunk.encode("utf-8")
         size += len(encoded)
-        if size > MAX_RESULT_BYTES:
+        if size > limit:
             return json.dumps(failure("result_limit")).encode("utf-8")
         chunks.append(encoded)
     return b"".join(chunks)
@@ -83,22 +84,23 @@ def _assess(input_name, input_size, result_name):
 class VerificationWorker:
     """One process, no pool or queue; the supervisor owns its whole lifetime."""
 
-    def __init__(self, design):
+    def __init__(self, design, *, _target=_assess, _result_limit=None, _name="nadoc-part-proof"):
         stream = _BoundedInput()
         pickle.dump(design, stream, protocol=pickle.HIGHEST_PROTOCOL)
         payload = stream.getvalue()
         context = multiprocessing.get_context("spawn")
+        self._result_limit = MAX_RESULT_BYTES if _result_limit is None else _result_limit
         self._buffers = []
         try:
             self._input = SharedMemory(create=True, size=len(payload))
             self._buffers.append(self._input)
             self._input.buf[:] = payload
-            self._output = SharedMemory(create=True, size=MAX_RESULT_BYTES + RESULT_HEADER_BYTES)
+            self._output = SharedMemory(create=True, size=self._result_limit + RESULT_HEADER_BYTES)
             self._buffers.append(self._output)
             self._process = context.Process(
-                target=_assess,
+                target=_target,
                 args=(self._input.name, len(payload), self._output.name),
-                name="nadoc-part-proof",
+                name=_name,
                 daemon=True,
             )
         except BaseException:
@@ -129,17 +131,21 @@ class VerificationWorker:
     def is_alive(self):
         return not self._process_closed and self._process.is_alive()
 
-    def result(self):
+    def _read_result(self):
         if self._process.is_alive():
             raise ValueError("Part verification worker has not exited")
         if self._process.exitcode != 0:
             return failure("worker_exited")
         size = struct.unpack_from("!I", self._output.buf)[0]
-        if not 0 < size <= MAX_RESULT_BYTES:
+        if not 0 < size <= getattr(self, "_result_limit", MAX_RESULT_BYTES):
             raise ValueError("Invalid part verification worker result size")
         result = json.loads(bytes(self._output.buf[RESULT_HEADER_BYTES:RESULT_HEADER_BYTES + size]))
         if not isinstance(result, dict) or not isinstance(result.get("issues"), list):
             raise ValueError("Invalid part verification worker result")
+        return result
+
+    def result(self):
+        result = self._read_result()
         if result.get("status") not in {"verified", "reproduced_import", "failed", "mismatch", "unverified"}:
             raise ValueError("Invalid part verification worker status")
         return result
@@ -181,7 +187,13 @@ class VerificationWorker:
                 while process.is_alive():
                     process.join(timeout=KILL_POLL_SECONDS)
                 process.join(timeout=0)
-            process.close()
+            try:
+                process.close()
+            except BaseException:
+                # A reaped process handle can fail to close independently of
+                # shared memory. Still attempt every buffer close and unlink.
+                self._release_buffers()
+                raise
             self._process_closed = True
         self._release_buffers()
         self._closed = True

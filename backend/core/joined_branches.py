@@ -180,32 +180,8 @@ def joined_seed(lattice, summary):
             )
         )
         if spec.get("path"):
-            from backend.core.models import DeformationOp
-            from backend.core.sweep_model import SweepParams
-
-            path = spec["path"]
-            positions = path["positions"]
-            frames = path["frames"]
-            steps = len(positions) - 1
-            deformations.append(
-                DeformationOp(
-                    id=f"generated_join_sweep_{index}",
-                    type="sweep",
-                    plane_a_bp=0,
-                    plane_b_bp=steps,
-                    affected_helix_ids=[h.id for h in part.helices],
-                    params=SweepParams(
-                        points_nm=[positions[0], positions[-1]],
-                        origin_nm=[0, 0, 0],
-                        initial_rotation=frames[0],
-                        steps=steps,
-                        path_length_nm=steps * RISE,
-                        bp_positions_nm=positions,
-                        bp_frames=frames,
-                        auto_loop_skips=True,
-                    ),
-                )
-            )
+            deformations.append(joined_path_operation(
+                [h.id for h in part.helices], spec["path"], f"generated_join_sweep_{index}"))
         # Distinct lattice addresses keep future staple routing inside each
         # independent bundle, with parity and canonical physical axes retained.
         part = part.copy_with(
@@ -223,6 +199,22 @@ def joined_seed(lattice, summary):
         strands=[s for p in parts for s in p.strands],
         cluster_transforms=clusters,
         deformations=deformations,
+    )
+
+
+def joined_path_operation(helix_ids, path, identity):
+    """Pack the native indexed path; its samples are evaluated builder output."""
+    from backend.core.models import DeformationOp
+    from backend.core.sweep_model import SweepParams
+
+    positions, frames = path["positions"], path["frames"]
+    steps = len(positions) - 1
+    return DeformationOp(
+        id=identity, type="sweep", plane_a_bp=0, plane_b_bp=steps,
+        affected_helix_ids=helix_ids,
+        params=SweepParams(points_nm=[positions[0], positions[-1]], origin_nm=[0, 0, 0],
+            initial_rotation=frames[0], steps=steps, path_length_nm=steps * RISE,
+            bp_positions_nm=positions, bp_frames=frames, auto_loop_skips=True),
     )
 
 
@@ -293,7 +285,7 @@ def _fit_stem(summary, lattice):
     )
 
 
-def _attach_crossbar(design, spec):
+def _attach_crossbar(design, spec, *, identity_seed=None):
     """Keep the authored curve fixed while finding short native bridge pairs."""
     from backend.core.cluster_join_free import propose_free_cluster_join
 
@@ -315,7 +307,7 @@ def _attach_crossbar(design, spec):
             expected_revision=0,
         )
         try:
-            result, report = propose_free_cluster_join(design, body)
+            result, report = propose_free_cluster_join(design, body, identity_seed=identity_seed)
         except ValueError as exc:
             errors.append(str(exc))
             if str(exc).startswith("Placement clashes with existing DNA"):
@@ -334,7 +326,7 @@ def _attach_crossbar(design, spec):
     return best
 
 
-def _attach_arm(design, spec):
+def _attach_arm(design, spec, *, identity_seed=None):
     from backend.core.cluster_join import _geometry, _ports
     from backend.core.cluster_join_free import propose_free_cluster_join
 
@@ -384,7 +376,7 @@ def _attach_arm(design, spec):
                 expected_revision=0,
             )
             try:
-                result, report = propose_free_cluster_join(design, body)
+                result, report = propose_free_cluster_join(design, body, identity_seed=identity_seed)
                 return result, body, report
             except ValueError as exc:
                 errors.append(str(exc))
@@ -502,30 +494,17 @@ def _continuous_layouts(centers):
 
 def _extend_crossbar_tails(summary, extras):
     """Add paired terminal duplex, preserving NP stations and T-junction poses."""
+    from backend.core.join_crossbars import extend_crossbar_path
+
     s = deepcopy(summary)
     for spec, extra in zip(s["join_sections"][1:], extras):
         if not extra:
             continue
-        path = spec["path"]
-        points, frames = (
-            np.array(path["positions"]),
-            np.array(path["frames"]).reshape(-1, 3, 3),
-        )
         left, right = extra // 2, extra - extra // 2
-        before = points[0] - np.arange(left, 0, -1)[:, None] * RISE * frames[0, :, 2]
-        after = points[-1] + np.arange(1, right + 1)[:, None] * RISE * frames[-1, :, 2]
-        path["positions"] = np.concatenate([before, points, after]).tolist()
-        path["frames"] = (
-            np.concatenate(
-                [
-                    np.repeat(frames[:1], left, axis=0),
-                    frames,
-                    np.repeat(frames[-1:], right, axis=0),
-                ]
-            )
-            .reshape(-1, 9)
-            .tolist()
-        )
+        spec["path"] = extend_crossbar_path(spec["path"], left, right)
+        if "path_recipe" in spec:
+            spec["path_recipe"]["extra_left_bp"] += left
+            spec["path_recipe"]["extra_right_bp"] += right
         spec["length_bp"] += extra
         for station in s["join_attachments"]:
             if station["cluster_id"] == spec["id"]:

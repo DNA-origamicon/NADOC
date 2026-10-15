@@ -211,6 +211,7 @@ def _budget_attachments(design, scaffold):
     # The native fitter checks crossover clearance and preserves helix geometry.
     # Other strand/endpoint ownership needs a separate trim contract.
     handled = {"helices", "strands", "crossovers", "crossover_constraints"}
+    guarded = []
     for field in COLLECTIONS.keys() - handled:
         for item in getattr(design, field):
             try:
@@ -221,8 +222,135 @@ def _budget_attachments(design, scaffold):
             if field in {"deformations", "cluster_transforms"}:
                 refs = {ref for ref in refs if ref[0] == "strand"}
             if refs & resources:
+                if field in {"flexible_connections", "flexible_segment_marks", "forced_ligations"}:
+                    guarded.append(item)
+                    continue
                 _fail(f"Budget fitting target has unsupported {field} dependencies",
                       "strand", scaffold.id, ["scaffold_id"])
+    return guarded
+
+
+def _check_budget_join(before, after, references, scaffold_id):
+    """Admit only untouched Join sites, without rerouting or moving a tether.
+
+    The native fitter can shorten a distant free end while keeping every Join
+    site. Strand identity, domain index, physical site, backbone neighbours and
+    rigid ownership must all survive; a renamed staple is not the same target.
+    """
+    from backend.core.flexible_segments import _owning_cluster_id
+    from backend.core.models import FlexibleAnchor, FlexibleConnection, ForcedLigation
+
+    if not references:
+        return
+
+    def reject(detail):
+        _fail(f"Budget fitting would invalidate a Join reference: {detail}",
+              "strand", scaffold_id, ["scaffold_id"])
+
+    def index(records):
+        result = {}
+        for record in records:
+            result.setdefault(record.id, []).append(record)
+        return result
+
+    def unique(records, identity):
+        matches = records.get(identity, ())
+        if len(matches) != 1:
+            reject(f"missing or ambiguous target {identity!r}")
+        return matches[0]
+
+    contexts = [(design, index(design.strands), index(design.helices),
+                 index(design.cluster_transforms)) for design in (before, after)]
+    ligations = [index(design.forced_ligations) for design in (before, after)]
+    # Forced ligations name physical slots, not strand/domain identities. Build
+    # an interval index once; do not expand the whole part into a bead graph.
+    intervals = []
+    for design in (before, after):
+        ranges = {}
+        for strand in design.strands:
+            if strand.is_reference:
+                continue
+            for di, domain in enumerate(strand.domains):
+                ranges.setdefault((domain.helix_id, domain.direction.value), []).append(
+                    (min(domain.start_bp, domain.end_bp), max(domain.start_bp, domain.end_bp),
+                     strand.id, di))
+        intervals.append(ranges)
+
+    def site(anchor, context):
+        design, strands, helices, _ = context
+        strand = unique(strands, anchor.strand_id)
+        di = anchor.domain_index
+        if not 0 <= di < len(strand.domains):
+            reject("domain index no longer resolves")
+        domain = strand.domains[di]
+        helix = unique(helices, domain.helix_id)
+        bp = anchor.bp_index
+        # Strand occupancy is authoritative: routing can use global bp indices
+        # beyond a helix's original nominal extent (as in topology_integrity).
+        if (anchor.direction != domain.direction
+                or not min(domain.start_bp, domain.end_bp) <= bp <= max(domain.start_bp, domain.end_bp)
+                or any(mark.bp_index == bp and mark.delta < 0 for mark in helix.loop_skips)):
+            reject("referenced nucleotide is missing or changed")
+
+        def key(dm, position):
+            return dm.helix_id, position, dm.direction
+
+        step = 1 if domain.end_bp >= domain.start_bp else -1
+        previous = (key(domain, bp - step) if bp != domain.start_bp else
+                    key(strand.domains[di - 1], strand.domains[di - 1].end_bp) if di else None)
+        following = (key(domain, bp + step) if bp != domain.end_bp else
+                     key(strand.domains[di + 1], strand.domains[di + 1].start_bp)
+                     if di + 1 < len(strand.domains) else None)
+        location = key(domain, bp)
+        owner = _owning_cluster_id(design, location, (strand.id, di))
+        if owner is not None:
+            owners = [unique(item[3], owner) for item in contexts]
+            if owners[0] != owners[1]:
+                reject("rigid owner changed")
+        return location, previous, following, owner, helix
+
+    for reference in references:
+        if isinstance(reference, ForcedLigation):
+            # Native Join's records are realized directed backbone bonds. A
+            # pending or stale ligation is not admitted by merely retaining its
+            # two endpoint numbers after a trim.
+            from backend.core.topology_integrity import forced_edge
+
+            old_records, new_records = (unique(records, reference.id) for records in ligations)
+            if old_records != new_records:
+                reject("ligation record changed")
+            states = []
+            for context, ranges in zip(contexts, intervals):
+                endpoints = []
+                for hid, bp, direction in forced_edge(reference):
+                    matches = [(sid, di) for lo, hi, sid, di in ranges.get((hid, direction), ())
+                               if lo <= bp <= hi]
+                    if len(matches) != 1:
+                        reject("ligation endpoint is missing or has ambiguous occupancy")
+                    sid, di = matches[0]
+                    anchor = FlexibleAnchor(strand_id=sid, domain_index=di,
+                                            bp_index=bp, direction=direction)
+                    endpoints.append((sid, di, site(anchor, context)))
+                a_strand, _, (a_key, _, a_next, _, _) = endpoints[0]
+                b_strand, _, (b_key, b_previous, _, _, _) = endpoints[1]
+                if a_strand != b_strand or a_next != b_key or b_previous != a_key:
+                    reject("ligation is not the same realized directed backbone bond")
+                states.append(endpoints)
+            if states[0] != states[1]:
+                reject("ligation endpoint, backbone neighbours or owner changed")
+            continue
+        connection = isinstance(reference, FlexibleConnection)
+        anchors = ([reference.anchor_a, reference.anchor_b, *reference.segment_bead_keys]
+                   if connection else [reference])
+        for i, anchor in enumerate(anchors):
+            old, new = (site(anchor, context) for context in contexts)
+            if old != new:
+                reject("referenced nucleotide, neighbours or owner changed")
+            if connection and i < 2:
+                owner_id = reference.cluster_a_id if i == 0 else reference.cluster_b_id
+                owners = [unique(context[3], owner_id) for context in contexts]
+                if owners[0] != owners[1] or old[3] != owner_id:
+                    reject("anchor cluster ownership does not resolve unchanged")
 
 
 def fit_budget(design, params):
@@ -243,12 +371,13 @@ def fit_budget(design, params):
         if design.find_helix(domain.helix_id) is None:
             _fail("Scaffold has a missing helix dependency", "strand", body.scaffold_id,
                   ["scaffold_id"])
-    _budget_attachments(design, scaffolds[0])
+    guarded = _budget_attachments(design, scaffolds[0])
     updated = trim_to_budget(design, body.target_nt)
     identities = [strand.id for strand in updated.strands]
     if len(identities) != len(set(identities)):
         _fail("Budget fitting would create duplicate strand identities", "strand",
               body.scaffold_id, ["scaffold_id"])
+    _check_budget_join(design, updated, guarded, body.scaffold_id)
     return updated
 
 

@@ -9,7 +9,7 @@ Scope approved October 14, 2026: implement standard-part validation, editability
 | P0 | Inventory, field ownership and performance evidence | Source audit complete; initial recording benchmark captured. Add workloads as the affected subsystem changes |
 | P1 | Standard-part recording transactions, executable replay registry and evidenced cleanup | Foundation implemented below. Retain legacy callbacks and compatibility recovery; no claim of general isolated evaluation |
 | P2 | Explicit recipe roots/versions, authoritative-field classification, read-only verification and incremental dependencies | Implementation exit checks complete: independent nonempty replay, content-pinned roots, typed dependencies, fingerprints, bounded capture/jobs and stale/cancel handling. Supported-family expansion continues in P3/P4; validation debt below remains explicit |
-| P3 | Complete native DNA command families and generated construction | 83 versioned command kinds, with action/method restrictions, native generated-part composition and independent regeneration implemented. Final validation below; compound branch generation and bounded CPD-conversion replay remain open, so P3 is not universally complete |
+| P3 | Native DNA command families and generated construction | 96 versioned kinds with method/action restrictions, joined/connectivity input compilation and bounded native-source CPD conversion/relaxation implemented. See the latest evidence and explicit scope limits below; full generated asset/attachment histories belong to P4 |
 | P4 | Standard-part assets and attachments | Pending. Explicit import provenance, duplex/protein/nanoparticle commands, physical-result separation and all current part authoring bypasses |
 | P5 | Standard-part repair, drafts, desktop and part-mode VR | Pending. Revision-bound impact previews, failed/blocked diagnostics, reference replacement, last-successful-state display, undo/reload |
 | P6 | Strict standard-part agent transactions and legacy retirement | Pending. Pure candidate execution outside long-held locks, expected-revision publication, registered command batches, bypass closure and explicit import exceptions |
@@ -371,3 +371,76 @@ records each file and duration. Changed code has no new lint findings; repositor
 lint retains five unrelated unused imports and memory lint its six existing
 errors. No frontend or molecular placement algorithm was changed, and no visual
 inspection or physical simulation was run for this contract-only increment.
+
+## P3 native DNA construction and bounded jobs — October 15
+
+Joined sections and connectivity generation now emit separate native features:
+seed, numeric path, group/pose, constraints, selected-section routing, Join,
+curvature, budget and sequence steps. Ordinary cluster creation and moves use
+their actual overlay definitions; destination composition independently executes
+them and compares every authoring field. Saved samples, candidate Designs and
+recovery snapshots are not proof inputs. Legacy generated construction remains
+explicitly unsupported. The reported planning-to-runtime cluster map preserves
+the old candidate summary and resolves the actual materialized identities.
+
+The real joined triangle generation regression passes, including its fixed-center
+attachment checks. The new budget guard initially rejected all references from a
+scaffold to a Join. It now verifies that a distant native terminal trim preserves
+each referenced nucleotide, direction, backbone neighbors, rigid owner and
+realized directed ligation. Consumed sites, ambiguous occupancy and pending Join
+constraints fail atomically. The existing fitting/placement algorithms are
+unchanged; a small exact-parity fixture covers every attachment family emitted
+by native Join. The full triangle test takes 187.66 seconds including setup.
+This measures the complete planning/materialization regression, not added
+validation overhead or ordinary edit latency. Joined compilation still performs
+an additional destination execution to establish equivalence; no broad speedup
+claim is made.
+
+Native-source CPD conversion and relaxation have strict inputs, explicit endpoint
+references, pinned template/implementation/numerical-runtime contracts and source
+atom admission. The real regression creates, independently replays, relaxes and
+replays both features in fresh spawned workers, with poisoned recovery and an
+unusable physical reference. Complete authoring values agree exactly. Its
+starting molecular topology is an explicit import, so the result correctly
+remains `reproduced_import`; it does not prove native construction of that fixture.
+The existing molecular solvers, export qualification and physical-reference
+behavior are unchanged. The unreachable direct conversion branch in the ordinary
+photoproduct adapter was removed, with a regression preventing its reuse.
+
+`/api/design/features/evaluation/jobs` supports explicit verify, CPD append,
+historical parameter edit and deletion. Jobs share the single proof admission
+slot and process supervisor, run outside the document lock, retain bounded
+candidates, and publish only through an explicit revision-bound commit. Commit
+checks exact authoring reconstruction, cancellation, expiry, source identity and
+revision, preserves unrelated presentation/physical state, and adds one undo
+step. Polling omits candidate bytes. State-lock contention cannot block worker
+deadline/cancellation supervision. Native workers are terminated and reaped
+before admission is released; dead-worker cleanup retries are bounded.
+
+Ordinary proof keeps its five-second policy. Long jobs have a 180-second whole-job
+deadline, 2 MB input transport, 256 KB operation input, 8 MB cumulative recovery
+encoding, 16 MB candidate transport, two retained results and a 15-minute result
+lifetime. These are admission/retention limits, not a hard process heap cap.
+Source/reference validation happens before a CPD long-job refusal, without
+atomistic construction. No full replay was added to normal edits, scrubbing,
+rendering or selection. One independently regenerated prefix is reused within
+an evaluation; saved materialized output never substitutes for it.
+
+P3 delivery is the native DNA construction/execution foundation. It does not
+certify complete generated NP/attachment histories, supply new desktop/VR
+controls, restore old numerical runtimes, or make every numeric edit individually
+valid. A path extent change needs matching upstream seed parameters; coordinated
+repair/batch editing is later work. Rootless legacy receipts remain unverified
+until an explicit provenance decision. P4 asset/attachment contracts, P5 repair
+and P6 strict automation remain active implementation work.
+
+See [validation detail](validation_native_jobs.json) and the
+[evaluation API guide](../../part_recipe_evaluation.md). The latest selector dry
+run remains **FULL (FULL suite) [test-dedicated session OPEN]**. Archive is still
+unavailable; broad artifact-producing suites were not rerun on fallback storage.
+Earlier broad baseline results do not certify this checkpoint. Focused checks
+are serialized; genuinely heavy native integration cases remain in the existing
+slow groups without raising guards. No frontend or molecular algorithm changed,
+`main.js` LOC delta is zero, and no visual inspection or physical simulation is
+claimed. P4–P6 audits are recorded in `asset_import_plan.md`,
+`duplex_contract_plan.md`, `repair_plan.md` and `automation_policy_plan.md`.

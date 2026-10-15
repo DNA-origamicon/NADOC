@@ -37,6 +37,7 @@ from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel
 
 from backend.api import state as design_state
+from backend.api.part_evaluation import EvaluationRequest
 
 # Shared kernel/infra helpers that stay in crud.py and are imported back
 # (same convention as routes_camera_poses.py / routes_loop_skip.py):
@@ -62,6 +63,30 @@ from backend.core.display_placement import measured_display_placement
 from backend.core.feature_evaluation import batch_target_groups, optimization_enabled
 
 router = APIRouter()
+
+
+@router.post("/design/features/evaluation/jobs", status_code=202)
+def start_part_evaluation(body: EvaluationRequest):
+    from backend.api.part_evaluation_jobs import start
+    return start(body)
+
+
+@router.get("/design/features/evaluation/jobs/{job_id}")
+def get_part_evaluation(job_id: str):
+    from backend.api.part_evaluation_jobs import inspect
+    return inspect(job_id)
+
+
+@router.delete("/design/features/evaluation/jobs/{job_id}")
+def cancel_part_evaluation(job_id: str):
+    from backend.api.part_evaluation_jobs import inspect
+    return inspect(job_id, cancel=True)
+
+
+@router.post("/design/features/evaluation/jobs/{job_id}/commit")
+def commit_part_evaluation(job_id: str):
+    from backend.api.part_evaluation_jobs import commit
+    return commit(job_id)
 
 
 @router.post("/design/features/verification/jobs", status_code=202)

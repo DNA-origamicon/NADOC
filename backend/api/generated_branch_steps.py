@@ -63,7 +63,7 @@ def encode_fork_curvature(design, history, key="curve-marks"):
     """Recompute compensation after path/routing edits, with explicit targets."""
     return _execute_recorded(
         design, history, "encode-sweep-curvature",
-        "Encode fork curvature with insertions/deletions",
+        "Encode sweep curvature with insertions/deletions",
         {"op_ids": [op.id for op in design.deformations if op.type == "sweep"],
          "_proof_version": 1}, key,
     )

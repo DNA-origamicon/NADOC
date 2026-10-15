@@ -151,6 +151,50 @@ def test_buffer_cleanup_attempts_every_unlink_after_close_failure():
     assert actions == ["first-close", "first-unlink", "second-close", "second-unlink"]
 
 
+def test_reaped_process_handle_failure_still_unlinks_buffers(monkeypatch):
+    worker = workers.VerificationWorker(create_empty_part("Close failure", "SQUARE"))
+    names = [buffer.name for buffer in worker._buffers]
+    close = worker._process.close
+
+    def fail_close():
+        raise OSError("Injected process handle close failure")
+
+    monkeypatch.setattr(worker._process, "close", fail_close)
+    try:
+        with pytest.raises(OSError, match="handle close"):
+            worker.close()
+        _assert_unlinked(names)
+    finally:
+        monkeypatch.setattr(worker._process, "close", close)
+        worker.close()
+
+
+def test_supervisor_retries_buffer_unlink_after_child_is_reaped(monkeypatch):
+    from backend.api.part_verification_jobs import _dispose
+
+    worker = workers.VerificationWorker(create_empty_part("Unlink retry", "SQUARE"))
+    names = [buffer.name for buffer in worker._buffers]
+    unlink = SharedMemory.unlink
+    failed = False
+
+    def fail_once(buffer):
+        nonlocal failed
+        if buffer.name == names[0] and not failed:
+            failed = True
+            raise OSError("Injected first unlink failure")
+        return unlink(buffer)
+
+    monkeypatch.setattr(SharedMemory, "unlink", fail_once)
+    job = SimpleNamespace(revision=1, result=None, status="running")
+    try:
+        problem = _dispose(job, worker, "source")
+        assert problem["issues"][0]["code"] == "worker_cleanup_error"
+        assert failed and worker._closed
+        _assert_unlinked(names)
+    finally:
+        worker.close()
+
+
 def test_spawned_worker_reproduces_empty_part_and_is_reaped():
     # Uses the production spawn entry point, imports and serialized projection.
     # No disk scratch, live session, command solver or model fixture is needed.

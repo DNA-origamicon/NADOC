@@ -125,4 +125,9 @@ def test_legacy_compound_output_is_explicitly_unverified():
     assert not c["certifies_history"]
     assert c["command_editors"]["nick"]["history_ui"] == "not_available"
     assert c["history_edit"]["routing_child_query"] == "sub_index"
-    assert c["photoproduct_create_methods"] == ["preflight"]
+    assert c["photoproduct_create_methods"] == ["preflight", "convert"]
+    assert "photoproduct-create:convert" in c["long_job_methods"]
+    assert "legacy photoproduct-create:convert" in c["unverified_methods"]
+    assert not dependencies("photoproduct-create", {
+        "_proof_version": 1, "method": "convert", "history_seed": "legacy",
+    }).known

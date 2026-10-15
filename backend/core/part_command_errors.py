@@ -11,12 +11,27 @@ class CommandReference(TypedDict):
     parameter_path: list[str | int]
 
 
-class ReferenceResolutionError(ValueError):
+class CommandContractError(ValueError):
+    """A declared execution contract cannot be fulfilled in this environment."""
+
+    status = "unverified"
+
+    def __init__(self, detail: str, *, code: str):
+        super().__init__(detail)
+        self.code = code
+
+    def as_issue(self) -> dict:
+        return {"code": self.code, "detail": str(self)}
+
+
+class ReferenceResolutionError(CommandContractError):
     """An authored target is missing or no longer satisfies its selection.
 
     Parameter paths address command inputs, so a repair editor can offer a
     replacement without parsing an exception message or recorded geometry.
     """
+
+    status = "failed"
 
     def __init__(
         self,
@@ -25,8 +40,7 @@ class ReferenceResolutionError(ValueError):
         references: Iterable[Mapping[str, object]],
         code: Literal["missing_reference", "invalid_selection"] = "missing_reference",
     ):
-        super().__init__(detail)
-        self.code = code
+        super().__init__(detail, code=code)
         self.references = tuple(deepcopy(dict(reference)) for reference in references)
 
     def as_issue(self) -> dict:
