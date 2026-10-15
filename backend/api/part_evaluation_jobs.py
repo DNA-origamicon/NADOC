@@ -16,6 +16,7 @@ from backend.api.doc_context import get_current_doc
 from backend.api.part_evaluation import EvaluationRequest
 from backend.api.part_evaluation_worker import EvaluationWorker
 from backend.api.part_history_verification import _slot
+from backend.api import part_publication_permit as permits, part_publication_policy as policy
 from backend.api.part_verification_jobs import Job, supervise
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_verification_capture import CaptureLimit
@@ -37,6 +38,13 @@ class EvaluationJob(Job):
     # JSON cannot supply publication authority; absent admission fails closed.
     admitted_operation: str | None = None
     session_identity: str | None = None
+    admission: object | None = None
+    request_sha256: str | None = None
+
+    @property
+    def policy_generation(self):
+        context = permits.admission_context(self.admission)
+        return None if context is None else context.policy_generation
 
     @property
     def selection_only(self):
@@ -54,22 +62,63 @@ def _assert_publishable(job):
     if not _has_session_context(job):
         raise HTTPException(409, detail={"code": "invalid_evaluation_context",
             "detail": "This job has no captured document session"})
+    if _admission_context(job) is None:
+        raise HTTPException(409, detail={"code": "invalid_evaluation_admission",
+            "detail": "This job has no matching private host admission"})
+    if _policy_changed(job):
+        raise HTTPException(409, detail={"code": "policy_changed", "detail": "Construction policy changed; evaluate again"})
 
 
 def _has_session_context(job):
     return type(job.session_identity) is str and bool(job.session_identity)
 
 
+def _admission_context(job):
+    context = permits.admission_context(job.admission)
+    if (context is None or context.doc_id != job.doc or context.session_identity != job.session_identity
+            or context.source_revision != job.revision or context.source() is not job.source()
+            or context.operation != job.admitted_operation or context.request_sha256 != job.request_sha256):
+        return None
+    return context
+
+
+def _policy_changed(job):
+    generation = job.policy_generation
+    return generation is not None and generation != policy.resolve(job.doc).generation
+
+
+def _request_matches(job, operation):
+    from backend.core.part_history_proof import digest
+    from backend.core.part_operation_input import validate_operation_input
+
+    context = _admission_context(job)
+    if context is None:
+        return False
+    try:
+        definition = operation["request"]
+        validate_operation_input(definition)
+        return digest(definition) == context.request_sha256
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
 def _run(job, captured, operation):
-    result = supervise(job, captured, lambda d: EvaluationWorker(d, operation),
+    def worker(design):
+        if not _request_matches(job, operation):
+            raise ValueError("Evaluation request no longer matches its host admission")
+        return EvaluationWorker(design, operation)
+
+    result = supervise(job, captured, worker,
                        TIME_BUDGET, status_lock=_lock)
     known_operation = job.admitted_operation in PUBLISHABLE_OPERATIONS | {"verify", "selection"}
-    if not known_operation or not _has_session_context(job) or (job.admitted_operation not in PUBLISHABLE_OPERATIONS
+    matching_admission = _request_matches(job, operation)
+    if not known_operation or not _has_session_context(job) or not matching_admission or (job.admitted_operation not in PUBLISHABLE_OPERATIONS
                               and ("candidate" in result or result.get("status") == "ready")):
         # A future dispatch defect cannot promote a read operation or invent
         # publication authority by returning a ready candidate or actor label.
         code = ("invalid_operation_admission" if not known_operation else
                 "invalid_evaluation_context" if not _has_session_context(job) else
+                "invalid_evaluation_admission" if not matching_admission else
                 "invalid_selection_result" if job.selection_only else
                 "invalid_verification_result" if job.admitted_operation == "verify" else
                 "invalid_operation_admission")
@@ -93,9 +142,12 @@ def start(request, *, expected_source=None, expected_session_identity=None):
         raise HTTPException(429, detail="A part history operation is already running")
     identity = None
     try:
+        # Own nested Any-valued inputs after busy admission, before capture.
+        # Earlier Python dictionary/model aliases cannot alter worker inputs.
+        request = EvaluationRequest.model_validate_json(request.model_dump_json())
         try:
-            source, captured, revision, session_identity = state.capture_design_for_evaluation(request,
-                include_session_identity=True, expected_source=expected_source,
+            source, captured, revision, session_identity, admission = state.capture_design_for_evaluation(request,
+                include_admission=True, expected_source=expected_source,
                 expected_session_identity=expected_session_identity)
         except CommandContractError as error:
             conflict = error.code in {"source_changed", "repair_conflict", "selection_conflict", "batch_conflict"}
@@ -108,7 +160,8 @@ def start(request, *, expected_source=None, expected_session_identity=None):
                 raise HTTPException(409, detail={"code": f"{request.operation}_conflict",
                     "detail": f"The {request.operation} belongs to a different part or revision."})
         job = EvaluationJob(get_current_doc(), ref(source), revision, created=monotonic(),
-                            admitted_operation=request.operation, session_identity=session_identity)
+                            admitted_operation=request.operation, session_identity=session_identity, admission=admission,
+                            request_sha256=permits.admission_context(admission).request_sha256)
         identity = str(uuid4())
         operation = {"request": request.model_dump(mode="json"), "header": {
             "identity": str(uuid4()), "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -148,7 +201,8 @@ def inspect(identity, *, cancel=False):
     with _lock:
         job = _lookup(identity)
         if job.committed_revision is not None:
-            matches = state.evaluation_session_matches(job.doc, job.session_identity, blocking=False)
+            matches = state.evaluation_session_matches(job.doc, job.session_identity, blocking=False,
+                expected_policy_generation=job.policy_generation)
             return {"job_id": identity, "status": "committed", "revision": job.committed_revision,
                     "stale": matches is False, "source_busy": matches is None}
         if cancel:
@@ -162,11 +216,13 @@ def inspect(identity, *, cancel=False):
         })
         status = job.status
     matches = (state.verification_source_matches(job.doc, job.source(), job.revision, blocking=False,
-        expected_session_identity=job.session_identity) if _has_session_context(job) else False)
+        expected_session_identity=job.session_identity, expected_policy_generation=job.policy_generation)
+        if _has_session_context(job) and _admission_context(job) is not None else False)
     stale, busy = matches is False, matches is None
     if result is not None and (stale or busy or job.cancelled.is_set()):
         result.update(status="unverified", native_editable=False)
-        result["issues"].append({"code": "cancelled" if job.cancelled.is_set() else "source_changed" if stale else "source_busy"})
+        result["issues"].append({"code": "cancelled" if job.cancelled.is_set() else
+            "policy_changed" if _policy_changed(job) else "source_changed" if stale else "source_busy"})
         if job.selection_only and isinstance(result.get("selection"), dict):
             selection = result["selection"]
             selection.update(candidates=[], candidates_invalidated=True)
@@ -186,14 +242,15 @@ def commit(identity):
             job = _lookup(identity)
             _assert_publishable(job)
             if job.committed_revision is not None:
-                if not state.evaluation_session_matches(job.doc, job.session_identity):
+                if not state.evaluation_session_matches(job.doc, job.session_identity,
+                        expected_policy_generation=job.policy_generation):
                     raise HTTPException(409, detail="The evaluation belongs to an earlier document session")
                 return {"job_id": identity, "status": "committed", "revision": job.committed_revision}
             if job.cancelled.is_set() or job.status != "complete" or not job.result or job.result["status"] != "ready":
                 raise HTTPException(409, detail="Part evaluation has no publishable candidate")
             source = job.source()
             if not state.verification_source_matches(job.doc, source, job.revision,
-                    expected_session_identity=job.session_identity):
+                    expected_session_identity=job.session_identity, expected_policy_generation=job.policy_generation):
                 job.result.pop("candidate", None)
                 raise HTTPException(409, detail="Design changed; evaluate the current recipe again")
             data = job.result["candidate"]
@@ -226,8 +283,15 @@ def commit(identity):
             _assert_publishable(job)
             if job.cancelled.is_set():
                 raise HTTPException(409, detail="Part evaluation was cancelled")
+            permit = None
+            if job.admitted_operation == "batch":
+                permit = permits.issue_batch_permit(job.admission, candidate,
+                    request_sha256=job.request_sha256, authoring_sha256=expected_authoring,
+                    recipe_sha256=expected_recipe, expires=job.created + RESULT_TTL,
+                    cancelled=job.cancelled, source_status=job.result.get("source_assessment", {}).get("status"))
             job.committed_revision = state.set_design(candidate, expected_revision=job.revision, expected_source=source,
-                expected_session_identity=job.session_identity)
+                expected_session_identity=job.session_identity, expected_policy_generation=job.policy_generation,
+                publication_permit=permit)
             job.result.pop("candidate", None)
             job.status = "committed"
             return {"job_id": identity, "status": "committed", "revision": job.committed_revision,

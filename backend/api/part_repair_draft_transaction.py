@@ -16,6 +16,8 @@ def _conflict(detail):
 def _current(session, *, expected_session, expected_source, expected_doc_id,
              expected_design_id, expected_revision, expected_draft_id,
              expected_generation, context):
+    from backend.api.part_publication_policy import require_compatibility
+    require_compatibility(context.get_current_doc(), "repair_metadata_publication")
     if type(expected_revision) is not int or expected_revision < 0:
         raise ValueError("Draft publication requires a trusted nonnegative revision")
     if (expected_draft_id is None) != (expected_generation is None) or (
@@ -35,6 +37,8 @@ def _current(session, *, expected_session, expected_source, expected_doc_id,
 
 
 def _publish_field(session, before, field, value, *, bump_revision, context):
+    from backend.api.part_publication_policy import require_compatibility
+    require_compatibility(context.get_current_doc(), "repair_metadata_publication")
     # Strictly internal: public publishers below choose the sole allowed field.
     # Never accept an arbitrary request-provided Design update dictionary.
     if field not in {"repair_draft", "input_sources"}:

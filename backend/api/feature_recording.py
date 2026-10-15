@@ -16,6 +16,7 @@ from backend.core.models import Design, MinorMutationLogEntry, RoutingClusterLog
 
 @contextmanager
 def _transaction(session, state):
+    state._require_compatibility_write("feature_recording")
     before = state._snapshot_copy(session.design)
     history = list(session.history)
     redo = list(session.redo)
@@ -39,6 +40,7 @@ def _transaction(session, state):
 
 
 def _run(session, before, fn, state, *, retry=True):
+    state._require_compatibility_write("feature_recording_callback")
     result = fn(session.design)
     report = None
     if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], Design):
@@ -64,6 +66,7 @@ def _run(session, before, fn, state, *, retry=True):
 
 
 def _publish(session, before, parent_id, state):
+    state._require_compatibility_write("feature_recording_publication")
     # A validation report may contain warnings/errors on an editable draft;
     # preserve that contract. An exception, however, must never publish state.
     validation = state.validate_design(session.design)

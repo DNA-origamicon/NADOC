@@ -23,6 +23,7 @@ def start_draft_evaluation(value):
     try:
         request = parse_evaluation_request(value)
         with host._lock:
+            host._require_compatibility_write("repair_draft_evaluation")
             session = host._session()
             source, revision = session.design, session.revision
             if source is None:

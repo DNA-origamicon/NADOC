@@ -1094,6 +1094,7 @@ def undo_design():
     Returns 404 if nothing to undo. Per-step wall-clock is exposed via the
     ``Server-Timing`` header.
     """
+    design_state.require_compatibility_write("legacy_undo")
     trace = _TimingTrace()
     with trace.step("clone_prev"):
         prev = design_state.get_or_404().model_copy(deep=True)
@@ -1111,6 +1112,7 @@ def redo_design():
     Returns 404 if nothing to redo. Per-step wall-clock is exposed via the
     ``Server-Timing`` header.
     """
+    design_state.require_compatibility_write("legacy_redo")
     trace = _TimingTrace()
     with trace.step("clone_prev"):
         prev = design_state.get_or_404().model_copy(deep=True)
@@ -1531,6 +1533,7 @@ def create_bundle(body: BundleRequest) -> dict:
     then run bundle creation through the snapshot wrapper. The resulting
     snapshot's pre-state is therefore the canonical empty design.
     """
+    design_state.require_compatibility_write("legacy_bundle_create")
     try:
         cells = [tuple(c) for c in body.cells]  # type: ignore[misc]
     except (TypeError, ValueError) as exc:
@@ -1584,6 +1587,7 @@ def _build_bundle(cells, body: "BundleRequest") -> Design:
 @router.post("/design", status_code=201)
 def create_design(body: CreateDesignRequest) -> dict:
     """Create and activate a new empty design, discarding any current design."""
+    design_state.require_compatibility_write("legacy_design_create")
     from backend.core.validator import validate_design
     from backend.core.part_history_contract import create_empty_part
 
@@ -1734,6 +1738,7 @@ def load_design(body: FilePathRequest) -> dict:
     coordinates are arbitrary. The user can manually trigger recentering via
     POST ``/design/center``.
     """
+    design_state.require_compatibility_write("legacy_design_load")
     path = os.path.abspath(body.path)
     if not os.path.isfile(path):
         raise HTTPException(400, detail=f"File not found: {path}")
@@ -1748,6 +1753,7 @@ def load_design(body: FilePathRequest) -> dict:
 
 def _install_loaded_design(design: Design) -> dict:
     """Install saved recipes exactly; migrate only rootless legacy documents."""
+    design_state.require_compatibility_write("legacy_design_install")
     from backend.core.lattice import (
         migrate_split_staple_domains,
         autodetect_all_overhangs,

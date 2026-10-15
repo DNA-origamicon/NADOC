@@ -29,14 +29,18 @@ is still closed. Its first benchmark confirms that full-source undo cost cannot
 be inferred from authoring-only capture: large excluded physical state and long
 history need separate admission. Do not raise global capture limits, add proof
 to render/scrub paths, or reuse a cached baseline while mutable aliases and
-unclassified write paths remain. No strict-session or general LLM enforcement
-claim is justified yet.
+unclassified write paths remain. Private host policy/admission and exact-candidate batch permits are implemented,
+but the closed strict HTTP surface and mutable read/write alias closure remain
+open. No complete strict-session or general LLM enforcement claim is justified.
 
 An experimental ordinary free-protein importer records pinned original bytes and
 separate import/placement inputs, but its server-owned gate remains false after
 retained-history capture refusals. Existing ordinary import behavior remains
 available. Its scalar-atom copy optimization preserves exact admission accounting;
-no deadline or GC policy was relaxed. Saved source restoration now has a real
+no source deadline or GC policy was relaxed. Allocation-light private candidate
+admission removes a redundant copy; a retained-protein refusal now has measured
+45 ms generation-2 GC overlap during locked source isolation. Immutable strict
+revision ownership is planned after the closed HTTP boundary. Saved source restoration now has a real
 HTTP-to-cold-replay regression requiring explicit rebase before evaluation.
 
 Focused tests and small in-memory qualification run serially. The Archive

@@ -306,7 +306,7 @@ def main():
         parser.error("repeats must be between 1 and 30")
     doc = f"__protein_import_benchmark_{uuid4()}__"
     originals = (state._lock, recording.capture_import, recording.publish_import, protein.parse_protein_pdb,
-                 recording.prepare_import, recording.capture, routes.NATIVE_FREE_IMPORT_ENABLED)
+                 recording.prepare_import, recording.capture, routes.NATIVE_FREE_IMPORT_ENABLED, recording.admit)
     probe, parses = LockProbe(originals[0]), []
     gc_probe, capture_spans = GCProbe(), []
     state._lock = probe
@@ -315,20 +315,22 @@ def main():
     recording.publish_import = phase_wrapper(originals[2], "publication")
     recording.prepare_import = phase_wrapper(originals[4], "native_preparation")
 
-    def tracked_capture(*args, **kwargs):
-        phase = "candidate_admission" if _PHASE.get() == "native_preparation" else "source_capture"
-        token, begin, completed = _PHASE.set(phase), perf_counter(), False
-        try:
-            result = originals[5](*args, **kwargs)
-            completed = True
-            return result
-        finally:
-            ended = perf_counter()
-            capture_spans.append({"phase": phase, "start": begin, "end": ended,
-                                  "elapsed_ms": (ended - begin) * 1000, "completed": completed})
-            _PHASE.reset(token)
+    def tracked_admission(operation, phase):
+        def tracked(*args, **kwargs):
+            token, begin, completed = _PHASE.set(phase), perf_counter(), False
+            try:
+                result = operation(*args, **kwargs)
+                completed = True
+                return result
+            finally:
+                ended = perf_counter()
+                capture_spans.append({"phase": phase, "start": begin, "end": ended,
+                                      "elapsed_ms": (ended - begin) * 1000, "completed": completed})
+                _PHASE.reset(token)
+        return tracked
 
-    recording.capture = tracked_capture
+    recording.capture = tracked_admission(originals[5], "source_capture")
+    recording.admit = tracked_admission(originals[7], "candidate_admission")
     def count_parse(*args, **kwargs):
         parses.append(True)
         token = _PHASE.set("native_parse")
@@ -384,7 +386,7 @@ def main():
         state._protein_library.clear()
         state._protein_library.update(original_library)
         (state._lock, recording.capture_import, recording.publish_import, protein.parse_protein_pdb,
-         recording.prepare_import, recording.capture, routes.NATIVE_FREE_IMPORT_ENABLED) = originals
+         recording.prepare_import, recording.capture, routes.NATIVE_FREE_IMPORT_ENABLED, recording.admit) = originals
         gc.callbacks.remove(gc_callback)
     leaked = doc in state.revision_map()
     print(json.dumps({"scope": "Actual ordinary free protein HTTP import; original bytes, native suffix, one undo/revision/library publication",
@@ -396,11 +398,14 @@ def main():
                                "enabled": gc.isenabled(), "thresholds": gc.get_threshold()}},
         "limits_unchanged": {"capture_nodes": 30_000, "capture_bytes": 2_000_000,
             "capture_seconds_cooperative": 0.025, "recovery_bytes": 8_000_000},
+        "candidate_admission": {"isolated_copy": False, "same_node_byte_accounting": True,
+                                "separate_deadline": False, "private_input_only": True},
         "notes": ["Synthetic sources qualify size/work boundaries, not molecular realism.",
             "Retained heavy physical/loadout state is outside this initial native ordinary-import slice.",
             "No full-prefix proof is performed on import; cold proof is measured separately afterward.",
             "Experimental native import is explicitly enabled only in this harness and restored on exit.",
             "GC callbacks observe intervals only; no collect(), disable(), threshold changes or retries are used.",
+            "Private candidate resource admission has no second isolation copy/deadline; source capture keeps its 25 ms allowance.",
             "Library remains a cache; no replay source is reconstructed from its atoms.",
             "Retained recipes are created by real HTTP imports before timing; all preparation failures stop qualification.",
             "Repeated imports verify unchanged prefix/assets/proposals/source bytes and exact single undo/redo outside timing.",

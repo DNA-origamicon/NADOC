@@ -42,6 +42,7 @@ def audit_loadout_inputs() -> dict:
 
 @router.post("/design/loadouts", status_code=200)
 def create_loadout(body: LoadoutCreateBody) -> dict:
+    design_state.require_compatibility_write("loadout_create")
     current = design_state.get_or_404()
     loadouts, active_id = ensure_loadouts(current)
     loadouts = save_active_snapshot(current, loadouts, active_id)
@@ -64,6 +65,7 @@ def create_loadout(body: LoadoutCreateBody) -> dict:
 @router.post("/design/loadouts/{loadout_id}/select", status_code=200)
 def select_loadout(loadout_id: str, save_current: bool = True) -> dict:
     """Save the current branch, unless requested otherwise, then restore one."""
+    design_state.require_compatibility_write("loadout_select")
     current = design_state.get_or_404()
     loadouts, active_id = ensure_loadouts(current)
     if save_current:
@@ -93,6 +95,7 @@ def select_loadout(loadout_id: str, save_current: bool = True) -> dict:
 
 @router.post("/design/loadouts/activate-editable", status_code=200)
 def activate_last_editable_loadout() -> dict:
+    design_state.require_compatibility_write("loadout_activate")
     current = design_state.get_or_404()
     loadouts, _active_id = ensure_loadouts(current)
     target = next(
@@ -126,6 +129,7 @@ def activate_last_editable_loadout() -> dict:
 
 @router.patch("/design/loadouts/{loadout_id}", status_code=200)
 def rename_loadout(loadout_id: str, body: LoadoutRenameBody) -> dict:
+    design_state.require_compatibility_write("loadout_rename")
     design = design_state.get_or_404()
     loadouts, active_id = ensure_loadouts(design)
     if loadout_id == "__implicit_loadout_1__":
@@ -148,6 +152,7 @@ def rename_loadout(loadout_id: str, body: LoadoutRenameBody) -> dict:
 
 @router.delete("/design/loadouts/{loadout_id}", status_code=200)
 def delete_loadout(loadout_id: str) -> dict:
+    design_state.require_compatibility_write("loadout_delete")
     current = design_state.get_or_404()
     loadouts, active_id = ensure_loadouts(current)
     if len(loadouts) <= 1:

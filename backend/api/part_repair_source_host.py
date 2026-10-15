@@ -48,6 +48,8 @@ def capture_source_request(value, *, mutation=False):
     try:
         request = parse_source_request(value, mutation=mutation)
         with host._lock:
+            if mutation:
+                host._require_compatibility_write("repair_source_upload")
             session = host._session()
             source, revision = session.design, session.revision
             if source is None:

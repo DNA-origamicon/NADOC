@@ -1,0 +1,4500 @@
+{
+  "scope": "Actual HTTP capture; independent prepared publication with full-source undo; real spawned lifecycle",
+  "public_gate_before_and_after": false,
+  "harness_only_gate_override": true,
+  "ordinary_capture_profile_unchanged": {
+    "max_nodes": 30000,
+    "max_bytes": 2000000,
+    "seconds": 0.025
+  },
+  "session_cleanup_verified": true,
+  "retained_history_boundary": null,
+  "intermediate_history_only": false,
+  "public_envelope_only": true,
+  "intermediate_history_native_preparation": [],
+  "provenance_diagnostics": {
+    "rootless": {
+      "status": "unverified",
+      "issues": [
+        {
+          "code": "missing_recipe_root"
+        }
+      ],
+      "source_assessment": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "unverified",
+        "issues": [
+          {
+            "code": "missing_recipe_root"
+          }
+        ],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 0,
+        "proof_coverage": "versioned_commands",
+        "native_editable": false,
+        "dependencies": {
+          "complete": true,
+          "parents": {}
+        },
+        "recipe_fingerprint": "36adb2d287331e68315cfddd182c488e57160cb6ef929b6f14af2d04fff82591",
+        "authoring_fingerprint": "06ec0baa1fdb6821a5ba1381cd8fee7b751a5252ea6b7036e9804101ef327b46"
+      },
+      "candidate_returned": false
+    },
+    "explicit_import_basis": {
+      "status": "ready",
+      "issues": [],
+      "source_assessment": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "reproduced_import",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 0,
+        "proof_coverage": "versioned_commands",
+        "native_editable": false,
+        "dependencies": {
+          "complete": true,
+          "parents": {}
+        },
+        "recipe_fingerprint": "3681d7afafdc979cc730e0d76f2e4a77180e3015bfe48273c2879f9d9c709e21",
+        "authoring_fingerprint": "06ec0baa1fdb6821a5ba1381cd8fee7b751a5252ea6b7036e9804101ef327b46",
+        "imported_sources": []
+      },
+      "candidate_returned": true
+    }
+  },
+  "empty_root_worker_startup_baseline": {
+    "mode": "complete",
+    "start_http_status": 202,
+    "poll": {
+      "job_id": "8e25741a-5c7f-4015-bad6-e82fe7d50ca1",
+      "status": "complete",
+      "stale": false,
+      "source_busy": false,
+      "result": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "verified",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 0,
+        "proof_coverage": "versioned_commands",
+        "native_editable": true,
+        "dependencies": {
+          "complete": true,
+          "parents": {}
+        },
+        "recipe_fingerprint": "af59bfe1b4b1d9d0f031d18c71ee53d059a26ef5f3c1bf5ecaf29a4009ff893f",
+        "authoring_fingerprint": "8542143cf47cd3394a0346305d59f8a9c6c15a322b61c19d0dd9cc3ac14625c0",
+        "imported_sources": [],
+        "source_revision": 1,
+        "design_id": "d08e5dad-9d3c-48fc-94b2-b93fe6b5780c"
+      }
+    },
+    "commit_http_status": 409,
+    "commit": {
+      "detail": "Verification is a nonpublishing assessment"
+    },
+    "source_guard_correct": true,
+    "cold_replay": null,
+    "shared_admission_released_after_reaping": true,
+    "start_http_ms": 7.4425020029593725,
+    "parent_worker_constructor_ms": 2.3114969990274403,
+    "process_start_call_ms": 1.1344710001139902,
+    "start_to_supervisor_reaped_ms": 1198.8066129997605,
+    "commit_http_ms": 1.046812001732178
+  },
+  "cases": [
+    {
+      "name": "32-gold-commands",
+      "qualification_scope": true,
+      "commands": 32,
+      "history_rows": 32,
+      "history_entries_including_children": 32,
+      "source_json_bytes": 141174,
+      "candidate_json_bytes": 315767,
+      "retained_recovery_encoded_bytes": 113452,
+      "retained_input_sources": 0,
+      "separate_native_evaluation_ms": 25.04229600162944,
+      "repeats": 30,
+      "independent_candidate_edit": null,
+      "capture_refusals": 0,
+      "correct_publications": 30,
+      "publication_snapshot": {
+        "count": 30,
+        "p50_ms": 0.3041594991373131,
+        "p95_ms": 0.43506099973456,
+        "max_ms": 0.4426099985721521
+      },
+      "capture_without_worker": {
+        "http": {
+          "count": 30,
+          "p50_ms": 9.563385001456481,
+          "p95_ms": 11.143113999423804,
+          "max_ms": 11.536206999153364
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 0.9929805000865599,
+          "p95_ms": 1.3492070029315073,
+          "max_ms": 1.349599002423929
+        },
+        "revision_http": {
+          "count": 40,
+          "p50_ms": 9.145582500423188,
+          "p95_ms": 10.534107997955289,
+          "max_ms": 11.469041000964353
+        },
+        "capture_lock_hold": {
+          "count": 30,
+          "p50_ms": 6.432117501390167,
+          "p95_ms": 7.378278001851868,
+          "max_ms": 8.071511998423375
+        },
+        "capture_lock_wait": {
+          "count": 30,
+          "p50_ms": 0.0012750024325214326,
+          "p95_ms": 0.0014710021787323058,
+          "max_ms": 0.0014710021787323058
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 40,
+          "p50_ms": 0.00392199945054017,
+          "p95_ms": 0.008921997505240142,
+          "max_ms": 0.014609999198000878
+        },
+        "light_request_lock_wait": {
+          "count": 40,
+          "p50_ms": 0.617781999608269,
+          "p95_ms": 2.315320998604875,
+          "max_ms": 2.7410670008976012
+        },
+        "overlapping_revision_requests": 31,
+        "sample_summary": {
+          "samples": 30,
+          "http_status_counts": {
+            "202": 30
+          },
+          "retention": "All errors/refusals and timing maxima retained; distributions include every original sample."
+        },
+        "retained_samples": [
+          {
+            "sample_index": 0,
+            "http_ms": 11.536206999153364,
+            "baseline_revision_http_ms": 1.1402559975977056,
+            "revision_http_ms": [
+              11.469041000964353
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              8.071511998423375
+            ],
+            "capture_lock_wait_ms": [
+              0.0012739983503706753
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.008921997505240142
+            ],
+            "light_request_lock_wait_ms": [
+              2.7410670008976012
+            ],
+            "http_status": 202,
+            "response": {
+              "job_id": "411b62a4-1084-49b9-ac4a-df722378ad08",
+              "status": "running",
+              "source_revision": 2,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          }
+        ]
+      },
+      "commit_prepared_candidate": {
+        "http": {
+          "count": 30,
+          "p50_ms": 6.097462999605341,
+          "p95_ms": 7.2879709987319075,
+          "max_ms": 7.931394000479486
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 0.9138519999396522,
+          "p95_ms": 1.0356340026191901,
+          "max_ms": 1.5495290026592556
+        },
+        "revision_http": {
+          "count": 60,
+          "p50_ms": 3.5929005025536753,
+          "p95_ms": 4.959511999913957,
+          "max_ms": 5.599893996986793
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 30,
+          "p50_ms": 0.6956850011192728,
+          "p95_ms": 0.9459159991820343,
+          "max_ms": 1.3963700002932455
+        },
+        "publication_lock_wait": {
+          "count": 30,
+          "p50_ms": 0.0005879992386326194,
+          "p95_ms": 0.0006869995559100062,
+          "max_ms": 0.0009800023690331727
+        },
+        "light_request_lock_hold": {
+          "count": 60,
+          "p50_ms": 0.002844000846380368,
+          "p95_ms": 0.004705998435383663,
+          "max_ms": 0.0114719987323042
+        },
+        "light_request_lock_wait": {
+          "count": 60,
+          "p50_ms": 0.0008829993021208793,
+          "p95_ms": 0.0012750024325214326,
+          "max_ms": 0.0024520013539586216
+        },
+        "overlapping_revision_requests": 30,
+        "sample_summary": {
+          "samples": 30,
+          "http_status_counts": {
+            "200": 30
+          },
+          "retention": "All errors/refusals and timing maxima retained; distributions include every original sample."
+        },
+        "retained_samples": [
+          {
+            "sample_index": 0,
+            "http_ms": 6.727304997184547,
+            "baseline_revision_http_ms": 0.859825002407888,
+            "revision_http_ms": [
+              4.366880002635298,
+              2.436121998471208
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              1.3963700002932455
+            ],
+            "publication_lock_wait_ms": [
+              0.0005879992386326194
+            ],
+            "light_request_lock_hold_ms": [
+              0.0026470006559975445,
+              0.0026470006559975445
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008829993021208793,
+              0.0007849994290154427
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "3ab31eae-5f59-4c52-bef1-72258ea7040f",
+              "status": "committed",
+              "revision": 4,
+              "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+            },
+            "snapshot_ms": [
+              0.380346999008907
+            ],
+            "correct_publication": true
+          },
+          {
+            "sample_index": 17,
+            "http_ms": 6.70475299921236,
+            "baseline_revision_http_ms": 0.8509019971825182,
+            "revision_http_ms": [
+              5.599893996986793,
+              1.6640539979562163
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.7116670021787286
+            ],
+            "publication_lock_wait_ms": [
+              0.000490999809699133
+            ],
+            "light_request_lock_hold_ms": [
+              0.0028430004022084177,
+              0.004705998435383663
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008829993021208793,
+              0.001176998921437189
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "2d520770-2b0c-417c-b7e9-37c6e2a1677f",
+              "status": "committed",
+              "revision": 55,
+              "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+            },
+            "snapshot_ms": [
+              0.31180799851426855
+            ],
+            "correct_publication": true
+          },
+          {
+            "sample_index": 22,
+            "http_ms": 7.931394000479486,
+            "baseline_revision_http_ms": 1.5495290026592556,
+            "revision_http_ms": [
+              5.5331199982902035,
+              3.0057110016059596
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.9459159991820343
+            ],
+            "publication_lock_wait_ms": [
+              0.0009800023690331727
+            ],
+            "light_request_lock_hold_ms": [
+              0.0114719987323042,
+              0.006177000614115968
+            ],
+            "light_request_lock_wait_ms": [
+              0.0024520013539586216,
+              0.0015689984138589352
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "d59ebcf5-1d77-49b3-8a39-a096501c2b87",
+              "status": "committed",
+              "revision": 70,
+              "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+            },
+            "snapshot_ms": [
+              0.4426099985721521
+            ],
+            "correct_publication": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "mixed-prefix-37-rows-plus-27-commands",
+      "qualification_scope": true,
+      "commands": 27,
+      "history_rows": 27,
+      "history_entries_including_children": 37,
+      "source_json_bytes": 102762,
+      "candidate_json_bytes": 259138,
+      "retained_recovery_encoded_bytes": 77300,
+      "retained_input_sources": 0,
+      "separate_native_evaluation_ms": 24.345042002096307,
+      "repeats": 30,
+      "independent_candidate_edit": null,
+      "capture_refusals": 0,
+      "correct_publications": 30,
+      "publication_snapshot": {
+        "count": 30,
+        "p50_ms": 0.41996000072686,
+        "p95_ms": 0.6807810023019556,
+        "max_ms": 0.6952929979888722
+      },
+      "capture_without_worker": {
+        "http": {
+          "count": 30,
+          "p50_ms": 7.43637400046282,
+          "p95_ms": 8.091513998806477,
+          "max_ms": 8.691107002960052
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 0.9621920016797958,
+          "p95_ms": 1.255467999726534,
+          "max_ms": 1.4922660011507105
+        },
+        "revision_http": {
+          "count": 46,
+          "p50_ms": 6.935765499292756,
+          "p95_ms": 7.85952099977294,
+          "max_ms": 7.989441997779068
+        },
+        "capture_lock_hold": {
+          "count": 30,
+          "p50_ms": 4.36143849947257,
+          "p95_ms": 4.995005998353008,
+          "max_ms": 5.864048001967603
+        },
+        "capture_lock_wait": {
+          "count": 30,
+          "p50_ms": 0.001372001861454919,
+          "p95_ms": 0.0015689984138589352,
+          "max_ms": 0.0017649981600698084
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 46,
+          "p50_ms": 0.0030399987736018375,
+          "p95_ms": 0.0034320000850129873,
+          "max_ms": 0.0038239995774347335
+        },
+        "light_request_lock_wait": {
+          "count": 46,
+          "p50_ms": 0.000931500835577026,
+          "p95_ms": 0.0012740019883494824,
+          "max_ms": 0.0013729986676480621
+        },
+        "overlapping_revision_requests": 31,
+        "sample_summary": {
+          "samples": 30,
+          "http_status_counts": {
+            "202": 30
+          },
+          "retention": "All errors/refusals and timing maxima retained; distributions include every original sample."
+        },
+        "retained_samples": [
+          {
+            "sample_index": 0,
+            "http_ms": 7.001754998782417,
+            "baseline_revision_http_ms": 1.1701619987434242,
+            "revision_http_ms": [
+              6.906741997227073
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              4.142044999753125
+            ],
+            "capture_lock_wait_ms": [
+              0.0012749987945426255
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0030390001484192908
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009809991752263159
+            ],
+            "http_status": 202,
+            "response": {
+              "job_id": "cd2b619a-d3eb-43f0-9abf-885c1c2e0543",
+              "status": "running",
+              "source_revision": 92,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "sample_index": 14,
+            "http_ms": 8.691107002960052,
+            "baseline_revision_http_ms": 0.9716050008137245,
+            "revision_http_ms": [
+              7.11314300133381,
+              1.9836079991364386
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              5.864048001967603
+            ],
+            "capture_lock_wait_ms": [
+              0.0013729986676480621
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0031380004656966776,
+              0.003040000592591241
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008819988579489291,
+              0.0008819988579489291
+            ],
+            "http_status": 202,
+            "response": {
+              "job_id": "c5f3751f-7587-4206-8a67-3107c37e6586",
+              "status": "running",
+              "source_revision": 134,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "sample_index": 15,
+            "http_ms": 7.25934000001871,
+            "baseline_revision_http_ms": 0.9041450030053966,
+            "revision_http_ms": [
+              7.124714000383392
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              4.372273000626592
+            ],
+            "capture_lock_wait_ms": [
+              0.0013730023056268692
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0031370000215247273
+            ],
+            "light_request_lock_wait_ms": [
+              0.0013729986676480621
+            ],
+            "http_status": 202,
+            "response": {
+              "job_id": "f328ddfc-3e49-4daf-824b-c8c292746483",
+              "status": "running",
+              "source_revision": 137,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "sample_index": 26,
+            "http_ms": 8.091513998806477,
+            "baseline_revision_http_ms": 1.0290639984305017,
+            "revision_http_ms": [
+              7.989441997779068
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              4.995005998353008
+            ],
+            "capture_lock_wait_ms": [
+              0.0015689984138589352
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0038239995774347335
+            ],
+            "light_request_lock_wait_ms": [
+              0.0012740019883494824
+            ],
+            "http_status": 202,
+            "response": {
+              "job_id": "59acc31e-99e8-402b-ab0e-1637302398ef",
+              "status": "running",
+              "source_revision": 170,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          }
+        ]
+      },
+      "commit_prepared_candidate": {
+        "http": {
+          "count": 30,
+          "p50_ms": 5.744767000578577,
+          "p95_ms": 7.009893000940792,
+          "max_ms": 7.328662999498192
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 0.9049790005519753,
+          "p95_ms": 1.0171020003326703,
+          "max_ms": 1.27429400163237
+        },
+        "revision_http": {
+          "count": 60,
+          "p50_ms": 3.4267009996256093,
+          "p95_ms": 4.49885899797664,
+          "max_ms": 5.326032998709707
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 30,
+          "p50_ms": 0.7965810000314377,
+          "p95_ms": 1.0767179992399178,
+          "max_ms": 1.1120169983769301
+        },
+        "publication_lock_wait": {
+          "count": 30,
+          "p50_ms": 0.0005879992386326194,
+          "p95_ms": 0.001177002559415996,
+          "max_ms": 0.0017650017980486155
+        },
+        "light_request_lock_hold": {
+          "count": 60,
+          "p50_ms": 0.002843997208401561,
+          "p95_ms": 0.005784997483715415,
+          "max_ms": 0.009805997251532972
+        },
+        "light_request_lock_wait": {
+          "count": 60,
+          "p50_ms": 0.0008829993021208793,
+          "p95_ms": 0.0015690020518377423,
+          "max_ms": 0.002549000782892108
+        },
+        "overlapping_revision_requests": 30,
+        "sample_summary": {
+          "samples": 30,
+          "http_status_counts": {
+            "200": 30
+          },
+          "retention": "All errors/refusals and timing maxima retained; distributions include every original sample."
+        },
+        "retained_samples": [
+          {
+            "sample_index": 0,
+            "http_ms": 6.202428001415683,
+            "baseline_revision_http_ms": 0.8674729979247786,
+            "revision_http_ms": [
+              4.481993997615064,
+              2.2389379992091563
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.7950119979796
+            ],
+            "publication_lock_wait_ms": [
+              0.001177002559415996
+            ],
+            "light_request_lock_hold_ms": [
+              0.0026469970180187374,
+              0.002745000529102981
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008830029400996864,
+              0.0008829993021208793
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "86b559a5-f232-47eb-b80f-e335a599dc03",
+              "status": "committed",
+              "revision": 94,
+              "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+            },
+            "snapshot_ms": [
+              0.4102530001546256
+            ],
+            "correct_publication": true
+          },
+          {
+            "sample_index": 21,
+            "http_ms": 5.653233998600626,
+            "baseline_revision_http_ms": 0.8391359988308977,
+            "revision_http_ms": [
+              3.9670209989708383,
+              2.115293002134422
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.7597129988425877
+            ],
+            "publication_lock_wait_ms": [
+              0.000490999809699133
+            ],
+            "light_request_lock_hold_ms": [
+              0.009805997251532972,
+              0.0028430004022084177
+            ],
+            "light_request_lock_wait_ms": [
+              0.002549000782892108,
+              0.0008830029400996864
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "52b7a8a8-e355-4926-bb0f-a524513d3487",
+              "status": "committed",
+              "revision": 157,
+              "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+            },
+            "snapshot_ms": [
+              0.4099590005353093
+            ],
+            "correct_publication": true
+          },
+          {
+            "sample_index": 24,
+            "http_ms": 7.328662999498192,
+            "baseline_revision_http_ms": 0.9872939990600571,
+            "revision_http_ms": [
+              4.791743001987925,
+              3.187304999300977
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              1.1120169983769301
+            ],
+            "publication_lock_wait_ms": [
+              0.0017650017980486155
+            ],
+            "light_request_lock_hold_ms": [
+              0.0029410002753138542,
+              0.006569996912730858
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008830029400996864,
+              0.0015690020518377423
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "df77f2dc-2b9b-4c07-95e4-b12457c3f90c",
+              "status": "committed",
+              "revision": 166,
+              "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+            },
+            "snapshot_ms": [
+              0.5802760024380405
+            ],
+            "correct_publication": true
+          },
+          {
+            "sample_index": 26,
+            "http_ms": 6.2510630014003254,
+            "baseline_revision_http_ms": 0.8606090013927314,
+            "revision_http_ms": [
+              5.326032998709707,
+              1.425100002961699
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.7263749976118561
+            ],
+            "publication_lock_wait_ms": [
+              0.000686002749716863
+            ],
+            "light_request_lock_hold_ms": [
+              0.0033330034057144076,
+              0.0031380004656966776
+            ],
+            "light_request_lock_wait_ms": [
+              0.0007849994290154427,
+              0.0008819988579489291
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "f7b576be-2bb8-4b54-bdc4-28d404e70926",
+              "status": "committed",
+              "revision": 172,
+              "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+            },
+            "snapshot_ms": [
+              0.3429889984545298
+            ],
+            "correct_publication": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "public-50000-authored-residues",
+      "qualification_scope": true,
+      "commands": 31,
+      "history_rows": 1,
+      "history_entries_including_children": 32,
+      "source_json_bytes": 41570,
+      "candidate_json_bytes": 91658,
+      "retained_recovery_encoded_bytes": 14304,
+      "retained_input_sources": 0,
+      "separate_native_evaluation_ms": 21.62701800261857,
+      "repeats": 30,
+      "independent_candidate_edit": null,
+      "capture_refusals": 1,
+      "correct_publications": 30,
+      "publication_snapshot": {
+        "count": 30,
+        "p50_ms": 0.4246660009812331,
+        "p95_ms": 0.5464479982038029,
+        "max_ms": 0.5534099982469343
+      },
+      "capture_without_worker": {
+        "http": {
+          "count": 30,
+          "p50_ms": 6.885023498398368,
+          "p95_ms": 7.886486000643345,
+          "max_ms": 50.43728799864766
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 0.9760174980328884,
+          "p95_ms": 1.1941849988943432,
+          "max_ms": 1.3236149970907718
+        },
+        "revision_http": {
+          "count": 40,
+          "p50_ms": 6.597777499337099,
+          "p95_ms": 7.159228000091389,
+          "max_ms": 49.87073899974348
+        },
+        "capture_lock_hold": {
+          "count": 30,
+          "p50_ms": 3.129699001874542,
+          "p95_ms": 3.3780170015234035,
+          "max_ms": 46.25151099753566
+        },
+        "capture_lock_wait": {
+          "count": 30,
+          "p50_ms": 0.0013729986676480621,
+          "p95_ms": 0.0014710021787323058,
+          "max_ms": 0.001568001607665792
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 40,
+          "p50_ms": 0.0030394985515158623,
+          "p95_ms": 0.004411998816067353,
+          "max_ms": 0.011864998668897897
+        },
+        "light_request_lock_wait": {
+          "count": 40,
+          "p50_ms": 0.0009804989531403407,
+          "p95_ms": 0.0012739983503706753,
+          "max_ms": 0.0029410002753138542
+        },
+        "overlapping_revision_requests": 30,
+        "sample_summary": {
+          "samples": 30,
+          "http_status_counts": {
+            "202": 29,
+            "413": 1
+          },
+          "retention": "All errors/refusals and timing maxima retained; distributions include every original sample."
+        },
+        "retained_samples": [
+          {
+            "sample_index": 0,
+            "http_ms": 7.886486000643345,
+            "baseline_revision_http_ms": 1.1752610007533804,
+            "revision_http_ms": [
+              7.703911000135122
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              3.3210490000783466
+            ],
+            "capture_lock_wait_ms": [
+              0.0013719982234761119
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0036279998312238604
+            ],
+            "light_request_lock_wait_ms": [
+              0.0010789990483317524
+            ],
+            "http_status": 202,
+            "response": {
+              "job_id": "002b2c98-dc1f-4548-ba17-27974fb73905",
+              "status": "running",
+              "source_revision": 182,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "sample_index": 12,
+            "http_ms": 7.724993000010727,
+            "baseline_revision_http_ms": 0.9051259985426441,
+            "revision_http_ms": [
+              7.159228000091389,
+              1.0927009971055668
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              3.242410999519052
+            ],
+            "capture_lock_wait_ms": [
+              0.001568001607665792
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.011864998668897897,
+              0.003235003532608971
+            ],
+            "light_request_lock_wait_ms": [
+              0.0029410002753138542,
+              0.0007849994290154427
+            ],
+            "http_status": 202,
+            "response": {
+              "job_id": "7a977a08-81bb-401a-9c78-40a18915ff2e",
+              "status": "running",
+              "source_revision": 218,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "sample_index": 20,
+            "http_ms": 50.43728799864766,
+            "baseline_revision_http_ms": 1.066225999238668,
+            "revision_http_ms": [
+              49.87073899974348,
+              1.191244002257008
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              46.25151099753566
+            ],
+            "capture_lock_wait_ms": [
+              0.0013730023056268692
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0031370000215247273,
+              0.004411998816067353
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009809991752263159,
+              0.0010789990483317524
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          }
+        ]
+      },
+      "commit_prepared_candidate": {
+        "http": {
+          "count": 30,
+          "p50_ms": 5.553367500397144,
+          "p95_ms": 6.291460002103122,
+          "max_ms": 7.113045001460705
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 0.9268440007872414,
+          "p95_ms": 1.0780910015455447,
+          "max_ms": 1.236935997440014
+        },
+        "revision_http": {
+          "count": 59,
+          "p50_ms": 3.191619001881918,
+          "p95_ms": 5.184542002098169,
+          "max_ms": 5.199152998102363
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 30,
+          "p50_ms": 0.7362790001934627,
+          "p95_ms": 0.9114989989029709,
+          "max_ms": 1.0395560020697303
+        },
+        "publication_lock_wait": {
+          "count": 30,
+          "p50_ms": 0.0005879992386326194,
+          "p95_ms": 0.0014709985407534987,
+          "max_ms": 0.0015689984138589352
+        },
+        "light_request_lock_hold": {
+          "count": 59,
+          "p50_ms": 0.0028430004022084177,
+          "p95_ms": 0.004117999196751043,
+          "max_ms": 0.011569998605409637
+        },
+        "light_request_lock_wait": {
+          "count": 59,
+          "p50_ms": 0.0008829993021208793,
+          "p95_ms": 0.0010789990483317524,
+          "max_ms": 0.003529999958118424
+        },
+        "overlapping_revision_requests": 30,
+        "sample_summary": {
+          "samples": 30,
+          "http_status_counts": {
+            "200": 30
+          },
+          "retention": "All errors/refusals and timing maxima retained; distributions include every original sample."
+        },
+        "retained_samples": [
+          {
+            "sample_index": 0,
+            "http_ms": 5.5864610003482085,
+            "baseline_revision_http_ms": 1.022299002215732,
+            "revision_http_ms": [
+              4.014183999970555,
+              2.0538140015560202
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.727747999917483
+            ],
+            "publication_lock_wait_ms": [
+              0.0005879992386326194
+            ],
+            "light_request_lock_hold_ms": [
+              0.002745000529102981,
+              0.0027460009732749313
+            ],
+            "light_request_lock_wait_ms": [
+              0.0010789990483317524,
+              0.0007839989848434925
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "8dc8160f-1cc1-41b9-8ad9-254cd79391ee",
+              "status": "committed",
+              "revision": 184,
+              "design_id": "a7097508-bb5a-416c-ad9e-b587c7b4cb22"
+            },
+            "snapshot_ms": [
+              0.41211599818780087
+            ],
+            "correct_publication": true
+          },
+          {
+            "sample_index": 1,
+            "http_ms": 5.807374000141863,
+            "baseline_revision_http_ms": 0.929834000999108,
+            "revision_http_ms": [
+              5.199152998102363,
+              1.1272150004515424
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.9114989989029709
+            ],
+            "publication_lock_wait_ms": [
+              0.0005879992386326194
+            ],
+            "light_request_lock_hold_ms": [
+              0.0027460009732749313,
+              0.0027460009732749313
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008819988579489291,
+              0.0008819988579489291
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "ad6abc7d-e21d-4387-83e1-3507f473ad57",
+              "status": "committed",
+              "revision": 187,
+              "design_id": "a7097508-bb5a-416c-ad9e-b587c7b4cb22"
+            },
+            "snapshot_ms": [
+              0.5534099982469343
+            ],
+            "correct_publication": true
+          },
+          {
+            "sample_index": 4,
+            "http_ms": 5.515275002835551,
+            "baseline_revision_http_ms": 0.9041449993674178,
+            "revision_http_ms": [
+              4.799685000762111,
+              1.2904729992442299
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.6912720018590335
+            ],
+            "publication_lock_wait_ms": [
+              0.0006869995559100062
+            ],
+            "light_request_lock_hold_ms": [
+              0.0028430004022084177,
+              0.011569998605409637
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008830029400996864,
+              0.003529999958118424
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "9c8419e1-48ea-4d83-b2f7-429df070ca5b",
+              "status": "committed",
+              "revision": 196,
+              "design_id": "a7097508-bb5a-416c-ad9e-b587c7b4cb22"
+            },
+            "snapshot_ms": [
+              0.3894660003425088
+            ],
+            "correct_publication": true
+          },
+          {
+            "sample_index": 19,
+            "http_ms": 7.113045001460705,
+            "baseline_revision_http_ms": 0.8718860008229967,
+            "revision_http_ms": [
+              2.6681150011427235,
+              4.566809999232646
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              1.0395560020697303
+            ],
+            "publication_lock_wait_ms": [
+              0.0007849994290154427
+            ],
+            "light_request_lock_hold_ms": [
+              0.0030390001484192908,
+              0.003235996700823307
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009809991752263159,
+              0.000981002813205123
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "1ae77259-ac9c-4ada-bc4a-e9a00d304e73",
+              "status": "committed",
+              "revision": 241,
+              "design_id": "a7097508-bb5a-416c-ad9e-b587c7b4cb22"
+            },
+            "snapshot_ms": [
+              0.542819998372579
+            ],
+            "correct_publication": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "public-63-source-rows-plus-one",
+      "qualification_scope": true,
+      "commands": 1,
+      "history_rows": 63,
+      "history_entries_including_children": 63,
+      "source_json_bytes": 306678,
+      "candidate_json_bytes": 315775,
+      "retained_recovery_encoded_bytes": 261348,
+      "retained_input_sources": 0,
+      "separate_native_evaluation_ms": 27.840233000461012,
+      "repeats": 30,
+      "independent_candidate_edit": null,
+      "capture_refusals": 0,
+      "correct_publications": 30,
+      "publication_snapshot": {
+        "count": 30,
+        "p50_ms": 0.5229154994594865,
+        "p95_ms": 0.7278459997905884,
+        "max_ms": 0.7393180021608714
+      },
+      "capture_without_worker": {
+        "http": {
+          "count": 30,
+          "p50_ms": 13.882463998015737,
+          "p95_ms": 15.112976998352678,
+          "max_ms": 15.208677003101911
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 0.9739094984979602,
+          "p95_ms": 1.088189997972222,
+          "max_ms": 1.164672001323197
+        },
+        "revision_http": {
+          "count": 55,
+          "p50_ms": 11.886942000273848,
+          "p95_ms": 13.856235000275774,
+          "max_ms": 15.085719998751301
+        },
+        "capture_lock_hold": {
+          "count": 30,
+          "p50_ms": 11.44889100214641,
+          "p95_ms": 12.708821002888726,
+          "max_ms": 12.807952000002842
+        },
+        "capture_lock_wait": {
+          "count": 30,
+          "p50_ms": 0.000784000803832896,
+          "p95_ms": 0.0012749987945426255,
+          "max_ms": 0.0013730023056268692
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 55,
+          "p50_ms": 0.0034320000850129873,
+          "p95_ms": 0.021081999875605106,
+          "max_ms": 0.03971199839725159
+        },
+        "light_request_lock_wait": {
+          "count": 55,
+          "p50_ms": 0.0009809991752263159,
+          "p95_ms": 6.1844850024499465,
+          "max_ms": 7.620565997058293
+        },
+        "overlapping_revision_requests": 38,
+        "sample_summary": {
+          "samples": 30,
+          "http_status_counts": {
+            "202": 30
+          },
+          "retention": "All errors/refusals and timing maxima retained; distributions include every original sample."
+        },
+        "retained_samples": [
+          {
+            "sample_index": 0,
+            "http_ms": 12.931204997585155,
+            "baseline_revision_http_ms": 0.9371890009788331,
+            "revision_http_ms": [
+              12.920909000968095
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              10.83248200302478
+            ],
+            "capture_lock_wait_ms": [
+              0.0006859991117380559
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.005294001311995089
+            ],
+            "light_request_lock_wait_ms": [
+              5.7015749989659525
+            ],
+            "http_status": 202,
+            "response": {
+              "job_id": "40e26ddc-d16b-41b2-b10e-ac33ae266656",
+              "status": "running",
+              "source_revision": 272,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "sample_index": 1,
+            "http_ms": 15.208677003101911,
+            "baseline_revision_http_ms": 0.9393460022693034,
+            "revision_http_ms": [
+              12.1251119999215,
+              3.6065780004719272
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              12.807952000002842
+            ],
+            "capture_lock_wait_ms": [
+              0.0012749987945426255
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.004117999196751043,
+              0.003529999958118424
+            ],
+            "light_request_lock_wait_ms": [
+              0.0010780022421386093,
+              0.0009809991752263159
+            ],
+            "http_status": 202,
+            "response": {
+              "job_id": "3ebd029f-8ffb-4a99-bcac-c2b537912257",
+              "status": "running",
+              "source_revision": 275,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "sample_index": 22,
+            "http_ms": 15.09552399875247,
+            "baseline_revision_http_ms": 0.998962001176551,
+            "revision_http_ms": [
+              15.085719998751301
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              12.572135001391871
+            ],
+            "capture_lock_wait_ms": [
+              0.0006869995559100062
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.014119999832473695
+            ],
+            "light_request_lock_wait_ms": [
+              7.620565997058293
+            ],
+            "http_status": 202,
+            "response": {
+              "job_id": "0a11716a-0995-42db-9c36-4d1a1351e53f",
+              "status": "running",
+              "source_revision": 338,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          }
+        ]
+      },
+      "commit_prepared_candidate": {
+        "http": {
+          "count": 30,
+          "p50_ms": 6.193750999955228,
+          "p95_ms": 6.950472998141777,
+          "max_ms": 7.059802999719977
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 0.8774750003794907,
+          "p95_ms": 0.9969029997591861,
+          "max_ms": 1.6427769987785723
+        },
+        "revision_http": {
+          "count": 60,
+          "p50_ms": 3.7607174999720883,
+          "p95_ms": 4.696142001193948,
+          "max_ms": 4.950391998136183
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 30,
+          "p50_ms": 1.010973499433021,
+          "p95_ms": 1.1898709999513812,
+          "max_ms": 1.321849998930702
+        },
+        "publication_lock_wait": {
+          "count": 30,
+          "p50_ms": 0.0005880010576220229,
+          "p95_ms": 0.001177002559415996,
+          "max_ms": 0.0012749987945426255
+        },
+        "light_request_lock_hold": {
+          "count": 60,
+          "p50_ms": 0.002844000846380368,
+          "p95_ms": 0.005196998245082796,
+          "max_ms": 0.013335000403458253
+        },
+        "light_request_lock_wait": {
+          "count": 60,
+          "p50_ms": 0.0008829993021208793,
+          "p95_ms": 0.0012750024325214326,
+          "max_ms": 0.0038250000216066837
+        },
+        "overlapping_revision_requests": 30,
+        "sample_summary": {
+          "samples": 30,
+          "http_status_counts": {
+            "200": 30
+          },
+          "retention": "All errors/refusals and timing maxima retained; distributions include every original sample."
+        },
+        "retained_samples": [
+          {
+            "sample_index": 0,
+            "http_ms": 6.0988850018475205,
+            "baseline_revision_http_ms": 0.8969869995780755,
+            "revision_http_ms": [
+              4.216565001115669,
+              2.332971002033446
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.9754290003911592
+            ],
+            "publication_lock_wait_ms": [
+              0.000490999809699133
+            ],
+            "light_request_lock_hold_ms": [
+              0.0027460009732749313,
+              0.002745000529102981
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008819988579489291,
+              0.0007849994290154427
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "06c3ecca-f02e-4b2d-84a5-e7b2170c7897",
+              "status": "committed",
+              "revision": 274,
+              "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+            },
+            "snapshot_ms": [
+              0.4940880025969818
+            ],
+            "correct_publication": true
+          },
+          {
+            "sample_index": 3,
+            "http_ms": 6.599445001484128,
+            "baseline_revision_http_ms": 0.9482690002187155,
+            "revision_http_ms": [
+              4.707810003310442,
+              2.925699998741038
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              1.0135720003745519
+            ],
+            "publication_lock_wait_ms": [
+              0.0004899993655271828
+            ],
+            "light_request_lock_hold_ms": [
+              0.0036279998312238604,
+              0.013335000403458253
+            ],
+            "light_request_lock_wait_ms": [
+              0.0010789990483317524,
+              0.0038250000216066837
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "9fadf40e-785d-4ca0-b211-a610bcfb0333",
+              "status": "committed",
+              "revision": 283,
+              "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+            },
+            "snapshot_ms": [
+              0.5190919982851483
+            ],
+            "correct_publication": true
+          },
+          {
+            "sample_index": 8,
+            "http_ms": 6.950472998141777,
+            "baseline_revision_http_ms": 0.9321879988419823,
+            "revision_http_ms": [
+              4.315794001740869,
+              3.523037001286866
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              1.321849998930702
+            ],
+            "publication_lock_wait_ms": [
+              0.001177002559415996
+            ],
+            "light_request_lock_hold_ms": [
+              0.002844000846380368,
+              0.006079000741010532
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009799987310543656,
+              0.0013729986676480621
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "22babda2-3a45-4a83-b49b-e5e4160f762f",
+              "status": "committed",
+              "revision": 298,
+              "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+            },
+            "snapshot_ms": [
+              0.7189229982031975
+            ],
+            "correct_publication": true
+          },
+          {
+            "sample_index": 27,
+            "http_ms": 7.059802999719977,
+            "baseline_revision_http_ms": 0.9548380003252532,
+            "revision_http_ms": [
+              4.950391998136183,
+              2.615852001326857
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              1.0667159986041952
+            ],
+            "publication_lock_wait_ms": [
+              0.0006869995559100062
+            ],
+            "light_request_lock_hold_ms": [
+              0.0031379968277178705,
+              0.0029420007194858044
+            ],
+            "light_request_lock_wait_ms": [
+              0.000981002813205123,
+              0.0008819988579489291
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "380ec2cf-bd6d-4292-b713-f186f05f59ca",
+              "status": "committed",
+              "revision": 355,
+              "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+            },
+            "snapshot_ms": [
+              0.5391920021793339
+            ],
+            "correct_publication": true
+          }
+        ]
+      }
+    }
+  ],
+  "real_spawned_jobs": [
+    {
+      "case": "32-gold-commands",
+      "mode": "complete",
+      "start_http_status": 202,
+      "poll": {
+        "job_id": "4dc540fe-3fe6-4dd3-b909-a37575d8336c",
+        "status": "complete",
+        "stale": false,
+        "source_busy": false,
+        "result": {
+          "status": "ready",
+          "issues": [],
+          "validation": {
+            "passed": false,
+            "results": [
+              {
+                "ok": true,
+                "message": "Helix IDs are unique."
+              },
+              {
+                "ok": true,
+                "message": "Strand IDs are unique."
+              },
+              {
+                "ok": true,
+                "message": "All domain helix references are valid."
+              },
+              {
+                "ok": false,
+                "message": "No scaffold strand defined."
+              }
+            ]
+          },
+          "batch": {
+            "phase": "complete",
+            "source_design_id": "01c08951-6121-450f-8634-67e9ef65ec22",
+            "source_revision": 362,
+            "commands": [
+              {
+                "command_index": 0,
+                "kind": "nanoparticle-patch",
+                "feature_id": "92036d7d-ce1e-5852-92b3-e879e8b9ee6a",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 1,
+                "kind": "nanoparticle-patch",
+                "feature_id": "e87c0c1b-bcad-5213-804c-2e780bdb9038",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 2,
+                "kind": "nanoparticle-patch",
+                "feature_id": "5f3632ab-5e19-5c82-a945-4fdfd0f424f6",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 3,
+                "kind": "nanoparticle-patch",
+                "feature_id": "4a5c39a4-d415-5736-bc83-645f904e642d",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 4,
+                "kind": "nanoparticle-patch",
+                "feature_id": "7984d320-cd35-5d93-bd4e-3cac549ca4d9",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 5,
+                "kind": "nanoparticle-patch",
+                "feature_id": "0e4dfb36-8b60-5772-b3b3-2a58e778e249",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 6,
+                "kind": "nanoparticle-patch",
+                "feature_id": "bdf9dad7-54bf-5c7d-b7e2-e3eab9fea86e",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 7,
+                "kind": "nanoparticle-patch",
+                "feature_id": "e48d5c52-dea0-5b91-b237-eed796f13f8a",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 8,
+                "kind": "nanoparticle-patch",
+                "feature_id": "870d3819-5e04-535c-a811-173a64504d7d",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 9,
+                "kind": "nanoparticle-patch",
+                "feature_id": "981ff0dc-40ed-5bf2-bc1b-553ef8900468",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 10,
+                "kind": "nanoparticle-patch",
+                "feature_id": "c799b228-a52e-5254-8273-0ee065e94eae",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 11,
+                "kind": "nanoparticle-patch",
+                "feature_id": "94eb876b-4ddb-5915-bb2d-bb6695dcf300",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 12,
+                "kind": "nanoparticle-patch",
+                "feature_id": "1dba5210-6209-5ed4-9d9f-e59f3876992d",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 13,
+                "kind": "nanoparticle-patch",
+                "feature_id": "70c347cd-b03c-5364-8db0-737afdf8f032",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 14,
+                "kind": "nanoparticle-patch",
+                "feature_id": "caea3994-df28-5bbf-b007-49e27685beec",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 15,
+                "kind": "nanoparticle-patch",
+                "feature_id": "17e52792-3650-5f29-8a7f-9c1ca105627e",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 16,
+                "kind": "nanoparticle-patch",
+                "feature_id": "c6ba2c22-602e-5105-a677-309ba2ad6cf9",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 17,
+                "kind": "nanoparticle-patch",
+                "feature_id": "b181cddd-c497-5bc3-8b22-0ea9a68a4ff1",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 18,
+                "kind": "nanoparticle-patch",
+                "feature_id": "6b35bfbb-9e72-5696-9cdc-773987935b0a",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 19,
+                "kind": "nanoparticle-patch",
+                "feature_id": "93a83572-5296-56c7-bcdf-3d170d784089",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 20,
+                "kind": "nanoparticle-patch",
+                "feature_id": "d261edff-3fa9-51bd-a84e-8a1699667869",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 21,
+                "kind": "nanoparticle-patch",
+                "feature_id": "b611969d-cc56-531c-ba03-4652bb610350",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 22,
+                "kind": "nanoparticle-patch",
+                "feature_id": "8391ec9d-7891-56e5-bd47-e7f88e713dc9",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 23,
+                "kind": "nanoparticle-patch",
+                "feature_id": "e9f1d74e-90d7-5de3-8af4-7dc7a87afdc5",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 24,
+                "kind": "nanoparticle-patch",
+                "feature_id": "3a4fcb80-fac0-5873-b907-6e2ed16dd92f",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 25,
+                "kind": "nanoparticle-patch",
+                "feature_id": "dec9931d-d92f-5e7a-9911-23a3c09dd3eb",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 26,
+                "kind": "nanoparticle-patch",
+                "feature_id": "1a2813ef-3648-5008-b966-2be0b2a30850",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 27,
+                "kind": "nanoparticle-patch",
+                "feature_id": "fa667227-eb6c-549c-b906-9f5eaf989d43",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 28,
+                "kind": "nanoparticle-patch",
+                "feature_id": "51a6f9d8-0f3b-59ba-816c-305485b84d68",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 29,
+                "kind": "nanoparticle-patch",
+                "feature_id": "b270b127-1c61-5446-92f4-b62f04706a75",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 30,
+                "kind": "nanoparticle-patch",
+                "feature_id": "07418092-88a4-5225-a58a-730016297f23",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 31,
+                "kind": "nanoparticle-patch",
+                "feature_id": "757320da-fa6e-5fd3-996c-9458fcbb3141",
+                "child_id": null,
+                "outputs": []
+              }
+            ],
+            "completed": [
+              "92036d7d-ce1e-5852-92b3-e879e8b9ee6a",
+              "e87c0c1b-bcad-5213-804c-2e780bdb9038",
+              "5f3632ab-5e19-5c82-a945-4fdfd0f424f6",
+              "4a5c39a4-d415-5736-bc83-645f904e642d",
+              "7984d320-cd35-5d93-bd4e-3cac549ca4d9",
+              "0e4dfb36-8b60-5772-b3b3-2a58e778e249",
+              "bdf9dad7-54bf-5c7d-b7e2-e3eab9fea86e",
+              "e48d5c52-dea0-5b91-b237-eed796f13f8a",
+              "870d3819-5e04-535c-a811-173a64504d7d",
+              "981ff0dc-40ed-5bf2-bc1b-553ef8900468",
+              "c799b228-a52e-5254-8273-0ee065e94eae",
+              "94eb876b-4ddb-5915-bb2d-bb6695dcf300",
+              "1dba5210-6209-5ed4-9d9f-e59f3876992d",
+              "70c347cd-b03c-5364-8db0-737afdf8f032",
+              "caea3994-df28-5bbf-b007-49e27685beec",
+              "17e52792-3650-5f29-8a7f-9c1ca105627e",
+              "c6ba2c22-602e-5105-a677-309ba2ad6cf9",
+              "b181cddd-c497-5bc3-8b22-0ea9a68a4ff1",
+              "6b35bfbb-9e72-5696-9cdc-773987935b0a",
+              "93a83572-5296-56c7-bcdf-3d170d784089",
+              "d261edff-3fa9-51bd-a84e-8a1699667869",
+              "b611969d-cc56-531c-ba03-4652bb610350",
+              "8391ec9d-7891-56e5-bd47-e7f88e713dc9",
+              "e9f1d74e-90d7-5de3-8af4-7dc7a87afdc5",
+              "3a4fcb80-fac0-5873-b907-6e2ed16dd92f",
+              "dec9931d-d92f-5e7a-9911-23a3c09dd3eb",
+              "1a2813ef-3648-5008-b966-2be0b2a30850",
+              "fa667227-eb6c-549c-b906-9f5eaf989d43",
+              "51a6f9d8-0f3b-59ba-816c-305485b84d68",
+              "b270b127-1c61-5446-92f4-b62f04706a75",
+              "07418092-88a4-5225-a58a-730016297f23",
+              "757320da-fa6e-5fd3-996c-9458fcbb3141"
+            ],
+            "not_evaluated": [],
+            "candidate_replay_verified": false,
+            "authoring_changes": {
+              "basis": "captured_materialized_state",
+              "changed_fields": [
+                "nanoparticles"
+              ],
+              "record_counts": {
+                "nanoparticles": {
+                  "before": 32,
+                  "after": 32
+                }
+              },
+              "visual_comparison": false,
+              "scientific_qualification": false
+            }
+          },
+          "source_assessment": {
+            "scope": "part",
+            "contract_version": 1,
+            "status": "verified",
+            "issues": [],
+            "verification_scope": "authoring_reproducibility",
+            "integrity_checked": false,
+            "excluded_roles": [
+              "presentation",
+              "physical",
+              "document_identity",
+              "repair_draft"
+            ],
+            "checked_commands": 32,
+            "proof_coverage": "versioned_commands",
+            "native_editable": true,
+            "dependencies": {
+              "complete": true,
+              "parents": {
+                "217888b2-2060-5c38-aed9-0ca0b9d85d59": [],
+                "1f8d84a0-bd82-599e-b0ff-23ea6e427193": [
+                  "217888b2-2060-5c38-aed9-0ca0b9d85d59"
+                ],
+                "86e175c8-78fc-55fe-a577-8db5b879a4bd": [
+                  "1f8d84a0-bd82-599e-b0ff-23ea6e427193"
+                ],
+                "0949b5dd-e4b4-51f2-8e83-7bd7ea791466": [
+                  "86e175c8-78fc-55fe-a577-8db5b879a4bd"
+                ],
+                "31c3a6b9-669d-5a9e-9720-014a1c24915e": [
+                  "0949b5dd-e4b4-51f2-8e83-7bd7ea791466"
+                ],
+                "cd2a95a6-ff4d-5ed2-bd94-4919abcea68c": [
+                  "31c3a6b9-669d-5a9e-9720-014a1c24915e"
+                ],
+                "a5af3210-10e7-5af5-88ea-af73e8b053a5": [
+                  "cd2a95a6-ff4d-5ed2-bd94-4919abcea68c"
+                ],
+                "e5720214-8444-5d6f-8bd8-976e429d37bd": [
+                  "a5af3210-10e7-5af5-88ea-af73e8b053a5"
+                ],
+                "d74a1522-f301-5f74-8c0d-2ffb6846d8e1": [
+                  "e5720214-8444-5d6f-8bd8-976e429d37bd"
+                ],
+                "368d026c-f99c-5ee7-9db9-8d5327336fb1": [
+                  "d74a1522-f301-5f74-8c0d-2ffb6846d8e1"
+                ],
+                "b23ee16e-68a8-536f-bfa2-ec19d7d8d5f6": [
+                  "368d026c-f99c-5ee7-9db9-8d5327336fb1"
+                ],
+                "b1c390b3-2ca9-5440-93fc-7c2770ad7738": [
+                  "b23ee16e-68a8-536f-bfa2-ec19d7d8d5f6"
+                ],
+                "25a2fcab-d70c-56e3-9efb-ca79a5ba5d4d": [
+                  "b1c390b3-2ca9-5440-93fc-7c2770ad7738"
+                ],
+                "8143a75d-71c9-50e1-9478-20c457bfdd8d": [
+                  "25a2fcab-d70c-56e3-9efb-ca79a5ba5d4d"
+                ],
+                "6cc2eba9-f755-592f-8bae-28657cc5dcec": [
+                  "8143a75d-71c9-50e1-9478-20c457bfdd8d"
+                ],
+                "7b6f9b5c-cd1b-54f8-a68a-65beac215beb": [
+                  "6cc2eba9-f755-592f-8bae-28657cc5dcec"
+                ],
+                "3ad7bbea-36d1-54d3-a796-4418a5ffcecd": [
+                  "7b6f9b5c-cd1b-54f8-a68a-65beac215beb"
+                ],
+                "c4320387-f3fd-5364-9f8f-2cdbda22ef50": [
+                  "3ad7bbea-36d1-54d3-a796-4418a5ffcecd"
+                ],
+                "1c4334f4-0d4b-5f28-bc83-f7d4647c0db3": [
+                  "c4320387-f3fd-5364-9f8f-2cdbda22ef50"
+                ],
+                "f516cdc5-58c6-5e4a-a1af-ad78fba33f40": [
+                  "1c4334f4-0d4b-5f28-bc83-f7d4647c0db3"
+                ],
+                "6681197b-12e8-5509-aa93-b10b4e5739f4": [
+                  "f516cdc5-58c6-5e4a-a1af-ad78fba33f40"
+                ],
+                "f7f5a726-920c-53f9-a5f3-782601d3d5d7": [
+                  "6681197b-12e8-5509-aa93-b10b4e5739f4"
+                ],
+                "683ab873-4c12-509d-a958-f73b618416f1": [
+                  "f7f5a726-920c-53f9-a5f3-782601d3d5d7"
+                ],
+                "c8a2a910-70f3-54c7-906c-2dd15c2aa6bf": [
+                  "683ab873-4c12-509d-a958-f73b618416f1"
+                ],
+                "2e539820-dd96-5964-964c-17b9095016fc": [
+                  "c8a2a910-70f3-54c7-906c-2dd15c2aa6bf"
+                ],
+                "71b33d8b-99c9-5bf7-ad57-80fb65ab0555": [
+                  "2e539820-dd96-5964-964c-17b9095016fc"
+                ],
+                "8734f66f-281b-5f23-ad86-307df836256c": [
+                  "71b33d8b-99c9-5bf7-ad57-80fb65ab0555"
+                ],
+                "a98a5648-e5a7-572a-8033-d2481a4c99d6": [
+                  "8734f66f-281b-5f23-ad86-307df836256c"
+                ],
+                "84bc2f26-031a-53b2-ac29-638ab30ea519": [
+                  "a98a5648-e5a7-572a-8033-d2481a4c99d6"
+                ],
+                "57f53c95-ca93-5771-8bd6-9ef0743734d2": [
+                  "84bc2f26-031a-53b2-ac29-638ab30ea519"
+                ],
+                "80d38b4a-863a-5744-8fb6-78238330ebe6": [
+                  "57f53c95-ca93-5771-8bd6-9ef0743734d2"
+                ],
+                "0a16df97-f62d-56f7-a380-580e0b427789": [
+                  "80d38b4a-863a-5744-8fb6-78238330ebe6"
+                ]
+              }
+            },
+            "recipe_fingerprint": "d2ee216455799b97d26262d76c11220a4b3c01e1096b787524e09f6ba236ff37",
+            "authoring_fingerprint": "bf3c31200577669d01ede68ab2571e3392ab98718b4af277cff7e2e2cb63e7be",
+            "imported_sources": []
+          },
+          "source_revision": 362,
+          "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+        }
+      },
+      "commit_http_status": 200,
+      "commit": {
+        "job_id": "4dc540fe-3fe6-4dd3-b909-a37575d8336c",
+        "status": "committed",
+        "revision": 363,
+        "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+      },
+      "source_guard_correct": true,
+      "cold_replay": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "verified",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 64,
+        "proof_coverage": "versioned_commands",
+        "native_editable": true,
+        "dependencies": {
+          "complete": true,
+          "parents": {
+            "217888b2-2060-5c38-aed9-0ca0b9d85d59": [],
+            "1f8d84a0-bd82-599e-b0ff-23ea6e427193": [
+              "217888b2-2060-5c38-aed9-0ca0b9d85d59"
+            ],
+            "86e175c8-78fc-55fe-a577-8db5b879a4bd": [
+              "1f8d84a0-bd82-599e-b0ff-23ea6e427193"
+            ],
+            "0949b5dd-e4b4-51f2-8e83-7bd7ea791466": [
+              "86e175c8-78fc-55fe-a577-8db5b879a4bd"
+            ],
+            "31c3a6b9-669d-5a9e-9720-014a1c24915e": [
+              "0949b5dd-e4b4-51f2-8e83-7bd7ea791466"
+            ],
+            "cd2a95a6-ff4d-5ed2-bd94-4919abcea68c": [
+              "31c3a6b9-669d-5a9e-9720-014a1c24915e"
+            ],
+            "a5af3210-10e7-5af5-88ea-af73e8b053a5": [
+              "cd2a95a6-ff4d-5ed2-bd94-4919abcea68c"
+            ],
+            "e5720214-8444-5d6f-8bd8-976e429d37bd": [
+              "a5af3210-10e7-5af5-88ea-af73e8b053a5"
+            ],
+            "d74a1522-f301-5f74-8c0d-2ffb6846d8e1": [
+              "e5720214-8444-5d6f-8bd8-976e429d37bd"
+            ],
+            "368d026c-f99c-5ee7-9db9-8d5327336fb1": [
+              "d74a1522-f301-5f74-8c0d-2ffb6846d8e1"
+            ],
+            "b23ee16e-68a8-536f-bfa2-ec19d7d8d5f6": [
+              "368d026c-f99c-5ee7-9db9-8d5327336fb1"
+            ],
+            "b1c390b3-2ca9-5440-93fc-7c2770ad7738": [
+              "b23ee16e-68a8-536f-bfa2-ec19d7d8d5f6"
+            ],
+            "25a2fcab-d70c-56e3-9efb-ca79a5ba5d4d": [
+              "b1c390b3-2ca9-5440-93fc-7c2770ad7738"
+            ],
+            "8143a75d-71c9-50e1-9478-20c457bfdd8d": [
+              "25a2fcab-d70c-56e3-9efb-ca79a5ba5d4d"
+            ],
+            "6cc2eba9-f755-592f-8bae-28657cc5dcec": [
+              "8143a75d-71c9-50e1-9478-20c457bfdd8d"
+            ],
+            "7b6f9b5c-cd1b-54f8-a68a-65beac215beb": [
+              "6cc2eba9-f755-592f-8bae-28657cc5dcec"
+            ],
+            "3ad7bbea-36d1-54d3-a796-4418a5ffcecd": [
+              "7b6f9b5c-cd1b-54f8-a68a-65beac215beb"
+            ],
+            "c4320387-f3fd-5364-9f8f-2cdbda22ef50": [
+              "3ad7bbea-36d1-54d3-a796-4418a5ffcecd"
+            ],
+            "1c4334f4-0d4b-5f28-bc83-f7d4647c0db3": [
+              "c4320387-f3fd-5364-9f8f-2cdbda22ef50"
+            ],
+            "f516cdc5-58c6-5e4a-a1af-ad78fba33f40": [
+              "1c4334f4-0d4b-5f28-bc83-f7d4647c0db3"
+            ],
+            "6681197b-12e8-5509-aa93-b10b4e5739f4": [
+              "f516cdc5-58c6-5e4a-a1af-ad78fba33f40"
+            ],
+            "f7f5a726-920c-53f9-a5f3-782601d3d5d7": [
+              "6681197b-12e8-5509-aa93-b10b4e5739f4"
+            ],
+            "683ab873-4c12-509d-a958-f73b618416f1": [
+              "f7f5a726-920c-53f9-a5f3-782601d3d5d7"
+            ],
+            "c8a2a910-70f3-54c7-906c-2dd15c2aa6bf": [
+              "683ab873-4c12-509d-a958-f73b618416f1"
+            ],
+            "2e539820-dd96-5964-964c-17b9095016fc": [
+              "c8a2a910-70f3-54c7-906c-2dd15c2aa6bf"
+            ],
+            "71b33d8b-99c9-5bf7-ad57-80fb65ab0555": [
+              "2e539820-dd96-5964-964c-17b9095016fc"
+            ],
+            "8734f66f-281b-5f23-ad86-307df836256c": [
+              "71b33d8b-99c9-5bf7-ad57-80fb65ab0555"
+            ],
+            "a98a5648-e5a7-572a-8033-d2481a4c99d6": [
+              "8734f66f-281b-5f23-ad86-307df836256c"
+            ],
+            "84bc2f26-031a-53b2-ac29-638ab30ea519": [
+              "a98a5648-e5a7-572a-8033-d2481a4c99d6"
+            ],
+            "57f53c95-ca93-5771-8bd6-9ef0743734d2": [
+              "84bc2f26-031a-53b2-ac29-638ab30ea519"
+            ],
+            "80d38b4a-863a-5744-8fb6-78238330ebe6": [
+              "57f53c95-ca93-5771-8bd6-9ef0743734d2"
+            ],
+            "0a16df97-f62d-56f7-a380-580e0b427789": [
+              "80d38b4a-863a-5744-8fb6-78238330ebe6"
+            ],
+            "92036d7d-ce1e-5852-92b3-e879e8b9ee6a": [
+              "0a16df97-f62d-56f7-a380-580e0b427789",
+              "217888b2-2060-5c38-aed9-0ca0b9d85d59"
+            ],
+            "e87c0c1b-bcad-5213-804c-2e780bdb9038": [
+              "1f8d84a0-bd82-599e-b0ff-23ea6e427193",
+              "92036d7d-ce1e-5852-92b3-e879e8b9ee6a"
+            ],
+            "5f3632ab-5e19-5c82-a945-4fdfd0f424f6": [
+              "86e175c8-78fc-55fe-a577-8db5b879a4bd",
+              "e87c0c1b-bcad-5213-804c-2e780bdb9038"
+            ],
+            "4a5c39a4-d415-5736-bc83-645f904e642d": [
+              "0949b5dd-e4b4-51f2-8e83-7bd7ea791466",
+              "5f3632ab-5e19-5c82-a945-4fdfd0f424f6"
+            ],
+            "7984d320-cd35-5d93-bd4e-3cac549ca4d9": [
+              "31c3a6b9-669d-5a9e-9720-014a1c24915e",
+              "4a5c39a4-d415-5736-bc83-645f904e642d"
+            ],
+            "0e4dfb36-8b60-5772-b3b3-2a58e778e249": [
+              "7984d320-cd35-5d93-bd4e-3cac549ca4d9",
+              "cd2a95a6-ff4d-5ed2-bd94-4919abcea68c"
+            ],
+            "bdf9dad7-54bf-5c7d-b7e2-e3eab9fea86e": [
+              "0e4dfb36-8b60-5772-b3b3-2a58e778e249",
+              "a5af3210-10e7-5af5-88ea-af73e8b053a5"
+            ],
+            "e48d5c52-dea0-5b91-b237-eed796f13f8a": [
+              "bdf9dad7-54bf-5c7d-b7e2-e3eab9fea86e",
+              "e5720214-8444-5d6f-8bd8-976e429d37bd"
+            ],
+            "870d3819-5e04-535c-a811-173a64504d7d": [
+              "d74a1522-f301-5f74-8c0d-2ffb6846d8e1",
+              "e48d5c52-dea0-5b91-b237-eed796f13f8a"
+            ],
+            "981ff0dc-40ed-5bf2-bc1b-553ef8900468": [
+              "368d026c-f99c-5ee7-9db9-8d5327336fb1",
+              "870d3819-5e04-535c-a811-173a64504d7d"
+            ],
+            "c799b228-a52e-5254-8273-0ee065e94eae": [
+              "981ff0dc-40ed-5bf2-bc1b-553ef8900468",
+              "b23ee16e-68a8-536f-bfa2-ec19d7d8d5f6"
+            ],
+            "94eb876b-4ddb-5915-bb2d-bb6695dcf300": [
+              "b1c390b3-2ca9-5440-93fc-7c2770ad7738",
+              "c799b228-a52e-5254-8273-0ee065e94eae"
+            ],
+            "1dba5210-6209-5ed4-9d9f-e59f3876992d": [
+              "25a2fcab-d70c-56e3-9efb-ca79a5ba5d4d",
+              "94eb876b-4ddb-5915-bb2d-bb6695dcf300"
+            ],
+            "70c347cd-b03c-5364-8db0-737afdf8f032": [
+              "1dba5210-6209-5ed4-9d9f-e59f3876992d",
+              "8143a75d-71c9-50e1-9478-20c457bfdd8d"
+            ],
+            "caea3994-df28-5bbf-b007-49e27685beec": [
+              "6cc2eba9-f755-592f-8bae-28657cc5dcec",
+              "70c347cd-b03c-5364-8db0-737afdf8f032"
+            ],
+            "17e52792-3650-5f29-8a7f-9c1ca105627e": [
+              "7b6f9b5c-cd1b-54f8-a68a-65beac215beb",
+              "caea3994-df28-5bbf-b007-49e27685beec"
+            ],
+            "c6ba2c22-602e-5105-a677-309ba2ad6cf9": [
+              "17e52792-3650-5f29-8a7f-9c1ca105627e",
+              "3ad7bbea-36d1-54d3-a796-4418a5ffcecd"
+            ],
+            "b181cddd-c497-5bc3-8b22-0ea9a68a4ff1": [
+              "c4320387-f3fd-5364-9f8f-2cdbda22ef50",
+              "c6ba2c22-602e-5105-a677-309ba2ad6cf9"
+            ],
+            "6b35bfbb-9e72-5696-9cdc-773987935b0a": [
+              "1c4334f4-0d4b-5f28-bc83-f7d4647c0db3",
+              "b181cddd-c497-5bc3-8b22-0ea9a68a4ff1"
+            ],
+            "93a83572-5296-56c7-bcdf-3d170d784089": [
+              "6b35bfbb-9e72-5696-9cdc-773987935b0a",
+              "f516cdc5-58c6-5e4a-a1af-ad78fba33f40"
+            ],
+            "d261edff-3fa9-51bd-a84e-8a1699667869": [
+              "6681197b-12e8-5509-aa93-b10b4e5739f4",
+              "93a83572-5296-56c7-bcdf-3d170d784089"
+            ],
+            "b611969d-cc56-531c-ba03-4652bb610350": [
+              "d261edff-3fa9-51bd-a84e-8a1699667869",
+              "f7f5a726-920c-53f9-a5f3-782601d3d5d7"
+            ],
+            "8391ec9d-7891-56e5-bd47-e7f88e713dc9": [
+              "683ab873-4c12-509d-a958-f73b618416f1",
+              "b611969d-cc56-531c-ba03-4652bb610350"
+            ],
+            "e9f1d74e-90d7-5de3-8af4-7dc7a87afdc5": [
+              "8391ec9d-7891-56e5-bd47-e7f88e713dc9",
+              "c8a2a910-70f3-54c7-906c-2dd15c2aa6bf"
+            ],
+            "3a4fcb80-fac0-5873-b907-6e2ed16dd92f": [
+              "2e539820-dd96-5964-964c-17b9095016fc",
+              "e9f1d74e-90d7-5de3-8af4-7dc7a87afdc5"
+            ],
+            "dec9931d-d92f-5e7a-9911-23a3c09dd3eb": [
+              "3a4fcb80-fac0-5873-b907-6e2ed16dd92f",
+              "71b33d8b-99c9-5bf7-ad57-80fb65ab0555"
+            ],
+            "1a2813ef-3648-5008-b966-2be0b2a30850": [
+              "8734f66f-281b-5f23-ad86-307df836256c",
+              "dec9931d-d92f-5e7a-9911-23a3c09dd3eb"
+            ],
+            "fa667227-eb6c-549c-b906-9f5eaf989d43": [
+              "1a2813ef-3648-5008-b966-2be0b2a30850",
+              "a98a5648-e5a7-572a-8033-d2481a4c99d6"
+            ],
+            "51a6f9d8-0f3b-59ba-816c-305485b84d68": [
+              "84bc2f26-031a-53b2-ac29-638ab30ea519",
+              "fa667227-eb6c-549c-b906-9f5eaf989d43"
+            ],
+            "b270b127-1c61-5446-92f4-b62f04706a75": [
+              "51a6f9d8-0f3b-59ba-816c-305485b84d68",
+              "57f53c95-ca93-5771-8bd6-9ef0743734d2"
+            ],
+            "07418092-88a4-5225-a58a-730016297f23": [
+              "80d38b4a-863a-5744-8fb6-78238330ebe6",
+              "b270b127-1c61-5446-92f4-b62f04706a75"
+            ],
+            "757320da-fa6e-5fd3-996c-9458fcbb3141": [
+              "07418092-88a4-5225-a58a-730016297f23",
+              "0a16df97-f62d-56f7-a380-580e0b427789"
+            ]
+          }
+        },
+        "recipe_fingerprint": "6ceb845a833bdd9356895eceb186944a6eb62a20c0ffdfc757369cead2098f9a",
+        "authoring_fingerprint": "11f2471a2990c58c5db6016db23202e4cbc5f5fcdea8aab73e6dda2d1c43445d",
+        "imported_sources": [],
+        "elapsed_ms": 1139.298655998573
+      },
+      "shared_admission_released_after_reaping": true,
+      "start_http_ms": 9.634668997023255,
+      "parent_worker_constructor_ms": 1.3458730027195998,
+      "process_start_call_ms": 0.4477090005821083,
+      "start_to_supervisor_reaped_ms": 1187.4541569995927,
+      "commit_http_ms": 5.132083999342285
+    },
+    {
+      "case": "mixed-prefix-37-rows-plus-27-commands",
+      "mode": "complete",
+      "start_http_status": 202,
+      "poll": {
+        "job_id": "4b9baea2-8848-479b-8124-ff238cd1d46b",
+        "status": "complete",
+        "stale": false,
+        "source_busy": false,
+        "result": {
+          "status": "ready",
+          "issues": [],
+          "validation": {
+            "passed": true,
+            "results": [
+              {
+                "ok": true,
+                "message": "Helix IDs are unique."
+              },
+              {
+                "ok": true,
+                "message": "Strand IDs are unique."
+              },
+              {
+                "ok": true,
+                "message": "All domain helix references are valid."
+              },
+              {
+                "ok": true,
+                "message": "Multi-scaffold design: 5 scaffold strands."
+              }
+            ]
+          },
+          "batch": {
+            "phase": "complete",
+            "source_design_id": "01c08951-6121-450f-8634-67e9ef65ec22",
+            "source_revision": 364,
+            "commands": [
+              {
+                "command_index": 0,
+                "kind": "nanoparticle-patch",
+                "feature_id": "a1bcb47f-4ea5-5fa1-a46f-7bb616758593",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 1,
+                "kind": "nanoparticle-patch",
+                "feature_id": "6f12656f-2c5b-5537-88db-d054a22b8afb",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 2,
+                "kind": "nanoparticle-patch",
+                "feature_id": "05e7d922-7e68-52ab-8fc6-100a7ec05291",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 3,
+                "kind": "nanoparticle-patch",
+                "feature_id": "caeeed96-d85d-5967-bdc8-b6fc972ff00e",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 4,
+                "kind": "nanoparticle-patch",
+                "feature_id": "b4244f6b-22a2-559c-9086-c2bda0753922",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 5,
+                "kind": "nanoparticle-patch",
+                "feature_id": "480e97fb-0902-53e1-a067-001f482eb057",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 6,
+                "kind": "nanoparticle-patch",
+                "feature_id": "da40eba5-e0cb-578a-a630-52dd09df9bff",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 7,
+                "kind": "nanoparticle-patch",
+                "feature_id": "63826ac3-11e1-5f4b-888c-db56c02ef558",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 8,
+                "kind": "nanoparticle-patch",
+                "feature_id": "5b9906f9-6e64-5579-a1ee-5aa5930f938f",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 9,
+                "kind": "nanoparticle-patch",
+                "feature_id": "fdce9fea-654a-5f75-8a82-857784d58559",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 10,
+                "kind": "nanoparticle-patch",
+                "feature_id": "0b37de0f-c049-5916-bc60-79c02ab9c8dc",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 11,
+                "kind": "nanoparticle-patch",
+                "feature_id": "0d2ce964-7bba-57c2-963b-f70cc7fca3eb",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 12,
+                "kind": "nanoparticle-patch",
+                "feature_id": "98875fc9-3879-513c-992f-0b0e9f21c039",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 13,
+                "kind": "nanoparticle-patch",
+                "feature_id": "13e5813e-d011-5276-a493-28770d434b9f",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 14,
+                "kind": "nanoparticle-patch",
+                "feature_id": "1b01198a-8acd-5a57-968d-944000dad0aa",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 15,
+                "kind": "nanoparticle-patch",
+                "feature_id": "88052b83-0b8f-55db-9ee2-838a4f1716c5",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 16,
+                "kind": "nanoparticle-patch",
+                "feature_id": "035f46d5-7117-576b-a667-b87f4db26073",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 17,
+                "kind": "nanoparticle-patch",
+                "feature_id": "f46cef17-b9f5-5ed7-9684-f0280a5f3273",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 18,
+                "kind": "nanoparticle-patch",
+                "feature_id": "94ff1a64-8a5f-5044-9a72-0cc9b247bbc7",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 19,
+                "kind": "nanoparticle-patch",
+                "feature_id": "22649b7a-98bb-557c-8aa8-cd9c43148eeb",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 20,
+                "kind": "nanoparticle-patch",
+                "feature_id": "17e74428-45d7-5142-95cd-7ad2a5278a21",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 21,
+                "kind": "nanoparticle-patch",
+                "feature_id": "5efb0fc1-29af-5898-9afb-ff919487e742",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 22,
+                "kind": "nanoparticle-patch",
+                "feature_id": "1c657134-8c42-5c59-9b30-031b84429810",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 23,
+                "kind": "nanoparticle-patch",
+                "feature_id": "7e89924d-c221-5b78-92a9-54212143935f",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 24,
+                "kind": "nanoparticle-patch",
+                "feature_id": "cde4557f-09c4-5bd0-af92-e4632a158bd4",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 25,
+                "kind": "nanoparticle-patch",
+                "feature_id": "57dd11a6-cce4-55f1-b715-f4d2a0c8ed2a",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 26,
+                "kind": "nanoparticle-patch",
+                "feature_id": "8539c6a6-5457-5fe2-86bd-fba2db3f2abe",
+                "child_id": null,
+                "outputs": []
+              }
+            ],
+            "completed": [
+              "a1bcb47f-4ea5-5fa1-a46f-7bb616758593",
+              "6f12656f-2c5b-5537-88db-d054a22b8afb",
+              "05e7d922-7e68-52ab-8fc6-100a7ec05291",
+              "caeeed96-d85d-5967-bdc8-b6fc972ff00e",
+              "b4244f6b-22a2-559c-9086-c2bda0753922",
+              "480e97fb-0902-53e1-a067-001f482eb057",
+              "da40eba5-e0cb-578a-a630-52dd09df9bff",
+              "63826ac3-11e1-5f4b-888c-db56c02ef558",
+              "5b9906f9-6e64-5579-a1ee-5aa5930f938f",
+              "fdce9fea-654a-5f75-8a82-857784d58559",
+              "0b37de0f-c049-5916-bc60-79c02ab9c8dc",
+              "0d2ce964-7bba-57c2-963b-f70cc7fca3eb",
+              "98875fc9-3879-513c-992f-0b0e9f21c039",
+              "13e5813e-d011-5276-a493-28770d434b9f",
+              "1b01198a-8acd-5a57-968d-944000dad0aa",
+              "88052b83-0b8f-55db-9ee2-838a4f1716c5",
+              "035f46d5-7117-576b-a667-b87f4db26073",
+              "f46cef17-b9f5-5ed7-9684-f0280a5f3273",
+              "94ff1a64-8a5f-5044-9a72-0cc9b247bbc7",
+              "22649b7a-98bb-557c-8aa8-cd9c43148eeb",
+              "17e74428-45d7-5142-95cd-7ad2a5278a21",
+              "5efb0fc1-29af-5898-9afb-ff919487e742",
+              "1c657134-8c42-5c59-9b30-031b84429810",
+              "7e89924d-c221-5b78-92a9-54212143935f",
+              "cde4557f-09c4-5bd0-af92-e4632a158bd4",
+              "57dd11a6-cce4-55f1-b715-f4d2a0c8ed2a",
+              "8539c6a6-5457-5fe2-86bd-fba2db3f2abe"
+            ],
+            "not_evaluated": [],
+            "candidate_replay_verified": false,
+            "authoring_changes": {
+              "basis": "captured_materialized_state",
+              "changed_fields": [
+                "nanoparticles"
+              ],
+              "record_counts": {
+                "nanoparticles": {
+                  "before": 4,
+                  "after": 4
+                }
+              },
+              "visual_comparison": false,
+              "scientific_qualification": false
+            }
+          },
+          "source_assessment": {
+            "scope": "part",
+            "contract_version": 1,
+            "status": "verified",
+            "issues": [],
+            "verification_scope": "authoring_reproducibility",
+            "integrity_checked": false,
+            "excluded_roles": [
+              "presentation",
+              "physical",
+              "document_identity",
+              "repair_draft"
+            ],
+            "checked_commands": 32,
+            "proof_coverage": "versioned_commands",
+            "native_editable": true,
+            "dependencies": {
+              "complete": true,
+              "parents": {
+                "fd2e920a-c399-5878-8cd3-b19008ae0fea": [],
+                "c2d492ef-1999-50df-ac15-8f45f54be6f8": [
+                  "fd2e920a-c399-5878-8cd3-b19008ae0fea"
+                ],
+                "5b6e410d-ca38-5753-ae49-6d588834df73": [
+                  "c2d492ef-1999-50df-ac15-8f45f54be6f8"
+                ],
+                "f4ee3f86-a9fe-591a-95b3-ceeb8b5b6503": [
+                  "5b6e410d-ca38-5753-ae49-6d588834df73"
+                ],
+                "e277a2b0-7783-5099-939b-3e0bb6ef91c6": [
+                  "5b6e410d-ca38-5753-ae49-6d588834df73",
+                  "f4ee3f86-a9fe-591a-95b3-ceeb8b5b6503"
+                ],
+                "81431ecd-fb47-5e41-add3-27f10fc4cf33": [
+                  "e277a2b0-7783-5099-939b-3e0bb6ef91c6"
+                ],
+                "401f2ea5-a80a-5a71-aa66-b3aca970d5c1": [
+                  "81431ecd-fb47-5e41-add3-27f10fc4cf33"
+                ],
+                "cd4f4ac0-9720-517d-b1f2-5bcfe8ba0328": [
+                  "401f2ea5-a80a-5a71-aa66-b3aca970d5c1"
+                ],
+                "0aec11f9-dd16-5ae5-b512-c9c360b401f2": [
+                  "cd4f4ac0-9720-517d-b1f2-5bcfe8ba0328"
+                ],
+                "2e23a501-46ff-5f97-8b53-ca556856ade6": [
+                  "0aec11f9-dd16-5ae5-b512-c9c360b401f2"
+                ],
+                "c5aa36e4-821f-5ab2-9437-92a86e0f9ccc": [
+                  "0aec11f9-dd16-5ae5-b512-c9c360b401f2",
+                  "2e23a501-46ff-5f97-8b53-ca556856ade6"
+                ],
+                "41930e24-4e9e-5fa3-92a5-6b22c8fc601e": [
+                  "c5aa36e4-821f-5ab2-9437-92a86e0f9ccc"
+                ],
+                "02161baf-f40c-55ec-af49-077575360a15": [
+                  "41930e24-4e9e-5fa3-92a5-6b22c8fc601e"
+                ],
+                "1dc38990-7de5-5cca-b893-dda4a72c72ab": [
+                  "02161baf-f40c-55ec-af49-077575360a15"
+                ],
+                "088dca2d-5f05-5809-af1d-e1e68acff6a2": [
+                  "1dc38990-7de5-5cca-b893-dda4a72c72ab"
+                ],
+                "0374fb56-dae9-5f6c-a667-57d6c3ca685f": [
+                  "088dca2d-5f05-5809-af1d-e1e68acff6a2"
+                ],
+                "84cba4c1-9108-58ea-9cbe-a62a989dac81": [
+                  "0374fb56-dae9-5f6c-a667-57d6c3ca685f",
+                  "088dca2d-5f05-5809-af1d-e1e68acff6a2"
+                ],
+                "3b49d653-8995-5fdb-9b83-f43248feb5e0": [
+                  "84cba4c1-9108-58ea-9cbe-a62a989dac81"
+                ],
+                "7f4b908d-61f4-5a42-b957-e6d72595abf9": [
+                  "3b49d653-8995-5fdb-9b83-f43248feb5e0"
+                ],
+                "dabc96a7-2afd-5c38-8f6d-2793c9f7bacd": [
+                  "7f4b908d-61f4-5a42-b957-e6d72595abf9"
+                ],
+                "e60c9d87-c605-54c5-aefc-963fc3a1e087": [
+                  "dabc96a7-2afd-5c38-8f6d-2793c9f7bacd"
+                ],
+                "083e53b3-aef8-516e-8ea5-6be269d222ff": [
+                  "e60c9d87-c605-54c5-aefc-963fc3a1e087"
+                ],
+                "bb5f2f2e-cc05-5520-ac19-49968ed98f33": [
+                  "083e53b3-aef8-516e-8ea5-6be269d222ff",
+                  "e60c9d87-c605-54c5-aefc-963fc3a1e087"
+                ],
+                "be2fcc0d-19c6-58d7-8ef4-b27f58a8e466": [
+                  "bb5f2f2e-cc05-5520-ac19-49968ed98f33"
+                ],
+                "7d39a93d-92a2-54a2-ad87-f9704a99df75": [
+                  "be2fcc0d-19c6-58d7-8ef4-b27f58a8e466"
+                ],
+                "c42efbd9-3420-5027-9a82-318efdb2cb1e": [
+                  "7d39a93d-92a2-54a2-ad87-f9704a99df75"
+                ],
+                "e75f8133-f5d7-598f-ac49-6db50b271e7d": [
+                  "c42efbd9-3420-5027-9a82-318efdb2cb1e"
+                ],
+                "aef34a7c-455f-56a0-a9da-f25e1e23e497": [
+                  "e75f8133-f5d7-598f-ac49-6db50b271e7d"
+                ],
+                "e2f0ff37-f89d-5f2e-9210-208c0b4c1ba9": [
+                  "aef34a7c-455f-56a0-a9da-f25e1e23e497",
+                  "e75f8133-f5d7-598f-ac49-6db50b271e7d"
+                ],
+                "49c04b58-6e86-5451-b338-5f30e3456bbe": [
+                  "e2f0ff37-f89d-5f2e-9210-208c0b4c1ba9"
+                ],
+                "529a3433-ef56-54b9-b476-80eb11466122": [
+                  "49c04b58-6e86-5451-b338-5f30e3456bbe",
+                  "81431ecd-fb47-5e41-add3-27f10fc4cf33"
+                ],
+                "10c39706-1873-5ee4-952f-bbcecb1df2ae": [
+                  "49c04b58-6e86-5451-b338-5f30e3456bbe",
+                  "529a3433-ef56-54b9-b476-80eb11466122"
+                ]
+              }
+            },
+            "recipe_fingerprint": "3ee7c19aed39e33b318672aebcf63fe038dde5405079afa2e3400964cb477dd7",
+            "authoring_fingerprint": "af58ee08403df1eb90de2c8dd249af432382f02e9e4a0bb3e9ed65fc3d5fd690",
+            "imported_sources": []
+          },
+          "source_revision": 364,
+          "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+        }
+      },
+      "commit_http_status": 200,
+      "commit": {
+        "job_id": "4b9baea2-8848-479b-8124-ff238cd1d46b",
+        "status": "committed",
+        "revision": 365,
+        "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+      },
+      "source_guard_correct": true,
+      "cold_replay": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "verified",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 59,
+        "proof_coverage": "versioned_commands",
+        "native_editable": true,
+        "dependencies": {
+          "complete": true,
+          "parents": {
+            "fd2e920a-c399-5878-8cd3-b19008ae0fea": [],
+            "c2d492ef-1999-50df-ac15-8f45f54be6f8": [
+              "fd2e920a-c399-5878-8cd3-b19008ae0fea"
+            ],
+            "5b6e410d-ca38-5753-ae49-6d588834df73": [
+              "c2d492ef-1999-50df-ac15-8f45f54be6f8"
+            ],
+            "f4ee3f86-a9fe-591a-95b3-ceeb8b5b6503": [
+              "5b6e410d-ca38-5753-ae49-6d588834df73"
+            ],
+            "e277a2b0-7783-5099-939b-3e0bb6ef91c6": [
+              "5b6e410d-ca38-5753-ae49-6d588834df73",
+              "f4ee3f86-a9fe-591a-95b3-ceeb8b5b6503"
+            ],
+            "81431ecd-fb47-5e41-add3-27f10fc4cf33": [
+              "e277a2b0-7783-5099-939b-3e0bb6ef91c6"
+            ],
+            "401f2ea5-a80a-5a71-aa66-b3aca970d5c1": [
+              "81431ecd-fb47-5e41-add3-27f10fc4cf33"
+            ],
+            "cd4f4ac0-9720-517d-b1f2-5bcfe8ba0328": [
+              "401f2ea5-a80a-5a71-aa66-b3aca970d5c1"
+            ],
+            "0aec11f9-dd16-5ae5-b512-c9c360b401f2": [
+              "cd4f4ac0-9720-517d-b1f2-5bcfe8ba0328"
+            ],
+            "2e23a501-46ff-5f97-8b53-ca556856ade6": [
+              "0aec11f9-dd16-5ae5-b512-c9c360b401f2"
+            ],
+            "c5aa36e4-821f-5ab2-9437-92a86e0f9ccc": [
+              "0aec11f9-dd16-5ae5-b512-c9c360b401f2",
+              "2e23a501-46ff-5f97-8b53-ca556856ade6"
+            ],
+            "41930e24-4e9e-5fa3-92a5-6b22c8fc601e": [
+              "c5aa36e4-821f-5ab2-9437-92a86e0f9ccc"
+            ],
+            "02161baf-f40c-55ec-af49-077575360a15": [
+              "41930e24-4e9e-5fa3-92a5-6b22c8fc601e"
+            ],
+            "1dc38990-7de5-5cca-b893-dda4a72c72ab": [
+              "02161baf-f40c-55ec-af49-077575360a15"
+            ],
+            "088dca2d-5f05-5809-af1d-e1e68acff6a2": [
+              "1dc38990-7de5-5cca-b893-dda4a72c72ab"
+            ],
+            "0374fb56-dae9-5f6c-a667-57d6c3ca685f": [
+              "088dca2d-5f05-5809-af1d-e1e68acff6a2"
+            ],
+            "84cba4c1-9108-58ea-9cbe-a62a989dac81": [
+              "0374fb56-dae9-5f6c-a667-57d6c3ca685f",
+              "088dca2d-5f05-5809-af1d-e1e68acff6a2"
+            ],
+            "3b49d653-8995-5fdb-9b83-f43248feb5e0": [
+              "84cba4c1-9108-58ea-9cbe-a62a989dac81"
+            ],
+            "7f4b908d-61f4-5a42-b957-e6d72595abf9": [
+              "3b49d653-8995-5fdb-9b83-f43248feb5e0"
+            ],
+            "dabc96a7-2afd-5c38-8f6d-2793c9f7bacd": [
+              "7f4b908d-61f4-5a42-b957-e6d72595abf9"
+            ],
+            "e60c9d87-c605-54c5-aefc-963fc3a1e087": [
+              "dabc96a7-2afd-5c38-8f6d-2793c9f7bacd"
+            ],
+            "083e53b3-aef8-516e-8ea5-6be269d222ff": [
+              "e60c9d87-c605-54c5-aefc-963fc3a1e087"
+            ],
+            "bb5f2f2e-cc05-5520-ac19-49968ed98f33": [
+              "083e53b3-aef8-516e-8ea5-6be269d222ff",
+              "e60c9d87-c605-54c5-aefc-963fc3a1e087"
+            ],
+            "be2fcc0d-19c6-58d7-8ef4-b27f58a8e466": [
+              "bb5f2f2e-cc05-5520-ac19-49968ed98f33"
+            ],
+            "7d39a93d-92a2-54a2-ad87-f9704a99df75": [
+              "be2fcc0d-19c6-58d7-8ef4-b27f58a8e466"
+            ],
+            "c42efbd9-3420-5027-9a82-318efdb2cb1e": [
+              "7d39a93d-92a2-54a2-ad87-f9704a99df75"
+            ],
+            "e75f8133-f5d7-598f-ac49-6db50b271e7d": [
+              "c42efbd9-3420-5027-9a82-318efdb2cb1e"
+            ],
+            "aef34a7c-455f-56a0-a9da-f25e1e23e497": [
+              "e75f8133-f5d7-598f-ac49-6db50b271e7d"
+            ],
+            "e2f0ff37-f89d-5f2e-9210-208c0b4c1ba9": [
+              "aef34a7c-455f-56a0-a9da-f25e1e23e497",
+              "e75f8133-f5d7-598f-ac49-6db50b271e7d"
+            ],
+            "49c04b58-6e86-5451-b338-5f30e3456bbe": [
+              "e2f0ff37-f89d-5f2e-9210-208c0b4c1ba9"
+            ],
+            "529a3433-ef56-54b9-b476-80eb11466122": [
+              "49c04b58-6e86-5451-b338-5f30e3456bbe",
+              "81431ecd-fb47-5e41-add3-27f10fc4cf33"
+            ],
+            "10c39706-1873-5ee4-952f-bbcecb1df2ae": [
+              "49c04b58-6e86-5451-b338-5f30e3456bbe",
+              "529a3433-ef56-54b9-b476-80eb11466122"
+            ],
+            "a1bcb47f-4ea5-5fa1-a46f-7bb616758593": [
+              "10c39706-1873-5ee4-952f-bbcecb1df2ae",
+              "529a3433-ef56-54b9-b476-80eb11466122"
+            ],
+            "6f12656f-2c5b-5537-88db-d054a22b8afb": [
+              "41930e24-4e9e-5fa3-92a5-6b22c8fc601e",
+              "a1bcb47f-4ea5-5fa1-a46f-7bb616758593"
+            ],
+            "05e7d922-7e68-52ab-8fc6-100a7ec05291": [
+              "3b49d653-8995-5fdb-9b83-f43248feb5e0",
+              "6f12656f-2c5b-5537-88db-d054a22b8afb"
+            ],
+            "caeeed96-d85d-5967-bdc8-b6fc972ff00e": [
+              "05e7d922-7e68-52ab-8fc6-100a7ec05291",
+              "be2fcc0d-19c6-58d7-8ef4-b27f58a8e466"
+            ],
+            "b4244f6b-22a2-559c-9086-c2bda0753922": [
+              "a1bcb47f-4ea5-5fa1-a46f-7bb616758593",
+              "caeeed96-d85d-5967-bdc8-b6fc972ff00e"
+            ],
+            "480e97fb-0902-53e1-a067-001f482eb057": [
+              "6f12656f-2c5b-5537-88db-d054a22b8afb",
+              "b4244f6b-22a2-559c-9086-c2bda0753922"
+            ],
+            "da40eba5-e0cb-578a-a630-52dd09df9bff": [
+              "05e7d922-7e68-52ab-8fc6-100a7ec05291",
+              "480e97fb-0902-53e1-a067-001f482eb057"
+            ],
+            "63826ac3-11e1-5f4b-888c-db56c02ef558": [
+              "caeeed96-d85d-5967-bdc8-b6fc972ff00e",
+              "da40eba5-e0cb-578a-a630-52dd09df9bff"
+            ],
+            "5b9906f9-6e64-5579-a1ee-5aa5930f938f": [
+              "63826ac3-11e1-5f4b-888c-db56c02ef558",
+              "b4244f6b-22a2-559c-9086-c2bda0753922"
+            ],
+            "fdce9fea-654a-5f75-8a82-857784d58559": [
+              "480e97fb-0902-53e1-a067-001f482eb057",
+              "5b9906f9-6e64-5579-a1ee-5aa5930f938f"
+            ],
+            "0b37de0f-c049-5916-bc60-79c02ab9c8dc": [
+              "da40eba5-e0cb-578a-a630-52dd09df9bff",
+              "fdce9fea-654a-5f75-8a82-857784d58559"
+            ],
+            "0d2ce964-7bba-57c2-963b-f70cc7fca3eb": [
+              "0b37de0f-c049-5916-bc60-79c02ab9c8dc",
+              "63826ac3-11e1-5f4b-888c-db56c02ef558"
+            ],
+            "98875fc9-3879-513c-992f-0b0e9f21c039": [
+              "0d2ce964-7bba-57c2-963b-f70cc7fca3eb",
+              "5b9906f9-6e64-5579-a1ee-5aa5930f938f"
+            ],
+            "13e5813e-d011-5276-a493-28770d434b9f": [
+              "98875fc9-3879-513c-992f-0b0e9f21c039",
+              "fdce9fea-654a-5f75-8a82-857784d58559"
+            ],
+            "1b01198a-8acd-5a57-968d-944000dad0aa": [
+              "0b37de0f-c049-5916-bc60-79c02ab9c8dc",
+              "13e5813e-d011-5276-a493-28770d434b9f"
+            ],
+            "88052b83-0b8f-55db-9ee2-838a4f1716c5": [
+              "0d2ce964-7bba-57c2-963b-f70cc7fca3eb",
+              "1b01198a-8acd-5a57-968d-944000dad0aa"
+            ],
+            "035f46d5-7117-576b-a667-b87f4db26073": [
+              "88052b83-0b8f-55db-9ee2-838a4f1716c5",
+              "98875fc9-3879-513c-992f-0b0e9f21c039"
+            ],
+            "f46cef17-b9f5-5ed7-9684-f0280a5f3273": [
+              "035f46d5-7117-576b-a667-b87f4db26073",
+              "13e5813e-d011-5276-a493-28770d434b9f"
+            ],
+            "94ff1a64-8a5f-5044-9a72-0cc9b247bbc7": [
+              "1b01198a-8acd-5a57-968d-944000dad0aa",
+              "f46cef17-b9f5-5ed7-9684-f0280a5f3273"
+            ],
+            "22649b7a-98bb-557c-8aa8-cd9c43148eeb": [
+              "88052b83-0b8f-55db-9ee2-838a4f1716c5",
+              "94ff1a64-8a5f-5044-9a72-0cc9b247bbc7"
+            ],
+            "17e74428-45d7-5142-95cd-7ad2a5278a21": [
+              "035f46d5-7117-576b-a667-b87f4db26073",
+              "22649b7a-98bb-557c-8aa8-cd9c43148eeb"
+            ],
+            "5efb0fc1-29af-5898-9afb-ff919487e742": [
+              "17e74428-45d7-5142-95cd-7ad2a5278a21",
+              "f46cef17-b9f5-5ed7-9684-f0280a5f3273"
+            ],
+            "1c657134-8c42-5c59-9b30-031b84429810": [
+              "5efb0fc1-29af-5898-9afb-ff919487e742",
+              "94ff1a64-8a5f-5044-9a72-0cc9b247bbc7"
+            ],
+            "7e89924d-c221-5b78-92a9-54212143935f": [
+              "1c657134-8c42-5c59-9b30-031b84429810",
+              "22649b7a-98bb-557c-8aa8-cd9c43148eeb"
+            ],
+            "cde4557f-09c4-5bd0-af92-e4632a158bd4": [
+              "17e74428-45d7-5142-95cd-7ad2a5278a21",
+              "7e89924d-c221-5b78-92a9-54212143935f"
+            ],
+            "57dd11a6-cce4-55f1-b715-f4d2a0c8ed2a": [
+              "5efb0fc1-29af-5898-9afb-ff919487e742",
+              "cde4557f-09c4-5bd0-af92-e4632a158bd4"
+            ],
+            "8539c6a6-5457-5fe2-86bd-fba2db3f2abe": [
+              "1c657134-8c42-5c59-9b30-031b84429810",
+              "57dd11a6-cce4-55f1-b715-f4d2a0c8ed2a"
+            ]
+          }
+        },
+        "recipe_fingerprint": "0fb6a31b1772d37716377b92614fca2d56dc9d01633278ff41ab726081a79ed5",
+        "authoring_fingerprint": "e9da431d0999a9a0b67223d02c059129005b4b39bd3bcfdd6c768d69bbc6407a",
+        "imported_sources": [],
+        "elapsed_ms": 1158.771482998418
+      },
+      "shared_admission_released_after_reaping": true,
+      "start_http_ms": 7.768233997921925,
+      "parent_worker_constructor_ms": 1.5291340023395605,
+      "process_start_call_ms": 0.4239810004946776,
+      "start_to_supervisor_reaped_ms": 1212.745755998185,
+      "commit_http_ms": 5.171863002033206
+    },
+    {
+      "case": "public-50000-authored-residues",
+      "mode": "complete",
+      "start_http_status": 202,
+      "poll": {
+        "job_id": "62006959-3fff-4896-92cf-385a880d6b7e",
+        "status": "complete",
+        "stale": false,
+        "source_busy": false,
+        "result": {
+          "status": "ready",
+          "issues": [],
+          "validation": {
+            "passed": true,
+            "results": [
+              {
+                "ok": true,
+                "message": "Helix IDs are unique."
+              },
+              {
+                "ok": true,
+                "message": "Strand IDs are unique."
+              },
+              {
+                "ok": true,
+                "message": "All domain helix references are valid."
+              },
+              {
+                "ok": true,
+                "message": "Multi-scaffold design: 31 scaffold strands."
+              }
+            ]
+          },
+          "batch": {
+            "phase": "complete",
+            "source_design_id": "a7097508-bb5a-416c-ad9e-b587c7b4cb22",
+            "source_revision": 366,
+            "commands": [
+              {
+                "command_index": 0,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "e44fab1b-b964-5110-b46a-de4e6122810c",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "fc4c1b38-2214-57f9-82f1-0ece0fc2bada"
+                  }
+                ]
+              },
+              {
+                "command_index": 1,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "8437b07f-7e63-5dea-8c65-701b14939bbc",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "59be82a4-dd2a-570d-8295-c8a88a45a13c"
+                  }
+                ]
+              },
+              {
+                "command_index": 2,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "0334825c-8385-51b6-a623-b916d82df65e",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "069ef3ed-0bed-55c7-ba9c-208d304c67f4"
+                  }
+                ]
+              },
+              {
+                "command_index": 3,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "e2260b52-c3b3-50d0-a6ff-fe86140f37be",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "ade49dfd-2d95-5b42-b2e5-6057020c9fa4"
+                  }
+                ]
+              },
+              {
+                "command_index": 4,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "6bb55d60-3cae-535b-8c5e-1e1eae71bb6c",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "a8129eee-7176-58b7-9d10-a9c45a200e82"
+                  }
+                ]
+              },
+              {
+                "command_index": 5,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "9a818a11-e6be-56d1-8394-f9dac6e5b0a3",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "0504b144-7720-5a42-a3d0-d31412d752ce"
+                  }
+                ]
+              },
+              {
+                "command_index": 6,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "0b0d7b04-b002-5581-9d41-68eaeea24ae0",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "b15f14f2-77b2-5bf6-b947-b51a2649468c"
+                  }
+                ]
+              },
+              {
+                "command_index": 7,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "c847efe8-d224-5cc5-9178-63708e8a538e",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "74807fff-31bd-5753-b8fd-4d25def11652"
+                  }
+                ]
+              },
+              {
+                "command_index": 8,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "c74abb84-2c2a-5f6d-a40c-a3a8301e7626",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "47213893-5850-57f9-b84b-fde0d1808b3a"
+                  }
+                ]
+              },
+              {
+                "command_index": 9,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "2091d288-723c-5cfd-ae78-939af84de628",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "f2c8dc31-7dad-57dd-9a51-f743e84eb55f"
+                  }
+                ]
+              },
+              {
+                "command_index": 10,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "3b80973b-0bc8-5c57-af9a-5b04638b9a61",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "a111e9d3-a4f1-5f60-91b7-b5845eaae2bd"
+                  }
+                ]
+              },
+              {
+                "command_index": 11,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "4d9954e1-e530-5850-a2b0-fb5905605cda",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "56475a35-a91d-54da-ab1e-e1daacb20af9"
+                  }
+                ]
+              },
+              {
+                "command_index": 12,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "4e879416-af59-5f9a-bbdb-aeb56d8244c4",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "ac4bfc47-ec38-5c1f-9a5f-a52f19fe5acc"
+                  }
+                ]
+              },
+              {
+                "command_index": 13,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "af8b339b-fd1c-54c5-80b3-064aabf7f8d0",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "d1cb68de-6dfc-550d-972f-3eecf014cac7"
+                  }
+                ]
+              },
+              {
+                "command_index": 14,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "6aa68c5d-b255-5a56-9cec-274219ee3cc8",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "e94f487c-c804-5afe-bf96-4cf052bdbccc"
+                  }
+                ]
+              },
+              {
+                "command_index": 15,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "8f62ea88-4ffa-5adf-a7cf-ef4d87db4619",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "ff1d0b2c-45f4-5634-9ac7-c9e431f4914a"
+                  }
+                ]
+              },
+              {
+                "command_index": 16,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "9fc313c7-fadd-5271-9bb6-9049ed6c4c12",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "47199ff6-da19-5d98-8f76-334090b272d6"
+                  }
+                ]
+              },
+              {
+                "command_index": 17,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "a632527e-ddb7-5286-93cd-c13928854414",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "31f15b44-0d8c-5aa1-9fb5-33bfa3c04e54"
+                  }
+                ]
+              },
+              {
+                "command_index": 18,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "8a37829f-73b0-5137-86cc-8e93c86f9bc8",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "9bca7a89-64b8-55c7-8bb0-466b814cf75a"
+                  }
+                ]
+              },
+              {
+                "command_index": 19,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "610b62fd-9293-5ba6-83cd-ae2f8082865b",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "7796fa57-96d6-55c7-93ae-a65e8c318942"
+                  }
+                ]
+              },
+              {
+                "command_index": 20,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "8f3d094a-e6fb-5b98-b8a5-7218a893e16c",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "98b0d40d-07f9-5526-a790-56131e9554e4"
+                  }
+                ]
+              },
+              {
+                "command_index": 21,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "b87054ae-8fd2-59da-8871-e832c24e2686",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "7442c0ed-e334-5bf2-9181-fe4ea72b6766"
+                  }
+                ]
+              },
+              {
+                "command_index": 22,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "1077b1d0-2ae8-5d43-b603-f25fbf800f38",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "b9f5b4d2-a9f8-5358-beb0-55a64f81101f"
+                  }
+                ]
+              },
+              {
+                "command_index": 23,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "2619353f-148e-5414-ace0-a1be458754a6",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "f0c88428-c71d-57af-b682-d73b720c7de0"
+                  }
+                ]
+              },
+              {
+                "command_index": 24,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "fdd14b67-540d-53a3-96c2-a0e7991f68fa",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "a42bec09-458b-5565-8b71-e427cd5d3531"
+                  }
+                ]
+              },
+              {
+                "command_index": 25,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "02856431-ee3b-5e47-8c42-fe0cfa183197",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "53b459ce-3918-506b-96de-76dfb304f471"
+                  }
+                ]
+              },
+              {
+                "command_index": 26,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "ca95ad61-39a7-59b4-90ea-a609aea0b885",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "8b9d5acd-7389-519f-bc00-a66f1504674b"
+                  }
+                ]
+              },
+              {
+                "command_index": 27,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "7e9557fb-5f90-50a3-9183-fb1729296702",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "94b86fe6-71cc-5b58-8c70-a7264bdadd4f"
+                  }
+                ]
+              },
+              {
+                "command_index": 28,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "e2daf67d-0c87-5984-b5bf-4b6dfead54bd",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "5ee0c5ce-c96b-5b07-8cca-ad8c08d04436"
+                  }
+                ]
+              },
+              {
+                "command_index": 29,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "de9d0583-34f4-5144-9b06-115387e12c3d",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "0e55c3a6-eeb5-5b1f-a3d6-af913283e4ab"
+                  }
+                ]
+              },
+              {
+                "command_index": 30,
+                "kind": "strand-add",
+                "feature_id": "b049fc94-bc0e-5755-bbfe-b6a3e1263cef",
+                "child_id": "75636b85-508a-537f-a246-0e0471aa618d",
+                "outputs": [
+                  {
+                    "kind": "strand",
+                    "identity": "2b2a9b66-dc1c-5cc7-b470-ddede00be3c1"
+                  }
+                ]
+              }
+            ],
+            "completed": [
+              "e44fab1b-b964-5110-b46a-de4e6122810c",
+              "8437b07f-7e63-5dea-8c65-701b14939bbc",
+              "0334825c-8385-51b6-a623-b916d82df65e",
+              "e2260b52-c3b3-50d0-a6ff-fe86140f37be",
+              "6bb55d60-3cae-535b-8c5e-1e1eae71bb6c",
+              "9a818a11-e6be-56d1-8394-f9dac6e5b0a3",
+              "0b0d7b04-b002-5581-9d41-68eaeea24ae0",
+              "c847efe8-d224-5cc5-9178-63708e8a538e",
+              "c74abb84-2c2a-5f6d-a40c-a3a8301e7626",
+              "2091d288-723c-5cfd-ae78-939af84de628",
+              "3b80973b-0bc8-5c57-af9a-5b04638b9a61",
+              "4d9954e1-e530-5850-a2b0-fb5905605cda",
+              "4e879416-af59-5f9a-bbdb-aeb56d8244c4",
+              "af8b339b-fd1c-54c5-80b3-064aabf7f8d0",
+              "6aa68c5d-b255-5a56-9cec-274219ee3cc8",
+              "8f62ea88-4ffa-5adf-a7cf-ef4d87db4619",
+              "9fc313c7-fadd-5271-9bb6-9049ed6c4c12",
+              "a632527e-ddb7-5286-93cd-c13928854414",
+              "8a37829f-73b0-5137-86cc-8e93c86f9bc8",
+              "610b62fd-9293-5ba6-83cd-ae2f8082865b",
+              "8f3d094a-e6fb-5b98-b8a5-7218a893e16c",
+              "b87054ae-8fd2-59da-8871-e832c24e2686",
+              "1077b1d0-2ae8-5d43-b603-f25fbf800f38",
+              "2619353f-148e-5414-ace0-a1be458754a6",
+              "fdd14b67-540d-53a3-96c2-a0e7991f68fa",
+              "02856431-ee3b-5e47-8c42-fe0cfa183197",
+              "ca95ad61-39a7-59b4-90ea-a609aea0b885",
+              "7e9557fb-5f90-50a3-9183-fb1729296702",
+              "e2daf67d-0c87-5984-b5bf-4b6dfead54bd",
+              "de9d0583-34f4-5144-9b06-115387e12c3d",
+              "75636b85-508a-537f-a246-0e0471aa618d"
+            ],
+            "not_evaluated": [],
+            "candidate_replay_verified": false,
+            "authoring_changes": {
+              "basis": "captured_materialized_state",
+              "changed_fields": [
+                "strands"
+              ],
+              "record_counts": {
+                "strands": {
+                  "before": 0,
+                  "after": 31
+                }
+              },
+              "visual_comparison": false,
+              "scientific_qualification": false
+            }
+          },
+          "source_assessment": {
+            "scope": "part",
+            "contract_version": 1,
+            "status": "verified",
+            "issues": [],
+            "verification_scope": "authoring_reproducibility",
+            "integrity_checked": false,
+            "excluded_roles": [
+              "presentation",
+              "physical",
+              "document_identity",
+              "repair_draft"
+            ],
+            "checked_commands": 31,
+            "proof_coverage": "versioned_commands",
+            "native_editable": true,
+            "dependencies": {
+              "complete": true,
+              "parents": {
+                "73a0d661-145d-5dbf-bd9b-92ca5b90543a": [],
+                "7ba12620-48eb-5517-a371-b8544dd1b269": [
+                  "73a0d661-145d-5dbf-bd9b-92ca5b90543a"
+                ],
+                "4e7ad1e0-d8a3-5628-ae4e-7c790d8bc8d8": [
+                  "7ba12620-48eb-5517-a371-b8544dd1b269"
+                ],
+                "c56ee7e2-a387-5574-aba7-8aad203396eb": [
+                  "4e7ad1e0-d8a3-5628-ae4e-7c790d8bc8d8"
+                ],
+                "4ddf1583-e7f8-5267-bbdd-893b24cfefca": [
+                  "c56ee7e2-a387-5574-aba7-8aad203396eb"
+                ],
+                "19f039bb-e6a9-5113-be09-23ec4988151d": [
+                  "4ddf1583-e7f8-5267-bbdd-893b24cfefca"
+                ],
+                "7a9da57e-d8e1-5eaa-a62b-e8df30ab6846": [
+                  "19f039bb-e6a9-5113-be09-23ec4988151d"
+                ],
+                "0d7aa557-86f0-5dd1-afa1-56be983043e8": [
+                  "7a9da57e-d8e1-5eaa-a62b-e8df30ab6846"
+                ],
+                "75ed6662-24ed-5cc1-baaa-1ae636885cad": [
+                  "0d7aa557-86f0-5dd1-afa1-56be983043e8"
+                ],
+                "141d67e1-6e0b-54da-b426-379ec8a7ac23": [
+                  "75ed6662-24ed-5cc1-baaa-1ae636885cad"
+                ],
+                "9fb5fd59-87bc-5bf0-a2c9-a9bda9ebc6fe": [
+                  "141d67e1-6e0b-54da-b426-379ec8a7ac23"
+                ],
+                "db7ea5ce-3b73-5cb4-befb-ae8245149b48": [
+                  "9fb5fd59-87bc-5bf0-a2c9-a9bda9ebc6fe"
+                ],
+                "e1606c44-c4a5-5db3-b79d-bc073b2681cf": [
+                  "db7ea5ce-3b73-5cb4-befb-ae8245149b48"
+                ],
+                "ec0a4b01-f334-5054-b1a7-627d7643cc73": [
+                  "e1606c44-c4a5-5db3-b79d-bc073b2681cf"
+                ],
+                "25785c75-23a5-5899-9f8e-8df340e288e6": [
+                  "ec0a4b01-f334-5054-b1a7-627d7643cc73"
+                ],
+                "51645307-2dde-5821-9cd8-3124062060de": [
+                  "25785c75-23a5-5899-9f8e-8df340e288e6"
+                ],
+                "8123e464-0aeb-57c4-aac8-1afaa2df62b4": [
+                  "51645307-2dde-5821-9cd8-3124062060de"
+                ],
+                "7c95687c-cd2c-5514-8b16-2c5e592c3429": [
+                  "8123e464-0aeb-57c4-aac8-1afaa2df62b4"
+                ],
+                "9d3961f7-df94-560d-8cf0-820509ad6916": [
+                  "7c95687c-cd2c-5514-8b16-2c5e592c3429"
+                ],
+                "ca84130a-f4ac-5fa8-bd10-c97b72311759": [
+                  "9d3961f7-df94-560d-8cf0-820509ad6916"
+                ],
+                "733354e1-b448-5a2e-a5b8-55b4386cad97": [
+                  "ca84130a-f4ac-5fa8-bd10-c97b72311759"
+                ],
+                "b569b10a-8edc-5a15-86f0-5220ba57eaed": [
+                  "733354e1-b448-5a2e-a5b8-55b4386cad97"
+                ],
+                "2dfdc3b9-857a-5ea4-a429-312e2ba475c6": [
+                  "b569b10a-8edc-5a15-86f0-5220ba57eaed"
+                ],
+                "32f4b566-6d40-5f0e-a3c3-81fab5772598": [
+                  "2dfdc3b9-857a-5ea4-a429-312e2ba475c6"
+                ],
+                "26d24667-4c2c-5555-84d9-030a98fde620": [
+                  "32f4b566-6d40-5f0e-a3c3-81fab5772598"
+                ],
+                "e6e3221d-73ba-5108-ac4d-277fc3de37b9": [
+                  "26d24667-4c2c-5555-84d9-030a98fde620"
+                ],
+                "c23b5f6d-199e-504f-86fb-81a24e4dab1c": [
+                  "e6e3221d-73ba-5108-ac4d-277fc3de37b9"
+                ],
+                "2cd44616-d812-5081-a4e7-659fae059ca6": [
+                  "c23b5f6d-199e-504f-86fb-81a24e4dab1c"
+                ],
+                "73a78d61-a79f-527f-a1be-37599ba247a1": [
+                  "2cd44616-d812-5081-a4e7-659fae059ca6"
+                ],
+                "2b0d30f3-12fc-54d0-a586-e6976c599cf4": [
+                  "73a78d61-a79f-527f-a1be-37599ba247a1"
+                ],
+                "620e4fea-e2ac-5147-bd74-411e96460184": [
+                  "2b0d30f3-12fc-54d0-a586-e6976c599cf4"
+                ]
+              }
+            },
+            "recipe_fingerprint": "a37543c80a9d57c191dc552e5d5b527764595c2830708476c781990f79c433d1",
+            "authoring_fingerprint": "4e5770ea5e6fbcd3ce81a67f614651383f1b447c1af9390f1dd0b533a403b171",
+            "imported_sources": []
+          },
+          "source_revision": 366,
+          "design_id": "a7097508-bb5a-416c-ad9e-b587c7b4cb22"
+        }
+      },
+      "commit_http_status": 200,
+      "commit": {
+        "job_id": "62006959-3fff-4896-92cf-385a880d6b7e",
+        "status": "committed",
+        "revision": 367,
+        "design_id": "a7097508-bb5a-416c-ad9e-b587c7b4cb22"
+      },
+      "source_guard_correct": true,
+      "cold_replay": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "verified",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 62,
+        "proof_coverage": "versioned_commands",
+        "native_editable": true,
+        "dependencies": {
+          "complete": true,
+          "parents": {
+            "73a0d661-145d-5dbf-bd9b-92ca5b90543a": [],
+            "7ba12620-48eb-5517-a371-b8544dd1b269": [
+              "73a0d661-145d-5dbf-bd9b-92ca5b90543a"
+            ],
+            "4e7ad1e0-d8a3-5628-ae4e-7c790d8bc8d8": [
+              "7ba12620-48eb-5517-a371-b8544dd1b269"
+            ],
+            "c56ee7e2-a387-5574-aba7-8aad203396eb": [
+              "4e7ad1e0-d8a3-5628-ae4e-7c790d8bc8d8"
+            ],
+            "4ddf1583-e7f8-5267-bbdd-893b24cfefca": [
+              "c56ee7e2-a387-5574-aba7-8aad203396eb"
+            ],
+            "19f039bb-e6a9-5113-be09-23ec4988151d": [
+              "4ddf1583-e7f8-5267-bbdd-893b24cfefca"
+            ],
+            "7a9da57e-d8e1-5eaa-a62b-e8df30ab6846": [
+              "19f039bb-e6a9-5113-be09-23ec4988151d"
+            ],
+            "0d7aa557-86f0-5dd1-afa1-56be983043e8": [
+              "7a9da57e-d8e1-5eaa-a62b-e8df30ab6846"
+            ],
+            "75ed6662-24ed-5cc1-baaa-1ae636885cad": [
+              "0d7aa557-86f0-5dd1-afa1-56be983043e8"
+            ],
+            "141d67e1-6e0b-54da-b426-379ec8a7ac23": [
+              "75ed6662-24ed-5cc1-baaa-1ae636885cad"
+            ],
+            "9fb5fd59-87bc-5bf0-a2c9-a9bda9ebc6fe": [
+              "141d67e1-6e0b-54da-b426-379ec8a7ac23"
+            ],
+            "db7ea5ce-3b73-5cb4-befb-ae8245149b48": [
+              "9fb5fd59-87bc-5bf0-a2c9-a9bda9ebc6fe"
+            ],
+            "e1606c44-c4a5-5db3-b79d-bc073b2681cf": [
+              "db7ea5ce-3b73-5cb4-befb-ae8245149b48"
+            ],
+            "ec0a4b01-f334-5054-b1a7-627d7643cc73": [
+              "e1606c44-c4a5-5db3-b79d-bc073b2681cf"
+            ],
+            "25785c75-23a5-5899-9f8e-8df340e288e6": [
+              "ec0a4b01-f334-5054-b1a7-627d7643cc73"
+            ],
+            "51645307-2dde-5821-9cd8-3124062060de": [
+              "25785c75-23a5-5899-9f8e-8df340e288e6"
+            ],
+            "8123e464-0aeb-57c4-aac8-1afaa2df62b4": [
+              "51645307-2dde-5821-9cd8-3124062060de"
+            ],
+            "7c95687c-cd2c-5514-8b16-2c5e592c3429": [
+              "8123e464-0aeb-57c4-aac8-1afaa2df62b4"
+            ],
+            "9d3961f7-df94-560d-8cf0-820509ad6916": [
+              "7c95687c-cd2c-5514-8b16-2c5e592c3429"
+            ],
+            "ca84130a-f4ac-5fa8-bd10-c97b72311759": [
+              "9d3961f7-df94-560d-8cf0-820509ad6916"
+            ],
+            "733354e1-b448-5a2e-a5b8-55b4386cad97": [
+              "ca84130a-f4ac-5fa8-bd10-c97b72311759"
+            ],
+            "b569b10a-8edc-5a15-86f0-5220ba57eaed": [
+              "733354e1-b448-5a2e-a5b8-55b4386cad97"
+            ],
+            "2dfdc3b9-857a-5ea4-a429-312e2ba475c6": [
+              "b569b10a-8edc-5a15-86f0-5220ba57eaed"
+            ],
+            "32f4b566-6d40-5f0e-a3c3-81fab5772598": [
+              "2dfdc3b9-857a-5ea4-a429-312e2ba475c6"
+            ],
+            "26d24667-4c2c-5555-84d9-030a98fde620": [
+              "32f4b566-6d40-5f0e-a3c3-81fab5772598"
+            ],
+            "e6e3221d-73ba-5108-ac4d-277fc3de37b9": [
+              "26d24667-4c2c-5555-84d9-030a98fde620"
+            ],
+            "c23b5f6d-199e-504f-86fb-81a24e4dab1c": [
+              "e6e3221d-73ba-5108-ac4d-277fc3de37b9"
+            ],
+            "2cd44616-d812-5081-a4e7-659fae059ca6": [
+              "c23b5f6d-199e-504f-86fb-81a24e4dab1c"
+            ],
+            "73a78d61-a79f-527f-a1be-37599ba247a1": [
+              "2cd44616-d812-5081-a4e7-659fae059ca6"
+            ],
+            "2b0d30f3-12fc-54d0-a586-e6976c599cf4": [
+              "73a78d61-a79f-527f-a1be-37599ba247a1"
+            ],
+            "620e4fea-e2ac-5147-bd74-411e96460184": [
+              "2b0d30f3-12fc-54d0-a586-e6976c599cf4"
+            ],
+            "e44fab1b-b964-5110-b46a-de4e6122810c": [
+              "620e4fea-e2ac-5147-bd74-411e96460184"
+            ],
+            "8437b07f-7e63-5dea-8c65-701b14939bbc": [
+              "e44fab1b-b964-5110-b46a-de4e6122810c"
+            ],
+            "0334825c-8385-51b6-a623-b916d82df65e": [
+              "8437b07f-7e63-5dea-8c65-701b14939bbc"
+            ],
+            "e2260b52-c3b3-50d0-a6ff-fe86140f37be": [
+              "0334825c-8385-51b6-a623-b916d82df65e"
+            ],
+            "6bb55d60-3cae-535b-8c5e-1e1eae71bb6c": [
+              "e2260b52-c3b3-50d0-a6ff-fe86140f37be"
+            ],
+            "9a818a11-e6be-56d1-8394-f9dac6e5b0a3": [
+              "6bb55d60-3cae-535b-8c5e-1e1eae71bb6c"
+            ],
+            "0b0d7b04-b002-5581-9d41-68eaeea24ae0": [
+              "9a818a11-e6be-56d1-8394-f9dac6e5b0a3"
+            ],
+            "c847efe8-d224-5cc5-9178-63708e8a538e": [
+              "0b0d7b04-b002-5581-9d41-68eaeea24ae0"
+            ],
+            "c74abb84-2c2a-5f6d-a40c-a3a8301e7626": [
+              "c847efe8-d224-5cc5-9178-63708e8a538e"
+            ],
+            "2091d288-723c-5cfd-ae78-939af84de628": [
+              "c74abb84-2c2a-5f6d-a40c-a3a8301e7626"
+            ],
+            "3b80973b-0bc8-5c57-af9a-5b04638b9a61": [
+              "2091d288-723c-5cfd-ae78-939af84de628"
+            ],
+            "4d9954e1-e530-5850-a2b0-fb5905605cda": [
+              "3b80973b-0bc8-5c57-af9a-5b04638b9a61"
+            ],
+            "4e879416-af59-5f9a-bbdb-aeb56d8244c4": [
+              "4d9954e1-e530-5850-a2b0-fb5905605cda"
+            ],
+            "af8b339b-fd1c-54c5-80b3-064aabf7f8d0": [
+              "4e879416-af59-5f9a-bbdb-aeb56d8244c4"
+            ],
+            "6aa68c5d-b255-5a56-9cec-274219ee3cc8": [
+              "af8b339b-fd1c-54c5-80b3-064aabf7f8d0"
+            ],
+            "8f62ea88-4ffa-5adf-a7cf-ef4d87db4619": [
+              "6aa68c5d-b255-5a56-9cec-274219ee3cc8"
+            ],
+            "9fc313c7-fadd-5271-9bb6-9049ed6c4c12": [
+              "8f62ea88-4ffa-5adf-a7cf-ef4d87db4619"
+            ],
+            "a632527e-ddb7-5286-93cd-c13928854414": [
+              "9fc313c7-fadd-5271-9bb6-9049ed6c4c12"
+            ],
+            "8a37829f-73b0-5137-86cc-8e93c86f9bc8": [
+              "a632527e-ddb7-5286-93cd-c13928854414"
+            ],
+            "610b62fd-9293-5ba6-83cd-ae2f8082865b": [
+              "8a37829f-73b0-5137-86cc-8e93c86f9bc8"
+            ],
+            "8f3d094a-e6fb-5b98-b8a5-7218a893e16c": [
+              "610b62fd-9293-5ba6-83cd-ae2f8082865b"
+            ],
+            "b87054ae-8fd2-59da-8871-e832c24e2686": [
+              "8f3d094a-e6fb-5b98-b8a5-7218a893e16c"
+            ],
+            "1077b1d0-2ae8-5d43-b603-f25fbf800f38": [
+              "b87054ae-8fd2-59da-8871-e832c24e2686"
+            ],
+            "2619353f-148e-5414-ace0-a1be458754a6": [
+              "1077b1d0-2ae8-5d43-b603-f25fbf800f38"
+            ],
+            "fdd14b67-540d-53a3-96c2-a0e7991f68fa": [
+              "2619353f-148e-5414-ace0-a1be458754a6"
+            ],
+            "02856431-ee3b-5e47-8c42-fe0cfa183197": [
+              "fdd14b67-540d-53a3-96c2-a0e7991f68fa"
+            ],
+            "ca95ad61-39a7-59b4-90ea-a609aea0b885": [
+              "02856431-ee3b-5e47-8c42-fe0cfa183197"
+            ],
+            "7e9557fb-5f90-50a3-9183-fb1729296702": [
+              "ca95ad61-39a7-59b4-90ea-a609aea0b885"
+            ],
+            "e2daf67d-0c87-5984-b5bf-4b6dfead54bd": [
+              "7e9557fb-5f90-50a3-9183-fb1729296702"
+            ],
+            "de9d0583-34f4-5144-9b06-115387e12c3d": [
+              "e2daf67d-0c87-5984-b5bf-4b6dfead54bd"
+            ],
+            "75636b85-508a-537f-a246-0e0471aa618d": [
+              "de9d0583-34f4-5144-9b06-115387e12c3d"
+            ]
+          }
+        },
+        "recipe_fingerprint": "4a268cd1ca91d50fe2c45124b76b8e20498050a7e456d5d65d4b1dc7d53e21e1",
+        "authoring_fingerprint": "9814fb280309ad7099ac4e4f82ff90ae1bb9f886994660a18195a6fe99983263",
+        "imported_sources": [],
+        "elapsed_ms": 1148.2953029990313
+      },
+      "shared_admission_released_after_reaping": true,
+      "start_http_ms": 9.226259997376474,
+      "parent_worker_constructor_ms": 1.8870239982788917,
+      "process_start_call_ms": 0.4350279996288009,
+      "start_to_supervisor_reaped_ms": 1199.3894079969323,
+      "commit_http_ms": 4.263160000846256
+    },
+    {
+      "case": "public-63-source-rows-plus-one",
+      "mode": "complete",
+      "start_http_status": 202,
+      "poll": {
+        "job_id": "ecd4a9e0-76c0-4c95-ad3a-b27891dfae0e",
+        "status": "complete",
+        "stale": false,
+        "source_busy": false,
+        "result": {
+          "status": "ready",
+          "issues": [],
+          "validation": {
+            "passed": false,
+            "results": [
+              {
+                "ok": true,
+                "message": "Helix IDs are unique."
+              },
+              {
+                "ok": true,
+                "message": "Strand IDs are unique."
+              },
+              {
+                "ok": true,
+                "message": "All domain helix references are valid."
+              },
+              {
+                "ok": false,
+                "message": "No scaffold strand defined."
+              }
+            ]
+          },
+          "batch": {
+            "phase": "complete",
+            "source_design_id": "01c08951-6121-450f-8634-67e9ef65ec22",
+            "source_revision": 368,
+            "commands": [
+              {
+                "command_index": 0,
+                "kind": "nanoparticle-patch",
+                "feature_id": "b0c1013d-833c-5f46-93ef-ed1e125a6dc1",
+                "child_id": null,
+                "outputs": []
+              }
+            ],
+            "completed": [
+              "b0c1013d-833c-5f46-93ef-ed1e125a6dc1"
+            ],
+            "not_evaluated": [],
+            "candidate_replay_verified": false,
+            "authoring_changes": {
+              "basis": "captured_materialized_state",
+              "changed_fields": [],
+              "record_counts": {},
+              "visual_comparison": false,
+              "scientific_qualification": false
+            }
+          },
+          "source_assessment": {
+            "scope": "part",
+            "contract_version": 1,
+            "status": "verified",
+            "issues": [],
+            "verification_scope": "authoring_reproducibility",
+            "integrity_checked": false,
+            "excluded_roles": [
+              "presentation",
+              "physical",
+              "document_identity",
+              "repair_draft"
+            ],
+            "checked_commands": 63,
+            "proof_coverage": "versioned_commands",
+            "native_editable": true,
+            "dependencies": {
+              "complete": true,
+              "parents": {
+                "217888b2-2060-5c38-aed9-0ca0b9d85d59": [],
+                "1f8d84a0-bd82-599e-b0ff-23ea6e427193": [
+                  "217888b2-2060-5c38-aed9-0ca0b9d85d59"
+                ],
+                "86e175c8-78fc-55fe-a577-8db5b879a4bd": [
+                  "1f8d84a0-bd82-599e-b0ff-23ea6e427193"
+                ],
+                "0949b5dd-e4b4-51f2-8e83-7bd7ea791466": [
+                  "86e175c8-78fc-55fe-a577-8db5b879a4bd"
+                ],
+                "31c3a6b9-669d-5a9e-9720-014a1c24915e": [
+                  "0949b5dd-e4b4-51f2-8e83-7bd7ea791466"
+                ],
+                "cd2a95a6-ff4d-5ed2-bd94-4919abcea68c": [
+                  "31c3a6b9-669d-5a9e-9720-014a1c24915e"
+                ],
+                "a5af3210-10e7-5af5-88ea-af73e8b053a5": [
+                  "cd2a95a6-ff4d-5ed2-bd94-4919abcea68c"
+                ],
+                "e5720214-8444-5d6f-8bd8-976e429d37bd": [
+                  "a5af3210-10e7-5af5-88ea-af73e8b053a5"
+                ],
+                "d74a1522-f301-5f74-8c0d-2ffb6846d8e1": [
+                  "e5720214-8444-5d6f-8bd8-976e429d37bd"
+                ],
+                "368d026c-f99c-5ee7-9db9-8d5327336fb1": [
+                  "d74a1522-f301-5f74-8c0d-2ffb6846d8e1"
+                ],
+                "b23ee16e-68a8-536f-bfa2-ec19d7d8d5f6": [
+                  "368d026c-f99c-5ee7-9db9-8d5327336fb1"
+                ],
+                "b1c390b3-2ca9-5440-93fc-7c2770ad7738": [
+                  "b23ee16e-68a8-536f-bfa2-ec19d7d8d5f6"
+                ],
+                "25a2fcab-d70c-56e3-9efb-ca79a5ba5d4d": [
+                  "b1c390b3-2ca9-5440-93fc-7c2770ad7738"
+                ],
+                "8143a75d-71c9-50e1-9478-20c457bfdd8d": [
+                  "25a2fcab-d70c-56e3-9efb-ca79a5ba5d4d"
+                ],
+                "6cc2eba9-f755-592f-8bae-28657cc5dcec": [
+                  "8143a75d-71c9-50e1-9478-20c457bfdd8d"
+                ],
+                "7b6f9b5c-cd1b-54f8-a68a-65beac215beb": [
+                  "6cc2eba9-f755-592f-8bae-28657cc5dcec"
+                ],
+                "3ad7bbea-36d1-54d3-a796-4418a5ffcecd": [
+                  "7b6f9b5c-cd1b-54f8-a68a-65beac215beb"
+                ],
+                "c4320387-f3fd-5364-9f8f-2cdbda22ef50": [
+                  "3ad7bbea-36d1-54d3-a796-4418a5ffcecd"
+                ],
+                "1c4334f4-0d4b-5f28-bc83-f7d4647c0db3": [
+                  "c4320387-f3fd-5364-9f8f-2cdbda22ef50"
+                ],
+                "f516cdc5-58c6-5e4a-a1af-ad78fba33f40": [
+                  "1c4334f4-0d4b-5f28-bc83-f7d4647c0db3"
+                ],
+                "6681197b-12e8-5509-aa93-b10b4e5739f4": [
+                  "f516cdc5-58c6-5e4a-a1af-ad78fba33f40"
+                ],
+                "f7f5a726-920c-53f9-a5f3-782601d3d5d7": [
+                  "6681197b-12e8-5509-aa93-b10b4e5739f4"
+                ],
+                "683ab873-4c12-509d-a958-f73b618416f1": [
+                  "f7f5a726-920c-53f9-a5f3-782601d3d5d7"
+                ],
+                "c8a2a910-70f3-54c7-906c-2dd15c2aa6bf": [
+                  "683ab873-4c12-509d-a958-f73b618416f1"
+                ],
+                "2e539820-dd96-5964-964c-17b9095016fc": [
+                  "c8a2a910-70f3-54c7-906c-2dd15c2aa6bf"
+                ],
+                "71b33d8b-99c9-5bf7-ad57-80fb65ab0555": [
+                  "2e539820-dd96-5964-964c-17b9095016fc"
+                ],
+                "8734f66f-281b-5f23-ad86-307df836256c": [
+                  "71b33d8b-99c9-5bf7-ad57-80fb65ab0555"
+                ],
+                "a98a5648-e5a7-572a-8033-d2481a4c99d6": [
+                  "8734f66f-281b-5f23-ad86-307df836256c"
+                ],
+                "84bc2f26-031a-53b2-ac29-638ab30ea519": [
+                  "a98a5648-e5a7-572a-8033-d2481a4c99d6"
+                ],
+                "57f53c95-ca93-5771-8bd6-9ef0743734d2": [
+                  "84bc2f26-031a-53b2-ac29-638ab30ea519"
+                ],
+                "80d38b4a-863a-5744-8fb6-78238330ebe6": [
+                  "57f53c95-ca93-5771-8bd6-9ef0743734d2"
+                ],
+                "0a16df97-f62d-56f7-a380-580e0b427789": [
+                  "80d38b4a-863a-5744-8fb6-78238330ebe6"
+                ],
+                "9a44bd5b-0ea2-52a7-89fa-6dc016bdb868": [
+                  "0a16df97-f62d-56f7-a380-580e0b427789",
+                  "217888b2-2060-5c38-aed9-0ca0b9d85d59"
+                ],
+                "2375b329-feaa-5aca-9d6a-3363a138a1a2": [
+                  "1f8d84a0-bd82-599e-b0ff-23ea6e427193",
+                  "9a44bd5b-0ea2-52a7-89fa-6dc016bdb868"
+                ],
+                "989044e4-8929-504a-84df-a56f5e0db664": [
+                  "2375b329-feaa-5aca-9d6a-3363a138a1a2",
+                  "86e175c8-78fc-55fe-a577-8db5b879a4bd"
+                ],
+                "343d3031-0740-5343-8315-63b130ec8f7d": [
+                  "0949b5dd-e4b4-51f2-8e83-7bd7ea791466",
+                  "989044e4-8929-504a-84df-a56f5e0db664"
+                ],
+                "6c2a98ee-3f23-5ded-a337-f7e50cf29ab6": [
+                  "31c3a6b9-669d-5a9e-9720-014a1c24915e",
+                  "343d3031-0740-5343-8315-63b130ec8f7d"
+                ],
+                "beeb1319-1746-5577-8346-6187b68bdbd1": [
+                  "6c2a98ee-3f23-5ded-a337-f7e50cf29ab6",
+                  "cd2a95a6-ff4d-5ed2-bd94-4919abcea68c"
+                ],
+                "296181b1-dc2c-54bc-9675-43ad422ea645": [
+                  "a5af3210-10e7-5af5-88ea-af73e8b053a5",
+                  "beeb1319-1746-5577-8346-6187b68bdbd1"
+                ],
+                "0c8890ff-eca2-5b17-8460-c8e070ecfb28": [
+                  "296181b1-dc2c-54bc-9675-43ad422ea645",
+                  "e5720214-8444-5d6f-8bd8-976e429d37bd"
+                ],
+                "48e02c64-bb62-5942-88b2-ee454aa0ae3a": [
+                  "0c8890ff-eca2-5b17-8460-c8e070ecfb28",
+                  "d74a1522-f301-5f74-8c0d-2ffb6846d8e1"
+                ],
+                "f668e9b4-c46a-59cf-8931-3b5609c68f3c": [
+                  "368d026c-f99c-5ee7-9db9-8d5327336fb1",
+                  "48e02c64-bb62-5942-88b2-ee454aa0ae3a"
+                ],
+                "281e66bc-5265-5781-a9ab-ed769f436702": [
+                  "b23ee16e-68a8-536f-bfa2-ec19d7d8d5f6",
+                  "f668e9b4-c46a-59cf-8931-3b5609c68f3c"
+                ],
+                "cde7eb7a-ace8-5de8-83e7-48f8586df664": [
+                  "281e66bc-5265-5781-a9ab-ed769f436702",
+                  "b1c390b3-2ca9-5440-93fc-7c2770ad7738"
+                ],
+                "5178638d-1735-5d9c-824e-b299ad0c6c0f": [
+                  "25a2fcab-d70c-56e3-9efb-ca79a5ba5d4d",
+                  "cde7eb7a-ace8-5de8-83e7-48f8586df664"
+                ],
+                "cffdda5f-ce77-5945-ae1c-0cf0720ce3c6": [
+                  "5178638d-1735-5d9c-824e-b299ad0c6c0f",
+                  "8143a75d-71c9-50e1-9478-20c457bfdd8d"
+                ],
+                "0a7cb832-8dae-5923-ba73-bfa99623c474": [
+                  "6cc2eba9-f755-592f-8bae-28657cc5dcec",
+                  "cffdda5f-ce77-5945-ae1c-0cf0720ce3c6"
+                ],
+                "82a20f17-7fa7-5c6b-aed7-b8e0058e279a": [
+                  "0a7cb832-8dae-5923-ba73-bfa99623c474",
+                  "7b6f9b5c-cd1b-54f8-a68a-65beac215beb"
+                ],
+                "342e4444-c488-5ac5-aad6-7a79b9f128ae": [
+                  "3ad7bbea-36d1-54d3-a796-4418a5ffcecd",
+                  "82a20f17-7fa7-5c6b-aed7-b8e0058e279a"
+                ],
+                "6832b9e8-4533-59ff-b206-6afd5473bb14": [
+                  "342e4444-c488-5ac5-aad6-7a79b9f128ae",
+                  "c4320387-f3fd-5364-9f8f-2cdbda22ef50"
+                ],
+                "9e40be86-849f-5a9a-aaef-f6ddf5967a59": [
+                  "1c4334f4-0d4b-5f28-bc83-f7d4647c0db3",
+                  "6832b9e8-4533-59ff-b206-6afd5473bb14"
+                ],
+                "75d767c4-3b6e-53a1-bad0-21018d8909bd": [
+                  "9e40be86-849f-5a9a-aaef-f6ddf5967a59",
+                  "f516cdc5-58c6-5e4a-a1af-ad78fba33f40"
+                ],
+                "a57f130c-9ce7-501c-bfe0-9924c4cb5600": [
+                  "6681197b-12e8-5509-aa93-b10b4e5739f4",
+                  "75d767c4-3b6e-53a1-bad0-21018d8909bd"
+                ],
+                "cd35fcac-2f33-503c-bdc7-87846b0d2a9f": [
+                  "a57f130c-9ce7-501c-bfe0-9924c4cb5600",
+                  "f7f5a726-920c-53f9-a5f3-782601d3d5d7"
+                ],
+                "532a669d-94cc-5466-8129-97ba5e3212e5": [
+                  "683ab873-4c12-509d-a958-f73b618416f1",
+                  "cd35fcac-2f33-503c-bdc7-87846b0d2a9f"
+                ],
+                "74e5d6d1-005a-50a3-b01d-efd80e2a48ae": [
+                  "532a669d-94cc-5466-8129-97ba5e3212e5",
+                  "c8a2a910-70f3-54c7-906c-2dd15c2aa6bf"
+                ],
+                "bc83c542-8118-552e-bd95-18973fbe0075": [
+                  "2e539820-dd96-5964-964c-17b9095016fc",
+                  "74e5d6d1-005a-50a3-b01d-efd80e2a48ae"
+                ],
+                "a86f6a8a-a6c3-5649-817c-52edc0c2f6eb": [
+                  "71b33d8b-99c9-5bf7-ad57-80fb65ab0555",
+                  "bc83c542-8118-552e-bd95-18973fbe0075"
+                ],
+                "3c88f62f-bfe6-5e97-a913-ec754f5e8fa6": [
+                  "8734f66f-281b-5f23-ad86-307df836256c",
+                  "a86f6a8a-a6c3-5649-817c-52edc0c2f6eb"
+                ],
+                "8f850dae-3aef-5499-ac91-1af1fe0610bf": [
+                  "3c88f62f-bfe6-5e97-a913-ec754f5e8fa6",
+                  "a98a5648-e5a7-572a-8033-d2481a4c99d6"
+                ],
+                "a22cb831-28d4-5a77-a5c9-79eb9a34b1a5": [
+                  "84bc2f26-031a-53b2-ac29-638ab30ea519",
+                  "8f850dae-3aef-5499-ac91-1af1fe0610bf"
+                ],
+                "6643297c-f41b-5af1-a859-38576e670b08": [
+                  "57f53c95-ca93-5771-8bd6-9ef0743734d2",
+                  "a22cb831-28d4-5a77-a5c9-79eb9a34b1a5"
+                ],
+                "a7406380-233d-5c5b-b0f3-4125548ad815": [
+                  "6643297c-f41b-5af1-a859-38576e670b08",
+                  "80d38b4a-863a-5744-8fb6-78238330ebe6"
+                ]
+              }
+            },
+            "recipe_fingerprint": "84e16c3dce04b4b6e8ad13e9901fa04c7783677934669f0f7a696c09b47c2254",
+            "authoring_fingerprint": "57064bf3862e66e4831b9288a499717496c03d9f95e81200b577ad8ac451a0e7",
+            "imported_sources": []
+          },
+          "source_revision": 368,
+          "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+        }
+      },
+      "commit_http_status": 200,
+      "commit": {
+        "job_id": "ecd4a9e0-76c0-4c95-ad3a-b27891dfae0e",
+        "status": "committed",
+        "revision": 369,
+        "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+      },
+      "source_guard_correct": true,
+      "cold_replay": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "verified",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 64,
+        "proof_coverage": "versioned_commands",
+        "native_editable": true,
+        "dependencies": {
+          "complete": true,
+          "parents": {
+            "217888b2-2060-5c38-aed9-0ca0b9d85d59": [],
+            "1f8d84a0-bd82-599e-b0ff-23ea6e427193": [
+              "217888b2-2060-5c38-aed9-0ca0b9d85d59"
+            ],
+            "86e175c8-78fc-55fe-a577-8db5b879a4bd": [
+              "1f8d84a0-bd82-599e-b0ff-23ea6e427193"
+            ],
+            "0949b5dd-e4b4-51f2-8e83-7bd7ea791466": [
+              "86e175c8-78fc-55fe-a577-8db5b879a4bd"
+            ],
+            "31c3a6b9-669d-5a9e-9720-014a1c24915e": [
+              "0949b5dd-e4b4-51f2-8e83-7bd7ea791466"
+            ],
+            "cd2a95a6-ff4d-5ed2-bd94-4919abcea68c": [
+              "31c3a6b9-669d-5a9e-9720-014a1c24915e"
+            ],
+            "a5af3210-10e7-5af5-88ea-af73e8b053a5": [
+              "cd2a95a6-ff4d-5ed2-bd94-4919abcea68c"
+            ],
+            "e5720214-8444-5d6f-8bd8-976e429d37bd": [
+              "a5af3210-10e7-5af5-88ea-af73e8b053a5"
+            ],
+            "d74a1522-f301-5f74-8c0d-2ffb6846d8e1": [
+              "e5720214-8444-5d6f-8bd8-976e429d37bd"
+            ],
+            "368d026c-f99c-5ee7-9db9-8d5327336fb1": [
+              "d74a1522-f301-5f74-8c0d-2ffb6846d8e1"
+            ],
+            "b23ee16e-68a8-536f-bfa2-ec19d7d8d5f6": [
+              "368d026c-f99c-5ee7-9db9-8d5327336fb1"
+            ],
+            "b1c390b3-2ca9-5440-93fc-7c2770ad7738": [
+              "b23ee16e-68a8-536f-bfa2-ec19d7d8d5f6"
+            ],
+            "25a2fcab-d70c-56e3-9efb-ca79a5ba5d4d": [
+              "b1c390b3-2ca9-5440-93fc-7c2770ad7738"
+            ],
+            "8143a75d-71c9-50e1-9478-20c457bfdd8d": [
+              "25a2fcab-d70c-56e3-9efb-ca79a5ba5d4d"
+            ],
+            "6cc2eba9-f755-592f-8bae-28657cc5dcec": [
+              "8143a75d-71c9-50e1-9478-20c457bfdd8d"
+            ],
+            "7b6f9b5c-cd1b-54f8-a68a-65beac215beb": [
+              "6cc2eba9-f755-592f-8bae-28657cc5dcec"
+            ],
+            "3ad7bbea-36d1-54d3-a796-4418a5ffcecd": [
+              "7b6f9b5c-cd1b-54f8-a68a-65beac215beb"
+            ],
+            "c4320387-f3fd-5364-9f8f-2cdbda22ef50": [
+              "3ad7bbea-36d1-54d3-a796-4418a5ffcecd"
+            ],
+            "1c4334f4-0d4b-5f28-bc83-f7d4647c0db3": [
+              "c4320387-f3fd-5364-9f8f-2cdbda22ef50"
+            ],
+            "f516cdc5-58c6-5e4a-a1af-ad78fba33f40": [
+              "1c4334f4-0d4b-5f28-bc83-f7d4647c0db3"
+            ],
+            "6681197b-12e8-5509-aa93-b10b4e5739f4": [
+              "f516cdc5-58c6-5e4a-a1af-ad78fba33f40"
+            ],
+            "f7f5a726-920c-53f9-a5f3-782601d3d5d7": [
+              "6681197b-12e8-5509-aa93-b10b4e5739f4"
+            ],
+            "683ab873-4c12-509d-a958-f73b618416f1": [
+              "f7f5a726-920c-53f9-a5f3-782601d3d5d7"
+            ],
+            "c8a2a910-70f3-54c7-906c-2dd15c2aa6bf": [
+              "683ab873-4c12-509d-a958-f73b618416f1"
+            ],
+            "2e539820-dd96-5964-964c-17b9095016fc": [
+              "c8a2a910-70f3-54c7-906c-2dd15c2aa6bf"
+            ],
+            "71b33d8b-99c9-5bf7-ad57-80fb65ab0555": [
+              "2e539820-dd96-5964-964c-17b9095016fc"
+            ],
+            "8734f66f-281b-5f23-ad86-307df836256c": [
+              "71b33d8b-99c9-5bf7-ad57-80fb65ab0555"
+            ],
+            "a98a5648-e5a7-572a-8033-d2481a4c99d6": [
+              "8734f66f-281b-5f23-ad86-307df836256c"
+            ],
+            "84bc2f26-031a-53b2-ac29-638ab30ea519": [
+              "a98a5648-e5a7-572a-8033-d2481a4c99d6"
+            ],
+            "57f53c95-ca93-5771-8bd6-9ef0743734d2": [
+              "84bc2f26-031a-53b2-ac29-638ab30ea519"
+            ],
+            "80d38b4a-863a-5744-8fb6-78238330ebe6": [
+              "57f53c95-ca93-5771-8bd6-9ef0743734d2"
+            ],
+            "0a16df97-f62d-56f7-a380-580e0b427789": [
+              "80d38b4a-863a-5744-8fb6-78238330ebe6"
+            ],
+            "9a44bd5b-0ea2-52a7-89fa-6dc016bdb868": [
+              "0a16df97-f62d-56f7-a380-580e0b427789",
+              "217888b2-2060-5c38-aed9-0ca0b9d85d59"
+            ],
+            "2375b329-feaa-5aca-9d6a-3363a138a1a2": [
+              "1f8d84a0-bd82-599e-b0ff-23ea6e427193",
+              "9a44bd5b-0ea2-52a7-89fa-6dc016bdb868"
+            ],
+            "989044e4-8929-504a-84df-a56f5e0db664": [
+              "2375b329-feaa-5aca-9d6a-3363a138a1a2",
+              "86e175c8-78fc-55fe-a577-8db5b879a4bd"
+            ],
+            "343d3031-0740-5343-8315-63b130ec8f7d": [
+              "0949b5dd-e4b4-51f2-8e83-7bd7ea791466",
+              "989044e4-8929-504a-84df-a56f5e0db664"
+            ],
+            "6c2a98ee-3f23-5ded-a337-f7e50cf29ab6": [
+              "31c3a6b9-669d-5a9e-9720-014a1c24915e",
+              "343d3031-0740-5343-8315-63b130ec8f7d"
+            ],
+            "beeb1319-1746-5577-8346-6187b68bdbd1": [
+              "6c2a98ee-3f23-5ded-a337-f7e50cf29ab6",
+              "cd2a95a6-ff4d-5ed2-bd94-4919abcea68c"
+            ],
+            "296181b1-dc2c-54bc-9675-43ad422ea645": [
+              "a5af3210-10e7-5af5-88ea-af73e8b053a5",
+              "beeb1319-1746-5577-8346-6187b68bdbd1"
+            ],
+            "0c8890ff-eca2-5b17-8460-c8e070ecfb28": [
+              "296181b1-dc2c-54bc-9675-43ad422ea645",
+              "e5720214-8444-5d6f-8bd8-976e429d37bd"
+            ],
+            "48e02c64-bb62-5942-88b2-ee454aa0ae3a": [
+              "0c8890ff-eca2-5b17-8460-c8e070ecfb28",
+              "d74a1522-f301-5f74-8c0d-2ffb6846d8e1"
+            ],
+            "f668e9b4-c46a-59cf-8931-3b5609c68f3c": [
+              "368d026c-f99c-5ee7-9db9-8d5327336fb1",
+              "48e02c64-bb62-5942-88b2-ee454aa0ae3a"
+            ],
+            "281e66bc-5265-5781-a9ab-ed769f436702": [
+              "b23ee16e-68a8-536f-bfa2-ec19d7d8d5f6",
+              "f668e9b4-c46a-59cf-8931-3b5609c68f3c"
+            ],
+            "cde7eb7a-ace8-5de8-83e7-48f8586df664": [
+              "281e66bc-5265-5781-a9ab-ed769f436702",
+              "b1c390b3-2ca9-5440-93fc-7c2770ad7738"
+            ],
+            "5178638d-1735-5d9c-824e-b299ad0c6c0f": [
+              "25a2fcab-d70c-56e3-9efb-ca79a5ba5d4d",
+              "cde7eb7a-ace8-5de8-83e7-48f8586df664"
+            ],
+            "cffdda5f-ce77-5945-ae1c-0cf0720ce3c6": [
+              "5178638d-1735-5d9c-824e-b299ad0c6c0f",
+              "8143a75d-71c9-50e1-9478-20c457bfdd8d"
+            ],
+            "0a7cb832-8dae-5923-ba73-bfa99623c474": [
+              "6cc2eba9-f755-592f-8bae-28657cc5dcec",
+              "cffdda5f-ce77-5945-ae1c-0cf0720ce3c6"
+            ],
+            "82a20f17-7fa7-5c6b-aed7-b8e0058e279a": [
+              "0a7cb832-8dae-5923-ba73-bfa99623c474",
+              "7b6f9b5c-cd1b-54f8-a68a-65beac215beb"
+            ],
+            "342e4444-c488-5ac5-aad6-7a79b9f128ae": [
+              "3ad7bbea-36d1-54d3-a796-4418a5ffcecd",
+              "82a20f17-7fa7-5c6b-aed7-b8e0058e279a"
+            ],
+            "6832b9e8-4533-59ff-b206-6afd5473bb14": [
+              "342e4444-c488-5ac5-aad6-7a79b9f128ae",
+              "c4320387-f3fd-5364-9f8f-2cdbda22ef50"
+            ],
+            "9e40be86-849f-5a9a-aaef-f6ddf5967a59": [
+              "1c4334f4-0d4b-5f28-bc83-f7d4647c0db3",
+              "6832b9e8-4533-59ff-b206-6afd5473bb14"
+            ],
+            "75d767c4-3b6e-53a1-bad0-21018d8909bd": [
+              "9e40be86-849f-5a9a-aaef-f6ddf5967a59",
+              "f516cdc5-58c6-5e4a-a1af-ad78fba33f40"
+            ],
+            "a57f130c-9ce7-501c-bfe0-9924c4cb5600": [
+              "6681197b-12e8-5509-aa93-b10b4e5739f4",
+              "75d767c4-3b6e-53a1-bad0-21018d8909bd"
+            ],
+            "cd35fcac-2f33-503c-bdc7-87846b0d2a9f": [
+              "a57f130c-9ce7-501c-bfe0-9924c4cb5600",
+              "f7f5a726-920c-53f9-a5f3-782601d3d5d7"
+            ],
+            "532a669d-94cc-5466-8129-97ba5e3212e5": [
+              "683ab873-4c12-509d-a958-f73b618416f1",
+              "cd35fcac-2f33-503c-bdc7-87846b0d2a9f"
+            ],
+            "74e5d6d1-005a-50a3-b01d-efd80e2a48ae": [
+              "532a669d-94cc-5466-8129-97ba5e3212e5",
+              "c8a2a910-70f3-54c7-906c-2dd15c2aa6bf"
+            ],
+            "bc83c542-8118-552e-bd95-18973fbe0075": [
+              "2e539820-dd96-5964-964c-17b9095016fc",
+              "74e5d6d1-005a-50a3-b01d-efd80e2a48ae"
+            ],
+            "a86f6a8a-a6c3-5649-817c-52edc0c2f6eb": [
+              "71b33d8b-99c9-5bf7-ad57-80fb65ab0555",
+              "bc83c542-8118-552e-bd95-18973fbe0075"
+            ],
+            "3c88f62f-bfe6-5e97-a913-ec754f5e8fa6": [
+              "8734f66f-281b-5f23-ad86-307df836256c",
+              "a86f6a8a-a6c3-5649-817c-52edc0c2f6eb"
+            ],
+            "8f850dae-3aef-5499-ac91-1af1fe0610bf": [
+              "3c88f62f-bfe6-5e97-a913-ec754f5e8fa6",
+              "a98a5648-e5a7-572a-8033-d2481a4c99d6"
+            ],
+            "a22cb831-28d4-5a77-a5c9-79eb9a34b1a5": [
+              "84bc2f26-031a-53b2-ac29-638ab30ea519",
+              "8f850dae-3aef-5499-ac91-1af1fe0610bf"
+            ],
+            "6643297c-f41b-5af1-a859-38576e670b08": [
+              "57f53c95-ca93-5771-8bd6-9ef0743734d2",
+              "a22cb831-28d4-5a77-a5c9-79eb9a34b1a5"
+            ],
+            "a7406380-233d-5c5b-b0f3-4125548ad815": [
+              "6643297c-f41b-5af1-a859-38576e670b08",
+              "80d38b4a-863a-5744-8fb6-78238330ebe6"
+            ],
+            "b0c1013d-833c-5f46-93ef-ed1e125a6dc1": [
+              "9a44bd5b-0ea2-52a7-89fa-6dc016bdb868",
+              "a7406380-233d-5c5b-b0f3-4125548ad815"
+            ]
+          }
+        },
+        "recipe_fingerprint": "e9e70a4dc32ff9631894dceb6db807e8ec231de0edd592906c21715d27f5dec3",
+        "authoring_fingerprint": "57064bf3862e66e4831b9288a499717496c03d9f95e81200b577ad8ac451a0e7",
+        "imported_sources": [],
+        "elapsed_ms": 1134.6993879997171
+      },
+      "shared_admission_released_after_reaping": true,
+      "start_http_ms": 13.903012000810122,
+      "parent_worker_constructor_ms": 1.608542999747442,
+      "process_start_call_ms": 0.46442999882856384,
+      "start_to_supervisor_reaped_ms": 1341.223216997605,
+      "commit_http_ms": 4.779609000252094
+    }
+  ],
+  "real_worker_races": [
+    {
+      "mode": "cancel",
+      "start_http_status": 202,
+      "poll": {
+        "job_id": "6dccbf91-8e3d-4c2c-9640-ae30375b09b8",
+        "status": "complete",
+        "stale": false,
+        "source_busy": false,
+        "result": {
+          "status": "unverified",
+          "native_editable": false,
+          "issues": [
+            {
+              "code": "cancelled"
+            },
+            {
+              "code": "cancelled"
+            }
+          ],
+          "source_revision": 370,
+          "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+        }
+      },
+      "commit_http_status": 409,
+      "commit": {
+        "detail": "Part evaluation has no publishable candidate"
+      },
+      "source_guard_correct": true,
+      "cold_replay": null,
+      "shared_admission_released_after_reaping": true,
+      "start_http_ms": 7.810745999449864,
+      "parent_worker_constructor_ms": 1.1049760032619815,
+      "process_start_call_ms": 0.42460499753360637,
+      "stop_to_supervisor_reaped_ms": 51.94616699736798,
+      "start_to_supervisor_reaped_ms": 60.38388799788663,
+      "commit_http_ms": 1.0015290026785806
+    },
+    {
+      "mode": "source_changed",
+      "start_http_status": 202,
+      "poll": {
+        "job_id": "60d5c92e-139e-4f60-a02f-dceef9ad9566",
+        "status": "complete",
+        "stale": true,
+        "source_busy": false,
+        "result": {
+          "status": "unverified",
+          "native_editable": false,
+          "issues": [
+            {
+              "code": "source_changed"
+            },
+            {
+              "code": "source_changed"
+            }
+          ],
+          "source_revision": 371,
+          "design_id": "01c08951-6121-450f-8634-67e9ef65ec22"
+        }
+      },
+      "commit_http_status": 409,
+      "commit": {
+        "detail": "Part evaluation has no publishable candidate"
+      },
+      "source_guard_correct": true,
+      "cold_replay": null,
+      "shared_admission_released_after_reaping": true,
+      "start_http_ms": 7.877611998992506,
+      "parent_worker_constructor_ms": 1.656627999182092,
+      "process_start_call_ms": 0.44712300223181956,
+      "stop_to_supervisor_reaped_ms": 52.04155000319588,
+      "start_to_supervisor_reaped_ms": 60.68016700010048,
+      "commit_http_ms": 1.0674130026018247
+    }
+  ],
+  "notes": [
+    "No production lifespan, workspace writes or scientific calculations; artificial excluded-state records measure storage costs only.",
+    "Capture samples intercept submission after actual locked capture and do not measure worker computation or native cancellation.",
+    "Prepared commits run independently of capture refusals and are not evidence of successful end-to-end admission.",
+    "Undo equality checks cover the complete retained source, including history, physical/presentation state and repair draft.",
+    "Intermediate boundaries have exactly 64/128/256 native source rows; each appends 32 commands and its complete candidate is independently editable.",
+    "When the maximum-history search runs, its final native history is independently editable and the next single command must fail atomically at unchanged budgets.",
+    "A source may fit ordinary capture while excluded physical/presentation/draft data makes undo publication expensive.",
+    "Empty-root verification measures spawn/import/trivial-proof overhead without a native build; parent process-start call timings are separate.",
+    "Cold proof uses its unchanged ordinary capture and deadline; no successful cold assessment is inferred from a ready batch.",
+    "Lock probes add overhead; zero observed overlap is not evidence of zero contention. Refusals are retained without retry.",
+    "Exit status checks harness correctness only. Qualification requires reviewing capture refusals, p95 lock/HTTP costs and full-source scope."
+  ],
+  "sample_retention": "Repetitive successful samples pruned; all refusals and timing maxima retained. No outcomes or percentiles recomputed."
+}

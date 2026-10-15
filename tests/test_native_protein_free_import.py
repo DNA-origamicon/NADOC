@@ -119,6 +119,36 @@ def test_exact_original_source_one_parse_two_editable_rows_one_revision_undo_and
     assert state.get_or_404() == design
 
 
+def test_private_candidate_is_admitted_without_another_isolated_copy(client, monkeypatch):
+    source = state.get_or_404()
+    source.annotations = [Annotation(text="Retain metadata within the shared source budget")]
+    native_capture, native_admit = recording.capture, recording.admit
+    captures, admissions = [], []
+
+    def capture_source(design, **limits):
+        captures.append((design, limits))
+        return native_capture(design, **limits)
+
+    def admit_candidate(design, **limits):
+        assert design is not source and state.get_or_404() is source
+        assert len(design.protein_assets) == 1 and not source.protein_assets
+        admissions.append((design, limits))
+        return native_admit(design, **limits)
+
+    monkeypatch.setattr(recording, "capture", capture_source)
+    monkeypatch.setattr(recording, "admit", admit_candidate)
+    response = post(client)
+    assert response.status_code == 200, response.text
+    assert len(captures) == len(admissions) == 1
+    assert captures[0][0] is source and 0 < captures[0][1]["seconds"] <= .025
+    assert "seconds" not in admissions[0][1]
+    for key in ("max_nodes", "max_bytes", "preserve_entry_types"):
+        assert captures[0][1][key] == admissions[0][1][key]
+    assert admissions[0][1]["max_nodes"] < 30_000
+    assert admissions[0][1]["max_bytes"] < 2_000_000
+    assert state.get_or_404().annotations == source.annotations
+
+
 def test_cold_replay_ignores_recovery_and_library_and_both_features_remain_editable(client):
     response = post(client)
     assert response.status_code == 200, response.text
@@ -285,14 +315,9 @@ def test_preparation_and_publication_failures_preserve_document_stacks_and_libra
     if stage == "recovery":
         monkeypatch.setattr(state, "encode_design_snapshot", fail)
     elif stage == "candidate_admission":
-        original, calls = recording.capture, 0
-        def fail_candidate(*args, **kwargs):
-            nonlocal calls
-            calls += 1
-            if calls == 2:
-                raise CaptureLimit("injected candidate refusal")
-            return original(*args, **kwargs)
-        monkeypatch.setattr(recording, "capture", fail_candidate)
+        def fail_candidate(*_args, **_kwargs):
+            raise CaptureLimit("injected candidate refusal")
+        monkeypatch.setattr(recording, "admit", fail_candidate)
     elif stage == "response":
         from backend.api import crud
         monkeypatch.setattr(crud, "_design_response", fail)

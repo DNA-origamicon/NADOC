@@ -260,7 +260,10 @@ def test_batch_uses_ordinary_capture_profile_without_coating_classification(docu
     monkeypatch.setattr(part_evaluation_capture, "_coating_intent", lambda *_a: pytest.fail("Batch inspected coating history"))
     monkeypatch.setattr(part_verification_capture, "capture", ordinary)
     source_design, captured, revision = state.capture_design_for_evaluation(EvaluationRequest.model_validate(body()))
-    assert calls == [(source_design, {"preserve_entry_types": True})]
+    assert len(calls) == 1 and calls[0][0] is source_design
+    assert calls[0][1]["preserve_entry_types"] is True
+    assert set(calls[0][1]) == {"preserve_entry_types", "seconds"}
+    assert 0 <= calls[0][1]["seconds"] <= 0.025  # Scope admission shares the original deadline.
     assert captured is not source_design and captured.id == source_design.id and revision == state.revision()
 
 

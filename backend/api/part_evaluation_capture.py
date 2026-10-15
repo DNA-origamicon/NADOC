@@ -108,7 +108,7 @@ def _scope(design):
             _reject("Current coating exceeds the bounded single-particle contract")
 
 
-def _history(design, *, require_coating=True):
+def _history(design, *, require_coating=True, publishing=False):
     from backend.api import part_nanoparticle_commands as gold
     from backend.api import part_streptavidin_commands as coating
 
@@ -120,8 +120,14 @@ def _history(design, *, require_coating=True):
         _reject("Coating evaluation requires flat native gold/coating definitions")
     if require_coating and not any(type(entry.params) is dict and "coating_version" in entry.params for entry in rows):
         _reject("Coating evaluation requires a versioned coating definition")
+    # Publication snapshots the complete live source for undo. Bound saved
+    # payload lengths separately; they remain excluded from proof input and
+    # are never decoded or treated as construction evidence here.
+    from backend.api.part_recovery_budget import retained_recovery_bytes
+
+    if publishing:
+        retained_recovery_bytes(rows, max_rows=MAX_COATING_HISTORY_ROWS)
     # Bound the combined authored header/parameter envelope before validation.
-    # Recovery strings are intentionally not read, decoded, copied or measured.
     try:
         validate_operation_input([{name: getattr(entry, name) for name in _HEADER_FIELDS} for entry in rows])
         if any(type(entry.id) is not str for entry in rows) or len({entry.id for entry in rows}) != len(rows):
@@ -192,7 +198,7 @@ def capture_for_evaluation(design, *, request, revision, preserve_entry_types=Tr
     if request.operation == "append" and not coating_append:
         _reject("This append operation does not admit the coating capture profile")
     _scope(design)
-    _history(design, require_coating=not coating_append or any(
+    _history(design, publishing=request.operation != "verify", require_coating=not coating_append or any(
         particle.coating is not None for particle in design.nanoparticles))
     _source_envelope(design)
     return capture(design, preserve_entry_types=preserve_entry_types, **COATING_PROFILE)

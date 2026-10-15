@@ -245,12 +245,8 @@ def test_capture_refusal_never_retries_or_changes_source(monkeypatch):
 
 
 def test_real_capture_keeps_isolation_and_strips_recovery_without_proof():
-    class Recovery:
-        def __deepcopy__(self, _memo):
-            pytest.fail("Capture inspected recovery")
-
     design = source()
-    design.feature_log[0].design_snapshot_gz_b64 = Recovery()
+    design.feature_log[0].design_snapshot_gz_b64 = "poisoned recovery, not a proof input"
     isolated = policy.capture_for_evaluation(design, request=request(), revision=7)
     assert not isolated.feature_log[0].design_snapshot_gz_b64
     assert isolated.feature_log[1].params == design.feature_log[1].params
@@ -258,6 +254,26 @@ def test_real_capture_keeps_isolation_and_strips_recovery_without_proof():
     isolated.feature_log[1].params["seed"] = 9
     assert design.nanoparticles[0].diameter_nm == 20.0
     assert design.feature_log[1].params["seed"] == 1
+
+
+def test_coating_rejects_oversized_retained_recovery_before_capture(captures):
+    from backend.api.part_recovery_budget import MAX_RECOVERY_BYTES
+
+    design = source()
+    design.feature_log[0].design_snapshot_gz_b64 = "x" * MAX_RECOVERY_BYTES
+    design.feature_log[1].post_state_gz_b64 = "x"
+    with pytest.raises(CaptureLimit, match="Retained recovery"):
+        policy.capture_for_evaluation(design, request=request(operation="edit", index=0, params={}), revision=7)
+    assert not captures
+
+
+def test_nonpublishing_coating_proof_still_ignores_oversized_recovery(captures):
+    from backend.api.part_recovery_budget import MAX_RECOVERY_BYTES
+
+    design = source()
+    design.feature_log[0].post_state_gz_b64 = "x" * (MAX_RECOVERY_BYTES + 1)
+    assert policy.capture_for_evaluation(design, request=request(), revision=7) == "isolated"
+    assert len(captures) == 1
 
 
 @pytest.mark.parametrize("field", ["profile", "max_nodes", "max_bytes", "seconds"])

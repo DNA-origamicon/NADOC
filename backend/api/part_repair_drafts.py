@@ -66,6 +66,7 @@ def mutate_draft(request):
     request = parse_draft_request(request.model_dump(mode="json") if hasattr(request, "model_dump") else request)
     try:
         with host._lock:
+            host._require_compatibility_write("repair_draft")
             session = host._session()
             source, revision = session.design, session.revision
             if source is None:

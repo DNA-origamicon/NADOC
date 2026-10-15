@@ -1,117 +1,27 @@
-"""Bounded proof input capture; strip recovery payloads and display/physics data."""
-from copy import deepcopy
-from time import monotonic
+"""Isolated, time-bounded proof input capture from a lock-owned design."""
 
-from pydantic import BaseModel
-
-from backend.core.part_history_contract import FIELD_ROLES
-
-
-class CaptureLimit(ValueError):
-    pass
+from backend.core.part_capture_inputs import CaptureLimit as CaptureLimit, visit_inputs
 
 
 def capture(design, *, max_nodes=30_000, max_bytes=2_000_000, seconds=0.025,
             preserve_entry_types=False):
-    """Caller owns the state lock. Bound admission before expensive deep copies.
+    """Caller owns the state lock; isolation retains the cooperative deadline.
 
-    Time is cooperative at object boundaries, not a hard real-time guarantee.
-    Immutable strings are shared, but count toward the retained input budget.
-    No snapshot blobs or physical results enter the captured proof input.
+    Recovery payloads and display/physical data are excluded. Immutable strings
+    are shared but charged. Time is checked at object boundaries, not a hard
+    real-time guarantee. Private candidate admission uses the same accounting
+    without constructing another isolated graph.
     """
-    from backend.core.models import MinorMutationLogEntry, RoutingClusterLogEntry
-    from backend.core.part_capture_copy import seed_scalar_atom_copy
-    deadline = monotonic() + seconds
-    remaining = [max_nodes, max_bytes]
+    return visit_inputs(design, max_nodes=max_nodes, max_bytes=max_bytes, seconds=seconds,
+                        preserve_entry_types=preserve_entry_types, copy_inputs=True)
 
-    def charge(value, copy_memo=None):
-        pending = [value]
-        seen = set()
-        while pending:
-            item = pending.pop()
-            remaining[0] -= 1
-            if remaining[0] < 0 or remaining[1] < 0 or monotonic() > deadline:
-                raise CaptureLimit("Part verification capture budget exceeded")
-            if isinstance(item, str):
-                remaining[1] -= len(item) * 4  # conservative UTF-8 upper bound
-            elif isinstance(item, (BaseModel, dict, list, tuple)):
-                if id(item) in seen:
-                    continue
-                seen.add(id(item))
-                if isinstance(item, BaseModel):
-                    children = item.__dict__.values()
-                    if copy_memo is not None:
-                        scalar_charge = seed_scalar_atom_copy(item, copy_memo)
-                        if scalar_charge is not None:
-                            nodes, size = scalar_charge
-                            if nodes + len(pending) > remaining[0]:
-                                raise CaptureLimit("Part verification capture node budget exceeded")
-                            remaining[0] -= nodes
-                            remaining[1] -= size
-                            if remaining[1] < 0 or monotonic() > deadline:
-                                raise CaptureLimit("Part verification capture budget exceeded")
-                            continue
-                elif isinstance(item, dict):
-                    if len(item) * 2 > remaining[0]:
-                        raise CaptureLimit("Part verification capture node budget exceeded")
-                    children = (*item.keys(), *item.values())
-                else:
-                    children = item
-                if len(children) + len(pending) > remaining[0]:
-                    raise CaptureLimit("Part verification capture node budget exceeded")
-                pending.extend(children)
-        if remaining[1] < 0:
-            raise CaptureLimit("Part verification capture byte budget exceeded")
 
-    fields = {}
-    for name in type(design).model_fields:
-        if FIELD_ROLES.get(name) not in {"presentation", "physical", "history", "repair_draft"}:
-            value = getattr(design, name)
-            # Specialize the same reviewed scalar atoms in protein assets and
-            # nanoparticle authoring; never bypass field/node/byte accounting.
-            # Keep traversal/budgets identical; memo preserves atom aliases
-            # within the captured field without sharing atoms with the source.
-            copy_memo = {} if name in {"nanoparticles", "protein_assets"} else None
-            charge(value, copy_memo)
-            fields[name] = deepcopy(value, copy_memo)
-    charge(design.recipe_root)
-    fields["recipe_root"] = design.recipe_root  # frozen root, immutable scalar fields
-    fields["feature_log_cursor"] = design.feature_log_cursor
-    fields["feature_log_sub_cursor"] = design.feature_log_sub_cursor
+def admit(design, *, max_nodes=30_000, max_bytes=2_000_000, preserve_entry_types=False):
+    """Check resource bounds of an already-private candidate without copying.
 
-    def header(entry):
-        # Copy only fields proof mode actually reads. Never visit a payload.
-        from backend.core.part_overlay_commands import KINDS as OVERLAY_KINDS, command_input
-        if entry.feature_type in OVERLAY_KINDS:
-            charge(entry)
-        if preserve_entry_types:
-            if entry.feature_type in OVERLAY_KINDS:
-                # These native overlay definitions are already input-only.
-                return deepcopy(entry)
-            names = {"id", "feature_type", "op_kind", "op_subtype", "label", "params",
-                     "timestamp", "autogenerated_group_id"}
-            data = {name: getattr(entry, name) for name in names if name in type(entry).model_fields}
-            charge(data)
-            return type(entry).model_construct(**deepcopy(data))
-        kind, params = command_input(entry)
-        data = {"id": entry.id, "op_subtype": kind, "params": params}
-        charge(data)
-        # model_construct intentionally preserves unsupported legacy kinds for
-        # fail-closed coverage diagnostics without attempting a schema migration.
-        return MinorMutationLogEntry.model_construct(**deepcopy(data))
-
-    log = []
-    for entry in design.feature_log:
-        if entry.feature_type == "routing-cluster":
-            data = {"id": entry.id}
-            if preserve_entry_types:
-                data.update({name: getattr(entry, name) for name in (
-                    "label", "timestamp", "autogenerated_group_id")})
-            charge(data)
-            log.append(RoutingClusterLogEntry.model_construct(**data, children=[header(c) for c in entry.children]))
-        else:
-            log.append(header(entry))
-    fields["feature_log"] = log
-    if monotonic() > deadline:
-        raise CaptureLimit("Part verification capture time budget exceeded")
-    return type(design).model_construct(**fields)
+    This is not source isolation or validation, and grants no proof certificate.
+    No independent time limit is imposed on private admission. Live input must
+    still go through capture under its host lock before native preparation.
+    """
+    visit_inputs(design, max_nodes=max_nodes, max_bytes=max_bytes, seconds=None,
+                 preserve_entry_types=preserve_entry_types, copy_inputs=False)

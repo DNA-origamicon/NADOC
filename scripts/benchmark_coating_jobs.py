@@ -25,14 +25,16 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.api import part_evaluation_jobs as jobs, state
+from backend.api import part_publication_permit as permits
 from backend.api.doc_context import DocContextMiddleware, reset_current_doc, set_current_doc
-from backend.api.part_evaluation import evaluate
+from backend.api.part_evaluation import EvaluationRequest, evaluate
 from backend.api.part_evaluation_capture import COATING_APPEND_ENABLED, COATING_PROFILE
 from backend.api.part_history_verification import _slot
 from backend.api.part_recovery_budget import MAX_RECOVERY_BYTES
 from backend.api.routes_feature_log import router
 from backend.core.models import Design
 from backend.core.part_history_contract import create_empty_part
+from backend.core.part_history_proof import digest
 from backend.core.part_streptavidin_contract import contract_defaults
 from scripts.benchmark_cadnano_route import LockProbe, _PHASE, phase_wrapper, stats
 from scripts.benchmark_coating_contract import append, source_inputs
@@ -278,12 +280,17 @@ def repeated_case(client, doc, case, repeats, probe, snapshots):
             # This is a publication cost sample, not an admitted end-to-end job.
             revision = reset_source(doc, design)
             identity = str(uuid4())
+            definition = EvaluationRequest.model_validate({**case["request"], "expected_revision": revision})
+            request_digest = digest(definition.model_dump(mode="json"))
             with state._lock:
                 session_identity = state._sessions[doc].identity
+                admission = permits.admit_evaluation(doc, state._sessions[doc],
+                    operation="edit", request_sha256=request_digest)
             with jobs._lock:
                 jobs._jobs[identity] = jobs.EvaluationJob(doc, ref(design), revision,
                     created=monotonic(), status="complete", admitted_operation="edit",
-                    session_identity=session_identity, result=dict(case["prepared"]))
+                    session_identity=session_identity, admission=admission,
+                    request_sha256=request_digest, result=dict(case["prepared"]))
             first_snapshot = len(snapshots)
             try:
                 response, measured = concurrent_request(client, headers,

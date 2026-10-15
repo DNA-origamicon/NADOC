@@ -25,7 +25,7 @@ from backend.core.part_input_sources import (
 )
 from backend.core.part_overlay_commands import command_input
 from backend.core.part_recipe_publication import preserve_document_state
-from backend.core.part_verification_capture import CaptureLimit, capture
+from backend.core.part_verification_capture import CaptureLimit, admit, capture
 
 
 MAX_ROWS = 2000
@@ -128,6 +128,7 @@ def _retained_metadata(design, deadline):
 
 def capture_import(text, name, exclude_dna, operation_id, expected_revision):
     """Return an owned input or a pre-native rootless compatibility reason."""
+    state.require_compatibility_write("protein_import")
     if type(operation_id) is not str or not 1 <= len(operation_id) <= 256:
         raise HTTPException(422, detail="Protein import operation ID must contain 1..256 characters")
     if expected_revision is not None and (type(expected_revision) is not int or expected_revision < 0):
@@ -244,11 +245,12 @@ def prepare_import(captured):
         **base, "attachment_id": captured.identities["attachment"], "target": {"kind": "free"},
         "conjugation_atom_serial": asset.default_conjugation_atom_serial,
         "handle_complement_bp": 0, "handle_spacer_nt": 0, "pose": None, "visible": True})
-    # Do not publish a suffix whose resulting input no longer fits the existing
-    # ordinary capture profile. This check is outside the document lock.
+    # This candidate is already private. Check the same authoring node/byte
+    # allowance without making a second isolated graph or imposing a second
+    # source-capture deadline. Source isolation above retains its own deadline.
     started = perf_counter()
-    capture(current, max_nodes=30_000 - captured.metadata_nodes, max_bytes=2_000_000 - captured.metadata_bytes,
-            preserve_entry_types=True)
+    admit(current, max_nodes=30_000 - captured.metadata_nodes, max_bytes=2_000_000 - captured.metadata_bytes,
+          preserve_entry_types=True)
     times["candidate_admission"] = (perf_counter() - started) * 1000
     validation = validate_design(current)
     from backend.api.crud import _design_response
@@ -269,12 +271,14 @@ def prepare_import(captured):
 
 def _store_library_asset_locked(asset):
     """Publish the cache entry only while the import host owns state._lock."""
+    state._require_compatibility_write("protein_import_library")
     state._protein_library[asset.id] = asset
 
 
 def publish_import(captured, prepared):
     """One undo/revision/library transaction; never reparse under the lock."""
     with state._lock:
+        state._require_compatibility_write("protein_import_publication")
         session = state._sessions.get(doc_context.get_current_doc())
         if (session is not captured.session or doc_context.get_current_doc() != captured.doc_id
                 or session.design is not captured.source or session.revision != captured.revision):

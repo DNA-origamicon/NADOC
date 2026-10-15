@@ -1,0 +1,189 @@
+"""Private, identity-registered capabilities for exact candidate publication.
+
+These capabilities stay in the trusted host. JSON labels and similarly shaped
+Python objects confer no authority. All document comparisons run under state's
+lock; the small registry lock never calls back into state. No solver, whole-model
+copy or candidate digest runs at the publication boundary.
+"""
+
+from dataclasses import dataclass
+from re import fullmatch
+from threading import Event, Lock
+from time import monotonic
+from weakref import WeakKeyDictionary, ref
+
+from fastapi import HTTPException
+
+from backend.api import part_publication_policy as policy
+
+
+MAX_CAPABILITIES = 64
+MAX_LIFETIME = 900.0
+_lock = Lock()
+_admissions = WeakKeyDictionary()
+_permits = WeakKeyDictionary()
+
+
+class EvaluationAdmission:
+    """Opaque host handle; its authority lives only in the private registry."""
+    __slots__ = ("__weakref__",)
+
+
+class PublicationPermit:
+    __slots__ = ("__weakref__",)
+
+
+@dataclass(frozen=True)
+class AdmissionContext:
+    doc_id: str
+    session_identity: str
+    source: object
+    source_revision: int
+    policy_generation: int
+    operation: str
+    request_sha256: str
+    scope_tag: str | None
+
+
+@dataclass(frozen=True)
+class _PermitContext:
+    admission: AdmissionContext
+    candidate: object
+    authoring_sha256: str | None
+    recipe_sha256: str | None
+    evidence_class: str
+    expires: float
+    cancelled: Event | None
+
+
+def _refusal(detail, *, code="invalid_publication_permit"):
+    raise HTTPException(409, detail={"code": code, "detail": detail})
+
+
+def _register(registry, handle, context):
+    with _lock:
+        if len(registry) >= MAX_CAPABILITIES:
+            raise HTTPException(429, detail={"code": "publication_admission_limit",
+                "detail": "Too many live host publication capabilities"})
+        registry[handle] = context
+    return handle
+
+
+def admission_context(admission):
+    if type(admission) is not EvaluationAdmission:
+        return None
+    with _lock:
+        return _admissions.get(admission)
+
+
+def admit_evaluation(doc_id, session, *, operation, request_sha256):
+    """Called only after locked host capture has admitted the actual request."""
+    effective = policy.require_evaluation(doc_id, operation)
+    if operation not in {"verify", "selection", "append", "edit", "delete", "repair", "batch"}:
+        _refusal("Unknown evaluation operation", code="invalid_operation_admission")
+    if type(request_sha256) is not str or fullmatch(r"[0-9a-f]{64}", request_sha256) is None:
+        raise ValueError("Admission requires the canonical bounded request digest")
+    if session.design is None or type(session.revision) is not int or session.revision < 0:
+        _refusal("Admission needs a captured live source", code="invalid_evaluation_context")
+    context = AdmissionContext(doc_id, session.identity, ref(session.design), session.revision,
+        effective.generation, operation, request_sha256, "registered_batch_v1" if operation == "batch" else None)
+    return _register(_admissions, EvaluationAdmission(), context)
+
+
+def context_matches(context, doc_id, session, *, include_source=True):
+    return (context is not None and context.doc_id == doc_id and session is not None
+        and context.session_identity == session.identity
+        and context.policy_generation == policy.resolve(doc_id).generation
+        and (not include_source or (context.source() is session.design and context.source_revision == session.revision)))
+
+
+def issue_batch_permit(admission, candidate, *, request_sha256, authoring_sha256, recipe_sha256, expires,
+                       cancelled, source_status):
+    """Trusted job host calls after its existing exact transport checks.
+
+    Native composition is deliberately distinct from independent cold replay.
+    An evaluated imported basis is not admitted by this first public profile.
+    """
+    context = admission_context(admission)
+    if context is None or context.operation != "batch" or context.scope_tag != "registered_batch_v1":
+        _refusal("A batch publication requires its original host admission")
+    if context.policy_generation != policy.resolve(context.doc_id).generation:
+        _refusal("Construction policy changed; evaluate again", code="policy_changed")
+    if request_sha256 != context.request_sha256:
+        _refusal("The evaluated request does not match its host admission")
+    if source_status != "verified":
+        _refusal("The registered batch source was not natively reproduced")
+    if any(type(value) is not str or fullmatch(r"[0-9a-f]{64}", value) is None
+           for value in (authoring_sha256, recipe_sha256)):
+        raise ValueError("Publication needs both checked candidate projection digests")
+    now = monotonic()
+    if type(expires) not in {int, float} or not now < expires <= now + MAX_LIFETIME:
+        _refusal("The evaluated candidate has expired", code="publication_expired")
+    if not isinstance(cancelled, Event) or cancelled.is_set():
+        _refusal("The evaluated candidate was cancelled", code="cancelled")
+    source = context.source()
+    if source is None or candidate is source or candidate.id != source.id:
+        _refusal("Publication needs a privately decoded candidate for the captured part")
+    return _register(_permits, PublicationPermit(), _PermitContext(context, ref(candidate),
+        authoring_sha256, recipe_sha256, "registered_composition", expires, cancelled))
+
+
+def prepare_empty_creation(doc_id, session, *, name, lattice_type):
+    """Create the candidate here; this API never accepts an authored Design."""
+    if type(name) is not str or not name or len(name) > 1024 or lattice_type not in {"HONEYCOMB", "SQUARE"}:
+        raise ValueError("Empty part creation requires a bounded name and supported lattice")
+    if session.design is not None:
+        _refusal("Close the active part before creating a new empty part", code="part_already_open")
+    from backend.core.part_history_contract import create_empty_part
+
+    candidate = create_empty_part(name, lattice_type)
+    context = AdmissionContext(doc_id, session.identity, lambda: None, session.revision,
+        policy.resolve(doc_id).generation, "create_empty", "", "empty_root_v1")
+    permit = _register(_permits, PublicationPermit(), _PermitContext(context, ref(candidate),
+        None, None, "explicit_empty_root", monotonic() + MAX_LIFETIME, None))
+    return candidate, permit
+
+
+def check_publication(permit, *, doc_id, session, candidate):
+    """Lock-owned precondition; nothing is consumed until publication succeeds."""
+    if type(permit) is not PublicationPermit:
+        _refusal("A registered-only replacement needs a host publication permit")
+    with _lock:
+        context = _permits.get(permit)
+    if context is None:
+        _refusal("The publication permit is unknown or already consumed")
+    if context.admission.policy_generation != policy.resolve(doc_id).generation:
+        _refusal("Construction policy changed; evaluate again", code="policy_changed")
+    if not context_matches(context.admission, doc_id, session) or context.candidate() is not candidate:
+        _refusal("The publication does not match its source, session or exact candidate")
+    check_liveness(context)
+    if context.admission.scope_tag == "registered_batch_v1":
+        from backend.api.part_batch_publication_scope import admit_batch_source
+        from backend.core.part_command_errors import CommandContractError
+
+        # These are fixed typed checks, not caller-supplied callbacks. They also
+        # apply to compatibility batch jobs; ordinary legacy edits are separate.
+        try:
+            admit_batch_source(session.design)
+            admit_batch_source(candidate)
+        except CommandContractError as error:
+            raise HTTPException(422, detail=error.as_issue()) from error
+    elif context.admission.scope_tag != "empty_root_v1":
+        _refusal("This publication scope has no host contract")
+    return context
+
+
+def check_liveness(context):
+    """Repeat after undo preparation, immediately before assignment."""
+    if monotonic() >= context.expires:
+        _refusal("The publication permit expired", code="publication_expired")
+    if context.cancelled is not None and context.cancelled.is_set():
+        _refusal("The evaluated candidate was cancelled", code="cancelled")
+
+
+def consume_publication(permit, context):
+    """Call inside the replacement rollback bracket, after assigning revision."""
+    with _lock:
+        if _permits.get(permit) is not context:
+            _refusal("The publication permit is unknown or already consumed")
+        del _permits[permit]

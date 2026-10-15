@@ -496,6 +496,7 @@ def export_scadnano_design(compatibility_token: str | None = None) -> Response:
 @router.post("/design/save")
 def save_design(body: FilePathRequest) -> dict:
     """Save the active design to the given server-side path as .nadoc JSON."""
+    design_state.require_compatibility_write("legacy_design_save")
     design = design_state.get_or_404()
     path = os.path.abspath(body.path)
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)

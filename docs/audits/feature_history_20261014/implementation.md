@@ -987,3 +987,47 @@ generic JSON editor. Broader invalid-scalar recognition is a separate follow-up.
 cases. Changed Python Ruff and whitespace pass; frontend app/visual work is still
 in progress and not validated here. `main.js` LOC delta is zero. See the
 [endpoint contract](../../part_repair_inputs.md). P5 remains incomplete.
+
+## Private publication authority and measured capture cleanup — October 15
+
+Host-owned immutable policy configuration now survives session recreation. Private
+admission handles bind the actual request, source, session, revision and policy
+generation. Registered batch publication requires a one-use permit for the exact
+decoded candidate and rechecks source/candidate scope, cancellation and deadline
+before assignment. The rollback bracket consumes a permit only after successful
+publication. Saved labels and caller-supplied actor/native flags grant no authority.
+
+Strict generic callbacks, direct recorders, silent writes, undo/redo, source/draft
+publication and known legacy create/load/save/loadout routes refuse before their
+side effects. Default compatibility is preserved. This is a host foundation, not
+a complete HTTP boundary: global file routes, unreviewed reads and mutable aliases
+still require a closed strict application. The first admitted host slice is batch
+plus read-only verify and explicit empty creation; the public batch gate is false.
+
+Full-source batch publication is bounded to 64 source/candidate rows including
+group headers, reviewed native families, default excluded state and the existing
+8 MB retained recovery allowance. Read-only verification still ignores recovery.
+The final permit-aware benchmark produced 120 correct prepared publications and
+four real jobs that cold-replayed. One 50,000-residue capture refused after a
+46.25 ms lock hold; publication lock p95 ranged from 0.91 to 1.19 ms. Earlier
+63-row and other refusals remain in the evidence. No hard latency ceiling is claimed.
+
+Private protein candidate admission now shares exact source-capture node/byte
+accounting while omitting a redundant isolated copy and its second time allowance.
+Source capture retains the original 25 ms deadline. A 30-attempt retained-protein
+probe had 29 correct imports; the refusal coincided with a measured 45.08 ms
+generation-2 GC pause inside source capture, and subsequent cold capture refused.
+The smaller nine-attempt diagnostic passed. No GC policy/limit/retry changes;
+native ordinary import stays gated. Strict immutable revisions after read/write
+closure are the planned way to reduce lock-owned graph allocation.
+
+**527 focused cases across 22 files pass**, with changed Python Ruff and whitespace
+clean. Real benchmark cleanup passed. Repetitive successful samples were pruned,
+retaining outcome distributions, every unexpected result and timing maxima; GC
+evidence retains every major collection and phase/generation maxima. Broad-suite,
+app, visual and headset debt remains unchanged; Archive is unavailable.
+See [validation](validation_publication_foundation_p6.json),
+[policy audit](strict_publication_checkpoint.md),
+[batch evidence](registered_batch_jobs_benchmark_permits_p6.json) and
+[GC evidence](protein_free_import_benchmark_admission_2000_gc_p4.json).
+P4/P5/P6 remain incomplete; assemblies are deferred.

@@ -75,8 +75,14 @@ def supervise(job, design, worker_factory, seconds, *, status_lock=None):
         if monotonic() >= deadline:
             raise Stopped("time_limit")
         matches = state.verification_source_matches(job.doc, job.source(), job.revision, blocking=False,
-            expected_session_identity=getattr(job, "session_identity", None))
+            expected_session_identity=getattr(job, "session_identity", None),
+            expected_policy_generation=getattr(job, "policy_generation", None))
         if matches is False:
+            generation = getattr(job, "policy_generation", None)
+            if generation is not None:
+                from backend.api.part_publication_policy import resolve
+                if resolve(job.doc).generation != generation:
+                    raise Stopped("policy_changed")
             raise Stopped("source_changed")
         return matches
 
