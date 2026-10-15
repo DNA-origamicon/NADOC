@@ -9,7 +9,7 @@ from backend.api import state
 from backend.api.part_proof_commands import dependencies, execute
 from backend.core.design_diff import encode_child_diff
 from backend.core.part_command_errors import CommandContractError
-from backend.core.feature_identity import preserve_proof_identity
+from backend.core.part_edit_identity import preserve_proof_identity
 from backend.core.part_history_contract import assess_part_history
 from backend.core.part_recipe_publication import preserve_document_state
 from backend.core.part_overlay_commands import (

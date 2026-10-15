@@ -24,6 +24,7 @@ from backend.api.part_thiol_commands import KINDS as THIOL_KINDS
 from backend.api.part_aptamer_commands import KINDS as APTAMER_KINDS
 from backend.api.part_element_copy_commands import KINDS as ELEMENT_COPY_KINDS
 from backend.api.part_cadnano_commands import KINDS as CADNANO_KINDS
+from backend.api.part_nanoparticle_connection_commands import KINDS as NP_CONNECTION_KINDS
 
 
 TOPOLOGY_MINOR_KINDS = frozenset({
@@ -33,7 +34,7 @@ TOPOLOGY_MINOR_KINDS = frozenset({
 })
 EXTRUSION_COMMANDS = frozenset({"extrude-segment", "extrude-continuation", "extrude-deformed-continuation", "circle-segment", "extrude-frame"})
 PROOF_SNAPSHOT_KINDS = (
-    CADNANO_KINDS | ELEMENT_COPY_KINDS | APTAMER_KINDS | THIOL_KINDS
+    NP_CONNECTION_KINDS | CADNANO_KINDS | ELEMENT_COPY_KINDS | APTAMER_KINDS | THIOL_KINDS
     | PROTEIN_CONJUGATION_KINDS | PROTEIN_KINDS | DUPLEX_KINDS | NANOPARTICLE_KINDS
     | JOINED_PATH_KINDS | CONNECTIVITY_KINDS | SECTION_KINDS | PATH_KINDS | BRANCH_KINDS
     | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS
@@ -58,10 +59,25 @@ def capabilities():
 def dependencies(kind, params):
     if type(params.get("_proof_version")) is not int or params["_proof_version"] != PROOF_VERSION:
         return Dependencies(known=False)
+    if kind in NP_CONNECTION_KINDS and "_generated_scope" in params:
+        return Dependencies(known=False)  # Compound scoped owner selection is not qualified yet.
     # Composition metadata belongs to the scope executor, not the underlying
     # strict command schema. Preserve source provenance during scoped admission.
     params = {key: value for key, value in params.items()
               if key not in {"_generated_scope", "_generator"}}
+    if kind in NP_CONNECTION_KINDS:
+        from backend.api.part_nanoparticle_connection_commands import parse_command
+        try:
+            command = parse_command(kind, params)
+        except ValueError:
+            return Dependencies(known=False)
+        reads = {PART_TOPOLOGY, Resource("nanoparticle", command.nanoparticle_id),
+                 Resource("nanoparticle_conjugation", command.conjugation_id),
+                 Resource("strand", command.strand_id), Resource("overhang", command.overhang_id)}
+        version = Resource("nanoparticle_connection_version", command.version_id)
+        if kind != "nanoparticle-connection-version-create":
+            reads.add(version)
+        return Dependencies(frozenset(reads), frozenset({PART_TOPOLOGY, version}), barrier=True)
     if kind == "nanoparticle-patch" and "coating_version" in params:
         from backend.api.part_streptavidin_commands import resources
         try:
@@ -250,6 +266,9 @@ def _execute(kind, design, params, *, expensive):
         from backend.api.part_aptamer_commands import build
         from backend.core.part_input_sources import EmbeddedResolver
         updated = build(kind, design, params, resolver=EmbeddedResolver(design.input_sources))
+    elif kind in NP_CONNECTION_KINDS:
+        from backend.api.part_nanoparticle_connection_commands import build
+        updated = build(kind, design, params)
     elif kind in THIOL_KINDS:
         from backend.api.part_thiol_commands import build
         updated = build(kind, design, params)

@@ -2,6 +2,12 @@
 
 Reviewed 2026-10-15. Planning only: no connection implementation, scientific calculation or assembly behavior changes are authorized by this document. The next useful slice is the existing nanoparticle connection-version create/apply/unapply/delete workflow. The visible overhang panel calls these routes (`frontend/src/ui/overhang_connections_panel.js:394,401`); the older direct surface-strand bind is exposed by the client/test API but is not this panel's action.
 
+**Checkpoint sequencing refinement:** implement pending create/rename/delete
+first, as specified in [the finite closure map](remaining_standard_part_checkpoints.md).
+The complete application contract below remains a later increment. The current
+tests-only dossier is `tests/test_part_pending_np_connections.py`; no pending
+connection production adapter or route migration is implemented yet.
+
 ## Official CAD precedent and the NADOC decision
 
 | Documented behavior | Consequence for this proposal |
@@ -27,6 +33,187 @@ The documentation supports editable, deterministic feature construction and expl
 - The old direct bind at line 959 deletes the radial helix and updates the surface record but does not update/remove the auxiliary OverhangSpec or give the new binder its auxiliary domain tag. It must not be certified unchanged. `two_np_build.py:115` also uses the same old kind for a different snapshot-only “prepare handles” operation. A new contract marker must never promote that receipt.
 
 ## Proposed commands and selectors
+
+### First checkpoint: pending metadata only
+
+All three kinds require exact integer `_proof_version=1` and
+`nanoparticle_connection_version=1`, plus bounded `nanoparticle_id`,
+`conjugation_id`, `strand_id`, `overhang_id` and `version_id`. The first four
+selectors must resolve to the exact selected source-free gold/unbound thiol
+owner and ordinary target. Patch/delete repeat them and compare them with the
+saved version, so replay cannot silently follow a version whose ownership has
+changed. Create adds final `name`, finite nonnegative `created_at`,
+`connection_type="direct"`, `direct_variant` and strict `applied=false`.
+Patch adds a nonempty final `name`; delete adds no other inputs.
+
+No metadata-only operation needs a child namespace: the host records its explicit
+version UUID and creation time before publication. A `history_seed` and child
+identities become necessary only in the later materialization contract. Creation
+protects `version_id`, `created_at` and the discriminator during feature edits;
+patch/delete version IDs remain editable consumer references. Native schemas
+forbid `duplex_id`, saved topology, coordinates, engine pins and application flags
+on rename/delete. The selected stored version must have no applied/relaxed state,
+duplex, residual or retained constraint fields.
+
+Use the existing 5'/3' attach and polarity rules unchanged. Pending metadata does
+not invoke geometry fitting, duplex placement, or relaxation and does not require
+a numerical runtime pin. A metadata deletion removes only its selected version;
+it must **not** call `_sync_np_applied_bindings` across all conjugations. That
+legacy helper clears unrelated direct-binding markers even for an unapplied
+deletion. Preserve unrelated legacy metadata without claiming that its entire
+prefix is native or reproducible; complete-root proof still determines that.
+
+The original 49-case dossier uses the already registered bundle, overhang
+extrude/sequence, gold and thiol commands to build its owner/target from an empty
+root. It covers pending create/rename/delete, both chemical ends and variants,
+exact saved roundtrip, fresh-worker replay with poisoned recovery, upstream gold
+resize, protected output identity, typed dependency resources/paths, deleted
+target cascades, retained materialization-state refusal, strict schemas, actual
+visible route recording/undo and the unrelated legacy-binding deletion defect.
+One existing-native fixture proof and existing refusal cases act as controls.
+Root recorded the red baseline: **31 failed, 18 passed in 3.29 seconds**. Unknown
+contracts account for most failures; the actual pending-delete route also
+reproduced clearing an unrelated legacy direct-binding marker (ISSUE-90).
+
+The implementation now registers these three strict contracts and records the
+eligible visible routes under the existing lock-owned recording transaction.
+Selection, current source/revision checks and final identity/time allocation
+occur in that same critical section. No candidate survives a lock release before
+publication. The route keeps a private history list for the recorder's append;
+the common failure-atomic recorder owns undo, revision and recovery. Missing
+references in supported scope fail explicitly. Multiple ownership records,
+unspecified old endpoint mappings, applied/retained state and opaque reference
+families retain unverified compatibility paths before native execution.
+
+Native scope is one exact radial conjugation, at most 128 selected particle
+handles, and the existing 10,000-node/256KB operation allowance for reference
+inventory work. The preflight uses the shared reference schema's identity,
+reference, child and special-codec fields, including unrelated nested surface
+rows, cluster membership and saved-topology JSON; it ignores plain atoms,
+coordinates and user prose. Each occurrence is charged because the resolver
+also visits each occurrence. Oversize/opaque scope returns to the explicitly
+unverified compatibility path before native execution; malformed supported
+references still fail rather than falling back after evaluation. This is a
+conservative work allowance, not authoring capture or a latency guarantee.
+The part topology barrier remains because shared
+postprocessors still run. Generated compound scopes are explicitly unsupported.
+Additional regressions cover stale requests before IDs/time/build, a rejecting
+non-reentrant lock, exact one-time defaults, document isolation, rollback after
+encoding/publication/cancellation and legacy ownership boundaries. Root's first
+corrective run passed **58 cases in 4.30 seconds**. The final pending target,
+including nested reference budgets, passed **66 cases in 4.20 seconds**; the
+edit-identity target separately passed **7 cases in 2.72 seconds**. The later
+editing regression set passed **95 cases in 3.58 seconds**, including those
+seven identity cases, for **161 distinct green cases** across pending and
+editing targets. See `validation_pending_np_connections_p4.json` for exact
+scope. The later applied workflow remains a separate contract; no global limits
+have changed.
+
+The initial three-repeat HTTP measurement completed all ten native/compatibility
+cases and all fifteen native lifecycles. Four small native cold proofs passed;
+the larger fixture's final cold capture refused the unchanged cooperative 25 ms
+allowance after valid route samples. This refusal remains in
+`benchmark_pending_np_connections_initial.json`. The subsequent thirty-repeat
+run completed all ten cases, all 150 native lifecycles and all five independent
+cold proofs, with cleanup confirmed; see
+`benchmark_pending_np_connections_repeated.json`.
+
+**Correctness passed; latency is not qualified.** In the larger background,
+native route medians were 23.38–24.12 ms versus compatibility medians
+17.18–17.63 ms. The maximum native request was **88.57 ms**, recording lock
+**82.35 ms**, and concurrent lightweight request **86.30 ms**. Compatibility
+also showed a 75.41 ms request / 69.48 ms recording-lock maximum. These results
+cannot establish the cause of an outlier; no GC callbacks or per-stage timing
+were captured. The old report's `qualified` flag tested correctness/cleanup
+only, not a latency threshold. The harness now emits separate
+`correctness_verified` and `latency_qualified` fields and states that its exit
+status tests correctness only. Further optimization/measurement is required
+before making a no-regression claim.
+
+Static audit found duplicate `_bounded` and `typed_ownership_supported` walks
+in route preflight and pure build. The ordinary recorder does not call the
+proof dependency graph or regenerate the prefix. A narrow next optimization
+can prepare the same bounded typed inventory once under the existing lock and
+pass it privately to a shared build core, bound to the exact source object;
+standalone/cold build must still prepare its own inventory. Do not introduce a
+public validation-skip flag or a cache across revisions. Existing snapshot
+copy, two recovery encodes, reconciliation, ligation retry and validation are
+separate costs and must not be removed based on these timings.
+
+The initial implementation exposed unnecessary numerical pin coupling:
+`feature_identity.py` is a duplex-relax-v1 manifest member for `identity_factory`,
+but also contains the unrelated editing protection table. Adding three NP rows
+to that table would make all previously pinned duplex-relax features report
+`engine_mismatch` without any numerical change. The correction keeps that file
+byte-for-byte at its existing SHA-256
+`063a5eb49c09c9335775bc6f66c83a24d667b28ad721be739796f29b3a7dc730`.
+`part_edit_identity.py` wraps its existing protection base and adds new editing
+families; the three editing consumers use the wrapper. No numerical consumer,
+manifest, accepted hash, runtime pin or upgrade policy changes. CPD and coating
+manifests are also unaffected. An exact source/hash and manifest regression pins
+this boundary; future genuine engine changes still require explicit upgrading.
+
+Remaining ordinary-workflow seam: `part_thiol_patch_commands.py` currently
+rejects every connection version, including pending metadata. Creating a pending
+candidate and then dragging/resizing the particle therefore still uses legacy
+recording; this increment only proves upstream history edits regenerate that
+candidate. A small subsequent contract should select exact pending-version IDs,
+validate those untouched unapplied consumers, and reuse the unchanged particle
+replacement helper while preserving their metadata. Applied/retained state and
+other incoming consumers stay rejected. Graft replacement/removal likewise needs
+an explicit dependent-version deletion policy; no silent cascade is introduced.
+
+### Next bounded increment: pending candidates through thiol motion
+
+**Tests-only proposal; production support is not yet implemented.** Extend the
+existing `nanoparticle-patch` / `thiol_version: 1` contract with
+`pending_connection_version_ids: list[str]`, defaulting to an empty list for
+existing no-connection rows. The list is unique, identities retain the existing
+1–256-character bound, and the proposed first allowance is 128 versions. It
+selects exactly every current connection version on the particle, including
+multiple alternatives for the same handle. It does not select unrelated
+particles' versions. Omitted, missing, extra or foreign selectors fail with
+typed paths rooted at this field; an old row cannot silently accept a newly
+introduced consumer.
+
+Each selected version must be unapplied and unrelaxed, with no retained duplex,
+residual or constraint state. Validate its exact owned handle, ordinary target,
+chemical polarity and recorded endpoint mapping. Legacy nullable endpoint
+metadata remains unsupported. Reuse the pending CRUD validators through one
+shared identity/reference inventory rather than executing the CRUD builder
+once per version. Preserve its existing reference-work ceiling before expensive
+traversal; do not add one allowance per selected version. Existing thiol handle
+and nucleotide ceilings remain unchanged.
+
+After validating the versions, include their identities in the retained
+ownership closure used by the incoming-reference guard. This allows their own
+known references while still rejecting external consumers of any selected
+resource. Call the unchanged `replace_gold_nanosphere` exactly once; every
+version field and every handle identity is preserved. Register explicit version
+reads, retain the topology barrier, and add no version writes or imported source
+provenance. This does not enable graft replacement/deletion, application,
+relaxation, bound motion or compound generated scopes.
+
+The existing live recorder resolves the pending selector inside its locked
+callback together with conjugation IDs. Unsupported applied/opaque/oversized
+legacy scope is classified before native work; broken references within the
+supported scope fail atomically and cannot fall back after evaluation. The
+ordinary route must record one native row, one revision and one undo entry for
+each drag/resize. Route admission outside the lock is only a hint: the locked
+builder rechecks the actual current source and complete selector.
+
+`tests/test_part_thiol_pending_motion.py` is the red target. It covers exact
+native math parity for move/pose/resize combinations, complete metadata and
+unrelated particle retention, selector/schema failures, applied/retained
+refusals, external consumers, missing targets, typed dependencies, native root
+cold proof with poisoned recovery, geometry-changing history edits, deletion of
+a selected producer, actual ordinary route undo/redo, locked selector capture
+and failure atomicity. No tests have been run by the authoring agent; the parent
+serializes validation. After implementation, extend the existing pending HTTP
+benchmark with one move and resize at the already qualified scopes, reporting
+latency and proof capture separately without raising limits or retrying.
+
+### Later checkpoint: explicit application
 
 Reuse the three existing kind strings, strict schemas with extra fields forbidden, and `_proof_version: 1, nanoparticle_connection_version: 1`. IDs are nonempty bounded strings, names at most 256 characters, booleans/versions strict, and times finite/nonnegative. A UUID `history_seed` belongs to each feature, selected by the host and preserved during historical edits. No coordinates, frames, snapshots, solver outputs or Python are accepted.
 

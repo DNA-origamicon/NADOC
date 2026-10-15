@@ -112,6 +112,16 @@ def editing_capabilities(kinds):
             "scope": "uncoated gold particles without owned DNA or connection versions",
             "legacy": "Receipts without nanoparticle_version remain unverified",
         },
+        "nanoparticle_connection_contract": {
+            "version": 1,
+            "kinds": ["nanoparticle-connection-version-create", "nanoparticle-connection-version-patch",
+                      "nanoparticle-connection-version-delete"],
+            "scope": "Pending direct candidates on unbound source-free gold thiol handles; rename or delete only",
+            "ownership": "Exact particle, conjugation, strand, ordinary overhang and version selectors",
+            "limits": ["128 handles in the selected owner", "10000 reference-inventory nodes / 256KB reference data"],
+            "unsupported": ["apply/unapply", "retained application state", "generated scopes", "coated or catalog particles"],
+            "legacy": "Older candidate receipts and applied workflows remain unverified",
+        },
         "thiol_contract": {
             "version": 1,
             "kinds": ["nanoparticle-conjugate", "nanoparticle-conjugation-delete", "nanoparticle-patch"],

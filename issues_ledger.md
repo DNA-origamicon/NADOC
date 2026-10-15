@@ -1962,7 +1962,35 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   Fresh-worker proof, saved-draft evaluation, source restoration and generated
   scope guards remain covered; no molecular model or version changed.
 
-## ISSUE-91 — Missing physical-input evidence is indistinguishable from a match in job APIs (2026-10-15, API FIXED; FULL RECEIPTS/UI OPEN)
+## ISSUE-90 — Pending NP candidate deletion clears unrelated direct-binding metadata (2026-10-15, API FIXED; LATENCY UNQUALIFIED)
+
+- The existing pending connection delete route called `_sync_np_applied_bindings`
+  for the entire design after deleting one unapplied candidate. That helper
+  reconstructed surface bindings solely from applied candidate versions, so an
+  unrelated legacy direct-bound handle lost its `bound_overhang_id`.
+- `tests/test_part_pending_np_connections.py` reproduces the defect with two
+  native-created gold/thiol owners, an explicitly retained legacy direct binding
+  on the other particle, and two pending candidates. Delete must remove only the
+  chosen candidate and preserve the other owner's exact metadata. The parent
+  recorded the tests-only red dossier: 31 failed, 18 passed in 3.29 seconds;
+  unknown new contracts dominate, while this actual route failure is preexisting.
+- The correction bypasses global synchronization for unapplied deletion in both
+  the strict pending native builder and compatibility route. Applied workflows
+  remain separate and retain existing behavior. This does not certify old direct
+  bindings or reconstruct their missing historical inputs.
+- Native pending create/rename/delete now retain all exact owner/reference inputs,
+  output identity/time and the version discriminator. Lock-owned recording and
+  rollback regressions are included. The parent's final target passed 66 cases
+  in 4.20 seconds; editing regressions passed 95 in 3.58 seconds, including the
+  separately checked seven identity-policy cases: 161 distinct green cases.
+  Thirty-repeat measurement passed all ten cases and five native cold proofs.
+  Latency remains unqualified: maximum native request/lock/lightweight request
+  were 88.57/82.35/86.30 ms; larger native medians were about 24 ms versus 17 ms
+  compatibility. The initial larger cold-capture refusal is retained. See
+  `validation_pending_np_connections_p4.json`. No app check is claimed; applied
+  connections and pending-candidate movement remain separate increments.
+
+## ISSUE-91 — Missing physical-input evidence is indistinguishable from a match in job APIs (2026-10-15, API/SHARED UI FIXED; FULL RECEIPTS/APP OPEN)
 
 - Legacy `out_of_date: false` includes equal, missing and incomparable hashes;
   the shared v4 projection also omits consumed cluster/nucleotide transforms and
@@ -1976,6 +2004,10 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   unchanged `7886cd42` route/fingerprint modules: its alleged pre-recipe file
   retained a native recipe root. Corrected the fixture and added the complementary
   no-unlogged-topology assertion; production restoration is unchanged.
-- Complete engine-specific input/solver/source/restart receipts, result-selection
-  qualification and explicit UI unknown labels remain open under the physical
-  freshness plan. No historical simulation receives a current certificate.
+- API and shared frontend unknown/stale labels are fixed in `764b413b` and
+  `6abb5dde`. Frontend validation passed 39 focused cases and the full 8,192
+  cases with one skipped. These are automated results, not an app-validation claim.
+- Complete engine-specific input/solver/source/restart receipts and
+  result-selection qualification remain open under the physical freshness plan;
+  MV-46 app validation is also open. No historical simulation receives a current
+  certificate.

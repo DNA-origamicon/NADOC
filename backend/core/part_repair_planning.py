@@ -8,7 +8,7 @@ Callers supply bounded, stable definitions and a cheap command schema resolver.
 from copy import deepcopy
 from dataclasses import dataclass
 
-from backend.core.feature_identity import preserve_proof_identity
+from backend.core.part_edit_identity import preserve_proof_identity
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_history_proof import digest
 from backend.core.part_overlay_commands import command_input

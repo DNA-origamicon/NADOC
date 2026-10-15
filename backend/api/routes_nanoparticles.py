@@ -84,11 +84,13 @@ class NanoparticleConnectionVersionCreate(BaseModel):
     applied: bool = False
     connection_type: Literal["direct"] = "direct"
     direct_variant: Literal["end-to-root", "root-to-root"] = "end-to-root"
+    expected_revision: StrictInt | None = Field(default=None, ge=0)
 
 
 class NanoparticleConnectionVersionPatch(BaseModel):
     name: Optional[str] = None
     applied: Optional[bool] = None
+    expected_revision: StrictInt | None = Field(default=None, ge=0)
 
 
 @router.get("/nanoparticles/quantum-dots/catalog")
@@ -526,47 +528,18 @@ def _np_connection_attaches(owner, direct_variant: str) -> tuple[str, str]:
     opposite, solution-facing terminus. The target side is intentionally root
     for both currently-supported direct variants.
     """
-    surface = "root" if owner.attach_end == "5p" else "free_end"
-    free = "free_end" if owner.attach_end == "5p" else "root"
-    if direct_variant == "root-to-root":
-        return surface, "root"
-    if direct_variant == "end-to-root":
-        return free, "root"
-    raise ValueError(f"Unsupported nanoparticle connection type {direct_variant!r}.")
+    from backend.core.nanoparticle_connections import connection_attaches
+    return connection_attaches(owner, direct_variant)
 
 
 def _validate_np_connection_polarity(
     design: Design, owner, target_overhang_id: str, direct_variant: str,
 ) -> None:
     """Reject endpoint combinations that would require parallel DNA pairing."""
-    from backend.core.overhang_ops import overhang_free_end_polarity
-
-    target_free = overhang_free_end_polarity(design, target_overhang_id)
-    if target_free is None:
-        raise HTTPException(
-            422,
-            detail=(
-                "Target overhang polarity is unknown; its physical 5'/3' free end "
-                "must be defined before creating a nanoparticle connection."
-            ),
-        )
-    nanoparticle_free = "3p" if owner.attach_end == "5p" else "5p"
-    forbidden = (
-        nanoparticle_free != target_free
-        if direct_variant == "end-to-root"
-        else nanoparticle_free == target_free
-    )
-    if forbidden:
-        np_root = owner.attach_end
-        target_root = "3p" if target_free == "5p" else "5p"
-        raise HTTPException(
-            422,
-            detail=(
-                f"{direct_variant} is forbidden for a {np_root} thiol-bound NP root "
-                f"and a {target_root} target root: the duplex would be parallel, not "
-                "reverse-complementary. Choose the other direct connection type."
-            ),
-        )
+    from backend.core.nanoparticle_connections import polarity_error
+    error = polarity_error(design, owner, target_overhang_id, direct_variant)
+    if error:
+        raise HTTPException(422, detail=error[0])
 
 
 def _validate_np_direct_duplex(design: Design, duplex: Duplex) -> None:
@@ -711,13 +684,8 @@ def _set_np_version_applied(design: Design, version_id: str, applied: bool) -> D
 
 
 def _next_np_version_name(design: Design, nanoparticle_id: str, strand_id: str, overhang_id: str) -> str:
-    used = {version.name for version in design.nanoparticle_connection_versions
-            if version.nanoparticle_id == nanoparticle_id
-            and version.strand_id == strand_id and version.overhang_id == overhang_id}
-    index = 1
-    while f"V{index}" in used:
-        index += 1
-    return f"V{index}"
+    from backend.core.nanoparticle_connections import next_version_name
+    return next_version_name(design, nanoparticle_id, strand_id, overhang_id)
 
 
 def _np_duplex_measurement(design: Design, version: NanoparticleConnectionVersion, geometry=None) -> dict | None:
@@ -825,6 +793,12 @@ def get_np_connection_versions(nanoparticle_id: str) -> dict:
 
 @router.post("/design/nanoparticles/{nanoparticle_id}/connection-versions", status_code=201)
 def create_np_connection_version(nanoparticle_id: str, body: NanoparticleConnectionVersionCreate) -> dict:
+    from backend.api.part_nanoparticle_connection_commands import try_record
+    recorded = try_record("nanoparticle-connection-version-create", nanoparticle_id,
+        body.model_dump(exclude={"expected_revision"}), expected_revision=body.expected_revision)
+    if recorded is not None:
+        updated, report, entry = recorded
+        return {**_design_response(updated, report), "version_id": entry.params["version_id"]}
     design = design_state.get_or_404(); _particle_or_404(design, nanoparticle_id)
     owner, _record = _surface_owner(design, nanoparticle_id, body.strand_id)
     if owner is None: raise HTTPException(404, detail="Nanoparticle surface strand not found.")
@@ -861,13 +835,20 @@ def create_np_connection_version(nanoparticle_id: str, body: NanoparticleConnect
         return _set_np_version_applied(out, version.id, True) if version.applied else out
     updated, report, _ = design_state.mutate_with_feature_log(
         "nanoparticle-connection-version-create", f"Create nanoparticle connection {version.name}",
-        {"nanoparticle_id": nanoparticle_id, "version_id": version.id}, mutate)
+        {"nanoparticle_id": nanoparticle_id, "version_id": version.id}, mutate,
+        expected_revision=body.expected_revision)
     response = _design_response(updated, report); response["version_id"] = version.id
     return response
 
 
 @router.patch("/design/nanoparticles/{nanoparticle_id}/connection-versions/{version_id}")
 def patch_np_connection_version(nanoparticle_id: str, version_id: str, body: NanoparticleConnectionVersionPatch) -> dict:
+    from backend.api.part_nanoparticle_connection_commands import try_record
+    recorded = try_record("nanoparticle-connection-version-patch", nanoparticle_id,
+        body.model_dump(exclude={"expected_revision"}), version_id=version_id,
+        expected_revision=body.expected_revision)
+    if recorded is not None:
+        return _design_response(recorded[0], recorded[1])
     design = design_state.get_or_404(); _particle_or_404(design, nanoparticle_id)
     target = next((v for v in design.nanoparticle_connection_versions
                    if v.id == version_id and v.nanoparticle_id == nanoparticle_id), None)
@@ -886,25 +867,37 @@ def patch_np_connection_version(nanoparticle_id: str, version_id: str, body: Nan
     updated, report, _ = design_state.mutate_with_feature_log(
         "nanoparticle-connection-version-patch",
         ("Apply" if body.applied else "Unapply") + f" nanoparticle connection {target.name}",
-        {"nanoparticle_id": nanoparticle_id, "version_id": version_id}, mutate)
+        {"nanoparticle_id": nanoparticle_id, "version_id": version_id}, mutate,
+        expected_revision=body.expected_revision)
     return _design_response(updated, report)
 
 
 @router.delete("/design/nanoparticles/{nanoparticle_id}/connection-versions/{version_id}")
-def delete_np_connection_version(nanoparticle_id: str, version_id: str) -> dict:
+def delete_np_connection_version(nanoparticle_id: str, version_id: str, expected_revision: int | None = None) -> dict:
+    from backend.api.part_nanoparticle_connection_commands import try_record
+    recorded = try_record("nanoparticle-connection-version-delete", nanoparticle_id, {},
+                          version_id=version_id, expected_revision=expected_revision)
+    if recorded is not None:
+        return _design_response(recorded[0], recorded[1])
     design = design_state.get_or_404(); _particle_or_404(design, nanoparticle_id)
     if not any(v.id == version_id and v.nanoparticle_id == nanoparticle_id
                for v in design.nanoparticle_connection_versions):
         raise HTTPException(404, detail="Nanoparticle connection version not found.")
     def mutate(d: Design) -> Design:
         target_version = next(v for v in d.nanoparticle_connection_versions if v.id == version_id)
+        if not target_version.applied:
+            # A pending candidate has no binding to synchronize. Preserve
+            # unrelated legacy direct-binding ownership verbatim (ISSUE-90).
+            return d.model_copy(update={"nanoparticle_connection_versions": [
+                v for v in d.nanoparticle_connection_versions if v.id != version_id]})
         out = _set_np_version_applied(d, version_id, False) if target_version.applied else d
         return _sync_np_applied_bindings(out.model_copy(update={
             "nanoparticle_connection_versions": [v for v in out.nanoparticle_connection_versions if v.id != version_id],
         }))
     updated, report, _ = design_state.mutate_with_feature_log(
         "nanoparticle-connection-version-delete", "Delete nanoparticle connection version",
-        {"nanoparticle_id": nanoparticle_id, "version_id": version_id}, mutate)
+        {"nanoparticle_id": nanoparticle_id, "version_id": version_id}, mutate,
+        expected_revision=expected_revision)
     return _design_response(updated, report)
 
 

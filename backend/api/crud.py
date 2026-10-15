@@ -6572,7 +6572,7 @@ def edit_feature(index: int, body: EditFeatureBody, sub_index: int | None = None
     pre_state = design_state.decode_design_snapshot(entry.design_snapshot_gz_b64)
     params = {"separate_fresh_extrusions": entry.params.get("separate_fresh_extrusions", False),
               **body.params}
-    from backend.core.feature_identity import preserve_proof_identity
+    from backend.core.part_edit_identity import preserve_proof_identity
     params = preserve_proof_identity(entry.params, params)
     try:
         new_post = _edit_dispatch_run(entry.op_kind, pre_state, params)

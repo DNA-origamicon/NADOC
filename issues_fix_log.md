@@ -716,4 +716,19 @@ No app/smoke/headset validation; MV-45 remains pending because Archive is absent
 in oxDNA/NAMD list/detail responses. A matching legacy partial fingerprint stays
 unknown; known comparable differences are stale. No extra model/file work or job
 mutation. 59 focused cases pass; obsolete legacy MD fixture repaired with paired
-legacy/native assertions. Full receipts, projection qualification and UI remain open.
+legacy/native assertions. Shared frontend labels subsequently passed 39 focused
+and 8,192 full cases with one skipped (`6abb5dde`; API `764b413b`). Full receipts,
+projection qualification and MV-46 app validation remain open; no app check is claimed.
+
+2026-10-15 — ISSUE-90 pending NP deletion: the original global applied-version
+sync erased an unrelated legacy direct-binding marker. The parent recorded the
+49-case pending-native dossier red (31 failed/18 passed, 3.29 seconds), including
+the actual deletion defect. Pending deletion now removes only its selected
+version in native and compatibility paths. Native metadata inputs, owner checks,
+atomic recording, nested ownership budgets and context/failure regressions passed
+the parent's final 66-case run (4.20 seconds). Editing regressions passed 95 cases
+(3.58 seconds), including seven identity-policy cases: 161 distinct green cases.
+Thirty-repeat measurement passed all ten cells/five native cold proofs, with
+cleanup; latency remains unqualified (native request/lock/light maxima
+88.57/82.35/86.30 ms). Initial larger-fixture cold capture refusal remains in the
+evidence. No app validation is claimed. Applied geometry is unchanged.

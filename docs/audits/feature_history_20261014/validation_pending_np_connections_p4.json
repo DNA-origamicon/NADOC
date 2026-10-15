@@ -1,0 +1,72 @@
+{
+  "date": "2026-10-15",
+  "executor": "root, serialized validation; authoring agent ran no tests or benchmarks",
+  "scope": "Pending native nanoparticle connection create/rename/delete and isolated edit-identity policy",
+  "red": {
+    "target": "tests/test_part_pending_np_connections.py",
+    "cases": 49,
+    "failed": 31,
+    "passed": 18,
+    "seconds": 3.29,
+    "defects": ["Missing native pending contracts", "ISSUE-90: deleting a pending candidate clears unrelated legacy direct-binding metadata"]
+  },
+  "final_pending": {
+    "target": "tests/test_part_pending_np_connections.py",
+    "passed": 66,
+    "failed": 0,
+    "seconds": 4.20,
+    "real_cold_worker_seconds": 1.08
+  },
+  "identity_separate_run": {
+    "target": "tests/test_part_edit_identity.py",
+    "passed": 7,
+    "failed": 0,
+    "seconds": 2.72,
+    "included_in_editing_regressions": true
+  },
+  "editing_regressions": {
+    "targets": ["recipe_edit", "repair_planning", "recipe_repair", "edit_identity"],
+    "passed": 95,
+    "failed": 0,
+    "seconds": 3.58
+  },
+  "unique_green_cases": 161,
+  "benchmark_initial": {
+    "report": "benchmark_pending_np_connections_initial.json",
+    "repeats": 3,
+    "cases_attempted": 10,
+    "native_lifecycles_correct": 15,
+    "native_cold_verified": 4,
+    "failure": "Larger fixture cold capture exceeded unchanged cooperative 25 ms allowance after successful native lifecycle samples",
+    "cleanup": true
+  },
+  "benchmark_repeated": {
+    "report": "benchmark_pending_np_connections_repeated.json",
+    "repeats": 30,
+    "cases_completed": 10,
+    "native_lifecycles_correct": 150,
+    "native_cold_verified": 5,
+    "cleanup": true,
+    "correctness_verified": true,
+    "latency_qualified": false,
+    "larger_native_route_p50_ms": [23.37892200011993, 24.11936849966878],
+    "larger_compatibility_route_p50_ms": [17.177323999931104, 17.63290150120156],
+    "native_max_request_ms": 88.56836000268231,
+    "native_max_recording_lock_ms": 82.34846699997433,
+    "native_max_light_request_ms": 86.30182999695535,
+    "note": "Original qualified flag meant correctness/cleanup only. No latency threshold or GC attribution was measured. Later harness distinguishes correctness_verified from latency_qualified explicitly."
+  },
+  "preserved_boundaries": [
+    "Exact pending owner/target references, source-free uncoated gold and one unbound thiol owner",
+    "No applied state, geometry fitting, relaxation, assembly or compound generated scope",
+    "Single lock-owned recorder, exact defaults, one row/revision/undo, cancellation and failure rollback",
+    "Nested descriptor work bounded before traversal; unsupported scope retains honest compatibility behavior",
+    "feature_identity.py byte-for-byte unchanged, preventing unrelated duplex numerical pin invalidation"
+  ],
+  "open": [
+    "Latency remains unqualified; duplicate preflight/build descriptor scans identified for narrow follow-up",
+    "Pending-version motion/resize tests authored separately but not executed or implemented in this checkpoint",
+    "Applied connections, bound motion, graft-removal dependency policy and assemblies remain separate",
+    "No application/browser/manual validation claim"
+  ]
+}
