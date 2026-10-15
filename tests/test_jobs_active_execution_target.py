@@ -53,6 +53,9 @@ def test_collect_active_names_remote_gpu(tmp_path, monkeypatch):
     monkeypatch.setattr(namd_runner, "reconcile_job_status", lambda j, w: j)
     alpine = _make_md_job(ws, execution_target="alpine")
     alpine.partition = "aa100"
+    alpine.slurm_job_id = "34226173"
+    alpine.slurm_state = "RUNNING"
+    alpine.live_metrics = {"retrieved_at": 1792096800}
     alpine.save(ws)
     runpod = _make_md_job(ws, execution_target="runpod", status=MdStatus.preparing)
     runpod.runpod_gpu_key = "NVIDIA GeForce RTX 4090"
@@ -60,6 +63,9 @@ def test_collect_active_names_remote_gpu(tmp_path, monkeypatch):
 
     rows = {j["execution_target"]: j for j in routes_jobs._collect_active() if j["engine"] == "md"}
     assert rows["alpine"]["accelerator_name"] == "NVIDIA A100"
+    assert rows["alpine"]["slurm_job_id"] == "34226173"
+    assert rows["alpine"]["slurm_state"] == "RUNNING"
+    assert rows["alpine"]["last_synced_at"] == 1792096800
     assert rows["runpod"]["accelerator_name"] == "RTX 4090"
 
 

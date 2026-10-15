@@ -248,3 +248,31 @@ def test_explicit_disconnect_interrupts_transfer_and_retains_recovery_state(tmp_
         assert loaded.download_status['state'] == 'interrupted'
         assert loaded.download_status['transferred_bytes'] == 10
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('legacy', [False, True])
+@pytest.mark.parametrize('persisted', [False, True])
+def test_continuation_ignores_previous_allocation_download(tmp_path, legacy, persisted):
+    import os
+    from backend.core.alpine_transfer_state import submission_identity
+    job = make_job(tmp_path)
+    job.slurm_job_id = 'old'
+    job.queued_at = 100
+    status = {'state': 'verified', 'worker_transfer_id': 'old-transfer'}
+    record = {'id': 'old-transfer', 'done': True, 'download_status': status}
+    if not legacy:
+        record['submission'] = submission_identity(job)
+    atomic_json(state_path(job, tmp_path), record)
+    os.utime(state_path(job, tmp_path), (150, 150))
+    job.slurm_job_id = 'new'
+    job.queued_at = 200
+    job.status = MdStatus.queued
+    job.download_status = status if persisted else None
+    job.save(tmp_path)
+    loaded = MdJob.load(job.job_id, tmp_path)
+    assert loaded.download_status is None
+    assert md_executor._needs_remote_reconcile(loaded)
+    # A download belonging to the continuation still takes over normally.
+    record['submission'] = submission_identity(job)
+    atomic_json(state_path(job, tmp_path), record)
+    assert MdJob.load(job.job_id, tmp_path).download_status == status

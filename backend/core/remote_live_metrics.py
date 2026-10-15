@@ -220,6 +220,8 @@ def collect(work_dir):
     if live is not None:
         data["ns_per_day"] = live
     data["segment"] = os.path.basename(active)[:-4]
+    if data["segment"].endswith(".resume"):
+        data["segment"] = data["segment"][:-7]
     data["collected_at"] = time.time()
     data["dcd_size_bytes"] = dcd_bytes
     data["total_size_bytes"] = total_bytes
