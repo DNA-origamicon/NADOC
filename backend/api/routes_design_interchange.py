@@ -19,6 +19,9 @@ router = APIRouter()
 
 MAX_PDB_INPUT_BYTES = 50 * 1024 * 1024
 MAX_PROTEIN_ATOMS = 250_000
+# Experimental ordinary native import remains unavailable until retained-state
+# capture/publication qualification passes. No request or environment override.
+NATIVE_FREE_IMPORT_ENABLED = False
 
 
 class FilePathRequest(BaseModel):
@@ -197,15 +200,41 @@ async def import_pdb_auto(body: PdbAutoImportRequest, request: Request) -> dict:
                 ),
             }
         exclude_dna = bool(body.remove_dna_from_protein)
+        native_capture, native_prepared, legacy_reason = None, None, None
+        if body.protein_placement == "free" and NATIVE_FREE_IMPORT_ENABLED:
+            from backend.api import part_protein_import_recording as native_import
+
+            await _reject_disconnected_import(request, operation_id, started, stages_ms)
+            stage_started = time.perf_counter()
+            native_capture, legacy_reason = native_import.capture_import(
+                content, name, exclude_dna, operation_id, body.expected_revision)
+            if native_capture is not None:
+                stages_ms["native_capture"] = (time.perf_counter() - stage_started) * 1000.0
+        elif body.protein_placement == "free":
+            legacy_reason = "experimental_native_import_disabled"
         try:
             stage_started = time.perf_counter()
-            asset = await asyncio.to_thread(
-                parse_protein_pdb,
-                content,
-                name=name,
-                source_filename=name,
-                exclude_dna=exclude_dna,
-            )
+            if native_capture is not None:
+                from backend.core.part_command_errors import CommandContractError
+                from backend.core.part_history_proof import ProofBudgetExceeded
+                from backend.core.part_verification_capture import CaptureLimit
+
+                try:
+                    native_prepared = await asyncio.to_thread(native_import.prepare_import, native_capture)
+                except (CommandContractError, ProofBudgetExceeded, CaptureLimit, ValueError) as error:
+                    raise native_import.import_error(error) from error
+                asset = native_prepared.asset
+                stages_ms.update({f"native_{stage}": elapsed for stage, elapsed in native_prepared.stages_ms.items()})
+            else:
+                asset = await asyncio.to_thread(
+                    parse_protein_pdb,
+                    content,
+                    name=name,
+                    source_filename=name,
+                    exclude_dna=exclude_dna,
+                )
+        except HTTPException:
+            raise
         except Exception as exc:
             raise HTTPException(
                 400, detail=f"Protein PDB import failed: {exc}"
@@ -220,7 +249,11 @@ async def import_pdb_auto(body: PdbAutoImportRequest, request: Request) -> dict:
                     f"{MAX_PROTEIN_ATOMS}."
                 ),
             )
-        stages_ms["parse_protein"] = (time.perf_counter() - stage_started) * 1000.0
+        if native_prepared is not None:
+            stages_ms["native_preparation_total"] = (time.perf_counter() - stage_started) * 1000.0
+            stages_ms["parse_protein"] = native_prepared.stages_ms["import"]
+        else:
+            stages_ms["parse_protein"] = (time.perf_counter() - stage_started) * 1000.0
         stage_started = time.perf_counter()
         fingerprint = await asyncio.to_thread(protein_asset_fingerprint, asset)
         active = design_state.get_design()
@@ -252,12 +285,22 @@ async def import_pdb_auto(body: PdbAutoImportRequest, request: Request) -> dict:
             design_state.add_protein_asset(asset)
             meta = protein_asset_meta(asset)
         else:
-            updated, report, meta = _import_protein_free(
-                asset,
-                operation_id=operation_id,
-                expected_revision=body.expected_revision,
-            )
-            resp.update(_design_response(updated, report))
+            if native_prepared is not None:
+                updated, report, _revision = native_import.publish_import(native_capture, native_prepared)
+                meta = native_prepared.asset_meta
+                response = native_prepared.response
+                response["revision"] = _revision
+                resp.update(response)
+                resp["recipe_recording"] = {"status": "native_suffix", "whole_design_verified": False,
+                    "feature_ids": [row.id for row in native_prepared.rows]}
+            else:
+                updated, report, meta = _import_protein_free(
+                    asset,
+                    operation_id=operation_id,
+                    expected_revision=body.expected_revision,
+                )
+                resp.update(_design_response(updated, report))
+                resp["recipe_recording"] = {"status": "legacy_unverified", "reason": legacy_reason}
         stages_ms["commit"] = (time.perf_counter() - stage_started) * 1000.0
         resp["protein"] = meta
         resp["protein"]["deduplicated"] = deduplicated

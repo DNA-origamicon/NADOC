@@ -125,6 +125,24 @@ def test_legacy_compound_output_is_explicitly_unverified():
     assert not c["certifies_history"]
     assert c["command_editors"]["nick"]["history_ui"] == "not_available"
     assert c["history_edit"]["routing_child_query"] == "sub_index"
+    assert c["repair_contract"]["draft_endpoints"] == {
+        "inspect": "GET /api/design/features/repair-draft",
+        "mutate": "POST /api/design/features/repair-draft",
+        "evaluate": "POST /api/design/features/repair-draft/evaluate",
+        "source_inspect": "POST /api/design/features/repair-draft/source/inspect",
+        "source_upload": "POST /api/design/features/repair-draft/source",
+    }
+    assert "saved status is not readiness" in c["repair_contract"]["drafts"]
+    assert "restoration requires rebase" in c["repair_contract"]["source_repair"]
+    assert "apply retains proposal" in c["repair_contract"]["draft_evaluation"]
+    assert c["repair_contract"]["ui"] == "pending"
+    assert "visual preview pending" in c["repair_contract"]["comparison"]
+    assert "streptavidin-coating" in c["evaluation_jobs"]["append_kinds"]
+    assert c["coating_contract"]["live_append"].startswith("Enabled")
+    assert "ordinary limits unchanged" in c["coating_contract"]["capture"]
+    assert "32 flat native gold/coating rows" in c["coating_contract"]["publication_scope"]
+    assert c["evaluation_jobs"]["registered_batch_enabled"] is False
+    assert "batch" not in c["evaluation_jobs"]["operations"]
     assert c["photoproduct_create_methods"] == ["preflight", "convert"]
     assert "photoproduct-create:convert" in c["long_job_methods"]
     assert "legacy photoproduct-create:convert" in c["unverified_methods"]

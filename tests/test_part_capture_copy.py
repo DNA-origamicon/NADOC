@@ -15,25 +15,37 @@ def atom(cls=ProteinAtom):
                x=1.0, y=2.0, z=3.0)
 
 
-def design_with_atoms():
+def design_with_atoms(field="nanoparticles"):
     first = atom()
     protein = ProteinAsset(atoms=[first, first], bonds=[(0, 1)], metadata={"first": first})
+    return design_with_protein(protein, field)
+
+
+def design_with_protein(protein, field):
+    if field == "protein_assets":
+        return Design(protein_assets=[protein])
     return Design(nanoparticles=[Nanoparticle(diameter_nm=20, coating=StreptavidinCoating(
         target_count=1, protein=protein))])
 
 
-def test_capture_matches_deepcopy_and_preserves_internal_aliases_without_source_aliases(monkeypatch):
-    design = design_with_atoms()
-    expected = deepcopy(design.nanoparticles)
+def selected_protein(design, field):
+    return (design.protein_assets[0] if field == "protein_assets"
+            else design.nanoparticles[0].coating.protein)
+
+
+@pytest.mark.parametrize("field", ["nanoparticles", "protein_assets"])
+def test_capture_matches_deepcopy_and_preserves_internal_aliases_without_source_aliases(monkeypatch, field):
+    design = design_with_atoms(field)
+    expected = deepcopy(getattr(design, field))
 
     def unexpected_deepcopy(*_args):
         raise AssertionError("Scalar atom should not recursively copy immutable fields")
 
     monkeypatch.setattr(ProteinAtom, "__deepcopy__", unexpected_deepcopy)
     isolated = capture(design, seconds=1)
-    assert isolated.nanoparticles == expected
-    copied = isolated.nanoparticles[0].coating.protein
-    original = design.nanoparticles[0].coating.protein
+    assert getattr(isolated, field) == expected
+    copied = selected_protein(isolated, field)
+    original = selected_protein(design, field)
     assert copied.atoms[0] is copied.atoms[1] is copied.metadata["first"]
     assert copied.atoms[0] is not original.atoms[0]
     assert copied.atoms[0].__dict__ is not original.atoms[0].__dict__
@@ -50,15 +62,16 @@ def test_capture_matches_deepcopy_and_preserves_internal_aliases_without_source_
     assert "new" not in original.metadata
 
 
-def test_capture_preserves_aliases_to_atom_fields_and_between_atom_field_dicts():
-    design = design_with_atoms()
-    original = design.nanoparticles[0].coating.protein
+@pytest.mark.parametrize("field", ["nanoparticles", "protein_assets"])
+def test_capture_preserves_aliases_to_atom_fields_and_between_atom_field_dicts(field):
+    design = design_with_atoms(field)
+    original = selected_protein(design, field)
     other = atom()
     object.__setattr__(other, "__dict__", original.atoms[0].__dict__)
     original.atoms.append(other)
     original.metadata["atom_fields"] = original.atoms[0].__dict__
     expected = deepcopy(original)
-    copied = capture(design, seconds=1).nanoparticles[0].coating.protein
+    copied = selected_protein(capture(design, seconds=1), field)
     assert copied == expected
     assert copied.atoms[0] is not copied.atoms[2]
     assert copied.atoms[0].__dict__ is copied.atoms[2].__dict__ is copied.metadata["atom_fields"]
@@ -74,7 +87,8 @@ class ExtendedAtom(ProteinAtom):
 
 
 @pytest.mark.parametrize("fault", ["subclass", "cached", "mutable_field", "extra", "private", "future_schema"])
-def test_unreviewed_atom_shape_uses_full_deepcopy(monkeypatch, fault):
+@pytest.mark.parametrize("field", ["nanoparticles", "protein_assets"])
+def test_unreviewed_atom_shape_uses_full_deepcopy(monkeypatch, fault, field):
     value = atom(ExtendedAtom if fault == "subclass" else ProteinAtom)
     if fault == "subclass":
         value._notes.append([])
@@ -102,36 +116,43 @@ def test_unreviewed_atom_shape_uses_full_deepcopy(monkeypatch, fault):
     if value.__pydantic_private__:
         key = "_notes" if fault == "subclass" else "notes"
         assert copied.__pydantic_private__[key] is not value.__pydantic_private__[key]
+    # Exercise fallback through the actual field capture, including aliases to
+    # the opaque atom. Existing hidden-state charging behavior is unchanged.
+    source = design_with_protein(ProteinAsset.model_construct(atoms=[value], metadata={"again": value}), field)
+    native_deepcopy, calls = ProteinAtom.__deepcopy__, []
+
+    def counted(self, memo=None):
+        calls.append(self)
+        return native_deepcopy(self, memo)
+
+    monkeypatch.setattr(ProteinAtom, "__deepcopy__", counted)
+    captured = selected_protein(capture(source, seconds=1), field)
+    assert calls and captured.atoms[0] == value
+    assert captured.atoms[0] is captured.metadata["again"]
+    assert captured.atoms[0] is not value and captured.atoms[0].__dict__ is not value.__dict__
+    if value.__pydantic_extra__:
+        assert captured.atoms[0].__pydantic_extra__["notes"] is not value.__pydantic_extra__["notes"]
+    if value.__pydantic_private__:
+        assert captured.atoms[0].__pydantic_private__[key] is not value.__pydantic_private__[key]
 
 
 @pytest.mark.parametrize("limits", [{"max_nodes": 20}, {"max_bytes": 20}, {"seconds": 0}])
-def test_specialization_keeps_capture_limits_and_does_not_mutate_on_refusal(limits):
-    design = design_with_atoms()
+@pytest.mark.parametrize("field", ["nanoparticles", "protein_assets"])
+def test_specialization_keeps_capture_limits_and_does_not_mutate_on_refusal(limits, field):
+    design = design_with_atoms(field)
     before = deepcopy(design)
     with pytest.raises(CaptureLimit):
         capture(design, **limits)
     assert design == before
 
 
-def test_ordinary_protein_asset_capture_retains_existing_copy_path(monkeypatch):
-    from backend.core import part_capture_copy
-
-    def unexpected_seed(*_args):
-        raise AssertionError("Specialization is limited to nanoparticle authoring")
-
-    monkeypatch.setattr(part_capture_copy, "seed_scalar_atom_copy", unexpected_seed)
-    source = Design(protein_assets=[ProteinAsset(atoms=[atom()])])
-    copied = capture(source, seconds=1)
-    copied.protein_assets[0].atoms[0].x = 10
-    assert source.protein_assets[0].atoms[0].x == 1
-
-
 @pytest.mark.parametrize("budget", ["max_nodes", "max_bytes"])
-def test_atom_record_accounting_preserves_exact_generic_admission_boundary(monkeypatch, budget):
+@pytest.mark.parametrize("field", ["nanoparticles", "protein_assets"])
+def test_atom_record_accounting_preserves_exact_generic_admission_boundary(monkeypatch, budget, field):
     from backend.core import part_capture_copy
 
-    source = design_with_atoms()
-    source.nanoparticles[0].coating.protein.atoms[0].name = "Unicode atom \u03b1"
+    source = design_with_atoms(field)
+    selected_protein(source, field).atoms[0].name = "Unicode atom \u03b1"
 
     def minimum_budget():
         low, high = 0, 10000

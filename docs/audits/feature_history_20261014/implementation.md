@@ -940,3 +940,35 @@ corrections and dry-run selector's verbatim FAST/deferred FULL output are in the
 Archive is unavailable. No frontend/main.js, molecular algorithm, numerical pin
 or global-budget change. P4 coverage, P5 UI and P6 enforcement remain incomplete.
 See [saved evaluation](draft_evaluation.md) and [source contract](repair_source_staging.md).
+
+## Gated original-source protein workflow and repair regression — October 15
+
+The experimental ordinary free-protein importer records original PDB bytes and
+two independently editable native steps: import and placement. It parses once,
+prepares privately and publishes both rows/source/library changes in one guarded
+undo transaction. Missing or corrupt earlier source declarations cannot be healed
+implicitly by a later import. Rootless prefixes remain explicitly unverified.
+The ordinary route retains its existing behavior because the server-owned
+`NATIVE_FREE_IMPORT_ENABLED` gate is **false**; request data cannot open it.
+
+Retained-state benchmarks exposed occasional capture deadline refusals, including
+a failed final fixture setup in the optimized run. The existing scalar-atom copy
+optimization now covers protein assets with exact generic node/byte accounting
+and alias-isolation tests, but does not eliminate those outliers. No deadline,
+node/byte allowance, global GC policy or automatic retry was changed. Subsequent
+optimization must first distinguish redundant candidate allocation from necessary
+locked source isolation. All failures remain in the compact benchmark evidence.
+
+The saved-source repair regression now restores original missing bytes, requires
+explicit rebase, evaluates/applies once and independently cold-replays the result
+after JSON persistence with poisoned recovery. Capability descriptions were
+corrected for already implemented draft/source APIs and bounded coating jobs.
+
+This checkpoint passes **173 focused cases across six targets**. Changed Python
+Ruff and whitespace pass. The selector dry-run reports FAST/deferred FULL; neither
+broad suite ran. Archive remains unavailable, and no app/visual/headset check or
+scientific simulation ran. `main.js` LOC delta is zero. P4/P5/P6 remain incomplete.
+See [contract](protein_free_import_contract.md),
+[initial report](protein_free_import_benchmark_p4.json),
+[retained-state failures](protein_free_import_benchmark_optimized_p4.json), and
+[validation](validation_gated_protein_p4.json).

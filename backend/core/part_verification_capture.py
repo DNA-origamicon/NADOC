@@ -67,10 +67,11 @@ def capture(design, *, max_nodes=30_000, max_bytes=2_000_000, seconds=0.025,
     for name in type(design).model_fields:
         if FIELD_ROLES.get(name) not in {"presentation", "physical", "history", "repair_draft"}:
             value = getattr(design, name)
-            # Specialize scalar atoms only within nanoparticle authoring.
+            # Specialize the same reviewed scalar atoms in protein assets and
+            # nanoparticle authoring; never bypass field/node/byte accounting.
             # Keep traversal/budgets identical; memo preserves atom aliases
             # within the captured field without sharing atoms with the source.
-            copy_memo = {} if name == "nanoparticles" else None
+            copy_memo = {} if name in {"nanoparticles", "protein_assets"} else None
             charge(value, copy_memo)
             fields[name] = deepcopy(value, copy_memo)
     charge(design.recipe_root)

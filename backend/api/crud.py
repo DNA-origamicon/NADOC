@@ -283,8 +283,10 @@ def _design_response(
     *,
     preserve_feature_log_id: str | None = None,
     full_feature_log: bool = False,
+    normalize_legacy: bool = True,
 ) -> dict:
-    design = _ensure_default_cluster(design)
+    if normalize_legacy:
+        design = _ensure_default_cluster(design)
     # Proposals may contain bounded but sizeable action JSON. Never visit it on
     # ordinary response serialization; explicit draft reads own the full body.
     design_dict = design.model_dump(exclude={"repair_draft"})

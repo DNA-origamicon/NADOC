@@ -32,6 +32,13 @@ to render/scrub paths, or reuse a cached baseline while mutable aliases and
 unclassified write paths remain. No strict-session or general LLM enforcement
 claim is justified yet.
 
+An experimental ordinary free-protein importer records pinned original bytes and
+separate import/placement inputs, but its server-owned gate remains false after
+retained-history capture refusals. Existing ordinary import behavior remains
+available. Its scalar-atom copy optimization preserves exact admission accounting;
+no deadline or GC policy was relaxed. Saved source restoration now has a real
+HTTP-to-cold-replay regression requiring explicit rebase before evaluation.
+
 Focused tests and small in-memory qualification run serially. The Archive
 filesystem is unavailable in this environment; broader suite, app, visual and
 headset validation debt is recorded separately and must not be described as a

@@ -8,6 +8,8 @@ command, or confer a certificate. Verification remains an explicit operation.
 def editing_capabilities(kinds):
     from backend.api.part_overhang_commands import ACTIONS
     from backend.api.part_aptamer_commands import NATIVE_ROUTE_ENABLED
+    from backend.api.part_evaluation_capture import COATING_APPEND_ENABLED
+    from backend.api.part_batch_evaluation import REGISTERED_BATCH_ENABLED
 
     # Existing history editors; other authoring tools edit current objects, not
     # their historical input commands, so must not be advertised as equivalents.
@@ -60,7 +62,9 @@ def editing_capabilities(kinds):
             "cancel": "DELETE /api/design/features/evaluation/jobs/{job_id}",
             "commit": "POST /api/design/features/evaluation/jobs/{job_id}/commit",
             "operations": ["verify", "append", "edit", "delete", "repair", "selection"],
-            "append_kinds": ["photoproduct-create", "photoproduct-relax", "duplex-relax"],
+            "append_kinds": ["photoproduct-create", "photoproduct-relax", "duplex-relax"]
+                + (["streptavidin-coating"] if COATING_APPEND_ENABLED else []),
+            "registered_batch_enabled": REGISTERED_BATCH_ENABLED,
             "time_budget_seconds": 180,
             "publication": "explicit revision-bound commit of the evaluated candidate",
             "limits": ["2 MB captured input", "256 KB operation input", "8 MB cumulative recovery encoding",
@@ -77,7 +81,16 @@ def editing_capabilities(kinds):
             "numerical_upgrade_families": ["native CPD v1", "native duplex relaxation v1", "native streptavidin packing v1"],
             "publication": "Explicit commit of a complete regenerated candidate; source state need not reproduce",
             "comparison": "Changed authored fields/counts and numerical provenance; on-demand visual preview pending",
-            "drafts": "Persistence pending; job results expire after 15 minutes",
+            "drafts": "Bounded proposals persist with the part; explicit rebase preserves exact old-value expectations; saved status is not readiness",
+            "draft_endpoints": {
+                "inspect": "GET /api/design/features/repair-draft",
+                "mutate": "POST /api/design/features/repair-draft",
+                "evaluate": "POST /api/design/features/repair-draft/evaluate",
+                "source_inspect": "POST /api/design/features/repair-draft/source/inspect",
+                "source_upload": "POST /api/design/features/repair-draft/source",
+            },
+            "source_repair": "Explicit named proposed-input staging or published-source restoration; original bounded bytes and exact prior-byte receipt; restoration requires rebase",
+            "draft_evaluation": "Existing isolated repair job; exact saved generation and published base; apply retains proposal; job results expire after 15 minutes",
             "ui": "pending",
         },
         "reference_selection": {
@@ -114,8 +127,9 @@ def editing_capabilities(kinds):
             "scope": "One unowned gold particle with pinned complete 1STP and optional coverage inputs",
             "execution": "Explicit long evaluation only; set/repack pins implementation and numerical runtime",
             "limits": ["64 requested sites", "350 KB PDB source", "4096 bytes coverage JSON"],
-            "live_append": "pending",
-            "capture": "Ordinary limits unchanged; larger job profile pending lock qualification",
+            "live_append": "Enabled for the qualified single-gold-particle scope" if COATING_APPEND_ENABLED else "disabled",
+            "capture": "Explicit coating jobs only: 4 MB, 100000 nodes, 100 ms cooperative capture; ordinary limits unchanged",
+            "publication_scope": "Explicit empty root, at most one unowned gold particle, 32 flat native gold/coating rows, default physical/presentation state, bounded retained recovery and sources",
         },
         "quantum_dot_contract": {
             "version": 1,
