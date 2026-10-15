@@ -10,7 +10,7 @@ Scope approved October 14, 2026: implement standard-part validation, editability
 | P1 | Standard-part recording transactions, executable replay registry and evidenced cleanup | Foundation implemented below. Retain legacy callbacks and compatibility recovery; no claim of general isolated evaluation |
 | P2 | Explicit recipe roots/versions, authoritative-field classification, read-only verification and incremental dependencies | Implementation exit checks complete: independent nonempty replay, content-pinned roots, typed dependencies, fingerprints, bounded capture/jobs and stale/cancel handling. Supported-family expansion continues in P3/P4; validation debt below remains explicit |
 | P3 | Native DNA command families and generated construction | 96 versioned kinds with method/action restrictions, joined/connectivity input compilation and bounded native-source CPD conversion/relaxation implemented. See the latest evidence and explicit scope limits below; full generated asset/attachment histories belong to P4 |
-| P4 | Standard-part assets and attachments | Pending. Explicit import provenance, duplex/protein/nanoparticle commands, physical-result separation and all current part authoring bypasses |
+| P4 | Standard-part assets and attachments | In progress. Source-free gold CRUD implemented; pinned inputs/protein import and duplex work underway. Full import/attachment coverage and physical-result provenance remain open |
 | P5 | Standard-part repair, drafts, desktop and part-mode VR | Pending. Revision-bound impact previews, failed/blocked diagnostics, reference replacement, last-successful-state display, undo/reload |
 | P6 | Strict standard-part agent transactions and legacy retirement | Pending. Pure candidate execution outside long-held locks, expected-revision publication, registered command batches, bypass closure and explicit import exceptions |
 
@@ -444,3 +444,24 @@ slow groups without raising guards. No frontend or molecular algorithm changed,
 `main.js` LOC delta is zero, and no visual inspection or physical simulation is
 claimed. P4–P6 audits are recorded in `asset_import_plan.md`,
 `duplex_contract_plan.md`, `repair_plan.md` and `automation_policy_plan.md`.
+
+## P4a source-free gold particles — October 15
+
+Create, patch and delete for an uncoated gold particle now record strict complete
+inputs and explicit stable identity, using the existing native builders. Diameter,
+pose and gizmo choices are retained. Missing/ambiguous targets and owned DNA or
+connection dependencies fail before mutation. Decorated particles and QDs retain
+their legacy routes and remain explicitly unverified; kind registration alone
+does not upgrade old receipts. Source-free commands use conservative dependency
+barriers because shared postprocessing can retry pending ligations.
+
+There are now 99 supported versioned kinds, subject to their documented scopes.
+The new regressions prove complete native-builder equality, preservation of
+unrelated DNA, early diameter editing through a later move, stable feature/object
+IDs, cold replay without recovery, actual-reference cascade and failure-atomic
+recording. Existing particle/conjugation/connection/serialization tests pass.
+Final focused checks: **51 passed** (new native particle proof 29 in 3.50 s,
+existing nanoparticles 18 in 3.44 s, generated-native compatibility 4 in 2.55 s).
+No full proof or new snapshot copy was added to ordinary particle edits. No
+scientific placement algorithm changed. No frontend changes or visual checks;
+`main.js` LOC delta remains zero. Broad validation debt above remains open.

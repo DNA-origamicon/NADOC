@@ -21,5 +21,8 @@ def preserve_proof_identity(previous, updated, *, kind=None):
              "joined-crossbar-path": ("deformation_id",),
              "photoproduct-create": ("conversion_version", "template", "engine"),
              "photoproduct-relax": ("conversion_version", "template", "engine"),
+             "nanoparticle-create": ("nanoparticle_id", "nanoparticle_version"),
+             "nanoparticle-patch": ("nanoparticle_version",),
+             "nanoparticle-delete": ("nanoparticle_version",),
              "crossover-constraint-create": ("constraint_id",)}.get(kind, ())
     return {**updated, **{key: previous[key] for key in keys if key in previous}}

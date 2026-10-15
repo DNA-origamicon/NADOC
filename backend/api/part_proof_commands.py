@@ -16,6 +16,7 @@ from backend.api.part_path_commands import KINDS as PATH_KINDS
 from backend.api.part_section_commands import KINDS as SECTION_KINDS
 from backend.api.part_connectivity_commands import KINDS as CONNECTIVITY_KINDS
 from backend.api.part_joined_path_commands import KINDS as JOINED_PATH_KINDS
+from backend.api.part_nanoparticle_commands import KINDS as NANOPARTICLE_KINDS
 
 
 TOPOLOGY_MINOR_KINDS = frozenset({
@@ -24,7 +25,7 @@ TOPOLOGY_MINOR_KINDS = frozenset({
     "crossover-place", "crossover-place-batch",
 })
 EXTRUSION_COMMANDS = frozenset({"extrude-segment", "extrude-continuation", "extrude-deformed-continuation", "circle-segment", "extrude-frame"})
-PROOF_SNAPSHOT_KINDS = JOINED_PATH_KINDS | CONNECTIVITY_KINDS | SECTION_KINDS | PATH_KINDS | BRANCH_KINDS | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS | frozenset({"photoproduct-relax", "bundle-create", "sweep", "cluster-join", "strand-sequence", "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste"})
+PROOF_SNAPSHOT_KINDS = NANOPARTICLE_KINDS | JOINED_PATH_KINDS | CONNECTIVITY_KINDS | SECTION_KINDS | PATH_KINDS | BRANCH_KINDS | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS | frozenset({"photoproduct-relax", "bundle-create", "sweep", "cluster-join", "strand-sequence", "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste"})
 PROOF_MINOR_KINDS = MOVE_KINDS | CELL_KINDS | LIGATION_KINDS | TOPOLOGY_MINOR_KINDS | LOOP_COMMANDS | STRUCTURAL_KINDS | frozenset({"joint-place", "joint-update", "joint-delete", "strand-patch"})
 PROOF_VERSION = 1
 PART_TOPOLOGY = Resource("part", "topology")
@@ -42,6 +43,17 @@ def capabilities():
 def dependencies(kind, params):
     if type(params.get("_proof_version")) is not int or params["_proof_version"] != PROOF_VERSION:
         return Dependencies(known=False)
+    if kind in NANOPARTICLE_KINDS:
+        from backend.api.part_nanoparticle_commands import parse_command
+        try:
+            command = parse_command(kind, params)
+        except ValueError:
+            return Dependencies(known=False)
+        particle = Resource("nanoparticle", command.nanoparticle_id)
+        # Shared postprocessors can retry pending ligations. Retain the part
+        # barrier until that interaction has a narrower proved write contract.
+        return Dependencies(frozenset({PART_TOPOLOGY, particle}),
+                            frozenset({PART_TOPOLOGY, particle}), barrier=True)
     if kind == "photoproduct-relax" or (kind == "photoproduct-create" and params.get("method") != "preflight"):
         if params.get("conversion_version") != 1:
             return Dependencies(known=False)
@@ -149,6 +161,9 @@ def _execute(kind, design, params, *, expensive):
     elif kind == "nick-batch":
         from backend.api.part_command_references import build_strict_nick_batch
         updated = build_strict_nick_batch(design, params)
+    elif kind in NANOPARTICLE_KINDS:
+        from backend.api.part_nanoparticle_commands import build
+        updated = build(kind, design, params)
     elif kind in BRANCH_KINDS:
         from backend.api.part_branch_commands import build
         updated = build(kind, design, params)

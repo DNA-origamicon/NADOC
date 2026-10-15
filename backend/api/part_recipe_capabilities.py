@@ -66,6 +66,12 @@ def editing_capabilities(kinds):
                        "16 MB candidate transport", "two retained jobs", "15 minute result lifetime"],
         },
         "photoproduct_create_methods": ["preflight", "convert"],
+        "nanoparticle_contract": {
+            "version": 1,
+            "kinds": ["nanoparticle-create", "nanoparticle-patch", "nanoparticle-delete"],
+            "scope": "uncoated gold particles without owned DNA or connection versions",
+            "legacy": "Receipts without nanoparticle_version remain unverified",
+        },
         "long_job_methods": {
             "photoproduct-create:convert": "Explicit native-source contract with pinned template and numerical engine",
             "photoproduct-relax": "Existing native CPD with pinned template and numerical engine",

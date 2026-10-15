@@ -137,6 +137,14 @@ def import_quantum_dot(body: QuantumDotCreate) -> dict:
 
 @router.post("/design/nanoparticles/gold-nanospheres", status_code=201)
 def create_nanosphere(body: GoldNanosphereCreate) -> dict:
+    if body.coating is None:
+        from uuid import uuid4
+        from backend.api.part_nanoparticle_commands import record
+        identity = str(uuid4())
+        updated, report, _ = record("nanoparticle-create",
+            f"Create {body.diameter_nm:g} nm gold nanosphere",
+            {"nanoparticle_id": identity, "diameter_nm": body.diameter_nm})
+        return {**_design_response(updated, report), "nanoparticle_id": identity}
     particle = create_gold_nanosphere(body.diameter_nm)
     if body.coating:
         from backend.core.streptavidin import build_streptavidin_coating
@@ -171,6 +179,12 @@ def patch_nanoparticle(nanoparticle_id: str, body: NanoparticlePatch) -> dict:
         raise HTTPException(400, detail="Invalid gizmo move dimensions.")
     current = design_state.get_or_404()
     particle = _particle_or_404(current, nanoparticle_id)
+    from backend.api.part_nanoparticle_commands import record, route_source_free_target
+    if body.coating is None and route_source_free_target(current, nanoparticle_id):
+        updated, report, _ = record("nanoparticle-patch",
+            f"{'Resize' if body.diameter_nm is not None else 'Move'} gold nanosphere",
+            {"nanoparticle_id": nanoparticle_id, **body.model_dump(exclude_unset=True)})
+        return _design_response(updated, report)
     coating_changed = 'coating' in body.model_fields_set
     if particle.biotin_dna and (coating_changed or body.diameter_nm is not None):
         raise HTTPException(409, 'Remove biotinylated DNA before changing core size or coating.')
@@ -242,6 +256,11 @@ def patch_nanoparticle(nanoparticle_id: str, body: NanoparticlePatch) -> dict:
 def delete_nanoparticle(nanoparticle_id: str) -> dict:
     current = design_state.get_or_404()
     particle = _particle_or_404(current, nanoparticle_id)
+    from backend.api.part_nanoparticle_commands import record, route_source_free_target
+    if route_source_free_target(current, nanoparticle_id):
+        updated, report, _ = record("nanoparticle-delete", "Delete gold nanosphere",
+                                    {"nanoparticle_id": nanoparticle_id})
+        return _design_response(updated, report)
 
     def mutate(design: Design) -> None:
         conjugations = [c for c in design.nanoparticle_conjugations if c.nanoparticle_id == nanoparticle_id]

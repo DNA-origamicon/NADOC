@@ -26,7 +26,7 @@ keep assemblies deferred. Consult the implementation ledger for subsequent fixes
 
 ## Native recipe continuation (2026-10-15)
 
-P3 now has 96 versioned kinds (with method/action restrictions), pure native
+P3 plus the first P4 particle slice now has 99 versioned kinds (with method/action restrictions), pure native
 builders shared by routes and proof, source-based continuation references,
 thread-local deterministic routing IDs, actual-failure cascade analysis, and one
 independently rebuilt prefix retained per edit. No saved outputs are proof inputs.
@@ -46,6 +46,12 @@ explicit imported topology and correctly remains `reproduced_import`. Preflight
 photoproduct authoring remains supported. P3 is the DNA execution foundation;
 full generated asset/attachment histories remain unverified. Asset/NP/duplex work is P4, UI repair is
 P5, strict agent enforcement is P6; assemblies remain deferred.
+
+P4a adds strict uncoated gold particle create/patch/delete using existing native
+builders. Diameter/pose/gizmo inputs and stable particle identity are retained;
+owned DNA/decorations/connections are outside this slice. Legacy same-kind rows
+without `nanoparticle_version` remain unverified. Cold proof, early parameter
+editing, cascade/undo and existing particle workflows pass focused checks.
 
 `part_recipe_capabilities.py` exposes API/editor limitations explicitly. No new
 frontend controls were added. Long jobs evaluate privately, omit candidates from
