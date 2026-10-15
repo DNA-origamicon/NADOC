@@ -215,7 +215,7 @@ def change_recipe(index, *, params=None, sub_index=None, cascade=False):
                 log[index] = entry.model_copy(
                     update={
                         "params": preserve_proof_identity(
-                            entry.params, {**entry.params, **params}
+                            entry.params, {**entry.params, **params}, kind=entry.op_kind
                         )
                     }
                 )

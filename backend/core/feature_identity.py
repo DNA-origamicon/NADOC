@@ -12,6 +12,11 @@ def identity_factory(seed):
     return identifier
 
 
-def preserve_proof_identity(previous, updated):
+def preserve_proof_identity(previous, updated, *, kind=None):
     """Parameter edits retain the authored identity namespace and contract."""
-    return {**updated, **{key: previous[key] for key in ("_generated_scope", "binding_id", "created_at", "conn_id", "_sub_domain_id", "_scaffold_id", "_staple_id", "_source_helix_ids", "_fl_id", "bridge_identity_seed", "history_seed", "sweep_id", "crossover_id", "_helix_id", "_strand_id", "_proof_version") if key in previous}}
+    keys = ("_generated_scope", "binding_id", "created_at", "conn_id", "_sub_domain_id", "_scaffold_id", "_staple_id", "_source_helix_ids", "_fl_id", "bridge_identity_seed", "history_seed", "sweep_id", "crossover_id", "_helix_id", "_strand_id", "_proof_version")
+    # Output identities survive parameter edits. A consumer's reference (such
+    # as the constraint selected for deletion) remains an editable input.
+    keys += {"fork-path": ("deformation_id",),
+             "crossover-constraint-create": ("constraint_id",)}.get(kind, ())
+    return {**updated, **{key: previous[key] for key in keys if key in previous}}

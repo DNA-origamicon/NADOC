@@ -25,14 +25,19 @@ keep assemblies deferred. Consult the implementation ledger for subsequent fixes
 
 ## Native recipe continuation (2026-10-15)
 
-P3 now has 83 versioned kinds (with method/action restrictions), pure native
+P3 now has 92 versioned kinds (with method/action restrictions), pure native
 builders shared by routes and proof, source-based continuation references,
 thread-local deterministic routing IDs, actual-failure cascade analysis, and one
 independently rebuilt prefix retained per edit. No saved outputs are proof inputs.
-Generated ordinary DNA steps use the same builders with explicit part scopes;
-legacy compound branch construction and bounded CPD-conversion replay remain
-open, so P3 is **not yet fully complete**. CPD conversion must not execute on the
-ordinary proof worker: a small regression took about 70 seconds. Preflight
+Generated ordinary DNA steps use the same builders with versioned typed part
+scopes. Sparse planar/curved branches now separate seed, numeric path, crossover
+constraints, section routing, curvature encoding and optional budget fitting.
+Native semantic no-ops remain in the recipe. Seeds author their stable default
+cluster before publication; response-time legacy normalization must not add an
+unrecorded cluster. Independent-section seed/bounded-route contracts are the
+foundation for joined generation, whose full compiler and connectivity/CPD work
+remain open, so P3 is **not yet fully complete**. CPD conversion must not execute on the
+ordinary proof worker: conversion plus replay previously took 70.70 seconds. Preflight
 photoproduct authoring remains supported. Asset/NP/duplex work is P4, UI repair is
 P5, strict agent enforcement is P6; assemblies remain deferred.
 

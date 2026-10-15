@@ -1917,6 +1917,15 @@ class OverhangRotationLogEntry(FeatureLogProvenance):
 # `extrude-*` are continuation/segment ops that grow an existing design.
 # `overhang-extrude` adds a single-helix overhang stub from a nick.
 SnapshotOpKind = Literal[
+    "branch-seed",
+    "independent-section-seed",
+    "auto-scaffold-bounded-section",
+    "auto-scaffold-sections",
+    "fork-path",
+    "crossover-constraint-create",
+    "crossover-constraint-delete",
+    "encode-sweep-curvature",
+    "scaffold-budget-fit",
     "sweep",
     "curve-path",
     "generate-design",

@@ -314,3 +314,60 @@ native proof must explicitly declare its geometry source, template and engine,
 and use a separate bounded long job. The prior 70.70-second measurement included
 conversion plus replay, not one solve. Extending the ordinary deadline or
 storing solved coordinates cannot resolve this missing input contract.
+
+## P3 typed composition and native branch construction — October 15
+
+New scope receipts use version 2. A declarative model-field schema distinguishes
+typed identities/references from names, sequences and arbitrary metadata. It
+checks nested ownership and input closure, handles canonical CPD base keys and
+functional linker IDs, preserves independent objects, and composes the native
+selected subsequence order. Old receipts execute only when the corrected mapping
+and order agree with their historical semantics; unsafe definitions remain
+unverified without silent rewriting. Unsupported nonempty compatibility payloads
+still fail closed. Native minor steps use the existing Fine Routing schema.
+
+Sparse branch seed and section routing now have native input contracts. Curved
+forks retain each selected numeric path recipe and compile separate path,
+crossover-constraint, routing, curvature-encoding and optional budget-fitting
+features. Saved path arrays are never accepted as inputs. Existing scientific
+builders and formulas are unchanged. Output IDs survive edits while consumer
+references, such as a constraint selected for deletion, remain editable.
+Declared native no-ops remain in history because upstream edits can make them
+effective. Native seeds also author their deterministic default cluster before
+publication and snapshot encoding; legacy response serialization could otherwise
+add a random cluster and invalidate an otherwise successful edit.
+
+Independent-section construction and bounded selected-section routing add two
+more contracts for subsequent Join compilation. They retain the established
+even-column address separation independently of physical axes and preserve
+outside state. Joined materialization, indexed crossbar paths, connectivity and
+CPD conversion/relaxation remain P3 exit work. There are now 92 registered kinds,
+with existing action/method restrictions; this is not 92 complete UI editors or
+a completed P3. Assets, repair UI and strict automation policy remain P4–P6.
+
+Measured scope overhead remains within both unchanged gates: warm command medians
+are 1.24 ms versus 1.34 ms for six helices and 3.91 ms versus 4.38 ms for 24 helices
+with 100 history rows. Full authoring output agrees. These are paired in-memory
+command measurements, not cold startup or HTTP/rendering latency. See
+[scope evidence](generated_scope_benchmark.json).
+
+The composed fork regression verifies separate features across cold worker
+processes, edits radius, preserves IDs/independent work, checks semantic no-op
+retention and undo. Shrinking the fixture reduced its call from 7.21 to 5.85 s;
+native routing/curvature plus two spawned checks remain genuine integration
+work, so it is registered in the slow headless group. Focused development still
+runs it. No guard budget or assertion was weakened.
+
+Broad-suite debt remains explicit: Archive is still unavailable, and a fresh
+selector dry run still chooses **FULL (test-dedicated session OPEN)**. The known
+broad suites produce bulk fixture artifacts, so no further broad execution was
+started on unapproved fallback storage. The prior FAST baseline comparison above
+does not certify this increment. Focused results are recorded with this checkpoint.
+
+Final focused checks: **122 passed** across typed scope/reference compatibility,
+native branch/path/section adapters, cold replay/edit/cascade tests and existing
+generated-design compatibility. [Validation detail](validation_branch_scope.json)
+records each file and duration. Changed code has no new lint findings; repository
+lint retains five unrelated unused imports and memory lint its six existing
+errors. No frontend or molecular placement algorithm was changed, and no visual
+inspection or physical simulation was run for this contract-only increment.

@@ -436,8 +436,14 @@ def materialize(
     progress("Create bundle", f"{len(candidate.summary['cells'])} helices × {bp['length_bp']} bp", .10)
     before = Design(lattice_type=source.lattice_type, nanoparticles=particles)
     standard = history is not None and history.standard
+    native_branches = standard and branched and not joined
     swept = curved and candidate.summary.get("path_feature") == "sweep" and (history is None or standard)
-    if branched:
+    if native_branches:
+        from backend.api.part_branch_commands import compile_sparse_seed_params
+        from backend.api.part_proof_commands import execute
+        seed_params = compile_sparse_seed_params(candidate.summary, uuid.uuid4())
+        rod = execute("branch-seed", before, seed_params)
+    elif branched:
         from backend.core.branched_generator import branch_seed
         rod = branch_seed(source.lattice_type, candidate.summary)
     elif swept:
@@ -465,20 +471,28 @@ def materialize(
             c.model_copy(update={"rotation": [0, 0, 0, 1], "translation": [0, 0, 0]})
             for c in initial_join_poses
         ])
+    if native_branches:
+        construction_params = seed_params
+    elif swept or (standard and not branched):
+        construction_params = request.model_dump(mode="json")
+        if standard:
+            construction_params["_proof_version"] = 1
+    else:
+        construction_params = {**bp, "cells": candidate.summary["cells"],
+                               "lattice_type": source.lattice_type.value}
     _record(
         history,
         before,
         rod,
-        "generate-design" if branched else "sweep" if swept else "extrude-segment" if standard else "bundle-create",
-        "Create independent Join branches" if joined else "Create curved branched sections" if forked else "Create branched lattice sections" if branched else "Sweep nanoparticle path" if swept else "Extrude segment" if standard else f"Create {shape} bundle",
-        ({**request.model_dump(mode="json"), "_proof_version": 1} if standard and not branched else request.model_dump(mode="json")) if swept or (standard and not branched) else {
-            **bp,
-            "cells": candidate.summary["cells"],
-            "lattice_type": source.lattice_type.value,
-        },
+        "branch-seed" if native_branches else "generate-design" if branched else "sweep" if swept else "extrude-segment" if standard else "bundle-create",
+        "Create independent Join branches" if joined else "Create sparse fork tracks" if native_branches and forked else "Create curved branched sections" if forked else "Create branched lattice sections" if branched else "Sweep nanoparticle path" if swept else "Extrude segment" if standard else f"Create {shape} bundle",
+        construction_params,
         "branched-sections" if branched else "sweep" if swept else "bundle",
         () if swept or branched else ("length_bp",),
     )
+    if native_branches and forked:
+        from backend.api.generated_branch_steps import apply_fork_steps
+        rod = apply_fork_steps(rod, candidate.summary, history)
     if joined:
         before = rod
         rod = rod.copy_with(cluster_transforms=initial_join_poses)
@@ -497,6 +511,13 @@ def materialize(
         rod, routing = route_joined_branches(rod, candidate.summary,
             record=lambda *args: _record(history, *args))
         before = rod  # Routing and each Join already have separate history entries.
+    elif native_branches:
+        from backend.api.part_branch_commands import compile_partition_params, route
+        from backend.core.cluster_reconcile import reconcile_cluster_membership
+        from backend.core.lattice import retry_pending_ligations
+        routing_params = compile_partition_params(rod, candidate.summary, uuid.uuid4())
+        rod, routing = route(rod, routing_params)
+        rod = retry_pending_ligations(before, reconcile_cluster_membership(before, rod))
     elif branched:
         from backend.core.branched_generator import route_branches
         rod, routing = route_branches(rod, candidate.summary)
@@ -515,9 +536,9 @@ def materialize(
         history,
         before,
         rod,
-        "auto-scaffold-seamed",
+        "auto-scaffold-sections" if native_branches else "auto-scaffold-seamed",
         f"Route {shape} scaffold",
-        routing_params if standard and not branched else {},
+        routing_params if standard and (not branched or native_branches) else {},
         "scaffold",
     )
     if swept:
@@ -600,7 +621,10 @@ def materialize(
     budget = {"M13mp18": 7249, "p8064": 8064}.get(sequence_params["scaffold_name"])
     if budget is None:
         raise ValueError("Choose M13mp18 or p8064 for generation.")
-    if (forked and settings.branch_sizing == "optimized") or join_curved:
+    if standard and forked and settings.branch_sizing == "optimized":
+        from backend.api.generated_branch_steps import fit_fork_budget
+        rod = fit_fork_budget(rod, candidate.summary, budget, history)
+    elif (forked and settings.branch_sizing == "optimized") or join_curved:
         from backend.core.generated_sweep import encode_sweep
         from backend.core.branch_optimizer import trim_to_budget
         before = rod
@@ -645,7 +669,10 @@ def materialize(
 
         before = rod
         progress("Insert loops/skips", "Apply the selected manual insertion/deletion positions", .50)
-        if swept or forked or join_curved:
+        if standard and forked:
+            from backend.api.generated_branch_steps import encode_fork_curvature
+            rod = encode_fork_curvature(rod, history)
+        elif swept or forked or join_curved:
             from backend.core.generated_sweep import encode_sweep
             rod = encode_sweep(rod)
         else:
@@ -654,15 +681,16 @@ def materialize(
             raise ValueError(
                 "The curved rod's insertions exceed the scaffold budget. Shorten the bundle."
             )
-        _record(
-            history,
-            before,
-            rod,
-            "apply-loop-skips",
-            "Encode rod curvature with insertions/deletions",
-            {},
-            "curve-marks",
-        )
+        if not (standard and forked):
+            _record(
+                history,
+                before,
+                rod,
+                "apply-loop-skips",
+                "Encode rod curvature with insertions/deletions",
+                {},
+                "curve-marks",
+            )
         before = rod
         if standard:
             from backend.api.part_proof_commands import execute

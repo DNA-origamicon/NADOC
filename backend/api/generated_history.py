@@ -133,42 +133,54 @@ class GeneratedHistory:
                     self.renames.setdefault(
                         identifier, f"{prefix}gen_{self.group_id}_{identifier}"
                     )
-            old = self._map(before.model_dump(exclude={"feature_log", "loadouts"}))
-            new = self._map(after.model_dump(exclude={"feature_log", "loadouts"}))
-            merged = self.design.model_dump()
-            for field, values in new.items():
-                prior = old[field]
-                if values == prior or not isinstance(values, list):
-                    continue
-                if not all(
-                    isinstance(v, dict) and "id" in v for v in [*values, *prior]
-                ):
-                    raise ValueError(f"Cannot compose generated field {field}.")
-                before_by_id = {v["id"]: v for v in prior}
-                after_by_id = {v["id"]: v for v in values}
-                removed = set(before_by_id) - set(after_by_id)
-                changed = {
-                    i: v for i, v in after_by_id.items() if before_by_id.get(i) != v
-                }
-                if field == "staple_groups":
-                    for previous in merged[field]:
-                        if previous["id"] in changed:
-                            changed[previous["id"]]["strand_ids"] = list(
-                                dict.fromkeys(
-                                    [
-                                        *previous["strand_ids"],
-                                        *changed[previous["id"]]["strand_ids"],
-                                    ]
+            if self.standard and params.get("_proof_version") == 1:
+                from backend.api.generated_native_scope import merge_changes
+                from backend.core.part_scope_references import namespace_design
+
+                updated = merge_changes(
+                    self.design,
+                    namespace_design(before, self.group_id, self.source_ids),
+                    namespace_design(after, self.group_id, self.source_ids),
+                )
+            else:
+                # Persisted legacy generator recovery keeps its old semantics;
+                # these outputs do not acquire a native proof from this path.
+                old = self._map(before.model_dump(exclude={"feature_log", "loadouts"}))
+                new = self._map(after.model_dump(exclude={"feature_log", "loadouts"}))
+                merged = self.design.model_dump()
+                for field, values in new.items():
+                    prior = old[field]
+                    if values == prior or not isinstance(values, list):
+                        continue
+                    if not all(
+                        isinstance(v, dict) and "id" in v for v in [*values, *prior]
+                    ):
+                        raise ValueError(f"Cannot compose generated field {field}.")
+                    before_by_id = {v["id"]: v for v in prior}
+                    after_by_id = {v["id"]: v for v in values}
+                    removed = set(before_by_id) - set(after_by_id)
+                    changed = {
+                        i: v for i, v in after_by_id.items() if before_by_id.get(i) != v
+                    }
+                    if field == "staple_groups":
+                        for previous in merged[field]:
+                            if previous["id"] in changed:
+                                changed[previous["id"]]["strand_ids"] = list(
+                                    dict.fromkeys(
+                                        [
+                                            *previous["strand_ids"],
+                                            *changed[previous["id"]]["strand_ids"],
+                                        ]
+                                    )
                                 )
-                            )
-                current_ids = {v["id"] for v in merged[field]}
-                merged[field] = [
-                    changed.get(v["id"], v)
-                    for v in merged[field]
-                    if v["id"] not in removed
-                ]
-                merged[field] += [v for i, v in changed.items() if i not in current_ids]
-            updated = Design.model_validate(merged)
+                    current_ids = {v["id"] for v in merged[field]}
+                    merged[field] = [
+                        changed.get(v["id"], v)
+                        for v in merged[field]
+                        if v["id"] not in removed
+                    ]
+                    merged[field] += [v for i, v in changed.items() if i not in current_ids]
+                updated = Design.model_validate(merged)
         else:
             updated = after.copy_with(
                 feature_log=self.design.feature_log,
@@ -181,6 +193,7 @@ class GeneratedHistory:
             from backend.api.part_proof_commands import execute
             from backend.core.part_history_proof import AUTHORING_FIELDS
             native_params = {**params, "_generated_scope": {
+                "version": 2,
                 "group_id": self.group_id,
                 "input_ids": sorted(self.source_ids & set(_ids(before.model_dump()))),
             }} if scoped and kind != "sweep" else dict(params)
@@ -202,53 +215,66 @@ class GeneratedHistory:
                     or any(getattr(native, f) != getattr(updated, f) for f in AUTHORING_FIELDS - {"strands"})):
                 raise ValueError("Generated nick differs from the native command")
             updated = native
-        if self.standard and updated == self.design:
+        # A declared native step can be an intentional no-op for its current
+        # inputs (e.g. curvature encoding on a straight sweep). Keep its recipe
+        # definition so later edits still regenerate through that operation.
+        if self.standard and native_params is None and updated == self.design:
             return
-        pre, pre_size = state.encode_design_snapshot(self.design)
-        post, post_size = state.encode_design_snapshot(updated)
-        pre_clusters = {c.id: c for c in self.design.cluster_transforms}
-        post_clusters = {c.id: c for c in updated.cluster_transforms}
-        touched_clusters = sorted(
-            i
-            for i in pre_clusters.keys() | post_clusters.keys()
-            if pre_clusters.get(i) != post_clusters.get(i)
-        )
-        entry = SnapshotLogEntry(
-            id=self.entry_ids.get(key, str(uuid.uuid4())),
-            op_kind=kind,
-            label=label,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            params={
-                **params,
-                "_generator": {
-                    "version": 1,
-                    "group_id": self.group_id,
-                    "key": key,
-                    "settings": self.settings,
-                    "overrides": self.overrides,
-                    "editable": list(editable),
-                    "cluster_ids": touched_clusters,
-                },
-            },
-            design_snapshot_gz_b64=pre,
-            snapshot_size_bytes=pre_size,
-            post_state_gz_b64=post,
-            post_state_size_bytes=post_size,
-        )
-        entries = [entry]
-        if self.standard:
-            from backend.api.generated_commands import ordinary_entries
 
-            entry.params = ({**native_params, "_generator": entry.params["_generator"]}
-                            if native_params is not None else self._map(entry.params))
-            entries = ordinary_entries(self.design, updated, entry, key)
-            from backend.api.generated_commands import certify_entries
-            if native_params is None:
-                entries, limitation = certify_entries(self.design, updated, entries)
-            else:
-                limitation = None  # Complete comparison immediately above.
-            if limitation:
-                self.unverified_steps.append({"key": key, "kind": kind, "reason": limitation})
+        from backend.api.part_proof_commands import PROOF_MINOR_KINDS
+
+        if native_params is not None and kind in PROOF_MINOR_KINDS:
+            # Minor kinds have their own history schema; constructing a
+            # SnapshotLogEntry first would reject valid native operations.
+            from backend.api.generated_commands import fine_routing
+
+            entries = [fine_routing(self.design, updated, [(kind, label, native_params)])]
+        else:
+            pre, pre_size = state.encode_design_snapshot(self.design)
+            post, post_size = state.encode_design_snapshot(updated)
+            pre_clusters = {c.id: c for c in self.design.cluster_transforms}
+            post_clusters = {c.id: c for c in updated.cluster_transforms}
+            touched_clusters = sorted(
+                i
+                for i in pre_clusters.keys() | post_clusters.keys()
+                if pre_clusters.get(i) != post_clusters.get(i)
+            )
+            entry = SnapshotLogEntry(
+                id=self.entry_ids.get(key, str(uuid.uuid4())),
+                op_kind=kind,
+                label=label,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                params={
+                    **params,
+                    "_generator": {
+                        "version": 1,
+                        "group_id": self.group_id,
+                        "key": key,
+                        "settings": self.settings,
+                        "overrides": self.overrides,
+                        "editable": list(editable),
+                        "cluster_ids": touched_clusters,
+                    },
+                },
+                design_snapshot_gz_b64=pre,
+                snapshot_size_bytes=pre_size,
+                post_state_gz_b64=post,
+                post_state_size_bytes=post_size,
+            )
+            entries = [entry]
+            if self.standard:
+                from backend.api.generated_commands import ordinary_entries
+
+                entry.params = ({**native_params, "_generator": entry.params["_generator"]}
+                                if native_params is not None else self._map(entry.params))
+                entries = ordinary_entries(self.design, updated, entry, key)
+                from backend.api.generated_commands import certify_entries
+                if native_params is None:
+                    entries, limitation = certify_entries(self.design, updated, entries)
+                else:
+                    limitation = None  # Complete comparison immediately above.
+                if limitation:
+                    self.unverified_steps.append({"key": key, "kind": kind, "reason": limitation})
         for generated in entries:
             generated.autogenerated_group_id = self.group_id
             for child in getattr(generated, "children", []):

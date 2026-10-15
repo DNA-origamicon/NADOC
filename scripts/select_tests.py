@@ -157,6 +157,11 @@ LEAF_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("dcd_", ("md",)),
     ("trajectory", ("md",)),
     # headless routing / build pipeline
+    ("generated_", ("headless",)),
+    ("part_branch_commands", ("headless",)),
+    ("part_path_commands", ("headless",)),
+    ("curved_branches", ("headless",)),
+    ("branch_optimizer", ("headless",)),
     ("hinge_router", ("headless",)),
     ("hinge_weave", ("headless",)),
     ("hinge_ladder", ("headless",)),

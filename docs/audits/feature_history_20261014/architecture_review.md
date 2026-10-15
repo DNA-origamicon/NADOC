@@ -138,11 +138,21 @@ a claimed vendor precedent. Timeouts, cancellation and unsupported commands must
 remain separate from missing-dependency diagnostics. Reproducibility alone does
 not certify reference integrity, scientific validity or useful edit granularity.
 
-## Open prerequisite: generated scope identity and reference mapping
+## Generated scope identity and reference mapping
 
-Before admitting additional P4 commands to `_generated_scope`, replace the
+The audit below drove the version-2 scope implementation in the next checkpoint.
+Explicit typed field descriptors now preserve authored text, check ownership and
+closure, map canonical base keys and functional linker identities, and reject
+ambiguous aliases. Selected subsequences retain native order while independent
+objects retain their relative order. Legacy scopes execute only when the old and
+new meanings agree; unsafe old definitions require an explicit upgrade. Nonempty
+unclassified compatibility payloads remain unsupported, including old binding
+topology snapshots and some legacy CPD/animation fields. This is not blanket P4
+asset-command coverage. See the implementation ledger and focused evidence.
+
+The original prerequisite, before admitting additional P4 commands, was to replace the
 untyped string walker in `generated_native_scope.py` with explicit identity and
-reference traversal. The current complete-output comparison does not establish
+reference traversal. Complete-output comparison alone does not establish
 that a scoped command acted on the intended object. The audit found:
 
 - **Authored text changes (open).** A small in-memory scope probe creating a

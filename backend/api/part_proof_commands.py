@@ -11,6 +11,9 @@ from backend.core.part_overlay_commands import KINDS as OVERLAY_KINDS
 from backend.core.part_dependencies import Dependencies, Resource
 from backend.api.part_native_commands import LOOP_COMMANDS, SEQUENCE_COMMANDS, PATTERN_COMMANDS
 from backend.api.part_structural_commands import KINDS as STRUCTURAL_KINDS
+from backend.api.part_branch_commands import KINDS as BRANCH_KINDS
+from backend.api.part_path_commands import KINDS as PATH_KINDS
+from backend.api.part_section_commands import KINDS as SECTION_KINDS
 
 
 TOPOLOGY_MINOR_KINDS = frozenset({
@@ -19,7 +22,7 @@ TOPOLOGY_MINOR_KINDS = frozenset({
     "crossover-place", "crossover-place-batch",
 })
 EXTRUSION_COMMANDS = frozenset({"extrude-segment", "extrude-continuation", "extrude-deformed-continuation", "circle-segment", "extrude-frame"})
-PROOF_SNAPSHOT_KINDS = PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS | frozenset({"bundle-create", "sweep", "cluster-join", "strand-sequence", "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste"})
+PROOF_SNAPSHOT_KINDS = SECTION_KINDS | PATH_KINDS | BRANCH_KINDS | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS | frozenset({"bundle-create", "sweep", "cluster-join", "strand-sequence", "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste"})
 PROOF_MINOR_KINDS = MOVE_KINDS | CELL_KINDS | LIGATION_KINDS | TOPOLOGY_MINOR_KINDS | LOOP_COMMANDS | STRUCTURAL_KINDS | frozenset({"joint-place", "joint-update", "joint-delete", "strand-patch"})
 PROOF_VERSION = 1
 PART_TOPOLOGY = Resource("part", "topology")
@@ -52,7 +55,7 @@ def dependencies(kind, params):
         return Dependencies(frozenset({PART_TOPOLOGY}), frozenset({PART_TOPOLOGY}), barrier=True)
     if kind == "bundle-create" and params.get("history_seed"):
         return Dependencies(writes=frozenset({PART_TOPOLOGY}), barrier=True)
-    if kind in PATTERN_COMMANDS | EXTRUSION_COMMANDS | (AUTO_KINDS - {"auto-break", "auto-merge"}) and not params.get("history_seed"):
+    if kind in SECTION_KINDS | BRANCH_KINDS | PATTERN_COMMANDS | EXTRUSION_COMMANDS | (AUTO_KINDS - {"auto-break", "auto-merge"}) and not params.get("history_seed"):
         return Dependencies(known=False)
     if kind in {"photoproduct-create", "cluster-paste", "overhang-extrude", "nucleotide-transform", "nucleotide-transform-batch"} and not params.get("history_seed"):
         return Dependencies(known=False)
@@ -117,6 +120,15 @@ def execute(kind, design, params):
     if kind == "nick-batch":
         from backend.api.part_command_references import build_strict_nick_batch
         updated = build_strict_nick_batch(design, params)
+    elif kind in BRANCH_KINDS:
+        from backend.api.part_branch_commands import build
+        updated = build(kind, design, params)
+    elif kind in SECTION_KINDS:
+        from backend.api.part_section_commands import build
+        updated = build(kind, design, params)
+    elif kind in PATH_KINDS:
+        from backend.api.part_path_commands import build
+        updated = build(kind, design, params)
     elif kind in PHOTOPRODUCT_KINDS:
         from backend.api.part_photoproduct_commands import build
         updated = build(kind, design, params)
