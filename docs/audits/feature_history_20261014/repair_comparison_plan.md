@@ -1,7 +1,65 @@
 # P5 UI-2: private candidate comparison
 
-2026-10-15. Design proposal only. No projection endpoint or renderer implemented;
-no browser, native build or scientific check run. Assemblies remain deferred.
+2026-10-15. Backend comparison foundation and compatibility endpoint implemented
+and validated. Parent ran 180 focused tests: 31 pure projection, 31 owner-lifecycle,
+three worker, 13 HTTP and 102 existing lifecycle/strict-route regressions, including
+a real spawned display process. Frontend production implementation follows this
+backend checkpoint; no browser, native build or scientific check run.
+Assemblies remain deferred.
+
+## First backend increment
+
+`core/part_comparison_projection.py`, `api/part_comparison_worker.py` and
+`api/part_evaluation_comparison.py` implement the first private projection. The
+existing job owner delegates through `jobs.comparison`; no second catalog,
+persisted readiness, candidate cache, feature row or publication permit is added.
+Only complete uncoated gold/QD particles and free protein placements are admitted.
+DNA, coated/conjugated particles and anchored proteins refuse explicitly. Missing
+or ambiguous protein assets and unsupported particle transforms also refuse.
+All authored placements are represented, with authored visibility flags; physical
+and presentation state are excluded, so this is not the normal displayed scene.
+
+The strict request carries projection version, expected design/revision and saved
+draft ID/generation only. Its saved actions reconstruct the normalized existing
+`EvaluationRequest`; its digest must match that job's private admission. This
+prevents labeling a different evaluated repair as the saved proposal. No planner,
+base rehash, source parser or numerical feature execution is repeated.
+
+Capture starts one shared 25 ms/2 MB/30,000-node allowance before scope checks;
+draft cloning spends that allowance and source isolation receives its remainder.
+Busy state/work locks refuse without queueing. Both panes together retain the
+existing 2 MB worker input/result limits and use a 5-second disposable worker.
+Initial display ceilings are 128 placements and 4,096 projected protein atoms;
+they are conservative new display limits, not increases to existing proof limits.
+Large retained recovery/history may exceed combined transport even when evaluation
+succeeded. Cost qualification remains pending; existing proof limits are unchanged.
+
+`POST /design/features/evaluation/jobs/{id}/comparison` delegates only to that
+owner. Its typed request accepts no candidate or geometry. The synchronous FastAPI
+handler runs on a request thread; worker cancellation is the existing job DELETE
+operation and disconnecting the read does not cancel or publish the repair. The
+five-second process deadline remains active even when the caller stops waiting.
+Strict dispatch does not register this route and refuses it before reading a body.
+The final owner guard returns only the remaining job lifetime as
+`expires_in_seconds`; it does not renew the existing job. A nonpositive remainder
+refuses the response. The private view charges this interval from request-start
+monotonic time and disposes at expiry, so transport delay shortens its display
+lease rather than extending it. This adds no polling or persistent token.
+
+Protein coordinates reuse `compose_protein_world_transform` and
+`protein_asset_to_atomistic`. Their coordinates are already nm: the existing PDB
+parser divides Angstrom input by ten, and `Atom.x/y/z` use nm. Particle poses,
+diameters, protein atoms and `bounds_nm` therefore share one frame and unit; the
+projection adds no unit conversion. Proteins without C-alpha atoms declare an
+ovoid fallback rather than producing an empty trace. Invalid nonpositive particle
+diameters return an unavailable comparison, never invented or negative geometry.
+
+Candidate authoring/recipe digests must survive exact decoding and still match
+the retained candidate after projection. Final checks repeat catalog object,
+candidate identity, cancellation/expiry, source/session/policy and draft guards.
+Worker cleanup acts on an unregistered temporary receipt so it cannot overwrite
+the original evaluated candidate. The original job remains available for its
+normal explicit commit. Strict HTTP admission remains refused.
 
 ## Ownership and contract
 

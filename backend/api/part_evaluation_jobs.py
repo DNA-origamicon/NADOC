@@ -299,3 +299,10 @@ def commit(identity):
                     "design_id": candidate.id}
     finally:
         _slot.release()
+
+
+def comparison(identity, request):
+    """Read a bounded private display projection through this job owner."""
+    from backend.api.part_evaluation_comparison import compare
+
+    return compare(identity, request)

@@ -38,6 +38,7 @@ from pydantic import BaseModel
 
 from backend.api import state as design_state
 from backend.api.part_evaluation import EvaluationRequest
+from backend.core.part_comparison_projection import ComparisonRequest
 from backend.core.part_repair_draft_host import DraftRequest
 from backend.core.part_repair_draft_evaluation import DraftEvaluationRequest
 from backend.core.part_repair_sources import SourceSelection
@@ -142,6 +143,18 @@ def cancel_part_evaluation(job_id: str):
 def commit_part_evaluation(job_id: str):
     from backend.api.part_evaluation_jobs import commit
     return commit(job_id)
+
+
+@router.post("/design/features/evaluation/jobs/{job_id}/comparison")
+def compare_part_evaluation(job_id: str, body: ComparisonRequest):
+    """Private authored display only; cancel through the existing job endpoint.
+
+    This synchronous handler uses FastAPI's request thread. The existing shared
+    admission and five-second spawned-worker deadline bound projection work;
+    disconnecting this read neither publishes nor cancels the evaluated repair.
+    """
+    from backend.api.part_evaluation_jobs import comparison
+    return comparison(job_id, body)
 
 
 @router.post("/design/features/verification/jobs", status_code=202)
