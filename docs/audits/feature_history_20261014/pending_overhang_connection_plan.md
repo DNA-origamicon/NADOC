@@ -108,6 +108,42 @@ patch/delete endpoints. They require exact typed errors, zero whole-design work
 or output identity allocation, and unchanged object, undo/redo, revision and
 request markers. Root will record the red baseline before production changes.
 
+Root recorded that baseline: **seven expected failures and two passing controls**
+(the combined serialized run with unrelated physical-freshness tests was 46
+passed / 7 failed in 4.95 s). The evidence and recovery audit were checkpointed
+at `6e810f4c` before the fix. The implementation now separates exact source-owned
+selection from binding the final parsed command. Route and pure builder use the
+same selection and output-collision checks; recording consumes the prepared
+command without another inventory traversal. Creation allocates identity/time
+only after endpoint validation. Two additional regressions cover generated-ID
+collision before snapshots and an existing row named `pending` (the temporary
+preallocation placeholder), while asserting the successful path still uses one
+inventory, one undo copy and two recovery encodes.
+
+Root validated the fix: **119 tests passed, 14 warnings, 5.10 s**. The unchanged
+nine-repetition paired benchmark then passed correctness and cleanup with no
+dropped GC events and maximum RSS 139,332 KiB; every new missing-endpoint refusal
+performed **zero undo copies and zero snapshot encodes**. See the retained
+[prepared benchmark](benchmark_pending_overhang_connections_prepared.json).
+
+| Native DNA / retained candidates | Successful median overhead | Prepared 404 median / maximum | Prepared 404 lock maximum | Concurrent revision-read maximum for 404 |
+| --- | ---: | ---: | ---: | ---: |
+| Six cells / 0 | 0.47–0.56 | 2.00 / 2.65 | 0.078 | 2.21 |
+| Six cells / 16 | 0.36–0.59 | 1.92 / 2.17 | 0.090 | 2.14 |
+| Six cells / 128 | 0.88–1.14 | 2.29 / 2.82 | 0.220 | 2.40 |
+| Sixteen cells / 16 | 0.62–0.91 | 2.06 / 3.70 | 0.154 | 3.19 |
+| Sixteen cells / 64 | 0.81–1.06 | 2.11 / 2.43 | 0.134 | 2.10 |
+
+This resolves the avoidable refusal work. It **does not qualify successful-edit
+latency**: successful patch requests still reached 53.58, 59.14 and 70.36 ms,
+with 48.72, 50.48 and 61.32 ms of natural GC overlapping the document lock.
+The remaining 0.36–1.15 ms median successful overhead and those tails stay open.
+The one undo copy and two recovery encodes remain unchanged; the
+[separate recovery audit](pending_metadata_recovery_plan.md) explains why a codec
+change requires its own reader/rollback qualification. Both reports are retained,
+with no GC suppression, budget relaxation or reclassification of the initial
+failures as latency success.
+
 Successful requests currently take **one** independent undo copy, as the
 historical mutation helper does, plus the two new recovery encodes. The undo
 copy is not redundant: subsequent compatibility callbacks can mutate nested

@@ -132,6 +132,20 @@ class _Inventory:
     versions: dict
 
 
+@dataclass(frozen=True, slots=True)
+class _Selection:
+    source: object
+    action: str
+    endpoints: tuple[str, str]
+    version: ConnectionVersion | None
+
+
+@dataclass(frozen=True, slots=True)
+class _Prepared:
+    selection: _Selection
+    body: CreateRequest | PatchRequest | DeleteRequest
+
+
 def _inventory(design):
     """Bound only metadata used by exact selection/default naming before hashing.
 
@@ -170,7 +184,8 @@ def _inventory(design):
     return _Inventory(design, *indices)
 
 
-def _build(design, body, inventory):
+def _select(design, body, inventory):
+    """Resolve inputs before identity allocation or any whole-design work."""
     if inventory.source is not design:
         raise CommandContractError("Pending connection preparation belongs to another source", code="source_changed")
     version = None
@@ -181,14 +196,34 @@ def _build(design, body, inventory):
         for field in ("overhang_a_id", "overhang_b_id"):
             if getattr(version, field) != getattr(body, field):
                 _fail("Selected pending connection endpoint changed", "overhang", getattr(body, field), field)
-    elif body.version_id in inventory.versions:
-        _fail("Pending connection output identity already exists", "connection_version", body.version_id, "version_id")
     for field in ("overhang_a_id", "overhang_b_id"):
         selected = _resolve(inventory.overhangs, getattr(body, field), "overhang", field)
         if selected.auxiliary_endpoint:
             _fail("Pending ordinary connections require ordinary overhangs", "overhang", selected.id, field)
     if body.overhang_a_id == body.overhang_b_id:
         _fail("A pending connection needs two distinct overhangs", "overhang", body.overhang_b_id, "overhang_b_id")
+    return _Selection(design, body.action, (body.overhang_a_id, body.overhang_b_id), version)
+
+
+def _bind(body, selection, inventory):
+    """Bind a parsed definition to exact selected inputs, including output ID.
+
+    Creation may allocate its ID/time after selecting valid endpoints. Everything
+    here remains private to the same source/lock; this is not cached authority.
+    """
+    if (inventory.source is not selection.source or body.action != selection.action
+            or (body.overhang_a_id, body.overhang_b_id) != selection.endpoints
+            or (selection.version is not None and body.version_id != selection.version.id)):
+        raise CommandContractError("Pending connection preparation belongs to another selection", code="source_changed")
+    if body.action == CREATE and body.version_id in inventory.versions:
+        _fail("Pending connection output identity already exists", "connection_version", body.version_id, "version_id")
+    return _Prepared(selection, body)
+
+
+def _build(design, prepared):
+    if prepared.selection.source is not design:
+        raise CommandContractError("Pending connection preparation belongs to another source", code="source_changed")
+    body, version = prepared.body, prepared.selection.version
 
     if body.action == CREATE:
         version = ConnectionVersion(id=body.version_id, name=body.name.strip(), created_at=body.created_at,
@@ -218,7 +253,8 @@ def _build(design, body, inventory):
 
 
 def build(design, params):
-    return _build(design, parse_command(params), _inventory(design))
+    body, inventory = parse_command(params), _inventory(design)
+    return _build(design, _bind(body, _select(design, body, inventory), inventory))
 
 
 def try_record(action, choices, *, version_id=None):
@@ -262,7 +298,7 @@ def try_record(action, choices, *, version_id=None):
                 if values["patch"].get("bridge_length") is not None:
                     values["patch"]["bridge_length"] = max(0, values["patch"]["bridge_length"])
             try:
-                parse_command(values)
+                body = parse_command(values)
             except ValueError:
                 return None
             if any(inventory.overhangs.get(values[field]) is not None
@@ -270,14 +306,16 @@ def try_record(action, choices, *, version_id=None):
                    for field in ("overhang_a_id", "overhang_b_id")):
                 return None
             state._assert_active_loadout_editable(source)
+            selected = _select(source, body, inventory)
             if action == CREATE:
                 values.update(version_id=str(uuid4()), created_at=time())
-            body = parse_command(values)
+                body = parse_command(values)
+            prepared = _bind(body, selected, inventory)
 
             def native(design):
                 if session.design is not source or design is not source:
                     raise HTTPException(409, detail="Pending connection source changed before recording.")
-                return _build(design, body, inventory).copy_with(feature_log=list(design.feature_log))
+                return _build(design, prepared).copy_with(feature_log=list(design.feature_log))
 
             label = {CREATE: "Create", PATCH: "Edit", DELETE: "Delete"}[action] + " pending connection"
             return record_feature(session, "overhang-bulk", label, values, native)
