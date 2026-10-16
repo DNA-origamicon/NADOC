@@ -41,7 +41,7 @@ def failure(code, detail=None):
     return {"status": "unverified", "native_editable": False, "issues": [issue]}
 
 
-def _result_bytes(result, *, limit=None):
+def _result_bytes(result, *, limit=None, limit_result=None):
     limit = MAX_RESULT_BYTES if limit is None else limit
     chunks = []
     size = 0
@@ -49,6 +49,10 @@ def _result_bytes(result, *, limit=None):
         encoded = chunk.encode("utf-8")
         size += len(encoded)
         if size > limit:
+            if limit_result is not None:
+                # A private framed caller can retain its input binding even
+                # when output is refused. The fallback has the same byte cap.
+                return _result_bytes(limit_result, limit=limit)
             return json.dumps(failure("result_limit")).encode("utf-8")
         chunks.append(encoded)
     return b"".join(chunks)
@@ -88,18 +92,31 @@ class VerificationWorker:
         stream = _BoundedInput()
         pickle.dump(design, stream, protocol=pickle.HIGHEST_PROTOCOL)
         payload = stream.getvalue()
+        self._initialize_input((payload,), _target=_target, _result_limit=_result_limit, _name=_name)
+
+    def _initialize_input(self, parts, *, _target, _result_limit, _name):
+        """Allocate an already bounded private transport under supervisor ownership.
+
+        Ordinary callers pass the unchanged bounded pickle. The strict byte
+        worker supplies its separately checked full-document frame; no public
+        input or user-selected size limit reaches this internal primitive.
+        """
+        size = sum(len(part) for part in parts)
         context = multiprocessing.get_context("spawn")
         self._result_limit = MAX_RESULT_BYTES if _result_limit is None else _result_limit
         self._buffers = []
         try:
-            self._input = SharedMemory(create=True, size=len(payload))
+            self._input = SharedMemory(create=True, size=size)
             self._buffers.append(self._input)
-            self._input.buf[:] = payload
+            offset = 0
+            for part in parts:
+                self._input.buf[offset:offset + len(part)] = part
+                offset += len(part)
             self._output = SharedMemory(create=True, size=self._result_limit + RESULT_HEADER_BYTES)
             self._buffers.append(self._output)
             self._process = context.Process(
                 target=_target,
-                args=(self._input.name, len(payload), self._output.name),
+                args=(self._input.name, size, self._output.name),
                 name=_name,
                 daemon=True,
             )

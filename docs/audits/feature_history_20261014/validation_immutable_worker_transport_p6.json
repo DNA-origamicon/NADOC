@@ -1,0 +1,56 @@
+{
+  "date": "2026-10-15",
+  "scope": "Internal strict-byte worker before HTTP/job admission wiring",
+  "initial_red": {
+    "failed": 2,
+    "seconds": 2.68,
+    "stopped_after": 2,
+    "reason": "Transport module absent"
+  },
+  "first_implementation": {
+    "passed": 19,
+    "failed": 2,
+    "seconds": 2.84,
+    "reason": "Invalid test UUID and constant-clock fixture did not advance"
+  },
+  "corrected_fixtures": {
+    "passed": 24,
+    "failed": 1,
+    "seconds": 4.81,
+    "reason": "Cross-process equality included gzip container modification time"
+  },
+  "diagnostic_rerun": {
+    "failed": 1,
+    "seconds": 3.6,
+    "finding": "Only compressed recovery bytes differed; test now compares all fields and exact decompressed archive contents"
+  },
+  "focused_regression": {
+    "passed": 64,
+    "seconds": 7.88,
+    "targets": [
+      "part_immutable_worker",
+      "part_verification_worker",
+      "part_verification_jobs",
+      "part_evaluation_jobs"
+    ]
+  },
+  "invariants": [
+    "Original sealed source reference retained without decode/projection",
+    "Exact full canonical source and bounded operation hashes bind child result",
+    "Child scope and ordinary 30k-node/2MB/25ms projection unchanged",
+    "Native source proof still rejects unlogged geometry",
+    "Mutable input pickle ceiling unchanged",
+    "Shared lifecycle reaps before freeing admission and unlinks buffers",
+    "Output-limit fallback retains input binding; host-observed crash retains actionable worker_exited",
+    "Same native runtime and coordinate algorithms"
+  ],
+  "public_gates_enabled": false,
+  "latency_qualified": false,
+  "http_wired": false,
+  "next": [
+    "Wire constant-size sealed source reservation to existing job host",
+    "Test stale source/session/policy, cancellation, expiry, same candidate commit and durable lifecycle",
+    "Measure actual HTTP, memory and child resource ownership before public enablement"
+  ],
+  "app_status": "NOT VERIFIED IN APP"
+}

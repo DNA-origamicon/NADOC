@@ -20,6 +20,21 @@ from backend.core.part_operation_input import validate_operation_input
 MAX_CANDIDATE_BYTES = 16_000_000
 
 
+def evaluate_native(source, operation):
+    """Use the same numerical runtime policy for either private input transport."""
+    # Spawn entry points can import pools before the target's environment policy.
+    # Limit already loaded pools for this evaluation and restore them on return.
+    for module in ("numpy", "scipy.linalg", "scipy.optimize", "scipy.spatial.transform",
+                   "scipy.spatial.distance", "scipy.interpolate"):
+        import_module(module)
+    from threadpoolctl import threadpool_limits
+
+    with threadpool_limits(limits=1):
+        from backend.api.part_evaluation import evaluate
+
+        return evaluate(source, operation)
+
+
 def _evaluate(input_name, input_size, output_name):
     for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
                  "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
@@ -30,20 +45,7 @@ def _evaluate(input_name, input_size, output_name):
         try:
             source = SharedMemory(name=input_name)
             request = pickle.loads(source.buf[:input_size])
-            # Spawn imports __mp_main__ before entering this target. A caller's
-            # entry point can therefore load BLAS/OpenMP before the environment
-            # policy above takes effect. Preload the numerical contract's known
-            # pools, then enforce the same policy on already loaded libraries.
-            # This process is disposable; application/server pools are untouched.
-            for module in ("numpy", "scipy.linalg", "scipy.optimize", "scipy.spatial.transform",
-                           "scipy.spatial.distance", "scipy.interpolate"):
-                import_module(module)
-            from threadpoolctl import threadpool_limits
-
-            with threadpool_limits(limits=1):
-                from backend.api.part_evaluation import evaluate
-
-                result = evaluate(**request)
+            result = evaluate_native(**request)
         except BaseException as exc:
             result = failure("evaluation_error", exc)
         encoded = _result_bytes(result, limit=MAX_CANDIDATE_BYTES)
