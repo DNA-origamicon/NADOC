@@ -1,6 +1,7 @@
 """Version-two private transport and gated existing-owner integration."""
 
 from copy import deepcopy
+import json
 from multiprocessing.shared_memory import SharedMemory
 
 from fastapi.testclient import TestClient
@@ -8,8 +9,11 @@ import pytest
 
 from backend.api import part_evaluation_comparison as owner, part_evaluation_jobs as jobs, state
 from backend.api.part_comparison_worker import ComparisonWorker
+from backend.api.part_verification_worker import _result_bytes, MAX_RESULT_BYTES
 from backend.api.part_proof_commands import execute
 from backend.core.part_comparison_projection import compare, parse_request, project
+from backend.core.part_dna_comparison_codec import unpack_records
+from backend.core.part_command_errors import CommandContractError
 from backend.core.part_history_contract import create_empty_part
 from backend.core.part_repair_draft import RepairDraft
 from backend.core.part_repair_fingerprint import repair_base_fingerprint
@@ -162,3 +166,27 @@ def test_real_spawned_dna_projection_keeps_exact_native_coordinates_and_reaps_bu
     for name in names:
         with pytest.raises(FileNotFoundError):
             SharedMemory(name=name)
+
+
+@pytest.mark.parametrize("length,count", [(512, 1), (84, 6)])
+def test_real_uuid_recipe_boundary_fits_existing_transport_without_coordinate_loss(length, count):
+    from backend.core.design_geometry import _geometry_for_design
+    from scripts.benchmark_dna_comparison import native_recipe
+
+    source = native_recipe(length, count)
+    value = compare(source, source.model_dump(mode="json"), projection_version=2)
+    packed = _result_bytes(value)
+    assert len(packed) < MAX_RESULT_BYTES
+    decoded = json.loads(packed)
+    assert decoded["status"] == "projected"
+    assert unpack_records(decoded["published"]["dna"]["nucleotides"]) == _geometry_for_design(source)
+    expanded = {**value, **{side: {**value[side], "dna": {**value[side]["dna"],
+        "nucleotides": unpack_records(value[side]["dna"]["nucleotides"])}}
+        for side in ("published", "proposed")}}
+    assert len(json.dumps(expanded, separators=(",", ":"), allow_nan=False).encode()) > MAX_RESULT_BYTES
+
+
+@pytest.mark.parametrize("rows", [None, {}, [[]], [[None] * 22], [[None] * 21] * 1025])
+def test_fixed_row_codec_refuses_unknown_shape_or_unbounded_records(rows):
+    with pytest.raises(CommandContractError, match="fixed-row"):
+        unpack_records(rows)

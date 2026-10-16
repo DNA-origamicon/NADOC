@@ -9,12 +9,10 @@ from backend.core.part_comparison_projection import _finite, _reject
 from backend.core.part_dna_comparison_contract import (
     COMPONENT_VERSION, MAX_AXIS_POINTS, MAX_SELECTORS, MAX_SLOTS, _limit, inventory,
 )
+from backend.core.part_dna_comparison_codec import RECORD_COLUMNS, pack_records
 
 
-RECORD_FIELDS = frozenset({"helix_id", "bp_index", "direction", "copy_k", "backbone_position",
-    "base_position", "base_normal", "axis_tangent", "placement_source", "helical_site", "strand_id",
-    "strand_type", "is_five_prime", "is_three_prime", "domain_index", "overhang_id", "is_reference",
-    "is_flexible_segment", "is_unpaired", "slab_position", "slab_quaternion"})
+RECORD_FIELDS = frozenset(RECORD_COLUMNS)
 SITE_FIELDS = frozenset({"axis_point", "radial_hat", "azimuth_rad", "groove_offset_rad", "phase_roll_rad"})
 AXIS_FIELDS = frozenset({"helix_id", "start", "end", "samples", "segments", "ovhg_axes"})
 SEGMENT_FIELDS = frozenset({"strand_id", "domain_index", "ovhg_id", "bp_lo", "bp_hi", "domain_ids", "start", "end"})
@@ -161,4 +159,4 @@ def project(design):
     bounds = {"minimum": [min(point[i] for point in points) for i in range(3)],
               "maximum": [max(point[i] for point in points) for i in range(3)]} if points else None
     return {"component_version": COMPONENT_VERSION, "representation": "native-full-v1", "units": "nm",
-            "nucleotides": records, "helix_axes": axes, "display_topology": _topology(design), "bounds_nm": bounds}
+            "nucleotides": pack_records(records), "helix_axes": axes, "display_topology": _topology(design), "bounds_nm": bounds}

@@ -28,6 +28,7 @@ from backend.api.part_verification_worker import _result_bytes
 from backend.api.routes_feature_log import router
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_comparison_projection import compare
+from backend.core.part_dna_comparison_codec import unpack_records
 from backend.core.part_history_contract import create_empty_part
 from backend.core.part_repair_draft import RepairDraft
 from backend.core.part_repair_fingerprint import repair_base_fingerprint
@@ -74,6 +75,12 @@ def warm_case(name, source, repeats):
             result, row_data["derive_two_panes_ms"] = timed(lambda: compare(isolated, candidate, projection_version=2))
             raw, row_data["encode_ms"] = timed(lambda: json.dumps(result, separators=(",", ":"), allow_nan=False).encode())
             row_data["prospective_result_bytes"] = len(raw)
+            # Explain the previous short-ID versus UUID fixture size gap without
+            # dropping any data or raising the existing shared result ceiling.
+            expanded = {**result, **{side: {**result[side], "dna": {**result[side]["dna"],
+                "nucleotides": unpack_records(result[side]["dna"]["nucleotides"])}}
+                for side in ("published", "proposed")}}
+            row_data["full_object_result_bytes"] = len(json.dumps(expanded, separators=(",", ":"), allow_nan=False).encode())
             bounded = json.loads(_result_bytes(result))
             row_data["status"] = bounded["status"]
             if bounded.get("issues"):
@@ -127,23 +134,41 @@ def route_case(client, doc, name, length, helix_count, repeats, probe):
     rows = []
     source, identity, body = prepare(doc, length, helix_count)
     original = source.model_dump_json()
+    # Outside timed requests: exact result sizes for the actual admitted recipe,
+    # rather than a shorter-ID approximation from make_minimal_design.
+    with jobs._lock:
+        candidate = jobs._jobs[identity].result["candidate"]
+    measured = warm_case("actual_recipe_size", source, 1)
+    actual = compare(source, candidate, projection_version=2)
+    actual_bytes = len(json.dumps(actual, separators=(",", ":"), allow_nan=False).encode())
     headers = {"X-NADOC-Doc": doc}
     for _ in range(repeats):
         start_index = len(probe.records)
         gate, finished = Barrier(2), Event()
-        light, light_errors = [], []
+        light = {"count": 0, "total_ms": 0.0, "max_ms": 0.0, "last_completed_ms": None,
+                 "deadline_reached": False}
+        light_statuses, light_errors = Counter(), []
 
         def sample_revision():
             gate.wait(timeout=5)
-            for _ in range(256):
-                if finished.is_set():
+            started = perf_counter()
+            while not finished.is_set():
+                if perf_counter() - started >= 5:
+                    light["deadline_reached"] = True
                     break
                 try:
                     response, elapsed = timed(lambda: client.get(REVISION, headers=headers))
-                    light.append({"ms": elapsed, "status": response.status_code})
+                    light["count"] += 1
+                    light["total_ms"] += elapsed
+                    light["max_ms"] = max(light["max_ms"], elapsed)
+                    light["last_completed_ms"] = (perf_counter() - started) * 1000
+                    light_statuses[response.status_code] += 1
                 except Exception as error:
                     light_errors.append(str(error))
                     break
+                # Sample throughout the whole request, including parent decode/
+                # response encoding. No early fixed-count cutoff or busy loop.
+                finished.wait(.01)
 
         thread = Thread(target=sample_revision, name="dna-comparison-revision")
         thread.start()
@@ -159,8 +184,9 @@ def route_case(client, doc, name, length, helix_count, repeats, probe):
         value = response.json()
         detail = value.get("detail")
         rows.append({"status": response.status_code, "code": detail.get("code") if isinstance(detail, dict) else detail,
-            "route_ms": elapsed, "response_bytes": len(response.content), "light_request": stats([item["ms"] for item in light]),
-            "light_status_counts": dict(Counter(item["status"] for item in light)), "light_errors": light_errors,
+            "route_ms": elapsed, "response_bytes": len(response.content), "light_request": {
+                **light, "mean_ms": light["total_ms"] / light["count"] if light["count"] else None},
+            "light_status_counts": dict(light_statuses), "light_errors": light_errors,
             "capture_lock": stats([item["hold_ms"] for item in records if item["phase"] == "comparison_capture"]),
             "all_lock_holds": stats([item["hold_ms"] for item in records]),
             "waits": stats([item["wait_ms"] for item in records]),
@@ -177,6 +203,7 @@ def route_case(client, doc, name, length, helix_count, repeats, probe):
             if job is not None:
                 job.cancelled.set()
     return {"case": name, "source_and_revision_unchanged": unchanged, "candidate_retained": candidate_retained,
+        "actual_recipe_size": measured, "actual_candidate_result_bytes": actual_bytes,
         "status_counts": dict(Counter(row["status"] for row in rows)), "samples": rows}
 
 
@@ -228,7 +255,11 @@ def main():
         state._lock, owner._capture_source = original_lock, original_capture
         jobs._submit, owner.DNA_COMPARISON_ENABLED = original_submit, original_gate
     cleaned = doc not in state.revision_map() and not any(job.doc == doc for job in jobs._jobs.values())
+    transport_passed = not setup_errors and len(routes) == 3 and all(
+        set(row["status_counts"]) == {200} and not any(sample["light_request"]["deadline_reached"]
+            or sample["light_errors"] for sample in row["samples"]) for row in routes)
     print(json.dumps({"scope": "Native software display only; no physical validity, GPU or app qualification",
+        "transport_admission_passed": transport_passed,
         "production_gate_unchanged": owner.DNA_COMPARISON_ENABLED is original_gate,
         "source_and_worker_limits_unchanged": True, "session_and_catalog_cleanup_verified": cleaned,
         "process_children_max_rss_kib": resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss,
@@ -236,9 +267,10 @@ def main():
             "Warm projection has no worker deadline; production HTTP uses the unchanged hard five-second process deadline.",
             "The HTTP recipe is prepared by the real repair evaluator outside measured time; each projection uses a fresh spawned worker.",
             "Refused/capture-busy/over-budget rows are retained without retry. No admission ceiling is raised.",
+            "Revision sampling runs at 10 ms intervals until response completion or a five-second measurement deadline; count/mean/max and final sample time are reported without per-request arrays.",
             "Concurrent revision samples and lock instrumentation add overhead; these fixtures do not prove a universal latency bound."],
         "warm": warm, "http": routes, "setup_errors": setup_errors}, indent=2))
-    return int(not cleaned or bool(setup_errors) or any(not row["source_and_revision_unchanged"] or not row["candidate_retained"] for row in routes))
+    return int(not cleaned or not transport_passed or any(not row["source_and_revision_unchanged"] or not row["candidate_retained"] for row in routes))
 
 
 if __name__ == "__main__":

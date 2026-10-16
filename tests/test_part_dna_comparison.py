@@ -1,6 +1,7 @@
 """Complete native display parity and refusals before geometry allocation."""
 
 from copy import deepcopy
+import json
 
 import pytest
 
@@ -12,6 +13,7 @@ from backend.core.models import (
 )
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_dna_comparison import project
+from backend.core.part_dna_comparison_codec import unpack_records
 from backend.core.part_dna_comparison_contract import MAX_SLOTS, check_scope, inventory
 from tests.conftest import make_minimal_design
 
@@ -82,9 +84,11 @@ def test_exact_native_records_axes_and_source_are_preserved(kind):
     axes = deformation.deformed_helix_axes(design)
     axes = deformation._apply_ovhg_rotations_to_axes(design, axes, records)
     result = project(design)
-    assert result["nucleotides"] == records
+    # The JSON boundary must preserve every coordinate, flag and exact owner.
+    wire = json.loads(json.dumps(result, allow_nan=False))
+    assert unpack_records(wire["nucleotides"]) == records
     assert result["helix_axes"] == axes
-    assert result["component_version"] == 1
+    assert result["component_version"] == 2
     assert result["representation"] == "native-full-v1"
     assert result["units"] == "nm"
     assert design.model_dump_json() == before
@@ -94,7 +98,7 @@ def test_exact_native_records_axes_and_source_are_preserved(kind):
         assert len([n for n in records if n["bp_index"] == 3]) == 4
         assert not [n for n in records if n["bp_index"] == 8]
     if kind == "reference":
-        assert any(n["is_reference"] for n in result["nucleotides"])
+        assert any(n["is_reference"] for n in unpack_records(result["nucleotides"]))
 
 
 def test_empty_source_has_a_complete_empty_component():

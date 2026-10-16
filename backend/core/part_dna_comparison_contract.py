@@ -12,7 +12,7 @@ from backend.core.part_comparison_projection import _identity, _reject, _unique
 from backend.core.part_history_contract import FIELD_ROLES
 
 
-COMPONENT_VERSION = 1
+COMPONENT_VERSION = 2
 MAX_HELICES = 16
 MAX_STRANDS = 128
 MAX_DOMAINS = 256
