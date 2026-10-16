@@ -365,3 +365,67 @@ it('shows saved unrouted joins after Apply and follows geometry, undo and docume
   store.setState({ currentDesign: null })
   expect(layer.children).toHaveLength(0)
 })
+
+it('refreshes saved Join lines immediately from effective endpoint visibility without a server response', () => {
+  const hidden = new Set()
+  const key = endpoint => `${endpoint.helix_id}:${endpoint.bp_index}:${endpoint.direction}`
+  const isSiteVisible = vi.fn(site => [site.from, site.to].every(endpoint => !hidden.has(key(endpoint))))
+  const { store, scene, design, api } = setup({ isSiteVisible })
+  const endpoint = (helix_id, bp_index) => ({ helix_id, bp_index, direction: 'FORWARD' })
+  const constraint = { id: 'plan', first: { cluster_id: 'A', source: endpoint('a', 1), target: endpoint('a', 2) },
+    second: { cluster_id: 'B', source: endpoint('b', 1), target: endpoint('b', 2) } }
+  const geometry = ['a', 'b'].flatMap((h, i) => [1, 2].map(bp => ({ ...endpoint(h, bp), backbone_position: [i * 5, bp, 0] })))
+  const saved = { ...design, cluster_join_constraints: [constraint] }
+  store.setState({ currentDesign: saved, currentGeometry: geometry })
+  const layer = scene.getObjectByName('cluster-join-constraints')
+  expect(layer.children).toHaveLength(2)
+  const lines = [...layer.children]
+  const previous = lines.map(line => ({ line, geometry: line.geometry, material: line.material,
+    disposeGeometry: vi.spyOn(line.geometry, 'dispose'), disposeMaterial: vi.spyOn(line.material, 'dispose') }))
+  isSiteVisible.mockClear()
+  hidden.add(key(constraint.first.source))
+  tool.refreshVisibility()
+  expect(layer.children).toEqual(lines)
+  expect(lines.map(line => line.visible)).toEqual([false, true])
+  expect(isSiteVisible).toHaveBeenCalledWith({ from: constraint.first.source, to: constraint.second.target })
+  expect(isSiteVisible).toHaveBeenCalledWith({ from: constraint.second.source, to: constraint.first.target })
+  for (const resource of previous) {
+    expect(resource.line.geometry).toBe(resource.geometry)
+    expect(resource.line.material).toBe(resource.material)
+    expect(resource.disposeGeometry).not.toHaveBeenCalled()
+    expect(resource.disposeMaterial).not.toHaveBeenCalled()
+  }
+  hidden.add(key(constraint.second.source)); tool.refreshVisibility()
+  expect(lines.every(line => !line.visible)).toBe(true)
+  hidden.clear(); tool.refreshVisibility()
+  expect(layer.children).toEqual(lines)
+  expect(lines.every(line => line.visible)).toBe(true)
+  for (const resource of previous) {
+    expect(resource.disposeGeometry).not.toHaveBeenCalled()
+    expect(resource.disposeMaterial).not.toHaveBeenCalled()
+  }
+  expect(store.getState().currentDesign).toBe(saved)
+  expect(store.getState().currentGeometry).toBe(geometry)
+  expect(api.getClusterJoinSites).not.toHaveBeenCalled()
+  expect(api.previewClusterJoin).not.toHaveBeenCalled()
+  expect(api.applyClusterJoin).not.toHaveBeenCalled()
+})
+
+it('keeps placement-level saved Join hiding and makes visibility refresh inert after disposal', () => {
+  const isSiteVisible = vi.fn(() => true)
+  const { store, scene, design } = setup({ isSiteVisible })
+  const endpoint = (helix_id, bp_index) => ({ helix_id, bp_index, direction: 'FORWARD' })
+  const constraint = { id: 'plan', first: { cluster_id: 'A', source: endpoint('a', 1), target: endpoint('a', 2) },
+    second: { cluster_id: 'B', source: endpoint('b', 1), target: endpoint('b', 2) } }
+  const geometry = ['a', 'b'].flatMap((h, i) => [1, 2].map(bp => ({ ...endpoint(h, bp), backbone_position: [i * 5, bp, 0] })))
+  store.setState({ currentDesign: { ...design, cluster_join_constraints: [constraint],
+    visibility_state: { hidden_cluster_ids: ['A'] } }, currentGeometry: geometry })
+  const layer = scene.getObjectByName('cluster-join-constraints')
+  tool.refreshVisibility()
+  expect(layer.children.filter(line => line.visible)).toHaveLength(0)
+  isSiteVisible.mockClear()
+  tool.dispose(); tool.refreshVisibility()
+  expect(layer.children).toHaveLength(0)
+  expect(scene.getObjectByName('cluster-join-constraints')).toBeUndefined()
+  expect(isSiteVisible).not.toHaveBeenCalled()
+})

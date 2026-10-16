@@ -984,6 +984,19 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   display scope. The existing dedicated e2e isolation/output cleanup rules apply.
 
 - **MV-48 — PENDING — Ordinary grouping and geometry preview lifecycle (2026-10-15).**
+  **October 16 U14 persistent visibility (FH-18 checkpoint 12):** after qualified
+  gate enablement, hide a named group, add/remove members and terminal extensions,
+  dissolve/undo, seek and reload. Its current members must follow its identity;
+  old saved base masks and same-text placement masks keep their old meaning.
+  Check empty/overlapping groups, explicit Show exceptions and Show All. Click
+  Save/Save As/native Export immediately after Hide; the saved file must contain
+  settled visibility. Reject both queued saves and verify the display/undo return
+  to the last accepted state. Reset during drain/export and verify no replacement
+  document is downloaded, mirrored or assigned the old path. Inspect saved Join
+  dashed lines following endpoint hiding without geometry recreation. Measure
+  representative large-part latency/memory. Existing U12 current-member-only
+  expectation below is historical and superseded for new named-group hides.
+  **NOT VERIFIED IN APP:** Archive is unavailable; rollout remains disabled.
   **October 16 U13 ordinary Bend/Twist creation (FH-18 checkpoint 11):** after
   qualified gate enablement, use both toolbar actions and all four end-menu
   actions on named/mixed targets and explicit whole/placement scope. Preserve

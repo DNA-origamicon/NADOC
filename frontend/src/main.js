@@ -1023,6 +1023,7 @@ async function main() {
     getRevision: api.currentRevisionWatermark,
     onChange: (_hiddenBases, hiddenClusterIds, hiddenGroupIds) => {
       _atomSurface?.setHiddenNucs?.(_hiddenBases)
+      clusterJoinTool?.refreshVisibility?.()
       spreadsheet?.refresh?.()
       clusterPanel?.syncVisibility?.(hiddenClusterIds)
       clusterPanel?.syncGroupVisibility?.(hiddenGroupIds)
@@ -3583,7 +3584,7 @@ async function main() {
       if (!await api.exportAssembly()) showToast('Assembly export failed.', { severity: 'error' })
     } else {
       if (!currentDesign) { showToast('No design loaded.', { severity: 'error' }); return }
-      if (!await api.exportDesign()) showToast('Part export failed.', { severity: 'error' })
+      if (!await _fileIo.exportDesign()) showToast('Part export failed.', { severity: 'error' })
     }
   })
 
@@ -5364,6 +5365,7 @@ async function main() {
   // just below) executes lazily/post-init, so the late wiring is safe.
   const _fileIo = initFileIo({
     store, api,
+    flushPresentation: () => visibilityController?.flushPersistence?.(),
     setSyncStatus: _syncBadge.setSyncStatus,
     syncLog: _syncBadge.syncLog,
     libraryPanel,

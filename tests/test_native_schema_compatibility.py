@@ -27,6 +27,7 @@ DISSOLVE_BEFORE = ROOT / "docs/audits/feature_history_20261014/cluster_dissolve_
 ORGANIZATION_BEFORE = ROOT / "docs/audits/feature_history_20261014/group_organization_schema_compatibility_before.json"
 LOAD_BEFORE = ROOT / "docs/audits/feature_history_20261014/group_organization_load_schema_compatibility_before.json"
 LINEAGE_BEFORE = ROOT / "docs/audits/feature_history_20261014/domain_lineage_compatibility_before.json"
+VISIBILITY_BEFORE = ROOT / "docs/audits/feature_history_20261014/group_visibility_schema_compatibility_before.json"
 
 
 def _fixture(family):
@@ -139,10 +140,15 @@ def test_spawned_numerical_schema_transition_preserves_exact_authored_outputs(fa
     generations = [("grouping-v1", BEFORE), ("grouping-v2", DISSOLVE_BEFORE),
                    ("cluster-dissolve-v1", ORGANIZATION_BEFORE),
                    ("group-organization-v1", LOAD_BEFORE)]
-    event = "organization-load-v1"
     if family != "coating":
         generations.append(("organization-load-v1", LINEAGE_BEFORE))
-        event = "native-domain-lineage-v1"
+    # The coating capture at LINEAGE_BEFORE equals VISIBILITY_BEFORE; include
+    # that real source pin once under the latest captured generation.
+    generations.append(("native-domain-lineage-v1", VISIBILITY_BEFORE))
+    event = "group-visibility-v1"
+    historical_pins = [json.loads(path.read_text())["engines"][contract.ENGINE_ID]["implementation_sha256"]
+                       for _, path in generations]
+    assert len(set(historical_pins)) == len(generations) == (5 if family == "coating" else 6)
     for generation, path in generations:
         historical = json.loads(path.read_text())["engines"][contract.ENGINE_ID]["implementation_sha256"]
         assert current_pin != historical

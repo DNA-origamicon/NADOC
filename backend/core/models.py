@@ -2966,13 +2966,18 @@ class VisibilityState(BaseModel):
     """Persisted display-only visibility overrides.
 
     Base keys are the renderer's stable nucleotide addresses. ``shown_base_keys``
-    records explicit exceptions to a hidden cluster, so the exact composite
-    visibility state survives a save/load round trip.
+    records explicit exceptions to hidden placement or organizational groups.
+    Named groups use their own namespace and follow current membership. Missing
+    named identities remain dormant across history navigation and undo; they do
+    not resolve to same-text placement identities or expand to the whole part.
     """
 
     hidden_base_keys: List[str] = Field(default_factory=list)
     shown_base_keys: List[str] = Field(default_factory=list)
     hidden_cluster_ids: List[str] = Field(default_factory=list)
+    hidden_part_group_ids: List[Annotated[str, Field(strict=True, min_length=1, max_length=512)]] = Field(
+        default_factory=list, max_length=2000, strict=True, exclude_if=lambda value: value == [],
+    )
 
 
 class QuantumDotSpectra(BaseModel):

@@ -25,7 +25,7 @@ _ROLES = {
 _EMPTY_LISTS = ("representation_overrides", "view_volumes", "annotations", "camera_poses",
                 "animations", "chain_sim_projects", "loadouts")
 _ABSENT = ("plate_layout", "atomistic_reference", "active_loadout_id", "last_editable_loadout_id", "repair_draft")
-_VISIBILITY = frozenset({"hidden_base_keys", "shown_base_keys", "hidden_cluster_ids"})
+_VISIBILITY = frozenset({"hidden_base_keys", "shown_base_keys", "hidden_cluster_ids", "hidden_part_group_ids"})
 
 
 def _reject(detail):
@@ -69,5 +69,8 @@ def preservation_digest(design):
     return digest({
         "id": design.id, "annotations_enabled": design.annotations_enabled,
         **dict.fromkeys(_ABSENT), **{name: [] for name in _EMPTY_LISTS},
-        "visibility_state": {name: [] for name in _VISIBILITY},
+        # The new empty identity mask is omitted by VisibilityState's serializer.
+        # Preserve the existing exact three-field bytes and preservation digest;
+        # its presence/type/emptiness was still checked above, never ignored.
+        "visibility_state": {name: [] for name in _VISIBILITY - {"hidden_part_group_ids"}},
     })

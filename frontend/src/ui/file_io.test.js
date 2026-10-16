@@ -43,13 +43,14 @@ function makeFactory(overrides = {}) {
     ...overrides.state,
   }
   const store = createMockStore({
-    currentDesign: { metadata: { name: 'MyDesign' } },
+    currentDesign: { id: 'part-a', metadata: { name: 'MyDesign' } },
     currentAssembly: { metadata: { name: 'MyAssembly' } },
     ...overrides.storeState,
   })
   const api = {
     patchInstanceDesign: vi.fn(async () => ({ ok: true })),
     saveDesignAs: vi.fn(async () => ({ ok: true })),
+    saveDesignToWorkspace: vi.fn(async () => ({ ok: true })),
     saveAssemblyAs: vi.fn(async () => ({ ok: true })),
     getAssemblyContent: vi.fn(async () => '{"assembly":1}'),
     ...overrides.api,
@@ -70,6 +71,7 @@ function makeFactory(overrides = {}) {
     getAssemblyWorkspacePath: () => state.assemblyWorkspacePath,
     getAssemblyName: () => state.assemblyName,
     getPartEditContext: () => state.partEditContext,
+    ...overrides.deps,
   }
   return { fileIo: initFileIo(deps), deps, state, store, api }
 }
@@ -125,6 +127,188 @@ describe('getDesignContent', () => {
     fetch.mockResolvedValueOnce({ ok: false })
     const { fileIo } = makeFactory()
     expect(await fileIo.getDesignContent()).toBe(null)
+  })
+})
+
+function deferred() {
+  let resolve, reject
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no })
+  return { promise, resolve, reject }
+}
+const nextTurn = async () => { for (let i = 0; i < 8; i++) await Promise.resolve() }
+
+describe('part saves settle presentation in the original document', () => {
+  it('drains newly queued writes too and exports the settled canonical visibility', async () => {
+    const first = deferred(), second = deferred()
+    let queued = first.promise
+    const f = makeFactory({ deps: { flushPresentation: () => queued } })
+    fetch.mockImplementation(async () => ({ ok: true, text: async () => JSON.stringify(f.store.getState().currentDesign) }))
+    const saved = f.fileIo.getDesignContent()
+    await nextTurn()
+    expect(fetch).not.toHaveBeenCalled()
+    queued = second.promise
+    first.resolve()
+    await nextTurn()
+    expect(fetch).not.toHaveBeenCalled()
+    // Visibility persistence may replace the canonical wrapper; it is not a
+    // document reset. Its rollback state must be the one that reaches disk.
+    f.store.setState({ currentDesign: { id: 'part-a', visibility_state: { hidden_base_keys: [] } } })
+    second.resolve()
+    expect(JSON.parse(await saved).visibility_state).toEqual({ hidden_base_keys: [] })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not open or write a file handle until visibility persistence finishes', async () => {
+    const pending = deferred(), handle = makeHandle()
+    const f = makeFactory({ deps: { flushPresentation: () => pending.promise } })
+    fetch.mockResolvedValue({ ok: true, text: async () => 'SETTLED' })
+    const saved = f.fileIo.saveToHandle(handle)
+    await nextTurn()
+    expect(fetch).not.toHaveBeenCalled()
+    expect(handle.createWritable).not.toHaveBeenCalled()
+    pending.resolve()
+    expect(await saved).toBe(true)
+    expect(handle.written).toEqual(['SETTLED'])
+  })
+
+  it.each(['content', 'handle', 'save-as', 'workspace', 'download'])('%s refuses a same-ID document reset while draining', async mode => {
+    const pending = deferred(), handle = makeHandle()
+    const f = makeFactory({ deps: { flushPresentation: () => pending.promise } })
+    openFileBrowser.mockResolvedValue({ path: 'w/a.nadoc', name: 'a' })
+    fetch.mockResolvedValue({ ok: true, text: async () => 'REPLACEMENT' })
+    const run = {
+      content: () => f.fileIo.getDesignContent(),
+      handle: () => f.fileIo.saveToHandle(handle),
+      'save-as': () => f.fileIo.saveAs(),
+      workspace: () => f.fileIo.saveToWorkspace('w/a.nadoc', { fileHandle: handle }),
+      download: () => f.fileIo.exportDesign(),
+    }
+    const saved = run[mode]()
+    await nextTurn()
+    window.dispatchEvent(new Event('nadoc:document-reset'))
+    f.store.setState({ currentDesign: { id: 'part-a', metadata: { name: 'Replacement' } } })
+    pending.resolve()
+    expect(await saved).toBeFalsy()
+    expect(fetch).not.toHaveBeenCalled()
+    expect(f.api.saveDesignAs).not.toHaveBeenCalled()
+    expect(f.api.saveDesignToWorkspace).not.toHaveBeenCalled()
+    expect(handle.createWritable).not.toHaveBeenCalled()
+    expect(f.deps.setWorkspacePath).not.toHaveBeenCalled()
+  })
+
+  it('refuses replacement with a different design ID even without a reset event', async () => {
+    const pending = deferred()
+    const f = makeFactory({ deps: { flushPresentation: () => pending.promise } })
+    const saved = f.fileIo.getDesignContent()
+    f.store.setState({ currentDesign: { id: 'part-b' } })
+    pending.resolve()
+    expect(await saved).toBeNull()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('binds Save As before the file dialog, rather than adopting the part open at confirmation', async () => {
+    const dialog = deferred(), f = makeFactory()
+    openFileBrowser.mockReturnValue(dialog.promise)
+    const saved = f.fileIo.saveAs()
+    window.dispatchEvent(new Event('nadoc:document-reset'))
+    f.store.setState({ currentDesign: { id: 'part-a' } })
+    dialog.resolve({ path: 'w/a.nadoc', name: 'a' })
+    expect(await saved).toBeFalsy()
+    expect(f.api.saveDesignAs).not.toHaveBeenCalled()
+    expect(f.deps.setWorkspacePath).not.toHaveBeenCalled()
+  })
+
+  it('discards an export body completed after document reset', async () => {
+    const body = deferred(), f = makeFactory()
+    fetch.mockResolvedValue({ ok: true, text: () => body.promise })
+    const saved = f.fileIo.getDesignContent()
+    await nextTurn()
+    expect(fetch).toHaveBeenCalledTimes(1)
+    window.dispatchEvent(new Event('nadoc:document-reset'))
+    body.resolve('STALE')
+    expect(await saved).toBeNull()
+  })
+
+  it('aborts an opened file writer if the original document retired while opening it', async () => {
+    const opened = deferred(), f = makeFactory()
+    const writable = { write: vi.fn(), close: vi.fn(), abort: vi.fn(async () => {}) }
+    const handle = { createWritable: vi.fn(() => opened.promise) }
+    fetch.mockResolvedValue({ ok: true, text: async () => 'ORIGINAL' })
+    const saved = f.fileIo.saveToHandle(handle)
+    await nextTurn()
+    expect(handle.createWritable).toHaveBeenCalledTimes(1)
+    window.dispatchEvent(new Event('nadoc:document-reset'))
+    opened.resolve(writable)
+    expect(await saved).toBe(false)
+    expect(writable.abort).toHaveBeenCalledTimes(1)
+    expect(writable.write).not.toHaveBeenCalled()
+    expect(writable.close).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a rejected drain and performs no export or workspace write', async () => {
+    const pending = deferred(), f = makeFactory({ deps: { flushPresentation: () => pending.promise } })
+    const saved = f.fileIo.saveToWorkspace('w/a.nadoc')
+    pending.reject(new Error('Visibility persistence did not settle'))
+    expect(await saved).toBeFalsy()
+    expect(f.api.saveDesignToWorkspace).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
+    expect(showToast).toHaveBeenCalledWith(expect.stringContaining('Visibility persistence did not settle'), expect.anything())
+  })
+
+  it('does not mirror a failed workspace save to the file handle', async () => {
+    const handle = makeHandle()
+    const f = makeFactory({ api: { saveDesignToWorkspace: vi.fn(async () => null) } })
+    expect(await f.fileIo.saveToWorkspace('w/a.nadoc', { fileHandle: handle })).toBeFalsy()
+    expect(fetch).not.toHaveBeenCalled()
+    expect(handle.createWritable).not.toHaveBeenCalled()
+  })
+
+  it('allows Save As to adopt the server-issued identity after its checked request', async () => {
+    const f = makeFactory()
+    openFileBrowser.mockResolvedValue({ path: 'w/new.nadoc', name: 'new' })
+    f.api.saveDesignAs.mockImplementation(async () => {
+      f.store.setState({ currentDesign: { id: 'forked-id' } })
+      return { design: { id: 'forked-id' } }
+    })
+    await f.fileIo.saveAs()
+    expect(f.deps.setWorkspacePath).toHaveBeenCalledWith('w/new.nadoc')
+    expect(f.deps.setSyncStatus).toHaveBeenLastCalledWith('green', 'saved')
+  })
+
+  it('does not update Save As path/status when the response follows a reset', async () => {
+    const savedResponse = deferred(), f = makeFactory()
+    openFileBrowser.mockResolvedValue({ path: 'w/new.nadoc', name: 'new' })
+    f.api.saveDesignAs.mockReturnValue(savedResponse.promise)
+    const saved = f.fileIo.saveAs()
+    await nextTurn()
+    expect(f.api.saveDesignAs).toHaveBeenCalledTimes(1)
+    window.dispatchEvent(new Event('nadoc:document-reset'))
+    savedResponse.resolve({ design: { id: 'forked-id' } })
+    await saved
+    expect(f.deps.setWorkspacePath).not.toHaveBeenCalled()
+    expect(f.deps.setSyncStatus).not.toHaveBeenCalledWith('green', 'saved')
+  })
+
+  it('downloads the exact settled export with the server filename and releases its object URL', async () => {
+    const pending = deferred(), f = makeFactory({ deps: { flushPresentation: () => pending.promise } })
+    const blob = new Blob(['SETTLED'])
+    fetch.mockResolvedValue({ ok: true, headers: new Headers({ 'Content-Disposition': 'attachment; filename="settled.nadoc"' }), blob: async () => blob })
+    const createObjectURL = vi.fn(() => 'blob:owned'), revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', Object.assign(class extends URL {}, { createObjectURL, revokeObjectURL }))
+    const downloads = []
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () { downloads.push([this.href, this.download]) })
+    try {
+      const saved = f.fileIo.exportDesign()
+      await nextTurn()
+      expect(fetch).not.toHaveBeenCalled()
+      expect(downloads).toEqual([])
+      pending.resolve()
+      expect(await saved).toBe(true)
+      expect(createObjectURL).toHaveBeenCalledWith(blob)
+      expect(downloads).toEqual([['blob:owned', 'settled.nadoc']])
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:owned')
+      expect(document.querySelector('a[download]')).toBeNull()
+    } finally { click.mockRestore() }
   })
 })
 
@@ -451,6 +635,7 @@ function makeSaveFactory(overrides = {}) {
     ...overrides.api,
   }
   const fileIo = {
+    saveToWorkspace: vi.fn(async () => true),
     saveToHandle: vi.fn(async () => true),
     saveAs: vi.fn(async () => {}),
     saveAssemblyToHandle: vi.fn(async () => true),
@@ -480,12 +665,13 @@ describe('initFileSave — saveDispatch (design mode)', () => {
   })
   it('with a workspace path: logs, sets status, self-marks (then clears after 5s), and saves', async () => {
     vi.useFakeTimers()
-    const { fileSave, api, syncBadge, selfSavedPaths } = makeSaveFactory({ state: { workspacePath: 'w/d.nadoc' } })
+    const { fileSave, api, fileIo, syncBadge, selfSavedPaths } = makeSaveFactory({ state: { workspacePath: 'w/d.nadoc' } })
     await fileSave.saveDispatch()
     expect(syncBadge.syncLog).toHaveBeenCalledWith('info', 'SAVE', 'explicit save → w/d.nadoc')
     expect(syncBadge.setSyncStatus).toHaveBeenCalledWith('yellow', 'saving…')
     expect(selfSavedPaths.has('w/d.nadoc')).toBe(true)
-    expect(api.saveDesignToWorkspace).toHaveBeenCalledWith('w/d.nadoc')
+    expect(fileIo.saveToWorkspace).toHaveBeenCalledWith('w/d.nadoc', { fileHandle: null })
+    expect(api.saveDesignToWorkspace).not.toHaveBeenCalled()
     expect(syncBadge.setSyncStatus).toHaveBeenLastCalledWith('green', 'saved')
     vi.advanceTimersByTime(5000)
     expect(selfSavedPaths.has('w/d.nadoc')).toBe(false)
@@ -494,7 +680,17 @@ describe('initFileSave — saveDispatch (design mode)', () => {
     vi.useFakeTimers()
     const { fileSave, fileIo } = makeSaveFactory({ state: { workspacePath: 'w/d.nadoc', fileHandle: 'H' } })
     await fileSave.saveDispatch()
-    expect(fileIo.saveToHandle).toHaveBeenCalledWith('H')
+    expect(fileIo.saveToWorkspace).toHaveBeenCalledWith('w/d.nadoc', { fileHandle: 'H' })
+    expect(fileIo.saveToHandle).not.toHaveBeenCalled()
+  })
+  it('does not announce success when the guarded workspace save refuses', async () => {
+    vi.useFakeTimers()
+    const { fileSave, syncBadge, selfSavedPaths } = makeSaveFactory({
+      state: { workspacePath: 'w/d.nadoc' }, fileIo: { saveToWorkspace: vi.fn(async () => false) },
+    })
+    await fileSave.saveDispatch()
+    expect(syncBadge.setSyncStatus).not.toHaveBeenCalledWith('green', 'saved')
+    expect(selfSavedPaths.has('w/d.nadoc')).toBe(false)
   })
   it('with only a file handle (no workspace path), saves to the handle', async () => {
     const { fileSave, fileIo, api } = makeSaveFactory({ state: { fileHandle: 'H' } })

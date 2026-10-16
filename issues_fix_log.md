@@ -870,3 +870,24 @@ the controller's initial invalidation, and the generation rejects late old
 responses/finalizers after a new tool opens. Meaningful failing regression and
 passing focused correction are in [U13 evidence](docs/audits/feature_history_20261014/validation_deformation_creation.json).
 This changes no geometry formula and earns no separate milestone credit.
+
+
+2026-10-16 — U14 visibility integration: ISSUE-113 removes per-strand geometry
+rescans by using the existing effective mask; ISSUE-114 applies endpoint masks to
+cached saved Join lines without rebuilding them; ISSUE-115 settles visibility
+before explicit Save/export and guards document ownership through asynchronous
+reads/writes. The unused duplicate client exporter is pruned. ISSUE-111 reopened
+once: two refused queued writes restored an unacknowledged intermediate state;
+rollback now uses the last accepted checkpoint. Earlier one-success tests did not
+cover this failure combination. Tests-first failures and final evidence are in
+[U14 evidence](docs/audits/feature_history_20261014/validation_group_visibility.json).
+No additional milestone credit or desktop qualification is claimed.
+
+
+2026-10-16 — ISSUE-116 schema compatibility correction before U14: default model
+serialization would add an empty presentation list to old sealed bytes. Preserve
+the old canonical encoding with explicit empty-only field omission and the old
+strict empty-state digest after validating the new field. Three observed red
+canonical/stored/spawned recovery cases guard the fix; no relaxed decoder or
+rewritten source evidence is used. This was discovered by tracing the actual
+recovery equality check, beyond ordinary .nadoc roundtrip tests.

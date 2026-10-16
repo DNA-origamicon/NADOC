@@ -20,6 +20,7 @@ import { openFileBrowser } from './file_browser.js'
 import { showToast } from './toast.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
 import { docHeaders } from '../shared/doc_id.js'
+import { createDocumentRequestScope } from '../api/document_request_scope.js'
 import { initRecipeFileRecovery } from './part_recipe_file_recovery.js'
 
 /**
@@ -40,7 +41,8 @@ import { initRecipeFileRecovery } from './part_recipe_file_recovery.js'
  * @param {Function} deps.getAssemblyWorkspacePath
  * @param {Function} deps.getAssemblyName
  * @param {Function} deps.getPartEditContext
- * @returns {{getDesignContent, savePartToAssembly, saveToHandle, saveAs, saveAssemblyToHandle, saveAssemblyAs}}
+ * @param {Function} deps.flushPresentation Returns the current persistence-chain promise (stable until another write is queued).
+ * @returns {{getDesignContent, exportDesign, saveToWorkspace, savePartToAssembly, saveToHandle, saveAs, saveAssemblyToHandle, saveAssemblyAs}}
  */
 export function initFileIo({
   store, api,
@@ -50,24 +52,110 @@ export function initFileIo({
   setWorkspacePath, setFileName, setAssemblyWorkspacePath,
   setFileHandle, setAssemblyFileHandle, setAssemblyName,
   getWorkspacePath, getAssemblyWorkspacePath, getAssemblyName, getPartEditContext,
+  flushPresentation = () => undefined,
 }) {
   const recipeRecovery = initRecipeFileRecovery()
+
+  // The wrapper/revision may change as visibility persistence settles. Bind to
+  // the document incarnation and design ID, not the pre-drain model reference.
+  // This scope exists only for the save; all listeners retire in finally.
+  async function partTask(run, failure = null) {
+    const scope = createDocumentRequestScope(), generation = scope.capture()
+    const headers = docHeaders()
+    let designId = store.getState().currentDesign?.id
+    const alive = () => scope.isCurrent(generation) &&
+      docHeaders()['X-NADOC-Doc'] === headers['X-NADOC-Doc'] &&
+      !store.getState().assemblyActive && !!store.getState().currentDesign
+    const current = () => alive() && store.getState().currentDesign.id === designId
+    const requireCurrent = () => {
+      if (!current()) throw new Error('The document changed while saving. Save the current document again.')
+    }
+    const context = {
+      headers, requireCurrent,
+      async settle() {
+        requireCurrent()
+        let pending = flushPresentation()
+        for (;;) {
+          await pending
+          requireCurrent()
+          const latest = flushPresentation()
+          if (latest === pending) return
+          pending = latest
+        }
+      },
+      acceptSave(result) {
+        // Save As may legitimately mint a new ID. Accept only that response's
+        // identity, still in this exact document incarnation.
+        const savedId = result?.design?.id ?? result?.design_id ?? designId
+        if (!alive() || store.getState().currentDesign.id !== savedId) requireCurrent()
+        designId = savedId
+        requireCurrent()
+      },
+    }
+    try {
+      requireCurrent()
+      return await run(context)
+    } catch (error) {
+      showToast(`Save failed: ${error.message}`, { severity: 'error' })
+      return failure
+    } finally { scope.dispose() }
+  }
+
+  async function readDesign(context) {
+    context.requireCurrent()
+    const response = await fetch('/api/design/export', { headers: context.headers })
+    context.requireCurrent()
+    return response.ok ? response : null
+  }
+
+  async function readContent(context) {
+    const response = await readDesign(context)
+    if (!response) return null
+    const content = await response.text()
+    context.requireCurrent()
+    return content
+  }
+
   /** Fetch the active design's .nadoc JSON from the server. */
   async function getDesignContent() {
-    const r = await fetch('/api/design/export', { headers: docHeaders() })
-    if (!r.ok) return null
-    return r.text()
+    return partTask(async context => {
+      await context.settle()
+      return readContent(context)
+    })
+  }
+
+  /** Download the checked server artifact after presentation writes settle. */
+  async function exportDesign() {
+    return partTask(async context => {
+      await context.settle()
+      const response = await readDesign(context)
+      if (!response) return false
+      const blob = await response.blob()
+      context.requireCurrent()
+      const filename = (response.headers.get('Content-Disposition') ?? '').match(/filename="([^"]+)"/)?.[1] ?? 'design.nadoc'
+      const url = URL.createObjectURL(blob), link = document.createElement('a')
+      try {
+        link.href = url
+        link.download = filename
+        document.body.appendChild(link)
+        link.click()
+      } finally {
+        link.remove()
+        URL.revokeObjectURL(url)
+      }
+      return true
+    }, false)
   }
 
   /** Save this tab's design back to the assembly instance, then notify the assembly tab. */
   async function savePartToAssembly({ silent = false } = {}) {
-    if (!getPartEditContext()) return null
+    const ctx = getPartEditContext()
+    if (!ctx) return null
     const content = await getDesignContent()
     if (!content) {
       if (!silent) showToast('Failed to read design.', { severity: 'error' })
       return null
     }
-    const ctx = getPartEditContext()
     // Save-back targets the ASSEMBLY's doc (this tab edits on its own isolated doc).
     const result = await api.patchInstanceDesign(ctx.instanceId, content, { docId: ctx.assemblyDoc })
     if (result) {
@@ -88,18 +176,45 @@ export function initFileIo({
   }
 
   /** Save design to an existing file handle (in-place overwrite). */
-  async function saveToHandle(handle) {
-    const content = await getDesignContent()
+  async function writeHandle(handle, context) {
+    const content = await readContent(context)
     if (!content) { showToast('Failed to read design from server.', { severity: 'error' }); return false }
+    let writable
     try {
-      const writable = await handle.createWritable()
+      writable = await handle.createWritable()
+      context.requireCurrent()
       await writable.write(content)
+      context.requireCurrent()
       await writable.close()
+      writable = null
+      context.requireCurrent()
     } catch (e) {
-      showToast(`Save failed: ${e.message}`, { severity: 'error' })
-      return false
+      try { await writable?.abort?.() } catch { /* preserve the original failure */ }
+      throw e
     }
     return true
+  }
+
+  async function saveToHandle(handle) {
+    return partTask(async context => {
+      await context.settle()
+      return writeHandle(handle, context)
+    }, false)
+  }
+
+  /** Workspace Save and its optional file-handle mirror share one origin. */
+  async function saveToWorkspace(path, { fileHandle = null } = {}) {
+    return partTask(async context => {
+      await context.settle()
+      const result = await api.saveDesignToWorkspace(path)
+      if (!result) return false
+      context.acceptSave(result)
+      if (fileHandle) {
+        await context.settle()
+        return writeHandle(fileHandle, context)
+      }
+      return true
+    }, false)
   }
 
   /** Save As — server-side only.  Updates session identity to the chosen path. */
@@ -110,26 +225,32 @@ export function initFileIo({
     const stem = workspacePath
       ? workspacePath.replace(/\.nadoc$/i, '').split('/').pop()
       : (currentDesign.metadata?.name ?? 'design')
-    const result = await openFileBrowser({
-      title: 'Save Part As',
-      mode: 'save',
-      fileType: 'part',
-      suggestedName: stem,
-      suggestedExt: '.nadoc',
-      api,
+    return partTask(async context => {
+      const result = await openFileBrowser({
+        title: 'Save Part As',
+        mode: 'save',
+        fileType: 'part',
+        suggestedName: stem,
+        suggestedExt: '.nadoc',
+        api,
+      })
+      if (!result) return null
+      await context.settle()
+      setSyncStatus('yellow', 'saving…')
+      const r = await api.saveDesignAs(result.path, result.overwrite ?? false)
+      if (r) {
+        context.acceptSave(r)
+        setFileHandle(null)
+        setWorkspacePath(result.path)
+        setFileName(result.name)
+        setSyncStatus('green', 'saved')
+        libraryPanel?.refresh()
+      } else {
+        context.requireCurrent()
+        setSyncStatus('red', 'save error')
+      }
+      return r
     })
-    if (!result) return
-    setSyncStatus('yellow', 'saving…')
-    const r = await api.saveDesignAs(result.path, result.overwrite ?? false)
-    if (r) {
-      setFileHandle(null)
-      setWorkspacePath(result.path)
-      setFileName(result.name)
-      setSyncStatus('green', 'saved')
-      libraryPanel?.refresh()
-    } else {
-      setSyncStatus('red', 'save error')
-    }
   }
 
   async function saveAssemblyToHandle(handle) {
@@ -171,7 +292,7 @@ export function initFileIo({
     }
   }
 
-  return { getDesignContent, savePartToAssembly, saveToHandle, saveAs, saveAssemblyToHandle, saveAssemblyAs, recipeRecovery }
+  return { getDesignContent, exportDesign, saveToWorkspace, savePartToAssembly, saveToHandle, saveAs, saveAssemblyToHandle, saveAssemblyAs, recipeRecovery }
 }
 
 /**
@@ -421,13 +542,19 @@ export function initFileSave({
     const path = getWorkspacePath()
     const fileHandle = getFileHandle()
     if (path) {
+      const scope = createDocumentRequestScope(), generation = scope.capture()
       syncBadge.syncLog('info', 'SAVE', `explicit save → ${path}`)
       syncBadge.setSyncStatus('yellow', 'saving…')
       selfSavedPaths.add(path)
-      await api.saveDesignToWorkspace(path)
-      syncBadge.setSyncStatus('green', 'saved')
-      setTimeout(() => selfSavedPaths.delete(path), 5000)
-      if (fileHandle) await fileIo.saveToHandle(fileHandle)
+      let saved = false
+      try {
+        saved = await fileIo.saveToWorkspace(path, { fileHandle })
+        if (scope.isCurrent(generation)) syncBadge.setSyncStatus(saved ? 'green' : 'red', saved ? 'saved' : 'save error')
+      } finally {
+        scope.dispose()
+        if (saved) setTimeout(() => selfSavedPaths.delete(path), 5000)
+        else selfSavedPaths.delete(path)
+      }
     } else if (fileHandle) {
       await fileIo.saveToHandle(fileHandle)
     } else {

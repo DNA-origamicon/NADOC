@@ -22,12 +22,12 @@ decrement completed if an exit reopens. Flag three major checkpoints spent on
 any still-open milestone (cumulative even across alternating work), or total
 growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
-Effort is separate: U1–U13 are 13 engineering checkpoints since B1, closing one
-additional milestone; eleven went to still-open FH-18. The unchanged 38 is not an
+Effort is separate: U1–U14 are 14 engineering checkpoints since B1, closing one
+additional milestone; twelve went to still-open FH-18. The unchanged 38 is not an
 estimate of commits/messages. The post-U11 source/sequence audit earns no credit.
 Engineering update U2 closed **FH-19 after two checkpoints**. Current
 counts are **18 / 38 complete, 20 remaining (11 core, 9 parked)**, delta
-for latest update U13 **+0 completed, +0 total**. U13 is **FH-18 checkpoint 11**:
+for latest update U14 **+0 completed, +0 total**. U14 is **FH-18 checkpoint 12**:
 ordinary authored PATCH, admitted identity-group dissolution and auxiliary
 recording are implemented; private separate organization/native replay and gated
 owned HTTP transactions now work. Named native deformation selection, qualified
@@ -35,8 +35,9 @@ domain lineage and Fine Routing recovery now agree. U9 adds extrusion/crossover
 lineage; U10 adds passive resize/domain-shift tracking. U11 connects named
 preview/repair/comparison and owned publication. U12 integrates private
 Groups/Placements, typed scene display/selection and atomic placement Apply.
-U13 integrates ordinary owned Bend/Twist creation. Persistent group visibility,
-generated consumers, new-group movement and qualification keep FH-18 open.
+U13 integrates ordinary owned Bend/Twist creation. U14 adds persisted group
+visibility and guarded save/export. Generated consumers, new-group movement and
+qualification keep FH-18 open.
 **Task growth is flagged.** The containment decision and five finite batches are
 in the [organization/placement migration plan](../docs/audits/feature_history_20261014/group_placement_migration_plan.md).
 Separate organizational membership from the existing ordered placement list;
@@ -88,7 +89,7 @@ of recovery payloads. Recovery now checks closed inputs, IDs, metadata/storage
 budgets and complete non-evicted PRE/POST bodies before decoding; malformed or
 unavailable bodies give actionable errors. Full snapshot revert/edit publication
 remains closed until authoring-only bodies preserve physical/presentation state.
-The rest of the consumer matrix, persistent group visibility and
+The rest of the consumer matrix and
 new-group move semantics remain B–E work. All milestone exits remain unchanged.
 Before serialization, metadata admission charges each group and domain-reference
 occurrence so shared-container aliases cannot hide expanded JSON work. Bounds
@@ -96,7 +97,7 @@ remain 30k metadata nodes/2 MB, 2k groups; source identity indexes each admit at
 most 30k records. These are not latency/heap measurements.
 
 Five captured CPD/duplex generations and four coating entries retain the U10
-direct-edge policy (14 entries/14,216 bytes, 16-entry/16KiB limits); U11 changes
+then-current direct-edge policy (14 entries/14,216 bytes, 16-entry/16KiB limits); U11 changes
 no numerical manifests, stored pins, calculations or goldens. ISSUE-108 native
 crossover-growth metadata loss remains open. Prior lineage timing and worker
 evidence stays in the [U10 report](../docs/audits/feature_history_20261014/validation_group_resize_lineage.json).
@@ -127,8 +128,8 @@ and ordinary controls must agree. Nanoparticle/protein/assets and their remainin
 benchmarks are parked; ordinary DNA connections are core. Assemblies and VR
 remain separately deferred. The persistent P3–P6 goal stays active.
 
-Next: remaining persistent group visibility, new-group movement/frame semantics
-and generated compatibility within the existing B–E batches. U13 completes the
+Next: new-group movement/frame semantics and generated compatibility within
+the existing B–E batches. U13 completes the
 private ordinary Bend/Twist creation adapter: same owned prefix, controller,
 renderer and lease as history editing, no provisional canonical operation.
 Toolbar mixed selection and all four end-menu actions retain native planes and
@@ -140,19 +141,27 @@ Apply independently proves the fresh source and appends one typed feature using
 the existing exact-source transaction/undo/receipt. Cancel never deletes a live op.
 Reset during held Prepare now retires local opening immediately (ISSUE-112),
 without allowing late replies to affect a replacement editor.
-U12 Hide/Show persists **current member bases**, not persistent group identity;
-that D exit stays open. Earlier placement editing remains gated until FH-23.
+U14 Hide saves separate `hidden_part_group_ids`; current membership resolves on
+snapshot changes, absent IDs remain dormant and old base/placement masks retain
+their meaning. Show keeps explicit current-base exceptions. Save/export drains
+queued visibility writes with document-reset guards. Strand queries use the
+cached effective mask; native geometry and feature rows are unchanged. Earlier
+placement editing remains gated until FH-23.
 The [caller audit](../docs/audits/feature_history_20261014/group_placement_migration_plan.md#post-u11-caller-audit-and-next-delivery)
 found no ordinary core caller needing a new generic scope compiler first.
 Generated compatibility remains FH-18, not silently transferred to FH-36.
-No fixed exit changed; U13 is checkpoint11. Full redraw for structural partial
+No fixed exit changed; U14 is checkpoint12. Full redraw for structural partial
 updates and full undo copying under lock remain performance debt. No per-frame
 history proof is introduced. Shared prefix admission and editor setup are reused;
 live legacy authoring cannot be pruned until qualified rollout.
-**294 focused backend / 8,767 frontend passes, one skip**;
-see [U13 evidence](../docs/audits/feature_history_20261014/validation_deformation_creation.json)
-for executed checks, failures and cleanup. All organization/preview/history/create
-rollout flags remain false; main.js delta 0. Archive is unmounted, so application
+See [U14 evidence](../docs/audits/feature_history_20261014/validation_group_visibility.json)
+for executed checks, failures and cleanup. The 17 exact numerical compatibility
+edges preserve prior pins; reviewed policy capacity is now 32 entries/32 KiB
+(previously 16/16 KiB), with unchanged calculation/runtime/template guards.
+Final focused backend checks: **406 passed**; full frontend: **8,793 passed,
+one existing skip**. `main.js` is **+2 lines**, thin visibility/save wiring only.
+All organization/preview/history/create
+rollout flags remain false. Archive is unmounted, so application
 and performance qualification remain open; software checks do not close them.
 Do not enable organization until B/C/D adapters and E's applicable checks pass.
 Research unresolved CAD workflow decisions before choosing semantics. Any

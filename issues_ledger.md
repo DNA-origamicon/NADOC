@@ -2624,3 +2624,63 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   `docs/audits/feature_history_20261014/validation_deformation_creation.json`.
   Other intermediate fixture failures are recorded separately, not counted as
   behavioral reproductions. No live-app reproduction or rollout is claimed.
+
+
+## ISSUE-113 — Strand visibility queried by rebuilding every mask (2026-10-16, FIXED IN SOFTWARE CHECKS)
+
+- With a hidden placement, each spreadsheet strand query iterated the complete
+  geometry to rebuild a visibility mask already held by the controller.
+- A deterministic iteration-counter regression observed 40 extra geometry scans
+  during 40 queries; use the prepared effective mask instead. It also includes
+  named-group hiding and existing explicit show exceptions.
+- This removes repeated query work; larger-part latency remains unqualified.
+  U14 evidence records the failing regression and final software checks.
+
+## ISSUE-114 — Saved Join decorations ignore endpoint hiding (2026-10-16, FIXED IN SOFTWARE CHECKS)
+
+- Native candidate selection used the effective endpoint visibility callback,
+  but saved dashed bridges checked placement IDs only. Hiding their bases or
+  named group could leave those lines visible.
+- Saved lines now retain tiny endpoint/placement references; visibility changes
+  toggle the existing line without rebuilding/disposal. Regressions assert line,
+  geometry and material identity, placement masks and inert disposal.
+- This is display behavior only. Native Join admission, port generation and
+  calculations are unchanged; organized Join publication is still unqualified.
+
+## ISSUE-115 — Save/export can race queued presentation writes (2026-10-16, FIXED IN SOFTWARE CHECKS)
+
+- Hide persists asynchronously; immediate Save/Save As/export previously read
+  the server before that write completed. A reset during a held save could also
+  assign an old path or download the replacement document.
+- File I/O drains the current presentation queue, including newly appended
+  writes, and binds the operation to the original document incarnation. Guard
+  each asynchronous read/writer boundary and late path/status/mirror/download;
+  remove the now-unused duplicate client export function.
+- Failing held-write/reset regressions precede the fix. An already dispatched
+  server write or committed file close cannot be recalled by these guards.
+  U14 evidence and MV-48 retain software/app distinctions.
+
+### ISSUE-111 reopened during U14 — both queued saves fail (reopen count: 1)
+
+The prior cases covered either an earlier success or a later success. When both
+requests failed, restoring the latest gesture's before-state retained the earlier
+unsaved hide. Two null/throw regressions failed on the still-hidden bases. Keep
+one acknowledged presentation/undo checkpoint per document generation; an eligible
+latest refusal restores it. A later accepted complete save retains both user
+gestures and their undo. Existing source/revision/reset guards remain intact.
+This corrects the same queue defect before rollout; it reopens no completed
+milestone because FH-18 remains open. App qualification remains MV-48/FH-27.
+
+
+## ISSUE-116 — Empty new display field breaks prior strict recovery bytes (2026-10-16, CORRECTED BEFORE U14 CHECKPOINT)
+
+- During schema review, adding the default-empty group mask made serialized
+  designs differ from otherwise valid prior strict records. Three tests failed
+  at canonical-byte equality, stored preparation and real spawned recovery.
+- Omit only this new empty field during serialization; retain all existing
+  fields and nonempty group masks exactly. The strict preservation projector
+  validates the new list is empty before retaining its original three-field
+  digest. No normalization exception, cache rewrite or integrity weakening.
+- Tests include ordinary snapshots, nonempty roundtrip and unknown/missing-field
+  refusal controls. Exact original bytes/lease survive worker materialization.
+  This was an unreleased intermediate regression; no completed milestone reopens.

@@ -1,0 +1,401 @@
+{
+  "checkpoint": "U14 — FH-18 checkpoint 12; persistent named-group visibility and guarded save/export",
+  "source_checkpoint": "79c7bdee",
+  "date": "2026-10-16",
+  "evidence_status": "Final software checks complete; NOT VERIFIED IN APP; rollout and performance qualification remain open",
+  "progress": {
+    "baseline": "B1:17/38 through 2c15e747",
+    "completed": 18,
+    "estimated_total": 38,
+    "remaining": 20,
+    "core_remaining": 11,
+    "parked_remaining": 9,
+    "delta_completed": 0,
+    "delta_total": 0,
+    "fh18_checkpoints": 12,
+    "engineering_checkpoints_since_b1": 14,
+    "milestones_closed_since_b1": 1,
+    "task_growth_flagged": true,
+    "qualification": "U14 advances existing FH-18 scope; supporting fixes and validation earn no additional milestone credit. The original five batches and full exit remain unchanged."
+  },
+  "scope": {
+    "implemented": [
+      "VisibilityState adds a separate default-empty hidden_part_group_ids list: at most 2,000 exact nonempty IDs, each at most 512 characters. The existing three fields retain their meanings.",
+      "Named-group hiding follows current immutable membership, including loop copies and terminal extensions. Removed members lose only that group's contribution; missing group IDs remain dormant through dissolve/seek/undo/reload, without placement-ID fallback or inference from old hidden bases.",
+      "Hide contributions combine by union; explicit shown base addresses take precedence. Show removes the selected group's rule and shows current members without deleting other group rules. Empty hidden groups retain intent; Show All clears all masks.",
+      "Owned visibility requests accept exact legacy-three or new-four field bodies, validate before deduplication, and use the existing source/revision/policy/permit publication boundary. A changed visibility state produces one server undo/revision and no feature row or authoring mutation.",
+      "Ordinary metadata persistence, exact oxDNA archive inventory and strict preservation inventory carry the new field. Nonempty presentation remains unsupported in strict immutable admission.",
+      "The new field is omitted only when empty, preserving prior strict canonical bytes. Strict preservation validates all four fields and their emptiness before hashing the historical three-field serialized projection.",
+      "Strand visibility queries use the prepared effective mask rather than reconstructing it for every query.",
+      "Saved Join decorations cache native endpoint/placement references and toggle existing line visibility through the existing endpoint callback; local mask changes do not rebuild or dispose geometry.",
+      "File save/export drains presentation persistence and guards asynchronous reads/writes/adoption against document-incarnation changes. Already dispatched server writes or committed file closes cannot be retroactively cancelled.",
+      "Queued visibility rollback retains one acknowledged presentation/undo/redo checkpoint per document generation. Latest eligible failures restore acknowledged state; later accepted full-state saves preserve intermediate gesture undo.",
+      "Removed the unreferenced duplicate client.js native export helper after routing the File menu through guarded file_io export; independent cadnano export remains unchanged."
+    ],
+    "unchanged": [
+      "Molecular calculations, geometry constants, solver settings, runtime/template identities and native source algorithms.",
+      "Separate ordered cluster_transforms placement authority and part_group organizational identity.",
+      "Strict raw-byte equality, manifest hashing, cache lease ownership, worker completion/sealing and publication authorization checks.",
+      "Native Join port generation/calculations and its existing active-organization publication refusal.",
+      "Public rollout gates, assembly scope and deferred machine-specific VR validation.",
+      "Existing close-session presentation drain and lifecycle autosave dispatch."
+    ],
+    "remaining_original_exits": [
+      "FH-18 generated-consumer compatibility, including shared merge/branch/section ownership, remains open; no silent transfer to parked asset work.",
+      "FH-18 arbitrary new-group movement must define selected member scope, pose order, overlap/domain ownership, explicit frames/pivots, existing deformation/driver constraints, terminal extensions and lattice continuation.",
+      "FH-18 full consumer, dependency, recovery, repair, undo/reload/cold-replay and rollout matrix remains the original five-batch exit.",
+      "FH-20/FH-27 desktop interaction, latency/memory acceptance and appropriate legacy-path removal remain open.",
+      "Other fixed core history/repair/catalog milestones remain open; NP/assets remain parked. Assemblies and machine-specific VR remain excluded/deferred."
+    ],
+    "original_batches": {
+      "A": "Representation and legacy proof.",
+      "B": "Complete native lifecycle, generated consumers and explicit movement ownership.",
+      "C": "Recovery and all consumers, including frame/driver/Join ownership and incarnation boundaries.",
+      "D": "Actual Group/Placement surfaces, correct namespaces and source-bound interaction lifecycle.",
+      "E": "Finite correctness/regression/compatibility qualification and deliberate rollout."
+    }
+  },
+  "issues": {
+    "ISSUE-113": "Repeated strand visibility queries rebuilt the mask; use the existing prepared mask. Scan-count evidence is not a measured latency guarantee.",
+    "ISSUE-114": "Saved dashed Join decoration bypassed effective endpoint hiding; visibility-only refresh now preserves line/geometry/material identities.",
+    "ISSUE-115": "Save/export raced queued presentation writes and document replacement; drain and original-context guards added.",
+    "ISSUE-111": "Reopened once for two queued save failures retaining the first unsaved hide; acknowledged-checkpoint rollback added without relaxing source/revision/reset guards.",
+    "ISSUE-116": "Unreleased U14 schema regression added empty-field bytes to old strict records. Empty-only serialization omission and the unchanged old digest representation correct it without a normalization exception or cache rewrite."
+  },
+  "validation": {
+    "backend": {
+      "relevant_targets": [
+        "tests/test_part_group_visibility.py",
+        "tests/test_part_group_visibility_strict_compatibility.py",
+        "tests/test_group_placement_ui_host.py",
+        "tests/test_part_group_organization_routes.py",
+        "tests/test_visibility_persistence.py",
+        "tests/test_part_immutable_preservation.py",
+        "tests/test_oxdna_preparation_capture.py",
+        "tests/test_part_numerical_schema_compatibility.py",
+        "tests/test_part_immutable_revision.py",
+        "tests/test_part_immutable_persistence.py",
+        "tests/test_part_immutable_recovery.py"
+      ],
+      "initial_visibility_red": {
+        "failed": 19,
+        "passed": 7,
+        "seconds": 3.11,
+        "qualification": "Reported by root before the new backend visibility implementation."
+      },
+      "strict_compatibility_red": {
+        "failed": 3,
+        "passed": 5,
+        "seconds": 3.39,
+        "failures": [
+          "Prior full canonical byte/preservation representation.",
+          "StoredRevision preparation/materialization of prior three-field visibility bytes.",
+          "Actual spawned recovery of the prior exact bytes."
+        ],
+        "controls": "Ordinary snapshot default loading, nonempty serialization/reload, missing-existing-field/unknown-field/nonempty-strict refusal.",
+        "correction": "Omit only the new empty field; retain all other exact decoding and recovery checks."
+      },
+      "strict_compatibility_scope": "The new tiny in-memory corpus uses actual StoredRevision preparation, a real spawned RecoveryWorker and materialization. It does not replace the existing durable lease/CAS/rollback regression suite or establish general schema migration.",
+      "final": {
+        "status": "PASS",
+        "command": "just validate-safe scripts/test_guard.sh test-focused 0 focused -- uv run pytest tests/test_part_group_visibility.py tests/test_part_group_visibility_strict_compatibility.py tests/test_group_placement_ui_host.py tests/test_part_group_organization_routes.py tests/test_visibility_persistence.py tests/test_part_immutable_preservation.py tests/test_oxdna_preparation_capture.py tests/test_part_numerical_schema_compatibility.py tests/test_part_immutable_revision.py tests/test_part_immutable_persistence.py tests/test_part_immutable_recovery.py -q --tb=short --disable-warnings --durations=5",
+        "files": 11,
+        "passed": 406,
+        "warnings": 6,
+        "seconds": 12.33,
+        "exit_code": 0
+      },
+      "compatibility_red": {
+        "failed": 56,
+        "passed": 75,
+        "seconds": 4.18,
+        "reason": "New exact edges and reviewed policy limits absent before implementation."
+      },
+      "intermediate_before_empty_omission": [
+        {
+          "passed": 155,
+          "warnings": 6,
+          "seconds": 8.03,
+          "files": 6
+        },
+        {
+          "passed": 131,
+          "seconds": 3.37,
+          "files": 1
+        }
+      ]
+    },
+    "frontend": {
+      "saved_join_red": {
+        "failed": 2,
+        "passed": 20,
+        "seconds": 1.34,
+        "reason": "Both new cases failed on missing refreshVisibility before implementation."
+      },
+      "queue_regression": {
+        "failed": 2,
+        "passed": 30,
+        "seconds": 0.753,
+        "reason": "Both-null and both-throw refusals retained an earlier unsaved hide; corrected with acknowledged-state rollback."
+      },
+      "final_focused": {
+        "status": "PASS",
+        "files": [
+          "frontend/src/scene/visibility_controller.test.js",
+          "frontend/src/scene/cluster_join_tool.test.js",
+          "frontend/src/ui/cluster_panel.test.js",
+          "frontend/src/ui/part_group_panel.test.js",
+          "frontend/src/ui/file_io.test.js",
+          "frontend/src/api/group_organization_client.test.js",
+          "frontend/src/app/group_panel_bindings.test.js"
+        ],
+        "passed": 169,
+        "seconds": 3.89
+      },
+      "final_full": {
+        "status": "PASS",
+        "command": "just test-frontend",
+        "files": 742,
+        "passed": 8793,
+        "skipped": 1,
+        "seconds": 320.85,
+        "exit_code": 0
+      },
+      "qualification": "Focused sets overlap; do not sum their counts. Final full-suite evidence must match the final frozen source.",
+      "initial_visibility_red": {
+        "failed": 7,
+        "passed": 22,
+        "seconds": 0.787
+      },
+      "file_io_red": {
+        "failed": 18,
+        "passed": 45,
+        "seconds": 0.982
+      },
+      "intermediate_passes": [
+        {
+          "files": 5,
+          "passed": 81,
+          "seconds": 2.69
+        },
+        {
+          "files": 1,
+          "passed": 63,
+          "seconds": 0.96
+        }
+      ],
+      "invalid_invocation": {
+        "exit_code": 127,
+        "reason": "Shell quoting lost a filter pipe; shell command not found and Node EPIPE. No valid test result. Corrected by running the entire test file."
+      }
+    },
+    "native_compatibility": {
+      "intermediate_before_empty_omission": {
+        "passed": 3,
+        "seconds": 110.57,
+        "durations_seconds": {
+          "cpd": 88.28,
+          "coating": 10.22,
+          "duplex": 9.41
+        },
+        "qualification": "Superseded source: ran before the final empty-field serialization correction. This is not final acceptance."
+      },
+      "final": {
+        "status": "PASS",
+        "command": "just validate-safe scripts/test_guard.sh test-focused 0 focused -- uv run pytest tests/test_native_schema_compatibility.py -q --tb=short --disable-warnings --durations=5",
+        "passed": 3,
+        "seconds": 113.38,
+        "exit_code": 0,
+        "durations_seconds": {
+          "cpd": 90.65,
+          "coating": 10.4,
+          "duplex": 9.58,
+          "setup": 2.52
+        }
+      },
+      "claim_boundary": "Independent workers run installed unchanged kernels with current and explicitly admitted historical source pins. This is not execution of historical binaries or general numerical-equivalence proof."
+    },
+    "static": {
+      "scoped_author_checks": "Author reported Ruff, JavaScript syntax and scoped diff checks clean at handoff; no agent ran tests.",
+      "final_repository_checks": {
+        "scoped_ruff": {
+          "passed": true,
+          "python_files": 11
+        },
+        "just_lint": {
+          "exit_code": 1,
+          "errors": 5,
+          "code": "F401",
+          "baseline_delta": 0,
+          "paths": [
+            "backend/api/vr_prompts.py",
+            "tests/test_cpd_cube_validation_v6.py",
+            "tests/test_cpd_isomer_formation_replay.py",
+            "tests/test_cpd_resume_anti3_v15.py",
+            "tests/test_cpd_resume_control2_v13.py"
+          ]
+        },
+        "just_lint_memory": {
+          "exit_code": 1,
+          "errors": 6,
+          "warnings": 59,
+          "baseline_delta": 0,
+          "updated_head_lines": 187
+        },
+        "diff_check": "PASS",
+        "ledger_check": "38 milestone rows:18 done,11 core remaining,9 parked;14 engineering checkpoints; no exit reclassified."
+      }
+    },
+    "selector": {
+      "command": "just test-smart --dry-run",
+      "decision": "FAST (fast suite only)",
+      "routing": "FULL: backend/api/main.py matches foundational/shared 'backend/api/main.py'",
+      "changed_files": 5592,
+      "executed_pytest": 0,
+      "notice_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\n  This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\n  Only request `just test-session` when a broad/full sweep is actually needed.",
+      "clarification": "The notice is selector wording. This was --dry-run: neither FAST nor FULL ran. Focused checks do not clear accumulated broad-suite debt."
+    },
+    "app": {
+      "status": "NOT VERIFIED IN APP",
+      "reason": "Archive /media/jojo/Archive is unavailable; no browser or bulk-scratch fallback.",
+      "debt": [
+        "MV-48",
+        "FH-20",
+        "FH-27"
+      ]
+    },
+    "frozen_source_sha256": {
+      "status": "PASS: all 21 changed production/test/policy file hashes unchanged through final frontend, backend and native checks",
+      "files": {
+        "backend/api/part_group_organization_recording.py": "b45b068f7954d2b4fb994e36030ba78422a1ad0f1d21cb0700a67ddd37f29a07",
+        "backend/api/part_immutable_preservation.py": "f1f1449fb1116d92df47ca823e955afd163047f6cf2e6e034675feb6b1d1ee57",
+        "backend/api/routes_display_metadata.py": "590d2da598b2a667fa79b37aae4efd2f2a491af65b8c1d3d44a1789a77ea3a0a",
+        "backend/core/data/numerical_schema_compatibility_v1.json": "b681a8432043cef50261b548d1cc904e6bba32ef88d610d09082e73c6d1da8b8",
+        "backend/core/models.py": "19e7587c28400dfd4d994f25cde44c170d65a8f6f3b4e111edd25c0fe848346f",
+        "backend/core/oxdna_preparation_schema.py": "9bcab9e503af81caefa5c2e07349ea81c7ec14f52cc40d295eeff47eb334399d",
+        "backend/core/part_numerical_schema_compatibility.py": "bac712160b03aacf799b3581940fbcefe16954c64c9ba49428742c151bc8e643",
+        "frontend/src/api/client.js": "f7afd844191611cc6b329402bc7982981a186b066dac0e3acf8cbe0562f479fd",
+        "frontend/src/main.js": "b5f48eb928b18bb5249d1d40136679507768b628f012a4532b2f7e5fc9846f7b",
+        "frontend/src/scene/cluster_join_tool.js": "f2e7401dfebfb4c6e2085a3faca612ee4822cb546221e125e7b2ab5078003752",
+        "frontend/src/scene/cluster_join_tool.test.js": "098491cbdcb8e5100a878752cff3af97622b1be235b1eb9d88bafe6aef71f9a6",
+        "frontend/src/scene/visibility_controller.js": "b79afc81db5de7771ee08a7021a03c2c0bccc13a80f1afa23f923a5f5a86dbbd",
+        "frontend/src/scene/visibility_controller.test.js": "ed08c6a5e38c185b2118ada1a740bd5d7569b5e6688bacf4a75908116c7ada74",
+        "frontend/src/ui/file_io.js": "f12bd3cbae0ba60e6288f81705b8e8333f0f006a520c9611975e73c4b8a5603a",
+        "frontend/src/ui/file_io.test.js": "425a5b9b643a8dd8fc6899d8ffb688a68917276ddd0d2ea736bf1459c6eea350",
+        "frontend/src/ui/part_group_panel.js": "8a803bd479c0041e73a1e18956791853f893bbee332a2399d4f771b7af9abb9e",
+        "tests/test_native_schema_compatibility.py": "94305b63bb6c9c80e53a349fd7b3916becdbd249a0181e4f437fb6f4ee75be78",
+        "tests/test_part_group_visibility.py": "24c49f233a5b8030a3529bdf663844c41197c7ba390f42007e196ec44fa26762",
+        "tests/test_part_group_visibility_strict_compatibility.py": "fa7b7e521529c5b367c2bb011c377243b4ff01726a49fa1c17b071f62b0763bf",
+        "tests/test_part_immutable_preservation.py": "dbc7ae315be23b46fdaabcf8b87f859a953315b01d9bc3582f3ccfc20375089d",
+        "tests/test_part_numerical_schema_compatibility.py": "b16bd0bc202990922f99808323879d1c5c67e37aa507a5783c1d0e3a517caaec"
+      }
+    },
+    "main_js_delta": {
+      "lines": 2,
+      "added": 3,
+      "removed": 1,
+      "purpose": "Thin Join visibility refresh, injected save drain, and native export delegation; no new composition-root state/logic block."
+    }
+  },
+  "numerical_compatibility": {
+    "algorithms_changed": false,
+    "golden_changes": false,
+    "shared_model_schema_changed": true,
+    "event": "group-visibility-v1",
+    "previous_policy": {
+      "entries": 14,
+      "bytes": 14216,
+      "max_entries": 16,
+      "max_bytes": 16384
+    },
+    "reviewed_policy": {
+      "entries": 17,
+      "bytes": 17013,
+      "max_entries": 32,
+      "max_bytes": 32768
+    },
+    "latest_manifest_delta": [
+      "backend/core/models.py",
+      "backend/core/part_numerical_schema_compatibility.py"
+    ],
+    "preserved": [
+      "All 14 prior authored pins plus the three immediately prior current pins have explicit direct edges to each exact current full manifest.",
+      "No wildcard, transitive admission, automatic future-schema authorization or authored-pin rewrite.",
+      "Archived prior policy and source manifests remain retained; older-generation cumulative source distinctions remain explicit.",
+      "The three-transition diagnostic collector and all capture/proof/publication/geometry/time/solver bounds remain unchanged."
+    ],
+    "evidence_sources": [
+      "docs/audits/feature_history_20261014/group_visibility_schema_compatibility_before.json",
+      "docs/audits/feature_history_20261014/group_visibility_schema_compatibility_prior_policy.json",
+      "backend/core/data/numerical_schema_compatibility_v1.json"
+    ],
+    "final_manifest_verification": {
+      "status": "PASS: exact manifest/policy tests and all three final native worker cases",
+      "prior_policy_byte_exact": true,
+      "hashes": {
+        "cpd": "2656ac0c21c0994eeeee19360741820cdd8e724c2566e2c6bfba0df640afea4e",
+        "duplex": "7d36afcf4f3ae6134ec2b730606bd1f0a64e8ac5bc92bd69a427c4e2cac23071",
+        "coating": "639081305b31e2036c91f6ac857254842d85c0b593156db405d14476563ad411"
+      }
+    }
+  },
+  "performance": {
+    "qualified": false,
+    "implementation_constraints": [
+      "No history replay, molecular work or new per-frame traversal for display visibility.",
+      "Repeated strand queries reuse the effective hidden mask.",
+      "Saved Join visibility changes retain geometry/material objects; full rebuild remains on existing design/geometry dependencies.",
+      "Current group membership is indexed on relevant immutable snapshot changes."
+    ],
+    "remaining": [
+      "Large-design interaction tails and memory under overlapping group membership are unmeasured.",
+      "Existing full undo copying and structural display rebuild costs remain unqualified.",
+      "Scan-count and resource-identity regressions establish avoided work, not a desktop latency bound."
+    ]
+  },
+  "independent_review": {
+    "status": "SOURCE REVIEW COMPLETE; FINAL SOFTWARE CHECKS PASSED",
+    "findings": "Independent backend and frontend source reviews found no remaining blocker. Review exposed strict-byte incompatibility, saved Join display bypass and queued visibility rollback; the narrow corrections are covered by regressions.",
+    "limits": "No app, broad-regression, rollout or general schema-migration claim. Root alone owns serialized final validation."
+  },
+  "cleanup": {
+    "status": "COMPLETE",
+    "removed_task_artifacts": [
+      {
+        "path": "/tmp/pytest-of-joshua/pytest-5",
+        "files": 0,
+        "bytes": 0,
+        "directories": 9,
+        "symlinks": 1
+      },
+      {
+        "path": "/tmp/pytest-of-joshua/pytest-6",
+        "files": 97,
+        "bytes": 308784,
+        "directories": 579,
+        "symlinks": 56
+      },
+      {
+        "path": "/tmp/pytest-of-joshua/pytest-7",
+        "files": 0,
+        "bytes": 0,
+        "directories": 4,
+        "symlinks": 1
+      }
+    ],
+    "files_removed": 97,
+    "bytes_removed": 308784,
+    "extra_symlink_removed": "/tmp/pytest-of-joshua/pytest-current",
+    "dependency_check": {
+      "proc_entries_inspected": 54,
+      "active_references": [],
+      "inaccessible_proc_entries": 127,
+      "coverage": "Visible /proc cwd, root, fd and maps. Permission-denied system-process entries counted; task processes finished and no owned test worker remains."
+    },
+    "verification": {
+      "task_paths_absent": true,
+      "shared_memory_psm_entries": []
+    },
+    "retained": "Only source, tests and compact tracked evidence; workspace designs/jobs, active runtimes, shared caches and historical provenance untouched. No browser/build/simulation bulk output produced."
+  }
+}

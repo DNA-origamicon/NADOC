@@ -35,9 +35,9 @@ export function buildVisibilityGeometryIndex(geometry) {
 }
 
 /**
- * One persisted, base-addressed visibility model for the editor. Higher-level
- * objects are expanded to base keys at hide time. It has its own undo stack and
- * is deliberately not part of the topology feature log.
+ * Persisted presentation visibility. Named groups and placements retain identity;
+ * individual selections retain exact base addresses. Group membership is resolved
+ * from the current immutable snapshot, never from the feature log or render loop.
  */
 export function initVisibilityController({ store, designRenderer, unfoldView, onChange, onPersist,
   getRevision = () => null, eventTarget = globalThis.window } = {}) {
@@ -45,6 +45,7 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
   const shown = new Set()
   let effectiveHidden = new Set()
   let hiddenClusters = new Set()
+  let hiddenGroupIds = new Set()
   const undoStack = []
   const redoStack = []
   let persistChain = Promise.resolve()
@@ -59,6 +60,7 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
   let contextGeneration = 0
   let needsHydration = false
   let disposed = false
+  let acknowledged = null
 
   const invalidateContext = () => {
     contextGeneration++; editEpoch++
@@ -66,6 +68,7 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
     // must neither block replacement hydration nor consume a new save's count.
     pendingPersists = 0
     needsHydration = true
+    acknowledged = null
   }
   eventTarget?.addEventListener('nadoc:document-reset', invalidateContext)
 
@@ -91,16 +94,18 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
     hidden_base_keys: [...hidden].sort(),
     shown_base_keys: [...shown].sort(),
     hidden_cluster_ids: [...hiddenClusters].sort(),
+    hidden_part_group_ids: [...hiddenGroupIds].sort(),
   })
 
   function _apply({ persist = true, notify = true, edit = null } = {}) {
     const all = new Set(hidden)
     for (const key of _keysFor({ clusterIds: [...hiddenClusters] })) all.add(key)
+    for (const id of hiddenGroupIds) for (const key of groupBaseKeys.get(id) ?? []) all.add(key)
     for (const key of shown) all.delete(key)
     effectiveHidden = all
     hiddenPartGroups = new Set()
     for (const [id, keys] of groupBaseKeys) {
-      if (keys.size && [...keys].every(key => all.has(key))) hiddenPartGroups.add(id)
+      if (keys.size ? [...keys].every(key => all.has(key)) : hiddenGroupIds.has(id)) hiddenPartGroups.add(id)
     }
     designRenderer.setHiddenNucs(all)
     designRenderer.setHiddenCrossovers(unfoldView?.setHiddenNucs?.(all) ?? new Set())
@@ -108,18 +113,20 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
     if (persist && onPersist) {
       const state = _persistedState()
       const generation = contextGeneration
+      const checkpoint = _checkpoint()
       pendingPersists++
       const task = persistChain.then(async () => {
         if (disposed || generation !== contextGeneration) return
         // Earlier queued saves may have installed a new canonical revision.
-        // Bind this request to its dispatch origin, retaining the gesture's
-        // before-state and epoch so a newer local edit is never overwritten.
+        // Bind this request to its dispatch origin and retain the gesture's
+        // epoch so a newer local edit is never overwritten.
         const dispatched = edit && { ...edit, design: design(), revision: getRevision() }
         try {
           const result = await onPersist(state)
           // Existing presentation callbacks may intentionally return void.
           // Null is the client adapter's explicit rejected/stale outcome.
           if (result === null) _rollback(dispatched)
+          else if (!disposed && generation === contextGeneration) acknowledged = checkpoint
         } catch (error) {
           _rollback(dispatched)
           console.error('Failed to persist visibility state', error)
@@ -139,7 +146,9 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
     for (const key of state.hidden_base_keys ?? []) hidden.add(key)
     for (const key of state.shown_base_keys ?? []) shown.add(key)
     hiddenClusters = new Set(state.hidden_cluster_ids ?? [])
+    hiddenGroupIds = new Set(state.hidden_part_group_ids ?? [])
     undoStack.length = 0; redoStack.length = 0
+    acknowledged = _checkpoint()
     _apply({ persist: false, notify })
   }
 
@@ -160,12 +169,15 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
 
   const _snapshot = () => ({
     hidden: new Set(hidden), shown: new Set(shown), hiddenClusters: new Set(hiddenClusters),
+    hiddenGroupIds: new Set(hiddenGroupIds),
   })
+  const _checkpoint = () => ({ visibility: _snapshot(), undo: [...undoStack], redo: [...redoStack] })
   function _restore(s, options) {
     hidden.clear(); shown.clear()
     for (const key of s.hidden) hidden.add(key)
     for (const key of s.shown) shown.add(key)
     hiddenClusters = new Set(s.hiddenClusters)
+    hiddenGroupIds = new Set(s.hiddenGroupIds)
     _apply(options)
   }
   function _pushUndo() { undoStack.push(_snapshot()); redoStack.length = 0 }
@@ -173,30 +185,40 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
   function _beginEdit() {
     const epoch = ++editEpoch
     if (!onPersist || !hasOrganization(design())) return null
-    return { epoch, generation: contextGeneration,
-      before: _snapshot(), undo: [...undoStack], redo: [...redoStack] }
+    return { epoch, generation: contextGeneration }
   }
 
   function _rollback(edit) {
-    if (!edit || disposed || edit.epoch !== editEpoch ||
+    if (!edit || !acknowledged || disposed || edit.epoch !== editEpoch ||
         edit.generation !== contextGeneration || design() !== edit.design ||
         getRevision() !== edit.revision) return
     editEpoch++
-    undoStack.splice(0, undoStack.length, ...edit.undo)
-    redoStack.splice(0, redoStack.length, ...edit.redo)
-    _restore(edit.before, { persist: false })
+    // A previous queued save may also have failed. The latest gesture's
+    // before-state can contain that unsaved edit, so restore only acknowledged
+    // presentation. Accepted complete saves retain intermediate gesture undo.
+    undoStack.splice(0, undoStack.length, ...acknowledged.undo)
+    redoStack.splice(0, redoStack.length, ...acknowledged.redo)
+    _restore(acknowledged.visibility, { persist: false })
   }
 
-  function hide(refs) {
+  function hide(refs = {}) {
     const edit = _beginEdit()
     _pushUndo()
-    for (const key of _keysFor(refs)) { shown.delete(key); hidden.add(key) }
+    for (const id of refs.partGroupIds ?? []) {
+      if (!groupBaseKeys.has(id)) continue
+      hiddenGroupIds.add(id)
+      for (const key of groupBaseKeys.get(id)) shown.delete(key)
+    }
+    for (const key of _keysFor({ ...refs, partGroupIds: [] })) { shown.delete(key); hidden.add(key) }
     _apply({ edit })
   }
 
-  function show(refs) {
+  function show(refs = {}) {
     const edit = _beginEdit()
     _pushUndo()
+    for (const id of refs.partGroupIds ?? []) hiddenGroupIds.delete(id)
+    // Preserve explicit Show precedence for current members of overlapping
+    // hidden groups/placements; their independent identity rules remain intact.
     for (const key of _keysFor(refs)) { hidden.delete(key); shown.add(key) }
     _apply({ edit })
   }
@@ -208,7 +230,7 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
 
   function unhideAll() {
     const edit = _beginEdit()
-    _pushUndo(); hidden.clear(); shown.clear(); hiddenClusters.clear(); _apply({ edit })
+    _pushUndo(); hidden.clear(); shown.clear(); hiddenClusters.clear(); hiddenGroupIds.clear(); _apply({ edit })
   }
 
   function undo() {
@@ -226,12 +248,7 @@ export function initVisibilityController({ store, designRenderer, unfoldView, on
 
   function isStrandShown(strandId) {
     const keys = currentGeometryIndex.baseKeysByStrand.get(strandId) ?? []
-    const all = new Set(hidden)
-    if (hiddenClusters.size) {
-      for (const key of _keysFor({ clusterIds: [...hiddenClusters] })) all.add(key)
-    }
-    for (const key of shown) all.delete(key)
-    return keys.length === 0 || keys.some(k => !all.has(k))
+    return keys.length === 0 || keys.some(k => !effectiveHidden.has(k))
   }
 
   currentDesignRef = design()

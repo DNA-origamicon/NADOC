@@ -57,25 +57,33 @@ export function initClusterJoinTool({
   const bridges = new THREE.Group(); bridges.name = 'cluster-join-bridges'
   root.add(markers, ghost, bridges); scene.add(root)
   const savedJoins = new THREE.Group(); savedJoins.name = 'cluster-join-constraints'; scene.add(savedJoins)
+  const savedJoinLines = []
+  function refreshSavedVisibility(state) {
+    const hidden = new Set(state.currentDesign?.visibility_state?.hidden_cluster_ids ?? [])
+    for (const { line, site, firstClusterId, secondClusterId } of savedJoinLines) {
+      line.visible = !state.assemblyActive && !hidden.has(firstClusterId) && !hidden.has(secondClusterId) && isSiteVisible(site)
+    }
+  }
   function refreshSavedJoins(state) {
     disposeLayer(savedJoins)
+    savedJoinLines.length = 0
     if (state.assemblyActive) return
     const constraints = state.currentDesign?.cluster_join_constraints ?? []
     if (!constraints.length) return
     const key = e => `${e.helix_id}:${e.bp_index}:${e.direction}`
     const positions = new Map((state.currentGeometry ?? []).map(n => [key(n), n.backbone_position]))
-    const hidden = new Set(state.currentDesign?.visibility_state?.hidden_cluster_ids ?? [])
     for (const c of constraints) {
-      if (hidden.has(c.first.cluster_id) || hidden.has(c.second.cluster_id)) continue
       for (const [a, b] of [[c.first.source, c.second.target], [c.second.source, c.first.target]]) {
         const points = [positions.get(key(a)), positions.get(key(b))]
         if (points.every(finitePoint)) {
           const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points.map(p => new THREE.Vector3(...p))),
             new THREE.LineDashedMaterial({ color: 0xffc35a, dashSize: 0.45, gapSize: 0.2 }))
           line.computeLineDistances(); savedJoins.add(line)
+          savedJoinLines.push({ line, site: { from: a, to: b }, firstClusterId: c.first.cluster_id, secondClusterId: c.second.cluster_id })
         }
       }
     }
+    refreshSavedVisibility(state)
   }
   refreshSavedJoins(store.getState())
   const markerGeometry = new THREE.SphereGeometry(0.55, 12, 8)
@@ -491,8 +499,9 @@ export function initClusterJoinTool({
     }).map(item => ({ ...item.site, x: item.x, y: item.y, z: item.depth }))
   }
   const getState = () => ({ active, opening, busy: applying, loading, previewLoading, needsResync, freeMovement, freePose, hintCount, movementMode: movement.getMode(), sites, clusters, first, second, preview, status, params: { ...params }, visibleSiteIds: visible.map(item => item.site.id), hoveredSiteId: hovered?.id ?? null, revision: bound?.revision })
+  const refreshVisibility = () => { if (!disposed) refreshSavedVisibility(store.getState()) }
   return {
-    activate, deactivate, reset, apply, refreshSites, updateParameters, getState,
+    activate, deactivate, reset, apply, refreshSites, refreshVisibility, updateParameters, getState,
     isActive: () => active, isBusy: () => applying,
     testApi: { projectWorld(point) {
       const rect = canvas.getBoundingClientRect(), p = new THREE.Vector3(...point).project(liveCamera())
@@ -502,6 +511,7 @@ export function initClusterJoinTool({
       if (disposed) return
       disposed = true; deactivate(true); unsubscribe?.(); panel.dispose(); movement.dispose()
       markerGeometry.dispose(); sideGeometry.dispose(); Object.values(markerMaterials).forEach(material => material.dispose()); root.removeFromParent(); disposeLayer(savedJoins); savedJoins.removeFromParent()
+      savedJoinLines.length = 0
     },
   }
 }

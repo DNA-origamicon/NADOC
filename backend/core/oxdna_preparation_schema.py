@@ -72,7 +72,7 @@ _fields = {
     m.RepresentationOverride: "id name representation segments protein_attachment_ids",
     m.Annotation: "id text icon callout_type color transparency size manual screen_pos visible refs",
     m.ViewVolume: "id name shape min_corner max_corner rotation representation opacity coloring outline_visible enabled",
-    m.VisibilityState: "hidden_base_keys shown_base_keys hidden_cluster_ids",
+    m.VisibilityState: "hidden_base_keys shown_base_keys hidden_cluster_ids hidden_part_group_ids",
     m.DesignAnimation: "id name fps loop keyframes",
     m.AnimationKeyframe: """id name camera_pose_id configuration_id feature_log_index hold_duration_s
         transition_duration_s easing joint_values binding_states strand_anim_phi is_trajectory trajectory_job_id

@@ -151,7 +151,7 @@ describe('visibility controller', () => {
   })
 })
 
-describe('organization current-member visibility', () => {
+describe('organization persistent visibility', () => {
   function organized(options = {}) {
     const state = { currentGeometry: geometry, currentDesign: {
       id: 'design', cluster_transforms: [{ id: 'same', helix_ids: ['h2'] }],
@@ -175,7 +175,7 @@ describe('organization current-member visibility', () => {
     } }
   }
 
-  it('persists exact current member bases without aliasing same-text placement IDs', async () => {
+  it('persists group identity without aliasing same-text placement IDs', async () => {
     const { api, onPersist, onChange } = organized()
     api.hide({ partGroupIds: ['same'] })
     expect(api.isBaseShown('h1:0:FORWARD')).toBe(false)
@@ -187,7 +187,7 @@ describe('organization current-member visibility', () => {
     expect(onChange.mock.calls.at(-1)[2]).toEqual(new Set(['same', 'whole']))
     await api.flushPersistence()
     expect(onPersist.mock.calls.at(-1)[0]).toEqual({
-      hidden_base_keys: ['h1:0:FORWARD', 'h1:1:FORWARD', 'h1:1:FORWARD:1'],
+      hidden_base_keys: [], hidden_part_group_ids: ['same'],
       shown_base_keys: [], hidden_cluster_ids: [],
     })
     api.setHiddenClusters(['same'])
@@ -199,7 +199,7 @@ describe('organization current-member visibility', () => {
     api.hide({ partGroupIds: ['same', 'empty'] })
     api.show({ baseKeys: ['h1:0:FORWARD'] })
     expect(api.isPartGroupShown('same')).toBe(true)
-    expect(onChange.mock.calls.at(-1)[2]).toEqual(new Set())
+    expect(onChange.mock.calls.at(-1)[2]).toEqual(new Set(['empty']))
     api.undo()
     expect(api.isPartGroupShown('same')).toBe(false)
     api.redo()
@@ -208,7 +208,7 @@ describe('organization current-member visibility', () => {
     expect(api.isBaseShown('h1:1:FORWARD:1')).toBe(true)
   })
 
-  it('membership edits and dissolution do not turn base-addressed hiding into dynamic group intent', async () => {
+  it('follows edited membership, becomes dormant on dissolution and resumes after undo/reload', async () => {
     const { api, state, change, onPersist } = organized()
     api.hide({ partGroupIds: ['same'] })
     await api.flushPersistence()
@@ -217,12 +217,17 @@ describe('organization current-member visibility', () => {
       group_organization: { version: 1, groups: [
         { id: 'same', helix_ids: ['h2'], domain_ids: [] },
       ] } } })
-    expect(api.isBaseShown('h1:0:FORWARD')).toBe(false)
-    expect(api.isPartGroupShown('same')).toBe(true)
+    expect(api.isBaseShown('h1:0:FORWARD')).toBe(true)
+    expect(api.isBaseShown('h2:0:REVERSE')).toBe(false)
+    expect(api.isPartGroupShown('same')).toBe(false)
+    const beforeDissolve = JSON.parse(JSON.stringify(state.currentDesign))
     change({ currentDesign: { ...state.currentDesign,
       group_organization: { version: 1, groups: [] } } })
-    expect(api.isBaseShown('h1:0:FORWARD')).toBe(false)
+    expect(api.isBaseShown('h2:0:REVERSE')).toBe(true)
     expect(api.isPartGroupShown('same')).toBe(true)
+    change({ currentDesign: beforeDissolve })
+    expect(api.isPartGroupShown('same')).toBe(false)
+    expect(api.isBaseShown('h2:0:REVERSE')).toBe(false)
   })
 
   it('rebuilds cached group base membership only when design or geometry changes', () => {
@@ -233,9 +238,70 @@ describe('organization current-member visibility', () => {
     const extended = [...old, { helix_id: 'h1', strand_id: 's1', domain_index: 0,
       bp_index: 2, direction: 'FORWARD' }]
     change({ currentGeometry: extended })
-    expect(api.isPartGroupShown('same')).toBe(true)
-    api.hide({ partGroupIds: ['same'] })
+    expect(api.isPartGroupShown('same')).toBe(false)
     expect(api.isBaseShown('h1:2:FORWARD')).toBe(false)
+  })
+
+  it('retains legacy base hiding when membership changes without inferring group intent', () => {
+    const { api, state, change } = organized()
+    const saved = { hidden_base_keys: ['h1:0:FORWARD', 'h1:1:FORWARD', 'h1:1:FORWARD:1'],
+      shown_base_keys: [], hidden_cluster_ids: [] }
+    change({ currentDesign: { ...state.currentDesign, visibility_state: saved } })
+    expect(api.isPartGroupShown('same')).toBe(false)
+    change({ currentDesign: { ...state.currentDesign,
+      group_organization: { version: 1, groups: [{ id: 'same', helix_ids: ['h2'] }] } } })
+    expect(api.isBaseShown('h1:0:FORWARD')).toBe(false)
+    expect(api.isBaseShown('h2:0:REVERSE')).toBe(true)
+    expect(api.isPartGroupShown('same')).toBe(true)
+  })
+
+  it('shows one group without deleting another hide rule; explicit shown bases keep precedence', async () => {
+    const { api, onPersist, state, change } = organized()
+    api.hide({ partGroupIds: ['same', 'whole'] })
+    api.show({ partGroupIds: ['same'] })
+    await api.flushPersistence()
+    const saved = onPersist.mock.calls.at(-1)[0]
+    expect(saved.hidden_part_group_ids).toEqual(['whole'])
+    expect(api.isBaseShown('h1:0:FORWARD')).toBe(true)
+    change({ currentDesign: { ...state.currentDesign, visibility_state: saved },
+      currentGeometry: [...geometry, { ...geometry[0], bp_index: 2 }] })
+    expect(api.isBaseShown('h1:0:FORWARD')).toBe(true)
+    expect(api.isBaseShown('h1:2:FORWARD')).toBe(false)
+    api.unhideAll()
+    await api.flushPersistence()
+    expect(onPersist.mock.calls.at(-1)[0].hidden_part_group_ids).toEqual([])
+    expect(api.isBaseShown('h1:2:FORWARD')).toBe(true)
+  })
+
+  it('hides new terminal extensions and loop copies through the current domain membership', async () => {
+    const { api, state, change, onPersist } = organized()
+    api.hide({ partGroupIds: ['same'] })
+    await api.flushPersistence()
+    change({ currentDesign: { ...state.currentDesign,
+      visibility_state: onPersist.mock.calls.at(-1)[0],
+      extensions: [{ id: 'e1', strand_id: 's1', end: 'three_prime' }] },
+      currentGeometry: [...geometry] })
+    expect(api.isBaseShown('__ext_e1:0:FORWARD')).toBe(false)
+    expect(api.isBaseShown('h1:1:FORWARD:1')).toBe(false)
+    expect(api.isStrandShown('s1')).toBe(false)
+    expect(api.isStrandShown('s2')).toBe(true)
+  })
+
+  it('uses the cached effective mask for repeated strand queries and unrelated store notifications', () => {
+    const { api, state, change } = organized()
+    api.setHiddenClusters(['same'])
+    api.hide({ partGroupIds: ['whole'] })
+    let scans = 0
+    const indexedGeometry = [...geometry]
+    indexedGeometry[Symbol.iterator] = function* () { scans++; yield* geometry }
+    change({ currentGeometry: indexedGeometry })
+    const prepared = scans
+    for (let i = 0; i < 20; i++) {
+      expect(api.isStrandShown('s1')).toBe(false)
+      expect(api.isStrandShown('s2')).toBe(false)
+      change({ currentDesign: state.currentDesign })
+    }
+    expect(scans).toBe(prepared)
   })
 
   it.each(['null', 'throw'])('rolls back failed %s persistence including visibility undo', async failure => {
@@ -273,6 +339,71 @@ describe('organization current-member visibility', () => {
     expect(api.isBaseShown('h1:1:FORWARD')).toBe(false)
     expect(persist).toHaveBeenCalledTimes(2)
     api.destroy()
+  })
+
+  it.each(['null', 'throw'])('restores acknowledged visibility when both queued saves fail (%s)', async failure => {
+    let finish
+    const first = new Promise((resolve, reject) => {
+      finish = () => failure === 'throw' ? reject(new Error('first refused')) : resolve(null)
+    })
+    const persist = vi.fn().mockReturnValueOnce(first).mockImplementationOnce(async () => {
+      if (failure === 'throw') throw new Error('second refused')
+      return null
+    })
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { api, state, onChange } = organized({ onPersist: persist, getRevision: () => 4 })
+    try {
+      const original = JSON.stringify(state.currentDesign)
+      api.hide({ partGroupIds: ['same'] })
+      await Promise.resolve()
+      api.hide({ baseKeys: ['h2:0:REVERSE'] })
+      finish()
+      await api.flushPersistence()
+      expect(persist).toHaveBeenCalledTimes(2)
+      expect(JSON.stringify(state.currentDesign)).toBe(original)
+      expect(api.isBaseShown('h1:0:FORWARD')).toBe(true)
+      expect(api.isBaseShown('h2:0:REVERSE')).toBe(true)
+      expect(api.isPartGroupShown('same')).toBe(true)
+      expect(onChange.mock.calls.at(-1)[2]).toEqual(new Set())
+      expect(api.undo()).toBe(false)
+      expect(api.redo()).toBe(false)
+    } finally { api.destroy(); log.mockRestore() }
+  })
+
+  it('keeps intermediate gesture undo when a later complete save succeeds after the first refusal', async () => {
+    let finish, revision = 4
+    const first = new Promise(resolve => { finish = resolve })
+    const persist = vi.fn().mockReturnValueOnce(first)
+    const { api, state, change } = organized({ onPersist: persist, getRevision: () => revision })
+    persist.mockImplementation(async visibility => {
+      revision++
+      const currentDesign = { ...state.currentDesign, visibility_state: visibility }
+      change({ currentDesign })
+      return { design: currentDesign, revision }
+    })
+    try {
+      api.hide({ partGroupIds: ['same'] })
+      await Promise.resolve()
+      api.show({ baseKeys: ['h1:0:FORWARD'] })
+      finish(null)
+      await api.flushPersistence()
+      expect(revision).toBe(5)
+      expect(state.currentDesign.visibility_state.hidden_part_group_ids).toEqual(['same'])
+      expect(api.isBaseShown('h1:0:FORWARD')).toBe(true)
+      expect(api.isBaseShown('h1:1:FORWARD')).toBe(false)
+      expect(api.undo()).toBe(true)
+      await api.flushPersistence()
+      expect(api.isBaseShown('h1:0:FORWARD')).toBe(false)
+      expect(state.currentDesign.visibility_state.shown_base_keys).toEqual([])
+      expect(api.undo()).toBe(true)
+      await api.flushPersistence()
+      expect(api.isBaseShown('h1:0:FORWARD')).toBe(true)
+      expect(state.currentDesign.visibility_state.hidden_part_group_ids).toEqual([])
+      expect(api.undo()).toBe(false)
+      expect(api.redo()).toBe(true)
+      await api.flushPersistence()
+      expect(api.isBaseShown('h1:0:FORWARD')).toBe(false)
+    } finally { api.destroy() }
   })
 
   it('rolls back only the latest queued edit after the earlier save installs its revision', async () => {

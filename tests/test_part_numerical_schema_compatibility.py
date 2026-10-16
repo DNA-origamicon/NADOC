@@ -21,9 +21,11 @@ LOAD_BEFORE = ROOT / "docs/audits/feature_history_20261014/group_organization_lo
 LOAD_PRIOR_POLICY = ROOT / "docs/audits/feature_history_20261014/group_organization_load_schema_compatibility_prior_policy.json"
 LINEAGE_BEFORE = ROOT / "docs/audits/feature_history_20261014/domain_lineage_compatibility_before.json"
 LINEAGE_PRIOR_POLICY = ROOT / "docs/audits/feature_history_20261014/domain_lineage_compatibility_prior_policy.json"
+VISIBILITY_BEFORE = ROOT / "docs/audits/feature_history_20261014/group_visibility_schema_compatibility_before.json"
+VISIBILITY_PRIOR_POLICY = ROOT / "docs/audits/feature_history_20261014/group_visibility_schema_compatibility_prior_policy.json"
 BASELINES = {"grouping-v1": BEFORE, "grouping-v2": DISSOLVE_BEFORE,
              "cluster-dissolve-v1": ORGANIZATION_BEFORE, "group-organization-v1": LOAD_BEFORE,
-             "organization-load-v1": LINEAGE_BEFORE}
+             "organization-load-v1": LINEAGE_BEFORE, "native-domain-lineage-v1": VISIBILITY_BEFORE}
 FAMILIES = ("part_cpd_contract", "part_duplex_relax_contract", "part_streptavidin_contract")
 LIVE_BASELINES = [(family, generation) for family in FAMILIES for generation in BASELINES
                   if family != "part_streptavidin_contract" or generation != "organization-load-v1"]
@@ -136,8 +138,8 @@ def test_oversized_policy_is_bounded(compatibility, monkeypatch, tmp_path):
     assert error.value.code == "engine_mismatch"
 
 
-@pytest.mark.parametrize("count", [16, 17])
-def test_policy_transition_limit_is_unchanged(compatibility, monkeypatch, tmp_path, count):
+@pytest.mark.parametrize("count", [32, 33])
+def test_reviewed_policy_capacity_is_exactly_thirty_two_edges(compatibility, monkeypatch, tmp_path, count):
     old, current = manifest(), manifest()
     current["files"]["backend/core/models.py"] = "4" * 64
     entries = []
@@ -146,8 +148,8 @@ def test_policy_transition_limit_is_unchanged(compatibility, monkeypatch, tmp_pa
         previous["files"]["backend/core/models.py"] = f"{index:064x}"
         entries.append(transition(previous, current, identity=f"reviewed-{index}"))
     path = install_policy(monkeypatch, tmp_path, compatibility, entries)
-    assert path.stat().st_size < 16 * 1024
-    if count == 16:
+    assert path.stat().st_size < 32 * 1024
+    if count == 32:
         assert require(compatibility, entries[0]["from_sha256"], current) == "reviewed-0"
     else:
         with pytest.raises(CommandContractError) as error:
@@ -156,11 +158,11 @@ def test_policy_transition_limit_is_unchanged(compatibility, monkeypatch, tmp_pa
 
 
 @pytest.mark.parametrize("extra", [0, 1])
-def test_policy_byte_limit_is_unchanged(compatibility, monkeypatch, tmp_path, extra):
+def test_reviewed_policy_byte_capacity_is_exactly_thirty_two_kib(compatibility, monkeypatch, tmp_path, extra):
     old, current = manifest(), manifest()
     current["files"]["backend/core/models.py"] = "4" * 64
     raw = json.dumps({"schema": SCHEMA, "transitions": [transition(old, current)]})
-    raw += " " * (16 * 1024 + extra - len(raw))
+    raw += " " * (32 * 1024 + extra - len(raw))
     install_policy(monkeypatch, tmp_path, compatibility, [], raw=raw)
     if extra == 0:
         assert require(compatibility, digest(old), current) == "grouping-cpd-v1"
@@ -175,20 +177,32 @@ def test_installed_policy_targets_only_current_engines_and_preserves_prior_audit
                digest(import_module(f"backend.core.{family}").implementation_manifest())
                for family in FAMILIES}
     entries = compatibility._policy()
-    assert len(entries) == 14
-    assert compatibility.POLICY_PATH.stat().st_size <= 16 * 1024
+    assert len(entries) == 17
+    assert compatibility.POLICY_PATH.stat().st_size <= 32 * 1024
     assert all(entry["to_sha256"] == current[entry["engine_id"]] for entry in entries)
     historical = json.loads(LOAD_PRIOR_POLICY.read_text())["transitions"]
     assert len(historical) == 9
     assert all(entry["to_sha256"] != current[entry["engine_id"]] for entry in historical)
     prior = json.loads(LINEAGE_PRIOR_POLICY.read_text())["transitions"]
     assert len(prior) == 12
+    immediate_prior = json.loads(VISIBILITY_PRIOR_POLICY.read_text())["transitions"]
+    assert len(immediate_prior) == 14
     coating = "nadoc.streptavidin-native.v1"
-    assert [entry for entry in entries if entry["engine_id"] == coating] == [
+    assert [entry for entry in immediate_prior if entry["engine_id"] == coating] == [
         entry for entry in prior if entry["engine_id"] == coating]
-    assert sum(entry["engine_id"] == coating for entry in entries) == 4
-    assert all((entry["to_sha256"] == current[entry["engine_id"]]) == (entry["engine_id"] == coating)
-               for entry in prior)
+    assert sum(entry["engine_id"] == coating for entry in entries) == 5
+    captured = json.loads(VISIBILITY_BEFORE.read_text())["engines"]
+    expected_sources = {(entry["engine_id"], entry["from_sha256"]) for entry in immediate_prior}
+    expected_sources.update((engine, value["implementation_sha256"]) for engine, value in captured.items())
+    assert len(expected_sources) == 17
+    assert {(entry["engine_id"], entry["from_sha256"]) for entry in entries} == expected_sources
+    assert all(entry["to_sha256"] == captured[entry["engine_id"]]["implementation_sha256"]
+               for entry in immediate_prior)
+    assert all(entry["to_sha256"] != current[entry["engine_id"]] for entry in immediate_prior)
+    # Lineage changed CPD/duplex only: its coating capture is the same source
+    # as the latest generation, so it must not introduce a duplicate edge.
+    lineage = json.loads(LINEAGE_BEFORE.read_text())["engines"]
+    assert lineage[coating] == captured[coating]
 
 
 def environment(monkeypatch, contract, implementation_pin):
@@ -222,22 +236,20 @@ def test_real_captured_old_manifest_has_one_exact_reviewed_transition(compatibil
                and entry["to_sha256"] == digest(current)]
     assert len(entries) == 1
     entry = entries[0]
-    event = "organization-load-v1" if family == "part_streptavidin_contract" else "native-domain-lineage-v1"
+    event = "group-visibility-v1"
     assert entry["id"] == f"{event}.from-{generation}.{contract.ENGINE_ID}"
     assert entry["event"] == event
     assert entry["source_checkpoint"] == capture["checkpoint"]
     old_files, new_files = before["manifest"]["files"], current["files"]
     changes = {path for path in old_files.keys() | new_files.keys() if old_files.get(path) != new_files.get(path)}
-    expected = set() if generation == "organization-load-v1" else {"backend/core/models.py"}
-    if generation not in {"group-organization-v1", "organization-load-v1"}:
+    expected = {"backend/core/models.py", "backend/core/part_numerical_schema_compatibility.py"}
+    if generation not in {"group-organization-v1", "organization-load-v1", "native-domain-lineage-v1"}:
         expected.update({"backend/core/part_group_model.py", f"backend/core/{family}.py"})
         if family == "part_streptavidin_contract":
             expected.add("backend/api/part_streptavidin_commands.py")
         else:
             expected.add("backend/core/part_history_contract.py")
-        if generation == "grouping-v1":
-            expected.add("backend/core/part_numerical_schema_compatibility.py")
-    if family != "part_streptavidin_contract":
+    if family != "part_streptavidin_contract" and generation != "native-domain-lineage-v1":
         expected.add("backend/core/lattice.py")
     assert changes == set(entry["changed_paths"]) == expected
     assert {key: value for key, value in before["manifest"].items() if key != "files"} == {
@@ -298,7 +310,7 @@ def test_previous_organization_edges_remain_in_historical_audit(compatibility, m
 
 @pytest.mark.parametrize("family", FAMILIES)
 @pytest.mark.parametrize("generation", ["grouping-v1", "grouping-v2", "cluster-dissolve-v1", "group-organization-v1"])
-def test_immediate_prior_twelve_edges_still_accept_exact_archived_target(
+def test_previous_twelve_edges_still_accept_exact_archived_target(
         compatibility, monkeypatch, family, generation):
     contract = import_module(f"backend.core.{family}")
     old = json.loads(BASELINES[generation].read_text())["engines"][contract.ENGINE_ID]
@@ -310,6 +322,22 @@ def test_immediate_prior_twelve_edges_still_accept_exact_archived_target(
     assert len(entries) == 12
     assert require(compatibility, old["implementation_sha256"], target["manifest"],
                    engine=contract.ENGINE_ID) == f"organization-load-v1.from-{generation}.{contract.ENGINE_ID}"
+
+
+@pytest.mark.parametrize("family,generation", [
+    value for value in LIVE_BASELINES if value[1] != "native-domain-lineage-v1"])
+def test_immediate_prior_fourteen_edges_still_accept_exact_archived_target(
+        compatibility, monkeypatch, family, generation):
+    contract = import_module(f"backend.core.{family}")
+    old = json.loads(BASELINES[generation].read_text())["engines"][contract.ENGINE_ID]
+    target = json.loads(VISIBILITY_BEFORE.read_text())["engines"][contract.ENGINE_ID]
+    assert digest(old["manifest"]) == old["implementation_sha256"]
+    assert digest(target["manifest"]) == target["implementation_sha256"]
+    monkeypatch.setattr(compatibility, "POLICY_PATH", VISIBILITY_PRIOR_POLICY)
+    assert len(compatibility._policy()) == 14
+    event = "organization-load-v1" if family == "part_streptavidin_contract" else "native-domain-lineage-v1"
+    assert require(compatibility, old["implementation_sha256"], target["manifest"],
+                   engine=contract.ENGINE_ID) == f"{event}.from-{generation}.{contract.ENGINE_ID}"
 
 
 @pytest.mark.parametrize("family", FAMILIES)

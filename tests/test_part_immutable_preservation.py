@@ -146,7 +146,7 @@ def test_candidate_nondefault_optional_state_is_refused_not_silently_erased(fiel
     assert getattr(candidate, field) is sentinel
 
 
-@pytest.mark.parametrize("field", ["hidden_base_keys", "shown_base_keys", "hidden_cluster_ids"])
+@pytest.mark.parametrize("field", ["hidden_base_keys", "shown_base_keys", "hidden_cluster_ids", "hidden_part_group_ids"])
 def test_nested_visibility_is_checked_before_any_candidate_projection(monkeypatch, field):
     sealed = revisions.prepare_revision(source())
     candidate = source()

@@ -1248,7 +1248,7 @@ export function changeDimensions(kind, id, upsert, deleted, context) {
   return _dimensionsRequest('PATCH', kind, id, { document_id: id, upsert, delete: deleted }, context)
 }
 
-/** Persist display-only nucleotide/cluster visibility in the .nadoc file. */
+/** Persist display-only base, placement and named-group visibility. */
 export async function saveVisibilityState(visibilityState) {
   if (store.getState().currentDesign?.group_organization != null)
     return groupOrganizationCommand('visibility-update', { visibility_state: visibilityState })
@@ -1377,33 +1377,6 @@ async function _syncPositionsOnlyDiff(json) {
   if (_responseDeltaHandler && !_skipNextDelta) await _responseDeltaHandler(json)
   _skipNextDelta = false
   return json
-}
-
-/**
- * Trigger a browser download of the active design as a .nadoc file.
- * Uses the GET /design/export endpoint which returns JSON with Content-Disposition.
- */
-export async function exportDesign() {
-  const r = await fetch(`${BASE}/design/export`, { headers: docHeaders() })
-  if (!r.ok) {
-    const json = await r.json().catch(() => null)
-    store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
-    return false
-  }
-  // Extract filename from Content-Disposition header, fall back to 'design.nadoc'
-  const disposition = r.headers.get('Content-Disposition') ?? ''
-  const match = disposition.match(/filename="([^"]+)"/)
-  const filename = match ? match[1] : 'design.nadoc'
-  const blob = await r.blob()
-  const url  = URL.createObjectURL(blob)
-  const a    = document.createElement('a')
-  a.href     = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
-  return true
 }
 
 export async function createBundle({ cells, lengthBp, name = 'Bundle', plane = 'XY', strandFilter = 'both', latticeType = 'HONEYCOMB', ligateAdjacent = true }) {

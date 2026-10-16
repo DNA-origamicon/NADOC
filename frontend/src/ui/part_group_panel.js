@@ -129,7 +129,7 @@ export function createPartGroupPanel({ store, container, api, onGroupClick, onCl
       if (hide) hidden.add(group.id); else hidden.delete(group.id)
       onGroupVisibilityChange?.(group.id, hide)
       render()
-    }, `${show ? 'Show' : 'Hide'} current members`)
+    }, show ? 'Show group and its current members' : 'Hide group, including future members')
     const edit = button('Rename group', 'Rename', () => rename(row, label, group))
     const membership = button('Use selection as group members', 'Use selection', async () => {
       try { await command('group-update', { group_id: group.id, fields: members() }) }
@@ -139,8 +139,8 @@ export function createPartGroupPanel({ store, container, api, onGroupClick, onCl
     const dissolve = button('Dissolve group', 'Dissolve', async () => {
       const token = context(), result = await command('group-dissolve', { group_ids: [group.id] }, token)
       if (result && current(token) && !store.getState().currentDesign.group_organization.groups.some(item => item.id === group.id)) {
-        // Hiding is a persisted base selection; removing its organizational label
-        // must not unhide those bases or alter a same-text placement owner.
+        // The missing group's hide rule is dormant until undo restores its ID;
+        // other base and placement visibility rules retain their own meaning.
         hidden.delete(group.id); render()
       }
     }, 'Dissolve group — keep members and all placement records')

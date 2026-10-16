@@ -17,8 +17,9 @@ from backend.core.part_numerical_runtime import digest
 
 POLICY_PATH = Path(__file__).resolve().parent / "data/numerical_schema_compatibility_v1.json"
 _SCHEMA = "nadoc.numerical-schema-compatibility.v1"
-_MAX_BYTES = 16 * 1024
-_MAX_TRANSITIONS = 16
+# Bounded reviewed policy metadata; numerical inputs and proof budgets are unchanged.
+_MAX_BYTES = 32 * 1024
+_MAX_TRANSITIONS = 32
 _HASH = re.compile(r"[0-9a-f]{64}\Z")
 _FIELDS = frozenset({"id", "event", "source_checkpoint", "engine_id", "from_sha256",
                      "to_sha256", "changed_paths", "rationale"})

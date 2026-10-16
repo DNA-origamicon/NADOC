@@ -1,6 +1,6 @@
 # Group organization and placement: finite migration plan
 
-Architecture proposal, October 16, 2026; source baseline `3aa2529a`. The U6–U13 status
+Architecture proposal, October 16, 2026; source baseline `3aa2529a`. The U6–U14 status
 below records implementation after that proposal. FH-18 remains open. The
 overhaul count remains **18/38 complete**, with **11 core and 9 parked milestones
 remaining**. This plan and its implementation batches earn no separate milestone
@@ -668,3 +668,103 @@ semantics, generated compatibility and qualification remain required in the same
 five batches. No unfinished core exit moves to parked assets. **18/38 complete;
 20 remaining (11 core, 9 parked); +0 completed, +0 total.** Eleven checkpoints on
 FH-18 keep the task-growth flag active; this workflow earns no separate milestone.
+
+
+## U14 persistent group visibility — FH-18 checkpoint 12
+
+The U12 current-member-only hide contract is superseded for new named-group
+Hide actions. `VisibilityState.hidden_part_group_ids` is a separate, default-empty
+presentation list (at most 2,000 exact IDs, each 1–512 characters). It neither
+changes `hidden_cluster_ids` nor infers intent from old hidden bases. Current
+organization membership resolves the mask once when membership/geometry changes;
+new members, loop copies and terminal extensions follow the hidden group. Removed
+members lose only that group's mask. Missing IDs are dormant across dissolve and
+history navigation, permitting undo/reload restoration without guessing an owner.
+Newly created groups receive fresh IDs; equal text in the placement namespace is
+irrelevant. This metadata is not a feature dependency or geometry suppression.
+
+Hide rules combine by union, then explicit shown base addresses take precedence.
+Show removes the selected group's rule and shows its current members using that
+existing exception mechanism; it never deletes another group's rule. Empty hidden
+groups retain their intent until members arrive. Show All clears every mask.
+Local visibility undo/redo and owned server undo retain their existing roles:
+publication has one server undo/revision but no feature row. Legacy three-list
+requests remain accepted as complete replacements with an empty named list.
+The new field is omitted only when empty, preserving prior canonical serialized
+bytes and strict recovery; nonempty identity masks serialize explicitly. The
+strict empty-state preservation digest keeps its original three-field encoding
+after validating that the new list is empty. Unknown/missing-old-field decoding
+still refuses. This uses the installed, documented [Pydantic field exclusion](https://pydantic.dev/docs/validation/2.12/concepts/serialization/)
+mechanism; there is no general normalization exception.
+The exact capture/preservation catalogs carry the new field; strict empty-state
+batch admission still refuses nonempty presentation rather than discarding it.
+
+Ordinary Save, Save As, native download and file-handle writes drain presentation
+saves before reading the canonical design. They bind to the original document
+incarnation, including same-ID reset; late replies cannot start a replacement
+write, mirror, download or change the displayed path. Already dispatched server
+writes or committed file closes are not retroactively cancelled. Existing
+close-session draining and autosave dispatch are unchanged.
+
+Repeated strand queries use the effective mask already prepared by the visibility
+controller. Saved Join decorations use the same endpoint visibility callback as
+Join selection and toggle existing line visibility without rebuilding geometry.
+Native Join candidate generation/calculations are unchanged; organized Join
+publication is still outside the admitted core matrix. No new per-frame history
+walk, proof or molecular work is introduced. Larger-design interaction/memory
+qualification remains open and is not replaced by scan-count tests.
+
+### Explicit numerical compatibility capacity review
+
+The new display field changes the full shared `models.py` source hash, although
+no molecular input or calculation changes. At source `79c7bdee`, installed policy
+contained 14 exact edges in 14,216 bytes. Preserving every admitted historical pin
+and the three then-current pins requires **17 direct edges**; the old 16-entry
+limit cannot represent this complete set. Deliberately raise only the host-policy
+capacity to **32 entries and 32 KiB**. Exact-boundary and one-over tests cover both.
+The diagnostic collector remains limited to three transitions; runtime/template checks, solver
+settings and publication/capture/time/geometry limits do not change. Stored
+authored pins are not rewritten; new authoring uses the current manifest hash.
+
+The before manifests and prior policy are retained byte-exact. Every new edge
+names one engine, one authored hash and one full current manifest. Actual newest
+manifest deltas are only `models.py` and the compatibility helper's documented
+capacity change. All older source/data/runtime distinctions remain explicit;
+unknown pins, changed files/data and transitive-only chains refuse. No future
+schema change is automatically authorized by spare capacity. Native checks use
+the installed kernels in independent workers; they are not historical-binary
+numerical equivalence evidence. See [U14 evidence](validation_group_visibility.json).
+
+### Remaining movement decision and fixed matrix
+
+Official [Onshape Transform](https://cad.onshape.com/help/Content/PartStudio/transform.htm)
+requires explicit moved parts and transformation references. [SOLIDWORKS Move/Copy
+Body](https://help.solidworks.com/2023/english/SolidWorks/sldworks/HIDD_DVE_FEAT_MOVE_SURF.htm)
+moves selected bodies together while other bodies remain fixed. These support
+separate **Edit placement** and **Move selected members** actions with explicit
+scope/pivot/frame. They do not define partial DNA domains, first-arm ownership or
+extension composition. The distinction between [SOLIDWORKS display states and
+configurations](https://help.solidworks.com/2021/english/SolidWorks/sldworks/c_display_states_configurations_parts.htm)
+also supports keeping visibility separate from physical changes/suppression.
+Dynamic group membership and dormant IDs above are NADOC decisions, not claims
+about vendor internals.
+
+Before implementing arbitrary new-group motion, freeze evidence for:
+
+| Case | Required result |
+|---|---|
+| Complete existing owner vs new selected set | Existing-owner edit stays explicit; new motion records its own selected scope. |
+| Partial, overlapping/domain and multiple-owner selection | Precisely selected output moves; unselected output is unchanged. No first-overlap fallback. |
+| Local/world axes and pivot/reference frame | Requested frame is explicit and survives replay/edit. |
+| Existing Bend/Twist and parent/driver constraints | Ordered native composition and endpoint-fit context stay correct. |
+| Terminal extensions and lattice continuation | No implicit first-owner reassignment or hidden carrier. |
+| Membership/reference changes | Prefix-relative target resolution; missing references diagnose and permit reviewed repair. |
+| Undo, save/reload, cold proof | Same authored inputs independently regenerate the complete design. |
+
+[Onshape repair guidance](https://cad.onshape.com/help/Content/Document/repairing.htm)
+supports explicit missing-reference replacement against healthy historical
+geometry. It does not justify choosing a different numerical owner silently.
+Any required molecular change still needs isolated A/B evidence and authorization.
+Generated core compatibility and full qualification remain existing FH-18 exits.
+**18/38 complete; +0 completed, +0 total; 20 remaining (11 core, 9 parked).**
+U14 is the twelfth FH-18 checkpoint; its growth flag and original five batches remain.

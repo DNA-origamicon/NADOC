@@ -128,12 +128,17 @@ def _prepare(kind, source, inputs):
         return result, entries
     if kind == "visibility-update":
         value = inputs.get("visibility_state")
+        fields = set(VisibilityState.model_fields)
         if (set(inputs) != {"visibility_state"} or type(value) is not dict
-                or set(value) != set(VisibilityState.model_fields)
+                or set(value) not in (fields, fields - {"hidden_part_group_ids"})
                 or any(type(items) is not list or any(type(item) is not str for item in items)
                        for items in value.values())):
-            _invalid("Visibility requires the three existing lists of exact nucleotide/placement addresses.")
-        visibility = VisibilityState(**{key: list(dict.fromkeys(items)) for key, items in value.items()})
+            _invalid("Visibility requires exact nucleotide/placement lists and an optional named-group identity list.")
+        # Validate the original count before deduplicating; never infer members
+        # or reinterpret dormant group IDs as numerical placement owners.
+        validated = VisibilityState.model_validate(value)
+        visibility = validated.model_copy(update={
+            key: list(dict.fromkeys(getattr(validated, key))) for key in fields})
         return source.copy_with(visibility_state=visibility), None
     if kind == "group-create":
         if set(inputs) - EDIT_FIELDS:

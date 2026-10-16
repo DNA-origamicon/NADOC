@@ -267,6 +267,7 @@ def save_visibility_state(body: VisibilityState) -> dict:
             hidden_base_keys=list(dict.fromkeys(body.hidden_base_keys)),
             shown_base_keys=list(dict.fromkeys(body.shown_base_keys)),
             hidden_cluster_ids=list(dict.fromkeys(body.hidden_cluster_ids)),
+            hidden_part_group_ids=list(dict.fromkeys(body.hidden_part_group_ids)),
         )
 
     design, report = design_state.mutate_and_validate(_apply)
