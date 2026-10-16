@@ -24,7 +24,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 # there is intentionally no bundled-data lookup or hidden file in this list.
 SOURCE_PATHS = tuple(f"backend/core/{name}.py" for name in (
     "part_streptavidin_contract", "part_numerical_runtime", "part_numerical_schema_compatibility", "streptavidin",
-    "protein", "pdb_to_design", "nanoparticle", "models",
+    "protein", "pdb_to_design", "nanoparticle", "models", "part_group_model",
 )) + ("backend/api/part_streptavidin_commands.py",)
 Hash = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 

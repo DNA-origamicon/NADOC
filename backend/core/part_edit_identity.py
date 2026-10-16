@@ -11,6 +11,9 @@ from backend.core.feature_identity import preserve_proof_identity as _preserve_b
 
 
 _PROTECTED = {
+    # Conversion derives organizational outputs from this complete ordered
+    # placement namespace. Pose values are intentionally not pinned here.
+    "group-organize": ("expected_placement_ids",),
     "nanoparticle-connection-version-create": ("version_id", "nanoparticle_connection_version",
         "nanoparticle_application_version", "duplex_id", "duplex_created_at"),
     "nanoparticle-connection-version-patch": ("nanoparticle_connection_version",
@@ -22,6 +25,11 @@ _PROTECTED = {
 def preserve_proof_identity(previous, updated, *, kind=None):
     """Preserve only authored output/contract slots, never invent absent ones."""
     result = _preserve_base(previous, updated, kind=kind)
+    if (kind == "group-create" and type(previous.get("group")) is dict
+            and "id" in previous["group"] and type(result.get("group")) is dict):
+        # Preserve the nested output only. Membership/style remain authored
+        # inputs; malformed replacements still reach their strict parser.
+        result = {**result, "group": {**result["group"], "id": previous["group"]["id"]}}
     keys = _PROTECTED.get(kind, ())
     if kind == "overhang-bulk" and previous.get("connection_version_contract") == 1:
         action = previous.get("action")

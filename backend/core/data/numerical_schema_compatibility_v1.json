@@ -2,124 +2,142 @@
   "schema": "nadoc.numerical-schema-compatibility.v1",
   "transitions": [
     {
-      "id": "grouping-proof-v2.nadoc.cpd-native-engine.v1",
-      "event": "cluster-create-proof-v2",
+      "id": "group-organization-v1.from-grouping-v1.nadoc.cpd-native-engine.v1",
+      "event": "group-organization-v1",
       "source_checkpoint": "1ae1137f",
       "engine_id": "nadoc.cpd-native-engine.v1",
       "from_sha256": "094b0e289c7f02ed4c97408605619a9b7711954e0a3aec8ffc4c7360ceda18ab",
-      "to_sha256": "f91acd3473e89ba351034e2520e9bbff77c7186d50b9a6267d4a84f354c61400",
+      "to_sha256": "8a20d881ea784ed663cc5b7c11713c9f113f74318f0503d7147fc3d140ce8388",
       "changed_paths": [
         "backend/core/models.py",
         "backend/core/part_cpd_contract.py",
+        "backend/core/part_group_model.py",
+        "backend/core/part_history_contract.py",
         "backend/core/part_numerical_schema_compatibility.py"
       ],
-      "rationale": "ClusterCreateLogEntry accepts proof version 2; numerical validation adds this exact-manifest compatibility helper. All pre-existing numerical source/data except the reviewed schema and validation boundary are unchanged. Runtime/template checks remain strict; stored pins are not rewritten."
+      "rationale": "Direct reviewed compatibility to the optional organization schema: the new closed model contains membership/style metadata only; ordered placement owners remain unchanged. Source inventory explicitly preserves organization and the manifest includes its schema. Earlier grouping/dissolution schema changes and exact-manifest validation are included where applicable. Numerical kernels, data, solver settings and runtime/template checks are unchanged. This edge is explicit, never inferred transitively; stored pins are not rewritten."
     },
     {
-      "id": "grouping-proof-v2.nadoc.duplex-relax-native.v1",
-      "event": "cluster-create-proof-v2",
-      "source_checkpoint": "1ae1137f",
-      "engine_id": "nadoc.duplex-relax-native.v1",
-      "from_sha256": "6c00a274d08a7423f714f95d1fb9fdb6332c6fba3ee8497a9e04dbb385b5b99c",
-      "to_sha256": "015ca817a2dd9669a513cdaee70d629f3870e94f47b4e46fea71e8a19022df3a",
-      "changed_paths": [
-        "backend/core/models.py",
-        "backend/core/part_duplex_relax_contract.py",
-        "backend/core/part_numerical_schema_compatibility.py"
-      ],
-      "rationale": "ClusterCreateLogEntry accepts proof version 2; numerical validation adds this exact-manifest compatibility helper. All pre-existing numerical source/data except the reviewed schema and validation boundary are unchanged. Runtime/template checks remain strict; stored pins are not rewritten."
-    },
-    {
-      "id": "grouping-proof-v2.nadoc.streptavidin-native.v1",
-      "event": "cluster-create-proof-v2",
-      "source_checkpoint": "1ae1137f",
-      "engine_id": "nadoc.streptavidin-native.v1",
-      "from_sha256": "6b2b55a59160868f16d15b50ab02d7d48ac3a2b152b400a1386b391eb762ab49",
-      "to_sha256": "d16f581fde15048d78d6d8e630b45939952e8d7d0a09cec9034a936e57d67bfa",
-      "changed_paths": [
-        "backend/core/models.py",
-        "backend/core/part_numerical_schema_compatibility.py",
-        "backend/core/part_streptavidin_contract.py"
-      ],
-      "rationale": "ClusterCreateLogEntry accepts proof version 2; numerical validation adds this exact-manifest compatibility helper. All pre-existing numerical source/data except the reviewed schema and validation boundary are unchanged. Runtime/template checks remain strict; stored pins are not rewritten."
-    },
-    {
-      "id": "cluster-dissolve-v1.from-grouping-v1.nadoc.cpd-native-engine.v1",
-      "event": "cluster-dissolve-v1",
-      "source_checkpoint": "1ae1137f",
-      "engine_id": "nadoc.cpd-native-engine.v1",
-      "from_sha256": "094b0e289c7f02ed4c97408605619a9b7711954e0a3aec8ffc4c7360ceda18ab",
-      "to_sha256": "b27662c778b2cbbefe6f0fbf2151aa7ad8a08e9a136a3347a1ba7d0b2a3ee027",
-      "changed_paths": [
-        "backend/core/models.py",
-        "backend/core/part_cpd_contract.py",
-        "backend/core/part_numerical_schema_compatibility.py"
-      ],
-      "rationale": "Direct reviewed compatibility from the captured pre-grouping-v2 implementation to the cluster-dissolve schema. Changes are the grouping proof-version/schema additions, the cluster-dissolve SnapshotOpKind literal, and the previously reviewed exact-manifest validation boundary. Numerical source/data are unchanged. This direct edge is independently enumerated, never inferred transitively; runtime/template checks remain strict and stored pins are not rewritten."
-    },
-    {
-      "id": "cluster-dissolve-v1.from-grouping-v2.nadoc.cpd-native-engine.v1",
-      "event": "cluster-dissolve-v1",
+      "id": "group-organization-v1.from-grouping-v2.nadoc.cpd-native-engine.v1",
+      "event": "group-organization-v1",
       "source_checkpoint": "96ed8fe1ab9486b6adb4b32961fb0946272bb295",
       "engine_id": "nadoc.cpd-native-engine.v1",
       "from_sha256": "f91acd3473e89ba351034e2520e9bbff77c7186d50b9a6267d4a84f354c61400",
-      "to_sha256": "b27662c778b2cbbefe6f0fbf2151aa7ad8a08e9a136a3347a1ba7d0b2a3ee027",
+      "to_sha256": "8a20d881ea784ed663cc5b7c11713c9f113f74318f0503d7147fc3d140ce8388",
       "changed_paths": [
-        "backend/core/models.py"
+        "backend/core/models.py",
+        "backend/core/part_cpd_contract.py",
+        "backend/core/part_group_model.py",
+        "backend/core/part_history_contract.py"
       ],
-      "rationale": "SnapshotOpKind accepts cluster-dissolve; the only changed manifest file is models.py and its only source change is that Literal addition. Numerical source/data and compatibility validators are unchanged. Runtime/template checks remain strict; stored pins are not rewritten."
+      "rationale": "Direct reviewed compatibility to the optional organization schema: the new closed model contains membership/style metadata only; ordered placement owners remain unchanged. Source inventory explicitly preserves organization and the manifest includes its schema. Earlier grouping/dissolution schema changes and exact-manifest validation are included where applicable. Numerical kernels, data, solver settings and runtime/template checks are unchanged. This edge is explicit, never inferred transitively; stored pins are not rewritten."
     },
     {
-      "id": "cluster-dissolve-v1.from-grouping-v1.nadoc.duplex-relax-native.v1",
-      "event": "cluster-dissolve-v1",
+      "id": "group-organization-v1.from-cluster-dissolve-v1.nadoc.cpd-native-engine.v1",
+      "event": "group-organization-v1",
+      "source_checkpoint": "e9f3ed7bf31f3129e88a7e0231bf189140dd083f",
+      "engine_id": "nadoc.cpd-native-engine.v1",
+      "from_sha256": "b27662c778b2cbbefe6f0fbf2151aa7ad8a08e9a136a3347a1ba7d0b2a3ee027",
+      "to_sha256": "8a20d881ea784ed663cc5b7c11713c9f113f74318f0503d7147fc3d140ce8388",
+      "changed_paths": [
+        "backend/core/models.py",
+        "backend/core/part_cpd_contract.py",
+        "backend/core/part_group_model.py",
+        "backend/core/part_history_contract.py"
+      ],
+      "rationale": "Direct reviewed compatibility to the optional organization schema: the new closed model contains membership/style metadata only; ordered placement owners remain unchanged. Source inventory explicitly preserves organization and the manifest includes its schema. Earlier grouping/dissolution schema changes and exact-manifest validation are included where applicable. Numerical kernels, data, solver settings and runtime/template checks are unchanged. This edge is explicit, never inferred transitively; stored pins are not rewritten."
+    },
+    {
+      "id": "group-organization-v1.from-grouping-v1.nadoc.duplex-relax-native.v1",
+      "event": "group-organization-v1",
       "source_checkpoint": "1ae1137f",
       "engine_id": "nadoc.duplex-relax-native.v1",
       "from_sha256": "6c00a274d08a7423f714f95d1fb9fdb6332c6fba3ee8497a9e04dbb385b5b99c",
-      "to_sha256": "266031eda0da33158023c7cf4206478ef9e24b41aaf93a4158aea04b858c94e3",
+      "to_sha256": "25a355131ff72c3fcd3647ef04badd31499d064012012cbaecfb9a66807b3580",
       "changed_paths": [
         "backend/core/models.py",
         "backend/core/part_duplex_relax_contract.py",
+        "backend/core/part_group_model.py",
+        "backend/core/part_history_contract.py",
         "backend/core/part_numerical_schema_compatibility.py"
       ],
-      "rationale": "Direct reviewed compatibility from the captured pre-grouping-v2 implementation to the cluster-dissolve schema. Changes are the grouping proof-version/schema additions, the cluster-dissolve SnapshotOpKind literal, and the previously reviewed exact-manifest validation boundary. Numerical source/data are unchanged. This direct edge is independently enumerated, never inferred transitively; runtime/template checks remain strict and stored pins are not rewritten."
+      "rationale": "Direct reviewed compatibility to the optional organization schema: the new closed model contains membership/style metadata only; ordered placement owners remain unchanged. Source inventory explicitly preserves organization and the manifest includes its schema. Earlier grouping/dissolution schema changes and exact-manifest validation are included where applicable. Numerical kernels, data, solver settings and runtime/template checks are unchanged. This edge is explicit, never inferred transitively; stored pins are not rewritten."
     },
     {
-      "id": "cluster-dissolve-v1.from-grouping-v2.nadoc.duplex-relax-native.v1",
-      "event": "cluster-dissolve-v1",
+      "id": "group-organization-v1.from-grouping-v2.nadoc.duplex-relax-native.v1",
+      "event": "group-organization-v1",
       "source_checkpoint": "96ed8fe1ab9486b6adb4b32961fb0946272bb295",
       "engine_id": "nadoc.duplex-relax-native.v1",
       "from_sha256": "015ca817a2dd9669a513cdaee70d629f3870e94f47b4e46fea71e8a19022df3a",
-      "to_sha256": "266031eda0da33158023c7cf4206478ef9e24b41aaf93a4158aea04b858c94e3",
+      "to_sha256": "25a355131ff72c3fcd3647ef04badd31499d064012012cbaecfb9a66807b3580",
       "changed_paths": [
-        "backend/core/models.py"
+        "backend/core/models.py",
+        "backend/core/part_duplex_relax_contract.py",
+        "backend/core/part_group_model.py",
+        "backend/core/part_history_contract.py"
       ],
-      "rationale": "SnapshotOpKind accepts cluster-dissolve; the only changed manifest file is models.py and its only source change is that Literal addition. Numerical source/data and compatibility validators are unchanged. Runtime/template checks remain strict; stored pins are not rewritten."
+      "rationale": "Direct reviewed compatibility to the optional organization schema: the new closed model contains membership/style metadata only; ordered placement owners remain unchanged. Source inventory explicitly preserves organization and the manifest includes its schema. Earlier grouping/dissolution schema changes and exact-manifest validation are included where applicable. Numerical kernels, data, solver settings and runtime/template checks are unchanged. This edge is explicit, never inferred transitively; stored pins are not rewritten."
     },
     {
-      "id": "cluster-dissolve-v1.from-grouping-v1.nadoc.streptavidin-native.v1",
-      "event": "cluster-dissolve-v1",
+      "id": "group-organization-v1.from-cluster-dissolve-v1.nadoc.duplex-relax-native.v1",
+      "event": "group-organization-v1",
+      "source_checkpoint": "e9f3ed7bf31f3129e88a7e0231bf189140dd083f",
+      "engine_id": "nadoc.duplex-relax-native.v1",
+      "from_sha256": "266031eda0da33158023c7cf4206478ef9e24b41aaf93a4158aea04b858c94e3",
+      "to_sha256": "25a355131ff72c3fcd3647ef04badd31499d064012012cbaecfb9a66807b3580",
+      "changed_paths": [
+        "backend/core/models.py",
+        "backend/core/part_duplex_relax_contract.py",
+        "backend/core/part_group_model.py",
+        "backend/core/part_history_contract.py"
+      ],
+      "rationale": "Direct reviewed compatibility to the optional organization schema: the new closed model contains membership/style metadata only; ordered placement owners remain unchanged. Source inventory explicitly preserves organization and the manifest includes its schema. Earlier grouping/dissolution schema changes and exact-manifest validation are included where applicable. Numerical kernels, data, solver settings and runtime/template checks are unchanged. This edge is explicit, never inferred transitively; stored pins are not rewritten."
+    },
+    {
+      "id": "group-organization-v1.from-grouping-v1.nadoc.streptavidin-native.v1",
+      "event": "group-organization-v1",
       "source_checkpoint": "1ae1137f",
       "engine_id": "nadoc.streptavidin-native.v1",
       "from_sha256": "6b2b55a59160868f16d15b50ab02d7d48ac3a2b152b400a1386b391eb762ab49",
-      "to_sha256": "bf071fef6464e05a45db04e75ae7e80fd1635a23aab3ad515225b4d3f1235599",
+      "to_sha256": "b9935ada31f38a1d33b6c615826d03524c83fd49401e6e4317383691a00667be",
       "changed_paths": [
+        "backend/api/part_streptavidin_commands.py",
         "backend/core/models.py",
+        "backend/core/part_group_model.py",
         "backend/core/part_numerical_schema_compatibility.py",
         "backend/core/part_streptavidin_contract.py"
       ],
-      "rationale": "Direct reviewed compatibility from the captured pre-grouping-v2 implementation to the cluster-dissolve schema. Changes are the grouping proof-version/schema additions, the cluster-dissolve SnapshotOpKind literal, and the previously reviewed exact-manifest validation boundary. Numerical source/data are unchanged. This direct edge is independently enumerated, never inferred transitively; runtime/template checks remain strict and stored pins are not rewritten."
+      "rationale": "Direct reviewed compatibility to the optional organization schema: the new closed model contains membership/style metadata only; ordered placement owners remain unchanged. Source inventory explicitly preserves organization and the manifest includes its schema. Earlier grouping/dissolution schema changes and exact-manifest validation are included where applicable. Numerical kernels, data, solver settings and runtime/template checks are unchanged. This edge is explicit, never inferred transitively; stored pins are not rewritten."
     },
     {
-      "id": "cluster-dissolve-v1.from-grouping-v2.nadoc.streptavidin-native.v1",
-      "event": "cluster-dissolve-v1",
+      "id": "group-organization-v1.from-grouping-v2.nadoc.streptavidin-native.v1",
+      "event": "group-organization-v1",
       "source_checkpoint": "96ed8fe1ab9486b6adb4b32961fb0946272bb295",
       "engine_id": "nadoc.streptavidin-native.v1",
       "from_sha256": "d16f581fde15048d78d6d8e630b45939952e8d7d0a09cec9034a936e57d67bfa",
-      "to_sha256": "bf071fef6464e05a45db04e75ae7e80fd1635a23aab3ad515225b4d3f1235599",
+      "to_sha256": "b9935ada31f38a1d33b6c615826d03524c83fd49401e6e4317383691a00667be",
       "changed_paths": [
-        "backend/core/models.py"
+        "backend/api/part_streptavidin_commands.py",
+        "backend/core/models.py",
+        "backend/core/part_group_model.py",
+        "backend/core/part_streptavidin_contract.py"
       ],
-      "rationale": "SnapshotOpKind accepts cluster-dissolve; the only changed manifest file is models.py and its only source change is that Literal addition. Numerical source/data and compatibility validators are unchanged. Runtime/template checks remain strict; stored pins are not rewritten."
+      "rationale": "Direct reviewed compatibility to the optional organization schema: the new closed model contains membership/style metadata only; ordered placement owners remain unchanged. Source inventory explicitly preserves organization and the manifest includes its schema. Earlier grouping/dissolution schema changes and exact-manifest validation are included where applicable. Numerical kernels, data, solver settings and runtime/template checks are unchanged. This edge is explicit, never inferred transitively; stored pins are not rewritten."
+    },
+    {
+      "id": "group-organization-v1.from-cluster-dissolve-v1.nadoc.streptavidin-native.v1",
+      "event": "group-organization-v1",
+      "source_checkpoint": "e9f3ed7bf31f3129e88a7e0231bf189140dd083f",
+      "engine_id": "nadoc.streptavidin-native.v1",
+      "from_sha256": "bf071fef6464e05a45db04e75ae7e80fd1635a23aab3ad515225b4d3f1235599",
+      "to_sha256": "b9935ada31f38a1d33b6c615826d03524c83fd49401e6e4317383691a00667be",
+      "changed_paths": [
+        "backend/api/part_streptavidin_commands.py",
+        "backend/core/models.py",
+        "backend/core/part_group_model.py",
+        "backend/core/part_streptavidin_contract.py"
+      ],
+      "rationale": "Direct reviewed compatibility to the optional organization schema: the new closed model contains membership/style metadata only; ordered placement owners remain unchanged. Source inventory explicitly preserves organization and the manifest includes its schema. Earlier grouping/dissolution schema changes and exact-manifest validation are included where applicable. Numerical kernels, data, solver settings and runtime/template checks are unchanged. This edge is explicit, never inferred transitively; stored pins are not rewritten."
     }
   ]
 }

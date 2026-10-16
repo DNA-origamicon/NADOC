@@ -60,6 +60,7 @@ from backend.api.part_immutable_storage import (
     content_metadata as _content_metadata, is_immutable as _is_immutable,
     mutable_design as _mutable_design,
 )
+from backend.api.part_group_organization_gate import require_live_design as _require_live_design
 
 def _snapshot_copy(design: Design) -> Design:
     """Independent copy of ``design`` for the undo/redo stack and pre/post-mutation
@@ -127,7 +128,11 @@ _sessions: dict[str, _DesignSession] = {}
 def _require_compatibility_write(operation, *, doc_id=None):
     """Lock-owned guard shared by facades and direct recording primitives."""
     from backend.api.part_publication_policy import require_compatibility
-    return require_compatibility(get_current_doc() if doc_id is None else doc_id, operation)
+    selected = get_current_doc() if doc_id is None else doc_id
+    configuration = require_compatibility(selected, operation)
+    session = _sessions.get(selected)
+    _require_live_design(None if session is None else session.design)
+    return configuration
 
 
 def configure_part_publication_policy(configuration):
@@ -235,6 +240,7 @@ def restore_doc_design(doc_id: str, design: Design) -> None:
     """
     with _lock:
         _require_compatibility_write("restore_doc_design", doc_id=doc_id)
+        _require_live_design(design)
         s = _sessions.get(doc_id)
         if s is None:
             s = _DesignSession()
@@ -473,6 +479,7 @@ def acknowledge_workspace_save(before: Design, saved: Design, revision: int, *, 
     """Advance save cursors without overwriting edits made during disk I/O."""
     with _lock:
         _require_compatibility_write("acknowledge_workspace_save")
+        _require_live_design(saved)
         s = _session()
         for loadout in saved.loadouts:
             if loadout.head_revision_id:
@@ -560,11 +567,13 @@ def _assert_active_loadout_editable(
 def load_design(d: Design | None) -> None:
     """Establish a file/new-design baseline, or clear it, without an undo entry."""
     require_compatibility_write("load_design")
+    _require_live_design(d)
     if d is not None and any(p.biotin_dna for p in d.nanoparticles):
         from backend.core.biotin_atomistic import prepare_biotin_display
         prepare_biotin_display(d)
     with _lock:
         _require_compatibility_write("load_design")
+        _require_live_design(d)
         s = _session()
         s.history.clear()
         s.redo.clear()
@@ -581,6 +590,7 @@ def set_design(d: Design | StrictPartRevision, *, expected_revision: int | None 
     with _lock:
         if publication_permit is None:
             _require_compatibility_write("set_design")
+        _require_live_design(d)
         if expected_policy_generation is not None:
             from backend.api.part_publication_policy import resolve
             if resolve(get_current_doc()).generation != expected_policy_generation:
@@ -606,6 +616,7 @@ def set_design_branch(d: Design, *, expected_revision: int | None = None) -> Non
     """Navigate to a branch without undoing back into a different branch."""
     with _lock:
         _require_compatibility_write("set_design_branch")
+        _require_live_design(d)
         s = _session()
         if expected_revision is not None and s.revision != expected_revision:
             raise HTTPException(409, detail="Design changed during generation. Recalculate before generating.")
@@ -877,6 +888,11 @@ def mutate_with_feature_log(
 
     with _lock:
         _require_compatibility_write("mutate_with_feature_log")
+        current = _sessions.get(get_current_doc())
+        if current is None or current.design is None:
+            # An initial model is unused when a legacy document is already
+            # active; only an actual initialization crosses this boundary.
+            _require_live_design(initial_design)
         s = _session()
         if s.design is None and initial_design is None:
             raise HTTPException(status_code=404, detail="No active design.")
@@ -974,6 +990,7 @@ def undo() -> tuple[Design, ValidationReport]:
         _assert_active_loadout_editable(s.design)
         if not s.history:
             raise HTTPException(status_code=404, detail="Nothing to undo.")
+        _require_live_design(s.history[-1])
         restored = _restore_edit_snapshot(s.history[-1], s.design)
         s.redo.append(_snapshot_copy(s.design))
         s.history.pop()
@@ -994,6 +1011,7 @@ def redo() -> tuple[Design, ValidationReport]:
         _assert_active_loadout_editable(s.design)
         if not s.redo:
             raise HTTPException(status_code=404, detail="Nothing to redo.")
+        _require_live_design(s.redo[-1])
         restored = _restore_edit_snapshot(s.redo[-1], s.design)
         s.history.append(_snapshot_copy(s.design))
         s.redo.pop()
@@ -1102,6 +1120,7 @@ def set_design_silent(d: Design) -> None:
     """
     with _lock:
         _require_compatibility_write("set_design_silent")
+        _require_live_design(d)
         s = _session()
         _assert_active_loadout_editable(s.design, d)
         _assert_photoproduct_dependencies(d)

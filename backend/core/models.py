@@ -29,6 +29,7 @@ from backend.core.lattice_frame_model import LatticeFrame, validate_frame_refere
 from backend.core.part_history_contract import PartRecipeRoot
 from backend.core.part_input_sources import Digest, EmbeddedInput, MAX_SOURCES
 from backend.core.part_repair_draft import RepairDraft
+from backend.core.part_group_model import GroupOrganization
 
 
 # ── Enumerations ──────────────────────────────────────────────────────────────
@@ -1938,6 +1939,10 @@ SnapshotOpKind = Literal[
     "nick",
     "cluster-pose",
     "cluster-dissolve",
+    "group-organize",
+    "group-create",
+    "group-update",
+    "group-dissolve",
     "cluster-join",
     "extrude-frame",
     "aptamer-import",
@@ -3155,6 +3160,9 @@ class Design(BaseModel):
     metadata: DesignMetadata = Field(default_factory=DesignMetadata)
     deformations: List[DeformationOp] = Field(default_factory=list)
     cluster_transforms: List[ClusterRigidTransform] = Field(default_factory=list)
+    # Explicit native conversion separates organization from unchanged ordered
+    # placement owners. Never infer this regime while loading legacy files.
+    group_organization: Optional[GroupOrganization] = None
     nucleotide_transforms: List[NucleotideTransform] = Field(default_factory=list)
     cluster_joints: List[ClusterJoint] = Field(default_factory=list)
     cluster_join_constraints: List[ClusterJoinConstraint] = Field(default_factory=list)

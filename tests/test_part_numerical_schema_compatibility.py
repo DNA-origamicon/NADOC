@@ -15,7 +15,10 @@ from backend.core.part_numerical_runtime import digest
 ROOT = Path(__file__).resolve().parents[1]
 BEFORE = ROOT / "docs/audits/feature_history_20261014/grouping_schema_compatibility_before.json"
 DISSOLVE_BEFORE = ROOT / "docs/audits/feature_history_20261014/cluster_dissolve_schema_compatibility_before.json"
-BASELINES = {"grouping-v1": BEFORE, "grouping-v2": DISSOLVE_BEFORE}
+ORGANIZATION_BEFORE = ROOT / "docs/audits/feature_history_20261014/group_organization_schema_compatibility_before.json"
+PRIOR_POLICY = ROOT / "docs/audits/feature_history_20261014/group_organization_schema_compatibility_prior_policy.json"
+BASELINES = {"grouping-v1": BEFORE, "grouping-v2": DISSOLVE_BEFORE,
+             "cluster-dissolve-v1": ORGANIZATION_BEFORE}
 FAMILIES = ("part_cpd_contract", "part_duplex_relax_contract", "part_streptavidin_contract")
 ENGINE = "nadoc.cpd-native-engine.v1"
 EVENT = "cluster-create-proof-v2"
@@ -126,6 +129,53 @@ def test_oversized_policy_is_bounded(compatibility, monkeypatch, tmp_path):
     assert error.value.code == "engine_mismatch"
 
 
+@pytest.mark.parametrize("count", [16, 17])
+def test_policy_transition_limit_is_unchanged(compatibility, monkeypatch, tmp_path, count):
+    old, current = manifest(), manifest()
+    current["files"]["backend/core/models.py"] = "4" * 64
+    entries = []
+    for index in range(count):
+        previous = deepcopy(old)
+        previous["files"]["backend/core/models.py"] = f"{index:064x}"
+        entries.append(transition(previous, current, identity=f"reviewed-{index}"))
+    path = install_policy(monkeypatch, tmp_path, compatibility, entries)
+    assert path.stat().st_size < 16 * 1024
+    if count == 16:
+        assert require(compatibility, entries[0]["from_sha256"], current) == "reviewed-0"
+    else:
+        with pytest.raises(CommandContractError) as error:
+            require(compatibility, entries[0]["from_sha256"], current)
+        assert error.value.code == "engine_mismatch"
+
+
+@pytest.mark.parametrize("extra", [0, 1])
+def test_policy_byte_limit_is_unchanged(compatibility, monkeypatch, tmp_path, extra):
+    old, current = manifest(), manifest()
+    current["files"]["backend/core/models.py"] = "4" * 64
+    raw = json.dumps({"schema": SCHEMA, "transitions": [transition(old, current)]})
+    raw += " " * (16 * 1024 + extra - len(raw))
+    install_policy(monkeypatch, tmp_path, compatibility, [], raw=raw)
+    if extra == 0:
+        assert require(compatibility, digest(old), current) == "grouping-cpd-v1"
+    else:
+        with pytest.raises(CommandContractError) as error:
+            require(compatibility, digest(old), current)
+        assert error.value.code == "engine_mismatch"
+
+
+def test_installed_policy_targets_only_current_engines_and_preserves_prior_audit(compatibility):
+    current = {import_module(f"backend.core.{family}").ENGINE_ID:
+               digest(import_module(f"backend.core.{family}").implementation_manifest())
+               for family in FAMILIES}
+    entries = compatibility._policy()
+    assert len(entries) == 9
+    assert compatibility.POLICY_PATH.stat().st_size <= 16 * 1024
+    assert all(entry["to_sha256"] == current[entry["engine_id"]] for entry in entries)
+    historical = json.loads(PRIOR_POLICY.read_text())["transitions"]
+    assert len(historical) == 9
+    assert all(entry["to_sha256"] != current[entry["engine_id"]] for entry in historical)
+
+
 def environment(monkeypatch, contract, implementation_pin):
     runtime = {"runtime": "same qualified worker"}
     monkeypatch.setattr(contract, "runtime_fingerprint", lambda: runtime)
@@ -158,14 +208,19 @@ def test_real_captured_old_manifest_has_one_exact_reviewed_transition(compatibil
                and entry["to_sha256"] == digest(current)]
     assert len(entries) == 1
     entry = entries[0]
-    assert entry["id"] == f"cluster-dissolve-v1.from-{generation}.{contract.ENGINE_ID}"
-    assert entry["event"] == "cluster-dissolve-v1"
+    assert entry["id"] == f"group-organization-v1.from-{generation}.{contract.ENGINE_ID}"
+    assert entry["event"] == "group-organization-v1"
     assert entry["source_checkpoint"] == capture["checkpoint"]
     old_files, new_files = before["manifest"]["files"], current["files"]
     changes = {path for path in old_files.keys() | new_files.keys() if old_files.get(path) != new_files.get(path)}
-    expected = {"backend/core/models.py"}
+    expected = {"backend/core/models.py", "backend/core/part_group_model.py",
+                f"backend/core/{family}.py"}
+    if family == "part_streptavidin_contract":
+        expected.add("backend/api/part_streptavidin_commands.py")
+    else:
+        expected.add("backend/core/part_history_contract.py")
     if generation == "grouping-v1":
-        expected |= {f"backend/core/{family}.py", "backend/core/part_numerical_schema_compatibility.py"}
+        expected.add("backend/core/part_numerical_schema_compatibility.py")
     assert changes == set(entry["changed_paths"]) == expected
     assert {key: value for key, value in before["manifest"].items() if key != "files"} == {
         key: value for key, value in current.items() if key != "files"}
@@ -177,11 +232,12 @@ def test_real_captured_old_manifest_has_one_exact_reviewed_transition(compatibil
 
 
 @pytest.mark.parametrize("family", FAMILIES)
-def test_original_reviewed_edges_remain_available_as_exact_historical_evidence(compatibility, family):
+def test_original_reviewed_edges_remain_available_as_exact_historical_evidence(compatibility, monkeypatch, family):
     contract = import_module(f"backend.core.{family}")
     oldest = json.loads(BEFORE.read_text())
     prior = json.loads(DISSOLVE_BEFORE.read_text())["engines"][contract.ENGINE_ID]
     original = oldest["engines"][contract.ENGINE_ID]
+    monkeypatch.setattr(compatibility, "POLICY_PATH", PRIOR_POLICY)
     entries = [entry for entry in compatibility._policy()
                if entry["id"] == f"grouping-proof-v2.{contract.ENGINE_ID}"]
     assert len(entries) == 1
@@ -189,11 +245,25 @@ def test_original_reviewed_edges_remain_available_as_exact_historical_evidence(c
     assert entry["event"] == EVENT and entry["source_checkpoint"] == oldest["checkpoint"]
     assert entry["from_sha256"] == original["implementation_sha256"]
     assert entry["to_sha256"] == prior["implementation_sha256"] == digest(prior["manifest"])
+    assert require(compatibility, original["implementation_sha256"], prior["manifest"],
+                   engine=contract.ENGINE_ID) == entry["id"]
     changed = {path for path in original["manifest"]["files"].keys() | prior["manifest"]["files"].keys()
                if original["manifest"]["files"].get(path) != prior["manifest"]["files"].get(path)}
     assert changed == set(entry["changed_paths"]) == {
         "backend/core/models.py", f"backend/core/{family}.py",
         "backend/core/part_numerical_schema_compatibility.py"}
+
+
+@pytest.mark.parametrize("family", FAMILIES)
+@pytest.mark.parametrize("generation", ["grouping-v1", "grouping-v2"])
+def test_previous_dissolution_edges_remain_in_historical_audit(compatibility, monkeypatch, family, generation):
+    contract = import_module(f"backend.core.{family}")
+    old = json.loads(BASELINES[generation].read_text())["engines"][contract.ENGINE_ID]
+    target = json.loads(ORGANIZATION_BEFORE.read_text())["engines"][contract.ENGINE_ID]
+    assert digest(target["manifest"]) == target["implementation_sha256"]
+    monkeypatch.setattr(compatibility, "POLICY_PATH", PRIOR_POLICY)
+    assert require(compatibility, old["implementation_sha256"], target["manifest"],
+                   engine=contract.ENGINE_ID) == f"cluster-dissolve-v1.from-{generation}.{contract.ENGINE_ID}"
 
 
 @pytest.mark.parametrize("family", FAMILIES)
@@ -206,6 +276,12 @@ def test_real_three_generation_policy_requires_the_explicit_direct_edge(compatib
                       if not (entry["engine_id"] == contract.ENGINE_ID
                               and entry["from_sha256"] == oldest["implementation_sha256"]
                               and entry["to_sha256"] == digest(current))]
+    # Old targets are audit evidence, not installed authority. Explicitly add
+    # the genuine historical old→prior edge for this no-transitivity control.
+    without_direct += [entry for entry in json.loads(PRIOR_POLICY.read_text())["transitions"]
+                       if entry["engine_id"] == contract.ENGINE_ID
+                       and entry["from_sha256"] == oldest["implementation_sha256"]
+                       and entry["to_sha256"] == prior["implementation_sha256"]]
     install_policy(monkeypatch, tmp_path, compatibility, without_direct)
     # The old→prior and prior→current pair remains usable individually. It
     # cannot infer approval for old→current if that separately reviewed edge
@@ -256,11 +332,43 @@ def test_template_check_is_not_bypassed_by_schema_transition(compatibility, monk
 
 
 @pytest.mark.parametrize("family", FAMILIES)
+@pytest.mark.parametrize("state", ["absent", "empty", "populated"])
+def test_organization_is_admitted_metadata_without_numerical_preparation(monkeypatch, family, state):
+    from backend.core.models import Design, Nanoparticle
+    from backend.core.part_group_model import GroupOrganization, PartGroup
+
+    organization = None if state == "absent" else GroupOrganization(groups=[] if state == "empty" else [
+        PartGroup(id="selection-only", name="Keep this empty group", color="#123456", opacity=0.4)])
+    source = Design(group_organization=organization)
+    contract = import_module(f"backend.core.{family}")
+    monkeypatch.setattr(contract, "runtime_fingerprint", lambda: pytest.fail("Source admission probed runtime"))
+    before = source.model_dump(mode="json")
+    if family == "part_streptavidin_contract":
+        from backend.api import part_streptavidin_commands as commands
+
+        source = source.copy_with(nanoparticles=[Nanoparticle(id="gold", diameter_nm=20)])
+        before = source.model_dump(mode="json")
+        # This test exercises only the actual source-scope check; a full pinned
+        # coating command and native packing are covered by the cold worker.
+        command = commands.SetRequest.model_construct(nanoparticle_id="gold")
+        assert commands._target(source, command) is source.nanoparticles[0]
+    else:
+        assert contract.validate_source(source) == 0
+        isolated = contract.native_source(source)
+        assert isolated.group_organization == organization
+        if organization is not None:
+            assert isolated.group_organization is not organization
+            isolated.group_organization.groups.append(PartGroup(id="private-only"))
+    assert source.model_dump(mode="json") == before
+
+
+@pytest.mark.parametrize("family", FAMILIES)
 @pytest.mark.parametrize("failure", [None, "before", "during"])
 def test_existing_builder_environment_fences_and_kernel_counts_are_preserved(
         compatibility, monkeypatch, family, failure):
     """Only the numerical leaf is fake; each real adapter keeps both fences."""
     from backend.core.models import Design, Nanoparticle
+    from backend.core.part_group_model import GroupOrganization, PartGroup
 
     contract = import_module(f"backend.core.{family}")
     before = json.loads(BEFORE.read_text())["engines"][contract.ENGINE_ID]
@@ -320,6 +428,8 @@ def test_existing_builder_environment_fences_and_kernel_counts_are_preserved(
         def run():
             return commands.build("nanoparticle-patch", source, {}, resolver=None)
 
+    source.group_organization = GroupOrganization(groups=[
+        PartGroup(id="selection-only", name="Unchanged organization", color="#123456", opacity=0.4)])
     original = source.model_dump(mode="json")
     if failure == "before":
         monkeypatch.setattr(contract, "runtime_fingerprint", lambda: {"runtime": "different"})

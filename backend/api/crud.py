@@ -230,7 +230,7 @@ def _ensure_default_cluster(design: Design, *, persist: bool = True) -> Design:
     containing all helices and persist it silently (no undo snapshot)."""
     # Authored recipes must not acquire topology while formatting a response.
     # Their native builders create any required placement cluster explicitly.
-    if design.recipe_root is not None:
+    if design.recipe_root is not None or design.group_organization is not None:
         return design
     from backend.core.feature_history_clusters import has_authored_group_history
     if has_authored_group_history(design.feature_log):
@@ -1767,6 +1767,8 @@ def load_design(body: FilePathRequest) -> dict:
 def _install_loaded_design(design: Design) -> dict:
     """Install saved recipes exactly; migrate only rootless legacy documents."""
     design_state.require_compatibility_write("legacy_design_install")
+    from backend.api.part_group_organization_gate import require_live_design
+    require_live_design(design)
     from backend.core.lattice import (
         migrate_split_staple_domains,
         autodetect_all_overhangs,
@@ -6890,6 +6892,7 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
     design = restore_authored_fields(design, snap_design)
     return design.copy_with(
         cluster_transforms=restore_follow_poses(design, snap_design),
+        group_organization=snap_design.group_organization,
         deformations=[d for d in design.deformations if d.type != "sweep"]
             + [d for d in snap_design.deformations if d.type == "sweep"],
         helices=snap_design.helices,

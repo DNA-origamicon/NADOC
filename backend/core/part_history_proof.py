@@ -69,6 +69,12 @@ def command_rows(design, limit):
                     raise ValueError("entry_limit")
             from backend.core.part_overlay_commands import command_input
             kind, params = command_input(child)
+            if child is not entry:
+                from backend.core.part_group_organization import KINDS
+                if kind in KINDS:
+                    # Routing diffs currently carry topology collections only.
+                    # A proof must not certify a row whose recovery drops groups.
+                    raise ValueError("group_organization_requires_snapshot")
             yield child.id, kind, params
 
 

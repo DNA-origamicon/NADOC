@@ -11,6 +11,7 @@ from functools import cached_property
 from backend.core import models
 from backend.core.base_keys import parse_base_key
 from backend.core.part_command_errors import ReferenceResolutionError
+from backend.core.part_group_model import GroupDomainRef, GroupOrganization, PartGroup
 from backend.core.part_history_proof import AUTHORING_FIELDS
 from backend.core.part_saved_topology import remap_snapshot, snapshot_for, validate_owner
 
@@ -34,7 +35,7 @@ SCHEMAS = {}
 
 
 def _schema(name, identity=None, *, refs=None, children="", plain="", special="", blocked=""):
-    SCHEMAS[getattr(models, name)] = Schema(
+    SCHEMAS[getattr(models, name) if isinstance(name, str) else name] = Schema(
         identity, refs or {}, frozenset(children.split()), frozenset(plain.split()),
         frozenset(special.split()), frozenset(blocked.split()),
     )
@@ -68,6 +69,10 @@ _schema("ClusterRigidTransform", "cluster", children="domain_ids",
         refs={"helix_ids": "helix", "parent_cluster_id": "cluster", "overhang_duplex_driver_id": "overhang"},
         plain="name is_default translation rotation pivot color opacity auto_created")
 _schema("DomainRef", refs={"strand_id": "strand"}, plain="domain_index")
+_schema(GroupDomainRef, refs={"strand_id": "strand"}, plain="domain_index")
+_schema(PartGroup, "part_group", children="domain_ids", refs={"helix_ids": "helix"},
+        plain="name color opacity is_default auto_created")
+_schema(GroupOrganization, children="groups", plain="version")
 _schema("ClusterJoint", "joint", refs={"cluster_id": "cluster"},
         plain="name joint_type local_axis_origin local_axis_direction surface_detail min_angle_deg max_angle_deg")
 _schema("ClusterJoinConstraint", "join_constraint", children="first second", plain="reach_nm")
@@ -140,6 +145,9 @@ COLLECTIONS = {
     "crossover_constraints": "crossover_constraint", "forced_ligations": "forced_ligation",
 }
 GLOBALS = frozenset({"lattice_type", "metadata", "tm_settings"})
+# A wrapper is not an opaque global: its records own independent identities and
+# ordinary topology references. Keep the legacy flat collection API unchanged.
+NESTED_COLLECTIONS = {"group_organization": ("groups", "part_group")}
 
 
 def _issue(detail, kind, identity, *, code="missing_reference"):
@@ -162,13 +170,34 @@ def _schema_for(model):
     return schema
 
 
+def iter_typed_collections(design):
+    """Yield (top-level field, resource kind, records), including typed wrappers.
+
+    Legacy None costs only the field lookup. Callers that require a count/byte
+    budget still own that admission; this iterator never serializes or decodes.
+    """
+    organization = design.group_organization
+    if organization is not None:
+        if (type(organization) is not GroupOrganization
+                or type(organization.version) is not int or organization.version != 1
+                or type(organization.groups) is not list):
+            raise NotImplementedError("Unreviewed group organization schema")
+        _schema_for(organization)
+    for field, kind in COLLECTIONS.items():
+        yield field, kind, getattr(design, field)
+    if organization is not None:
+        yield "group_organization", "part_group", organization.groups
+
+
 def identity_index(design):
     """Index typed record identities and their top-level owners, never metadata."""
-    if set(COLLECTIONS) | GLOBALS != AUTHORING_FIELDS:
+    if set(COLLECTIONS) | set(NESTED_COLLECTIONS) | GLOBALS != AUTHORING_FIELDS:
         raise NotImplementedError("Generated scope has unclassified authoring fields")
     records, owners = {}, {}
-    for field, kind in COLLECTIONS.items():
-        for model in getattr(design, field):
+    for field, kind, values in iter_typed_collections(design):
+        for model in values:
+            if field == "group_organization" and type(model) is not PartGroup:
+                raise NotImplementedError("Unreviewed group organization record")
             key = (kind, model.id)
             entries = [(key, model)]
             if isinstance(model, models.OverhangSpec):
@@ -364,6 +393,8 @@ def remap_design(design, mapping):
             raise _issue("Generated linker identity disagrees with its connection owner", *key, code="invalid_selection")
     data = design.model_dump(mode="json", include=GLOBALS)
     data.update({field: [mapped(model) for model in getattr(design, field)] for field in COLLECTIONS})
+    data["group_organization"] = (mapped(design.group_organization)
+                                  if design.group_organization is not None else None)
     # External input hashes are immutable source identities, not generated
     # geometry IDs. Each local replay needs the captured table; copy its mutable
     # mapping while retaining the frozen byte records without serialization.

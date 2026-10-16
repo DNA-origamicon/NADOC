@@ -53,7 +53,7 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 
 | ID | Status | Fixed remaining exit |
 |---|---|---|
-| FH-18 | In progress · 3 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Ordinary PATCH, admitted identity-group dissolution and auxiliary recording are implemented; posed/regrouped placement and the organization/placement migration stay open. |
+| FH-18 | In progress · 4 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Ordinary PATCH, admitted identity-group dissolution, auxiliary recording and private organization/native replay are implemented; live transactions, consumer/UI migration and new-group movement stay open. |
 | FH-20 | Remaining | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
 | FH-21 | Remaining | Extrusion history editor: eligible earlier edits through downstream features, stable identities, complete ordinary controls and validation. |
 | FH-22 | Remaining | Sweep history editor: input-based isolated preview, recovery-independent Apply/Cancel and downstream rebuild. |
@@ -125,6 +125,42 @@ bound their matrices before implementation rather than expanding them indefinite
 | U3 · 2026-10-16 | FH-18 checkpoint 1: owned ordinary group PATCH recording, bounded typed membership, conservative dependencies and exact-candidate geometry response; [evidence](validation_group_edit_recording.json) | None; deletion, regrouping pose preservation and auxiliary group paths remain | 18 | 38 | 11 | 9 | +0 total, +0 completed; first checkpoint on FH-18, existing scope, no growth trigger |
 | U4 · 2026-10-16 | FH-18 checkpoint 2: native identity-group dissolve, bounded incoming owners, atomic batch/undo, seek without resurrection and import/sidebar delivery; [evidence](validation_group_dissolve.json) | None; posed/regrouped membership and auxiliary paths remain | 18 | 38 | 11 | 9 | +0 total, +0 completed; second checkpoint on FH-18, existing scope. If still open after a third checkpoint, flag task growth and review the remaining exit before continuing. |
 | U5 · 2026-10-16 | FH-18 checkpoint 3: recorded unassigned-component grouping and duplex pivot rebase, private computation, stale/failure guards and authored-inference suppression; [evidence](validation_group_auxiliary_recording.json) | None; posed/regrouped placement and organization/placement migration remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth flagged:** three checkpoints on unfinished FH-18. Containment is the finite [migration plan](group_placement_migration_plan.md), preserving the fixed exit and estimate. |
+| U6 · 2026-10-16 | FH-18 checkpoint 4: separate typed organization, native conversion → posed dissolve → regroup, input editing/cold proof, recovery chronology, bounded metadata and legacy schema compatibility; [evidence](validation_group_organization_representation.json) | None; live transactions, remaining consumers, visible placement controls and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** four checkpoints on unfinished FH-18. Migration batch A is implemented privately; B/C have partial foundations, D/E remain. No exit or denominator change. |
+
+### FH-18 containment update — U6
+
+The representation/native-contract batch now delivers the intended conversion →
+posed dissolve → regroup path on private native recipes. `group_organization`
+owns typed membership/style only; existing placement records retain exact IDs,
+order, membership, pose and ownership. New commands are top-level snapshots, with
+independent input replay, protected output identities and editable member inputs.
+Earlier pose edits regenerate through conversion without pinning old poses.
+Ordinary and actual 33-row optimized recovery, including F0, restore the selected
+organization without treating its dissolution as placement removal.
+
+This is **not** the live-user exit. Batch B still needs the owned transaction and
+complete authoring/repair paths; C still needs all selection/topology/recovery
+consumers and missing-body admission; D needs separate visible Group and Placement
+controls; E needs the remaining parity and rollout checks. New-group movement
+must resolve the original frame/extension boundary. Existing explicit placement
+pose replay is admitted privately, while unadapted native commands refuse.
+Public publication, load/restore, loadout navigation and ordinary writes reject
+active organization before side effects. No saved flag enables it. The mutable
+Python runtime is not claimed to be a security sandbox.
+
+Legacy `None` adds only scalar admission checks, without a new structural strand
+walk. New operations use bounded metadata and never run placement, reconciliation
+or whole-history proof on a drag frame. Before serialization, cumulative budgets
+charge each group and domain-reference occurrence, including shared containers;
+unique-object accounting alone would undercount JSON expansion. These are work
+admission bounds, not measured latency/heap guarantees. Numeric compatibility
+retains all three historical generations through nine exact direct transitions
+to the current implementation; the previous policy remains an immutable audit
+artifact. No policy-limit increase, numerical kernel change or stored-pin rewrite.
+
+The finite five-batch plan remains the containment strategy. Four checkpoints
+spent on FH-18 do not become four completed milestones. **18/38; +0 completed,
++0 total; 20 remaining (11 core, 9 parked).**
 
 ### FH-18 finite closure matrix — U5
 

@@ -1,0 +1,161 @@
+{
+  "date": "2026-10-16",
+  "checkpoint_before": "e9f3ed7bf31f3129e88a7e0231bf189140dd083f",
+  "scope": "U6 / FH-18 checkpoint 4: private organization representation and native history",
+  "progress": {
+    "completed": 18,
+    "estimated_total": 38,
+    "remaining": 20,
+    "core_remaining": 11,
+    "parked_remaining": 9,
+    "completed_delta": 0,
+    "total_delta": 0,
+    "milestone": "FH-18",
+    "major_checkpoints_spent_since_B1": 4,
+    "milestone_closed": false,
+    "task_growth_flag": true,
+    "containment": "Fixed five-batch group_placement_migration_plan.md. Batch A implemented privately; B/C partial foundations; D/E open. No smaller exit, new completion credit, denominator increase or moved core scope."
+  },
+  "delivered": [
+    "Closed version-1 GroupOrganization / PartGroup / GroupDomainRef authoring schema, optional legacy None and distinct part_group identities.",
+    "Native group-organize/create/update/dissolve derive only membership/style; placement owner records and order remain exactly unchanged.",
+    "Top-level snapshot registration, protected creator/conversion output identities, input edits, typed missing references, independent cold proof and tamper detection.",
+    "Upstream pose edits regenerate through conversion; ordinary and real 33-row optimized recovery restore organization, including F0 and end.",
+    "Typed identity/remapping and bounded structural diagnostics; legacy None preserves old report shape and avoids added strand traversal.",
+    "Bounded metadata before serialization, charged per group and domain-reference occurrence to account for shared-container expansion.",
+    "Public ingress/publication/source guards keep the unfinished regime private; unadapted generated/removal/native operations refuse.",
+    "Exact archive inventory preserves legacy preparation admission; active organization remains explicitly unsupported.",
+    "Current numerical policy pruned to nine explicit A/B/C-to-current edges while preserving all prior supported source generations and retaining previous policy byte-for-byte.",
+    "Active project memory reduced to 117 lines; 934-line archive preserves prior implementation notes verbatim."
+  ],
+  "remaining": [
+    "Batch B: shared owned transaction, complete ordinary/repair authoring and explicit placement controls.",
+    "Batch C: complete selection/topology/generated/import/deformation consumers and missing/evicted organization recovery-body admission.",
+    "Batch D: visible independent Groups and Placements, correct namespaces and complete input/preview/selection lifecycle.",
+    "New-group movement must resolve the original frame/extension owner semantics; no new transform composition rule is assumed.",
+    "Remaining full parity matrix, desktop, responsiveness and rollout qualification. Batch A is not FH-18 closure."
+  ],
+  "validation": {
+    "backend_related": {
+      "targets": [
+        "tests/test_group_organization_commands.py",
+        "tests/test_group_organization_inventory.py",
+        "tests/test_group_organization_boundaries.py",
+        "tests/test_group_organization_execution.py",
+        "tests/test_group_organization_history.py",
+        "tests/test_group_organization_public_gate.py",
+        "tests/test_part_numerical_schema_compatibility.py",
+        "tests/test_part_cpd_contract.py",
+        "tests/test_part_duplex_relax_contract.py",
+        "tests/test_part_streptavidin_commands.py",
+        "tests/test_part_edit_identity.py",
+        "tests/test_part_repair_planning.py",
+        "tests/test_part_structure.py",
+        "tests/test_part_structure_proof.py",
+        "tests/test_generated_scope_references.py",
+        "tests/test_generated_scope_sources.py",
+        "tests/test_generated_scope_aliases.py",
+        "tests/test_generated_commands.py",
+        "tests/test_group_dissolve_command.py",
+        "tests/test_group_dissolve_recording.py",
+        "tests/test_group_dissolve_recovery.py",
+        "tests/test_group_dissolve_seek_admission.py",
+        "tests/test_geometry_group_history.py",
+        "tests/test_group_edit_recording.py",
+        "tests/test_group_auxiliary_recording.py",
+        "tests/test_group_rotation_point_recording.py",
+        "tests/test_part_recipe_edit.py",
+        "tests/test_recipe_load_preservation.py",
+        "tests/test_part_proof_engine.py",
+        "tests/test_part_replacement_transaction.py",
+        "tests/test_part_publication_state.py",
+        "tests/test_part_publication_permit.py",
+        "tests/test_part_batch_publication_scope.py",
+        "tests/test_part_immutable_state.py",
+        "tests/test_oxdna_preparation_capture.py",
+        "tests/test_part_deformation_preview_dto.py",
+        "tests/test_part_comparison_serialization.py"
+      ],
+      "passed": 978,
+      "warnings": 176,
+      "seconds": 39.85,
+      "new_organization_cases": 159
+    },
+    "native_compatibility": {
+      "target": "tests/test_native_schema_compatibility.py",
+      "passed": 3,
+      "seconds": 72.95,
+      "method": "Real spawned current-kernel authoring and independent verification workers; all three historical implementation pins, current pin, unknown-pin refusal, exact authoring fingerprints, preserved organization, runtime/template settings and poisoned recovery.",
+      "limitation": "Same installed kernels, not historical binary execution or scientific convergence. No numerical tolerance, solver setting or golden changed."
+    },
+    "static": {
+      "ruff": "All 31 changed Python files passed after final source/test edits.",
+      "diff": "Passed",
+      "main_js_delta": 0
+    },
+    "frontend": "No frontend production changes; suite not rerun in this backend-only checkpoint.",
+    "app": "NOT VERIFIED IN APP. /media/jojo/Archive is not mounted (path absent). No browser, visual or real-workload latency pass. FH-27/MV-48 remain open; VR separately deferred.",
+    "memory_lint": {
+      "passed": false,
+      "errors": 6,
+      "warnings": 59,
+      "detail": "Pre-existing unrelated repository debt: oversized project_cpd_strand_builder/project_native_vr heads; unindexed project_exp_predictor; one missing md_job_system artifact link and two native_vr artifact links. Current feature-history head is 117 lines and indexed; archive preserves old notes."
+    }
+  },
+  "numerical_compatibility": {
+    "policy_entries": 9,
+    "policy_bytes": 10989,
+    "bounds": "Unchanged: 16 entries, 16 KiB",
+    "generations": [
+      "grouping-v1",
+      "grouping-v2",
+      "cluster-dissolve-v1"
+    ],
+    "prior_policy": "group_organization_schema_compatibility_prior_policy.json",
+    "prior_manifests": "group_organization_schema_compatibility_before.json",
+    "current_targets": {
+      "cpd": "8a20d881ea784ed663cc5b7c11713c9f113f74318f0503d7147fc3d140ce8388",
+      "duplex": "25a355131ff72c3fcd3647ef04badd31499d064012012cbaecfb9a66807b3580",
+      "coating": "b9935ada31f38a1d33b6c615826d03524c83fd49401e6e4317383691a00667be"
+    },
+    "changes": "Schema/model inventory and preservation only. No molecular placement/kernel/data/runtime logic change; stored pins unchanged. Historical-target edges archived, current-target edges exact and direct."
+  },
+  "selection_only": {
+    "command": "just test-smart --dry-run",
+    "decision": "FAST (fast suite only)",
+    "executed_suite": false,
+    "verbatim_deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+    "clarification": "The 'only the fast suite ran' text is selector boilerplate. Dry-run ran no suite; aggregate fast/FULL debt remains. No test-session or broad-suite bypass."
+  },
+  "red_and_review": [
+    "Typed inventory baseline: 19 failed, 1 passed before implementation.",
+    "Initial native command tests: 50 passed, one missing registration failure; subsequent integration caught missing SnapshotOpKind literals before final native history passed.",
+    "Boundary baseline: 7 archive/identity failures with 58 passes including native controls, before production boundary fixes.",
+    "History baseline: 11 passed and one protected-output-ID failure before identity fix; final optimized case was extended to 33 rows to exercise the actual optimized branch.",
+    "Public guard and alias baseline: 34 failed, 10 passed; 33 missing gate cases and one pre-serialization alias-budget failure. Five additional gate controls subsequently added.",
+    "Numeric metadata subset first ran after source edits: 9 passed; it is not claimed as red-first evidence.",
+    "First worker run failed 3 fixtures because reimport retained recipe_root. Fixed the test source to be explicitly history-free; production import admission was not widened. Final 3 workers passed."
+  ],
+  "performance": {
+    "operation_envelope": "Existing 10k JSON nodes / 256k bytes / depth64; not increased.",
+    "group_metadata": "2k groups, cumulative 30k nodes / 2MB before serialization. Per-group and per-domain-reference occurrence accounting prevents alias expansion.",
+    "source_indexes": "Each helix/strand/placement identity index limited to 30k records and bounded IDs.",
+    "ordinary_legacy": "Only scalar organization lookup at state gates; no new structural strand walk or native proof/geometry in ordinary legacy admission.",
+    "limitation": "Admission bounds are not measured serialization-time, heap, HTTP responsiveness or drag-frame latency guarantees."
+  },
+  "cleanup": {
+    "owned_root": "/tmp/pytest-of-joshua",
+    "admission": "Empty at turn start; all removed entries were generated by this turn's serialized checks.",
+    "removed_files": 64,
+    "removed_bytes": 167901,
+    "removed_directories": 1023,
+    "removed_symlinks": 18,
+    "available_process_references": [],
+    "inspection_limit": "Protected/system processes denied cwd/fd/maps inspection, including startup systemd/PAM PIDs 435/436. Available references checked; no references to owned fixtures found. No claim of full protected-process visibility.",
+    "remaining_pytest_entries": [],
+    "remaining_nadoc_shared_memory": [],
+    "bulk_browser_simulation_outputs_created": false,
+    "preserved": "User designs, managed jobs, runtimes, source assets and historical evidence.",
+    "retained": "Only small tracked source/tests, fixed plan/ledger, compact JSON manifests/policy/evidence and archived project notes."
+  }
+}

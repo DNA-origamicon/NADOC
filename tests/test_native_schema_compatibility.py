@@ -24,6 +24,7 @@ from backend.core.part_verification_capture import capture
 ROOT = Path(__file__).resolve().parents[1]
 BEFORE = ROOT / "docs/audits/feature_history_20261014/grouping_schema_compatibility_before.json"
 DISSOLVE_BEFORE = ROOT / "docs/audits/feature_history_20261014/cluster_dissolve_schema_compatibility_before.json"
+ORGANIZATION_BEFORE = ROOT / "docs/audits/feature_history_20261014/group_organization_schema_compatibility_before.json"
 
 
 def _fixture(family):
@@ -86,7 +87,17 @@ def _cold(source, request, *, family):
 
 @pytest.mark.parametrize("family", ["duplex", "coating", "cpd"])
 def test_spawned_numerical_schema_transition_preserves_exact_authored_outputs(family, monkeypatch):
+    from backend.core.part_group_model import GroupOrganization, PartGroup
+
     source, request, contract_name = _fixture(family)
+    # Organization is independently authored selection/style metadata. The
+    # existing ordered placement owners and molecular inputs remain unchanged.
+    organization = GroupOrganization(groups=[PartGroup(
+        id="organization-only", name="Preserved organization", color="#123456", opacity=0.4,
+        helix_ids=[source.helices[0].id] if source.helices else [])])
+    if family != "coating":
+        source.group_organization = organization
+        source.recipe_root = import_root(source.copy_with(recipe_root=None))
     contract = import_module(f"backend.core.{contract_name}")
     # Parent imports can load different BLAS/OpenMP pools. Never author or
     # normalize a numerical pin here; every real pin comes from the child.
@@ -97,11 +108,23 @@ def test_spawned_numerical_schema_transition_preserves_exact_authored_outputs(fa
     assert created["status"] == "ready", created
     candidate = Design.model_validate(created["candidate"])
     assert source.model_dump_json() == original
-    authored = candidate.model_dump(mode="json", include=AUTHORING_FIELDS)
-    assert authored == {name: created["candidate"][name] for name in AUTHORING_FIELDS}
+    assert candidate.group_organization == source.group_organization
+    assert candidate.model_dump(mode="json", include=AUTHORING_FIELDS) == {
+        name: created["candidate"][name] for name in AUTHORING_FIELDS}
     entries = [row for row in candidate.feature_log if "engine" in row.params]
     assert len(entries) == 1
     entry = entries[0]
+    if family == "coating":
+        # Public append intentionally admits only its empty-root gold history.
+        # Qualify the actual pinned set command over an independently imported
+        # uncoated gold + organization source without widening that append gate.
+        candidate.group_organization = organization
+        uncoated = candidate.copy_with(nanoparticles=[
+            item.model_copy(update={"coating": None}) for item in candidate.nanoparticles],
+            feature_log=[], recipe_root=None)
+        candidate.recipe_root = import_root(uncoated)
+        candidate.feature_log = [entry]
+    authored = candidate.model_dump(mode="json", include=AUTHORING_FIELDS)
     params = deepcopy(entry.params)
     current_pin = params["engine"]["implementation_sha256"]
     for row in candidate.feature_log:
@@ -111,7 +134,8 @@ def test_spawned_numerical_schema_transition_preserves_exact_authored_outputs(fa
     assert current["status"] == "reproduced_import", current
     assert not current.get("numerical_compatibility", {}).get("transitions")
 
-    for generation, path in (("grouping-v1", BEFORE), ("grouping-v2", DISSOLVE_BEFORE)):
+    for generation, path in (("grouping-v1", BEFORE), ("grouping-v2", DISSOLVE_BEFORE),
+                             ("cluster-dissolve-v1", ORGANIZATION_BEFORE)):
         historical = json.loads(path.read_text())["engines"][contract.ENGINE_ID]["implementation_sha256"]
         assert current_pin != historical
         entry.params = {**params, "engine": {**params["engine"], "implementation_sha256": historical}}
@@ -121,7 +145,7 @@ def test_spawned_numerical_schema_transition_preserves_exact_authored_outputs(fa
         assert approved["checked_commands"] == current["checked_commands"] == len(candidate.feature_log)
         assert approved["authoring_fingerprint"] == current["authoring_fingerprint"]
         assert approved["numerical_compatibility"] == {"transitions": [{
-            "transition_id": f"cluster-dissolve-v1.from-{generation}.{contract.ENGINE_ID}",
+            "transition_id": f"group-organization-v1.from-{generation}.{contract.ENGINE_ID}",
             "engine_id": contract.ENGINE_ID, "from_sha256": historical, "to_sha256": current_pin,
         }], "truncated": False}
         assert candidate.model_dump_json() == before_old

@@ -171,10 +171,12 @@ def _residue_dependents(design, binder, domains):
 
 
 def _delete_closure(design, attachment, binder):
-    from backend.core.part_scope_references import COLLECTIONS, GLOBALS, referenced_resources
+    from backend.core.part_scope_references import COLLECTIONS, GLOBALS, NESTED_COLLECTIONS, referenced_resources
     from backend.core.part_history_proof import AUTHORING_FIELDS
 
-    if set(COLLECTIONS) | GLOBALS != AUTHORING_FIELDS:
+    if design.group_organization is not None:
+        _unsupported("Conjugate deletion does not yet support separate group organization")
+    if set(COLLECTIONS) | set(NESTED_COLLECTIONS) | GLOBALS != AUTHORING_FIELDS:
         _unsupported("Conjugate deletion has unclassified authored resource collections")
     for field, kind in COLLECTIONS.items():
         if field == "photoproduct_junctions":

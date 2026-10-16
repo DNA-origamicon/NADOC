@@ -16,6 +16,11 @@ from backend.core.part_scope_references import (
 )
 
 
+def _require_legacy_organization(*designs):
+    if any(design.group_organization is not None for design in designs):
+        raise NotImplementedError("Generated scope does not support separate group organization")
+
+
 def map_values(value, mapping):
     """Historical string mapping, used only to check old receipt equivalence."""
     if isinstance(value, str):
@@ -51,6 +56,7 @@ def merge_changes(destination, before, after, *, require_legacy_order=False):
     disappear and surplus native records append after the existing list. Thus
     selected order is exact while independent records keep their relative order.
     """
+    _require_legacy_organization(destination, before, after)
     changes = {}
     for field in AUTHORING_FIELDS:
         prior, values = getattr(before, field), getattr(after, field)
@@ -113,6 +119,7 @@ def _missing(detail, kind, identity):
 
 
 def _selection(design, group, input_ids):
+    _require_legacy_organization(design)
     records, owners = identity_index(design)
     if not isinstance(input_ids, list) or any(not isinstance(i, str) for i in input_ids):
         raise ValueError("Generated scope requires object references")
@@ -175,6 +182,7 @@ def _legacy_equivalent(source, mapped, mapping):
 
 
 def execute(kind, design, params, executor):
+    _require_legacy_organization(design)
     scope = params["_generated_scope"]
     if not isinstance(scope, dict) or set(scope) not in (
         {"group_id", "input_ids"}, {"version", "group_id", "input_ids"}

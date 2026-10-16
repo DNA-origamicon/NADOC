@@ -144,7 +144,10 @@ def _target(design, command):
         _unsupported("Pinned coating initially admits exactly one particle")
     # This small job contract has no implicit obstacle/ownership context. New
     # authoring collections fail closed here until their meaning is reviewed.
-    for field in AUTHORING_FIELDS - {"nanoparticles", "metadata", "tm_settings", "lattice_type"}:
+    # Organization is selection/style metadata; placement remains exclusively
+    # in cluster_transforms, which this one-particle scope still refuses.
+    for field in AUTHORING_FIELDS - {"nanoparticles", "metadata", "tm_settings", "lattice_type",
+                                    "group_organization"}:
         if getattr(design, field):
             _unsupported(f"Pinned coating does not yet admit additional {field}")
     coating = particle.coating

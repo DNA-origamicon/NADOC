@@ -27,7 +27,7 @@ class PartRecipeRoot(BaseModel):
 # full. A new Design field must receive an explicit role before verification.
 _AUTHORING = """
 dimensions lattice_frames helices strands lattice_type metadata deformations
-cluster_transforms nucleotide_transforms cluster_joints cluster_join_constraints
+cluster_transforms group_organization nucleotide_transforms cluster_joints cluster_join_constraints
 overhangs overhang_connections overhang_bindings connection_versions duplexes
 flexible_segment_marks flexible_connections protein_assets protein_attachments
 nanoparticles nanoparticle_conjugations nanoparticle_connection_versions

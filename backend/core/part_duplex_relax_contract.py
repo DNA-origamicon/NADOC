@@ -22,7 +22,7 @@ SOURCE_PATHS = tuple(f"backend/core/{name}.py" for name in (
     "linker_relax", "bond_relax", "duplex", "constants", "geometry", "design_geometry",
     "deformation", "deformation_scope", "sweep_path", "native_full_placement",
     "native_slab_placement", "measured_atomistic", "measured_positioning", "nucleotide_landmarks",
-    "junction_topology", "flexible_segments", "aptamer", "lattice", "sequences", "models",
+    "junction_topology", "flexible_segments", "aptamer", "lattice", "sequences", "models", "part_group_model",
     "sweep_model", "lattice_frame_model", "dimensions", "part_history_contract",
     "cluster_autodetect", "feature_identity",
 )) + ("backend/api/part_duplex_commands.py",)
@@ -34,7 +34,7 @@ nanoparticle_connection_versions extensions overhang_connections photoproduct_ju
 """.split())
 _ALLOWED_FIELDS = frozenset("""
 dimensions lattice_frames helices strands lattice_type metadata deformations
-cluster_transforms nucleotide_transforms cluster_joints cluster_join_constraints
+cluster_transforms group_organization nucleotide_transforms cluster_joints cluster_join_constraints
 overhangs overhang_bindings connection_versions duplexes flexible_segment_marks
 flexible_connections tm_settings staple_groups crossovers crossover_constraints forced_ligations
 """.split())

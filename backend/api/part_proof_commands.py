@@ -27,6 +27,7 @@ from backend.api.part_cadnano_commands import KINDS as CADNANO_KINDS
 from backend.api.part_nanoparticle_connection_commands import KINDS as NP_CONNECTION_KINDS
 from backend.api.part_connection_version_commands import is_pending_action
 from backend.api.part_connection_application_commands import ACTION as CONNECTION_APPLY_ACTION
+from backend.core.part_group_organization import KINDS as GROUP_ORGANIZATION_KINDS
 
 
 TOPOLOGY_MINOR_KINDS = frozenset({
@@ -36,7 +37,7 @@ TOPOLOGY_MINOR_KINDS = frozenset({
 })
 EXTRUSION_COMMANDS = frozenset({"extrude-segment", "extrude-continuation", "extrude-deformed-continuation", "circle-segment", "extrude-frame"})
 PROOF_SNAPSHOT_KINDS = (
-    NP_CONNECTION_KINDS | CADNANO_KINDS | ELEMENT_COPY_KINDS | APTAMER_KINDS | THIOL_KINDS
+    GROUP_ORGANIZATION_KINDS | NP_CONNECTION_KINDS | CADNANO_KINDS | ELEMENT_COPY_KINDS | APTAMER_KINDS | THIOL_KINDS
     | PROTEIN_CONJUGATION_KINDS | PROTEIN_KINDS | DUPLEX_KINDS | NANOPARTICLE_KINDS
     | JOINED_PATH_KINDS | CONNECTIVITY_KINDS | SECTION_KINDS | PATH_KINDS | BRANCH_KINDS
     | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS
@@ -103,10 +104,20 @@ def capabilities():
             "proof_version_overrides": {"cluster_create": {"supported": [1, GROUP_CREATE_VERSION],
                                                             "authoring": GROUP_CREATE_VERSION}},
             "proof_commands": sorted(PROOF_MINOR_KINDS | PROOF_SNAPSHOT_KINDS | OVERLAY_KINDS),
+            "group_organization": {"native_version": 1, "public_authoring": False,
+                                   "history_container": "snapshot"},
             "proof_root_kinds": ["empty", "import"]}
 
 
 def dependencies(kind, params):
+    if kind in GROUP_ORGANIZATION_KINDS:
+        from backend.core.part_group_organization import dependencies as organization_dependencies
+        # Generated composition has not qualified the distinct namespaces yet.
+        # Attribution is presentation metadata, as for the other native commands.
+        if type(params) is not dict or "_generated_scope" in params:
+            return Dependencies(known=False)
+        return organization_dependencies(kind, {key: value for key, value in params.items()
+                                               if key != "_generator"})
     if kind == "cluster_op":
         return _cluster_op_dependencies(params)
     if kind == "cluster-dissolve":
@@ -315,6 +326,12 @@ def execute_long(kind, design, params):
 def _execute(kind, design, params, *, expensive):
     if not dependencies(kind, params).known:
         raise NotImplementedError("Command lacks a versioned proof contract")
+    if design.group_organization is not None:
+        from backend.api.part_group_organization_gate import require_native_command
+        require_native_command(kind, params)
+    if kind in GROUP_ORGANIZATION_KINDS:
+        from backend.core.part_group_organization import build
+        return build(kind, design, {key: value for key, value in params.items() if key != "_generator"})
     from backend.core.part_history_proof import ProofBudgetExceeded
     # Admission is explicit-operation-only; never scan models on normal edits.
     nucleotide_budget = sum(h.length_bp for h in design.helices)

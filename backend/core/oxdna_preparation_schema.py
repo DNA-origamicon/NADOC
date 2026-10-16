@@ -8,6 +8,7 @@ New fields must be reviewed here rather than inferred from current serializers.
 from types import MappingProxyType
 
 from backend.core import models as m
+from backend.core.part_group_model import GroupDomainRef, GroupOrganization, PartGroup
 from backend.core.part_history_contract import PartRecipeRoot
 from backend.core.part_input_sources import EmbeddedInput, InputSource
 from backend.core.part_repair_draft import RepairBaseFingerprint, RepairDraft
@@ -16,7 +17,7 @@ from backend.core.part_repair_inputs import SetInput, UpgradeClusterCreation, Up
 
 _fields = {
     m.Design: """recipe_root input_sources repair_draft dimensions id lattice_frames helices strands
-        lattice_type metadata deformations cluster_transforms nucleotide_transforms cluster_joints
+        lattice_type metadata deformations cluster_transforms group_organization nucleotide_transforms cluster_joints
         cluster_join_constraints overhangs overhang_connections overhang_bindings connection_versions
         duplexes flexible_segment_marks flexible_connections protein_assets protein_attachments nanoparticles
         nanoparticle_conjugations nanoparticle_connection_versions tm_settings extensions staple_groups
@@ -47,6 +48,9 @@ _fields = {
         auto_loop_skips loop_skip_warnings preceding_op_ids direction start_step steps path_length_nm
         bp_positions_nm bp_frames""",
     m.DomainRef: "strand_id domain_index",
+    GroupDomainRef: "strand_id domain_index",
+    PartGroup: "id name helix_ids domain_ids color opacity is_default auto_created",
+    GroupOrganization: "version groups",
     m.NucleotideTransform: """id kind helix_id bp_index direction copy_k crossover_id extra_base_k
         pivot translation rotation""",
     m.ClusterRigidTransform: """id name is_default helix_ids domain_ids translation rotation pivot

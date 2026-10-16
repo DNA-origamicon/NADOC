@@ -112,6 +112,8 @@ def source_reason(design):
         _shape(design)
     except CaptureShapeError as error:
         return str(error)
+    if design.group_organization is not None:
+        return "Owned DNA preparation has not reviewed separate group organization"
     for name in _LIST_FIELDS:
         value = getattr(design, name)
         if type(value) is not list:

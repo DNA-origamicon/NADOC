@@ -40,7 +40,7 @@ def require_compatibility(operation, *, doc_id=None):
     from backend.api.doc_context import get_current_doc
 
     with state._lock:
-        return policy.require_compatibility(doc_id or get_current_doc(), operation)
+        return state._require_compatibility_write(operation, doc_id=doc_id or get_current_doc())
 
 
 def _create_empty_part_locked(name, lattice_type):

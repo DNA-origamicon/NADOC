@@ -1,8 +1,8 @@
 """Bounded structural reference diagnostics, separate from scientific validity.
 
-Only cluster/frame identities, frame placement owners, and helix frame/cell
-references are inspected. Callers own source isolation and decide when to run
-this explicit check. No geometry, serialization, mutation or repair occurs.
+Cluster/frame identities and frame/cell references are checked for all designs.
+Explicit separate organization additionally checks its typed member references;
+legacy None never adds a strand walk. No geometry, serialization or repair occurs.
 """
 
 MAX_ITEMS = 30_000
@@ -56,10 +56,11 @@ def assess_structure(design, *, checkpoint=None, max_items=MAX_ITEMS, max_issues
 
     def index(values, field, count, kind):
         first, ambiguous, keys = {}, set(), []
+        root = [field] if type(field) is str else list(field)
         for position, item in enumerate(values):
             check()
             result["checked_counts"][count] += 1
-            path = [field, position, "id"]
+            path = [*root, position, "id"]
             key = identity(item.id, path, kind)
             keys.append(key)
             if key is None:
@@ -67,7 +68,7 @@ def assess_structure(design, *, checkpoint=None, max_items=MAX_ITEMS, max_issues
             if key in first:
                 ambiguous.add(key)
                 issue("duplicate_identity", path, kind, key,
-                      first_model_path=[field, first[key], "id"])
+                      first_model_path=[*root, first[key], "id"])
             else:
                 first[key] = position
         return first, ambiguous, keys
@@ -80,6 +81,8 @@ def assess_structure(design, *, checkpoint=None, max_items=MAX_ITEMS, max_issues
         code = "ambiguous_reference" if target in ambiguous else "missing_reference" if target not in first else None
         if code:
             issue(code, path, kind, owner, reference={"kind": target_kind, "identity": target})
+            return None
+        return target
 
     try:
         check()
@@ -93,6 +96,32 @@ def assess_structure(design, *, checkpoint=None, max_items=MAX_ITEMS, max_issues
             if total > max_items:
                 raise _Incomplete("structure_item_limit", maximum=max_items)
             collections[field] = values
+        organization = getattr(design, "group_organization", None)
+        if organization is not None:
+            from backend.core.models import Domain, Strand
+            from backend.core.part_group_model import GroupDomainRef, GroupOrganization, PartGroup
+
+            if (type(organization) is not GroupOrganization
+                    or type(organization.version) is not int or organization.version != 1
+                    or type(organization.groups) is not list or type(design.strands) is not list):
+                raise _Incomplete("structure_input_shape", model_path=["group_organization"])
+            groups, strands = organization.groups, design.strands
+            total += len(groups) + len(strands)
+            if total > max_items:
+                raise _Incomplete("structure_item_limit", maximum=max_items)
+            # Reserve all group-member occurrences before any identity index or
+            # member traversal. Domain addresses are O(1) indexes, not full
+            # strand/domain scans. Repeated references still consume allowance.
+            for position, group in enumerate(groups):
+                check()
+                path = ["group_organization", "groups", position]
+                if (type(group) is not PartGroup or type(group.helix_ids) is not list
+                        or type(group.domain_ids) is not list):
+                    raise _Incomplete("structure_input_shape", model_path=path)
+                total += len(group.helix_ids) + len(group.domain_ids)
+                if total > max_items:
+                    raise _Incomplete("structure_item_limit", maximum=max_items)
+            result["checked_counts"].update(part_groups=0, strands=0, group_members=0)
         indexes = {field: index(collections[field], field, count, kind)
                    for field, count, kind in _COLLECTIONS}
         for position, frame in enumerate(collections["lattice_frames"]):
@@ -108,6 +137,51 @@ def assess_structure(design, *, checkpoint=None, max_items=MAX_ITEMS, max_issues
                       "helix", owner, "lattice_frame", indexes["lattice_frames"])
             if helix.grid_pos is None:
                 issue("missing_lattice_cell", ["helices", position, "grid_pos"], "helix", owner)
+        if organization is not None:
+            for position, strand in enumerate(strands):
+                check()
+                if type(strand) is not Strand:
+                    raise _Incomplete("structure_input_shape", model_path=["strands", position])
+            strand_index = index(strands, "strands", "strands", "strand")
+            group_index = index(groups, ("group_organization", "groups"), "part_groups", "part_group")
+            for position, group in enumerate(groups):
+                owner = group_index[2][position]
+                base = ["group_organization", "groups", position]
+                for offset, helix_id in enumerate(group.helix_ids):
+                    check()
+                    result["checked_counts"]["group_members"] += 1
+                    reference(helix_id, [*base, "helix_ids", offset], "part_group", owner,
+                              "helix", indexes["helices"])
+                for offset, member in enumerate(group.domain_ids):
+                    check()
+                    result["checked_counts"]["group_members"] += 1
+                    path = [*base, "domain_ids", offset]
+                    if type(member) is not GroupDomainRef:
+                        raise _Incomplete("structure_input_shape", model_path=path)
+                    strand_id = reference(member.strand_id, [*path, "strand_id"], "part_group", owner,
+                                          "strand", strand_index)
+                    if type(member.domain_index) is not int or member.domain_index < 0:
+                        issue("invalid_reference", [*path, "domain_index"], "part_group", owner)
+                        continue
+                    if member.domain_index.bit_length() > 64:
+                        raise _Incomplete("structure_identity_limit", maximum=64,
+                                          model_path=[*path, "domain_index"])
+                    if strand_id is None:
+                        continue
+                    strand = strands[strand_index[0][strand_id]]
+                    if type(strand.domains) is not list:
+                        raise _Incomplete("structure_input_shape", model_path=[
+                            "strands", strand_index[0][strand_id], "domains"])
+                    if member.domain_index >= len(strand.domains):
+                        issue("missing_reference", [*path, "domain_index"], "part_group", owner,
+                              reference={"kind": "domain", "identity": f"{strand_id}:{member.domain_index}"})
+                        continue
+                    domain = strand.domains[member.domain_index]
+                    if type(domain) is not Domain:
+                        raise _Incomplete("structure_input_shape", model_path=[
+                            "strands", strand_index[0][strand_id], "domains", member.domain_index])
+                    reference(domain.helix_id, [*path, "domain_index"], "part_group", owner,
+                              "helix", indexes["helices"])
         check()
     except _Incomplete as error:
         result.update(status="incomplete", complete=False, limit=error.detail)

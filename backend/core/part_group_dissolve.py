@@ -15,7 +15,7 @@ from backend.core.part_command_errors import CommandContractError, ReferenceReso
 from backend.core.part_operation_input import MAX_OPERATION_BYTES, MAX_OPERATION_NODES, validate_operation_input
 from backend.core.part_history_contract import FIELD_ROLES
 from backend.core.part_saved_topology import snapshot_for
-from backend.core.part_scope_references import COLLECTIONS, GLOBALS, SCHEMAS
+from backend.core.part_scope_references import COLLECTIONS, GLOBALS, NESTED_COLLECTIONS, SCHEMAS
 
 
 KIND = "cluster-dissolve"
@@ -139,7 +139,7 @@ def _check_inventory_contract():
     """Class metadata only: close both direct and nested future owner families."""
     authoring = {field for field, role in FIELD_ROLES.items() if role == "authoring"}
     if (set(m.Design.model_fields) - FIELD_ROLES.keys()
-            or set(COLLECTIONS) | GLOBALS != authoring):
+            or set(COLLECTIONS) | set(NESTED_COLLECTIONS) | GLOBALS != authoring):
         _unsupported("Group reference inventory has unclassified authoring fields.")
     cache, active = {}, set()
 
@@ -170,7 +170,7 @@ def _check_inventory_contract():
         cache[model] = reachable
         return reachable
 
-    for field in COLLECTIONS:
+    for field in (*COLLECTIONS, *NESTED_COLLECTIONS):
         roots = _model_types(m.Design.model_fields[field].annotation)
         if not roots:
             _unsupported("Group reference inventory has an unclassified collection schema.")
@@ -276,6 +276,8 @@ def _walk(record, path, owner, budget, incoming, depth=0):
 def _inventory(design):
     if type(design) is not m.Design:
         _unsupported("Group dissolution requires an ordinary owned Design.")
+    if design.group_organization is not None:
+        _unsupported("Legacy cluster dissolution cannot remove separate group organization.")
     _check_inventory_contract()
     total = 0
     for field in _COLLECTIONS:

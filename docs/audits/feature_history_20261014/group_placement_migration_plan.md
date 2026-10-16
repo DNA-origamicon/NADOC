@@ -1,7 +1,7 @@
 # Group organization and placement: finite migration plan
 
-Architecture proposal, October 16, 2026; source baseline `3aa2529a`. This document
-contains no implementation or new validation result. FH-18 remains open. The
+Architecture proposal, October 16, 2026; source baseline `3aa2529a`. The U6 status
+below records implementation after that proposal. FH-18 remains open. The
 overhaul count remains **18/38 complete**, with **11 core and 9 parked milestones
 remaining**. This plan and its implementation batches earn no separate milestone
 credit. See the [fixed exits and ledger](remaining_standard_part_checkpoints.md).
@@ -160,6 +160,31 @@ independent reproduction under the explicitly admitted manifest transitions.
 Existing persisted pins are never rewritten silently.
 
 ## Implementation batches and gates
+
+**U6 implementation status:** A is implemented privately. The exact schema is
+`Design.group_organization: GroupOrganization | None`, with version 1 and typed
+`PartGroup`/`GroupDomainRef` records in a distinct `part_group` namespace. Native
+`group-organize`, `group-create`, `group-update` and `group-dissolve` v1 inputs
+are top-level Snapshot rows. Conversion checks the complete ordered placement-ID
+inventory, deriving organization from the independently rebuilt prefix without
+pinning its poses. Output identities and command versions are protected during
+input editing. Pose-only `cluster_op` can still target an explicit existing
+placement in a private recipe; unadapted native operations refuse after conversion.
+
+B/C have foundations, not completion: input editing/cold replay, typed reference
+inventory, bounded diagnostics, selected-snapshot organization recovery, and
+actual optimized/F0 seek are covered. Live transaction, remaining topology and
+selection consumers, generated composition, full recovery-body admission and
+new-group move semantics remain. D/E are open. Public canonical state ingress
+and publication refuse active organization until those adapters are ready;
+legacy `None` remains admitted. No UI switch, request flag or automatic loading
+migration enables the new representation. See the [U6 evidence](validation_group_organization_representation.json).
+
+The schema transition replaces nine historical-target policy entries with nine
+explicit A/B/C→current entries, retaining support for every previously admitted
+source generation. The exact prior policy is preserved separately for audit and
+historical-target tests. Numerical kernels/data/runtime checks and policy bounds
+are unchanged. Source model/contract deltas are enumerated per engine.
 
 These are finite batches within **one FH-18 milestone**, not new completed slots.
 Root owns sequencing and serialized validation. No prototype is enabled merely

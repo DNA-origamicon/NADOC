@@ -40,7 +40,7 @@ SOURCE_PATHS = tuple(f"backend/core/{name}.py" for name in (
     "deformation_scope", "sweep_path", "native_full_placement",
     "native_slab_placement", "measured_atomistic", "measured_positioning",
     "nucleotide_landmarks", "junction_topology", "flexible_segments", "aptamer",
-    "lattice", "sequences", "chain_ids", "models", "sweep_model",
+    "lattice", "sequences", "chain_ids", "models", "part_group_model", "sweep_model",
     "lattice_frame_model", "dimensions", "biotin_extensions", "part_history_contract",
 )) + ("backend/api/part_cpd_commands.py",)
 DATA_PATHS = ("backend/core/data/measured_atomistic_template.json",)
@@ -53,7 +53,7 @@ flexible_segment_marks flexible_connections
 """.split())
 _ALLOWED_FIELDS = frozenset("""
 dimensions lattice_frames helices strands lattice_type metadata deformations
-cluster_transforms nucleotide_transforms tm_settings staple_groups
+cluster_transforms group_organization nucleotide_transforms tm_settings staple_groups
 photoproduct_junctions crossovers crossover_constraints forced_ligations
 """.split())
 
