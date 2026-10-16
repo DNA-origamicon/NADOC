@@ -9,10 +9,10 @@ import pytest
 from backend.api import doc_context, part_batch_evaluation, part_evaluation_jobs as jobs, state
 from backend.api import part_immutable_evaluation as immutable
 from backend.api import part_immutable_revision as revisions, part_publication_host as host
+from backend.api import part_immutable_worker as transport
 from backend.api import part_publication_permit as permits, part_publication_policy as policy
 from backend.api.part_evaluation import EvaluationRequest, evaluate
 from backend.api.part_history_verification import _slot
-from backend.core.models import Design
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_verification_capture import CaptureLimit
 from tests.test_part_registered_batch import gold, request as batch_request
@@ -58,6 +58,9 @@ def slot_available():
 def immediate(document, monkeypatch):
     class Worker:
         def __init__(self, design, operation):
+            if transport.is_immutable_input(design):
+                parts, _binding = transport.encode_input(design, operation)
+                design, operation, _binding = transport.decode_input(b"".join(parts))
             self.design, self.operation = design, operation
 
         def start(self):
@@ -76,37 +79,23 @@ def immediate(document, monkeypatch):
             pass
 
     monkeypatch.setattr(jobs, "EvaluationWorker", Worker)
+    monkeypatch.setattr(transport, "ImmutableEvaluationWorker", Worker)
     monkeypatch.setattr(jobs, "_submit", jobs._run)
     return document
 
 
 @pytest.mark.parametrize("admission,identity", [(False, False), (False, True), (True, False)])
-def test_owned_capture_preserves_actual_handle_and_outside_lock_work(document, monkeypatch, admission, identity):
+def test_source_reservation_preserves_handle_without_parent_decode_or_projection(document, monkeypatch, admission, identity):
     doc, source = document
     from backend.core import part_capture_inputs
 
-    seen = []
-    original_decode, original_capture = immutable.materialize_revision, part_capture_inputs.visit_inputs
-
-    def decode(value):
-        unlocked()
-        assert value is source
-        seen.append("decode")
-        return original_decode(value)
-
-    def capture(value, **kwargs):
-        unlocked()
-        assert type(value) is Design
-        seen.append("capture")
-        return original_capture(value, **kwargs)
-
-    monkeypatch.setattr(immutable, "materialize_revision", decode)
-    monkeypatch.setattr(part_capture_inputs, "visit_inputs", capture)
+    monkeypatch.setattr(immutable, "materialize_revision", lambda *_a: pytest.fail("Request decoded source"))
+    monkeypatch.setattr(part_capture_inputs, "visit_inputs", lambda *_a, **_kw: pytest.fail("Request projected source"))
     result = state.capture_design_for_evaluation(EvaluationRequest.model_validate(body(source)),
         include_admission=admission, include_session_identity=identity)
     assert result[0] is state._sessions[doc].design is source
-    assert type(result[1]) is Design and seen == ["decode", "capture"]
-    result[1].metadata.name = "private edit"
+    assert transport.is_immutable_input(result[1]) and result[1].source is source
+    assert result[1].id == revisions.revision_metadata(source).design_id
     assert revisions.revision_metadata(source).name == "Strict evaluation"
     assert len(result) == (5 if admission else 4 if identity else 3)
     if admission:
@@ -134,14 +123,56 @@ def test_initial_context_refuses_before_materialization(document, monkeypatch, c
     slot_available()
 
 
-@pytest.mark.parametrize("change", ["close", "reopen", "revision", "source", "policy"])
-def test_change_during_decode_refuses_before_job_admission(document, monkeypatch, change):
+def test_scalar_history_limit_refuses_before_reservation_or_worker(document, monkeypatch):
+    from backend.core.models import MinorMutationLogEntry, RoutingClusterLogEntry
+    from tests.test_part_registered_batch import helix
+
     doc, source = document
-    original = immutable.materialize_revision
+    private = revisions.materialize_revision(source)
+    private.feature_log = [RoutingClusterLogEntry(children=[MinorMutationLogEntry(
+        label="Helix", op_subtype="helix-add", params={"_proof_version": 1}) for _ in range(61)])]
+    sealed = revisions.prepare_revision(private)
+    with state._lock:
+        state._sessions[doc].design = sealed
+    request = body(sealed)
+    request["batch"]["commands"] = [helix(), gold()]
+    monkeypatch.setattr(transport, "reserve_input", lambda *_a: pytest.fail("Oversize rows reserved input"))
+    monkeypatch.setattr(jobs, "_submit", lambda *_a: pytest.fail("Oversize rows spawned"))
+    with pytest.raises(HTTPException) as error:
+        jobs.start(request)
+    assert error.value.status_code == 422
+    assert error.value.detail["code"] == "unsupported_batch_publication_scope"
+    assert state._sessions[doc].design is sealed and not jobs._jobs
+    slot_available()
+
+
+def test_equal_bytes_from_another_source_handle_cannot_substitute_worker_input(document, monkeypatch):
+    doc, source = document
+    replacement = revisions.prepare_revision(revisions.materialize_revision(source))
+    assert replacement.payload == source.payload and replacement is not source
+
+    def substitute(job, _captured, operation):
+        jobs._run(job, transport.reserve_input(replacement), operation)
+
+    monkeypatch.setattr(jobs, "_submit", substitute)
+    monkeypatch.setattr(transport, "ImmutableEvaluationWorker", lambda *_a: pytest.fail("Substituted source spawned"))
+    identity = jobs.start(body(source))["job_id"]
+    result = jobs.inspect(identity)["result"]
+    assert result["status"] == "unverified" and "candidate" not in result
+    with pytest.raises(HTTPException):
+        jobs.commit(identity)
+    assert state._sessions[doc].design is source and not state._sessions[doc].history
+    slot_available()
+
+
+@pytest.mark.parametrize("change", ["close", "reopen", "revision", "source", "policy"])
+def test_change_during_reservation_refuses_before_job_admission(document, monkeypatch, change):
+    doc, source = document
+    original = transport.reserve_input
     replacement = revisions.prepare_revision(revisions.materialize_revision(source))
     prior_admissions = len(permits._admissions)
 
-    def decode(value):
+    def reserve(value):
         result = original(value)
         unlocked()
         if change in {"close", "reopen"}:
@@ -159,7 +190,7 @@ def test_change_during_decode_refuses_before_job_admission(document, monkeypatch
                     state._sessions[doc].design = replacement
         return result
 
-    monkeypatch.setattr(immutable, "materialize_revision", decode)
+    monkeypatch.setattr(transport, "reserve_input", reserve)
     monkeypatch.setattr(jobs, "_submit", lambda *args: pytest.fail("Stale source reached supervisor"))
     with pytest.raises(HTTPException) as error:
         jobs.start(body(source))

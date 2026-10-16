@@ -75,6 +75,11 @@ def admit_batch_source(design, commands=()):
                 _native_row(child)
         else:
             _native_row(entry)
+    admit_prospective_rows(rows, commands)
+
+
+def admit_prospective_rows(rows, commands):
+    """Share cheap scalar row admission with sealed-source HTTP reservations."""
     previous_minor = False
     for command in commands:
         minor = command.kind in _MINOR_KINDS

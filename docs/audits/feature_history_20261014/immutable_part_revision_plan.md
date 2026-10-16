@@ -42,6 +42,20 @@ with the actual capture/commit lifecycle coverage. The old mutable verification
 facade still refuses handles; strict verification uses the admitted evaluation
 job path. See [evaluation validation](validation_immutable_evaluation_p6.json).
 
+## Strict-byte host continuation
+
+The existing host now reserves the exact sealed source without decoding or
+projecting it in the request process. The admitted child receives a private
+versioned byte envelope and performs exact decode, unchanged ordinary admission
+and native proof. Prospective row counts are rejected cheaply from sealed
+metadata before worker allocation. The unused parent-only capture helper is
+removed; mutable compatibility capture stays unchanged. The host continuation
+has 147 distinct focused green cases, including durable create/recovery cold
+proof and source/session/policy substitution checks. Public gates remain false.
+The new transport requires actual lifecycle latency and memory measurements;
+previous owned-input results do not qualify this implementation. See
+[transport evidence](validation_immutable_worker_transport_p6.json).
+
 ## Decision
 
 Use one immutable serialized revision as the authoritative content of a new

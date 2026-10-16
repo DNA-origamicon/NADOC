@@ -1,6 +1,6 @@
 {
   "date": "2026-10-15",
-  "scope": "Internal strict-byte worker before HTTP/job admission wiring",
+  "scope": "Strict-byte worker and existing immutable HTTP/job host wiring; public availability gates remain false",
   "initial_red": {
     "failed": 2,
     "seconds": 2.68,
@@ -46,11 +46,40 @@
   ],
   "public_gates_enabled": false,
   "latency_qualified": false,
-  "http_wired": false,
+  "http_wired": true,
   "next": [
-    "Wire constant-size sealed source reservation to existing job host",
-    "Test stale source/session/policy, cancellation, expiry, same candidate commit and durable lifecycle",
-    "Measure actual HTTP, memory and child resource ownership before public enablement"
+    "Measure actual start/worker/commit HTTP lifecycle and concurrent lightweight requests against the predeclared criteria",
+    "Measure scoped parent+child memory and retained source/undo/two-result ownership",
+    "Keep public storage and registered batch gates false until relevant qualification passes"
   ],
-  "app_status": "NOT VERIFIED IN APP"
+  "app_status": "NOT VERIFIED IN APP",
+  "host_wiring": {
+    "initial_red": {
+      "failed": 2,
+      "seconds": 2.76,
+      "reason": "Existing host still decoded the immutable source in the request process"
+    },
+    "first_regression": {
+      "passed": 135,
+      "failed": 2,
+      "seconds": 12.26,
+      "reason": "Two independent cold-proof fixtures still treated the new private input ticket as a mutable Design"
+    },
+    "corrected_regression": {
+      "passed": 112,
+      "seconds": 11.6,
+      "warnings": 2,
+      "warning_reason": "Historical model_construct serialization fixtures"
+    },
+    "distinct_green": 147,
+    "unchanged_related_cases_from_first_run": 35,
+    "invariants": [
+      "Constant-size exact-source reservation; parent decode/projection tripwires",
+      "Prospective 64-row admission from sealed metadata before worker allocation",
+      "Same session/source/revision/policy binding and exact candidate commit",
+      "Independent classic capture and cold replay after durable creation/recovery",
+      "Equal bytes on a different sealed handle cannot substitute the admitted source"
+    ],
+    "removed_legacy_path": "Unused parent-only _capture_owned_revision helper; owned projection now tested through actual strict-byte transport"
+  }
 }

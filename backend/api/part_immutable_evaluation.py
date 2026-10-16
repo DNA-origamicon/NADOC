@@ -1,8 +1,9 @@
 """Private evaluation preparation for an already sealed strict source.
 
-The state facade retains the actual source/session under its lock. Decode and
-ordinary capture run outside that lock, then the same host context is checked
-before an admission is minted. No decoded model is retained by the session.
+The state facade retains the actual source/session under its lock. A private
+byte-input reservation is bound to that same host context before admission.
+Decode and ordinary projection run only inside the isolated child. Candidate
+preparation at commit still happens outside the state lock in the parent.
 """
 
 from fastapi import HTTPException
@@ -30,38 +31,17 @@ def check_request(source, request, revision, configuration):
         if (request.batch.expected_design_id != metadata.design_id
                 or request.batch.expected_revision != revision):
             raise CommandContractError("Batch belongs to a different part or captured revision", code="batch_conflict")
+        from backend.api.part_batch_publication_scope import admit_prospective_rows
 
-
-def _capture_owned_revision(source, *, request, revision):
-    """Own materialization through transfer; never accept a live mutable model.
-
-    Full-byte decoding remains checked. The ordinary authoring projection and
-    30k-node/2 MB/25 ms accounting are shared with mutable capture, including
-    recovery stripping. Nested authored models may transfer because the only
-    published source is immutable bytes; no decoded alias survives this call.
-    """
-    from time import monotonic
-    from backend.api.part_batch_evaluation import admit_batch_capture
-    from backend.core.part_capture_inputs import visit_inputs
-
-    require_sealed(source)
-    if request.operation not in {"batch", "verify"}:
-        raise CommandContractError("Immutable capture requires batch or verify", code="immutable_publication_scope")
-    if request.expected_revision is not None and request.expected_revision != revision:
-        raise CommandContractError("Design changed before evaluation capture", code="source_changed")
-    private = materialize_revision(source)
-    deadline = (admit_batch_capture(private, request, revision=revision)
-                if request.operation == "batch" else monotonic() + 0.025)
-    return visit_inputs(private, max_nodes=30_000, max_bytes=2_000_000,
-        seconds=max(0, deadline - monotonic()), preserve_entry_types=True,
-        copy_inputs=False, retain_owned=True)
+        admit_prospective_rows(metadata.history_rows, request.batch.commands)
 
 
 def capture_reserved(doc_id, session, source, revision, generation, request, request_digest,
                      *, include_session_identity, include_admission):
     from backend.api import state
+    from backend.api.part_immutable_worker import reserve_input
 
-    captured = _capture_owned_revision(source, request=request, revision=revision)
+    captured = reserve_input(source)
     with state._lock:
         current = policy.require_evaluation(doc_id, request.operation)
         if current.generation != generation:

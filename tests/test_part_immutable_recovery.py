@@ -389,7 +389,7 @@ def test_strict_http_recovery_uses_same_poll_commit_and_no_json_restore_selector
 
 
 def test_real_spawned_native_empty_restore_is_cold_qualified_and_reverified(document):
-    from backend.api.part_evaluation import EvaluationRequest
+    from backend.core.part_verification_capture import capture
 
     doc, _owner = document
     source = stored(document)
@@ -398,7 +398,7 @@ def test_real_spawned_native_empty_restore_is_cold_qualified_and_reverified(docu
     assert report["result"]["restoration_assessment"]["status"] == "verified", report
     assert jobs.commit(identity)["revision"] == 1
     assert state._sessions[doc].design.payload == source.payload
-    captured = state.capture_design_for_evaluation(EvaluationRequest(operation="verify", expected_revision=1))[1]
+    captured = capture(revisions.materialize_revision(state._sessions[doc].design), preserve_entry_types=True)
     from backend.api.part_verification_worker import VerificationWorker
     worker = VerificationWorker(captured)
     try:

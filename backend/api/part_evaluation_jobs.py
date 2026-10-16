@@ -114,6 +114,12 @@ def _run(job, captured, operation):
     def worker(design):
         if not _request_matches(job, operation):
             raise ValueError("Evaluation request no longer matches its host admission")
+        from backend.api.part_immutable_worker import ImmutableEvaluationWorker, is_immutable_input
+
+        if is_immutable_input(design):
+            if design.source is not job.source():
+                raise ValueError("Immutable worker input differs from the admitted source")
+            return ImmutableEvaluationWorker(design, operation)
         return EvaluationWorker(design, operation)
 
     result = supervise(job, captured, worker,

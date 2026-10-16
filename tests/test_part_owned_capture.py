@@ -3,13 +3,11 @@
 import pytest
 from fastapi import HTTPException
 
-from backend.api import part_batch_evaluation as batch
-from backend.api import part_immutable_evaluation as immutable
 from backend.api import part_immutable_revision as revisions
+from backend.api import part_immutable_worker as transport
 from backend.api.part_evaluation import EvaluationRequest
 from backend.core import part_capture_inputs as inputs
 from backend.core.models import ClusterCreateLogEntry, Design, RoutingClusterLogEntry, MinorMutationLogEntry
-from backend.core.part_command_errors import CommandContractError
 from backend.core.part_verification_capture import CaptureLimit, capture
 from tests.test_part_immutable_revision import retained_source
 from tests.test_part_registered_batch import gold, request as batch_request
@@ -31,6 +29,14 @@ def projected(design, **kwargs):
         preserve_entry_types=kwargs.get("preserve_entry_types", True), copy_inputs=False, retain_owned=True)
 
 
+def from_bytes(handle, request, revision):
+    parts, _binding = transport.encode_input(transport.reserve_input(handle), {
+        "request": request.model_dump(mode="json"), "header": {"identity": "worker-input",
+            "timestamp": "2026-10-15T00:00:00Z", "source_revision": revision,
+            "source_design_id": revisions.revision_metadata(handle).design_id}})
+    return transport.decode_input(b"".join(parts))[0]
+
+
 @pytest.mark.parametrize("preserve", [False, True])
 def test_owned_projection_has_exact_capture_shape_and_exclusions(preserve):
     design = source()
@@ -46,8 +52,7 @@ def test_owned_projection_has_exact_capture_shape_and_exclusions(preserve):
 def test_owned_projection_mutations_cannot_change_seal_or_future_materialization():
     handle = revisions.prepare_revision(source())
     original = handle.payload
-    actual = immutable._capture_owned_revision(handle,
-        request=EvaluationRequest(operation="verify", expected_revision=1), revision=1)
+    actual = from_bytes(handle, EvaluationRequest(operation="verify", expected_revision=1), 1)
     actual.nanoparticles[0].diameter_nm = 22.
     actual.feature_log[0].params["nested"]["values"].clear()
     actual.feature_log[1].helix_ids.append("changed")
@@ -63,8 +68,7 @@ def test_owned_projection_mutations_cannot_change_seal_or_future_materialization
 def test_owned_path_does_not_deepcopy_an_already_isolated_graph(monkeypatch):
     handle = revisions.prepare_revision(source())
     monkeypatch.setattr(inputs, "deepcopy", lambda *a, **k: pytest.fail("Redundant graph copy"))
-    value = immutable._capture_owned_revision(handle,
-        request=EvaluationRequest(operation="verify", expected_revision=1), revision=1)
+    value = from_bytes(handle, EvaluationRequest(operation="verify", expected_revision=1), 1)
     assert value.nanoparticles[0].id == "gold"
     assert value.feature_log[2].children[0].id == "child"
 
@@ -101,21 +105,16 @@ def test_owned_transfer_cannot_disable_deadline_or_mix_copy_modes(changes):
 @pytest.mark.parametrize("fake", [None, {}, b"{}"])
 def test_owned_host_requires_sealed_bytes_before_materialization(fake):
     with pytest.raises(HTTPException) as error:
-        immutable._capture_owned_revision(fake, request=EvaluationRequest(operation="verify"), revision=1)
+        from_bytes(fake, EvaluationRequest(operation="verify"), 1)
     assert error.value.status_code == 409
     assert error.value.detail["code"] == "immutable_publication_scope"
 
 
-def test_owned_capture_reuses_batch_scope_and_command_row_admission(monkeypatch):
+def test_owned_capture_reuses_batch_scope_and_captured_context():
     handle = revisions.prepare_revision(retained_source())
-    monkeypatch.setattr(batch, "REGISTERED_BATCH_ENABLED", True)
     request = EvaluationRequest.model_validate({"operation": "batch", "batch": batch_request(
         gold(), expected_revision=1, expected_design_id="stable-part")})
-    value = immutable._capture_owned_revision(handle, request=request, revision=1)
+    value = from_bytes(handle, request, 1)
     assert value.feature_log[0].post_state_gz_b64 == ""
-    monkeypatch.setattr(batch, "REGISTERED_BATCH_ENABLED", False)
-    with pytest.raises(CommandContractError, match="not enabled"):
-        immutable._capture_owned_revision(handle, request=request, revision=1)
-    monkeypatch.setattr(batch, "REGISTERED_BATCH_ENABLED", True)
-    with pytest.raises(CommandContractError, match="different part"):
-        immutable._capture_owned_revision(handle, request=request, revision=2)
+    with pytest.raises(ValueError, match="different source"):
+        from_bytes(handle, request, 2)

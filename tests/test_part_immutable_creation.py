@@ -285,7 +285,7 @@ def test_real_durable_create_batch_flush_restart_restore_and_edit(document, monk
     from collections import OrderedDict
     from backend.api import part_batch_evaluation, part_evaluation_jobs as jobs
     from backend.api import part_immutable_recovery as recovery
-    from backend.api.part_evaluation import EvaluationRequest
+    from backend.core.part_verification_capture import capture
     from backend.api.part_verification_worker import VerificationWorker
     from tests.test_part_registered_batch import GOLD, command, gold, request
 
@@ -323,7 +323,8 @@ def test_real_durable_create_batch_flush_restart_restore_and_edit(document, monk
     assert current.feature_log[0].id == first_feature and current.nanoparticles[0].id == GOLD
     assert current.nanoparticles[0].diameter_nm == 14.0 and len(current.feature_log) == 2
     assert session_cache._write_doc(doc)[0] == revision
-    captured = state.capture_design_for_evaluation(EvaluationRequest(operation="verify", expected_revision=revision))[1]
+    # Independent classic capture/proof remains an oracle for byte-transport jobs.
+    captured = capture(revisions.materialize_revision(state._sessions[doc].design), preserve_entry_types=True)
     worker = VerificationWorker(captured)
     try:
         worker.start()
