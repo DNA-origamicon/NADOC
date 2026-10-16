@@ -1,0 +1,92 @@
+{
+  "date": "2026-10-16",
+  "checkpoint_before": "6df35afb",
+  "scope": "FH-19 checkpoint 1: private bounded saved-file recipe admission and explicit recovered-copy evaluation",
+  "progress": {
+    "completed": 17,
+    "estimated_total": 38,
+    "remaining": 21,
+    "core_remaining": 12,
+    "parked_remaining": 9,
+    "completed_delta": 0,
+    "total_delta": 0,
+    "milestone": "FH-19",
+    "major_checkpoints_spent_since_B1": 1,
+    "milestone_closed": false
+  },
+  "focused_targets": [
+    "tests/test_part_recipe_file.py",
+    "tests/test_part_recipe_file_recovery.py",
+    "tests/test_part_group_repair.py",
+    "tests/test_group_creation_v2.py",
+    "tests/test_part_structure_proof.py",
+    "tests/test_part_recipe_repair.py",
+    "tests/test_part_input_sources.py",
+    "tests/test_part_document_io.py"
+  ],
+  "final_checks": {
+    "backend": {
+      "command": "just validate-safe scripts/test_guard.sh test-focused 0 focused -- uv run pytest <8 explicit targets> -q --tb=short --disable-warnings --durations=8",
+      "passed": 277,
+      "seconds": 4.85,
+      "new_cases": 104,
+      "existing_regression_cases": 173
+    },
+    "scoped_ruff": "Passed: four new Python files",
+    "diff_check": "Passed",
+    "main_js_line_delta": 0,
+    "frontend": "Unchanged; no frontend test or browser run",
+    "app": "No user entry is connected. No app, process-host or request/render-latency qualification is claimed. Archive is unavailable; VR deferred."
+  },
+  "integration_and_review_evidence": [
+    {"scope": "First evaluator integration", "passed": 23, "seconds": 3.5},
+    {"scope": "Parser and evaluator integration", "passed": 95, "seconds": 3.43},
+    {"scope": "Stronger cancellation regressions before fix", "failed": 6, "passed": 2, "deselected": 21, "seconds": 2.86,
+     "cause": "ValueError/TypeError raised by caller checkpoints were normalized as input failures. A private interruption sentinel now escapes nested input handlers and rethrows the exact caller exception."},
+    {"scope": "Stronger roundtrip regression before fix", "failed": 1, "passed": 31, "seconds": 3.0,
+     "cause": "Python equality accepted integer-to-float input drift. Bounded canonical JSON digests now compare exact typed JSON values before independent proof."},
+    {"scope": "Command invocation corrections", "tests_executed": false,
+     "cause": "Initial test-focused invocation rejected unsupported flags; a later just invocation split a compound -k expression. Reissued guarded pytest with explicit targets. No tests are credited for those invocations."}
+  ],
+  "architecture": {
+    "authority": "Exact immutable original bytes/SHA; only separately admitted root, typed definitions and pinned sources feed reconstruction",
+    "bounds": "1,500,000 original bytes; depth64; 30,000 JSON nodes/8,000,000 graph bytes; unchanged recipe 2,000,000-byte/30,000-node admission, 2,000 rows, 64 actions/256,000 operation bytes and 16,000,000 result bytes",
+    "scope": "Explicit native empty v1 roots and grouping v1 upgrade actions; unsupported roots/definitions refuse",
+    "preservation": "Original byte object retained unchanged. Excluded materialized, presentation, physical, metadata and draft fields are enumerated; no silent metadata restoration claim",
+    "copy": "Host-generated fresh document ID; stable feature/output identities; no live session, path, workspace reconciliation or file publication",
+    "acceptance": "Existing repair rebuild, structural closure, successful validator, exact ordinary typed roundtrip and independent input replay; original materialization is not the oracle",
+    "efficiency": "Only explicit private calls perform these scans/replays. No ordinary edit/slider/load/autosave path changed; exact roundtrip avoids redundant validation/structure walks",
+    "cleanup_and_pruning": "No shared legacy paths changed or deleted. Dedicated modules avoid a second retained recovery host and retain existing typed repair/replay logic",
+    "molecular_changes": false,
+    "numerical_pins_changed": false,
+    "public_gates_changed": false
+  },
+  "selector": {
+    "command": "just test-smart --dry-run",
+    "changed_files_since_last_full": 5464,
+    "decision": "FAST  (fast suite only)",
+    "tests_executed": false,
+    "deferred_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\n  This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\n  Only request `just test-session` when a broad/full sweep is actually needed.",
+    "clarification": "Selection only: quoted boilerplate says ran, but no selector suite ran. Broad and aggregate fast-suite debt remain; only scoped software checks ran with Archive unavailable."
+  },
+  "cleanup": {
+    "active_fd_cwd_map_references": 0,
+    "removed_roots": ["/tmp/pytest-of-joshua/pytest-2", "/tmp/pytest-of-joshua/pytest-3", "/tmp/pytest-of-joshua/pytest-4"],
+    "removed_files": 13,
+    "removed_bytes": 7515,
+    "removed_directories": 353,
+    "removed_symlinks": 18,
+    "remaining_owned_roots": [],
+    "shared_worker_buffers": 0,
+    "earlier_roots": "pytest automatically pruned this turn's earlier pytest-0 and pytest-1 roots; their bytes are not counted in explicit cleanup",
+    "bulk_or_native_scratch_generated": false,
+    "live_server_or_user_files_mutated": false
+  },
+  "remaining_exit": [
+    "Actual isolated process request/response framing, shared work admission, deadline, cancellation and reaping",
+    "Data-only HTTP adapters and explicit Recover recipe dialog with exclusion/upgrade review",
+    "Exact server-encoded recovered-copy download; never browser reserialization of parsed numeric inputs",
+    "Failed, cancelled and stale UI lifecycle preserves occupied document and original file",
+    "Desktop and responsiveness qualification remains tracked independently; this core checkpoint is not a usable UI release"
+  ]
+}

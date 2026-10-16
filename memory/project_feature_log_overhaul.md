@@ -22,7 +22,34 @@ decrement completed if an exit reopens. Flag three major checkpoints spent on
 any still-open milestone (cumulative even across alternating work), or total
 growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
-This reporting-only change closes no additional engineering milestone.
+Latest engineering update U1 works on **FH-19, checkpoint 1**; it closes no
+milestone. Counts remain **17 / 38 complete, 21 remaining (12 core, 9 parked)**,
+delta **+0 completed, +0 total**.
+
+**Saved recipe recovery core:** `core/part_recipe_file.py` admits exact original
+bytes/digest and separately typed root/definitions/sources without loading saved
+geometry. Native empty-root v1 only; 1.5 MB wire, depth 64, 30k nodes/8 MB graph,
+plus unchanged ordinary recipe/repair/output limits. It refuses duplicate keys,
+ambiguous/missing IDs, unknown fields and legacy rows instead of dropping them.
+`api/part_recipe_file_recovery.py` offers coherent v1 grouping actions and requires
+the exact file digest plus explicit actions; it reuses repair, assigns a new
+document ID, and requires ordinary typed roundtrip plus independent input replay.
+Saved materialized/presentation/physical/draft state is excluded and enumerated;
+the original bytes retain everything. No paths, sessions, loaders or autosave are
+changed, and no ordinary edit gains a check. See the
+[recovery contract](../docs/audits/feature_history_20261014/saved_recipe_recovery_contract.md).
+This is private core implementation only: no HTTP worker lifecycle or user entry
+is connected. Next reuse isolated process admission/cancellation/reaping and add
+File → Recover recipe from file… with explicit review and copy download. Avoid
+ordinary workspace reconciliation (may rewrite identity) and reset-before-open UI.
+Do not claim FH-19 complete or describe this checkpoint as an available button.
+Validation: **277 focused backend passes** in 4.85 s, including 104 new admission/
+recovery cases. Review regressions reproduced and fixed cancellation exception
+normalization and numeric JSON type drift during ordinary reload. Scoped Ruff/
+diff pass; `main.js` delta 0. [Evidence](../docs/audits/feature_history_20261014/validation_saved_recipe_core.json)
+retains failures, selector-only FAST/FULL-deferred verdict, and cleanup of 13
+files/7,515 bytes, 353 directories and 18 links after zero active references.
+No frontend, process-host, app or latency pass is claimed; no public entry exists.
 
 **Active user priority:** standard geometry first—extrude, sweep, bend, twist,
 move/rotate and Fine Routing resize/ligate/nick/crossovers/loop-skips. Complete
@@ -78,11 +105,11 @@ remain. Selector dry-run chose FAST with FULL deferred; no selector suite ran.
 **NOT VERIFIED IN APP**; Archive is unavailable, and actual desktop/latency
 qualification remains open. No shared-server mutation or molecular change.
 
-Next: a separate bounded **Recover recipe** entry for invalid saved files.
-Normal typed loading stays strict; preserve original bytes/digest and admit only
-reviewed input definitions before explicit private repair and recovered-copy
-publication. Primary Onshape/SOLIDWORKS recovery precedents and NADOC-specific
-inferences are in the delivery map. Broader incoming cluster-delete dependencies
+Next: connect the separate bounded **Recover recipe** entry for invalid saved
+files to the private core described above. Normal typed loading stays strict;
+explicit private repair must finish before recovered-copy download. Primary
+Onshape/SOLIDWORKS recovery precedents and NADOC-specific inferences are in the
+delivery map. Broader incoming cluster-delete dependencies
 and a logged delete contract remain open. Do not claim ISSUE-106 fully closed or
 G1 complete. Geometry/Fine Routing stays ahead of assets, assemblies and VR.
 

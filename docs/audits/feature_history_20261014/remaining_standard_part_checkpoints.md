@@ -53,7 +53,7 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 | ID | Status | Fixed remaining exit |
 |---|---|---|
 | FH-18 | Remaining | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. |
-| FH-19 | Remaining | Recover known invalid saved recipes: preserve original bytes, bounded read-only admission, explicit repair, valid recovered-copy publication. Next implementation target. |
+| FH-19 | In progress · 1 checkpoint | Recover known invalid saved recipes: preserve original bytes, bounded read-only admission, explicit repair, valid recovered-copy publication. Private admission/reconstruction implemented; isolated transport and copy-download UI remain. |
 | FH-20 | Remaining | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
 | FH-21 | Remaining | Extrusion history editor: eligible earlier edits through downstream features, stable identities, complete ordinary controls and validation. |
 | FH-22 | Remaining | Sweep history editor: input-based isolated preview, recovery-independent Apply/Cancel and downstream rebuild. |
@@ -120,6 +120,7 @@ bound their matrices before implementation rather than expanding them indefinite
 | Update | Implementation basis / milestone worked | Closed or reopened | Completed | Estimated total | Core remaining | Parked remaining | Total delta / reason |
 |---|---|---|---|---|---|---|---|
 | B1 · 2026-10-16 | Evidence through `2c15e747`; retrospective fixed milestone baseline | FH-01–FH-17 documented; no new engineering closure in this reporting update | 17 | 38 | 12 | 9 | Initial estimate; no earlier numerical baseline |
+| U1 · 2026-10-16 | FH-19 checkpoint 1: bounded definition-only saved-file admission and explicit private recovered-copy evaluation; [contract](saved_recipe_recovery_contract.md), [evidence](validation_saved_recipe_core.json) | None; HTTP/process lifecycle and copy-download controls remain | 17 | 38 | 12 | 9 | +0; first engineering checkpoint spent on FH-19, no scope change |
 
 ## Active goal and priority override — October 15, 2026
 

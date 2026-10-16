@@ -24,8 +24,14 @@ specific `cluster_create` v2 contract while retaining exact saved v1 behavior.
 Explicit verification now reports reproducibility and bounded structural
 reference validity separately, and history-edit/repair publication refuses
 invalid final closure. Numerical pins use a disclosed exact-manifest schema
-compatibility transition. This prevents new invalid grouping; repairing old
-definitions and invalid saved-file admission remain the next core work.
+compatibility transition. Explicit live-part grouping repair is implemented.
+The latest FH-19 checkpoint adds bounded saved-file definition admission and
+private recovered-copy evaluation, preserving original bytes and using only
+explicit repairs. Normal typed loading and active document state are unchanged.
+The isolated transport/copy-download UI remains open; see the
+[contract](saved_recipe_recovery_contract.md) and [evidence](validation_saved_recipe_core.json).
+Progress remains **17/38 complete**, with **21 remaining**; this is the first
+engineering checkpoint spent on FH-19, not its completion.
 Assemblies, VR validation and further nanoparticle feature expansion remain
 deferred. Neither this checkpoint nor the private editor tests establish desktop
 interaction or latency qualification.
@@ -41,10 +47,11 @@ Neither HTTP nor ordinary editor rollout is enabled, and ISSUE-100 remains open.
 Desktop/timing checks are still pending, with Archive unavailable. Assemblies and
 machine-specific VR remain deferred; `main.js` has zero added lines.
 
-Save/reload tests additionally reproduced ISSUE-106: exhausting a default group's
+The preceding editor checkpoint's save/reload tests reproduced ISSUE-106: exhausting a default group's
 membership can remove a retained lattice-frame placement owner. Equivalent
-reproduction is not structural validity. Fix that at the next version-aware
-checkpoint before calling G1 complete; no old command output is changed here.
+reproduction is not structural validity. The version-aware prevention and live
+repair work above address that defect; saved-file UI recovery and broader group
+deletion closure still prevent calling G1 complete. Old v1 output is unchanged.
 
 | Phase | Scope | State and exit condition |
 |---|---|---|
