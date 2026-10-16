@@ -232,5 +232,6 @@ The proposed benchmark script has not been created or run. The private gate
 stays false. P4–P6, full repair UI and strict automation rollout remain incomplete;
 assemblies and VR remain deferred. See
 [the compact validation record](validation_np_application_routes.json) for exact
-runs, selector/lint debt and artifact cleanup. This is the requested stopping
-point; resume with the predeclared HTTP/geometry benchmark, not gate activation.
+runs, selector/lint debt and artifact cleanup. This is the saved nanoparticle stopping
+point. Subsequent user direction prioritizes core geometry; the predeclared
+HTTP/geometry benchmark is parked until that higher-priority work is complete.

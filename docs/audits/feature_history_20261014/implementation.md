@@ -1395,3 +1395,17 @@ folders were empty and removed after lock/reference checks; historical locked
 data was preserved. The persistent goal is paused at the user's requested
 stopping point. See [the route plan](ordinary_np_application_route_plan.md) and
 [validation](validation_np_application_routes.json).
+
+
+## Geometry-first priority reset — October 15
+
+The user resumed work and explicitly moved extrude, sweep, bend, twist,
+move/rotate and Fine Routing ahead of nanoparticles and assets. The revised
+persistent objective and G1–G6 acceptance sequence are in
+[the active delivery map](remaining_standard_part_checkpoints.md). Existing
+native command availability is not full desktop lifecycle completion. G1 begins
+with regression reproduction of grouping history omissions and deformation
+preview/Apply/cancel interactions; G2 covers the legacy editor restrictions.
+No private gate, source pin, budget or scientific algorithm changes in this
+planning checkpoint. Nanoparticle work stays at `c9f1d185`; assemblies and VR
+validation remain deferred.

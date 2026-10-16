@@ -10,6 +10,16 @@ The persistent implementation goal covers standard-part P3–P6. Assemblies rema
 in `assembly_deferred.md`; part-local proteins, nanoparticles and duplexes do not.
 The checkpoint before this review is `a8bc9fc9` (pushed).
 
+## Current priority override
+
+The user reprioritized core geometry on October 15 after checkpoint `c9f1d185`.
+Follow G1–G5 in [the active delivery map](remaining_standard_part_checkpoints.md):
+ordinary extrude/sweep/bend/twist/move and Fine Routing lifecycle, history
+editors, repair, performance and trusted automation before further nanoparticle
+or asset expansion. The older P3–P6 rows below are retained architectural context,
+not an asset-first execution order. Assemblies and machine-specific VR validation
+remain deferred.
+
 ## Findings that change the order of work
 
 1. Dependency edges are mostly conservative whole-part barriers. They identify

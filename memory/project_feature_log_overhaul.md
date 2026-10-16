@@ -8,6 +8,16 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 
 ## Current delivery status (2026-10-15)
 
+**Active user priority:** standard geometry first—extrude, sweep, bend, twist,
+move/rotate and Fine Routing resize/ligate/nick/crossovers/loop-skips. Complete
+recording and preview/commit integrity, history editors, dependency repair,
+responsiveness and registered automation before more nanoparticle/asset work.
+The user resumed after `c9f1d185`; follow G1–G6 in the
+[active delivery map](../docs/audits/feature_history_20261014/remaining_standard_part_checkpoints.md).
+Existing core command support is enabled, but ordinary grouping, preview and
+editor integration gaps prevent claiming end-to-end completion. Assemblies and
+machine-specific VR validation remain deferred.
+
 The sections below retain earlier implementation context; use the latest
 [implementation checkpoint](../docs/audits/feature_history_20261014/implementation.md)
 for current availability and measured limits. P3's native DNA execution foundation
@@ -55,7 +65,7 @@ now share the registered pure command preparation through one lock-owned
 recording adapter. Its private gate remains false. All 224 unique focused cases
 pass, including actual HTTP lifecycle, conflict switching, rollback and cold
 input-only replay. Complete response/geometry latency and desktop qualification
-are next; the benchmark is planned but not created. See
+remain parked behind core geometry work; the benchmark is planned but not created. See
 [route checkpoint](../docs/audits/feature_history_20261014/ordinary_np_application_route_plan.md).
 
 An experimental ordinary free-protein importer records pinned original bytes and
@@ -99,7 +109,7 @@ snapshots without silently adding an unlogged cluster.
 Focused tests and small in-memory qualification run serially. The Archive
 filesystem is unavailable in this environment; broader suite, app, visual and
 headset validation debt is recorded separately and must not be described as a
-pass. The persistent goal is paused at the user-requested stopping point.
+pass. Work has resumed by explicit user instruction with the geometry-first priority override above.
 
 ## Architecture review and hardening (2026-10-15)
 

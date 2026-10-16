@@ -5,6 +5,67 @@ new claim that every registered kind or legacy receipt regenerates. Assemblies
 remain outside the agreed scope. Existing molecular builders and constants stay
 unchanged; each new adapter must preserve their complete admitted output.
 
+## Active goal and priority override — October 15, 2026
+
+User direction supersedes the asset-first ordering below. Complete the ordinary
+standard-part geometry workflow first: **extrude, sweep, bend, twist, move/rotate,
+and Fine Routing resize, ligate, nick, crossovers and loop/skip operations**.
+The goal is complete regeneration from recorded inputs, actionable missing
+references with repair, and normal editing that stays responsive. A registered
+builder alone is not a finished tool: its live route, preview/cancel/Apply,
+undo/redo, history editor, persistence and downstream edits must agree.
+
+Nanoparticle/protein/asset expansion and their unexecuted benchmarks are lower
+priority and parked at existing checkpoints; private gates stay closed. Ordinary
+DNA overhang/connection work remains in the core scope where a standard tool
+requires it. Assemblies remain deferred. VR validation remains explicitly
+deferred to a capable machine, independently of desktop completion.
+
+The user resumed work after the clean `c9f1d185` checkpoint. This file and the
+project memory carry the revised persistent objective and sequence. The goal
+controller exposes status changes only, not objective editing or a programmatic
+resume; its older objective still encompasses this work. Do not mark that goal
+complete or create a duplicate to change its metadata.
+
+### Geometry-first completion sequence
+
+| Order | Work | Exit evidence |
+|---|---|---|
+| G1 — Recording and transaction integrity | Close unlogged grouping/deformation lifecycle paths, preview pollution, stale selections and work computed outside its owning transaction. Reuse existing native algorithms and recording/publication boundaries. | Tests first for actual desktop/API sequences; exact source/history/revision/undo preservation on failure or cancel; one committed input record; cold replay without snapshots; legacy compatibility explicitly classified. |
+| G2 — Standard history editors | Remove obsolete extrude restrictions only for eligible native histories; make sweep and bend/twist previews independent of recovery snapshots; finish move/rotate history commits and parameter editing for routing children. | Earlier-parameter edits rebuild dependents; preview and Apply agree; stable object identities; unverified histories retain honest compatibility behavior; desktop control and interaction checks. |
+| G3 — Geometry dependency diagnostics and repair | Add core-tool field/target adapters to the existing repair framework. Show earliest missing input, blocked descendants and unaffected work; replace references or explicitly cascade. | Delete an upstream extrusion with downstream sweep/deformation/routing; preserve repairable definitions; evaluate a replacement; cancel/apply/undo/reload; no silent skipped targets or false verified badge. |
+| G4 — Integrated correctness and responsiveness | Exercise representative small/larger geometry workflows through actual request plus geometry refresh, save/reopen, independent cold replay and desktop interaction. | Compare bounded baseline/native timings and memory, including concurrent scalar reads, p95/tails, cancellation and retained history. No full proof in drags/render/status polling; no raised budgets. Existing required suites and app debt remain explicit. |
+| G5 — Registered automation for core tools | Expose the completed geometry catalog through the trusted batch policy; reject opaque all-model replacement while retaining explicit import provenance and ordinary editable steps. | Same design built by UI and registered script commands is editable and regenerates; bypass/stale/tamper/atomicity tests; public gates open only after lifecycle and responsiveness evidence. |
+| G6 — Lower-priority part assets | Resume remaining nanoparticle, protein/import and coupled attachment work after the core workflow exits above. | Existing finite P4 checkpoints below, with their independent proof/performance/desktop criteria. |
+
+At every checkpoint create or strengthen behavior-based validation, prune stale
+traps/duplicate implementations only after caller and compatibility checks, and
+commit/push reversible progress. Maintain scientific helpers, constants and
+numerical pins. If a new history schema would invalidate pinned numerical
+sources, checkpoint first and design an explicit compatibility strategy rather
+than overloading an unrelated command kind or silently accepting old proofs.
+
+### Source audit driving G1/G2
+
+- Ordinary native execution exists for all named tool families. It is enabled;
+  the disabled nanoparticle rollout gate does not gate core geometry.
+- Cluster-panel creation omits `log`, whose route default is false; direct group
+  deletion lacks a history operation. Response-time default-group inference must
+  also be included in any deletion contract.
+- Committed bend/twist creation records inputs, but history previews remove or
+  modify the canonical source before Apply. The newer editor verifies that source
+  before changing it; reproduce the handoff/cancel mismatch before selecting a fix.
+- Sweep history preview still reads saved snapshots. Extrude's frontend still
+  disables some edits with later snapshots. Fine Routing has backend child edits
+  but no complete desktop parameter forms.
+- Several live batch selectors skip absent targets; some callbacks close over
+  results built before the recording lock. Replay is stricter. Close these
+  mismatches with bounded local checks, not a new full replay on every edit.
+
+Archive remains unavailable on this machine. Continue focused memory-only checks;
+no bulk/app/native-scratch output may silently fall back to the system disk.
+Unperformed desktop and broad-suite checks remain completion debt, not passes.
+
 ## Completed pending candidates and motion; application rollout remains open
 
 Implemented in `ee90a927`: the existing `nanoparticle-connection-version-create`, `-patch` and
@@ -46,7 +107,7 @@ are now implemented (`bf50e62e`, `8f1ca5a9`). The nine-repeat benchmark recorded
 180 exact adapter/kernel parity pairs, four cold proofs and four upstream edits
 (`f71f4d5a`); ordinary route migration and interactive latency remain unqualified.
 
-## Finite P4 remainder
+## Lower-priority P4 remainder — parked behind G1–G5
 
 | Checkpoint | Concrete remaining work and exit |
 |---|---|
@@ -65,7 +126,7 @@ coating jobs. Their documented bounds and provenance distinctions remain active.
 Neither the old [coverage inventory](coverage.md) nor the aggregate kind count
 replaces this per-family evidence.
 
-## P5 and P6 closure order
+## Retained P5/P6 work inventory — scheduled through G1–G5 above
 
 1. **P5 recognized-invalid fields:** the gold diameter/pose recognition adapter
    has focused implementation evidence, shared by metadata/draft/repair planning.
@@ -107,5 +168,5 @@ replaces this per-family evidence.
 Every row above has a bounded exit. A refused oversized or unknown operation
 remains unverified with an actionable reason; it is not silently recategorized as
 an assembly or a native success. No new command becomes public merely because its
-pure builder exists. This ordering completes structural provenance first, then
-bounded attachment/import coverage, repair UX and enforceable agent construction.
+pure builder exists. The geometry-first sequence above is authoritative; the asset inventory is
+retained for later resumption, not the next implementation queue.
