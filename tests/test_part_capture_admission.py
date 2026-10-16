@@ -16,6 +16,11 @@ from backend.core.part_verification_capture import CaptureLimit, admit, capture
 from tests.test_part_capture_copy import atom, design_with_atoms, selected_protein
 
 
+def owned_projection(source, *, max_nodes=30_000, max_bytes=2_000_000, preserve_entry_types=False):
+    return part_capture_inputs.visit_inputs(source, max_nodes=max_nodes, max_bytes=max_bytes,
+        seconds=5, preserve_entry_types=preserve_entry_types, copy_inputs=False, retain_owned=True)
+
+
 class SmallInput(BaseModel):
     """Fixed projection makes the inherited accounting boundaries explicit."""
     id: str = "d"
@@ -44,7 +49,7 @@ def test_inherited_accounting_has_fixed_node_byte_boundaries(case, nodes, size):
     elif case in {"minor", "group"}:
         row = MinorMutationLogEntry(id="f", op_subtype="nick", label="Ignored label", params={"bp": 2})
         source.feature_log = [row if case == "minor" else RoutingClusterLogEntry(id="g", children=[row])]
-    for operation in (admit, lambda source, **limits: capture(source, seconds=5, **limits)):
+    for operation in (admit, owned_projection, lambda source, **limits: capture(source, seconds=5, **limits)):
         operation(source, max_nodes=nodes, max_bytes=size)
         with pytest.raises(CaptureLimit):
             operation(source, max_nodes=nodes - 1, max_bytes=size)
@@ -114,6 +119,7 @@ def test_capture_and_private_admission_agree_at_exact_resource_boundary(case, pr
     isolated = lambda source, **limits: capture(source, seconds=5, **limits)
     boundary = minimum_budget(isolated, source, budget, preserve)
     assert minimum_budget(admit, source, budget, preserve) == boundary
+    assert minimum_budget(owned_projection, source, budget, preserve) == boundary
     admit(source, preserve_entry_types=preserve, **{budget: boundary})
     with pytest.raises(CaptureLimit):
         admit(source, preserve_entry_types=preserve, **{budget: boundary - 1})

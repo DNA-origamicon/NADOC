@@ -1,0 +1,19 @@
+{
+  "date": "2026-10-15",
+  "scope": "Transfer exclusively owned decoded immutable authoring into ordinary bounded worker projection; mutable capture unchanged",
+  "initial_test_development": {"failed": 14, "seconds": 2.74, "note": "Missing implementation mixed with invalid test labels/public command schema"},
+  "corrected_red": {"failed": 2, "seconds": 2.59, "stopped_after": 2, "reason": "Owned projection mode absent"},
+  "first_implementation_run": {"passed": 112, "failed": 4, "seconds": 8.42, "failure": "Three incorrect test exception expectations and one invalid public batch fixture; production needed no change"},
+  "corrected_owned_target": {"passed": 14, "seconds": 3.27},
+  "final_owned_and_exact_admission": {"passed": 47, "seconds": 3.81, "note": "Two added copy/deadline mode guards; existing exact boundary tests now also exercise ownership transfer"},
+  "unique_green_cases": 118,
+  "covered_targets": ["part_owned_capture", "part_immutable_evaluation", "part_batch_evaluation", "part_capture_admission", "part_capture_copy"],
+  "invariants": ["Sealed-byte source required by private host entry", "Later materialization and immutable bytes unaffected by projection mutation", "Nested Any input, overlay and routing-child ownership", "Same exact node/byte accounting and cooperative 25 ms limit", "Same stripped recovery and excluded fields", "Mutable source capture remains isolated", "Existing outside-lock capture, session/revision/policy races, permit publication and independent spawned proof"],
+  "initial_http_diagnostic": {"report": "benchmark_immutable_part_jobs_owned_initial.json", "repeats": 3, "cases": 4, "publications": 12, "independent_cold_verified": 4, "cleanup": true, "parent_rss_high_water_kib": 133892, "child_rss_high_water_kib": 133868},
+  "latency_qualified": false,
+  "public_gates_enabled": false,
+  "next": ["Thirty-repeat diagnostic comparison against retained failed baseline", "Separate allocation measurement; traced timings are not latency evidence", "Durable creation/recovery lifecycle qualification"],
+  "changed_file_ruff": "passed",
+  "git_diff_check": "passed",
+  "app_status": "NOT VERIFIED IN APP"
+}

@@ -8,9 +8,12 @@ restore are separate qualification. Public production gates remain unchanged.
 """
 
 import argparse
+from contextlib import nullcontext
 import json
+import resource
 from threading import Event
 from time import perf_counter
+import tracemalloc
 from uuid import uuid4
 
 from fastapi import FastAPI
@@ -23,12 +26,17 @@ from backend.api.part_strict_http import StrictPartDispatch
 from backend.core.part_history_proof import AUTHORING_FIELDS, digest
 from scripts import benchmark_registered_batch_jobs as baseline
 from scripts.benchmark_cadnano_route import LockProbe, _PHASE, phase_wrapper, stats
+from scripts.benchmark_runtime_probe import RuntimeProbe, overlap_ms
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repeats", type=int, default=3, choices=range(1, 31))
+    parser.add_argument("--diagnostics", action="store_true", help="Correlate parent GC without changing its policy")
+    parser.add_argument("--memory", action="store_true", help="Separate allocation diagnostic; timings are not comparable")
     args = parser.parse_args()
+    if args.memory and tracemalloc.is_tracing():
+        raise RuntimeError("Memory measurement needs an independently owned tracing session")
     doc = f"__immutable_benchmark_{uuid4()}"
     prior_policy = policy.current_configuration()
     original = {"lock": state._lock, "capture": state.capture_design_for_evaluation,
@@ -38,6 +46,37 @@ def main():
     existing_jobs = set(jobs._jobs)
     probe, completion, decode_times, seal_times = LockProbe(original["lock"]), {}, [], []
     cases, failure, cleanup_errors = [], None, []
+
+    def measured_request(client, callback):
+        interval = []
+
+        def timed():
+            interval.append(perf_counter())
+            try:
+                return callback()
+            finally:
+                interval.append(perf_counter())
+
+        runtime = RuntimeProbe(phase=lambda: _PHASE.get()) if args.diagnostics else None
+        if args.memory:
+            tracemalloc.start()
+        try:
+            with runtime if runtime is not None else nullcontext():
+                response, metrics = baseline.concurrent_request(client, {"X-NADOC-Doc": doc}, timed, probe)
+            if response.is_error:
+                metrics["refusal"] = response.json()
+            if args.memory:
+                current, peak = tracemalloc.get_traced_memory()
+                metrics["parent_python_allocation"] = {"retained_bytes": current, "peak_bytes": peak}
+            if runtime is not None:
+                events = runtime.intervals(*interval)
+                metrics["gc"] = {"overlap_ms": overlap_ms(events, *interval),
+                    "events": len(events), "dropped_events": runtime.dropped_events,
+                    "generations": {str(g): sum(e["generation"] == g for e in events) for g in range(3)}}
+            return response, metrics
+        finally:
+            if args.memory:
+                tracemalloc.stop()
 
     def measured(function, values):
         def call(*a, **kw):
@@ -133,9 +172,9 @@ def main():
                         with state._lock:
                             state._sessions[doc] = state._DesignSession(design=source, revision=1)
                         phase = "http_capture"
-                        response, capture = baseline.concurrent_request(client, {"X-NADOC-Doc": doc},
+                        response, capture = measured_request(client,
                             lambda: client.post(baseline.JOBS_PATH,
-                                json=baseline.request(fixture["design"], fixture["commands"], 1)), probe)
+                                json=baseline.request(fixture["design"], fixture["commands"], 1)))
                         sample = {"iteration": iteration, "capture": capture}
                         report["samples"].append(sample)
                         report["errors"].extend({"phase": phase, "detail": error} for error in capture["errors"])
@@ -147,8 +186,8 @@ def main():
                         if result["status"] != "ready":
                             raise RuntimeError(f"Evaluation refused: {result.get('issues')}")
                         phase = "http_publication"
-                        response, publication = baseline.concurrent_request(client, {"X-NADOC-Doc": doc},
-                            lambda: client.post(f"{baseline.JOBS_PATH}/{identity}/commit"), probe)
+                        response, publication = measured_request(client,
+                            lambda: client.post(f"{baseline.JOBS_PATH}/{identity}/commit"))
                         sample.update(publication=publication, publication_status=response.status_code)
                         report["errors"].extend({"phase": phase, "detail": error} for error in publication["errors"])
                         response.raise_for_status()
@@ -188,8 +227,27 @@ def main():
                         rows = [sample[stage] for sample in report["samples"] if stage in sample]
                         report[stage] = baseline.summarize(rows)
                         report[stage].pop("samples", None)
+                        if args.diagnostics:
+                            report[stage]["gc_overlap"] = stats([row["gc"]["overlap_ms"] for row in rows])
+                            report[stage]["dropped_gc_events"] = sum(row["gc"]["dropped_events"] for row in rows)
+                        if args.memory:
+                            report[stage]["parent_python_peak_bytes"] = [row["parent_python_allocation"]["peak_bytes"] for row in rows]
                     report["private_materialization"] = stats(decode_times[start_decodes:])
                     report["private_sealing"] = stats(seal_times[start_seals:])
+                    samples = report["samples"]
+                    keep = {i for i, sample in enumerate(samples) if not sample.get("exact_immutable_publication")
+                            or any(sample.get(stage, {}).get("gc", {}).get("generations", {}).get("2", 0)
+                                   for stage in ("capture", "publication"))}
+                    for stage in ("capture", "publication"):
+                        candidates = [(i, sample[stage]) for i, sample in enumerate(samples) if stage in sample]
+                        for metric in (lambda row: row["http_ms"],
+                                       lambda row: max(row[f"{stage}_lock_hold_ms"], default=0),
+                                       lambda row: max(row["revision_http_ms"], default=0)):
+                            if candidates:
+                                keep.add(max(candidates, key=lambda item: metric(item[1]))[0])
+                    report["sample_count"] = len(samples)
+                    report["successful_publications"] = sum(sample.get("exact_immutable_publication", False) for sample in samples)
+                    report["samples"] = [sample for i, sample in enumerate(samples) if i in keep]
                 if not cleanup_jobs():
                     break  # Never start another case while a prior supervisor is unaccounted for.
     except Exception as error:
@@ -207,6 +265,12 @@ def main():
     passed = failure is None and clean and bool(cases) and all(case["completed"] for case in cases)
     print(json.dumps({"scope": "Staged immutable actual strict HTTP batch/verify/commit; persistence excluded",
         "repeats": args.repeats, "completed": passed, "failure": failure,
+        "diagnostics": args.diagnostics, "allocation_tracing": args.memory,
+        "latency_qualified": False,
+        "memory_scope": "Traced parent Python allocations exclude native/worker allocations. Linux RSS high-water includes fixture creation and all prior cases; not an incremental or hard memory bound.",
+        "rss_high_water_kib": {"parent": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+            "children": resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss},
+        "sample_retention": "All aggregate metrics plus refusals, incomplete publications, gen-2 GC samples and phase HTTP/lock/light maxima; other successful per-request arrays are omitted.",
         "session_cleanup_verified": clean, "cleanup_errors": cleanup_errors, "cases": cases}, indent=2))
     return int(not passed)
 

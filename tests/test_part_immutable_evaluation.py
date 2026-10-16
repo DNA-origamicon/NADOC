@@ -83,10 +83,10 @@ def immediate(document, monkeypatch):
 @pytest.mark.parametrize("admission,identity", [(False, False), (False, True), (True, False)])
 def test_owned_capture_preserves_actual_handle_and_outside_lock_work(document, monkeypatch, admission, identity):
     doc, source = document
-    from backend.api import part_evaluation_capture
+    from backend.core import part_capture_inputs
 
     seen = []
-    original_decode, original_capture = immutable.materialize_revision, part_evaluation_capture.capture_for_evaluation
+    original_decode, original_capture = immutable.materialize_revision, part_capture_inputs.visit_inputs
 
     def decode(value):
         unlocked()
@@ -101,7 +101,7 @@ def test_owned_capture_preserves_actual_handle_and_outside_lock_work(document, m
         return original_capture(value, **kwargs)
 
     monkeypatch.setattr(immutable, "materialize_revision", decode)
-    monkeypatch.setattr(part_evaluation_capture, "capture_for_evaluation", capture)
+    monkeypatch.setattr(part_capture_inputs, "visit_inputs", capture)
     result = state.capture_design_for_evaluation(EvaluationRequest.model_validate(body(source)),
         include_admission=admission, include_session_identity=identity)
     assert result[0] is state._sessions[doc].design is source

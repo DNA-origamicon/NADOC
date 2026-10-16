@@ -10,6 +10,16 @@ REGISTERED_BATCH_ENABLED = False
 
 def capture_batch(design, request, *, revision, preserve_entry_types=True):
     """Capture lock-owned or privately materialized input with fixed bounds."""
+    from time import monotonic
+    from backend.core.part_verification_capture import capture
+
+    deadline = admit_batch_capture(design, request, revision=revision)
+    return capture(design, preserve_entry_types=preserve_entry_types,
+                   seconds=max(0, deadline - monotonic()))
+
+
+def admit_batch_capture(design, request, *, revision):
+    """Shared scope/context admission; return the unchanged capture deadline."""
     if not REGISTERED_BATCH_ENABLED:
         raise CommandContractError("Registered batches are not enabled on this server",
                                    code="registered_batch_unavailable")
@@ -21,14 +31,12 @@ def capture_batch(design, request, *, revision, preserve_entry_types=True):
         raise CommandContractError("Batch belongs to a different part or captured revision", code="batch_conflict")
     from time import monotonic
     from backend.api.part_batch_publication_scope import admit_batch_source
-    from backend.core.part_verification_capture import capture
 
     # A coating or any other source family cannot silently grant a batch a
     # larger capture profile. No source classification or retry is necessary.
     deadline = monotonic() + 0.025
     admit_batch_source(design, body.commands)
-    return capture(design, preserve_entry_types=preserve_entry_types,
-                   seconds=max(0, deadline - monotonic()))
+    return deadline
 
 
 def evaluate_batch(source, request, header, *, executor, dependency_resolver):

@@ -32,15 +32,36 @@ def check_request(source, request, revision, configuration):
             raise CommandContractError("Batch belongs to a different part or captured revision", code="batch_conflict")
 
 
+def _capture_owned_revision(source, *, request, revision):
+    """Own materialization through transfer; never accept a live mutable model.
+
+    Full-byte decoding remains checked. The ordinary authoring projection and
+    30k-node/2 MB/25 ms accounting are shared with mutable capture, including
+    recovery stripping. Nested authored models may transfer because the only
+    published source is immutable bytes; no decoded alias survives this call.
+    """
+    from time import monotonic
+    from backend.api.part_batch_evaluation import admit_batch_capture
+    from backend.core.part_capture_inputs import visit_inputs
+
+    require_sealed(source)
+    if request.operation not in {"batch", "verify"}:
+        raise CommandContractError("Immutable capture requires batch or verify", code="immutable_publication_scope")
+    if request.expected_revision is not None and request.expected_revision != revision:
+        raise CommandContractError("Design changed before evaluation capture", code="source_changed")
+    private = materialize_revision(source)
+    deadline = (admit_batch_capture(private, request, revision=revision)
+                if request.operation == "batch" else monotonic() + 0.025)
+    return visit_inputs(private, max_nodes=30_000, max_bytes=2_000_000,
+        seconds=max(0, deadline - monotonic()), preserve_entry_types=True,
+        copy_inputs=False, retain_owned=True)
+
+
 def capture_reserved(doc_id, session, source, revision, generation, request, request_digest,
                      *, include_session_identity, include_admission):
     from backend.api import state
-    from backend.api.part_evaluation_capture import capture_for_evaluation
 
-    private = materialize_revision(source)
-    captured = capture_for_evaluation(private, request=request, revision=revision)
-    # Release the full recovery-bearing model before publication or spawning.
-    del private
+    captured = _capture_owned_revision(source, request=request, revision=revision)
     with state._lock:
         current = policy.require_evaluation(doc_id, request.operation)
         if current.generation != generation:
