@@ -1,4 +1,4 @@
-"""Forced ligation records the source it actually owns, without stale replacement.
+"""Routing records its owned source and never conceals failed selections.
 
 Small route-level fixtures retain the real recorder, reconciliation and response.
 The interleave is deterministic: another authored edit runs at the first released
@@ -255,3 +255,199 @@ def test_failure_restores_persisted_source_stacks_and_request_markers(document, 
              [d.model_dump(mode="json") for d in session.redo], session.revision,
              doc_context.current_request_revision(), doc_context.current_request_feature_log_entry_id())
     assert after == before
+
+
+def _signature():
+    session = state._session()
+    return (
+        session.design.model_dump(mode="json"),
+        [item.model_dump(mode="json") for item in session.history],
+        [item.model_dump(mode="json") for item in session.redo], session.revision,
+        doc_context.current_request_revision(), doc_context.current_request_feature_log_entry_id(),
+    )
+
+
+def _nick(design, bp=10):
+    domain = design.strands[0].domains[0]
+    return {"helix_id": domain.helix_id, "bp_index": bp, "direction": domain.direction}
+
+
+def _resize(design, **overrides):
+    strand = design.strands[0]
+    return {"strand_id": strand.id, "helix_id": strand.domains[-1].helix_id,
+            "end": "3p", "delta_bp": 2, **overrides}
+
+
+@pytest.mark.parametrize("failure", ["missing", "terminal", "duplicate", "outside"])
+def test_live_nick_batch_rejects_failed_later_selection_without_partial_recording(document, failure):
+    first = _nick(document)
+    second = dict(first)
+    if failure == "missing":
+        second["helix_id"] = "missing"
+    elif failure == "terminal":
+        second["bp_index"] = document.strands[0].domains[0].end_bp
+    elif failure == "outside":
+        second["bp_index"] = 1000
+    state._session().redo.append(Design())
+    before = _signature()
+    with pytest.raises(HTTPException) as caught:
+        crud.add_nick_batch(crud.NickBatchRequest(nicks=[first, second]))
+    assert caught.value.status_code == (404 if failure == "missing" else 422)
+    assert caught.value.detail["code"] == ("missing_reference" if failure == "missing" else "invalid_selection")
+    assert caught.value.detail["references"] == [{
+        "kind": "helix", "identity": second["helix_id"],
+        "parameter_path": ["nicks", 1, "helix_id"],
+    }]
+    assert _signature() == before
+
+
+def test_live_nick_batch_rejects_missing_backbone(document):
+    request = _nick(document)
+    source = document.copy_with(strands=document.strands[1:])
+    state.load_design(source)
+    state._session().redo.append(Design())
+    before = _signature()
+    with pytest.raises(HTTPException) as caught:
+        crud.add_nick_batch(crud.NickBatchRequest(nicks=[request]))
+    assert caught.value.status_code == 422
+    assert caught.value.detail["code"] == "invalid_selection"
+    assert caught.value.detail["references"][0]["parameter_path"] == ["nicks", 0, "helix_id"]
+    assert _signature() == before
+
+
+@pytest.mark.parametrize("failure", ["strand", "helix", "wrong-terminal", "empty-domains"])
+def test_live_resize_rejects_failed_later_reference_without_partial_recording(document, failure):
+    first = _resize(document)
+    second = _resize(document)
+    source = document
+    if failure in {"strand", "helix"}:
+        second[f"{failure}_id"] = "missing"
+    elif failure == "wrong-terminal":
+        second["helix_id"] = document.helices[1].id
+    else:
+        empty = document.strands[1].model_copy(update={"domains": []})
+        source = document.copy_with(strands=[document.strands[0], empty, *document.strands[2:]])
+        second["strand_id"] = empty.id
+        state.load_design(source)
+    state._session().redo.append(Design())
+    before = _signature()
+    with pytest.raises(HTTPException) as caught:
+        crud.strand_end_resize(crud.StrandEndResizeRequest(entries=[first, second]))
+    assert caught.value.status_code == (404 if failure in {"strand", "helix"} else 422)
+    issue = caught.value.detail
+    assert issue["code"] == ("missing_reference" if failure in {"strand", "helix"} else "invalid_selection")
+    assert issue["references"][0]["parameter_path"] == [
+        "entries", 1, f"{failure}_id" if failure in {"strand", "helix"} else "strand_id",
+    ]
+    assert _signature() == before
+
+
+@pytest.mark.parametrize("operation", ["nick-batch", "strand-end-resize"])
+@pytest.mark.parametrize("empty", [False, True])
+def test_valid_and_empty_routing_batches_preserve_native_recording_and_replay(document, operation, empty):
+    source = Design.model_validate_json(document.model_dump_json())
+    depth, revision = state.undo_depth(), state.revision()
+    if operation == "nick-batch":
+        body = crud.NickBatchRequest(nicks=[] if empty else [_nick(source, 10), _nick(source, 20)])
+        response = crud.add_nick_batch(body)
+    else:
+        body = crud.StrandEndResizeRequest(entries=[] if empty else [_resize(source)])
+        response = crud.strand_end_resize(body)
+    updated = state.get_or_404()
+    row = updated.feature_log[-1].children[-1]
+    assert row.op_subtype == operation
+    assert row.params == {**body.model_dump(mode="json"), "_proof_version": 1}
+    expected = execute(operation, source, row.params)
+    assert _authoring(updated) == _authoring(expected)
+    assert state.undo_depth() == depth + 1
+    assert state.revision() == revision + 1 == response["revision"]
+    if not empty:
+        assert response["partial_geometry"] is True
+        assert response["changed_helix_ids"] == [source.helices[0].id]
+        assert {nuc["helix_id"] for nuc in response["nucleotides"]} == {source.helices[0].id}
+        if operation == "strand-end-resize":
+            assert [axis["helix_id"] for axis in response["helix_axes"]] == [source.helices[0].id]
+    _verified(updated)
+    restored, _ = state.undo()
+    assert _authoring(restored) == _authoring(source)
+    restored, _ = state.redo()
+    assert _authoring(restored) == _authoring(expected)
+
+
+def test_batch_nick_partial_response_covers_all_helices_of_the_actual_owned_strand(document, monkeypatch):
+    first = document.find_strand(_request(document).three_prime_strand_id)
+    request = crud.NickBatchRequest(nicks=[{
+        "helix_id": first.domains[0].helix_id, "bp_index": 10,
+        "direction": first.domains[0].direction,
+    }])
+    sources, interleaved = [], []
+    make_nick = lattice.make_nick
+
+    def native(source, *args, **kwargs):
+        sources.append(source)
+        return make_nick(source, *args, **kwargs)
+
+    def another_edit():
+        crud.forced_ligation(_request(document))
+        interleaved.append(True)
+
+    with monkeypatch.context() as hooks:
+        hooks.setattr(state, "_lock", _GuardedLock(another_edit))
+        hooks.setattr(lattice, "make_nick", native)
+        response = crud.add_nick_batch(request)
+    assert interleaved == [True] and len(sources) == 1
+    selected, _ = lattice._find_strand_at(
+        sources[0], request.nicks[0].helix_id, 10, request.nicks[0].direction,
+    )
+    assert set(response["changed_helix_ids"]) == {domain.helix_id for domain in selected.domains}
+    _verified(state.get_or_404())
+
+
+def test_valid_batch_nick_on_multihelix_strand_refreshes_both_sides(document):
+    body = _request(document)
+    crud.forced_ligation(body)
+    source = state.get_or_404()
+    selected = source.find_strand(body.three_prime_strand_id)
+    response = crud.add_nick_batch(crud.NickBatchRequest(nicks=[{
+        "helix_id": selected.domains[0].helix_id, "bp_index": 10,
+        "direction": selected.domains[0].direction,
+    }]))
+    assert set(response["changed_helix_ids"]) == {domain.helix_id for domain in selected.domains}
+    _verified(state.get_or_404())
+
+
+@pytest.mark.parametrize("operation", ["nick-batch", "strand-end-resize"])
+def test_checked_batches_use_one_lock_snapshot_reconcile_and_retry(document, monkeypatch, operation):
+    from backend.api import part_routing_recording
+    from backend.core import part_history_contract
+
+    lock, stages = _GuardedLock(), []
+
+    def counted(name, callback):
+        def call(*args, **kwargs):
+            assert lock.held, f"{name} ran outside the recording lock"
+            stages.append(name)
+            return callback(*args, **kwargs)
+        return call
+
+    def unexpected(*_args, **_kwargs):
+        raise AssertionError("Interactive routing must not run full recipe proof")
+
+    with monkeypatch.context() as hooks:
+        hooks.setattr(state, "_lock", lock)
+        hooks.setattr(part_routing_recording, "validate_command_references", counted(
+            "references", part_routing_recording.validate_command_references,
+        ))
+        for name in ("_snapshot_copy", "reconcile_cluster_membership", "_retry_pending_ligations"):
+            hooks.setattr(state, name, counted(name, getattr(state, name)))
+        hooks.setattr(part_history_contract, "assess_part_history", unexpected)
+        native = "make_nick" if operation == "nick-batch" else "resize_strand_ends"
+        hooks.setattr(lattice, native, counted("native", getattr(lattice, native)))
+        if operation == "nick-batch":
+            crud.add_nick_batch(crud.NickBatchRequest(nicks=[_nick(document)]))
+        else:
+            crud.strand_end_resize(crud.StrandEndResizeRequest(entries=[_resize(document)]))
+    assert not lock.held
+    assert stages == [
+        "references", "_snapshot_copy", "native", "reconcile_cluster_membership", "_retry_pending_ligations",
+    ]

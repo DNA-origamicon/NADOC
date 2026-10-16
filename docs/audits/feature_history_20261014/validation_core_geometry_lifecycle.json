@@ -1,0 +1,216 @@
+{
+  "date": "2026-10-16",
+  "scope": "Geometry-first G1 continuation: atomic nick/resize, private auto-crossover preparation, private deformation host and display DTO, readable typed errors",
+  "status": "focused backend and full frontend validated; no app or performance qualification",
+  "goal": "active; standard geometry precedes nanoparticle/asset expansion; assemblies and machine-specific VR validation deferred",
+  "backend_runs": [
+    {
+      "kind": "routing red before production edits",
+      "targets": [
+        "tests/test_geometry_routing_recording.py"
+      ],
+      "passed": 19,
+      "failed": 10,
+      "warnings": 29,
+      "seconds": 3.8,
+      "reason": "Silent invalid nick selections, missing resize diagnostics/terminal guards, stale partial geometry scope"
+    },
+    {
+      "kind": "routing green",
+      "targets": [
+        "tests/test_geometry_routing_recording.py",
+        "tests/test_part_command_references.py",
+        "tests/test_native_routing_proof.py",
+        "tests/test_strand_end_resize_api.py",
+        "tests/test_feature_recording_transactions.py",
+        "tests/test_forced_ligation.py",
+        "tests/test_end_resize_deformation.py",
+        "tests/test_aptamer_import.py"
+      ],
+      "passed": 174,
+      "warnings": 101,
+      "seconds": 7.09,
+      "new_routing_cases": 17,
+      "routing_cases_including_previous_checkpoint": 31
+    },
+    {
+      "kind": "private host red",
+      "targets": [
+        "tests/test_part_deformation_preview_sessions.py"
+      ],
+      "errors": 17,
+      "seconds": 3.33,
+      "reason": "New module absent; later expanded to 27 lifecycle cases"
+    },
+    {
+      "kind": "private DTO red",
+      "targets": [
+        "tests/test_part_deformation_preview_dto.py"
+      ],
+      "failed": 25,
+      "passed": 1,
+      "seconds": 2.99,
+      "reason": "New module absent; comparison-v2 compatibility control passed; later added loop/reference case"
+    },
+    {
+      "kind": "private DTO and native controls green",
+      "targets": [
+        "tests/test_part_deformation_preview_dto.py",
+        "tests/test_part_dna_comparison.py",
+        "tests/test_part_deformation_preview.py"
+      ],
+      "passed": 119,
+      "warnings": 0,
+      "seconds": 4.73,
+      "breakdown": {
+        "new_dto": 27,
+        "private_evaluator": 34,
+        "existing_comparison": 58
+      }
+    },
+    {
+      "kind": "host validation command correction",
+      "executed_tests": 0,
+      "exit_code": 4,
+      "reason": "Mistyped test_native_recipe_edit.py; corrected to existing test_part_recipe_edit.py"
+    },
+    {
+      "kind": "private host and publication controls green",
+      "targets": [
+        "tests/test_part_deformation_preview_sessions.py",
+        "tests/test_part_publication_state.py",
+        "tests/test_part_recipe_edit.py"
+      ],
+      "passed": 73,
+      "warnings": 8,
+      "seconds": 6.25,
+      "breakdown": {
+        "new_host": 27,
+        "publication": 38,
+        "recipe_edit": 8
+      }
+    },
+    {
+      "kind": "auto-crossover red before production edits",
+      "targets": [
+        "tests/test_geometry_auto_crossover_recording.py"
+      ],
+      "failed": 4,
+      "passed": 6,
+      "warnings": 10,
+      "seconds": 3.41,
+      "reason": "Live source alias, stale overwrite, protected preparation and native-failure alias mutation"
+    },
+    {
+      "kind": "auto-crossover and existing routing controls green",
+      "targets": [
+        "tests/test_geometry_auto_crossover_recording.py",
+        "tests/test_native_auto_proof.py",
+        "tests/test_simple_router.py",
+        "tests/test_geometry_routing_recording.py",
+        "tests/test_feature_recording_transactions.py"
+      ],
+      "passed": 117,
+      "skipped": 1,
+      "warnings": 65,
+      "seconds": 10.43,
+      "new_auto_crossover_cases": 12,
+      "overlapping_passes_with_routing_run": 72,
+      "skip_reason": "Existing hand-built workspace/3x6_hinge_bound_end_to_root.nadoc fixture absent"
+    }
+  ],
+  "distinct_backend_passes": 411,
+  "distinct_backend_skips": 1,
+  "deduplication": "174 + 119 + 73 + 117 - 31 routing adapter cases - 41 recording transaction cases = 411. Counts overlap earlier checkpoints and must not be added to them.",
+  "frontend_red": {
+    "file": "frontend/src/api/error_detail.test.js",
+    "failed": 6,
+    "passed": 16,
+    "seconds": 1.65
+  },
+  "frontend_green": {
+    "command": "just test-frontend",
+    "passed": 8300,
+    "skipped": 1,
+    "files_passed": 717,
+    "seconds": 345.21,
+    "error_detail_cases": 22,
+    "warnings": "Existing jsdom/Three.js and injected error-path diagnostics; no failed tests"
+  },
+  "private_preview_contract": {
+    "sessions_per_document": 1,
+    "global_sessions": 2,
+    "nonqueued_work_slots": 1,
+    "fixed_lease_seconds": 60,
+    "scalar_tombstones": 16,
+    "tombstone_seconds": 60,
+    "capture_nodes": 30000,
+    "capture_bytes": 2000000,
+    "capture_cooperative_ms": 25,
+    "whole_response_graph_nodes": 200000,
+    "whole_response_json_bytes": 2000000,
+    "binding": [
+      "document",
+      "source weak identity",
+      "session identity",
+      "revision",
+      "host policy generation",
+      "caller nonce",
+      "server lease",
+      "request sequence"
+    ],
+    "prefixes": [
+      "bundle-create",
+      "cluster_create",
+      "cluster_op",
+      "deformation"
+    ],
+    "preview_proves_source_equivalence": false,
+    "preview_evaluates_downstream": false,
+    "physical_validity_claim": false,
+    "apply": "fresh owned input proof, final origin checks, explicit commit reservation, existing failure-atomic replacement with one undo",
+    "cancellation": "discard private state only; commit_in_progress after reservation; no silent rollback of accepted commit",
+    "limits": "Targets/clusters fixed; cooperative deadlines; stale-source leases release on cancel/expiry; no HTTP/frontend rollout or latency qualification"
+  },
+  "performance": {
+    "full_proof_added_to_nick_resize": false,
+    "full_proof_on_preview_drag": false,
+    "auto_crossover_native_work_under_state_lock": false,
+    "auto_crossover_additional_full_source_copies": 1,
+    "qualified": false,
+    "remaining": [
+      "larger auto-crossover capture/request cost",
+      "full-source Apply undo snapshot cost",
+      "actual HTTP and desktop response tails",
+      "lease/admission usability",
+      "Duplicate DTO and host envelope graph/JSON accounting; consolidate into one bounded merged response before HTTP integration"
+    ]
+  },
+  "regression_and_cleanup": {
+    "main_js_line_delta": 0,
+    "scientific_algorithms_models_constants_pins_changed": false,
+    "comparison_v2_schema_or_rollout_changed": false,
+    "legacy_tolerant_nick_builder_retained": true,
+    "stale_silent_reconciliation_guidance_removed": true,
+    "repository_lint": "same five pre-existing F401 imports; no new errors",
+    "selector": "just test-smart --dry-run: 5411 accumulated changed files, FAST selected, no suite executed; accumulated FULL debt remains",
+    "deferred_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\nThis is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\nOnly request `just test-session` when a broad/full sweep is actually needed.",
+    "selector_note": "The selector's boilerplate 'ran' is not execution evidence for a dry run.",
+    "app": "NOT VERIFIED IN APP; Archive unavailable, no browser/native scratch or shared live-server mutation",
+    "cleanup": {
+      "roots": [
+        "/tmp/pytest-of-joshua/pytest-274",
+        "/tmp/pytest-of-joshua/pytest-275",
+        "/tmp/pytest-of-joshua/pytest-276"
+      ],
+      "directories_removed": 204,
+      "symlinks_removed": 4,
+      "files_removed": 0,
+      "bytes_removed": 0,
+      "active_references": 0,
+      "owned_roots_remaining": [],
+      "e2e_cleanup_roots_remaining": [],
+      "preserved_historical_lock": "/tmp/pytest-of-joshua/pytest-268/.lock"
+    }
+  }
+}

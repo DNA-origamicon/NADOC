@@ -370,6 +370,8 @@ export function errorDetailToMessage(detail, fallback = 'Server error') {
   // entries blank) must reach the fallback rather than serialise to a bare "[]".
   if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
     if (typeof detail.msg === 'string' && detail.msg) return detail.msg
+    if (typeof detail.detail === 'string' && detail.detail) return detail.detail
+    if (typeof detail.message === 'string' && detail.message) return detail.message
     try {
       const s = JSON.stringify(detail)
       if (s && s !== '{}') return s

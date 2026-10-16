@@ -2567,15 +2567,10 @@ def _build_strand_end_resize(d: Design, body: "StrandEndResizeRequest") -> Desig
 @router.post("/design/strand-end-resize", status_code=200)
 def strand_end_resize(body: StrandEndResizeRequest) -> dict:
     """Resize terminal strand domains from the 3D/cadnano drag handles."""
+    from backend.api.part_routing_recording import record_strand_end_resize
+
     try:
-        n = len(body.entries)
-        label = f"Resize {n} strand end{'s' if n != 1 else ''}"
-        updated, report, _entry = design_state.mutate_with_minor_log(
-            op_subtype="strand-end-resize",
-            label=label,
-            params=body.model_dump(mode="json"),
-            fn=lambda d: _build_strand_end_resize(d, body),
-        )
+        updated, report, changed_helix_ids = record_strand_end_resize(body)
     except KeyError as exc:
         missing = exc.args[0] if exc.args else "unknown"
         raise HTTPException(
@@ -2590,7 +2585,6 @@ def strand_end_resize(body: StrandEndResizeRequest) -> dict:
     # design's geometry — ~16× faster on large designs (332 ms → 20 ms on a 16k-nuc
     # design). The frontend's _scaffoldCoverageChanged guard forces a correct full
     # JS rebuild from the merged geometry when nuc count / coverage changed.
-    changed_helix_ids = list({entry.helix_id for entry in body.entries})
     return _design_response_with_geometry(
         updated,
         report,
@@ -3316,21 +3310,9 @@ def auto_crossover() -> dict:
     starves some valid sites (see its WARNING), so this iterates it to a FIXPOINT —
     each re-run starts from the placed + re-ligated state and fills the gaps.
     """
-    design = design_state.get_or_404()
-    from backend.api.part_auto_commands import crossovers
-    history_seed = str(_uuid.uuid4())
-    new_design, stats = crossovers(design, history_seed=history_seed)
+    from backend.api.part_routing_recording import record_auto_crossover
 
-    current, report, _entry = design_state.mutate_with_feature_log(
-        op_kind="auto-crossover",
-        label="Auto-crossover",
-        params={
-            "history_seed": history_seed,
-            "sites_considered": stats["sites_considered"],
-            "placed": stats["placed"],
-        },
-        fn=lambda _d: new_design,
-    )
+    current, report, stats = record_auto_crossover()
     print(f"[AUTO XOVER] placed {stats['placed']} crossovers", flush=True)
     return _design_response_with_geometry(current, report)
 
@@ -4054,32 +4036,10 @@ def _build_nick_batch(d: Design, body: "NickBatchRequest") -> Design:
 
 @router.post("/design/nick/batch", status_code=201)
 def add_nick_batch(body: NickBatchRequest) -> dict:
-    """Nick at multiple positions in one operation."""
-    from backend.core.lattice import _find_strand_at
+    """Nick every selected position in one atomic recorded operation."""
+    from backend.api.part_routing_recording import record_nick_batch
 
-    design = design_state.get_or_404()
-    all_changed: set[str] = set()
-
-    for nick in body.nicks:
-        # Collect all helix IDs from the strand being nicked (not just the
-        # nick helix) so that cross-helix strand splits update all affected nucs.
-        try:
-            nicked_strand, _ = _find_strand_at(
-                design, nick.helix_id, nick.bp_index, nick.direction
-            )
-            all_changed.update(dom.helix_id for dom in nicked_strand.domains)
-        except ValueError:
-            all_changed.add(nick.helix_id)
-
-    n = len(body.nicks)
-    label = f"{n} nick{'s' if n != 1 else ''} (batch)"
-    current, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype="nick-batch",
-        label=label,
-        params=body.model_dump(mode="json"),
-        fn=lambda d: _build_nick_batch(d, body),
-    )
-    changed_helix_ids = list(all_changed) if all_changed else None
+    current, report, changed_helix_ids = record_nick_batch(body)
     return _design_response_with_geometry(
         current, report, changed_helix_ids=changed_helix_ids
     )

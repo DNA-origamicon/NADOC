@@ -57,15 +57,13 @@ an error. The decision:
 | Routes that *explicitly* edit `cluster_transforms` — cluster CRUD, feature-log replay, `relax_overhang_connection`, importers | **`mutate_and_validate(fn)`** [:244](../../backend/api/state.py#L244) | Reconciling would fight the route's own edit. The docstring at :277-283 states this exclusion — obey it. |
 | Whole-design replacement that still needs reconcile | `replace_with_reconcile` [:300](../../backend/api/state.py#L300) | |
 | Mutation that must appear in the feature log | `mutate_with_feature_log` / `mutate_with_minor_log` in `state.py` | Delegate to failure-atomic `feature_recording.py`; canonical snapshots/diffs are retained, wire responses are slimmed separately |
-| Intermediate step inside a `snapshot()` bracket | `set_design_silent_reconciled(new, before, report)` [:740](../../backend/api/state.py#L740) — **preferred**; plain `set_design_silent` [:728](../../backend/api/state.py#L728) only when no topology moved | Callers named in its docstring: `place_crossover`, `forced_ligation`, `add_nick_batch` |
+| Lock-owned authored operation needing source selection and response scope from the same revision | A focused recording adapter calls `feature_recording.record_minor` / `record_feature` while holding `state._lock` | The recorder owns one snapshot, reconciliation/retry, validation, history and rollback. Do not nest a public state mutation helper inside the non-reentrant lock. |
 
-Multi-step op = one Ctrl-Z:
-
-```python
-state.snapshot()                                       # ONE undo checkpoint for the whole op
-state.set_design_silent_reconciled(d1, before, rep)    # intermediate — no undo push
-design, report = state.mutate_with_reconcile(step_n)   # final step validates
-```
+Multi-step authored operations use one recording callback and one Ctrl-Z. Build
+against the source supplied to that callback; never return a candidate computed
+before the recording lock was acquired. Private previews must not publish through
+canonical silent setters. The unused `set_design_silent_reconciled` helper was
+removed; its former snapshot-bracket example is not a supported mutation pattern.
 
 All of these bump `revision` (`_bump_revision`, [:89](../../backend/api/state.py#L89)) — that
 number is what the frontend's stale-response watermark reads. Do not mutate `s.design` outside
@@ -218,6 +216,7 @@ Note `domainDesigner` is deliberately in **both** `viz` and `selection`.
 
 | Dead name | Reality |
 |---|---|
+| `set_design_silent_reconciled` | Removed after caller review. Use one failure-atomic recording transaction for authored topology operations; isolated previews publish nothing. |
 | `_active_design` | Never existed in the current model; zero hits repo-wide. Use `_session().design`. |
 | `_history` (module-level deque) | Now `_DesignSession.history` ([state.py:77](../../backend/api/state.py#L77)), per document. |
 | `design_state` as *a global design* | It's only the conventional import alias `from backend.api import state as design_state`. Not an object. |

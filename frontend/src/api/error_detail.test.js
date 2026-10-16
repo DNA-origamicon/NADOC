@@ -87,6 +87,45 @@ describe('errorDetailToMessage', () => {
     expect(errorDetailToMessage({ msg: 'nope' })).toBe('nope')
   })
 
+  it('shows the direct explanation from a typed native-reference error', () => {
+    const detail = {
+      code: 'missing_reference',
+      detail: 'The selected strand no longer exists.',
+      references: [{ kind: 'strand', identity: 'strand-1', parameter_path: ['strand_id'] }],
+    }
+    expect(errorDetailToMessage(detail)).toBe('The selected strand no longer exists.')
+  })
+
+  it('reads a direct message without exposing unrelated diagnostic fields', () => {
+    expect(errorDetailToMessage({ code: 'resize_refused', message: 'The strand cannot be resized here.' }))
+      .toBe('The strand cannot be resized here.')
+  })
+
+  it.each([
+    [{ msg: 'first', detail: 'second', message: 'third' }, 'first'],
+    [{ msg: '', detail: 'second', message: 'third' }, 'second'],
+    [{ msg: null, detail: '', message: 'third' }, 'third'],
+    [{ msg: 17, detail: { message: 'nested' }, message: 'direct' }, 'direct'],
+    [{ detail: false, message: 'direct' }, 'direct'],
+  ])('keeps msg, detail, then message precedence for direct nonempty strings (%j)', (detail, expected) => {
+    expect(errorDetailToMessage(detail)).toBe(expected)
+  })
+
+  it('does not recursively reinterpret unknown object diagnostics', () => {
+    for (const detail of [
+      { detail: { message: 'nested' } },
+      { detail: ['nested'], message: 0 },
+      { detail: '', message: '' },
+    ]) expect(errorDetailToMessage(detail, 'Fallback')).toBe(JSON.stringify(detail))
+  })
+
+  it('preserves array validation and fallback behavior despite object message fields', () => {
+    expect(errorDetailToMessage([{ loc: ['body', 'strand_id'], msg: 'missing', detail: 'ignored', message: 'ignored' }]))
+      .toBe('strand_id: missing')
+    expect(errorDetailToMessage([{ detail: 'not a validation msg', message: 'not a validation msg' }], 'Fallback'))
+      .toBe('Fallback')
+  })
+
   it('serialises an unrecognised object rather than losing it', () => {
     expect(errorDetailToMessage({ code: 'E_NOPE' })).toBe('{"code":"E_NOPE"}')
   })

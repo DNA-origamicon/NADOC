@@ -89,7 +89,7 @@ def test_valid_native_batch_matches_established_builder(part):
     )
 
 
-def test_live_batch_retains_its_skip_behavior(part):
+def test_legacy_batch_builder_retains_its_skip_behavior(part):
     from backend.api.crud import NickBatchRequest, _build_nick_batch
 
     one = _build_nick_batch(part, NickBatchRequest(nicks=[nick()]))

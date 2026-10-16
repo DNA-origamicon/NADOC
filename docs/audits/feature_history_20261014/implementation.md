@@ -1515,3 +1515,57 @@ The selector dry run reports FAST with accumulated FULL debt and executes no
 suite. App, broad regression and measured responsiveness remain open; `main.js`
 delta is zero. Completed disposable fixtures were empty and removed after active
 reference checks; no designs, captures or simulation outputs were retained.
+
+## G1 core geometry lifecycle continuation — October 16
+
+Live nick batches now require every selected nick to succeed; resize uses the
+same terminal-reference guard as native replay. Both record atomically and
+derive partial-response scope from their owned source. Missing targets return
+typed 404 diagnostics and inapplicable targets return 422 with parameter paths.
+Valid native math, empty-batch behavior and tolerant legacy replay are preserved.
+
+Automatic crossover now builds on one detached full source copy outside the
+state lock, then compares source/session/revision and host policy generation
+before the existing recorder publishes. An intervening nick is preserved and
+the stale automatic result is refused. Protected and strict-policy refusals
+precede work. This adds one source copy beyond the recorder's undo copy; its
+larger-design cost remains unqualified. No full proof is added to these edits.
+
+Private deformation previews now have a bounded host lifecycle and complete
+native DNA/control DTO: one prefix/document, two total, 60-second leases, one
+nonqueued work slot and bounded scalar cancellation tombstones. Weak source,
+session, revision and policy identities prevent stale admissions. Late responses
+cannot revive cancelled or superseded work. Apply re-captures and proves the
+original inputs, reserves its commit and performs one failure-atomic publication;
+Cancel reports a commit already in progress rather than claiming to stop it.
+An unchanged-source failure preserves the unexpired editor lease. Full undo
+copy cost is separate from the authoring-capture budget.
+
+The DTO preserves native nucleotide orientation, slab placement, loop/reference
+metadata and every scoped axis sample. It reuses pure projection/inventory logic
+under a separately named/versioned preview schema; existing comparison v2 stays
+unchanged and gated. Controls-only requests avoid geometry allocation. Complete
+responses, including host envelopes, are budgeted outside the state/catalog
+locks. Source equivalence, downstream evaluation and physical validity are never
+claimed by this local preview.
+
+There are **411 distinct backend passes and one existing conditional skip**.
+The [checkpoint evidence](validation_core_geometry_lifecycle.json) records red
+runs, the corrected mistyped test target, warnings, overlap accounting and
+frontend validation. Typed errors now display direct explanations instead of
+raw JSON; existing array/fallback behavior is preserved. Current guidance for
+the previously removed silent-reconciliation helper is also corrected.
+Full frontend validation passed **8,300 tests / one skipped in 717 files,
+345.21 s**. Repository lint retains exactly five pre-existing unused imports.
+Completed test folders contained no files/bytes: 204 empty directories and four
+symlinks were removed after checking active references. Historical pytest and
+placement-review evidence was preserved; no e2e cleanup roots remain.
+
+**ISSUE-100 and G1 remain open:** no public preview route or editor integration
+is enabled. Standard-tool prefix expansion, complete controls, document-bound
+transport/controller/renderer and actual desktop/latency qualification are next.
+The existing 60-second lease and private admission bounds are not a final UX
+qualification. Assemblies, machine-specific VR and lower-priority assets remain
+deferred. `main.js` delta is zero; scientific algorithms, models and source pins
+are unchanged. MV-48 retains all unperformed app checks and the broad backend
+suite remains separate debt.

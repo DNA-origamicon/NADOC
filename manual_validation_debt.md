@@ -1015,3 +1015,24 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   Exercise periodic seams, selected terminal extensions (full geometry refresh)
   and protected-loadout refusal without losing work. The 14 new tests sit within
   107 green related cases; they do not qualify app behavior or responsiveness.
+
+  **Nick/resize continuation (ISSUE-102):** repeat multi-selection nick and end
+  resize from the 3D and caDNAno views. Valid batches should create one undoable
+  child and refresh all affected helices. A batch with a missing or inapplicable
+  selection must explain the failed target and preserve the complete prior
+  document, including redo. Confirm rapid edits do not leave half-refreshed
+  cross-helix strands. All 174 related focused cases pass; actual gesture,
+  error-display and latency checks remain pending.
+
+  **Automatic crossover continuation (ISSUE-103):** run ordinary automatic
+  crossover, then undo/redo and save/reopen/verify. If another edit occurs while
+  it calculates, expect an explained refusal and preservation of that newer
+  work. Confirm protected loadouts refuse before calculation. Measure larger
+  designs, including the new detached-source copy; native work remains outside
+  the state lock but no interactive timing qualification is claimed. Native
+  HC/SQ parity and input-only replay pass within 117 related tests (one existing
+  conditional skip). The shared error formatter now reads typed `detail` and
+  `message` explanations; check readable feedback for all these refusals.
+  Full frontend validation passed 8,300 cases with one skip across 717 files in
+  345.21 s, including all 22 error formatter tests. This does not replace the
+  pending app exercise or measured larger-design responsiveness.

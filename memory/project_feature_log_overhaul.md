@@ -38,19 +38,41 @@ labels/partial-response scope and native building now share one lock-owned
 one snapshot/reconcile/retry are preserved. All 107 related cases, including
 14 new tests, pass; see [continuation evidence](../docs/audits/feature_history_20261014/validation_geometry_integrity_continuation.json)
 for the red run and combined-run fixture correction. No app/broad/performance
-qualification. Batch-nick skipping, resize terminal-reference checks and
-prebuilt auto-crossover publication remain open; do not treat G1 as complete.
+qualification. Subsequent live batch-nick and resize checks now reject missing
+or inapplicable selections atomically, preserve native replay/empty-batch
+semantics, and derive partial responses from their owned source. All 174 related
+cases pass (101 warnings, 7.09 s), including 31 routing adapter cases. Legacy
+tolerant replay remains explicitly separate. Auto-crossover now builds from an
+owned full copy outside the state lock and uses source/session/revision/policy
+guards before recording. Its 12 cases plus existing native routing checks pass;
+the extra copy's larger-design cost remains unqualified. Do not treat G1 as complete.
 
 **Private preview core:** bounded owned-input prefix preparation and local
 bend/twist evaluation are implemented, with 34 new/current private cases plus
 46 existing native/edit controls green. Prefixes currently admit empty roots
 and bundle/group/pose/deformation commands only; targets/cluster scope are fixed.
-It provides no live session/revision lease, render DTO, public route or editor
-wiring, and always leaves source equivalence/downstream evaluation unchecked.
-ISSUE-100 is still open. The unused silent-reconciliation setter was pruned after
+The private host and render/control DTO are now implemented: 27 host and 27 DTO
+cases pass alongside native/publication controls. One prefix/document, two total,
+60-second leases and one nonqueued work slot bound retention; source/session/
+revision/policy guards reject stale responses. Native projection and proof run
+outside both locks; Apply uses fresh input proof and one guarded publication.
+The DTO preserves scoped axis samples and orientation through a separately
+versioned schema; comparison v2 remains unchanged. No public route or preview
+editor wiring is enabled, and preview never proves source/downstream equivalence.
+ISSUE-100 remains open; expand core prefixes/controls, connect the editor and
+measure actual interactions next. The unused silent-reconciliation setter was pruned after
 caller review; 38 remaining publication-state cases pass. Continuation evidence
 records 225 distinct cases across these scopes, with corrected fixture failures
 retained. No app or responsiveness qualification is implied.
+
+**October 16 continuation validation:** 411 distinct focused backend passes and
+one existing missing-fixture skip; full frontend 8,300 passes/one skip across
+717 files in 345.21 s. Typed routing errors now show their explanation rather
+than raw JSON. [Current evidence](../docs/audits/feature_history_20261014/validation_core_geometry_lifecycle.json)
+retains red/green runs, overlapping counts, private limits, extra-copy and
+duplicate-response-walk debt, unchanged five-error lint baseline and cleanup.
+MV-48 app checks and broad backend/interaction timing remain open; no browser
+or shared-server mutation occurred. Core tools remain the active priority.
 
 The sections below retain earlier implementation context; use the latest
 [implementation checkpoint](../docs/audits/feature_history_20261014/implementation.md)

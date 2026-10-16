@@ -735,7 +735,7 @@ configuration plays back as a no-op, in the app and in every export.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this. **Last updated 2026-10-15 (geometry-first G1 checkpoint).**_
+_Living pointer — each session overwrites this. **Last updated 2026-10-16 (geometry-first G1 checkpoint).**_
 
 **NEXT PICK: ISSUE-100 isolated bend/twist history preview.** Ordinary grouping
 now always records its native input under one lock-owned publication transaction
@@ -744,8 +744,11 @@ state before acceptance. Follow the [geometry delivery map](docs/audits/feature_
 Grouping has 102 unique focused checks at its checkpoint; the ten deformation
 cases include explicit characterizations of unresolved defects. App, broad-suite
 and performance qualification are outstanding (MV-48); `main.js` delta is zero.
-Forced-ligation recording is also focused-fixed (ISSUE-101, 107 related cases);
-batch-nick skipping, resize selection and prebuilt auto-crossover remain open.
+Forced ligation (ISSUE-101), batch nick/resize (ISSUE-102) and stale auto-crossover
+publication (ISSUE-103) are focused-fixed. Private deformation host/DTO coverage
+now passes; there is no public preview route or editor integration yet. Follow
+the current delivery map for core-prefix, complete controls and response/desktop
+qualification. Do not treat private preparation as a live preview fix.
 Nanoparticle/asset expansion, assemblies and machine-specific VR work remain
 outside this next step.
 
@@ -2243,6 +2246,12 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   frontend integration is enabled, so this issue remains open. Follow the
   [continuation evidence](docs/audits/feature_history_20261014/validation_geometry_integrity_continuation.json).
 
+- October 16 private continuation adds source/session/revision/policy-bound host
+  leases, guarded Apply and a complete bounded native preview DTO. All 27 host
+  and 27 DTO cases pass with related controls. There is still no public route
+  or editor wiring, broader core-prefix/control parity or app/latency evidence;
+  ISSUE-100 remains open.
+
 ## ISSUE-101 — Forced ligation can replace an intervening authored edit (2026-10-15, FOCUSED FIX VALIDATED; APP OPEN)
 
 - The ordinary route selected strands and built `_ligate` output before taking
@@ -2271,3 +2280,61 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   remain separate follow-ups; this fix does not close G1. **No app, broad-suite
   or performance qualification**; MV-48 remains open and `main.js` delta is **0**.
   See [continuation evidence](docs/audits/feature_history_20261014/validation_geometry_integrity_continuation.json).
+
+## ISSUE-102 — Live Fine Routing silently accepts invalid batch selections (2026-10-16, FOCUSED FIX VALIDATED; APP OPEN)
+
+- Batch nick reused the tolerant legacy builder, silently skipping missing,
+  terminal, repeated or otherwise inapplicable targets. Resize did not apply the
+  native history terminal-reference guard; a wrong helix or empty-domain target
+  could become an apparently successful recorded operation. Nick response scope
+  was also collected before acquiring the recording lock.
+- `part_routing_recording` now uses the existing strict sequential nick builder
+  and resize reference admission with one lock-owned `record_minor` transaction.
+  Missing references return typed 404 diagnostics; inapplicable selections return
+  typed 422 diagnostics with parameter paths. A failed later selection preserves
+  design values, history/redo, revision and request markers. Valid native building,
+  one snapshot/reconcile/retry, partial geometry and empty-batch behavior remain.
+- Red: **10 failed / 19 passed, 29 warnings, 3.80 s**. Green: **174 passed,
+  101 warnings, 7.09 s** across eight related files, including 31 adapter cases.
+  Coverage includes poisoned-recovery replay, undo/redo, multi-helix splits,
+  deterministic interleaving and absence of full-history proof in these edits.
+- The old tolerant builder remains for legacy compatibility and its direct
+  regression is named accordingly. No molecular formulas or source pins changed.
+  **Not verified in app or broad/performance testing**; MV-48 remains open.
+  `main.js` delta is zero. Auto-crossover and live preview integration remain
+  separate work; these focused fixes do not close G1.
+
+## ISSUE-103 — Automatic crossover publication can discard newer edits (2026-10-16, FOCUSED FIX VALIDATED; APP OPEN)
+
+- The native fixed-point builder received the live mutable source before the
+  recorder acquired its lock. Its prebuilt result could replace an intervening
+  nick; protected-loadout checks ran after native work. A failing builder could
+  also leave mutations through the live alias.
+- The ordinary adapter now captures one detached full source under the state
+  lock, builds outside it, and checks document/session identity, source object,
+  revision and construction-policy generation before `record_feature`. Changed
+  inputs return 409 without overwriting newer work. Strict/protected refusals
+  precede capture and calculation. Native fixed-point logic, seed, statistics,
+  labels, full response and one recording snapshot/reconcile/retry are preserved.
+- Red: **4 failed / 6 passed, 10 warnings, 3.41 s**. Green related run:
+  **117 passed / 1 skipped, 65 warnings, 10.43 s**, including 12 new cases;
+  72 of those passes overlap the earlier nick/resize run. The retained skip is
+  an existing native-router conditional, not a new disabled regression.
+- The extra full source copy is a real additional cost; larger-design lock and
+  request latency are not qualified. The expensive native calculation remains
+  outside the state lock. No scientific algorithm or numerical pin changed.
+  App testing remains MV-48; `main.js` delta is zero.
+
+## ISSUE-104 — Typed error explanations appear as raw JSON (2026-10-16, AUTOMATED FIX VALIDATED; APP OPEN)
+
+- `errorDetailToMessage` understood a direct `msg`, but new native reference
+  diagnostics use `detail` and other refusals use `message`. The browser therefore
+  displayed serialized codes/reference metadata instead of the explanation.
+- Two direct string checks now prefer `msg`, then `detail`, then `message`.
+  Existing strings, validation arrays, empty/non-string fields, circular values
+  and unknown-object diagnostics keep their established behavior; there is no
+  recursive reinterpretation or new truncation rule.
+- Tests-first red: **6 failed / 16 passed, 1.65 s**. Full frontend passed
+  **8,300 cases / 1 skipped across 717 files in 345.21 s**, including all 22
+  error-detail cases; see the [checkpoint evidence](docs/audits/feature_history_20261014/validation_core_geometry_lifecycle.json).
+  App error-display checks remain MV-48; `main.js` delta is zero.

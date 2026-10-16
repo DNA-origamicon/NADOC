@@ -64,7 +64,7 @@ def _records(records, expected):
     authoritative_slab_poses(records)
 
 
-def _axes(axes, expected):
+def _axes(axes, expected, *, scoped_segments=False):
     seen, overhangs, coverage = set(), set(), {}
     points, segments = 0, 0
     strands = expected.indices["strands"]
@@ -82,10 +82,21 @@ def _axes(axes, expected):
         for point in axis["samples"]:
             _point(point)
         for segment in axis["segments"]:
-            if not {"strand_id", "domain_index", "ovhg_id", "bp_lo", "bp_hi", "start", "end"} <= set(segment) <= SEGMENT_FIELDS:
+            allowed = SEGMENT_FIELDS | {"samples"} if scoped_segments else SEGMENT_FIELDS
+            if not {"strand_id", "domain_index", "ovhg_id", "bp_lo", "bp_hi", "start", "end"} <= set(segment) <= allowed:
                 _reject("DNA comparison has unreviewed axis segments", "unsupported_comparison_scope")
             _point(segment["start"]), _point(segment["end"])
             points += 2
+            if "samples" in segment:
+                samples = segment["samples"]
+                if type(samples) is not list:
+                    _reject("DNA preview has malformed scoped axis samples", "invalid_comparison_geometry")
+                # Count every emitted occurrence, including shared native lists.
+                # No sampling or truncation can hide a selected domain's path.
+                points += len(samples)
+                _limit(points, MAX_AXIS_POINTS, "axis points")
+                for point in samples:
+                    _point(point)
             refs = segment.get("domain_ids") or ([{"strand_id": segment["strand_id"], "domain_index": segment["domain_index"]}]
                                                 if segment["strand_id"] is not None else [])
             for ref in refs:
@@ -134,8 +145,8 @@ def _topology(design):
     return value
 
 
-def project(design):
-    """Complete admitted DNA DTO; exact native coordinates, no source mutation."""
+def _project(design, *, scoped_segments=False):
+    """Common native projection; callers select one closed wire schema."""
     from backend.core.design_geometry import _geometry_for_design
     from backend.core.deformation import deformed_helix_axes, _apply_ovhg_rotations_to_axes
     from backend.core.native_full_placement import NativePlacementError
@@ -146,7 +157,7 @@ def project(design):
         axes = deformed_helix_axes(design)
         axes = _apply_ovhg_rotations_to_axes(design, axes, records)
         _records(records, expected)
-        _axes(axes, expected)
+        _axes(axes, expected, scoped_segments=scoped_segments)
     except NativePlacementError as error:
         _reject(str(error), "invalid_comparison_geometry")
     points = [record[field] for record in records for field in ("backbone_position", "base_position", "slab_position")]
@@ -154,9 +165,26 @@ def project(design):
         points.extend([axis["start"], axis["end"], *axis["samples"]])
         for segment in axis["segments"]:
             points.extend([segment["start"], segment["end"]])
+            if scoped_segments:
+                points.extend(segment.get("samples", ()))
         for value in axis.get("ovhg_axes", {}).values():
             points.extend([value["start"], value["end"]])
     bounds = {"minimum": [min(point[i] for point in points) for i in range(3)],
               "maximum": [max(point[i] for point in points) for i in range(3)]} if points else None
     return {"component_version": COMPONENT_VERSION, "representation": "native-full-v1", "units": "nm",
             "nucleotides": pack_records(records), "helix_axes": axes, "display_topology": _topology(design), "bounds_nm": bounds}
+
+
+def project(design):
+    """Existing comparison v2 schema and admission remain unchanged."""
+    return _project(design)
+
+
+def project_for_deformation_preview(design):
+    """Private preview schema preserving native per-domain axis samples.
+
+    This does not enable the comparison host or expand its v2 schema. The same
+    inventory, prospective work and emitted-site/axis limits still apply.
+    """
+    return {**_project(design, scoped_segments=True),
+            "component_kind": "deformation-preview-dna", "component_version": 1}

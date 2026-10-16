@@ -21,11 +21,10 @@ DNA overhang/connection work remains in the core scope where a standard tool
 requires it. Assemblies remain deferred. VR validation remains explicitly
 deferred to a capable machine, independently of desktop completion.
 
-The user resumed work after the clean `c9f1d185` checkpoint. This file and the
-project memory carry the revised persistent objective and sequence. The goal
-controller exposes status changes only, not objective editing or a programmatic
-resume; its older objective still encompasses this work. Do not mark that goal
-complete or create a duplicate to change its metadata.
+The user resumed work after the clean `c9f1d185` checkpoint. The persistent goal
+controller is active; this file and the project memory carry its revised priority
+sequence. Its existing P3–P6 objective encompasses this work. Do not mark that
+goal complete or create a duplicate merely to change its metadata.
 
 ### Geometry-first completion sequence
 
@@ -62,21 +61,25 @@ than overloading an unrelated command kind or silently accepting old proofs.
   but no complete desktop parameter forms.
 - Forced ligation now resolves and builds inside its existing recording
   transaction; a deterministic interleaved-nick regression proves it cannot
-  overwrite that edit. Batch nick still skips invalid targets, resize lacks the
-  replay terminal-selection guard, and auto-crossover still has a prebuilt
-  callback. Close those remaining mismatches with bounded local checks, not a
-  new full replay on every edit.
+  overwrite that edit. Batch nick and resize now share native reference guards
+  inside one atomic recorder: invalid batches fail without partial changes, and
+  affected-helix responses use the actual owned source. Their 174 focused
+  regressions pass. Auto-crossover now builds on a detached source outside the
+  state lock and refuses publication after source/session/revision or policy
+  changes. Its 12 new cases and existing native routing controls pass. The extra
+  source copy needs larger-design timing; no full replay is added to these edits.
 
 Archive remains unavailable on this machine. Continue focused memory-only checks;
 no bulk/app/native-scratch output may silently fall back to the system disk.
 Unperformed desktop and broad-suite checks remain completion debt, not passes.
 
-### G1 next: isolated bend/twist history preview — private evaluator implemented
+### G1 next: isolated bend/twist history preview — private backend implemented
 
 `part_deformation_preview.py` now provides bounded prefix preparation and repeat
 local evaluation on owned input. Its 34 focused cases and existing native
-controls pass. It has no public route, retained host cache, session/revision
-lease, render DTO or frontend wiring. ISSUE-100 remains open. This first slice
+controls pass. A private bounded host lifecycle and native render/control DTO
+are now implemented (27 host and 27 DTO cases pass). There is no public route
+or frontend preview wiring. ISSUE-100 remains open. This first slice
 admits empty native roots and bundle/group/pose/bend/twist prefixes only;
 cluster/target membership stays fixed. Prefix expansion, complete controls,
 host lifecycle and actual interaction measurements are required before rollout.
@@ -131,15 +134,42 @@ preservation, poisoned recovery independence, earlier-feature versus Final
 semantics, stale/ABA/late-response rejection and bounded refusal. Add controller
 and renderer-disposal tests, then measure actual drag/request/geometry tails and
 exercise desktop Apply/Cancel. The existing DNA comparison is **disabled and
-qualification-only**; this proposal neither enables it nor borrows its renderer
-or DTO to bypass its admission bounds. No geometry algorithms or constants change.
+qualification-only**. The preview reuses its pure native projection and complete
+inventory checks, with a separately named/versioned axis schema preserving
+per-domain samples. Comparison v2, its host/renderer and all admission limits
+remain unchanged. No geometry algorithms or constants change.
 
-Concrete next checkpoint: add and test the **bounded host lifecycle and render
-DTO** around the private evaluator, with no frontend enablement. Open performs bounded native
+The private host retains one prefix per document, two total, with a fixed 60-second
+lease and one nonqueued work slot. A caller nonce plus server lease generation,
+weak source identity, session identity, revision and host policy generation bind
+every response. Cancellation tombstones are limited to 16 entries/60 seconds;
+stale-source entries are released on cancel/expiry. Native projection and proof
+run outside state/catalog locks. Apply reserves its commit before the existing
+undo/publication transaction; Cancel then reports `commit_in_progress` honestly.
+Failed Apply leaves an unchanged, unexpired editor lease usable. Full-source
+undo cost and the lease policy still need actual interaction qualification.
+
+Open performs bounded native
 prefix preparation plus cheap command-coverage admission, not full-source
 equivalence proof; that remains Apply's guard. Return explicit
 `stage="feature"`, `downstream_evaluated=false` and
 `source_equivalence_checked=false`, never a certificate.
+
+Concrete next checkpoint: complete the standard-tool prefix/control contract and
+add the document-bound HTTP adapter, controller and private renderer below.
+Preserve the existing controls before enabling a complete ordinary history-edit
+flow; explicitly explain unsupported histories rather than falling back to
+canonical preview mutations. Require actual request/geometry latency and desktop
+Cancel/Apply evidence before calling ISSUE-100 fixed.
+
+Before HTTP wiring, remove the known duplicate response walk: DTO methods
+currently bound their payload, then the host bounds it again with its envelope.
+Native geometry is computed once, but graph and finite-JSON accounting run twice.
+Let the DTO accept a collision-checked, host-owned scalar envelope and bound the
+merged result once; preserve bounded standalone calls and the final source/lease
+check. Pin one-final-bound, whole-envelope overflow, standalone refusal and exact
+payload parity before changing this seam. Do not introduce an unchecked path or
+infer actual latency from eliminating the duplicate walk.
 
 Frontend integration boundaries after that contract freezes:
 
