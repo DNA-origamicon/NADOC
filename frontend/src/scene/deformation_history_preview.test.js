@@ -18,6 +18,24 @@ function nodes(root) { const result = []; root.traverse(n => { if (n.geometry) r
 afterEach(() => { for (const owner of owned.splice(0)) owner.dispose(); vi.restoreAllMocks() })
 
 describe('owned native deformation history display', () => {
+  it('isolates real native panes from sibling geometry and restores the camera on repeated sessions', () => {
+    const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera()
+    const live = new THREE.Group(), arc = new THREE.Line(), light = new THREE.AmbientLight()
+    scene.add(live, arc, light)
+    for (let index = 0; index < 2; index++) {
+      const preview = createDeformationHistoryPreview({ scene, camera, getLiveRoot: () => live }); owned.push(preview)
+      preview.open({ before: component(), candidate: component() })
+      const visible = scene.children.filter(child => child.name === 'privateDeformationPreview')
+      for (const root of visible) root.traverse(node => expect(camera.layers.test(node.layers)).toBe(true))
+      expect(camera.layers.test(arc.layers)).toBe(false); expect(arc.visible).toBe(true); expect(live.visible).toBe(true)
+      preview.show('before'); preview.replaceCandidate(null)
+      expect(visible[0].visible).toBe(true)
+      preview.replaceCandidate(component()); preview.show('candidate')
+      preview.dispose()
+      expect(scene.children).toEqual([live, arc, light]); expect(camera.layers.mask).toBe(1); expect(light.layers.mask).toBe(1)
+    }
+  })
+
   it('keeps the saved scene and input packet intact while switching before/candidate/off', () => {
     const { scene, live, preview } = setup(), before = component(), candidate = component()
     const original = JSON.stringify({ before, candidate })

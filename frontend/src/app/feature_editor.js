@@ -1,5 +1,6 @@
 import * as api from '../api/client.js'
 import { store } from '../state/store.js'
+import { createDeformationHistoryEditor } from './deformation_history_editor.js'
 import {
   initDeformationEditor, previewDeformation, confirmDeformation,
   waitForDeformationIdle, discardDeformationPreview,
@@ -8,24 +9,36 @@ import {
   getState as getDeformState, getToolType as getDeformToolType,
   startToolForEdit as startDeformToolForEdit,
   markEditCommitted as markDeformEditCommitted,
+  startToolForHistory, finishHistoryTool,
   STATES as DEFORM_STATES,
 } from '../scene/deformation_editor.js'
 import {
   showPickingPopup, initBendTwistPopup, openPopup as openDeformPopup,
   closePopup as closeDeformPopup, setPlanePositions as setDeformPopupPlanes,
+  setHistoryPopupStatus,
 } from '../ui/bend_twist_popup.js'
+
+// Enable only after desktop and request/geometry latency qualification (MV-48).
+export const ISOLATED_DEFORMATION_HISTORY_ENABLED = false
 
 /** Owns deformation feature creation/editing and popup synchronization. */
 export function initFeatureEditor({
   scene, camera, canvas, controls, designRenderer,
   seekFeaturesWithDelta, showToast, getOrientPanel,
-  activateTranslateRotateTool,
+  activateTranslateRotateTool, isolatedHistoryEnabled = ISOLATED_DEFORMATION_HISTORY_ENABLED,
 }) {
   // Context set while editing an existing feature; cleared on confirm or cancel.
   let _editContext = null  // { priorCursor, pendingParams }
+  const history = isolatedHistoryEnabled ? createDeformationHistoryEditor({
+    store, api, scene, camera, designRenderer, showToast,
+    editor: { startToolForHistory, finishHistoryTool, repositionPlane: repositionDeformPlane },
+    popup: { openPopup: openDeformPopup, closePopup: closeDeformPopup, setHistoryPopupStatus },
+    setMode: value => { const node = document.getElementById('mode-indicator'); if (node) node.textContent = value ?? 'NADOC · WORKSPACE' },
+  }) : null
 
   initDeformationEditor(scene, camera, canvas, controls, designRenderer,
     () => {
+      if (history?.active()) { history.onToolExit(); return }
       // onExit: restore mode indicator + (for an unconfirmed edit) restore
       // the original op that _onEditFeature peeled off the design.
       //
@@ -108,6 +121,7 @@ export function initFeatureEditor({
   let _prevDeformState = DEFORM_STATES.IDLE
   let _prevDeformType = null
   function _watchDeformState() {
+    if (history?.active()) return
     const st = getDeformState()
     const type = getDeformToolType()
     if (st === _prevDeformState && type === _prevDeformType) return
@@ -138,7 +152,7 @@ export function initFeatureEditor({
     }
   }
 
-  store.subscribe((next, previous) => {
+  const unsubscribe = store.subscribe((next, previous) => {
     if (next.deformToolActive !== previous.deformToolActive) {
       _watchDeformState()
       // End/context entry points place both planes synchronously after activation.
@@ -147,6 +161,13 @@ export function initFeatureEditor({
   })
 
   async function _onEditFeature(entry, featureIndex) {
+    if (history?.active()) { showToast('Finish the current feature edit before opening another', 4000); return }
+    if (history && entry.feature_type === 'deformation') {
+      if (getDeformState() !== DEFORM_STATES.IDLE || _editContext) {
+        showToast('Finish the current tool before editing feature history', 4000); return
+      }
+      return history.open(entry, featureIndex)
+    }
     // ── Overhang orientation edit — open orientation panel for this overhang ─
     if (entry.feature_type === 'overhang_rotation') {
       const ovhgIds = entry.overhang_ids
@@ -242,5 +263,6 @@ export function initFeatureEditor({
     watchDeformState: _watchDeformState,
     getEditContext: () => _editContext,
     setEditContext: value => { _editContext = value },
+    dispose() { unsubscribe(); history?.dispose() },
   }
 }

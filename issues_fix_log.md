@@ -20,6 +20,7 @@ regress anything).
 
 | # | Date | Issue / phase | What changed (module) | Repro pinned by | Wall-clock | main.js LOC Δ | tests added | edits-to-green | app-validated | regression caught |
 |---|------|---------------|------------------------|-----------------|-----------|---------------|-------------|----------------|---------------|-------------------|
+| 39 | 2026-10-16 | ISSUE-105 authored group retargeting; gated ISSUE-100 editor | Native prefix selection helper, closed control validation, actual editor/popup adapter and private viewport | Group/plane reversals, exact unchanged inputs, failed Apply/status recovery, native display, owned guide cleanup and cold save/reload | Backend 14.87 s; full frontend 320.32 s | 0 | 18 retarget cases; complete checkpoint evidence linked below | 373 backend; full frontend 8,441 passed/one skip; review failures retained | **No** — MV-48, both rollout gates closed | ISSUE-106 source save defect reproduced; shared Sprite geometry preserved; pending callbacks and input reversals fixed |
 | 38 | 2026-10-16 | ISSUE-104 — readable typed refusals | Two direct string checks in existing API error formatter | Actual native-reference shape plus precedence/fallback controls | Red 1.65 s; full frontend 345.21 s | 0 | 9 cases (22 total) | Red 6 failed/16 passed; full frontend 8,300 passed/1 skipped | **No** — MV-48 | Typed `detail`/`message` was serialized as raw JSON |
 | 37 | 2026-10-16 | ISSUE-103 — automatic crossover ownership | Private full capture and guarded existing recorder adapter | Detached native input, real intervening nick, policy ABA, HC/SQ replay and rollback | Red 3.41 s; green 10.43 s | 0 | 12 cases | 117 related passes/1 existing skip; 72 overlap ISSUE-102 run | **No** — MV-48 | Prebuilt candidate discarded newer work; expensive native work stays outside lock, extra copy cost unqualified |
 | 36 | 2026-10-16 | ISSUE-102 — atomic nick/resize references | Shared strict builders/reference guards in routing recorder | Failed later selection, exact stacks/markers and multi-helix partial response | Red 3.80 s; green 7.09 s | 0 | 17 cases (31 routing total) | 174 related passes | **No** — MV-48 | Live nick skipped invalid selections; resize lacked terminal guard; response scope read stale source |
@@ -818,3 +819,15 @@ not reliably update affected-helix membership. The private preview retains
 native behavior and advertises group retargeting as unavailable. G2 must use
 the existing prefix plane/scope resolvers and align preview, publication and
 cold replay; this checkpoint does not change molecular calculations.
+
+2026-10-16 — ISSUE-105 backend correction and gated history editor: actual group
+selection changes now use existing selectors against the owned prefix. Unchanged
+groups preserve historical explicit membership, and old commands replay unchanged.
+The complete private control validator, plane editor, popup and viewport connect
+through the real feature editor behind a default-false gate. Failures preserve
+inputs, reversed inputs overwrite prior drafts, and explicit status/refresh
+actions avoid a second publication. Native source tests exposed ISSUE-106's
+pre-existing invalid all-members grouping; it remains separately open for a
+compatibility-aware correction. See [checkpoint evidence](docs/audits/feature_history_20261014/validation_deformation_history_editor.json).
+Both rollout gates remain closed and MV-48 remains open; no desktop or latency
+result is claimed.

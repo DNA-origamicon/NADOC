@@ -1038,7 +1038,8 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   pending app exercise or measured larger-design responsiveness.
 
   **Private isolated-preview integration (October 16):** the new HTTP adapter
-  and transport/controller/renderer are still disabled and unwired. Automated
+  remains disabled/unregistered. Transport/controller/renderer now connect to
+  the real editor/popup behind a separate default-false qualification gate. Automated
   Python-to-Three.js checks establish exact native nucleotide matrices and
   curved-axis display for ordinary, grouped and selected bend/twist, including
   a single-helix twist. They do not validate screen appearance or interaction.
@@ -1049,3 +1050,12 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   and matching preview/Apply/replay. Measure whole request/render tails and
   cancellation with representative larger designs; do not infer speed from
   one combined response bound or the finite private limits.
+  Include group/plane changes followed by returning to their original values,
+  untouched Apply preserving exact curvature, reopening after hover/drag,
+  canonical sibling arcs/labels staying hidden in feature preview, and explicit
+  status/refresh recovery after a lost Apply response. Unit tests do not prove
+  this interaction is usable. ISSUE-106 additionally needs exhaustive grouping,
+  frame continuation and save/reopen after its compatibility-aware correction.
+  This checkpoint passed 373 focused backend tests and the full frontend suite
+  (8,441 passed/one existing skip, 727 files, 320.32 s). Those results leave all
+  desktop, broad backend and measured responsiveness debt above outstanding.

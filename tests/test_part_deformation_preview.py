@@ -519,7 +519,9 @@ def test_routing_growth_refuses_before_native_allocation(monkeypatch, kind):
 
 
 @pytest.mark.parametrize("clear", [False, True])
-def test_unscoped_cluster_input_matches_native_edit_semantics_without_invented_retarget(clear):
+def test_unscoped_cluster_edit_records_native_group_membership(clear):
+    from backend.core.deformation import helices_crossing_planes, resolve_cluster_scope
+
     source = native_source(grouped=True)
     service = _service()
     prepared = service.prepare_from_capture(owned_capture(source), "edited-feature")
@@ -528,13 +530,15 @@ def test_unscoped_cluster_input_matches_native_edit_semantics_without_invented_r
     other = next(cluster.id for cluster in prefix.cluster_transforms
                  if cluster.id not in original.op_snapshot.cluster_ids)
     change = {"cluster_ids": [] if clear else [other]}
-    expected = part_proof_commands.execute(*_execution_args(prefix, edit_entry(original, change)))
+    expected_scope = resolve_cluster_scope(prefix, change["cluster_ids"], helices_crossing_planes(
+        prefix, original.op_snapshot.plane_a_bp, original.op_snapshot.plane_b_bp))
+    expected_entry = original.model_copy(update={"op_snapshot": original.op_snapshot.model_copy(
+        update={"cluster_ids": expected_scope["cluster_ids"], "affected_helix_ids": expected_scope["helix_ids"]})})
+    expected = part_proof_commands.execute(*_execution_args(prefix, expected_entry))
     result = service.evaluate(prepared, change)
     assert authoring(result.design) == authoring(expected)
     assert result.entry.op_snapshot.cluster_ids == change["cluster_ids"]
-    # Characterize the existing native edit contract; this does NOT establish
-    # complete cluster-retarget UX. Geometry membership still uses these IDs.
-    assert result.entry.op_snapshot.affected_helix_ids == original.op_snapshot.affected_helix_ids
+    assert result.entry.op_snapshot.affected_helix_ids == expected_scope["helix_ids"]
     assert result.entry.deformation_id == original.deformation_id
 
 

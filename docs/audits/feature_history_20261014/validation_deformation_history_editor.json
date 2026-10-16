@@ -1,0 +1,142 @@
+{
+  "date": "2026-10-16",
+  "scope": "Geometry-first G1/G2: authored group retargeting and gated integration of the actual bend/twist history editor",
+  "goal": "active; extrude, sweep, bend, twist, move/rotate and Fine Routing precede asset expansion; assemblies and machine-specific VR deferred",
+  "availability": "The actual feature_editor dispatch is wired behind ISOLATED_DEFORMATION_HISTORY_ENABLED=false. HTTP gate remains false and router remains unregistered. Ordinary history editing still uses the legacy path; ISSUE-100 is open. No automatic canonical fallback exists inside the isolated path.",
+  "backend_red": {
+    "failed": 11,
+    "passed": 7,
+    "seconds": 3.06,
+    "reason": "Group changes retained old affected helices; duplicate/empty/frozen selections and capability needed correction"
+  },
+  "backend_intermediate": {
+    "failed": 6,
+    "passed": 151,
+    "warnings": 14,
+    "seconds": 6.67,
+    "reason": "Real JSON roundtrip exposed pre-existing missing lattice-frame group ownership in source setup. Recorded ISSUE-106 and a dedicated characterization. Retarget fixture now uses a native named arm plus surviving default group, validates initial source and retains final full roundtrip/cold proof. No save check was removed."
+  },
+  "backend_green": {
+    "passed": 373,
+    "warnings": 91,
+    "seconds": 14.87,
+    "targets": [
+      "tests/test_part_deformation_group_retarget.py",
+      "tests/test_group_frame_ownership_characterization.py",
+      "tests/test_part_deformation_preview.py",
+      "tests/test_part_deformation_preview_dto.py",
+      "tests/test_part_deformation_preview_sessions.py",
+      "tests/test_part_deformation_preview_receipts.py",
+      "tests/test_part_deformation_preview_routes.py",
+      "tests/test_deformation_preview_native_display.py",
+      "tests/test_part_dna_comparison.py",
+      "tests/test_part_publication_state.py",
+      "tests/test_part_recipe_edit.py",
+      "tests/test_native_routing_proof.py",
+      "tests/test_native_auto_proof.py",
+      "tests/test_native_extrusion_proof.py",
+      "tests/test_native_overlay_proof.py"
+    ],
+    "counting": "One final combined run; preceding 169-case green overlaps and is not added.",
+    "native_display_cases": 11,
+    "characterization": "One passing case deliberately demonstrates invalid legacy all-members grouping; it is not an integrity acceptance pass."
+  },
+  "frontend_red": [
+    {
+      "scope": "closed display validator",
+      "suite_errors": 1,
+      "tests": 0,
+      "seconds": 0.809,
+      "reason": "New validator module absent"
+    },
+    {
+      "scope": "actual editor/popup adapters and root orchestration",
+      "failed": 19,
+      "suite_errors": 2,
+      "seconds": 1.85,
+      "reason": "Missing private adapters and root modules; current popup used canonical context and closed after failure"
+    },
+    {
+      "scope": "actual feature editor dispatch",
+      "failed": 2,
+      "seconds": 0.736,
+      "reason": "No gated dispatch or subscription teardown"
+    },
+    {
+      "scope": "integrated UI and creation compatibility",
+      "failed": 5,
+      "passed": 48,
+      "uncaught_errors": 4,
+      "seconds": 2.92,
+      "reason": "Two plane handlers hit JavaScript automatic semicolon insertion; one assertion expected signed layer masks; guide disposal included Three.Sprite shared geometry. Corrected handlers, asserted layer membership, and preserved shared templates with zero-disposal checks."
+    }
+  ],
+  "frontend_focused_green": {
+    "passed": 115,
+    "files": 11,
+    "seconds": 4.78
+  },
+  "frontend_full_green": {
+    "command": "just test-frontend",
+    "passed": 8441,
+    "skipped": 1,
+    "files_passed": 727,
+    "seconds": 320.32,
+    "counting": "One final complete run; focused results overlap and are not added."
+  },
+  "review_corrections": [
+    "Owned source uses canonical cluster_transforms; native renderer replacement builds successfully before changing visible pane.",
+    "Group and plane reversals send explicit original values to overwrite accumulated drafts; untouched or restored plane-only inputs retain exact original curvature.",
+    "Plane drags send input-only updates without stale cached parameters. Teardown releases dragging without a final evaluation.",
+    "History guide descendants and raycaster share the private camera layer; repeated sessions restore prior hover/camera/light masks.",
+    "Guide disposal releases owned geometry/materials/textures while retaining shared Three.Sprite geometry.",
+    "Delayed group callbacks cannot start creation or another history session's preview after close.",
+    "Complete published geometry enters the existing synchronous store adoption before its first await; status/refresh never recommits."
+  ],
+  "compatibility": "No schema, native scientific algorithm, numerical/model pin, comparison-v2 contract or allowance changed. Only actual authored group union changes resolve membership from the owned prefix; unchanged groups, including reorder, and saved v1 replay retain stored affected IDs.",
+  "research": [
+    {
+      "url": "https://cad.onshape.com/help/Content/Home/dialogs.htm",
+      "use": "Official feature-stage before/after preview and separate Final/suffix semantics informed the private-prefix UI. This is an architectural inference, not a claim about vendor internals."
+    },
+    {
+      "url": "https://threejs.org/docs/pages/Layers.html",
+      "use": "Official per-object/camera layer membership contract informed isolation of canonical scene siblings without changing their visibility."
+    }
+  ],
+  "checks": {
+    "scoped_ruff": "passed",
+    "diff_check": "passed",
+    "main_js_loc_delta": 0,
+    "repository_lint": "Same five F401 baseline errors: vr_prompts.parse_event and pathlib.Path in four CPD tests; no new errors.",
+    "test_smart": {
+      "mode": "dry-run only, no FAST or FULL tests executed by selector",
+      "changed_files": 5430,
+      "decision": "FAST  (fast suite only)",
+      "deferred_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+      "clarification": "The selector's 'ran' wording is boilerplate in this dry run. Broad backend debt remains open."
+    }
+  },
+  "limits_and_debt": [
+    "NOT VERIFIED IN APP. Archive mount unavailable; no browser, smoke, representative design visual review, native build or bulk scratch run.",
+    "No request/render tail, larger-design latency, concurrent-read or memory qualification claimed; private limits remain unchanged.",
+    "Before rollout, qualify all popup controls and canvas interaction, stale/expiry/lost-publication flows, repeated disposal, one undo, and save/reload.",
+    "ISSUE-106 needs an explicit old-command compatibility decision and structural-validity correction at the next reversible G1 checkpoint.",
+    "Prune legacy canonical history peel/delete/seek-restore only when the qualified isolated route and editor are enabled together."
+  ],
+  "cleanup": {
+    "active_fd_mapping_cwd_references": 0,
+    "owned_roots": [
+      "/tmp/pytest-of-joshua/pytest-270",
+      "/tmp/pytest-of-joshua/pytest-271",
+      "/tmp/pytest-of-joshua/pytest-272"
+    ],
+    "directories_removed": 702,
+    "symlinks_removed": 4,
+    "files_removed": 0,
+    "bytes_removed": 0,
+    "owned_roots_remaining": [],
+    "preserved": "Historical pytest-268/.lock, 6 bytes; user designs/jobs and prior scientific provenance untouched. No browser or bulk output created.",
+    "e2e_named_artifacts_remaining": 0
+  }
+}

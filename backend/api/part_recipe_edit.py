@@ -207,7 +207,10 @@ def prepare_change(source, captured, index, checkpoint, *, params=None, sub_inde
             )
             log[index] = entry.model_copy(update={"children": children})
         elif entry.feature_type in OVERLAY_KINDS:
-            log[index] = edit_entry(entry, params)
+            try:
+                log[index] = edit_entry(entry, params, prefix=prefix.design)
+            except CommandContractError as exc:
+                raise HTTPException(409, detail=exc.as_issue()) from exc
         elif entry.feature_type == "snapshot":
             log[index] = entry.model_copy(
                 update={

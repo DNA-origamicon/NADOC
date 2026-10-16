@@ -64,7 +64,7 @@ def test_complete_native_geometry_and_controls_are_owned(kind, grouped, scoped):
     assert controls["selected_operation"] == evaluated.entry.op_snapshot.model_dump(mode="json")
     assert controls["deformations"] == [op.model_dump(mode="json") for op in prefix.deformations]
     assert controls["capabilities"]["change_targets"] is False
-    assert controls["capabilities"]["change_clusters"] is False
+    assert controls["capabilities"]["change_clusters"] is (not scoped)
     if scoped:
         assert any("samples" in segment for axis in result["candidate"]["helix_axes"]
                    for segment in axis["segments"])

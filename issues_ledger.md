@@ -2341,7 +2341,7 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   error-detail cases; see the [checkpoint evidence](docs/audits/feature_history_20261014/validation_core_geometry_lifecycle.json).
   App error-display checks remain MV-48; `main.js` delta is zero.
 
-## ISSUE-105 — Historical bend/twist group changes retain old affected helices (2026-10-16, SOURCE AUDIT; OPEN)
+## ISSUE-105 — Historical bend/twist group changes retain old affected helices (2026-10-16, BACKEND CORRECTED; DESKTOP OPEN)
 
 - The ordinary popup offers group selection, but the historical commit sends
   the saved context's cluster IDs. Even with new IDs passed directly,
@@ -2349,12 +2349,43 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   original operation. Native deformation evaluation and membership filtering
   still use that list, so changing group metadata does not reliably retarget
   the operation. This is a selector/recording gap, not a molecular formula gap.
-- The private preview preserves current native edit semantics. Its
-  `change_clusters` capability remains false; explicit strand/domain targets
-  stay fixed. Tests for legacy cluster-input parity do not close this issue.
-- G2 must derive the proposed affected membership from the owned feature-stage
-  prefix using existing plane/scope helpers, record those inputs explicitly,
-  and prove preview/Apply/cold replay agree. The popup must submit its actual
-  selected IDs. Preserve explicit frozen selections and reject missing groups.
-  Include two disjoint groups, All/None, moved groups, failed Apply, Cancel,
-  undo/redo and save/reopen before claiming complete controls (MV-48).
+- Authored group changes now resolve through existing plane/scope selectors
+  against the owned prefix and record explicit affected IDs. Unchanged group
+  membership, including reordering, retains historical custom affected IDs.
+  Saved v1 replay is unchanged. Missing, duplicate and empty-intersection groups
+  refuse; native `[]` retains its unscoped meaning. Frozen strand/domain targets
+  remain protected; only unscoped operations advertise `change_clusters=true`.
+- Tests-first red: 11 failed/7 passed in 3.06 s. Eighteen retarget cases now pass
+  inside the final 373-case run, including two disjoint moved groups, initial
+  and final JSON roundtrip, preview/Apply/native-selector parity and cold replay.
+  A prior green attempt exposed ISSUE-106's invalid source fixture; correcting
+  that setup retained the real save/reload checks and recorded the defect.
+- The gated popup submits current checked IDs and retains failed Apply. Actual
+  desktop All/None, group/plane reversals, undo/redo and save/reopen remain MV-48;
+  do not claim ordinary desktop closure until the integration gate is qualified.
+
+## ISSUE-106 — Grouping every helix removes a retained lattice-frame owner (2026-10-16, SOURCE REPRODUCED; OPEN)
+
+- `part_overlay_commands.build("cluster_create", ...)` drops the default group
+  when its final helices move into named groups. A retained
+  `LatticeFrame.placement_cluster_id` still names that group, so the resulting
+  model fails real JSON save/reload validation with **lattice frame placement
+  cluster is missing**. Ordinary `create_group` uses this same builder. The
+  failed retarget validation run exposed six save/reload failures; membership
+  editing itself had passed. The source fixture was invalid before that edit.
+- The dedicated [characterization](tests/test_group_frame_ownership_characterization.py)
+  constructs a valid native bundle, groups all helices and demonstrates the
+  dangling reference. It deliberately records invalid legacy behavior, not an
+  acceptance criterion. Input-only reproduction currently returns `verified`
+  because the same builder recreates the invalid output; this does not establish
+  structural validity. The isolated characterization passes inside the final
+  373-case run; its passing result reproduces the defect and does not fix it.
+- Keep ISSUE-105's acceptance fixture valid using its named arm plus the real
+  surviving default group, both moved through native inputs; retain initial
+  and final full JSON roundtrips. Do not remove the save/reload check.
+- Proposed next checkpoint: preserve a referenced empty placement owner when
+  its grouping membership is exhausted, with ordinary route, frame continuation,
+  persistence and cold-replay tests. This changes the output of affected saved
+  `cluster_create` v1 commands, so decide compatibility/version handling first;
+  do not silently reinterpret old rows or change numerical/model pins in the
+  retarget fix. No grouping replay fix has been implemented for this issue.

@@ -113,6 +113,8 @@ def _feasibility(prefix, op):
 
 
 def _controls(prefix, op):
+    from backend.core.part_deformation_edit import can_edit_groups
+
     # _inputs has already charged the complete prefix and concrete operation
     # under the ordinary 30k/2MB admission, before these model_dump allocations.
     result = {name: [item.model_dump(mode="json", include=fields) for item in getattr(prefix, name)]
@@ -121,7 +123,7 @@ def _controls(prefix, op):
         deformations=[item.model_dump(mode="json") for item in prefix.deformations],
         forced_ligations=[item.model_dump(mode="json") for item in prefix.forced_ligations],
         selected_operation=op.model_dump(mode="json"),
-        capabilities={"change_targets": False, "change_clusters": False,
+        capabilities={"change_targets": False, "change_clusters": can_edit_groups(op),
                       "native_feasibility": True, "polymer_circle_inputs": True},
     )
     return result

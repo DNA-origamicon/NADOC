@@ -11,6 +11,26 @@ regression debt are recorded in [the checkpoint evidence](validation_pause_check
 
 ## Delivery sequence
 
+**Active delivery order:** core geometry and Fine Routing precede asset expansion.
+Use [G1–G6](remaining_standard_part_checkpoints.md) for current sequencing; the
+original P-phase table below retains architectural scope, not queue priority.
+
+The October 16 continuation connects complete private bend/twist controls to the
+existing history entry point behind a default-false qualification gate. Preview
+uses fixed feature-stage context; its dedicated camera layer excludes later
+canonical geometry, including sibling arcs/labels. Apply errors preserve inputs;
+lost replies expose status/refresh actions. Native group retargeting records the
+same membership for preview, Apply and cold replay without reinterpreting saved
+operations. See [editor evidence](validation_deformation_history_editor.json).
+Neither HTTP nor ordinary editor rollout is enabled, and ISSUE-100 remains open.
+Desktop/timing checks are still pending, with Archive unavailable. Assemblies and
+machine-specific VR remain deferred; `main.js` has zero added lines.
+
+Save/reload tests additionally reproduced ISSUE-106: exhausting a default group's
+membership can remove a retained lattice-frame placement owner. Equivalent
+reproduction is not structural validity. Fix that at the next version-aware
+checkpoint before calling G1 complete; no old command output is changed here.
+
 | Phase | Scope | State and exit condition |
 |---|---|---|
 | P0 | Inventory, field ownership and performance evidence | Source audit complete; initial recording benchmark captured. Add workloads as the affected subsystem changes |

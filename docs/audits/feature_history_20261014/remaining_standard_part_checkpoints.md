@@ -161,16 +161,42 @@ equivalence proof; that remains Apply's guard. Return explicit
 `stage="feature"`, `downstream_evaluated=false` and
 `source_equivalence_checked=false`, never a certificate.
 
-Concrete next checkpoint: complete the closed display/control envelope validator
-and connect the private controller/renderer to the existing editor and popup.
-Supply fixed prefix context for planes, group selection, strand/domain labels,
-polymer-circle controls and feasibility even with visual preview off. Correct
-historical group retargeting using the existing native selectors; passing new
-cluster metadata alone does not change affected-helix membership. Preserve all
-existing controls before enabling an ordinary history-edit flow; explicitly
-explain unsupported histories rather than falling back to canonical mutations.
-Require actual request/geometry latency and desktop Cancel/Apply evidence before
-calling ISSUE-100 fixed.
+The closed display/control validator and the existing editor/popup adapter are
+now implemented and connected through `feature_editor.js` behind the explicit
+default-false `ISOLATED_DEFORMATION_HISTORY_ENABLED` qualification gate. The
+HTTP route remains separately disabled/unregistered. There is no runtime error
+fallback from the isolated path to canonical preview mutations. Until desktop
+and request/geometry latency qualification permits rollout, the ordinary editor
+still uses its legacy path and ISSUE-100 remains open. Remove that branch when
+the new path is enabled, not before its complete controls are qualified.
+
+The private editor uses fixed prefix planes, groups, strand/domain labels,
+polymer-circle controls and native feasibility even with visual preview off.
+A reserved camera layer excludes canonical scene siblings as well as the main
+DNA root; owned plane picking uses that same layer. Apply failures retain the
+dialog, and explicit publication-status/refresh actions resolve lost responses.
+Unchanged inputs retain exact original values, without display-rounding edits.
+Group changes now resolve through the existing prefix selectors and explicitly
+record affected membership; unchanged groups and historical replay keep stored
+membership. Frozen strand/domain selections stay protected. No molecular math,
+model pins, comparison-v2 contract or admission limits changed.
+
+Next checkpoints, in order:
+
+1. Resolve ISSUE-106: grouping all helices can drop a lattice-frame placement
+   owner. The characterization shows that replaying invalid output can currently
+   report equivalence; structural validity must remain a separate requirement.
+   Decide explicit compatibility/version handling at a reversible checkpoint
+   before changing old `cluster_create` output. Add ordinary route, continuation,
+   initial/final save/reload and cold-proof checks.
+2. Qualify the complete private editor on representative desktop interactions
+   and actual request/render tails, including repeated open/close, group/plane
+   reversals, busy/expiry, lost Apply, source switches and one undo. Archive is
+   still unavailable; do not manufacture an app or responsiveness pass.
+3. Enable/register the qualified bounded route and editor together; prune the
+   obsolete peel/delete/seek-restore history path and its characterization only
+   after replacement behavior is proven. Then continue sweep, extrude,
+   move/rotate and Fine Routing history editors under G2.
 
 The duplicate response walk is removed: DTO methods accept a closed scalar host
 envelope, reject collisions before native work, and bound the merged response

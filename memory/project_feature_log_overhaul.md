@@ -61,11 +61,10 @@ is included in one response bound, replacing duplicate host/DTO accounting.
 Applied leases release the prefix and retain a scalar receipt with weak source
 identity until original expiry; status resolves lost responses without a retry
 publication. No public route or preview editor wiring is enabled, and preview
-never proves source/downstream equivalence. ISSUE-100 remains open; finish the
-full control validator and editor/popup integration, then measure interactions.
-ISSUE-105 records a real historical group selector gap: changing `cluster_ids`
-alone leaves old affected helices. Preserve current native semantics and keep
-the retarget capability false until the existing prefix selectors are integrated.
+never proves source/downstream equivalence. The newer gated editor checkpoint
+below completes control validation and popup integration, but interaction
+qualification keeps ISSUE-100 open. ISSUE-105's authored group retargeting now
+uses existing prefix selectors; explicit frozen targets remain protected.
 The unused silent-reconciliation setter was pruned after
 caller review; 38 remaining publication-state cases pass. Continuation evidence
 records 225 distinct cases across these scopes, with corrected fixture failures
@@ -90,8 +89,33 @@ gaps and finite extreme sweep coordinates without raising limits. The isolated
 controller resolves Apply/Cancel races without duplicate publication/adoption.
 [Integration evidence](../docs/audits/feature_history_20261014/validation_deformation_preview_integration.json)
 records red/green evidence, unchanged lint baseline, cleanup and rollout debt.
-Next complete control validation/retargeting and actual popup wiring; do not
-claim the existing desktop preview is fixed. `main.js` delta remains zero.
+That checkpoint is followed by the gated editor integration below; do not claim
+the existing desktop preview is fixed. `main.js` delta remains zero.
+
+**Gated editor integration:** closed Prepare/Evaluate/control validation is now
+connected to the actual `feature_editor.js` dispatch, existing plane editor and
+popup through `ISOLATED_DEFORMATION_HISTORY_ENABLED=false`. The HTTP route is
+still disabled/unregistered. Fixed prefix context drives all controls, native
+feedback remains available with visual preview off, and the private camera layer
+hides canonical sibling geometry without changing its visibility flags. Failed
+Apply stays editable; explicit status/refresh actions resolve uncertain replies.
+ISSUE-105's authored group changes now record native prefix membership; unchanged
+group selections and saved replay preserve their original affected IDs. No
+schema, molecular formula, constants or numerical pins changed.
+
+The final combined backend check passed **373 tests/91 warnings in 14.87 s**,
+including 11 real native Python-to-JavaScript cases. Full frontend passed
+**8,441 tests/one skip across 727 files in 320.32 s**. The 115 focused editor
+passes overlap that run. [Evidence](../docs/audits/feature_history_20261014/validation_deformation_history_editor.json)
+retains red/review failures, unchanged five-error lint baseline and cleanup:
+702 empty test directories/four links removed, zero file bytes; no owned
+temporary roots or e2e artifacts remain. `main.js` delta is zero. ISSUE-106 is newly reproduced:
+grouping every helix can remove a retained lattice-frame owner, so the source
+fails full JSON roundtrip even though equivalent replay reports verified. The
+characterization is not a successful validity check. Next fix that defect with
+an explicit old-command compatibility decision, then complete desktop/timing
+qualification before enabling and pruning the old preview path. Core geometry
+and Fine Routing still precede assets; assemblies and VR remain deferred.
 
 The sections below retain earlier implementation context; use the latest
 [implementation checkpoint](../docs/audits/feature_history_20261014/implementation.md)

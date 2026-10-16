@@ -10,7 +10,9 @@ import subprocess
 
 import pytest
 
-from backend.api.part_deformation_preview_dto import prepare_display
+from backend.api import part_deformation_preview as preview
+from backend.api.part_deformation_preview_dto import evaluate_display, prepare_display
+from tests.test_part_deformation_preview import _prefix_case, owned_capture
 from tests.test_part_deformation_preview_dto import _component_input, _owned
 
 
@@ -20,10 +22,12 @@ import * as THREE from './frontend/node_modules/three/build/three.module.js';
 import { buildHelixObjects } from './frontend/src/scene/helix_renderer.js';
 import { buildDeformationPreviewLayer } from './frontend/src/scene/part_dna_comparison_layer.js';
 import { decodeDnaComparisonRecords } from './frontend/src/features/part_dna_comparison_codec.js';
+import { validateDeformationPreviewDisplay } from './frontend/src/features/deformation_preview_display.js';
 import { _resetStapleColorPins } from './frontend/src/scene/helix_renderer/palette.js';
 let input = '';
 for await (const chunk of process.stdin) input += chunk;
 const packet = JSON.parse(input), original = JSON.stringify(packet);
+assert.equal(validateDeformationPreviewDisplay(packet, { prepare: true }), packet);
 const matrix = (mesh, id) => { const m = new THREE.Matrix4(); mesh.getMatrixAt(id, m); return m.elements; };
 const summaries = [];
 for (const component of [packet.before, packet.candidate]) {
@@ -80,6 +84,37 @@ def test_native_prepared_packet_preserves_rendered_matrices_and_curved_axes(kind
 
 def test_single_helix_twist_is_visible_in_actual_native_scene():
     _check(prepare_display(*_component_input("twist")))
+
+
+@pytest.mark.parametrize("case", ["controls_only", "prior_sweep", "periodic", "host_envelope"])
+def test_complete_native_control_envelope_crosses_the_actual_javascript_boundary(case):
+    if case == "prior_sweep":
+        source, _ = _prefix_case("sweep")
+        prepared = preview.prepare_from_capture(owned_capture(source), "edited-feature")
+        prefix, evaluated = prepared.copy_prefix(), preview.evaluate(prepared, {})
+    else:
+        prefix, evaluated = _component_input("periodic") if case == "periodic" else _owned()
+    if case == "controls_only":
+        packet = evaluate_display(prefix, evaluated, include_geometry=False)
+    else:
+        envelope = None if case != "host_envelope" else {
+            "preview_id": "11111111-1111-4111-8111-111111111111", "lease_id": "22222222-2222-4222-8222-222222222222",
+            "expected_design_id": prefix.id, "expected_revision": 7, "doc_id": "doc", "feature_id": "edited-feature",
+            "deformation_id": evaluated.entry.deformation_id, "request_sequence": 0, "remaining_seconds": 60,
+        }
+        packet = prepare_display(prefix, evaluated, envelope=envelope)
+    result = subprocess.run(["node", "--input-type=module", "-e", """
+        import assert from 'node:assert/strict';
+        import { validateDeformationPreviewDisplay } from './frontend/src/features/deformation_preview_display.js';
+        let text = ''; for await (const chunk of process.stdin) text += chunk;
+        const packet = JSON.parse(text), original = JSON.stringify(packet);
+        assert.equal(validateDeformationPreviewDisplay(packet, { prepare: Object.hasOwn(packet, 'before') }), packet);
+        assert.equal(JSON.stringify(packet), original);
+        console.log('native-display-contract');
+    """], input=json.dumps(packet, allow_nan=False), text=True, capture_output=True,
+        cwd=Path(__file__).resolve().parents[1], timeout=15, check=False)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "native-display-contract"
 
 
 def _check(packet):

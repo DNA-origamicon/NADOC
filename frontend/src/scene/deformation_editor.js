@@ -1,4 +1,5 @@
 import { deformationTargets, targetState } from './deformation_targets.js'
+import { createDeformationHistoryTool, disposeDeformationGuide, setDeformationGuideLayer } from './deformation_history_tool.js'
 /**
  * Deformation Editor — Bend and Twist tool state machine.
  *
@@ -59,6 +60,9 @@ let _editMode          = false  // true when opened via startToolForEdit; Esc ex
 let _editOpId          = null   // id of the op being edited in place (null = new-deformation flow)
 let _editOrigParams    = null   // op's params at edit-start, for cancel revert
 let _editDirty         = false  // a live preview PATCH has been applied
+let _historyTool = null
+let _historyRayMask = null
+let _historyHover = null
 let _editCommitted     = false  // edit was confirmed (don't revert on exit)
 
 // Three.js plumbing
@@ -190,6 +194,29 @@ export function startToolForEdit(toolType, globalBpA, globalBpB, opId = null, or
   _placeB(globalBpB)
 }
 
+/** Open only owned prefix controls. Rendering/publication remain delegated. */
+export function startToolForHistory(operation, adapter) {
+  if (!_scene) return
+  if (_state !== STATE.IDLE) throw new Error('Close the current deformation tool before editing history')
+  _historyTool = createDeformationHistoryTool(operation, adapter)
+  _historyRayMask = _raycaster.layers.mask
+  _historyHover = { bead: _hoverBead, mask: _hoverBead?.layers.mask }
+  _raycaster.layers.set(adapter.displayLayer ?? 0)
+  _sessionClusterIds = [...operation.cluster_ids]
+  startToolForEdit(operation.type, operation.plane_a_bp, operation.plane_b_bp, null, null, operation)
+}
+
+/** Local teardown after the host has resolved publication/cancellation. */
+export function finishHistoryTool() { if (_historyTool) _exitTool() }
+
+function _cancelHistory() {
+  const session = _historyTool
+  return Promise.resolve(session.onCancel()).then(closed => {
+    if (closed === true && _historyTool === session) finishHistoryTool()
+    return closed
+  }).catch(() => false)
+}
+
 export function isActive() {
   return _state !== STATE.IDLE
 }
@@ -271,13 +298,14 @@ function _onDocDragMove(event) {
   }
 }
 
-function _onDocDragUp() {
+function _onDocDragUp(notify = true) {
   const which = _dragging  // save before clearing
   _dragging = null
   if (_controls) _controls.enabled = true
   document.removeEventListener('pointermove',   _onDocDragMove)
   document.removeEventListener('pointerup',     _onDocDragUp)
   document.removeEventListener('pointercancel', _onDocDragUp)
+  if (notify === false) return
 
   // Notify caller of the final plane position so popup inputs can be updated
   if (which === 'A' && _planeA) _onPlaneDragEnd?.('A', _planeA.bp)
@@ -292,6 +320,10 @@ function _onDocDragUp() {
  * plane drag-end and programmatic plane repositioning.
  */
 function _refreshPreview() {
+  if (_historyTool) {
+    Promise.resolve(_historyTool.onPreview(_historyTool.patch(getPlanes(), _effectiveClusterIds()))).catch(() => {})
+    return
+  }
   const params = _lastPreviewParams
   if (!params) return
   _cancelPreview()
@@ -322,13 +354,14 @@ export function handlePointerMove(event) {
 
 export function handleEscape() {
   if (_state === STATE.IDLE) return
+  if (_historyTool) { void _cancelHistory(); return }
   if (_state === STATE.BOTH) {
     if (_editMode) {
       // In edit mode, Escape from BOTH exits directly (no A_PLACED intermediate).
       _exitTool()
     } else {
       _clearPreviewSession()
-      if (_solidB) { _scene.remove(_solidB.group); _solidB = null }
+      if (_solidB) { disposeDeformationGuide(_solidB.group); _solidB = null }
       _planeB = null
       _setState(STATE.A_PLACED)
     }
@@ -340,6 +373,12 @@ export function handleEscape() {
 // Called by popup when confirmed
 export async function confirmDeformation(params) {
   if (_state !== STATE.BOTH || !_planeA || !_planeB) return
+  if (_historyTool) {
+    const session = _historyTool
+    const closed = await session.onConfirm(session.patch(getPlanes(), _effectiveClusterIds(), params))
+    if (closed === true && _historyTool === session) finishHistoryTool()
+    return closed
+  }
   const a = Math.min(_planeA.bp, _planeB.bp), b = Math.max(_planeA.bp, _planeB.bp)
   const type = _toolType, targets = _sessionTargets, clusters = _effectiveClusterIds(), sourceOperationId = _scopeSourceOpId
   _cancelPreview()
@@ -351,9 +390,10 @@ export async function confirmDeformation(params) {
 
 // Called by popup on cancel — keep plane A, remove B so user can re-select
 export function cancelDeformation() {
+  if (_historyTool) return _cancelHistory()
   _clearPreviewSession()
   // Keep the picked scope while the user reselects plane B.
-  if (_solidB) { _scene.remove(_solidB.group); _solidB = null }
+  if (_solidB) { disposeDeformationGuide(_solidB.group); _solidB = null }
   _planeB = null
   _setState(STATE.A_PLACED)
 }
@@ -372,6 +412,7 @@ export function discardDeformationPreview() { _cancelPreview(); return _previewQ
 export async function previewDeformation(params) {
   if (_state !== STATE.BOTH || !_planeA || !_planeB) return
   _lastPreviewParams = params
+  if (_historyTool) return _historyTool.onPreview(_historyTool.patch(getPlanes(), _effectiveClusterIds(), params))
   const epoch = _previewEpoch
   const a = Math.min(_planeA.bp, _planeB.bp), b = Math.max(_planeA.bp, _planeB.bp)
   const type = _toolType, targets = _sessionTargets, clusters = _effectiveClusterIds(), sourceOperationId = _scopeSourceOpId
@@ -424,7 +465,7 @@ function _placeB(bp) {
   _planeB = { bp }
   _hideGhost(false)
   // Replace any existing solid B (e.g. re-placing after Cancel)
-  if (_solidB) { _scene.remove(_solidB.group); _solidB = null }
+  if (_solidB) { disposeDeformationGuide(_solidB.group); _solidB = null }
   _solidB = _makeSolidPlane(bp, 0xff9900, 'B')
   _scene.add(_solidB.group)
   _setState(STATE.BOTH)
@@ -451,6 +492,7 @@ function _defaultBpForPlaneB(bpA) {  // bpA is GLOBAL
 // snapshot is still valid across that cycle.
 function _cancelPreview() {
   ++_previewEpoch
+  if (_historyTool) return
   _renderer?.endDeformPreview?.()
   dismissToast()
   _queuePreview(async () => {
@@ -475,7 +517,7 @@ function _exitTool() {
   // Esc / other exit), silently restore its original params. editFeature was
   // never called, so the log still holds the original; reverting design.deformations
   // keeps the two consistent. Matches the new-flow's fire-and-forget cleanup.
-  if (_editOpId && _editDirty && !_editCommitted && _editOrigParams) {
+  if (!_historyTool && _editOpId && _editDirty && !_editCommitted && _editOrigParams) {
     api.updateDeformation(_editOpId, _editOrigParams).catch(() => {})
   }
   _editOpId = null
@@ -490,9 +532,17 @@ function _exitTool() {
   _sessionTargets = null
   _sessionRanges = null
   _sessionClusterIds = null   // reset cluster scope; next session uses default
-  if (_dragging) _onDocDragUp()   // clean up document listeners + restore controls
+  if (_dragging) _onDocDragUp(false)   // release listeners/controls without a final evaluation
   _showHoverBead(null)
+  if (_historyTool && _hoverBead) {
+    if (_hoverBead === _historyHover?.bead) _hoverBead.layers.mask = _historyHover.mask
+    else { disposeDeformationGuide(_hoverBead); _hoverBead = null }
+  }
+  _historyHover = null
   _setState(STATE.IDLE)
+  _historyTool = null
+  if (_historyRayMask !== null) _raycaster.layers.mask = _historyRayMask
+  _historyRayMask = null
   if (_onExit) _onExit()
 }
 
@@ -519,6 +569,7 @@ function _setNDC(event) {
  * the popup's selection (passed back through addDeformation/previewDeformation).
  */
 function _defaultClusterIds() {
+  if (_historyTool) return [..._historyTool.operation.cluster_ids]
   const { activeClusterId, currentDesign } = store.getState()
   if (activeClusterId) return [activeClusterId]
   const clusters = currentDesign?.cluster_transforms ?? []
@@ -532,7 +583,7 @@ let _scopeSourceOpId = null
 let _sessionTargets = null
 let _sessionRanges = null
 export function setDeformSessionTargets(targets) {
-  const resolved = deformationTargets(targetState(store.getState().currentDesign, targets))
+  const resolved = deformationTargets(targetState(_sourceDesign(), targets))
   if (resolved.error) throw new Error(resolved.error)
   _sessionTargets = resolved.targets
   _sessionRanges = resolved.ranges
@@ -550,7 +601,7 @@ let _sessionClusterIds = null
 export async function setDeformSessionClusterIds(ids) {
   if (_sessionTargets !== null) return
   _sessionClusterIds = Array.isArray(ids) ? ids.slice() : []
-  if (_state === STATE.BOTH && _previewOpId) {
+  if (!_historyTool && _state === STATE.BOTH && _previewOpId) {
     await api.deleteDeformation(_previewOpId, /*preview=*/true)
     _previewOpId = null
     if (_lastPreviewParams) await previewDeformation(_lastPreviewParams)
@@ -567,12 +618,15 @@ export function getDeformDefaultClusterIds() {
   return _effectiveClusterIds()
 }
 
+const _sourceDesign = () => _historyTool?.design ?? store.getState().currentDesign
+const _sourceAxes = () => _historyTool?.helixAxes ?? store.getState().currentHelixAxes
+
 function _getHelixAxisData(clusterIdsOverride = null) {
-  const { currentDesign } = store.getState()
+  const currentDesign = _sourceDesign()
   if (!currentDesign) return []
   // While a preview is live, the store has the bent axes — use the original snapshot
   // so planes and hover beads track the undeformed contour.
-  const helixAxes = _previewOriginalAxes ?? store.getState().currentHelixAxes
+  const helixAxes = _historyTool ? _sourceAxes() : (_previewOriginalAxes ?? _sourceAxes())
 
   // Restrict plane interaction to the union of selected clusters' helices so ghost
   // planes, picking, and centering are all scoped to the clusters being deformed.
@@ -753,6 +807,7 @@ function _pickBpFromPoint(worldPoint) {
  */
 function _showHoverBead(hit) {
   if (!_scene) return
+  if (!_hoverBead && !hit) return
   if (!_hoverBead) {
     _hoverBead = new THREE.Mesh(
       new THREE.SphereGeometry(0.45, 16, 10),
@@ -761,15 +816,16 @@ function _showHoverBead(hit) {
     _hoverBead.renderOrder = 6
     _scene.add(_hoverBead)
   }
+  setDeformationGuideLayer(_hoverBead, _historyTool?.displayLayer ?? 0)
   if (!hit) {
     _hoverBead.visible = false
     return
   }
   // Prefer the deformed position from currentHelixAxes; fall back to original axisPoint
   const { bp, helixId, axisPoint } = hit  // bp is GLOBAL
-  const helixAxes = store.getState().currentHelixAxes
+  const helixAxes = _sourceAxes()
   const axDef = helixAxes?.[helixId]
-  const design = store.getState().currentDesign
+  const design = _sourceDesign()
   const helixDef = design?.helices.find(h => h.id === helixId)
   const lengthBp  = helixDef?.length_bp  ?? 0
   const localBp   = bp - (helixDef?.bp_start ?? 0)  // convert global → local for sample lookup
@@ -901,6 +957,7 @@ function _showGhost(isA, bp) {
     _scene.add(ghost)
     if (isA) _ghostA = ghost; else _ghostB = ghost
   }
+  setDeformationGuideLayer(ghost, _historyTool?.displayLayer ?? 0)
   ghost.position.copy(_worldPosForBp(bp))
   ghost.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), _tangentAtBp(bp))
   ghost.visible = true
@@ -1006,6 +1063,7 @@ function _makeSolidPlane(bp, hexColor, label) {
   group.position.copy(_worldPosForBp(bp))
   group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), _tangentAtBp(bp))
 
+  setDeformationGuideLayer(group, _historyTool?.displayLayer ?? 0)
   return { group, planeMesh, bpSprite }
 }
 
@@ -1018,15 +1076,16 @@ function _updateSolidPlane(solid, bp) {
 }
 
 function _removePlanes() {
-  if (_solidA) { _scene.remove(_solidA.group); _solidA = null }
-  if (_solidB) { _scene.remove(_solidB.group); _solidB = null }
-  if (_ghostA) { _scene.remove(_ghostA); _ghostA = null }
-  if (_ghostB) { _scene.remove(_ghostB); _ghostB = null }
+  if (_solidA) { disposeDeformationGuide(_solidA.group); _solidA = null }
+  if (_solidB) { disposeDeformationGuide(_solidB.group); _solidB = null }
+  if (_ghostA) { disposeDeformationGuide(_ghostA); _ghostA = null }
+  if (_ghostB) { disposeDeformationGuide(_ghostB); _ghostB = null }
 }
 
 // ── Scene opacity dim ─────────────────────────────────────────────────────────
 
 function _dimScene(dim) {
+  if (_historyTool) return
   _renderer?.setToolOpacity?.(dim ? 0.15 : 1.0)
 }
 

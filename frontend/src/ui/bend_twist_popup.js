@@ -24,6 +24,16 @@ import {
 
 // ── DOM refs (grabbed once on init) ─────────────────────────────────────────
 
+let _historySession = null, _historyInitial = null, _historyParamsDirty = false, _openingHistory = false
+let _historyPlanesTouched = false, _historyGroupsTouched = false
+let _historyStatus = {}, _historyApplying = false, _historyMessage = null, _historyRecovery = null
+let _historyChangeSequence = 0
+const _historyDisabled = new Map()
+const _historyParamIds = new Set(['def-twist-value', 'def-twist-rh', 'def-twist-lh', 'def-twist-total-radio',
+  'def-twist-pernm-radio', 'def-bend-dir', 'def-bend-angle', 'def-bend-radius', 'def-polymer-circle', 'def-polymer-count'])
+const _sourceDesign = () => _historySession?.design ?? store.getState().currentDesign
+const _sourceTargets = () => _historySession ? (_historySession.operation.targets ?? null) : getDeformSessionTargets()
+
 let _selectionUI = null
 let _selectionSection = null
 let _floating = null
@@ -142,12 +152,22 @@ export function initBendTwistPopup(callbacks) {
 
   _popup      = document.getElementById('deform-panel')
   _title      = document.getElementById('def-panel-title')
-  _floating = createToolPopup({ panel: _popup, title: 'Twist', panelDisplay: 'flex', onClose: () => { if (_selectionUI) _selectionUI.onCancel(); else { _hide(); _callbacks?.onCancel() } } })
+  _floating = createToolPopup({ panel: _popup, title: 'Twist', panelDisplay: 'flex', onClose: () => { if (_historySession) { void _historyAction('onCancel'); return } if (_selectionUI) _selectionUI.onCancel(); else { _hide(); _callbacks?.onCancel() } } })
   _pickingHint = el('p', { className: 'tool-picking-hint', attrs: { 'aria-live': 'polite', hidden: true } })
   const fields = _popup.querySelector('.def-fields') ?? _popup
   fields.prepend(_pickingHint)
   _selectionSection = el('div', { id: 'def-current-selection' })
   fields.prepend(_selectionSection)
+  _historyMessage = el('p', { attrs: { id: 'def-history-status', 'aria-live': 'polite', hidden: true } })
+  _historyRecovery = el('div', { attrs: { hidden: true } })
+  for (const [id, text, action] of [['resolve', 'Check publication', 'onResolvePublication'], ['refresh', 'Refresh published design', 'onRefreshCommitted']]) {
+    _historyRecovery.append(el('button', { className: 'btn btn--sm', text,
+      attrs: { id: `def-history-${id}`, type: 'button' }, on: { click: () => void _historyAction(action) } }))
+  }
+  fields.append(_historyMessage, _historyRecovery)
+  const markHistoryInput = event => { if (_historySession && _historyParamIds.has(event.target.id)) _historyParamsDirty = true }
+  _popup.addEventListener('input', markHistoryInput, true)
+  _popup.addEventListener('change', markHistoryInput, true)
   _twistCtrl  = document.getElementById('def-twist-controls')
   _bendCtrl   = document.getElementById('def-bend-controls')
   _twistValue = document.getElementById('def-twist-value')
@@ -184,7 +204,7 @@ export function initBendTwistPopup(callbacks) {
   if (!_popup) return   // DOM not ready
 
   _clusterAllBtn?.addEventListener('click', () => {
-    const clusters = store.getState().currentDesign?.cluster_transforms ?? []
+    const clusters = _sourceDesign()?.cluster_transforms ?? []
     _setSelectedClusterIds(clusters.map(c => c.id), /*refreshPreview=*/true)
   })
   _clusterNoneBtn?.addEventListener('click', () => {
@@ -211,6 +231,7 @@ export function initBendTwistPopup(callbacks) {
   // Bend params
   _bendDir.addEventListener('input', () => {
     _updateCompassFromInput()
+    if (_historySession) _historyParamsDirty = true
     _firePreview()
   })
   _bendAngle.addEventListener('input', () => {
@@ -244,7 +265,8 @@ export function initBendTwistPopup(callbacks) {
     _planeABp.value = bp
     if (_planeANm) _planeANm.textContent = (bp * BDNA_RISE_PER_BP).toFixed(2) + ' nm'
     if (_toolType === 'bend') _syncBendFieldsForSpan()
-    _callbacks?.onPlaneChanged?.('A', bp)
+    const handler = _historySession ?? _callbacks
+    handler?.onPlaneChanged?.('A', bp)
     if (_toolType === 'bend') _firePreview()
     else _fireValidate()  // window width changed → re-check achievability
   })
@@ -253,7 +275,8 @@ export function initBendTwistPopup(callbacks) {
     _planeBBp.value = bp
     if (_planeBNm) _planeBNm.textContent = (bp * BDNA_RISE_PER_BP).toFixed(2) + ' nm'
     if (_toolType === 'bend') _syncBendFieldsForSpan()
-    _callbacks?.onPlaneChanged?.('B', bp)
+    const handler = _historySession ?? _callbacks
+    handler?.onPlaneChanged?.('B', bp)
     if (_toolType === 'bend') _firePreview()
     else _fireValidate()  // window width changed → re-check achievability
   })
@@ -266,11 +289,13 @@ export function initBendTwistPopup(callbacks) {
 
   // Buttons
   _cancelBtn.addEventListener('click', () => {
+    if (_historySession) { void _historyAction('onCancel'); return }
     if (_selectionUI) { _selectionUI.onCancel(); return }
     _hide()
     _callbacks?.onCancel()
   })
   _applyBtn.addEventListener('click', async () => {
+    if (_historySession) { await _historyAction('onApply'); return }
     const params = _readParams()
     _applyBtn.disabled = true
     try {
@@ -292,8 +317,18 @@ export function initBendTwistPopup(callbacks) {
  *        When null, uses the editor's default (active cluster, single cluster, or none).
  */
 export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClusterIds = null,
-                          skipInitialPreview = false) {
+                          skipInitialPreview = false, historySession = null) {
   if (!_popup) return
+  _clearHistoryStatus()
+  if (historySession && (!historySession.design || !historySession.operation
+      || ['onChange', 'onApply', 'onCancel'].some(key => typeof historySession[key] !== 'function'))) {
+    throw new Error('Prepared history controls and private delegates are required')
+  }
+  _historySession = historySession
+  if (historySession) setDeformationSelectionUI(null)
+  _historyInitial = { a: Math.min(bpA, bpB), b: Math.max(bpA, bpB), groups: [...(initialClusterIds ?? historySession?.operation.cluster_ids ?? [])] }
+  _historyParamsDirty = false; _openingHistory = !!historySession; _historyChangeSequence++
+  _historyPlanesTouched = false; _historyGroupsTouched = false
   _restorePickingControls()
   _toolType = toolType
 
@@ -309,14 +344,14 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
 
   // Build the cluster picker. Initial selection: explicit list (edit mode), else
   // the editor's default scope (active cluster / single cluster / none).
-  const initIds = initialClusterIds ?? getDeformDefaultClusterIds()
-  if (getDeformSessionTargets() !== null) {
+  const initIds = initialClusterIds ?? (_historySession ? _historySession.operation.cluster_ids : getDeformDefaultClusterIds())
+  if (_sourceTargets() !== null) {
     _selectedClusterIds = []
     if (_clusterSection) _clusterSection.style.display = 'none'
     if (!_selectionUI && _selectionSection) {
       _selectionSection.hidden = false
       _selectionSection.replaceChildren(el('div', { className: 'mr-section-label', text: 'Current selection' }))
-      const labels = moveRotateSelectionLabels(targetState(store.getState().currentDesign, getDeformSessionTargets()))
+      const labels = moveRotateSelectionLabels(targetState(_sourceDesign(), _sourceTargets()))
       for (const label of labels) _selectionSection.append(el('div', { className: 'mr-selection-item', text: label }))
     }
   } else {
@@ -357,7 +392,7 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
         _polymerCount.value = String(savedCircleCount)
         _polymerCircle.checked = true
         _setPolymerCircleMode(true)
-        if (savedCircleCount === 1) {
+        if (savedCircleCount === 1 && !_historySession) {
           // Reapplying a saved one-copy circle repairs the legacy endpoint
           // overlap through the normal preview/Apply/Undo transaction.
           _updateBendFromPolymerCount()
@@ -389,8 +424,10 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
   // In edit mode the op is already applied to the design, so an initial preview
   // would just re-compute identical geometry (a wasted round-trip). Preview fires
   // on the first slider change instead.
+  _openingHistory = false
+  _renderHistoryStatus()
   if (!skipInitialPreview) _firePreview()
-  else _fireValidate()  // still show feasibility immediately in edit mode
+  else if (!_historySession) _fireValidate()  // still show feasibility immediately in edit mode
 }
 
 /**
@@ -400,6 +437,8 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
  * @param {number} bpB
  */
 export function setPlanePositions(bpA, bpB) {
+  if (_historySession && !_openingHistory
+      && (Math.min(bpA, bpB) !== _historyInitial.a || Math.max(bpA, bpB) !== _historyInitial.b)) _historyPlanesTouched = true
   if (_planeABp) _planeABp.value = bpA
   if (_planeBBp) _planeBBp.value = bpB
   if (_planeANm) _planeANm.textContent = (bpA * BDNA_RISE_PER_BP).toFixed(2) + ' nm'
@@ -477,9 +516,87 @@ export function closePopup() {
   _hide()
 }
 
+/** Scalar controller feedback; never installs a design or changes typed fields. */
+export function setHistoryPopupStatus(status) {
+  if (!_historySession) return
+  _historyStatus = { ..._historyStatus, ...status }
+  if (Object.hasOwn(status, 'feasibility')) _renderFeasibility(status.feasibility)
+  _renderHistoryStatus()
+}
+
+function _historyPatch() {
+  const a = Math.round(Number(_planeABp.value)), b = Math.round(Number(_planeBBp.value))
+  const lo = Math.min(a, b), hi = Math.max(a, b)
+  const planesChanged = lo !== _historyInitial.a || hi !== _historyInitial.b
+  const groupsChanged = _selectedClusterIds.length !== _historyInitial.groups.length
+    || _selectedClusterIds.some((id, index) => id !== _historyInitial.groups[index])
+  _historyPlanesTouched ||= planesChanged
+  _historyGroupsTouched ||= groupsChanged
+  const params = _historyParamsDirty || planesChanged ? _readParams() : { ..._historySession.operation.params }
+  return { ...(_historyPlanesTouched ? { plane_a_bp: lo, plane_b_bp: hi } : {}),
+    ...(_historyParamsDirty || _historyPlanesTouched ? { params } : {}),
+    ...(_historyGroupsTouched ? { cluster_ids: [..._selectedClusterIds] } : {}) }
+}
+
+async function _historyChange() {
+  const session = _historySession, sequence = ++_historyChangeSequence
+  if (!session || _openingHistory || _historyApplying || _historyStatus.expired || _historyStatus.publicationUnknown || _historyStatus.refreshNeeded) return
+  try {
+    const result = await session.onChange(_historyPatch(), { includeGeometry: !!_previewChk.checked })
+    if (_historySession === session && sequence === _historyChangeSequence && result?.feasibility) _renderFeasibility(result.feasibility)
+  } catch (error) { if (_historySession === session) setHistoryPopupStatus({ error }) }
+}
+
+async function _historyAction(action) {
+  const session = _historySession
+  if (!session || (action === 'onApply' && (_historyApplying || _historyStatus.expired || _historyStatus.publicationUnknown || _historyStatus.refreshNeeded))) return
+  if (action === 'onApply') { clearTimeout(_validateTimer); _historyApplying = true; _renderHistoryStatus() }
+  try {
+    const result = await session[action]?.(...(action === 'onApply' ? [_historyPatch()] : []))
+    if (result === true && _historySession === session) _hide()
+  } catch (error) { if (_historySession === session) setHistoryPopupStatus({ error }) }
+  finally { if (_historySession === session && action === 'onApply') { _historyApplying = false; _renderHistoryStatus() } }
+}
+
+function _clearHistoryStatus() {
+  for (const [control, disabled] of _historyDisabled) control.disabled = disabled
+  _historyDisabled.clear(); _historyStatus = {}; _historyApplying = false
+  if (_historyMessage) { _historyMessage.hidden = true; _historyMessage.textContent = '' }
+  if (_historyRecovery) _historyRecovery.hidden = true
+}
+
+function _renderHistoryStatus() {
+  if (!_historySession || !_historyMessage) return
+  const status = _historyStatus, busy = _historyApplying ? 'apply' : status.busy
+  const locked = _historyApplying || ['prepare', 'apply', 'refresh', 'status'].includes(busy)
+    || status.expired || status.publicationUnknown || status.refreshNeeded
+  if (locked) {
+    for (const control of _popup.querySelectorAll('input, select, button')) {
+      if (control === _cancelBtn || _historyRecovery.contains(control)) continue
+      if (!_historyDisabled.has(control)) _historyDisabled.set(control, control.disabled)
+      control.disabled = true
+    }
+  } else {
+    for (const [control, disabled] of _historyDisabled) control.disabled = disabled
+    _historyDisabled.clear()
+  }
+  const message = status.expired ? 'Preview expired. Reopen the feature to continue.'
+    : status.publicationUnknown ? 'Publication status is unknown. Check it before continuing.'
+    : status.refreshNeeded ? 'The change is published. Refresh its display.'
+    : (status.error?.message ?? status.error) || (busy ? `${busy === 'apply' ? 'Applying' : 'Evaluating'}…` : '')
+  _historyMessage.hidden = false
+  _historyMessage.textContent = `Feature-stage preview; later features are hidden.${message ? ` ${message}` : ''}`
+  _historyRecovery.hidden = !status.publicationUnknown && !status.refreshNeeded
+  const resolve = document.getElementById('def-history-resolve'), refresh = document.getElementById('def-history-refresh')
+  resolve.hidden = !status.publicationUnknown; refresh.hidden = !status.refreshNeeded || !!status.publicationUnknown
+  resolve.disabled = refresh.disabled = !!busy
+}
+
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 function _hide() {
+  _historySession = null; _historyInitial = null; _historyChangeSequence++
+  _clearHistoryStatus()
   _restorePickingControls()
   _floating?.hide()
   _toolType = null
@@ -552,7 +669,7 @@ function _syncBendFieldsForSpan() {
 
 function _resetPolymerCircleOption() {
   if (!_polymerCircle) return
-  const eligible = hasPolymerizationStrands(store.getState().currentDesign)
+  const eligible = hasPolymerizationStrands(_sourceDesign())
   _polymerCircle.checked = false
   _polymerCircle.disabled = !eligible
   _polymerCircleLabel?.classList.toggle('is-disabled', !eligible)
@@ -595,7 +712,7 @@ function _updateBendFromPolymerCount() {
   if (count == null || !_polymerCircle?.checked) return
   const planeA = parseFloat(_planeABp?.value) || 0
   const planeB = parseFloat(_planeBBp?.value) || 0
-  const seamBendSpan = polymerBendSpanBp(store.getState().currentDesign, planeA, planeB)
+  const seamBendSpan = polymerBendSpanBp(_sourceDesign(), planeA, planeB)
   const typedSpan = _typedBendSpanBp()
   // Fall back to the typed span only for malformed legacy routing. Normal
   // routed designs always have at least one resolvable periodic seam.
@@ -623,6 +740,7 @@ function _updateBendHint() {
 }
 
 function _firePreview() {
+  if (_historySession) { clearTimeout(_validateTimer); void _historyChange(); return }
   // Feasibility check fires regardless of the preview checkbox — the user always
   // wants to know if a bend/twist is unachievable, even with live preview off.
   _fireValidate()
@@ -635,12 +753,13 @@ function _firePreview() {
 
 /** Debounced live feasibility check against the backend (no mutation). */
 function _fireValidate() {
-  if (!_toolType) return
+  if (!_toolType || _openingHistory) return
   clearTimeout(_validateTimer)
   _validateTimer = setTimeout(_doValidate, 120)
 }
 
 async function _doValidate() {
+  if (_historySession) { await _historyChange(); return }
   if (!_toolType || !_feasibility) return
   const type   = _toolType
   const planeA = Math.round(parseFloat(_planeABp?.value) || 0)
@@ -682,10 +801,10 @@ function _renderFeasibility(r) {
  */
 function _rebuildClusterList(selectedIds) {
   if (!_clusterList || !_clusterSection) return
-  const clusters = store.getState().currentDesign?.cluster_transforms ?? []
+  const clusters = _sourceDesign()?.cluster_transforms ?? []
   _clusterList.innerHTML = ''
 
-  if (clusters.length <= 1) {
+  if (clusters.length <= 1 && !_historySession) {
     // 0 clusters: no scoping possible; 1 cluster: implicit, no UI needed.
     _clusterSection.style.display = 'none'
     _selectedClusterIds = clusters.length === 1 ? [clusters[0].id] : []
@@ -704,6 +823,7 @@ function _rebuildClusterList(selectedIds) {
     cb.type = 'checkbox'
     cb.value = c.id
     cb.checked = initSet.has(c.id)
+    cb.disabled = !!_historySession && !_historySession.capabilities?.change_clusters
     cb.addEventListener('change', _onClusterCheckboxChange)
     const txt = document.createElement('span')
     txt.textContent = `${c.name || 'Cluster'} (${c.helix_ids.length}h)`
@@ -712,7 +832,8 @@ function _rebuildClusterList(selectedIds) {
     _clusterList.appendChild(row)
   }
 
-  _selectedClusterIds = clusters.filter(c => initSet.has(c.id)).map(c => c.id)
+  _selectedClusterIds = _historySession ? [...(selectedIds ?? [])] : clusters.filter(c => initSet.has(c.id)).map(c => c.id)
+  for (const button of [_clusterAllBtn, _clusterNoneBtn]) if (button) button.disabled = !!_historySession && !_historySession.capabilities?.change_clusters
   setDeformSessionClusterIds(_selectedClusterIds)
 }
 
@@ -726,6 +847,8 @@ function _onClusterCheckboxChange() {
 }
 
 async function _setSelectedClusterIds(ids, refreshPreview) {
+  const historySession = _historySession
+  if (_historySession && !_historySession.capabilities?.change_clusters) return
   _selectedClusterIds = ids.slice()
   if (_clusterList) {
     const set = new Set(ids)
@@ -735,6 +858,7 @@ async function _setSelectedClusterIds(ids, refreshPreview) {
   }
   // Tell the editor; it rebuilds the live preview op so geometry updates.
   await setDeformSessionClusterIds(_selectedClusterIds)
+  if (historySession && _historySession !== historySession) return
   if (refreshPreview) _firePreview()
 }
 
@@ -776,6 +900,7 @@ function _initCompassDrag() {
     deg = ((deg % 360) + 360) % 360
     _bendDir.value = deg
     _updateCompassFromInput()
+    if (_historySession) _historyParamsDirty = true
     _firePreview()
   }
 

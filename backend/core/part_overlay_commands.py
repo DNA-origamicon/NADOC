@@ -144,7 +144,7 @@ def build(kind, design, params):
     return design.copy_with(cluster_transforms=clusters)
 
 
-def edit_entry(entry, patch):
+def edit_entry(entry, patch, *, prefix=None):
     """Keep existing entry schemas and feature-editor parameter shapes."""
     from backend.core.models import ClusterRigidTransform, DeformationOp
 
@@ -156,10 +156,13 @@ def edit_entry(entry, patch):
             {**entry.model_dump(), **patch, "id": entry.id, "proof_version": 1}
         )
     if kind == "deformation":
+        from backend.core.part_deformation_edit import resolve_group_edit
+
         params = {**params, **patch, "id": entry.deformation_id}
         params.pop("_proof_version", None)
         return entry.model_copy(
-            update={"op_snapshot": DeformationOp.model_validate(params)}
+            update={"op_snapshot": resolve_group_edit(
+                prefix, entry.op_snapshot, DeformationOp.model_validate(params), patch)}
         )
     if kind == "cluster_create":
         cluster = ClusterRigidTransform.model_validate(

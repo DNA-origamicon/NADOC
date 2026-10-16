@@ -463,9 +463,6 @@ def evaluate(prepared, patch):
             _reject("Cluster selection must contain native identities", "invalid_preview_definition")
         if len(ids) != len(set(ids)) or set(ids) - {cluster.id for cluster in prepared._prefix.cluster_transforms}:
             _reject("Cluster selection no longer exists in this feature prefix", "invalid_preview_reference")
-        # Preserve edit_entry's existing authored semantics. It does not derive
-        # new affected_helix_ids from cluster_ids: a complete cluster-retarget UI
-        # still needs a separately reviewed correction, not inferred geometry.
     if "params" in patch:
         values = patch["params"]
         model = BendParams if original.type == "bend" else TwistParams
@@ -478,7 +475,9 @@ def evaluate(prepared, patch):
     entry = prepared._entry.model_copy(deep=True)
     from copy import deepcopy
     try:
-        entry = edit_entry(entry, deepcopy(patch))
+        entry = edit_entry(entry, deepcopy(patch), prefix=prefix)
+    except CommandContractError:
+        raise
     except ValueError as error:
         _reject(str(error), "invalid_preview_definition")
     kind, params = command_input(entry)
