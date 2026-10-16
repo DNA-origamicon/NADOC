@@ -1,19 +1,108 @@
 {
   "date": "2026-10-15",
   "scope": "Transfer exclusively owned decoded immutable authoring into ordinary bounded worker projection; mutable capture unchanged",
-  "initial_test_development": {"failed": 14, "seconds": 2.74, "note": "Missing implementation mixed with invalid test labels/public command schema"},
-  "corrected_red": {"failed": 2, "seconds": 2.59, "stopped_after": 2, "reason": "Owned projection mode absent"},
-  "first_implementation_run": {"passed": 112, "failed": 4, "seconds": 8.42, "failure": "Three incorrect test exception expectations and one invalid public batch fixture; production needed no change"},
-  "corrected_owned_target": {"passed": 14, "seconds": 3.27},
-  "final_owned_and_exact_admission": {"passed": 47, "seconds": 3.81, "note": "Two added copy/deadline mode guards; existing exact boundary tests now also exercise ownership transfer"},
+  "initial_test_development": {
+    "failed": 14,
+    "seconds": 2.74,
+    "note": "Missing implementation mixed with invalid test labels/public command schema"
+  },
+  "corrected_red": {
+    "failed": 2,
+    "seconds": 2.59,
+    "stopped_after": 2,
+    "reason": "Owned projection mode absent"
+  },
+  "first_implementation_run": {
+    "passed": 112,
+    "failed": 4,
+    "seconds": 8.42,
+    "failure": "Three incorrect test exception expectations and one invalid public batch fixture; production needed no change"
+  },
+  "corrected_owned_target": {
+    "passed": 14,
+    "seconds": 3.27
+  },
+  "final_owned_and_exact_admission": {
+    "passed": 47,
+    "seconds": 3.81,
+    "note": "Two added copy/deadline mode guards; existing exact boundary tests now also exercise ownership transfer"
+  },
   "unique_green_cases": 118,
-  "covered_targets": ["part_owned_capture", "part_immutable_evaluation", "part_batch_evaluation", "part_capture_admission", "part_capture_copy"],
-  "invariants": ["Sealed-byte source required by private host entry", "Later materialization and immutable bytes unaffected by projection mutation", "Nested Any input, overlay and routing-child ownership", "Same exact node/byte accounting and cooperative 25 ms limit", "Same stripped recovery and excluded fields", "Mutable source capture remains isolated", "Existing outside-lock capture, session/revision/policy races, permit publication and independent spawned proof"],
-  "initial_http_diagnostic": {"report": "benchmark_immutable_part_jobs_owned_initial.json", "repeats": 3, "cases": 4, "publications": 12, "independent_cold_verified": 4, "cleanup": true, "parent_rss_high_water_kib": 133892, "child_rss_high_water_kib": 133868},
+  "covered_targets": [
+    "part_owned_capture",
+    "part_immutable_evaluation",
+    "part_batch_evaluation",
+    "part_capture_admission",
+    "part_capture_copy"
+  ],
+  "invariants": [
+    "Sealed-byte source required by private host entry",
+    "Later materialization and immutable bytes unaffected by projection mutation",
+    "Nested Any input, overlay and routing-child ownership",
+    "Same exact node/byte accounting and cooperative 25 ms limit",
+    "Same stripped recovery and excluded fields",
+    "Mutable source capture remains isolated",
+    "Existing outside-lock capture, session/revision/policy races, permit publication and independent spawned proof"
+  ],
+  "initial_http_diagnostic": {
+    "report": "benchmark_immutable_part_jobs_owned_initial.json",
+    "repeats": 3,
+    "cases": 4,
+    "publications": 12,
+    "independent_cold_verified": 4,
+    "cleanup": true,
+    "parent_rss_high_water_kib": 133892,
+    "child_rss_high_water_kib": 133868
+  },
   "latency_qualified": false,
   "public_gates_enabled": false,
-  "next": ["Thirty-repeat diagnostic comparison against retained failed baseline", "Separate allocation measurement; traced timings are not latency evidence", "Durable creation/recovery lifecycle qualification"],
+  "next": [
+    "Qualified durable creation/recovery lifecycle",
+    "Move immutable source decoding/projection into the isolated worker, preserving ordinary accounting and exact admission",
+    "Measure capture and commit separately with concurrent light reads; public gates remain false"
+  ],
   "changed_file_ruff": "passed",
   "git_diff_check": "passed",
-  "app_status": "NOT VERIFIED IN APP"
+  "app_status": "NOT VERIFIED IN APP",
+  "repeated_http_diagnostic": {
+    "report": "benchmark_immutable_part_jobs_owned_repeated.json",
+    "repeats": 30,
+    "cases": 4,
+    "publications": 120,
+    "independent_cold_verified": 4,
+    "cleanup": true,
+    "max_capture_http_ms": 65.391,
+    "max_publication_http_ms": 78.256,
+    "max_light_http_ms": 69.031,
+    "max_capture_lock_ms": 0.083,
+    "max_publication_lock_ms": 0.323,
+    "generation_2_overlap_ms": [
+      46.56,
+      48.469,
+      46.567
+    ],
+    "parent_rss_high_water_kib": 138600,
+    "child_rss_high_water_kib": 138540,
+    "interpretation": "All exact publication checks pass; parent GC overlaps remaining responsiveness outliers. No latency qualification or GC time subtraction."
+  },
+  "separate_allocation_diagnostic": {
+    "report": "benchmark_immutable_part_jobs_owned_memory.json",
+    "repeats": 1,
+    "publications": 3,
+    "refused_case": "public-63-source-rows-plus-one",
+    "refusal": "HTTP 413: Part verification capture budget exceeded",
+    "cleanup": true,
+    "parent_capture_peak_bytes": [
+      1748232,
+      1354417,
+      1010483,
+      2157635
+    ],
+    "parent_publication_peak_bytes": [
+      2071280,
+      1712875,
+      1365740
+    ],
+    "interpretation": "tracemalloc perturbs timings; retained refusal under unchanged capture allowance. Parent Python allocations exclude native and worker allocations."
+  }
 }

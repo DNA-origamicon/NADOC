@@ -26,8 +26,16 @@ The existing private permit and atomic replacement publish the new handle with
 the original handle as undo. Capture/transport/recovery/work limits and the false
 public batch gate are unchanged. Repeated decode, allocation and GIL costs still
 need repeated measurement; outside-lock work alone does not establish responsiveness.
-The initial owned-input diagnostic has no generation-2 GC events and is not
-latency qualification. See [owned-input validation](validation_owned_capture_p6.json).
+The repeated owned-input diagnostic completes 120 publications and four independent
+cold proofs. State lock holds remain below 0.083 ms for capture and 0.323 ms for
+publication, but parent generation-2 GC overlaps request outliers: capture reaches
+65.39 ms, publication 78.26 ms and concurrent light reads 69.03 ms. A separate
+allocation-traced run completes three cases and refuses the 63-row capture under
+the unchanged budget; traced timings are not latency evidence. Public availability
+remains unqualified. The next reviewed increment moves source decode/projection
+into the existing isolated worker, with separate fixed full-byte transport and
+unchanged authoring limits. See [owned-input validation](validation_owned_capture_p6.json)
+and [worker transport proposal](immutable_worker_transport_plan.md).
 
 The obsolete test requiring evaluation to refuse immutable input was replaced
 with the actual capture/commit lifecycle coverage. The old mutable verification
