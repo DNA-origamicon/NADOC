@@ -2517,3 +2517,26 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
 - General capture/response/merge qualification remains within the existing
   FH-27 milestone, not a new estimated update. No live app reproduction or
   general fix is claimed; MV-48 retains the interaction acceptance work.
+
+## ISSUE-108 — Native crossover growth drops authored helix metadata (2026-10-16, REPRODUCED; OPEN)
+
+- **Trigger:** single/batch crossover motion extends beyond a helix's stored
+  range. Both native growth branches reconstruct `Helix` with a partial field
+  list, omitting `lattice_frame_id`, `label`, `direction`, `native_source` and
+  `native_residues`. In a two-junction batch, intermediate growth uses original
+  opposite endpoints even when the final middle domain fits its stored range.
+- **Evidence:** native controls in `tests/test_group_lineage_crossovers.py`
+  reproduce ordinary metadata loss and the original-opposite-endpoint case.
+  Corresponding new-organization tests refuse before builder invocation and
+  preserve the source. Both HC/SQ in-bounds native parity remains covered.
+- **Current containment:** private organizational replay refuses affected
+  metadata-bearing helices when the source/final endpoint envelope could enter
+  the native growth branch. It also refuses inverted/overlapping moved output.
+  Existing native builders and legacy behavior are unchanged; this does not fix
+  their omission or establish complete crossover consumer support.
+- **Required exit:** preserve authored fields through native growth, verify
+  complete native output/frame/source behavior and batch intermediate cases,
+  then remove the qualified refusal. Keep molecular placement unchanged; any
+  actual scientific change requires the existing A/B authorization gate.
+  This belongs to existing core geometry/Fine Routing qualification, not a new
+  counted overhaul milestone. Desktop acceptance remains open.

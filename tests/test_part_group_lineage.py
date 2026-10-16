@@ -262,8 +262,7 @@ def test_native_topology_preserving_commands_keep_exact_selection(kind):
     assert result.group_organization == design.group_organization
 
 
-@pytest.mark.parametrize("kind", ["domain-shift", "strand-end-resize", "crossover-move",
-                                  "extrude-continuation", "auto-scaffold", "unknown"])
+@pytest.mark.parametrize("kind", ["domain-shift", "strand-end-resize", "auto-scaffold", "unknown"])
 def test_unqualified_kinds_refuse_during_preparation(kind):
     design = grouped(source(), [[]])
     with pytest.raises(CommandContractError) as error:

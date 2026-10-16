@@ -240,8 +240,9 @@ and nick/ligation/crossover routing can split, merge or reorder domains. A saved
 ordinal may then select another domain while still passing structural validation.
 `cluster_reconcile` repairs placement membership only; its direction-independent,
 single-winner overlap rule is not suitable for overlapping organizational groups.
-`MutationReport.strand_id_renames` and `new_domain_origins` currently have no
-producers. Pending-ligation retry can change topology after that reconciliation.
+The unused strand-rename/domain-origin/deletion report fields were removed in
+U9 after a repository-wide caller audit; they never supplied ancestry.
+Pending-ligation retry can change topology after that reconciliation.
 
 | Priority / consumer | Required adapter and finite exit |
 |---|---|
@@ -325,6 +326,56 @@ upstream edits may change selection cardinality in its
 These support explicit entity tracking rather than ordinal reuse. The whole-final-
 entity and mixed-merge policy above is NADOC's chosen contract, not a universal
 CAD behavior inferred from those sources.
+
+### U9: extrusion and crossover correspondence
+
+The qualified set adds `extrude-segment`, `circle-segment`,
+`extrude-continuation`, `extrude-deformed-continuation`, `extrude-frame`,
+`crossover-place`, `crossover-place-batch`, `crossover-move` and
+`crossover-move-batch` (23 total). This is private native qualification only;
+ordinary publication/preview and generated scopes remain closed.
+
+Four extrusion families permit fresh helices while conserving old directional
+coverage exactly. Ordinary continuation additionally permits growth and separate
+new intervals on old helices, requiring every old interval and helix to survive.
+An entirely new domain has no ancestor; a coalesced old-plus-extension domain is
+selected as a whole. Frame, placement, cell proximity and strand ownership never
+implicitly add organizational members. Native algorithms and placement inputs
+remain unchanged across forward/backward, detached/in-place, mixed-cell, posed,
+deformed, independent-frame and source-frame branches.
+
+Crossover placement conserves directional material. Moves first prepare bounded
+scalar domain/crossover receipts, resolving each selected adjacent pair uniquely.
+Before reconciliation/retry, raw native output must retain the expected strand
+identities/order, domain metadata and exact requested endpoints. Each source
+domain is transported once to its actual final interval, including a batch moving
+both ends to a disjoint interval; then common final-output ancestry resolves
+survivors after retry. A move plan cannot skip this intermediate validation.
+No original model objects or geometry arrays are retained in those receipts.
+
+Duplicate/ambiguous selectors, inverted moved endpoints, overlapping output and
+undeclared correspondence refuse. Existing native growth reconstructs helices
+without some authored fields (ISSUE-108). Affected metadata-bearing helices whose
+source/final domain envelope exceeds the stored extent remain unqualified and
+refuse before native work. The envelope also covers native batch evaluation with
+each original opposite endpoint. This preserves legacy behavior and states the
+limitation without changing scientific output. Native growth must be corrected
+and qualified separately before removing this boundary.
+
+The next native pair is resize/domain-shift. Their internal inline-tail merge and
+re-split must retain contributor segments rather than falsely coalescing them;
+full tail removal must leave no descendants. Use passive observations at actual
+native replacements, not a second implementation of terminal-branch arithmetic.
+Any pinned-source instrumentation needs an explicit reviewed compatibility
+transition; it must not be mislabeled a schema-only change.
+
+[U9 evidence](validation_group_geometry_lineage.json) records 752 focused passes,
+complete native model/geometry/axis parity, input-only reconstruction and the
+timing limits. Four unused `MutationReport` fields and misleading docs were pruned;
+the three used placement hints and all reconciliation calculations are retained.
+This is FH-18 checkpoint 7, still flagged for growth; the five original batches
+and full exit stand. No additional milestone credit, denominator change, public
+enablement or desktop performance claim.
 
 ## Finite acceptance matrix
 

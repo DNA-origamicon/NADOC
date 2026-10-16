@@ -2,18 +2,19 @@
 
 Prepare before invoking the admitted builder; apply to its completed output,
 after ordinary placement reconciliation and pending-ligation retry. These kinds
-conserve/delete directional material, except sweep's separate new helices. They
-do not relocate old domains. Consequently disjoint directional intervals give
+conserve/delete directional material, or explicitly add new material. Moves
+first validate a native domain correspondence before composing through retry.
+Consequently disjoint directional intervals give
 an exact old-entity ancestry relation without relying on strand IDs, ordinals,
 Python object identity, placement proximity, or per-nucleotide expansion.
 
 This is organization metadata only. The native builders, placement owners and
-their numerical algorithms remain authoritative. Resize/shift, extrusion and
+their numerical algorithms remain authoritative. Resize/shift and
 automatic route replacement require separately qualified lineage contracts.
 """
 
 from bisect import bisect_right
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from pydantic import ValidationError
 
@@ -31,8 +32,15 @@ KINDS = frozenset({
     "crossover-delete", "crossover-delete-batch", "strand-delete",
     "strand-delete-batch", "domain-delete", "sweep", "loop-skip-insert",
     "assign-staple-sequences",
+    "extrude-segment", "extrude-continuation", "extrude-deformed-continuation",
+    "circle-segment", "extrude-frame", "crossover-place", "crossover-place-batch",
+    "crossover-move", "crossover-move-batch",
 })
 _REMOVING = frozenset({"strand-delete", "strand-delete-batch", "domain-delete"})
+_FRESH_HELICES = frozenset({"sweep", "extrude-segment", "extrude-continuation",
+                          "extrude-deformed-continuation", "circle-segment", "extrude-frame"})
+_ADDITIVE = frozenset({"extrude-continuation"})
+_TRANSPORT = frozenset({"crossover-move", "crossover-move-batch"})
 MAX_ITEMS = 30_000
 MAX_BYTES = 2_000_000
 MAX_ID_CHARS = 512
@@ -121,6 +129,7 @@ class _Plan:
     helices: frozenset[str]
     intervals: tuple[tuple[tuple[str, Direction], tuple[_Interval, ...]], ...]
     groups: tuple[_Group, ...]
+    transport: object = None
 
 
 def _inventory(design, budget):
@@ -244,8 +253,25 @@ def prepare_lineage(before, kind, params):
     budget = _Budget()
     helices, strands, intervals, _ = _inventory(before, budget)
     groups = _groups(before.group_organization, helices, strands, budget)
+    transport = None
+    if kind in _TRANSPORT:
+        from backend.core.part_group_transport import prepare_crossover_transport
+        transport = prepare_crossover_transport(before, kind, params, budget)
     return _Plan(kind, frozenset(helices),
-                 tuple((key, tuple(records)) for key, records in intervals.items()), groups)
+                 tuple((key, tuple(records)) for key, records in intervals.items()), groups, transport)
+
+
+def advance_lineage(plan, raw_after):
+    """Validate native relocation before reconciliation can rename its domains."""
+    if plan is None:
+        return plan
+    if type(plan) is not _Plan:
+        _fail("Organization lineage requires its prepared private scalar plan.")
+    if plan.kind not in _TRANSPORT:
+        return plan
+    from backend.core.part_group_transport import finish_crossover_transport
+    intervals = finish_crossover_transport(plan.transport, raw_after, plan.helices)
+    return replace(plan, intervals=intervals, transport=None)
 
 
 def _coverage(records):
@@ -259,22 +285,39 @@ def _coverage(records):
     return result
 
 
+def _covers(available, required):
+    """Containment of sorted interval unions in linear metadata work."""
+    index = 0
+    for lo, hi in required:
+        while index < len(available) and available[index][1] < lo:
+            index += 1
+        if index == len(available) or available[index][0] > lo or available[index][1] < hi:
+            return False
+    return True
+
+
 def apply_lineage(plan, final_after_retry):
     """Follow whole final entities independently for every overlapping group."""
     if plan is None:
         return final_after_retry
     if type(plan) is not _Plan:
         _fail("Organization lineage requires its prepared private scalar plan.")
+    if plan.transport is not None:
+        _fail("The native relocation must be checked before final organization lineage.",
+              "unsupported_group_lineage_output")
     budget = _Budget()
     helices, _, intervals, ordered = _inventory(final_after_retry, budget)
     old = dict(plan.intervals)
-    if plan.kind != "sweep" and helices - plan.helices:
+    if plan.kind not in _FRESH_HELICES and helices - plan.helices:
         _fail("This command unexpectedly introduced new helix identities.",
               "unsupported_group_lineage_output")
     if plan.kind not in _REMOVING:
-        if not plan.helices <= helices or any(
-                _coverage(records) != _coverage(intervals.get(key, ()))
-                for key, records in plan.intervals):
+        conserved = all(
+            _covers(_coverage(intervals.get(key, ())), _coverage(records))
+            if plan.kind in _ADDITIVE else
+            _coverage(records) == _coverage(intervals.get(key, ()))
+            for key, records in plan.intervals)
+        if not plan.helices <= helices or not conserved:
             _fail("The native output changed material outside the admitted ancestry contract.",
                   "unsupported_group_lineage_output")
     starts = {key: tuple(record.lo for record in records) for key, records in plan.intervals}
@@ -287,8 +330,8 @@ def apply_lineage(plan, final_after_retry):
     for key, final in ordered:
         records = old.get(key, ())
         if not records:
-            if plan.kind == "sweep" and key[0] not in plan.helices:
-                continue  # A separate new swept domain is not an old descendant.
+            if plan.kind in _ADDITIVE or (plan.kind in _FRESH_HELICES and key[0] not in plan.helices):
+                continue  # New material without an old ancestor is not selected.
             _fail("The native output introduced directional material without admitted ancestry.",
                   "unsupported_group_lineage_output")
         index = max(0, bisect_right(starts[key], final.lo) - 1)
@@ -299,13 +342,13 @@ def apply_lineage(plan, final_after_retry):
             budget.relation()
             if ancestor.hi < final.lo:
                 continue
-            if ancestor.lo > covered + 1:
+            if plan.kind not in _ADDITIVE and ancestor.lo > covered + 1:
                 break
             covered = max(covered, min(final.hi, ancestor.hi))
             for group_index in selected_by.get(ancestor.ref, ()):
                 budget.relation()
                 selected.add(group_index)
-        if covered < final.hi:
+        if plan.kind not in _ADDITIVE and covered < final.hi:
             _fail("A final domain extends beyond its admitted directional ancestors.",
                   "unsupported_group_lineage_output")
         for group_index in sorted(selected):

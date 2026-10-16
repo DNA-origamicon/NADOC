@@ -17,9 +17,9 @@ The reconciler is a pure function:
 
     reconcile_cluster_membership(design_before, design_after, report=None) -> Design
 
-The optional ``MutationReport`` lets pipelines hint at strand renames and
-new-helix parents; without it the reconciler falls back to bp-range overlap
-and lattice-neighbour proximity, which handles the common cases robustly.
+The optional ``MutationReport`` supplies new-helix parents and controls creation
+of disconnected clusters; without it the reconciler falls back to bp-range
+overlap and lattice-neighbour proximity.
 """
 
 from __future__ import annotations
@@ -48,13 +48,9 @@ class MutationReport:
 
     Fields
     ------
-    strand_id_renames:
-        Map of pre-mutation ``strand_id`` to post-mutation ``strand_id`` for
-        strands that were renamed in-place (e.g. ligation absorbing strand B
-        into strand A's id, or nick splitting A into A and ``A_..._r``).
-        The reconciler does not actually need this — it rebuilds DomainRefs
-        from scratch by bp-range overlap — but pipelines may populate it for
-        clarity.
+    cluster_identity_seed:
+        Stable identity seed for clusters created by disconnected-component
+        reconciliation during replay.
     new_helix_origins:
         Map ``new_helix_id -> parent_helix_id``. The new helix inherits every
         cluster the parent belongs to. If parent is orphaned the new helix is
@@ -64,20 +60,11 @@ class MutationReport:
     cluster_disconnected:
         Create clusters for unassigned new lattice components (extrusion opt-in).
         Explicit parents and explicit orphans are excluded from creation.
-    new_domain_origins:
-        List of ``(new_ref, parent_ref)`` pairs. Used as a tie-breaker when a
-        new domain's bp range overlaps two clusters' claims equally.
-    deleted_strand_ids / deleted_helix_ids:
-        Diagnostic only; the reconciler computes these from set diffs.
     """
 
     cluster_identity_seed: str | None = None
     cluster_disconnected: bool = False
-    strand_id_renames: dict[str, str] = field(default_factory=dict)
     new_helix_origins: dict[str, Optional[str]] = field(default_factory=dict)
-    new_domain_origins: list[tuple[DomainRef, DomainRef]] = field(default_factory=list)
-    deleted_strand_ids: set[str] = field(default_factory=set)
-    deleted_helix_ids: set[str] = field(default_factory=set)
 
 
 EMPTY_REPORT = MutationReport()

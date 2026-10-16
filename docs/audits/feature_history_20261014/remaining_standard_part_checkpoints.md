@@ -53,7 +53,7 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 
 | ID | Status | Fixed remaining exit |
 |---|---|---|
-| FH-18 | In progress · 6 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Owned organization transactions, named native deformation selections, qualified final-topology lineage and matching Fine Routing recovery are implemented; remaining tool/repair/UI migration and new-group movement stay open. |
+| FH-18 | In progress · 7 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Owned organization transactions, named native deformation selections, qualified final-topology lineage including extrusion/crossover edits and matching Fine Routing recovery are implemented; remaining tool/repair/UI migration and new-group movement stay open. |
 | FH-20 | Remaining | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
 | FH-21 | Remaining | Extrusion history editor: eligible earlier edits through downstream features, stable identities, complete ordinary controls and validation. |
 | FH-22 | Remaining | Sweep history editor: input-based isolated preview, recovery-independent Apply/Cancel and downstream rebuild. |
@@ -128,6 +128,33 @@ bound their matrices before implementation rather than expanding them indefinite
 | U6 · 2026-10-16 | FH-18 checkpoint 4: separate typed organization, native conversion → posed dissolve → regroup, input editing/cold proof, recovery chronology, bounded metadata and legacy schema compatibility; [evidence](validation_group_organization_representation.json) | None; live transactions, remaining consumers, visible placement controls and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** four checkpoints on unfinished FH-18. Migration batch A is implemented privately; B/C have partial foundations, D/E remain. No exit or denominator change. |
 | U7 · 2026-10-16 | FH-18 checkpoint 5: owned group/explicit-placement transaction and bounded HTTP adapter, exact-candidate permits, undo/save/reload, complete organization-body recovery admission and rootless-load preservation; [evidence](validation_group_organization_recording.json) | None; complete consumer/repair migration, visible Groups/Placements and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** five checkpoints on unfinished FH-18. B/C advance within the same five finite batches; D/E remain. No exit or denominator change. |
 | U8 · 2026-10-16 | FH-18 checkpoint 6: typed named bend/twist selection, bounded final-domain ancestry for 14 qualified native kinds, incoming-reference diagnostics and matching Fine Routing recovery; [evidence](validation_group_organization_consumers.json) | None; relocation/extrusion and remaining consumer/repair/UI migration, rollout and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** six checkpoints on unfinished FH-18. B/C advance; the original exit and five finite batches remain. No extra completion credit for adapter kinds, tests or commits. |
+| U9 · 2026-10-16 | FH-18 checkpoint 7: five extrusion families and crossover placement/motion follow organizational ancestry through native replay; bounded atomic endpoint correspondence, exact parity and unused reconciliation-field cleanup; [evidence](validation_group_geometry_lineage.json) | None; resize/domain-shift, remaining consumer/repair/UI migration, rollout and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** seven checkpoints on unfinished FH-18. The nine added command kinds are coverage within B/C, not new milestones. Fixed exit and five batches unchanged. |
+
+### FH-18 containment update — U9
+
+The native lineage set now covers 23 kinds, including all five extrusion families
+and four crossover placement/move commands. Continuation retains every old
+directional interval while admitting growth and separate new material; separate
+new domains/helices are not silently selected. A selected domain coalesced with
+its extension selects the whole resulting entity. Crossover motion binds exact
+source entities to actual raw output before reconciliation/retry changes their
+addresses; a batch moving both ends is handled atomically.
+
+This closes the explicit extrusion/crossover adapter batch, with 752 focused
+passes, without closing FH-18. Resize/domain-shift needs passive native merge,
+split and endpoint observations; duplicating those algorithms in the adapter is
+rejected as the containment strategy. That is the next bounded two-command batch.
+Remaining preview/repair/generated consumers, visible Group/Placement controls,
+new-group movement/frame semantics and rollout still belong to the same fixed
+exit. The existing native crossover-growth metadata-loss defect is reproduced
+and refused in the new path (ISSUE-108), not silently corrected or called solved.
+
+Metadata-only crossover transport measured 6.643 ms median at 100 domains and
+32.943 ms at 500 (79.443 ms maximum in 20 runs). These do not qualify ordinary
+interaction; no drag-frame walk was added, and desktop/publication latency remains
+open. Four unused reconciliation report fields were pruned after a caller audit;
+native algorithms, source pins and public gates are unchanged. **18/38;
++0 completed, +0 total; 20 remaining (11 core, 9 parked).**
 
 ### FH-18 containment update — U8
 

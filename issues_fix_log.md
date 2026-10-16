@@ -836,3 +836,11 @@ pre-existing invalid all-members grouping; it remains separately open for a
 compatibility-aware correction. See [checkpoint evidence](docs/audits/feature_history_20261014/validation_deformation_history_editor.json).
 Both rollout gates remain closed and MV-48 remains open; no desktop or latency
 result is claimed.
+
+2026-10-16 — ISSUE-108 intake (open): native crossover growth reconstructs
+`Helix` with an incomplete field list; batch growth can use original opposite
+endpoints outside the final domain's range. Native controls reproduce the lost
+metadata. U9's private organization adapter refuses the affected case before
+native work; algorithms and legacy behavior are unchanged. This is containment,
+not a fix or new milestone. The 752 focused U9 passes and remaining acceptance
+are recorded in [U9 evidence](docs/audits/feature_history_20261014/validation_group_geometry_lineage.json).

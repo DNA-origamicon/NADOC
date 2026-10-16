@@ -50,7 +50,7 @@ Shipped as 3 commits: `d8693fc` (chunk A — foundations + extrude pipelines), `
 
 ### Module: `backend/core/cluster_reconcile.py`
 
-- **`MutationReport`** dataclass — optional hints from a pipeline. Most useful field is `new_helix_origins: dict[str, Optional[str]]` mapping new helix id → parent helix id (or `None` for explicit orphan, used for the virtual `__lnk__` bridge helix). Other fields (`strand_id_renames`, `new_domain_origins`, `deleted_*`) are present for future use; bp-range overlap matching handles renames transparently today.
+- **`MutationReport`** dataclass — optional placement-reconciliation hints from a pipeline: `new_helix_origins: dict[str, Optional[str]]` maps new helix id → parent helix id (or `None` for explicit orphan, used for the virtual `__lnk__` bridge helix); `cluster_disconnected` enables grouping of unassigned new components; `cluster_identity_seed` supplies deterministic identities for those groups. Domain membership is rebuilt by bp-range overlap, without a strand-rename or domain-origin report.
 - **`reconcile_cluster_membership(design_before, design_after, report=None) -> Design`** — pure function. Never mutates inputs. Builds a coverage map from `design_before`, then rebuilds `helix_ids` and `domain_ids` for each cluster in `design_after`.
 
 ### State wrappers in `backend/api/state.py`
@@ -100,11 +100,10 @@ Slice-plane extrude • overhang extrude • overhang connection create/patch/de
 
 ## Future work / known gaps
 
-1. **`MutationReport.new_domain_origins` and `strand_id_renames` are unused.** Defined for future disambiguation if bp-overlap ties become a real problem, or if `strand_id_renames` needed for fast-path. Today the bp-overlap matcher handles them transparently.
-2. **Cross-part assembly connections not reconciled.** `cluster_transform_overrides` on `PartInstance` (`backend/core/models.py:778`) and assembly routes are out of scope.
-3. **Latent edge case: a domain-level cluster whose `domain_ids` becomes fully empty** (all its claimed domains deleted) would be re-classified as helix-level by the deformation code's `if not c.domain_ids` check, which would suddenly transform the entire helix instead of disjoint sub-ranges. The reconciler doesn't currently guard against this. Probably never happens in practice — to trigger it the user would have to delete every staple covering a bridge-helix bp range while keeping the helix in the cluster. If we ever see weird scaffold-cluster behaviour after large strand deletions, this is the place to look.
-4. **Reconciler never splits/merges clusters.** A new crossover that bridges two clusters keeps both clusters separate (per user's stated rule). Full bridge-helix re-evaluation requires the user to re-run cluster autodetect.
-5. **Lattice-neighbor proximity now uses canonical frame-aware edges.** The former Manhattan-distance heuristic was replaced; virtual linker and reference-only helices are excluded.
+1. **Cross-part assembly connections not reconciled.** `cluster_transform_overrides` on `PartInstance` (`backend/core/models.py:778`) and assembly routes are out of scope.
+2. **Latent edge case: a domain-level cluster whose `domain_ids` becomes fully empty** (all its claimed domains deleted) would be re-classified as helix-level by the deformation code's `if not c.domain_ids` check, which would suddenly transform the entire helix instead of disjoint sub-ranges. The reconciler doesn't currently guard against this. Probably never happens in practice — to trigger it the user would have to delete every staple covering a bridge-helix bp range while keeping the helix in the cluster. If we ever see weird scaffold-cluster behaviour after large strand deletions, this is the place to look.
+3. **Reconciler never splits/merges clusters.** A new crossover that bridges two clusters keeps both clusters separate (per user's stated rule). Full bridge-helix re-evaluation requires the user to re-run cluster autodetect.
+4. **Lattice-neighbor proximity now uses canonical frame-aware edges.** The former Manhattan-distance heuristic was replaced; virtual linker and reference-only helices are excluded.
 
 ---
 

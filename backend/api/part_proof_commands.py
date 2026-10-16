@@ -387,7 +387,7 @@ def _execute(kind, design, params, *, expensive):
     from backend.core.cluster_reconcile import reconcile_cluster_membership
     from backend.core.lattice import retry_pending_ligations
     from backend.core.photoproducts import stale_photoproduct_ids
-    from backend.core.part_group_lineage import KINDS as LINEAGE_KINDS, prepare_lineage, apply_lineage
+    from backend.core.part_group_lineage import KINDS as LINEAGE_KINDS, prepare_lineage, advance_lineage, apply_lineage
     lineage = prepare_lineage(design, kind, params) if kind in LINEAGE_KINDS else None
     report = None
     if kind == "photoproduct-relax" or (kind == "photoproduct-create" and params.get("method") == "convert"):
@@ -546,6 +546,7 @@ def _execute(kind, design, params, *, expensive):
         updated = replay_snapshot(kind, design, params)
     else:
         updated = replay_minor(kind, design, params)
+    lineage = advance_lineage(lineage, updated)
     updated = reconcile_cluster_membership(design, updated, report)
     if kind not in {"auto-break", "full-autostaple", "cluster-join"}:
         updated = retry_pending_ligations(design, updated)
