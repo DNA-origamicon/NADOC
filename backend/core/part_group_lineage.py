@@ -37,6 +37,9 @@ KINDS = frozenset({
     "crossover-move", "crossover-move-batch",
     "strand-end-resize", "domain-shift",
 })
+# Patterns declare their copied groups during native extraction. Capture that
+# raw result before global reconciliation/retry can merge domain identities.
+POSTPROCESS_KINDS = frozenset({"linear-pattern", "circular-pattern"})
 _REMOVING = frozenset({"strand-delete", "strand-delete-batch", "domain-delete"})
 _FRESH_HELICES = frozenset({"sweep", "extrude-segment", "extrude-continuation",
                           "extrude-deformed-continuation", "circle-segment", "extrude-frame"})
@@ -243,11 +246,12 @@ def prepare_lineage(before, kind, params):
 
     Command schemas/reference checks remain the existing dispatcher's job. This
     helper admits only the qualified topology effects, not arbitrary callbacks.
-    Legacy designs take the exact no-inventory path.
+    Legacy designs take the exact no-inventory path. POSTPROCESS_KINDS capture
+    the raw native result, including producer-declared copies, before retry.
     """
     if before.group_organization is None:
         return None
-    if type(kind) is not str or kind not in KINDS:
+    if type(kind) is not str or kind not in KINDS | POSTPROCESS_KINDS:
         _fail("This command requires a separately qualified organization lineage adapter.",
               "unsupported_group_lineage_command")
     try:

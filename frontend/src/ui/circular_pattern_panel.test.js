@@ -34,6 +34,14 @@ it('normalizes arbitrary directions and rejects degenerate axes', () => {
   expect(normalizedAxis([NaN, 0, 0], [0, 0, 1])).toBeNull()
 })
 
+it('rejects organizational group selection even when a placement has the same text identity', () => {
+  const s = state()
+  s.currentDesign.group_organization = { version: 1, groups: [{ id: 'c', helix_ids: [1] }] }
+  s.selection.items = [{ kind: 'part_group', id: 'c' }]
+  s.activeClusterId = 'c'
+  expect(circularPatternTarget(s)).toBeNull()
+})
+
 import { vi } from 'vitest'
 import { beginCircularPatternSelection } from './circular_pattern_panel.js'
 import { createMockStore } from '../test-helpers/mock_store.js'
@@ -167,4 +175,93 @@ it('rounds offset entry, restores offset mode, and confirms only once', async ()
   resolve(); await Promise.resolve(); await Promise.resolve()
   expect(tool.isActive()).toBe(false)
   document.body.innerHTML = ''
+})
+
+async function organizedFixture(commitPattern = vi.fn(async () => ({}))) {
+  document.body.innerHTML = '<canvas id="canvas"></canvas><div id="circular-pattern-panel"></div>'
+  const initial = state()
+  initial.currentDesign.id = 'part'
+  initial.currentDesign.helices = [{ id: 1, length_bp: 10 }, { id: 2, length_bp: 10 }]
+  initial.currentDesign.cluster_transforms[0].name = 'First placement'
+  initial.currentDesign.cluster_transforms.push({ id: 'd', name: 'Second placement', helix_ids: [2] })
+  initial.currentDesign.group_organization = { version: 1, groups: [
+    { id: 'c', name: 'Optional group', helix_ids: [1] },
+    { id: 'required', name: 'Required group', helix_ids: [] },
+    { id: 'second', name: 'Second group', helix_ids: [2] },
+  ] }
+  initial.currentDesign.deformations = [{ affected_helix_ids: [1], targets: [{ kind: 'part_group', id: 'required' }] }]
+  const store = createMockStore(initial), controller = createSelectionController({ store })
+  const scene = new THREE.Scene(), frames = new Set()
+  const tool = initCircularPatternPanel({ store, scene, canvas: document.getElementById('canvas'),
+    selectionManager: { clearSelection: controller.clear, setSelectionLevel: controller.setLevel },
+    getCamera: () => new THREE.PerspectiveCamera(), getControls: () => ({ enabled: true }),
+    addFrameCallback: fn => frames.add(fn), removeFrameCallback: fn => frames.delete(fn),
+    showToast: vi.fn(), commitPattern })
+  tool.open(); controller.replace([{ kind: 'cluster', id: 'c' }]); await Promise.resolve()
+  return { tool, store, controller, scene, frames, commitPattern }
+}
+const field = label => document.querySelector(`[aria-label="${label}"]`)
+const button = label => [...document.querySelectorAll('button')].find(node => node.textContent === label)
+
+it('keeps circular axis controls and copies explicitly selected group metadata, not group geometry', async () => {
+  const f = await organizedFixture()
+  try {
+    expect(field('Placement').value).toBe('c')
+    expect(field('Cluster')).toBeNull()
+    expect(field('Copy group Required group').disabled).toBe(true)
+    field('Copy group Optional group').click()
+    button('Y').click()
+    const offset = field('Origin offset (nm) X')
+    offset.value = '7'; offset.dispatchEvent(new Event('input'))
+    field('Instances').value = '4'; field('Instances').dispatchEvent(new Event('input'))
+    button('Confirm').click(); await Promise.resolve(); await Promise.resolve()
+    expect(f.commitPattern).toHaveBeenCalledWith(expect.objectContaining({ cluster_id: 'c', instances: 4,
+      axis_direction: [0, 1, 0], axis_point: [19, 3, 0],
+      _organization_copy: { version: 1, group_ids: ['required'] } }), expect.objectContaining({ designId: 'part' }))
+  } finally { f.tool.close(); document.body.innerHTML = '' }
+})
+
+it('updates circular copy choices only when changing the explicit source placement', async () => {
+  const f = await organizedFixture()
+  try {
+    const source = field('Placement')
+    source.value = 'd'; source.dispatchEvent(new Event('change'))
+    expect(field('Copy group Required group')).toBeNull()
+    expect(field('Copy group Second group').checked).toBe(true)
+    const choice = field('Copy group Second group')
+    for (const render of f.frames) { render(); render() }
+    expect(field('Copy group Second group')).toBe(choice)
+    button('Confirm').click(); await Promise.resolve(); await Promise.resolve()
+    expect(f.commitPattern.mock.calls[0][0]).toMatchObject({ cluster_id: 'd', _organization_copy: { version: 1, group_ids: ['second'] } })
+  } finally { f.tool.close(); document.body.innerHTML = '' }
+})
+
+it('keeps a refused circular draft and required checkboxes intact', async () => {
+  const f = await organizedFixture(vi.fn(async () => null))
+  try {
+    field('Total angle (degrees)').value = '180'; field('Total angle (degrees)').dispatchEvent(new Event('input'))
+    button('Confirm').click(); await Promise.resolve(); await Promise.resolve()
+    expect(f.tool.isActive()).toBe(true)
+    expect(field('Total angle (degrees)').value).toBe('180')
+    expect(field('Copy group Required group').disabled).toBe(true)
+    expect(document.querySelector('.cp-readout').textContent).toMatch(/not accepted/)
+  } finally { f.tool.close(); document.body.innerHTML = '' }
+})
+
+it('releases the circular preview on reset and ignores the held old response after reopening', async () => {
+  let finish
+  const f = await organizedFixture(vi.fn(() => new Promise(resolve => { finish = resolve })))
+  try {
+    button('Confirm').click()
+    window.dispatchEvent(new Event('nadoc:document-reset'))
+    expect(f.tool.isActive()).toBe(false)
+    expect(f.frames.size).toBe(0)
+    expect(f.scene.children).toHaveLength(0)
+    expect(document.querySelector('.cp-bead')).toBeNull()
+    f.tool.open(); f.controller.replace([{ kind: 'cluster', id: 'd' }]); await Promise.resolve()
+    const replacement = f.scene.getObjectByName('circularPatternPreview')
+    finish({}); await Promise.resolve(); await Promise.resolve()
+    expect(f.tool.isActive()).toBe(true)
+    expect(f.scene.getObjectByName('circularPatternPreview')).toBe(replacement)
+  } finally { f.tool.close(); document.body.innerHTML = '' }
 })

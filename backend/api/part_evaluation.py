@@ -19,7 +19,8 @@ class EvaluationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     operation: Literal["verify", "append", "edit", "delete", "repair", "selection", "batch"]
-    kind: Literal["photoproduct-create", "photoproduct-relax", "duplex-relax", "streptavidin-coating"] | None = None
+    kind: Literal["photoproduct-create", "photoproduct-relax", "duplex-relax", "streptavidin-coating",
+                  "linear-pattern", "circular-pattern"] | None = None
     params: dict | None = None
     index: StrictInt | None = Field(default=None, ge=0)
     sub_index: StrictInt | None = Field(default=None, ge=0)
@@ -88,6 +89,48 @@ def _authoring_changes(source, candidate):
 
 
 def evaluate(source, operation, *, executor=None, dependency_resolver=None):
+    """The pattern host adds only a private report observer to shared evaluation."""
+    header = operation["header"]
+    if "pattern_recording_version" not in header:
+        return _evaluate(source, operation, executor=executor, dependency_resolver=dependency_resolver)
+    from backend.api.pattern_features import collect_pattern_report
+    from backend.api.part_native_commands import PATTERN_COMMANDS
+
+    try:
+        request = EvaluationRequest.model_validate(operation["request"])
+        if (type(header["pattern_recording_version"]) is not int or header["pattern_recording_version"] != 1
+                or source.group_organization is None
+                or type(header.get("source_revision")) is not int
+                or header["source_revision"] != request.expected_revision
+                or header.get("source_design_id") != source.id):
+            raise CommandContractError("Pattern work lacks its exact captured context", code="invalid_capture_context")
+        if request.operation == "append" and request.kind in PATTERN_COMMANDS:
+            seed = header["identity"]
+        elif request.operation == "edit" and request.sub_index is None and request.index < len(source.feature_log):
+            entry = source.feature_log[request.index]
+            if (entry.feature_type != "snapshot" or entry.op_kind not in PATTERN_COMMANDS
+                    or entry.id != header.get("expected_feature_id")):
+                raise CommandContractError("Pattern edit target changed", code="source_changed")
+            seed = entry.params.get("history_seed")
+        else:
+            raise CommandContractError("Unknown owned pattern operation", code="invalid_operation_admission")
+        with collect_pattern_report(seed) as collected:
+            result = _evaluate(source, operation, executor=executor, dependency_resolver=dependency_resolver)
+        if result.get("status") == "ready":
+            if "report" not in collected:
+                raise CommandContractError("Native pattern execution did not return its copy report",
+                                           code="pattern_report_missing")
+            validate_operation_input(collected["report"])
+            result["pattern_report"] = collected["report"]
+        return result
+    except CommandContractError as error:
+        return {"status": error.status, "issues": [error.as_issue()], "native_editable": False}
+    except (ValueError, KeyError, TypeError) as error:
+        return {"status": "failed", "issues": [{"code": "invalid_command_inputs", "detail": str(error)[:2048]}],
+                "native_editable": False}
+
+
+def _evaluate(source, operation, *, executor=None, dependency_resolver=None):
     """Return a result/candidate without touching a document or decoding recovery."""
     from backend.api.part_proof_commands import dependencies, execute, execute_long
     from backend.api.part_recipe_edit import prepare_change

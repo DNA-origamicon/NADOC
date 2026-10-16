@@ -152,6 +152,9 @@ def _submit(job, captured, operation):
 def start(request, *, expected_source=None, expected_session_identity=None, expected_policy_generation=None):
     """Admit a request, optionally bound to a privately prepared draft source."""
     request = EvaluationRequest.model_validate(request)
+    if request.operation == "append" and request.kind in {"linear-pattern", "circular-pattern"}:
+        raise HTTPException(422, detail={"code": "pattern_owned_host_required",
+            "detail": "Pattern creation requires its owned ordinary pattern host"})
     if not _slot.acquire(blocking=False):
         raise HTTPException(429, detail="A part history operation is already running")
     identity = None
@@ -247,8 +250,6 @@ def inspect(identity, *, cancel=False):
 
 def commit(identity):
     """Publish the exact evaluated candidate once, without rerunning its solver."""
-    from backend.core.models import Design
-
     if not _slot.acquire(blocking=False):
         raise HTTPException(429, detail="A part history operation is already running")
     try:
@@ -277,23 +278,14 @@ def commit(identity):
         # Pydantic Any-valued params/metadata can retain transport aliases.
         # Fingerprint both bounded JSON projections before decoding, outside
         # the state lock, without retaining another full molecular graph.
-        from backend.core.part_history_proof import AUTHORING_FIELDS, digest
-        recipe_fields = {"recipe_root", "feature_log", "input_sources", "feature_log_cursor", "feature_log_sub_cursor"}
-        expected_recipe = digest({name: data[name] for name in recipe_fields})
-        expected_authoring = digest({name: data[name] for name in AUTHORING_FIELDS})
-        candidate = Design.model_validate(data)
-        if digest(candidate.model_dump(mode="json", include=AUTHORING_FIELDS)) != expected_authoring:
+        from backend.api.part_evaluation_candidate import CandidateDecodeError, decode_candidate
+        try:
+            candidate, expected_authoring, expected_recipe = decode_candidate(data)
+        except CandidateDecodeError as error:
             with _lock:
                 job.result.pop("candidate", None)
-                job.result.update(status="unverified", issues=[{"code": "candidate_decode_changed_authoring"}])
-            raise HTTPException(409, detail="Candidate changed during decoding; evaluation cannot be committed")
-        # Pins, stable command identities and source descriptors belong to
-        # every evaluated recipe, including appends and ordinary edits.
-        if digest(candidate.model_dump(mode="json", include=recipe_fields)) != expected_recipe:
-            with _lock:
-                job.result.pop("candidate", None)
-                job.result.update(status="unverified", issues=[{"code": "candidate_decode_changed_recipe"}])
-            raise HTTPException(409, detail="Recipe changed during decoding; evaluation cannot be committed")
+                job.result.update(status="unverified", issues=[{"code": error.code}])
+            raise HTTPException(409, detail=str(error)) from error
         # The worker intentionally omitted physical/display state. Preserve
         # it from the unchanged live source; it never becomes replay evidence.
         from backend.api.part_immutable_storage import content_identity, is_immutable

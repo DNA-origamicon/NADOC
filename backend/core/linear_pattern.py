@@ -79,7 +79,12 @@ def create_linear_pattern(
     vector=None,
     vector2=None,
     id_seed=None,
+    organization_copy=None,
 ):
+    if design.group_organization is not None or organization_copy is not None:
+        from backend.core.part_pattern_organization import require_linear_metadata_bounds
+
+        require_linear_metadata_bounds(design, cluster_ids)
     offsets = linear_offsets(
         instances,
         spacing,
@@ -108,6 +113,6 @@ def create_linear_pattern(
         pose[:3, 3] = offset
         placements.append((key, pose))
     result, ids, report = copy_pattern_instances(
-        design, cluster_ids, placements, id_seed=id_seed
+        design, cluster_ids, placements, id_seed=id_seed, organization_copy=organization_copy
     )
     return result, ids, [report]

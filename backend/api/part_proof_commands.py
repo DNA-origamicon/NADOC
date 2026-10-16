@@ -296,6 +296,23 @@ def dependencies(kind, params):
         return Dependencies(writes=frozenset({PART_TOPOLOGY}), barrier=True)
     if kind in SECTION_KINDS | BRANCH_KINDS | PATTERN_COMMANDS | EXTRUSION_COMMANDS | (AUTO_KINDS - {"auto-break", "auto-merge"}) and not params.get("history_seed"):
         return Dependencies(known=False)
+    if kind in PATTERN_COMMANDS and "_organization_copy" in params:
+        from backend.api.pattern_features import CircularPatternBody, LinearPatternBody
+        from backend.core.part_operation_input import validate_operation_input
+        from backend.core.part_pattern_organization import parse_organization_copy
+        try:
+            validate_operation_input(params)
+            copy = parse_organization_copy(params["_organization_copy"])
+            if copy is None:
+                return Dependencies(known=False)
+            schema = CircularPatternBody if kind == "circular-pattern" else LinearPatternBody
+            body = schema.model_validate(params)
+            placements = [body.cluster_id] if kind == "circular-pattern" else body.cluster_ids
+            reads = {PART_TOPOLOGY, *(Resource("cluster", identity) for identity in placements),
+                     *(Resource("part_group", identity) for identity in copy.group_ids)}
+        except (ValueError, TypeError):
+            return Dependencies(known=False)
+        return Dependencies(frozenset(reads), frozenset({PART_TOPOLOGY}), barrier=True)
     if kind == "auto-scaffold-connectivity-section" and not params.get("history_seed"):
         return Dependencies(known=False)
     if kind in {"photoproduct-create", "cluster-paste", "overhang-extrude", "nucleotide-transform", "nucleotide-transform-batch"} and not params.get("history_seed"):
@@ -531,6 +548,7 @@ def _execute(kind, design, params, *, expensive):
         from backend.core.cluster_reconcile import MutationReport
         updated, ids, _ = build_pattern(kind, design, params, id_seed=params["history_seed"])
         report = MutationReport(new_helix_origins={hid: None for hid in ids})
+        lineage = prepare_lineage(updated, kind, params)
     elif kind == "cluster-join":
         from backend.api.part_join_command import build
         updated, report = build(design, params)

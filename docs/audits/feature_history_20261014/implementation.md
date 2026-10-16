@@ -1682,3 +1682,31 @@ and accumulated FULL debt without executing a broad suite. `main.js` delta is
 **0**. Completed disposable output contained no files: 544 empty directories and
 four symlinks were removed after active-reference checks; historical evidence
 was preserved. No bulk/browser output or shared-server mutation occurred.
+
+## Ordinary organized patterns — U15, October 16
+
+Linear/circular patterns now declare copied named groups separately from their
+existing whole-helix placement inputs. One extraction provides exact ancestry;
+instance identities remain stable through count edits. An owned ordinary host
+uses the existing isolated source proof/rebuild and one guarded publication,
+including recovery-independent historical edits. Complete current/straight
+candidate geometry avoids unbound display fetches. Shared candidate decoding
+replaces duplicate commit logic; still-used legacy editing remains available.
+
+The [contract and remaining exits](group_placement_migration_plan.md#u15-ordinary-patterns--fh-18-checkpoint-13)
+and [validation](validation_group_patterns.json) are authoritative. **18/38
+milestones complete, 20 remaining (11 core, 9 parked); +0 completed, +0 total.**
+U15 is engineering checkpoint 15 since B1 and checkpoint 13 on still-open FH-18;
+task growth remains flagged. New-group movement, generated core consumers and
+qualification retain their original exit. Public organization rollout stays off.
+`main.js` delta is 0. No molecular algorithms, manifests or goldens changed.
+
+Final software checks passed **362 distinct backend cases** (105 new, 257
+related; 26 warnings) and **8,826 frontend tests / one existing skip across 745
+files**. All 21 changed Python files pass scoped Ruff; repository lint retains
+five existing F401 findings and memory lint retains six errors/59 warnings.
+Selector dry-run executed zero tests and retains broad backend debt.
+**NOT VERIFIED IN APP:** the required Archive mount is unavailable. Desktop,
+complete HTTP/geometry latency and retention qualification remain open.
+Cleanup removed 215 empty task directories and four symlinks (zero files/bytes);
+shared caches, runtimes, workspace state and historical evidence were preserved.

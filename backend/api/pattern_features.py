@@ -1,5 +1,7 @@
 """Pattern request schemas, creation, and transactional feature editing."""
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Literal
 
 from fastapi import HTTPException
@@ -11,13 +13,35 @@ from backend.core.linear_pattern import create_linear_pattern
 from backend.core.models import Design
 
 
+_report_capture = ContextVar("pattern_report_capture", default=None)
+
+
+@contextmanager
+def collect_pattern_report(history_seed):
+    """Retain only the latest native report for one explicitly evaluated row.
+
+    Source proof and edited suffix may execute the same row. Overwriting this
+    one slot yields its final report without retaining designs or rerunning copy.
+    """
+    if type(history_seed) is not str or not history_seed:
+        raise ValueError("Pattern report collection requires a stable history seed")
+    holder = {}
+    token = _report_capture.set((history_seed, holder))
+    try:
+        yield holder
+    finally:
+        _report_capture.reset(token)
+
+
 class CircularPatternBody(BaseModel):
     cluster_id: str
     instances: int = Field(ge=1, le=128, strict=True)
     total_angle: float = Field(gt=0, le=360, allow_inf_nan=False)
     axis_point: list[float] = Field(min_length=3, max_length=3)
     axis_direction: list[float] = Field(min_length=3, max_length=3)
-    expected_revision: int | None = None
+    expected_revision: int | None = Field(default=None, ge=0, strict=True)
+    expected_design_id: str | None = None
+    organization_copy: dict | None = Field(default=None, alias="_organization_copy")
 
 
 class LinearPatternBody(BaseModel):
@@ -35,7 +59,15 @@ class LinearPatternBody(BaseModel):
     vector2: list[float] = Field(
         default_factory=lambda: [0, 1, 0], min_length=3, max_length=3
     )
-    expected_revision: int | None = None
+    expected_revision: int | None = Field(default=None, ge=0, strict=True)
+    expected_design_id: str | None = None
+    organization_copy: dict | None = Field(default=None, alias="_organization_copy")
+
+
+def pattern_inputs(body):
+    """Recorded inputs exclude transport guards and absent legacy metadata."""
+    return body.model_dump(by_alias=True, exclude={"expected_revision", "expected_design_id"},
+                           exclude_none=True)
 
 
 def build_pattern(kind, design, params, *, id_seed=None):
@@ -45,9 +77,27 @@ def build_pattern(kind, design, params, *, id_seed=None):
         else (LinearPatternBody, create_linear_pattern)
     )
     body = schema.model_validate(params)
-    return builder(
-        design, **body.model_dump(exclude={"expected_revision"}), id_seed=id_seed
+    from backend.core.part_pattern_organization import parse_organization_copy
+    organization_copy = parse_organization_copy(body.organization_copy)
+    if design.group_organization is not None and organization_copy is None:
+        from backend.core.part_command_errors import CommandContractError
+        raise CommandContractError("Organized patterns require an explicit group-copy selection.",
+                                   code="organization_copy_required")
+    if design.group_organization is None and organization_copy is not None:
+        from backend.core.part_command_errors import CommandContractError
+        raise CommandContractError("Group-copy metadata requires an organized source.",
+                                   code="organization_copy_source_required")
+    arguments = body.model_dump(exclude={"expected_revision", "expected_design_id", "organization_copy"})
+    if organization_copy is not None:
+        arguments["organization_copy"] = organization_copy
+    result = builder(
+        design, **arguments, id_seed=id_seed
     )
+    if (capture := _report_capture.get()) is not None and capture[0] == id_seed:
+        report = result[2]
+        capture[1]["report"] = ([vars(item) for item in report]
+                                if isinstance(report, list) else vars(report))
+    return result
 
 
 def pattern_label(kind, params):
@@ -115,7 +165,7 @@ def edit_pattern_feature(design, index, params):
             if entry.op_kind == "circular-pattern"
             else LinearPatternBody
         )
-        params = schema.model_validate(params).model_dump(exclude={"expected_revision"})
+        params = pattern_inputs(schema.model_validate(params))
         replay, _, _ = build_pattern(
             entry.op_kind, before, entry.params, id_seed=entry.id
         )

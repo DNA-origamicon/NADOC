@@ -6324,6 +6324,9 @@ def _edit_dispatch_run(op_kind: str, pre_state: Design, params: dict) -> Design:
 
 class EditFeatureBody(BaseModel):
     params: dict
+    expected_design_id: str | None = None
+    expected_revision: int | None = Field(default=None, ge=0, strict=True)
+    expected_feature_id: str | None = None
 
 
 def _edit_cluster_op_feature(
@@ -6421,6 +6424,19 @@ def edit_feature(index: int, body: EditFeatureBody, sub_index: int | None = None
         )
 
     entry = log[index]
+
+    if (design.group_organization is not None
+            and getattr(entry, "op_kind", None) in {"linear-pattern", "circular-pattern"}):
+        from backend.api.part_pattern_recording import edit
+        if sub_index is not None:
+            raise HTTPException(422, detail="A pattern has no editable child feature.")
+        updated, report, _, copies = edit(index, body.params,
+            expected_feature_id=body.expected_feature_id,
+            expected_design_id=body.expected_design_id, expected_revision=body.expected_revision)
+        response = _design_response_with_geometry(updated, report, embed_straight=True,
+                                                 normalize_legacy=False)
+        response["pattern_report"] = copies
+        return response
 
     from backend.api.part_recipe_edit import supports_recipe_edit, change_recipe
     if supports_recipe_edit(design, entry):

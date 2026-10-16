@@ -19,7 +19,8 @@ def _pose(cluster):
     return matrix
 
 
-def copy_pattern_instances(design, cluster_id, placements, *, id_seed=None):
+def copy_pattern_instances(design, cluster_id, placements, *, id_seed=None,
+                           organization_copy=None):
     """Pure additive copy; source topology and placements remain unchanged.
 
     Existing cluster extraction owns strand-boundary truncation and copy eligibility.
@@ -27,6 +28,14 @@ def copy_pattern_instances(design, cluster_id, placements, *, id_seed=None):
     unrelated instances sharing lattice addresses. Poses compose after deformation.
     """
     cluster_ids = [cluster_id] if isinstance(cluster_id, str) else list(cluster_id)
+    organization_plan = None
+    if design.group_organization is not None or organization_copy is not None:
+        from backend.core.part_pattern_organization import prepare_organization_copy
+
+        id_seed = id_seed or str(uuid.uuid4())
+        organization_plan = prepare_organization_copy(
+            design, organization_copy, cluster_ids, [key for key, _ in placements],
+            seed=id_seed, single_cluster=isinstance(cluster_id, str))
     by_id = {c.id: c for c in design.cluster_transforms}
     if not cluster_ids or any(cid not in by_id for cid in cluster_ids):
         raise ValueError("Source cluster no longer exists")
@@ -74,7 +83,17 @@ def copy_pattern_instances(design, cluster_id, placements, *, id_seed=None):
     )
     # Extract the selected union once: strands/crossovers between selected
     # clusters belong to the same copied pattern, not to a cut boundary.
-    sub, report = extract_cluster_subdesign(extraction, cluster_ids)
+    if organization_plan is None:
+        sub, report = extract_cluster_subdesign(extraction, cluster_ids)
+    else:
+        split_map = None
+
+        def record_domains(receipt):
+            nonlocal split_map
+            split_map = receipt
+
+        sub, report = extract_cluster_subdesign(
+            extraction, cluster_ids, domain_map_callback=record_domains)
     if any(h.grid_pos is None for h in sub.helices):
         raise ValueError("Pattern requires lattice-addressed helices")
     if not placements:
@@ -116,6 +135,12 @@ def copy_pattern_instances(design, cluster_id, placements, *, id_seed=None):
         # order is stable, so key copies by fragment index for repeatable edits.
         smap = {s.id: new_id("strand", i) for i, s in enumerate(sub.strands)}
         root_id = new_id("cluster", "root")
+        copied_group_ids = None
+        if organization_plan is not None:
+            from backend.core.part_pattern_organization import copy_groups
+
+            additions, copied_group_ids = copy_groups(organization_plan, split_map, hmap, smap, new_id)
+            result.group_organization.groups.extend(additions)
         root_name = f"{source.name or 'Cluster'} · Pattern {index}"
         if len(groups) > 1:
             result.cluster_transforms.append(
@@ -194,16 +219,22 @@ def copy_pattern_instances(design, cluster_id, placements, *, id_seed=None):
         for op in design.deformations:
             affected = copied & set(op.affected_helix_ids)
             if affected:
-                result.deformations.append(
-                    op.model_copy(
-                        update={
-                            "id": new_id("deformation", op.id),
-                            "affected_helix_ids": [
-                                hmap[hid] for hid in sorted(affected)
-                            ],
-                            "cluster_ids": [root_id],
-                        }
+                if organization_plan is not None:
+                    from backend.core.part_pattern_organization import copy_deformation
+
+                    result.deformations.append(copy_deformation(
+                        organization_plan, op, hmap, root_id, new_id, copied_group_ids))
+                else:
+                    result.deformations.append(
+                        op.model_copy(
+                            update={
+                                "id": new_id("deformation", op.id),
+                                "affected_helix_ids": [
+                                    hmap[hid] for hid in sorted(affected)
+                                ],
+                                "cluster_ids": [root_id],
+                            }
+                        )
                     )
-                )
         new_ids.extend(hmap.values())
     return result, new_ids, report

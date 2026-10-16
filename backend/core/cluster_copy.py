@@ -124,7 +124,8 @@ def cluster_closure(
 
 
 def extract_cluster_subdesign(
-    design: Design, cluster_ids: Sequence[str], *, identity_factory=None
+    design: Design, cluster_ids: Sequence[str], *, identity_factory=None,
+    domain_map_callback=None,
 ) -> tuple[Design, ClusterCopyReport]:
     """Carve a self-contained sub-``Design`` out of ``design`` for ``cluster_ids``.
 
@@ -162,6 +163,12 @@ def extract_cluster_subdesign(
     helices = [h.model_copy(deep=True) for h in design.helices if h.id in copied]
 
     strands, split_map, truncated = _truncate_strands(design, copied, identity_factory=identity_factory)
+    if domain_map_callback is not None:
+        # The optional metadata receipt exposes the map from this exact native
+        # extraction; consumers must not rerun truncation to guess descendants.
+        from types import MappingProxyType
+
+        domain_map_callback(MappingProxyType(split_map))
 
     crossovers = [
         x.model_copy(deep=True)

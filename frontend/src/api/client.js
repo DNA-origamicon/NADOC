@@ -15,6 +15,7 @@ import { welcomeVisible } from '../shared/welcome_visibility.js'
 import { createPartRepairEndpoints } from './part_repair_endpoints.js'
 import { createPartRepairResponse } from './part_repair_response.js'
 import { createGroupOrganizationEndpoint } from './group_organization_endpoints.js'
+import { createPatternRequests } from './pattern_requests.js'
 
 const _documentRequests = createDocumentRequestScope()
 const _seekHistory = createSeekHistoryAcknowledgement()
@@ -3753,21 +3754,13 @@ export async function clusterUnassignedComponents() {
   return _syncFromDesignResponse(await _request('POST', '/design/cluster-unassigned', {}))
 }
 
-export async function createLinearPattern(body) {
-  const response = await _request('POST', '/design/linear-pattern', {
-    ...body, expected_revision: currentRevisionWatermark(),
-  })
-  if (!response) throw new Error(store.getState().lastError?.message || 'Linear pattern failed')
-  return _syncFromDesignResponse(response)
-}
-
-export async function createCircularPattern(body) {
-  const response = await _request('POST', '/design/circular-pattern', {
-    ...body, expected_revision: currentRevisionWatermark(),
-  })
-  if (!response) throw new Error(store.getState().lastError?.message || 'Circular pattern failed')
-  return _syncFromDesignResponse(response)
-}
+const _patterns = createPatternRequests({ store, request: _request, syncDesign: _syncFromDesignResponse,
+  getDocId, currentRevision: currentRevisionWatermark, documentRequests: _documentRequests })
+export const capturePatternContext = state => _patterns.capture(state)
+export const isPatternContextCurrent = (context, state) => _patterns.isCurrent(context, state)
+export const createLinearPattern = (body, context) => _patterns.create('linear-pattern', body, context)
+export const createCircularPattern = (body, context) => _patterns.create('circular-pattern', body, context)
+export const editPatternFeatureInputs = (index, params, context, featureId) => _patterns.edit(index, params, context, featureId)
 
 export async function createCluster(body) {
   const json = await _request('POST', '/design/cluster', body)

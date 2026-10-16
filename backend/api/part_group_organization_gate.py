@@ -48,7 +48,7 @@ def require_group_publication(source, candidate, checked):
         return
     if checked is not None and checked.admission.scope_tag == "organized_recipe_v1":
         if (checked.evidence_class != "owned_recipe_rebuild"
-                or checked.admission.operation not in {"repair", "deformation_preview"}):
+                or checked.admission.operation not in {"repair", "deformation_preview", "pattern"}):
             _refuse()
         require_group_edit_enabled()
         return
@@ -62,6 +62,10 @@ def require_native_command(kind, params):
     if "_generated_scope" not in params:
         if kind in KINDS or kind in LINEAGE_KINDS:
             return
+        if kind in {"linear-pattern", "circular-pattern"}:
+            from backend.core.part_pattern_organization import parse_organization_copy
+            if parse_organization_copy(params.get("_organization_copy")) is not None:
+                return
         if kind == "deformation":
             return  # Typed named selections resolve separately from placement context.
         if kind == "cluster_op" and not set(params) - {

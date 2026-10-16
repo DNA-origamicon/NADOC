@@ -43,6 +43,7 @@ from backend.api.pattern_features import (
     CircularPatternBody,
     LinearPatternBody,
     build_pattern,
+    pattern_inputs,
     pattern_label,
 )
 from backend.core.cluster_copy import paste_clusters
@@ -335,9 +336,19 @@ def cluster_paste(body: ClusterPasteBody) -> dict:
 
 
 def _create_pattern(kind, body):
+    from backend.api.crud import _design_response_with_geometry
     holder = {}
     from uuid import uuid4
-    params = {**body.model_dump(exclude={"expected_revision"}), "history_seed": str(uuid4())}
+    params = pattern_inputs(body)
+    if design_state.get_or_404().group_organization is not None:
+        from backend.api.part_pattern_recording import create
+        updated, report, _, copies = create(kind, params,
+            expected_design_id=body.expected_design_id, expected_revision=body.expected_revision)
+        response = _design_response_with_geometry(updated, report, embed_straight=True,
+                                                 normalize_legacy=False)
+        response["pattern_report"] = copies
+        return response
+    params["history_seed"] = str(uuid4())
 
     def build(design):
         try:
@@ -354,7 +365,7 @@ def _create_pattern(kind, body):
         fn=build,
         expected_revision=body.expected_revision,
     )
-    response = _design_response(updated, report)
+    response = _design_response_with_geometry(updated, report, embed_straight=True)
     copies = holder["report"]
     response["pattern_report"] = (
         [vars(r) for r in copies] if isinstance(copies, list) else vars(copies)

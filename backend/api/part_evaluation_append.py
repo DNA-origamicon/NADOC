@@ -2,6 +2,7 @@
 
 from backend.api import state
 from backend.api.part_recipe_prefix import ReplayPrefix
+from backend.api.part_native_commands import PATTERN_COMMANDS
 from backend.core.models import SnapshotLogEntry
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_history_contract import assess_part_history
@@ -53,6 +54,15 @@ def append_features(source, request, header, executor, dependencies, *, metadata
         if request.expected_revision != header["source_revision"]:
             raise CommandContractError("Coating append belongs to a different captured revision",
                                        code="source_changed")
+    if request.kind in PATTERN_COMMANDS:
+        if (type(header.get("pattern_recording_version")) is not int
+                or header["pattern_recording_version"] != 1
+                or source.group_organization is None
+                or type(header.get("source_revision")) is not int
+                or header["source_revision"] != request.expected_revision
+                or header.get("source_design_id") != source.id):
+            raise CommandContractError("Pattern append requires its owned captured context",
+                                       code="invalid_capture_context")
     needed, limit = _reservation(source, request)
     try:
         # Reserve every new row BEFORE replay, recovery, file reads or packing.
@@ -88,6 +98,11 @@ def append_features(source, request, header, executor, dependencies, *, metadata
         compiled = compile_steps(current, request.params, prepared, history_seed=header["identity"])
         current = current.copy_with(input_sources=compiled.input_sources)
         definitions = [(step.identity, step.kind, step.label, step.params) for step in compiled.steps]
+    elif request.kind in PATTERN_COMMANDS:
+        from backend.api.pattern_features import pattern_label
+
+        params = {**request.params, "_proof_version": 1, "history_seed": header["identity"]}
+        definitions = [(header["identity"], request.kind, pattern_label(request.kind, params), params)]
     else:
         definitions = [_legacy_definition(current, request, header)]
     if len(definitions) != needed:
@@ -109,5 +124,10 @@ def append_features(source, request, header, executor, dependencies, *, metadata
         metadata["append"] = {"kind": COATING_KIND, "action": request.params["action"],
                               "feature_ids": [step.identity for step in compiled.steps],
                               "nanoparticle_id": compiled.nanoparticle_id}
-    return current
+    if request.kind in PATTERN_COMMANDS:
+        from backend.core.part_structure_gate import require_valid_structure
+        from backend.core.part_verification_capture import admit
 
+        admit(current, preserve_entry_types=True)
+        require_valid_structure(current)
+    return current

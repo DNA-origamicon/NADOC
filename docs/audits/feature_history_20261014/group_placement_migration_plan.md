@@ -1,6 +1,6 @@
 # Group organization and placement: finite migration plan
 
-Architecture proposal, October 16, 2026; source baseline `3aa2529a`. The U6–U14 status
+Architecture proposal, October 16, 2026; source baseline `3aa2529a`. The U6–U15 status
 below records implementation after that proposal. FH-18 remains open. The
 overhaul count remains **18/38 complete**, with **11 core and 9 parked milestones
 remaining**. This plan and its implementation batches earn no separate milestone
@@ -132,8 +132,9 @@ a new generated-scope compiler before the visible core work.
 then E qualification. Existing generated prefixes retain v1/v2 meaning; active
 organization composition keeps its explicit refusal until qualified. Generated
 compatibility stays an open FH-18 exit, not a silent transfer to parked FH-36.
-Ordinary linear/circular patterns are separate visible tools and remain in the
-core consumer inventory. Do not expand the NP planner or add an unused compiler
+Ordinary linear/circular patterns are separate visible tools in the core consumer
+inventory; U15 implements their explicit-placement organization adapter below.
+Do not expand the NP planner or add an unused compiler
 ahead of a concrete standard-tool caller.
 
 The next visible delivery must cover the following connected paths, rather than
@@ -321,7 +322,8 @@ Pending-ligation retry can change topology after that reconciliation.
 | Loop/skip, sequence and whole-helix routing | Leaf builders retain existing member identities, but qualify the complete native executor, including reconciliation and retry. Whole-helix groups may remain unchanged while their helix IDs survive; deletion or unresolved ownership changes must refuse or use an explicit membership edit. |
 | Extrude/continuation/sweep | Keep native lattice-frame, source-helix and ordered-placement inheritance exactly. New numerical placement owners must not recreate dissolved organizational groups. State any new-group membership addition as explicit authoring input. Domain references need lineage handling even when only a sweep continuation prepends a domain. `bundle-create` remains a replacement/root operation, not an append after conversion. |
 | Domain-based FineRouting | Add a shared organization-only membership adapter after all native postprocessing, using command-specific split/merge/prepend/resize lineage. Preserve overlapping and opposite-direction selections independently. Refuse ambiguous lineage rather than infer nearest overlap; do not modify the existing placement reconciliation algorithm. Cover nick→ligation, resize inline-tail split/merge, sweep prepend and pending retry. |
-| Legacy grouping, generated producers, pattern and Join | Keep combined placement/group mutations blocked until each producer emits the separate roles deliberately. Do not mechanically replace `cluster_create` or placement membership writes with organizational commands. |
+| Ordinary linear/circular patterns | U15 copies declared group metadata through actual extraction ancestry and isolated input replay. Geometry still uses explicit whole-helix placements; qualification remains open. |
+| Legacy grouping, generated producers and Join | Keep combined placement/group mutations blocked until each producer emits the separate roles deliberately. Do not mechanically replace `cluster_create` or placement membership writes with organizational commands. |
 
 Use bounded membership indexes once per command, not per-nucleotide scans or a
 full `Design` roundtrip on ordinary edits. Native parity, cold replay, upstream
@@ -768,3 +770,69 @@ Any required molecular change still needs isolated A/B evidence and authorizatio
 Generated core compatibility and full qualification remain existing FH-18 exits.
 **18/38 complete; +0 completed, +0 total; 20 remaining (11 core, 9 parked).**
 U14 is the twelfth FH-18 checkpoint; its growth flag and original five batches remain.
+
+## U15 ordinary patterns — FH-18 checkpoint 13
+
+The connected workflow is conversion → explicit placement selection → linear or
+circular pattern → copied named groups → edit/regroup → undo/save/reload/cold
+replay. Geometry still comes from the native whole-helix placement contract.
+Named partial-domain groups are metadata selections, not synthetic placements.
+The complete existing linear 2D/custom/negative-spacing and circular axis/pivot
+controls remain; unsupported native source shapes retain explicit refusals.
+
+Recorded `_organization_copy: {version: 1, group_ids: [...]}` is mandatory on an
+organized source; an empty list explicitly selects none. It cannot implicitly
+convert a legacy source. UI choices default to intersecting groups and include
+required named targets of copied deformations, even currently empty groups.
+Copies retain name/style and actual extracted members, with fresh stable IDs
+per feature seed/source/instance. They are not defaults or automatic inference.
+Original memberships and ordered numerical placements remain unchanged.
+
+The one native extraction supplies its actual domain split map. Group references
+project through that map and the instance's helix/strand IDs. Primitive frozen
+deformation strand/domain selectors retain their historical provenance uniformly;
+only geometric helix ownership and declared live group roles relocate. Current
+ordinal coincidence never rebinds a historical selector. Copy remapping also
+preserves Sweep consumed-operation IDs, preventing earlier copied
+bends/twists from being reapplied. Per-occurrence accounting includes aliased
+target/range/vector/header lists; small Python graphs cannot hide expanded JSON.
+Postprocessing lineage captures the raw copied result before ordinary reconciliation/retry, retaining
+both source and copied groups. New crossovers retain the native rule excluding
+them from pending-ligation retry. No numerical algorithm or golden is changed.
+
+Ordinary organized append/edit uses one bounded capture, the existing isolated
+worker/supervisor/shared slot, full source input proof, and one exact-source
+publication/undo. Generic job append cannot manufacture this authority. The
+ordinary five-second budget covers capture, proof and publication, not the later
+HTTP geometry formatting cost; long prefixes can refuse with a time limit.
+Native history edits regenerate even with evicted/poisoned recovery. Candidate
+JSON authoring/recipe parity is shared with existing job commit rather than
+maintained as a second decoder. Source/session/revision/policy/cancel checks stay
+at publication. No per-frame proof, unbounded queue or new worker lifecycle.
+
+Pattern responses carry exact-candidate current and straight geometry for one
+client adoption. This avoids a second unbound geometry fetch and the partial
+response mismatch for count-preserving history edits. Requests retain the source
+shown when the tool opened, including document incarnation and feature identity.
+Reset retires old previews; refusal keeps the draft. A dispatched server commit
+cannot be recalled by closing/resetting a local dialog. Full response/lock/heap
+latency and desktop behavior remain qualification work, not inferred from tests.
+
+[Onshape linear patterns](https://cad.onshape.com/help/Content/PartStudio/linear_pattern.htm)
+and [FeatureScript pattern instance queries](https://cad.onshape.com/FsDoc/library.html)
+support explicit source and instance identities and distinguishing copied results
+from reapplied features. [SOLIDWORKS selection sets](https://help.solidworks.com/2020/english/SolidWorks/sldworks/c_selection_sets.htm)
+and [Onshape composite parts](https://cad.onshape.com/help/Content/PartStudio/composite_part.htm)
+support separating organization from transformation. Clipped groups, visible fresh
+copies and historical range provenance above are NADOC decisions, not claims
+about vendor internals. Missing references remain explicit repair inputs.
+
+**Containment stays fixed:** arbitrary new-group movement/frame/extension,
+generated core consumers and qualification still close the original B–E batches.
+The movement audit found first-owner deformation-arm selection, ordered overlapping
+pose composition, separately evaluated terminal extensions and driver/endpoint
+frames; assigning a new hidden carrier would change those semantics. Its finite
+matrix above remains required. Any molecular placement change needs the separate
+isolated A/B authorization path. Ordinary patterns do not close that exit.
+U15 adds no milestone or denominator; the existing task-growth flag remains.
+See [software evidence](validation_group_patterns.json) and MV-48 for acceptance.

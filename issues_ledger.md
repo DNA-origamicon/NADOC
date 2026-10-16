@@ -2684,3 +2684,26 @@ milestone because FH-18 remains open. App qualification remains MV-48/FH-27.
 - Tests include ordinary snapshots, nonempty roundtrip and unknown/missing-field
   refusal controls. Exact original bytes/lease survive worker materialization.
   This was an unreleased intermediate regression; no completed milestone reopens.
+
+## ISSUE-117 — Pattern refusal/reset and delayed geometry adoption (2026-10-16, FIXED IN SOFTWARE CHECKS)
+
+- Pattern panels previously closed after a null response and retained old previews
+  during a same-ID reset while committing. Preserve refused drafts, retire reset
+  previews and bind source/document/revision/feature identity before dispatch.
+- Design-only responses delegated to a second unbound geometry fetch; a delayed
+  fetch could overwrite geometry from a later edit. Count-preserving history
+  edits could also return a partial response to the full-response dispatcher.
+  Pattern creation and owned historical edit now embed current/straight geometry
+  from the exact candidate. Publication and response formatting remain separate.
+- The shared legacy geometry-fetch path outside patterns is not changed here.
+  MV-48 retains desktop/latency acceptance; software evidence is in U15.
+
+## ISSUE-118 — Copied Sweep consumes original operation identities (2026-10-16, CORRECTED IN ORGANIZED PATTERNS)
+
+- Pattern copies assign new deformation identities. Sweep's consumed-operation
+  list must follow those identities so a copied earlier Bend/Twist is not applied
+  again. The organized copier remaps only operations actually copied; historical
+  selectors and the native numerical evaluator retain their existing meaning.
+- Independent coordinate checks pass for linear and circular copies of a Sweep
+  with a preceding Bend. This correction is confined to the new organized path;
+  legacy pattern behavior is unchanged. MV-48 retains visual qualification.

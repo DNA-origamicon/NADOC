@@ -1,0 +1,228 @@
+{
+  "checkpoint": "U15 — FH-18 checkpoint 13; ordinary patterns preserve named groups through input replay",
+  "source_checkpoint": "1fcfb5f0",
+  "date": "2026-10-16",
+  "evidence_status": "Focused software checks passed; NOT VERIFIED IN APP because Archive is unavailable; public rollout and performance qualification remain open",
+  "progress": {
+    "baseline": "B1:17/38 through 2c15e747",
+    "completed": 18,
+    "estimated_total": 38,
+    "remaining": 20,
+    "core_remaining": 11,
+    "parked_remaining": 9,
+    "delta_completed": 0,
+    "delta_total": 0,
+    "fh18_checkpoints": 13,
+    "engineering_checkpoints_since_b1": 15,
+    "milestones_closed_since_b1": 1,
+    "task_growth_flagged": true
+  },
+  "scope": {
+    "implemented": [
+      "Mandatory explicit organized pattern metadata separate from unchanged whole-helix placement geometry; no implicit conversion or synthetic placement.",
+      "Actual extraction split-map projection; stable fresh group IDs per feature/source/instance, unchanged original groups, exact copied style, fresh nondefault roles and visible copies.",
+      "Historical primitive deformation provenance retained uniformly; geometric helix and live part_group references remapped. Sweep consumed-operation identities remap only copied operations.",
+      "Bound source and aggregate copy expansion before extraction, including repeated aliased metadata occurrences and early linear source/member count guards.",
+      "Pattern postprocessing lineage captures raw copied groups before existing reconcile/retry; new crossover retry semantics unchanged.",
+      "Owned synchronous create/edit host reuses bounded capture, existing worker/supervisor/shared slot, source input proof, parity decoder, exact permit and one publication/undo. Generic append jobs refuse.",
+      "Input-based pattern edits survive poisoned/evicted recovery and diagnose downstream missing copied groups.",
+      "Captured document/source/revision/feature UI requests, refused draft retention and reset-safe preview cleanup.",
+      "Complete current/straight candidate geometry in pattern responses prevents unbound follow-up geometry fetch and delta-dispatch mismatch.",
+      "Historical selection IDs displayed read-only with bounded text, no current-prefix lookup.",
+      "Existing job candidate decoding extracted into one shared module; still-used legacy pattern editing retained."
+    ],
+    "limits": [
+      "Organization rollout flag remains false; no public release or all-tools-complete claim.",
+      "Whole-helix source restrictions remain; arbitrary named-group movement/frame/extension and generated core consumers remain FH18 exits.",
+      "Ordinary five-second host budget covers capture/proof/publication, not complete HTTP geometry formatting; longer prefixes explicitly time out.",
+      "Complete HTTP response, concurrent-read/lock tails, heap and desktop qualification remain open.",
+      "Assemblies and machine-specific VR deferred; nanoparticle/assets parked.",
+      "No molecular kernel/constants/goldens changed; all three pinned numerical manifest member sets unchanged.",
+      "This is feature-log integrity under registered application paths, not a sandbox against privileged arbitrary Python."
+    ],
+    "main_js": {
+      "lines": 7349,
+      "delta": 0
+    }
+  },
+  "runs": {
+    "history_red": {
+      "failed": 6,
+      "passed": 4,
+      "seconds": 2.78,
+      "files": 1
+    },
+    "core_host_red": {
+      "failed": 42,
+      "passed": 3,
+      "errors": 24,
+      "seconds": 4.1,
+      "total": 69
+    },
+    "frontend_red": {
+      "files": 5,
+      "failed_suites": 2,
+      "failed_tests": 4,
+      "passed_tests": 22,
+      "seconds": 2.76
+    },
+    "frontend_first_green": {
+      "passed": 46,
+      "failed": 2,
+      "files": 7,
+      "seconds": 3.57,
+      "reason": "history test selected Rename loadout instead of feature Edit"
+    },
+    "host_history_routes_green": {
+      "passed": 48,
+      "warnings": 2,
+      "files": 3,
+      "seconds": 4.93
+    },
+    "frontend_history_green": {
+      "passed": 2,
+      "files": 1,
+      "seconds": 1.51
+    },
+    "frontend_full_initial": {
+      "passed": 8817,
+      "skipped": 1,
+      "files": 745,
+      "seconds": 321.09
+    },
+    "core_followup_red": {
+      "failed": 5,
+      "seconds": 2.88
+    },
+    "frontend_protocol_red": {
+      "failed": 8,
+      "passed": 25,
+      "files": 4,
+      "seconds": 2.34
+    },
+    "frontend_protocol_green": {
+      "passed": 33,
+      "files": 4,
+      "seconds": 2.39
+    },
+    "invalid_commands": [
+      {
+        "command": "just test-frontend src/...",
+        "exit_code": 1,
+        "tests_run": 0,
+        "reason": "Recipe takes no positional file arguments. Corrected to the recipe's guarded npm test command with explicit files."
+      },
+      {
+        "tests": 0,
+        "exit": 4,
+        "reason": "just variadic command split quoted -k expression; corrected to explicit test nodes"
+      }
+    ],
+    "selector": {
+      "decision": "FAST",
+      "routed": "FULL",
+      "tests_executed": 0,
+      "dry_run": true,
+      "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\n  This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\n  Only request `just test-session` when a broad/full sweep is actually needed.",
+      "qualification": "The selector wording says 'ran', but --dry-run executed zero tests and wrote no pending state; existing fast/FULL debt remains."
+    },
+    "core_history_first_green": {
+      "passed": 53,
+      "failed": 2,
+      "files": 2,
+      "seconds": 3.25,
+      "reason": "Root-added fixture incorrectly expected newly copied crossovers to enter native pending-ligation retry. Corrected to explicit postprocessing-lineage test using real native domain merges; retry behavior unchanged."
+    },
+    "lint": {
+      "exit_code": 1,
+      "errors": 5,
+      "delta": 0,
+      "details": "Same five pre-existing F401 findings; no changed-file lint findings."
+    },
+    "memory_lint": {
+      "exit_code": 1,
+      "errors": 6,
+      "warnings": 59,
+      "delta": 0
+    },
+    "frontend_full_final": {
+      "command": "just test-frontend",
+      "passed": 8826,
+      "skipped": 1,
+      "files": 745,
+      "seconds": 320.42
+    },
+    "backend_related": {
+      "passed": 257,
+      "warnings": 24,
+      "files": 11,
+      "seconds": 7.24,
+      "scope": [
+        "test_part_evaluation_jobs.py",
+        "test_part_evaluation_admission.py",
+        "test_part_evaluation_session.py",
+        "test_part_publication_permit.py",
+        "test_organized_recipe_permit.py",
+        "test_group_organization_public_gate.py",
+        "test_linear_pattern.py",
+        "test_circular_pattern.py",
+        "test_cluster_copy.py",
+        "test_group_organization_history.py",
+        "test_part_group_lineage.py"
+      ]
+    },
+    "missing_placement_red": {
+      "failed": 2,
+      "seconds": 2.67,
+      "reason": "Linear lookup returned an untyped ValueError; circular lookup reported cluster_ids[0] instead of the authored cluster_id."
+    },
+    "backend_new_first_final": {
+      "passed": 104,
+      "failed": 1,
+      "warnings": 2,
+      "files": 4,
+      "seconds": 5.43,
+      "reason": "Closed DeformationRange accounting charged values but omitted serialized field keys: 4000 repeated six-field ranges fit the node budget. Charge each existing field dictionary, without model dump/copy. Shared GraphBudget and native behavior remain unchanged."
+    },
+    "backend_new_final": {
+      "passed": 105,
+      "warnings": 2,
+      "files": 4,
+      "seconds": 5.21,
+      "scope": [
+        "test_part_pattern_organization.py",
+        "test_part_pattern_history.py",
+        "test_part_pattern_recording.py",
+        "test_part_pattern_routes.py"
+      ],
+      "real_spawn_seconds": 1.14
+    },
+    "backend_unique_final": {
+      "passed": 362,
+      "warnings": 26,
+      "files": 15,
+      "qualification": "Disjoint final runs: 105 new +257 related; intermediate/repeated runs not added."
+    },
+    "changed_python_lint": {
+      "passed": true,
+      "files": 21
+    }
+  },
+  "numerical_manifest_check": "nadoc.cpd-native-engine.v1 modified_manifest_members= []\nnadoc.duplex-relax-native.v1 modified_manifest_members= []\nnadoc.streptavidin-native.v1 modified_manifest_members= []\nbackend/core/models.py 19e7587c28400dfd4d994f25cde44c170d65a8f6f3b4e111edd25c0fe848346f\nbackend/core/part_numerical_schema_compatibility.py bac712160b03aacf799b3581940fbcefe16954c64c9ba49428742c151bc8e643\n",
+  "cleanup": {
+    "status": "Complete for task-owned disposable pytest output; no browser/bulk/physical-simulation writer started. Archive mount unavailable.",
+    "paths": [
+      "/tmp/pytest-of-joshua/pytest-6",
+      "/tmp/pytest-of-joshua/pytest-7",
+      "/tmp/pytest-of-joshua/pytest-8",
+      "/tmp/pytest-of-joshua/pytest-current"
+    ],
+    "removed_directories": 215,
+    "removed_symlinks": 4,
+    "removed_files": 0,
+    "removed_bytes": 0,
+    "remaining_task_paths": [],
+    "process_reference_check": "No readable same-user cwd/fd/maps references. Persistent user systemd/PAM processes (435/436) deny cwd/maps inspection; neither is a validation process. Removal used only unlink of task-owned symlinks and rmdir of empty directories; unexpected files would stop cleanup.",
+    "preserved": "Shared caches, active runtimes, workspace designs/managed jobs, historical artifacts and provenance."
+  }
+}

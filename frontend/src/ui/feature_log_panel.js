@@ -1428,10 +1428,12 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
           'extrude-deformed-continuation', 'overhang-extrude',
         ])
         const isPattern = isPatternFeature(entry.op_kind)
+        const ownedPattern = isPattern && !!store.getState().currentDesign?.group_organization
+          && entry.params?._organization_copy?.version === 1
         const isLinkerAdd = entry.op_kind === 'linker-add'
         const isNanoparticle = entry.op_kind === 'nanoparticle-create'
         const isGenerated = entry.params?._generator?.version === 1
-        const isEditable = (isGenerated || _EDIT_REPLAY_KINDS.has(entry.op_kind) || isLinkerAdd || isNanoparticle || isPattern) && !isEvicted
+        const isEditable = (isGenerated || _EDIT_REPLAY_KINDS.has(entry.op_kind) || isLinkerAdd || isNanoparticle || isPattern) && (!isEvicted || ownedPattern)
         const hasLaterSnapshot = isEditable && log.slice(i + 1).some(e => e.feature_type === 'snapshot')
         // Linker and nanoparticle editors change the current object; they do
         // not replay the original creation snapshot. Later operations are fine.
@@ -1493,6 +1495,14 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
                 return
               }
               if (isPattern) {
+                if (ownedPattern) {
+                  const context = api.capturePatternContext()
+                  await editPatternFeature(entry, {
+                    isCurrent: () => api.isPatternContextCurrent(context),
+                    onSave: params => api.editPatternFeatureInputs(i, params, context, entry.id),
+                  })
+                  return
+                }
                 const params = await editPatternFeature(entry)
                 if (!params) return
                 const response = await api.editFeature(i, params)

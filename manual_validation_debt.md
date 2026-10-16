@@ -984,6 +984,20 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   display scope. The existing dedicated e2e isolation/output cleanup rules apply.
 
 - **MV-48 — PENDING — Ordinary grouping and geometry preview lifecycle (2026-10-15).**
+  **October 16 U15 ordinary patterns (FH-18 checkpoint 13):** after qualified
+  organization enablement, select explicit placements and create both Linear
+  (including 2D/custom/negative spacing) and Circular patterns (axis/center).
+  Review copied named groups, required deformation targets and explicit none;
+  verify source groups stay unchanged and fresh copies have independent styles
+  and stable identities. Regroup/edit a copy, change pattern count and inspect
+  the missing downstream-reference refusal when removing a used copy. Edit
+  spacing/angle with evicted recovery, then undo/save/reload/cold regenerate.
+  Verify one coherent current/straight geometry update, no delayed geometry
+  overwrite, refused draft retention, same-ID reset cleanup and no stale popup
+  closing a replacement tool. Include a sweep with earlier bend/twist inputs.
+  Measure complete HTTP response/geometry, lock/read tails and heap on real
+  parts; bounded metadata and a tiny spawned worker do not qualify latency.
+  **NOT VERIFIED IN APP:** Archive is unavailable; rollout remains disabled.
   **October 16 U14 persistent visibility (FH-18 checkpoint 12):** after qualified
   gate enablement, hide a named group, add/remove members and terminal extensions,
   dissolve/undo, seek and reload. Its current members must follow its identity;

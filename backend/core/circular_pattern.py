@@ -26,6 +26,7 @@ def create_circular_pattern(
     axis_direction,
     *,
     id_seed=None,
+    organization_copy=None,
 ):
     angles = pattern_angles(instances, total_angle)
     point, direction = (
@@ -48,7 +49,8 @@ def create_circular_pattern(
         turn[:3, :3] = rotation
         turn[:3, 3] = point - rotation @ point
         placements.append((str(i), turn))
-    return copy_pattern_instances(design, cluster_id, placements, id_seed=id_seed)
+    return copy_pattern_instances(design, cluster_id, placements, id_seed=id_seed,
+                                  organization_copy=organization_copy)
 
 
 def pattern_history_overlays(design, decode_snapshot, *, pose_windows=None):

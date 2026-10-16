@@ -12,11 +12,34 @@ export function isPatternFeature(kind) {
   return kind === 'circular-pattern' || kind === 'linear-pattern'
 }
 
-export function editPatternFeature(entry) {
+function savedCopySelection(entry) {
+  const params = entry.params ?? {}
+  if (params._organization_copy?.version !== 1) return null
+  // Historical inputs own these identities. Current groups can have different
+  // membership or names, so this display intentionally performs no live lookup.
+  const placementIds = entry.op_kind === 'linear-pattern' ? params.cluster_ids : [params.cluster_id]
+  const rows = [['Placement IDs', placementIds], ['Copied group IDs', params._organization_copy.group_ids]]
+  const content = rows.map(([label, value]) => {
+    const ids = Array.isArray(value) ? value : []
+    const visible = ids.slice(0, 16).map(id => typeof id === 'string'
+      ? id.length > 128 ? `${id.slice(0, 128)}…` : id : '(invalid ID)')
+    const remaining = ids.length - visible.length
+    const text = visible.length ? `${visible.join(', ')}${remaining ? `; ${remaining} more` : ''}` : 'None'
+    return el('p', { className: 'tool-help', text: `${label} (${ids.length}): ${text}` })
+  })
+  const section = toolSection('Saved copy selection', content)
+  section.setAttribute('aria-label', 'Saved pattern copy selection')
+  return section
+}
+
+export function editPatternFeature(entry, { onSave, isCurrent = () => true } = {}) {
   return new Promise(resolve => {
-    let values = structuredClone(entry.params ?? {}), settled = false
-    const finish = value => { if (!settled) { settled = true; resolve(value) } }
+    let values = structuredClone(entry.params ?? {}), settled = false, saving = false, retired = false
+    const finish = value => { if (!settled) { settled = true; window.removeEventListener('nadoc:document-reset', reset); resolve(value) } }
+    const reset = () => { retired = true; modal.close() }
     const body = el('div', { className: 'cp-panel-body' })
+    const savedSelection = savedCopySelection(entry)
+    if (savedSelection) body.append(savedSelection)
     const error = el('div', { className: 'cp-readout', attrs: { 'aria-live': 'polite' } })
     error.hidden = true
     if (entry.op_kind === 'linear-pattern') {
@@ -42,20 +65,38 @@ export function editPatternFeature(entry) {
       controls.append(toolSection('Info', [el('p', { className: 'tool-help', text: 'Counts include the original. The axis direction is normalized.' }), error]))
       body.append(controls)
     }
-    const save = () => {
+    const save = async () => {
+      if (saving || settled) return
+      if (!isCurrent()) { error.hidden = false; error.textContent = 'The part changed. Reopen this pattern editor.'; return }
       const valid = entry.op_kind === 'linear-pattern' ? linearPatternOffsets(values) : patternAngles(values.instances, values.total_angle) && normalizedAxis(values.axis_point, values.axis_direction)
       if (!valid) {
         error.hidden = false
         error.textContent = entry.op_kind === 'linear-pattern' ? 'Use finite, nonzero vectors and spacing, and integer counts; at most 128 total instances. 2D directions must not be parallel.' : 'Use 1–128 instances, an angle greater than 0° and at most 360°, and a finite origin and nonzero axis direction.'
         return
       }
-      finish(values); modal.close()
+      if (!onSave) { finish(values); modal.close(); return }
+      saving = true
+      const controls = [...modal.root.querySelectorAll('input, select, button')]
+      const disabled = controls.map(control => control.disabled)
+      controls.forEach(control => { control.disabled = true })
+      try {
+        const result = await onSave(structuredClone(values))
+        if (settled) return
+        if (result == null) throw new Error('The pattern edit was not accepted. Your draft is unchanged.')
+        saving = false; finish(values); modal.close()
+      } catch (failure) {
+        if (settled) return
+        saving = false
+        controls.forEach((control, i) => { control.disabled = disabled[i] })
+        error.hidden = false; error.textContent = failure?.message || 'The pattern edit failed.'
+      }
     }
     const modal = createModal({ title: `Edit ${entry.op_kind === 'linear-pattern' ? 'Linear' : 'Circular'} Pattern`, size: 'sm', body,
       actions: [createButton({ label: 'Cancel', onClick: () => { finish(null); modal.close() } }), createButton({ label: 'Save', variant: 'primary', onClick: save })],
-      onClose: () => finish(null),
+      onClose: () => { if (saving && !retired) return false; finish(null) },
     })
     modal.root.setAttribute('aria-label', `Edit ${entry.op_kind === 'linear-pattern' ? 'Linear' : 'Circular'} Pattern`)
     modal.open()
+    window.addEventListener('nadoc:document-reset', reset)
   })
 }

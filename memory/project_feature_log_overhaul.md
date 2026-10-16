@@ -22,12 +22,12 @@ decrement completed if an exit reopens. Flag three major checkpoints spent on
 any still-open milestone (cumulative even across alternating work), or total
 growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
-Effort is separate: U1–U14 are 14 engineering checkpoints since B1, closing one
-additional milestone; twelve went to still-open FH-18. The unchanged 38 is not an
+Effort is separate: U1–U15 are 15 engineering checkpoints since B1, closing one
+additional milestone; thirteen went to still-open FH-18. The unchanged 38 is not an
 estimate of commits/messages. The post-U11 source/sequence audit earns no credit.
 Engineering update U2 closed **FH-19 after two checkpoints**. Current
 counts are **18 / 38 complete, 20 remaining (11 core, 9 parked)**, delta
-for latest update U14 **+0 completed, +0 total**. U14 is **FH-18 checkpoint 12**:
+for latest update U15 **+0 completed, +0 total**. U15 is **FH-18 checkpoint 13**:
 ordinary authored PATCH, admitted identity-group dissolution and auxiliary
 recording are implemented; private separate organization/native replay and gated
 owned HTTP transactions now work. Named native deformation selection, qualified
@@ -36,7 +36,11 @@ lineage; U10 adds passive resize/domain-shift tracking. U11 connects named
 preview/repair/comparison and owned publication. U12 integrates private
 Groups/Placements, typed scene display/selection and atomic placement Apply.
 U13 integrates ordinary owned Bend/Twist creation. U14 adds persisted group
-visibility and guarded save/export. Generated consumers, new-group movement and
+visibility and guarded save/export. U15 adds explicit-placement linear/circular
+patterns with declared named-group copies and owned input-based create/edit.
+U15 checks: 362 distinct backend and 8,826 frontend passes/one skip; app and
+HTTP latency remain unqualified while Archive is unavailable. Rollout stays off.
+Generated consumers, new-group movement and
 qualification keep FH-18 open.
 **Task growth is flagged.** The containment decision and five finite batches are
 in the [organization/placement migration plan](../docs/audits/feature_history_20261014/group_placement_migration_plan.md).
@@ -150,16 +154,23 @@ placement editing remains gated until FH-23.
 The [caller audit](../docs/audits/feature_history_20261014/group_placement_migration_plan.md#post-u11-caller-audit-and-next-delivery)
 found no ordinary core caller needing a new generic scope compiler first.
 Generated compatibility remains FH-18, not silently transferred to FH-36.
-No fixed exit changed; U14 is checkpoint12. Full redraw for structural partial
+No fixed exit changed; U15 is checkpoint13. Full redraw for structural partial
 updates and full undo copying under lock remain performance debt. No per-frame
 history proof is introduced. Shared prefix admission and editor setup are reused;
 live legacy authoring cannot be pruned until qualified rollout.
-See [U14 evidence](../docs/audits/feature_history_20261014/validation_group_visibility.json)
-for executed checks, failures and cleanup. The 17 exact numerical compatibility
-edges preserve prior pins; reviewed policy capacity is now 32 entries/32 KiB
-(previously 16/16 KiB), with unchanged calculation/runtime/template guards.
-Final focused backend checks: **406 passed**; full frontend: **8,793 passed,
-one existing skip**. `main.js` is **+2 lines**, thin visibility/save wiring only.
+See [U15 evidence](../docs/audits/feature_history_20261014/validation_group_patterns.json)
+for checks, failures and cleanup. Patterns require explicit `_organization_copy`
+metadata on organized sources, use actual extraction ancestry, and retain stable
+instance groups through count edits. Existing whole-helix placements determine
+geometry; historical primitive deformation selectors are not rebound to current
+ordinals. Native input history edits work with evicted recovery. The owned host
+reuses source proof, worker/supervisor, exact candidate parity and one publication;
+generic pattern append jobs refuse. Complete candidate geometry is embedded so
+client adoption does not await an unbound geometry GET. Historical source/group
+IDs are read-only in the dialog. Source/reset/refusal guards preserve drafts and
+retire old previews. All three numerical manifests remain byte-unchanged in U15;
+U14's 17 exact compatibility edges and 32-entry/32-KiB limits remain.
+`main.js` delta is 0. Desktop and complete HTTP/heap latency remain unqualified.
 All organization/preview/history/create
 rollout flags remain false. Archive is unmounted, so application
 and performance qualification remain open; software checks do not close them.

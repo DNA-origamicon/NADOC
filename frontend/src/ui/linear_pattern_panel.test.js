@@ -10,7 +10,7 @@ const defaults = { instances: 3, spacing: -10, direction: 'X', two_dimensional: 
 const button = name => [...document.querySelectorAll('button')].find(b => b.textContent === name)
 const field = label => document.querySelector(`[aria-label="${label}"]`)
 function input(label, value) { const node = field(label); node.value = value; node.dispatchEvent(new Event('input')) }
-afterEach(() => { document.body.innerHTML = '' })
+afterEach(() => { window.dispatchEvent(new Event('nadoc:document-reset')); document.body.innerHTML = '' })
 
 it('computes the full grid once per cell and rejects invalid or excessive counts', () => {
   expect(linearPatternOffsets(defaults)).toEqual([[0, 0, 0], [-10, 0, 0], [-20, 0, 0], [0, 0, 20], [-10, 0, 20], [-20, 0, 20]])
@@ -18,14 +18,89 @@ it('computes the full grid once per cell and rejects invalid or excessive counts
   for (const change of [{ instances: 2.5 }, { instances: 65 }, { spacing: 0 }, { spacing: Infinity }, { direction2: 'X' }]) expect(linearPatternOffsets({ ...defaults, ...change })).toBeNull()
 })
 
-async function fixture(commitPattern = vi.fn().mockResolvedValue({})) {
+async function fixture(commitPattern = vi.fn().mockResolvedValue({}), organized = false) {
   document.body.innerHTML = '<div id="linear-pattern-panel"></div>'
   const store = createMockStore({ currentDesign: { id: 'd', helices: [{ id: 'h', length_bp: 20 }, { id: 'h2', length_bp: 30 }], cluster_transforms: [{ id: 'c', name: 'Source', helix_ids: ['h'] }, { id: 'c2', name: 'Second', helix_ids: ['h2'] }] }, currentGeometry: [{ helix_id: 'h', backbone_position: [2, 3, 4] }, { helix_id: 'h2', backbone_position: [20, 30, 40] }] })
+  if (organized) store.setState({ currentDesign: { ...store.getState().currentDesign,
+    group_organization: { version: 1, groups: [
+      { id: 'c', name: 'Metadata group', helix_ids: ['h'] },
+      { id: 'required', name: 'Required empty group', helix_ids: [] },
+    ] }, deformations: [{ affected_helix_ids: ['h'], targets: [{ kind: 'part_group', id: 'required' }] }],
+  } })
   const controller = createSelectionController({ store }), scene = new THREE.Scene()
   const tool = initLinearPatternPanel({ store, scene, commitPattern, showToast: vi.fn(), selectionManager: { clearSelection: controller.clear, setSelectionLevel: controller.setLevel } })
   tool.open(); controller.replace([{ kind: 'cluster', id: 'c' }]); await Promise.resolve()
-  return { tool, store, scene, commitPattern }
+  return { tool, store, scene, commitPattern, controller }
 }
+
+it('keeps explicit placements and separately submits selected copied group metadata', async () => {
+  const { tool, commitPattern } = await fixture(undefined, true)
+  expect(document.querySelector('[aria-label="Available placements"]')).not.toBeNull()
+  const optional = field('Copy group Metadata group'), required = field('Copy group Required empty group')
+  expect(optional.checked).toBe(true)
+  expect(required.checked).toBe(true)
+  expect(required.disabled).toBe(true)
+  optional.click()
+  field('2D pattern').click(); input('Instances 2', '3')
+  button('Confirm').click(); await Promise.resolve(); await Promise.resolve()
+  expect(commitPattern.mock.calls[0][0]).toMatchObject({ cluster_ids: ['c'], two_dimensional: true,
+    _organization_copy: { version: 1, group_ids: ['required'] } })
+  expect(commitPattern.mock.calls[0][1]).toMatchObject({ designId: 'd' })
+  tool.close()
+})
+
+it('keeps a null-refused draft and its 2D controls open', async () => {
+  const { tool } = await fixture(vi.fn(async () => null), true)
+  field('2D pattern').click(); input('Spacing 1 (nm)', '17')
+  button('Confirm').click(); await Promise.resolve(); await Promise.resolve()
+  expect(tool.isActive()).toBe(true)
+  expect(field('Spacing 1 (nm)').value).toBe('17')
+  expect(document.querySelector('.cp-readout').textContent).toMatch(/accept|fail|refus/i)
+  tool.close()
+})
+
+it('retires a held commit on same-ID reset and ignores its late result after reopening', async () => {
+  let finish
+  const { tool, scene, controller } = await fixture(vi.fn(() => new Promise(resolve => { finish = resolve })), true)
+  button('Confirm').click()
+  window.dispatchEvent(new Event('nadoc:document-reset'))
+  expect(tool.isActive()).toBe(false)
+  expect(scene.children).toHaveLength(0)
+  tool.open(); controller.replace([{ kind: 'cluster', id: 'c' }]); await Promise.resolve()
+  expect(tool.isActive()).toBe(true)
+  const replacement = scene.getObjectByName('linearPatternPreview')
+  finish({}); await Promise.resolve(); await Promise.resolve()
+  expect(tool.isActive()).toBe(true)
+  expect(scene.getObjectByName('linearPatternPreview')).toBe(replacement)
+  tool.close()
+})
+
+it('keeps native history pattern inputs open on refusal and preserves its saved group selection', async () => {
+  const params = { ...defaults, cluster_ids: ['historic-placement'], _organization_copy: { version: 1, group_ids: ['historic-group'] } }
+  const onSave = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ accepted: true })
+  const result = editPatternFeature({ op_kind: 'linear-pattern', params }, { onSave })
+  input('Spacing 1 (nm)', '21'); button('Save').click()
+  await Promise.resolve(); await Promise.resolve()
+  expect(document.querySelector('[aria-label="Edit Linear Pattern"]')).not.toBeNull()
+  expect(field('Spacing 1 (nm)').value).toBe('21')
+  expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ cluster_ids: ['historic-placement'],
+    _organization_copy: { version: 1, group_ids: ['historic-group'] }, spacing: 21 }))
+  button('Save').click()
+  expect(await result).toMatchObject({ spacing: 21, _organization_copy: params._organization_copy })
+  expect(params.spacing).toBe(-10)
+})
+
+it('bounds read-only historical copy IDs without changing the authored request', async () => {
+  const ids = Array.from({ length: 32 }, (_, i) => `${i}-` + 'g'.repeat(240))
+  const params = { ...defaults, cluster_ids: ids, _organization_copy: { version: 1, group_ids: ids } }
+  const pending = editPatternFeature({ op_kind: 'linear-pattern', params })
+  const saved = document.querySelector('[aria-label="Saved pattern copy selection"]')
+  expect(saved).not.toBeNull()
+  expect(saved.textContent.length).toBeLessThan(10000)
+  expect(saved.textContent).toMatch(/more/)
+  button('Save').click()
+  expect(await pending).toMatchObject({ cluster_ids: ids, _organization_copy: params._organization_copy })
+})
 
 it('previews a 2D grid and multiple sources, then cancels without writing', async () => {
   const { tool, scene, commitPattern, store } = await fixture()

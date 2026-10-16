@@ -6,7 +6,8 @@ import { el } from './primitives/dom.js'
 import { canonicalSelection, selectedClusterIds } from '../scene/selection_model.js'
 import { clusterMemberFilter } from '../scene/cluster_entries.js'
 import { clusterLattice, latticeAligned, latticeCoordinates, latticePoint, snapToLattice, patternAngles } from './circular_pattern_math.js'
-import { createCircularPattern } from '../api/client.js'
+import { createCircularPattern, capturePatternContext } from '../api/client.js'
+import { createPatternOrganizationControls } from './pattern_organization.js'
 import './circular_pattern_panel.css'
 
 // Preview state stays local until Confirm commits the pattern.
@@ -56,10 +57,13 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
   let picking = null
   let disposePreview = null
   let popup = null
-  let committing = false
+  let committing = false, generation = 0
   const reveal = () => popup?.show()
-  const close = () => {
-    if (committing) return
+  const close = () => retire(false)
+  const reset = () => retire(true)
+  const retire = force => {
+    if (committing && !force) return
+    generation++; committing = false
     const pending = picking
     picking = null
     pending?.cancel()
@@ -71,6 +75,7 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
     panel.replaceChildren()
     panel.style.display = 'none'
     document.removeEventListener('keydown', onKeyDown, true)
+    window.removeEventListener('nadoc:document-reset', reset)
   }
   const onKeyDown = event => {
     if (event.key !== 'Escape' || event.defaultPrevented || document.querySelector('.modal__overlay')) return
@@ -78,14 +83,17 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
     event.stopPropagation()
     close()
   }
-  const showPreview = selectedTarget => {
-    const state = store.getState()
+  const showPreview = (selectedTarget, context) => {
+    const state = store.getState(), session = generation
+    const active = () => session === generation
+    const noun = state.currentDesign.group_organization ? 'Placement' : 'Cluster'
     let target = selectedTarget ?? circularPatternTarget(state)
     if (!target) {
-      showToast('Select exactly one cluster in a part with loaded geometry to explore rotation axes.', { severity: 'info' })
+      showToast(`Select exactly one ${noun.toLowerCase()} in a part with loaded geometry to explore rotation axes.`, { severity: 'info' })
       return
     }
     const initialDesign = state.currentDesign, initialGeometry = state.currentGeometry
+    const organization = createPatternOrganizationControls(initialDesign, [target.cluster.id], () => update())
     let frame = clusterLattice(state, target)
     let radius = target.points.reduce((r, p) => Math.max(r, Math.hypot(...p)), 5)
     let point = frame ? frame.u.clone().multiplyScalar(radius * 1.4).toArray() : [radius * 1.4, 0, 0]
@@ -125,7 +133,7 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
     function update() {
       const axis = normalizedAxis(point, direction), angles = patternAngles(count, degrees)
       const aligned = !!axis && latticeAligned(frame, direction)
-      confirm.disabled = committing || !axis || !angles
+      confirm.disabled = committing || !axis || !angles || !(organization?.valid() ?? true)
       const bp = circularPatternBPTotals(state.currentDesign, target.cluster, count)
       newBP.textContent = bp ? bp.created.toLocaleString() : '—'
       totalBP.textContent = bp ? bp.total.toLocaleString() : '—'
@@ -202,16 +210,16 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
       if (!centered) offsetPoint = [...point]
       syncInputs(); update()
     }
-    const sourceSelect = el('select', { className: 'input input--sm', attrs: { 'aria-label': 'Cluster', title: 'Cluster to repeat' } })
-    const centerSelect = el('select', { className: 'input input--sm', attrs: { 'aria-label': 'Center cluster', title: 'Place the rotation axis through this cluster’s backbone centroid' } })
+    const sourceSelect = el('select', { className: 'input input--sm', attrs: { 'aria-label': noun, title: `${noun} to repeat` } })
+    const centerSelect = el('select', { className: 'input input--sm', attrs: { 'aria-label': `Center ${noun.toLowerCase()}`, title: `Place the rotation axis through this ${noun.toLowerCase()}’s backbone centroid` } })
     const fillSelect = (select, choices, id) => {
       select.replaceChildren(...choices.map(t => el('option', { text: t.cluster.name || t.cluster.id, attrs: { value: t.cluster.id } })))
       select.value = id ?? ''
     }
     fillSelect(sourceSelect, targets, target.cluster.id)
-    const centerRow = el('label', { children: ['Center cluster', centerSelect] })
+    const centerRow = el('label', { children: [`Center ${noun.toLowerCase()}`, centerSelect] })
     centerRow.hidden = true
-    const centerButton = el('button', { text: 'Centered about', attrs: { 'aria-pressed': 'false', title: 'Place the axis through another cluster’s centroid' } })
+    const centerButton = el('button', { text: 'Centered about', attrs: { 'aria-pressed': 'false', title: `Place the axis through another ${noun.toLowerCase()}’s centroid` } })
     const offsetButton = el('button', { text: 'Offset', attrs: { 'aria-pressed': 'true', title: 'Position the axis by offsets in part coordinates or drag the amber bead' } })
     centerButton.disabled = targets.length < 2
     function setCentered(value) {
@@ -238,6 +246,7 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
     sourceSelect.addEventListener('change', () => {
       endDrag()
       target = targets.find(t => t.cluster.id === sourceSelect.value)
+      organization?.update([target.cluster.id])
       frame = clusterLattice(state, target)
       radius = target.points.reduce((r, p) => Math.max(r, Math.hypot(...p)), 5)
       preview.position.set(...target.center)
@@ -254,11 +263,12 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
     centerButton.addEventListener('click', () => setCentered(true))
     offsetButton.addEventListener('click', () => setCentered(false))
     centerSelect.addEventListener('change', () => { reference = targets.find(t => t.cluster.id === centerSelect.value); setCentered(true) })
-    controlsPane.append(toolSection('Cluster', [sourceSelect]))
+    controlsPane.append(toolSection(noun, [sourceSelect]))
+    if (organization) controlsPane.append(organization.element)
     const directionButtons = new Map()
     const presets = el('div', { className: 'cp-presets' })
     for (const name of ['X', 'Y', 'Z', 'Helices']) {
-      const button = el('button', { text: name, attrs: { 'aria-pressed': String(name === directionMode), title: name === 'Helices' ? 'Use the cluster’s helical axis direction' : `Use the part’s ${name} axis` }, on: { click: () => {
+      const button = el('button', { text: name, attrs: { 'aria-pressed': String(name === directionMode), title: name === 'Helices' ? `Use the ${noun.toLowerCase()}’s helical axis direction` : `Use the part’s ${name} axis` }, on: { click: () => {
         directionMode = name
         direction = name === 'Helices' ? frame.normal.toArray() : ['X', 'Y', 'Z'].map(axis => Number(axis === name))
         if (centered) update(); else applySnap()
@@ -270,7 +280,7 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
     const positionInputs = numbers('Origin offset (nm)', point, applySnap)
     const offsetFields = positionInputs[0].closest('fieldset')
     positionInputs.forEach(input => {
-      input.title = 'Offset from the source cluster’s backbone centroid in part coordinates; drag the amber bead to adjust'
+      input.title = `Offset from the source ${noun.toLowerCase()}’s backbone centroid in part coordinates; drag the amber bead to adjust`
     })
     const snapRow = el('label', { className: 'cp-snap', children: [snap, 'Snap to lattice'] })
     origin.append(offsetFields, snapRow)
@@ -293,7 +303,7 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
     ] })
     const confirm = el('button', { text: 'Confirm', className: 'btn--primary', attrs: { title: 'Create the previewed copies as one undoable operation' }, on: { click: async () => {
       const axis = normalizedAxis(point, direction)
-      if (committing || !axis || !patternAngles(count, degrees)) return
+      if (confirm.disabled || committing || !axis || !patternAngles(count, degrees)) return
       committing = true
       endDrag()
       const controls = [...body.querySelectorAll('input, select, button')]
@@ -301,13 +311,17 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
       confirm.textContent = 'Creating…'
       render()
       try {
-        await commitPattern({ cluster_id: target.cluster.id, instances: count, total_angle: degrees,
-          axis_point: point.map((v, i) => v + target.center[i]), axis_direction: axis.direction })
+        const response = await commitPattern({ cluster_id: target.cluster.id, instances: count, total_angle: degrees,
+          axis_point: point.map((v, i) => v + target.center[i]), axis_direction: axis.direction, ...organization?.params() }, context)
+        if (!active()) return
+        if (response === null) throw new Error('The pattern was not accepted. Your draft is unchanged.')
         committing = false; close()
       } catch (error) {
+        if (!active()) return
         committing = false
         controls.forEach(control => { control.disabled = false })
         centerButton.disabled = targets.length < 2
+        organization?.restoreDisabled()
         confirm.textContent = 'Confirm'
         update()
         readout.hidden = false; readout.textContent = error.message
@@ -367,29 +381,33 @@ export function initCircularPatternPanel({ store, showToast, selectionManager, s
     popup = createToolPopup({ panel, title: 'Circular Pattern', onClose: close })
     reveal(); update(); addFrameCallback(render)
     document.addEventListener('keydown', onKeyDown, true)
-    unsubscribe = store.subscribe((next, previous) => {
-      if (committing) return
-      if (next.assemblyActive === previous.assemblyActive && next.selection === previous.selection && next.activeClusterId === previous.activeClusterId && next.currentDesign === previous.currentDesign && next.currentGeometry === previous.currentGeometry) return
-      if (next.assemblyActive || next.currentDesign?.id !== initialDesign.id || next.currentGeometry !== initialGeometry || next.currentDesign?.cluster_transforms !== initialDesign.cluster_transforms) close()
+    window.addEventListener('nadoc:document-reset', reset)
+    unsubscribe = store.subscribe(next => {
+      if (next.assemblyActive || next.currentDesign !== initialDesign || next.currentGeometry !== initialGeometry) reset()
     })
   }
   const open = () => {
     if (disposePreview || picking) { reveal(); return }
     const state = store.getState()
     if (state.assemblyActive || !state.currentDesign?.cluster_transforms?.length || !state.currentGeometry?.length) {
-      showToast('Open a part with a cluster before creating a circular pattern.', { severity: 'info' })
+      showToast(`Open a part with a ${state.currentDesign?.group_organization ? 'placement' : 'cluster'} before creating a circular pattern.`, { severity: 'info' })
       return
     }
     panel.replaceChildren(el('div', { className: 'ox-card__body', children: [
-      el('p', { className: 'tool-picking-hint', text: 'Select a cluster', attrs: { 'aria-live': 'polite', title: 'Select in the 3D view or cluster list. Selection returns to Default automatically.' } }),
+      el('p', { className: 'tool-picking-hint', text: state.currentDesign.group_organization ? 'Select a placement' : 'Select a cluster', attrs: { 'aria-live': 'polite', title: `Select in the 3D view or ${state.currentDesign.group_organization ? 'placement' : 'cluster'} list. Selection returns to Default automatically.` } }),
       el('button', { className: 'btn btn--sm', text: 'Cancel', attrs: { type: 'button' }, on: { click: close } }),
     ] }))
     popup = createToolPopup({ panel, title: 'Circular Pattern', onClose: close })
+    const context = capturePatternContext(state)
     picking = beginCircularPatternSelection({ store, selectionManager,
-      onSelected: target => { close(); showPreview(target) }, onCancelled: close,
+      onSelected: target => {
+        if (store.getState().currentDesign !== context.source) { reset(); return }
+        close(); showPreview(target, context)
+      }, onCancelled: close,
     })
     reveal()
     document.addEventListener('keydown', onKeyDown, true)
+    window.addEventListener('nadoc:document-reset', reset)
   }
   document.getElementById('menu-tools-circular-pattern')?.addEventListener('click', open)
   return { open, close, isActive: () => !!disposePreview || !!picking }
