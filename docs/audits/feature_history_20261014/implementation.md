@@ -25,13 +25,19 @@ Explicit verification now reports reproducibility and bounded structural
 reference validity separately, and history-edit/repair publication refuses
 invalid final closure. Numerical pins use a disclosed exact-manifest schema
 compatibility transition. Explicit live-part grouping repair is implemented.
-The latest FH-19 checkpoint adds bounded saved-file definition admission and
-private recovered-copy evaluation, preserving original bytes and using only
-explicit repairs. Normal typed loading and active document state are unchanged.
-The isolated transport/copy-download UI remains open; see the
-[contract](saved_recipe_recovery_contract.md) and [evidence](validation_saved_recipe_core.json).
-Progress remains **17/38 complete**, with **21 remaining**; this is the first
-engineering checkpoint spent on FH-19, not its completion.
+FH-19 now connects bounded saved-file definition admission and private recovered-
+copy evaluation to an isolated HTTP worker and File → Recover recipe from file….
+The user reviews explicit grouping repairs and excluded data, evaluates, then
+downloads exact server-encoded text as a separate valid copy. Original bytes and
+the open document are preserved; ordinary typed loading is unchanged. The shared
+worker slot remains held through child/buffer cleanup and final response send.
+See the [contract](saved_recipe_recovery_contract.md) and
+[delivery evidence](validation_saved_recipe_delivery.json).
+Progress is **18/38 complete**, with **20 remaining (11 core, 9 parked)**; FH-19
+closed its bounded implementation exit after two checkpoints, with no total
+change. Its desktop/latency qualification remains in FH-27/MV-49. The latest
+checks passed 305 distinct focused backend cases and the full frontend suite
+(8,496 passed/one skip); no app exercise or broad backend pass is claimed.
 Assemblies, VR validation and further nanoparticle feature expansion remain
 deferred. Neither this checkpoint nor the private editor tests establish desktop
 interaction or latency qualification.
@@ -50,8 +56,8 @@ machine-specific VR remain deferred; `main.js` has zero added lines.
 The preceding editor checkpoint's save/reload tests reproduced ISSUE-106: exhausting a default group's
 membership can remove a retained lattice-frame placement owner. Equivalent
 reproduction is not structural validity. The version-aware prevention and live
-repair work above address that defect; saved-file UI recovery and broader group
-deletion closure still prevent calling G1 complete. Old v1 output is unchanged.
+repair work above address that defect; broader group deletion/membership/pose
+closure (FH-18) still prevents calling G1 complete. Old v1 output is unchanged.
 
 | Phase | Scope | State and exit condition |
 |---|---|---|

@@ -8,6 +8,7 @@ import json
 import os
 import pickle
 import struct
+from contextlib import contextmanager
 from importlib import import_module
 from multiprocessing.shared_memory import SharedMemory
 
@@ -20,8 +21,9 @@ from backend.core.part_operation_input import validate_operation_input
 MAX_CANDIDATE_BYTES = 16_000_000
 
 
-def evaluate_native(source, operation):
-    """Use the same numerical runtime policy for either private input transport."""
+@contextmanager
+def native_thread_limit():
+    """One numerical-thread policy for private native worker operations."""
     # Spawn entry points can import pools before the target's environment policy.
     # Limit already loaded pools for this evaluation and restore them on return.
     for module in ("numpy", "scipy.linalg", "scipy.optimize", "scipy.spatial.transform",
@@ -30,6 +32,12 @@ def evaluate_native(source, operation):
     from threadpoolctl import threadpool_limits
 
     with threadpool_limits(limits=1):
+        yield
+
+
+def evaluate_native(source, operation):
+    """Use the same numerical runtime policy for either private input transport."""
+    with native_thread_limit():
         from backend.api.part_evaluation import evaluate
 
         return evaluate(source, operation)

@@ -20,6 +20,7 @@ import { openFileBrowser } from './file_browser.js'
 import { showToast } from './toast.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
 import { docHeaders } from '../shared/doc_id.js'
+import { initRecipeFileRecovery } from './part_recipe_file_recovery.js'
 
 /**
  * @param {object} deps
@@ -50,6 +51,7 @@ export function initFileIo({
   setFileHandle, setAssemblyFileHandle, setAssemblyName,
   getWorkspacePath, getAssemblyWorkspacePath, getAssemblyName, getPartEditContext,
 }) {
+  const recipeRecovery = initRecipeFileRecovery()
   /** Fetch the active design's .nadoc JSON from the server. */
   async function getDesignContent() {
     const r = await fetch('/api/design/export', { headers: docHeaders() })
@@ -169,7 +171,7 @@ export function initFileIo({
     }
   }
 
-  return { getDesignContent, savePartToAssembly, saveToHandle, saveAs, saveAssemblyToHandle, saveAssemblyAs }
+  return { getDesignContent, savePartToAssembly, saveToHandle, saveAs, saveAssemblyToHandle, saveAssemblyAs, recipeRecovery }
 }
 
 /**

@@ -1,6 +1,6 @@
 """Private reconstruction of a saved recipe; no file or session publication.
 
-The eventual HTTP host must run these bounded calls in its isolated process.
+The HTTP host runs these bounded calls in its isolated process.
 Neither function installs the definition carrier or grants a publishing permit.
 Only explicit reviewed grouping upgrades are admitted in this first workflow.
 """

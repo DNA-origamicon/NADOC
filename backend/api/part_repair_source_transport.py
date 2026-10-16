@@ -7,10 +7,10 @@ from threading import Event, Lock
 
 from fastapi import HTTPException
 from pydantic import ValidationError
-from starlette.concurrency import run_in_threadpool
 from starlette.requests import ClientDisconnect
 
 from backend.api import part_repair_source_host as host
+from backend.api.part_async_work import thread_call as _thread_call
 from backend.core.part_repair_sources import MAX_UPLOAD_BYTES, parse_source_request
 
 
@@ -82,31 +82,6 @@ async def _read_source(request, size):
     if len(raw) != size:
         _fail("Source body length does not match the selected descriptor.")
     return bytes(raw)
-
-
-async def _thread_call(function, *args, cancelled=None, **kwargs):
-    """Do not release admission while a cancelled request still owns a worker.
-
-    These workers do bounded metadata/hash work only. The publication callback
-    also checks the local cancellation event after acquiring the state lock.
-    Cancellation after the atomic commit has begun cannot undo that commit.
-    """
-    task = asyncio.create_task(run_in_threadpool(partial(function, *args, **kwargs)))
-    try:
-        return await asyncio.shield(task)
-    except asyncio.CancelledError:
-        if cancelled is not None:
-            cancelled.set()
-        while not task.done():
-            try:
-                await asyncio.shield(task)
-            except asyncio.CancelledError:
-                continue
-            except BaseException:
-                break
-        if task.done() and not task.cancelled():
-            task.exception()  # retrieve a failed worker without replacing cancellation
-        raise
 
 
 async def upload_source(request):

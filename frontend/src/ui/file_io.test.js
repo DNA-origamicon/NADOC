@@ -97,6 +97,21 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+it('wires local recipe recovery from File without reading or changing the open part', () => {
+  const button = document.createElement('button'); button.id = 'menu-file-recover-recipe'; document.body.appendChild(button)
+  const { fileIo, deps, store, state, api } = makeFactory()
+  const original = store.getState(), paths = { ...state }
+  try {
+    expect(fileIo.recipeRecovery).toBeTruthy(); button.click()
+    expect(document.querySelector('[role=dialog]')?.textContent).toContain('Recover recipe from file')
+    expect(fetch).not.toHaveBeenCalled()
+    expect(api.saveDesignAs).not.toHaveBeenCalled(); expect(api.patchInstanceDesign).not.toHaveBeenCalled()
+    expect(deps.setFileHandle).not.toHaveBeenCalled(); expect(deps.setWorkspacePath).not.toHaveBeenCalled()
+    expect(store.getState()).toBe(original); expect(state).toEqual(paths)
+    fileIo.recipeRecovery.close(); expect(document.querySelector('[role=dialog]')).toBeNull()
+  } finally { fileIo.recipeRecovery?.dispose() }
+})
+
 // ── getDesignContent ─────────────────────────────────────────────────────────
 
 describe('getDesignContent', () => {

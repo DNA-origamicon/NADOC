@@ -1,0 +1,100 @@
+{
+  "date": "2026-10-16",
+  "checkpoint_before": "b9f616ad",
+  "scope": "FH-19 checkpoint 2: isolated saved-recipe HTTP lifecycle and explicit recovered-copy download",
+  "progress": {
+    "baseline": "B1: 17/38 through 2c15e747",
+    "completed": 18,
+    "estimated_total": 38,
+    "remaining": 20,
+    "core_remaining": 11,
+    "parked_remaining": 9,
+    "completed_delta": 1,
+    "total_delta": 0,
+    "milestone": "FH-19",
+    "major_checkpoints_spent_since_B1": 2,
+    "milestone_closed": true,
+    "closure": "Bounded implementation exit only. Desktop/latency acceptance remains in FH-27/MV-49, as allocated before this implementation. No total change or scope-growth trigger."
+  },
+  "final_checks": {
+    "backend_distinct_passes": 305,
+    "backend_runs": [
+      {
+        "targets": ["tests/test_part_repair_source_transport.py", "tests/test_part_verification_worker.py", "tests/test_part_evaluation_jobs.py", "tests/test_part_strict_http.py"],
+        "passed": 106,
+        "warnings": 11,
+        "seconds": 4.9
+      },
+      {
+        "targets": ["tests/test_part_recipe_file.py", "tests/test_part_recipe_file_recovery.py", "tests/test_part_recipe_file_worker.py", "tests/test_part_recipe_file_transport.py", "tests/test_part_evaluation.py", "tests/test_part_evaluation_runtime.py"],
+        "passed": 199,
+        "warnings": 3,
+        "seconds": 11.35,
+        "new_worker_cases": 37,
+        "new_transport_cases": 43
+      }
+    ],
+    "backend_command": "just validate-safe scripts/test_guard.sh test-focused 0 focused -- uv run pytest <explicit targets> -q --tb=short --disable-warnings --durations=8",
+    "frontend_scoped": {"passed": 77, "files": 4, "seconds": 1.89, "overlaps_full_run": true},
+    "frontend_full": {"command": "just test-frontend", "passed": 8496, "skipped": 1, "files": 730, "seconds": 323.18, "new_cases": 32},
+    "scoped_ruff": "Passed: all ten changed/new Python implementation and test files",
+    "diff_check": "Passed",
+    "ledger_check": "All38 stable milestone IDs occur once:18 done,11 core remaining,9 parked. Current added/rewritten links resolve. An initial all-history link scan found pre-existing root-relative code links in the memory history; these were outside the changed head and were not rewritten.",
+    "main_js_line_delta": 0,
+    "app": "NOT VERIFIED IN APP: Archive not mounted for safe browser/runtime artifacts; no browser or smoke run. Desktop and request/render latency remain unqualified. VR separately deferred.",
+    "resource_safety": "Backend and frontend suites ran serially under validation_guard. No native build or browser overlap."
+  },
+  "red_and_review_evidence": [
+    {"scope": "Frontend tests before implementation", "failed_suites": 3, "tests_executed": 0, "seconds": 2.01, "cause": "Three new modules did not exist yet."},
+    {"scope": "Initial worker/transport integration", "failed": 12, "passed": 48, "seconds": 5.1, "cause": "Tests assumed422/400 where deliberate malformed-frame/media policy used400/415. Aligned status expectations; empty metadata was corrected from413 to400. Rejected inputs never started workers."},
+    {"scope": "Expired-send and gzip regressions before fixes", "failed": 2, "seconds": 2.97, "cause": "asyncio timeout alone could send after expiry if callbacks did not yield. Default gzip compressed the response synchronously on the event loop. Added explicit pre-send deadline refusal and identity response encoding."},
+    {"scope": "Dead-child buffer-cleanup regression before fix", "failed": 1, "seconds": 3.75, "cause": "Three failed cleanup attempts could release admission once the process was dead, without proving buffers were released. Admission now remains held until close succeeds; first cleanup failure stays nonready."}
+  ],
+  "verified_boundaries": [
+    "Actual router HTTP inspect -> returned explicit actions -> recover through real spawned workers; downloaded text checksum/size, ordinary Design reload and independent input replay all pass.",
+    "Original file/source and a different occupied document retain exact session identity, Design, revision, undo and redo. No workspace or live server mutation.",
+    "Admission precedes upload; malformed framing, duplicate metadata, unsupported schemas, strict policy and busy work refuse without native work.",
+    "Repeated cancellation and disconnect drain the supervisor; child and shared-memory cleanup finish before admission release. A delayed response retains the slot through final ASGI send.",
+    "Policy generation is rechecked before native work and delivery. Existing strict routing remains closed; the frontend sends normal document identity solely for policy context.",
+    "Full escaped response is capped at16MB. The exact server-encoded ASCII document text preserves integer/float spelling and Unicode escapes; neither browser nor parent reserializes a parsed Design for download.",
+    "Frontend requires original-byte receipt matching, explicit repair selection and exclusions acknowledgment; stale file/reply/hash, cancellation, failed proof/validation or checksum mismatch cannot enable download.",
+    "Existing numerical thread policy is shared by both worker entry points; spawned runtime regression preserves parent pools/environment. Molecular kernels, constants and numerical pins are unchanged."
+  ],
+  "architecture": {
+    "raw_input_bytes": 1500000,
+    "metadata_bytes": 256000,
+    "whole_frame_bytes": 1756004,
+    "private_worker_input_bytes": 2000000,
+    "whole_response_bytes": 16000000,
+    "upload_seconds": 15,
+    "work_and_send_seconds": 180,
+    "client_timeout_seconds": 190,
+    "deadline_limit": "Shared thread scheduling and OS resource reclamation are cooperative, not a hard wall-clock termination guarantee. Cleanup failure retains admission rather than allocating another worker.",
+    "retention": "One shared native-worker slot through final send; no queue, second job catalog, retained candidate host or active-document lock.",
+    "pruning": "Extracted the existing cancellation-draining thread helper from source transport and reused it; extracted the existing numerical thread context for both workers. No speculative deletion of unrelated legacy readers.",
+    "ordinary_edit_checks_added": false,
+    "strict_or_immutable_rollout_gates_changed": false
+  },
+  "selector": {
+    "command": "just test-smart --dry-run",
+    "changed_files_since_last_full": 5470,
+    "decision": "FAST  (fast suite only)",
+    "tests_executed": false,
+    "deferred_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\n  This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\n  Only request `just test-session` when a broad/full sweep is actually needed.",
+    "clarification": "Selection only: quoted boilerplate says ran, but no selector suite ran. Broad and aggregate fast-suite debt remain; scoped checks ran with Archive unavailable."
+  },
+  "cleanup": {
+    "removed_roots": ["/tmp/pytest-of-joshua/pytest-2", "/tmp/pytest-of-joshua/pytest-3", "/tmp/pytest-of-joshua/pytest-4"],
+    "removed_files": 1,
+    "removed_bytes": 2193,
+    "removed_directories": 206,
+    "removed_symlinks": 5,
+    "active_fd_cwd_map_references_found": 0,
+    "remaining_owned_roots": [],
+    "shared_worker_buffers": 0,
+    "earlier_roots": "pytest automatically pruned this turn's pytest-0 and pytest-1; their bytes are not included",
+    "bulk_or_native_scratch_generated": false,
+    "live_server_or_user_files_mutated": false
+  },
+  "next": "FH-18 group deletion and membership/pose closure, then FH-20 onward standard geometry history editors. Keep FH-27 app/performance/broad regression debt explicit; assets, assemblies and machine-specific VR remain at their agreed priorities."
+}

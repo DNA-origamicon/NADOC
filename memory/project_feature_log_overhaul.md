@@ -22,9 +22,10 @@ decrement completed if an exit reopens. Flag three major checkpoints spent on
 any still-open milestone (cumulative even across alternating work), or total
 growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
-Latest engineering update U1 works on **FH-19, checkpoint 1**; it closes no
-milestone. Counts remain **17 / 38 complete, 21 remaining (12 core, 9 parked)**,
-delta **+0 completed, +0 total**.
+Latest engineering update U2 closes **FH-19 after two checkpoints**. Current
+counts are **18 / 38 complete, 20 remaining (11 core, 9 parked)**, delta
+**+1 completed, +0 total**. No scope-growth trigger fired. Next is FH-18 group
+deletion/membership/pose closure, followed by the standard history editors.
 
 **Saved recipe recovery core:** `core/part_recipe_file.py` admits exact original
 bytes/digest and separately typed root/definitions/sources without loading saved
@@ -38,18 +39,38 @@ Saved materialized/presentation/physical/draft state is excluded and enumerated;
 the original bytes retain everything. No paths, sessions, loaders or autosave are
 changed, and no ordinary edit gains a check. See the
 [recovery contract](../docs/audits/feature_history_20261014/saved_recipe_recovery_contract.md).
-This is private core implementation only: no HTTP worker lifecycle or user entry
-is connected. Next reuse isolated process admission/cancellation/reaping and add
-File → Recover recipe from file… with explicit review and copy download. Avoid
-ordinary workspace reconciliation (may rewrite identity) and reset-before-open UI.
-Do not claim FH-19 complete or describe this checkpoint as an available button.
-Validation: **277 focused backend passes** in 4.85 s, including 104 new admission/
-recovery cases. Review regressions reproduced and fixed cancellation exception
-normalization and numeric JSON type drift during ordinary reload. Scoped Ruff/
-diff pass; `main.js` delta 0. [Evidence](../docs/audits/feature_history_20261014/validation_saved_recipe_core.json)
-retains failures, selector-only FAST/FULL-deferred verdict, and cleanup of 13
-files/7,515 bytes, 353 directories and 18 links after zero active references.
-No frontend, process-host, app or latency pass is claimed; no public entry exists.
+**FH-19 delivery:** `part_recipe_file_worker.py` and the thin
+`POST /api/part-recipe/recovery` route now run admission/replay in an isolated
+process. The shared native slot is acquired before upload and retained through
+child/shared-buffer cleanup and the final response send. Repeated cancellation
+drains cleanup; a dead process alone never releases admission. There is one
+180-second work/send deadline, a 15-second upload limit and no queued/retained
+recovery jobs. Thread scheduling and OS cleanup remain cooperative. Strict
+dispatch stays closed; compatibility policy/generation is checked without
+acquiring an active Design/session. Exact child JSON uses identity encoding to
+avoid synchronous response compression. A shared cancellation-draining helper
+replaces the duplicate source-upload helper; native numerical limits are reused.
+
+File → Recover recipe from file… preserves the immutable original File, requires
+explicit offered repairs plus exclusion acknowledgment, then verifies the exact
+server text/digest and downloads a separate `-recovered.nadoc` copy. No browser
+document parse/reserialization, workspace write, open/reset or autosave occurs.
+Cancel/file changes/close invalidate late replies and hashes. The implementation
+exit is closed; unsupported roots/files remain explicit refusals. Desktop and
+latency qualification was already assigned to FH-27 and is now MV-49.
+
+Latest validation: **305 distinct focused backend passes** (106 shared
+regressions in 4.90 s, 199 core/worker/HTTP/runtime cases in 11.35 s), including
+real inspect→recover HTTP, exact ordinary reload and independent cold proof.
+Full frontend: **8,496 passed/one skip**, 730 files, 323.18 s; 77 scoped passes
+overlap that run. Red regressions caught expired sends, event-loop gzip and
+premature admission release after buffer-cleanup errors. Scoped Ruff/diff pass;
+`main.js` delta 0. See [delivery evidence](../docs/audits/feature_history_20261014/validation_saved_recipe_delivery.json).
+**NOT VERIFIED IN APP:** Archive is unavailable for browser/runtime artifacts;
+no smoke, interactive latency or broad backend pass is claimed. Selector-only
+FAST/FULL-deferred output is not suite execution. The earlier
+[core evidence](../docs/audits/feature_history_20261014/validation_saved_recipe_core.json)
+retains its separate parser/cancellation/numeric-roundtrip regressions.
 
 **Active user priority:** standard geometry first—extrude, sweep, bend, twist,
 move/rotate and Fine Routing resize/ligate/nick/crossovers/loop-skips. Complete

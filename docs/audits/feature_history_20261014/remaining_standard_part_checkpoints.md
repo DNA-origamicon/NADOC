@@ -7,9 +7,9 @@ unchanged; each new adapter must preserve their complete admitted output.
 
 ## Progress baseline and mandatory update counts — October 16, 2026
 
-**Completed: 17. Estimated total: 38. Remaining: 21 — 12 core-priority and
-9 parked asset/provenance milestones.** Baseline B1 is reconstructed from the
-implementation and evidence through `2c15e747`. No earlier numerical target was
+**Completed: 18. Estimated total: 38. Remaining: 20 — 11 core-priority and
+9 parked asset/provenance milestones.** Baseline B1 remains 17/38, reconstructed
+from implementation and evidence through `2c15e747`. No earlier numerical target was
 agreed; do not invent historical estimate deltas. This is a milestone estimate,
 not a count of messages/commits or a percentage of time or user-ready features.
 Core estimates have moderate confidence; parked work has lower confidence.
@@ -42,7 +42,8 @@ once; its remaining rollout is parked, not removed from the total.
 | FH-14 | Done | Immutable revision ownership, typed persistence and owned cold recovery: `7886cd42`–`800a093c`, [persistence](immutable_part_persistence_plan.md), [recovery evidence](validation_immutable_recovery_transport.json). Public immutable rollout remains open. |
 | FH-15 | Done | Honest physical-input freshness and isolated oxDNA preparation foundation: `764b413b`–`ad800573`, [freshness](physical_freshness_plan.md), [preparation evidence](validation_oxdna_preparation_route.json). Full receipts and owned-preparation rollout remain open. |
 | FH-16 | Done | Core transaction hardening and complete private bend/twist editor implementation: `35a96ef7`–`1ae1137f`, [lifecycle](validation_core_geometry_lifecycle.json), [editor](validation_deformation_history_editor.json). Isolated editor/HTTP rollout remains gated. |
-| FH-17 | Done | Versioned group-creation frame-owner closure and explicit live-part legacy repair: `64a262a2`, `2c15e747`, [prevention](validation_grouping_structure.json), [repair](validation_grouping_repair.json). Invalid-file recovery and desktop checks remain open. |
+| FH-17 | Done | Versioned group-creation frame-owner closure and explicit live-part legacy repair: `64a262a2`, `2c15e747`, [prevention](validation_grouping_structure.json), [repair](validation_grouping_repair.json). Invalid-file recovery is FH-19; desktop checks remain open. |
+| FH-19 | Done · 2 checkpoints | Recover supported invalid saved recipes: original bytes/digest preserved, bounded read-only admission, explicit grouping repair, independently regenerated valid copy and exact download. Isolated HTTP/process lifecycle and File-menu controls are connected and automated-tested; [contract](saved_recipe_recovery_contract.md), [evidence](validation_saved_recipe_delivery.json). Native empty-root recipes within the declared bounds only; desktop/latency acceptance remains FH-27/MV-49, as allocated before implementation. |
 
 ### Remaining core-priority milestones
 
@@ -53,7 +54,6 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 | ID | Status | Fixed remaining exit |
 |---|---|---|
 | FH-18 | Remaining | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. |
-| FH-19 | In progress · 1 checkpoint | Recover known invalid saved recipes: preserve original bytes, bounded read-only admission, explicit repair, valid recovered-copy publication. Private admission/reconstruction implemented; isolated transport and copy-download UI remain. |
 | FH-20 | Remaining | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
 | FH-21 | Remaining | Extrusion history editor: eligible earlier edits through downstream features, stable identities, complete ordinary controls and validation. |
 | FH-22 | Remaining | Sweep history editor: input-based isolated preview, recovery-independent Apply/Cancel and downstream rebuild. |
@@ -88,8 +88,8 @@ After **every major engineering update**, update this ledger and the project
 memory, and include this line in the user-facing final report even when no
 milestone closed:
 
-> Overhaul: **17 / 38 complete**; **21 remaining** (12 core, 9 parked).
-> Change this update: **+0 completed, +0 total**. Baseline total: **38**.
+> Overhaul: **18 / 38 complete**; **20 remaining** (11 core, 9 parked).
+> Change this update: **+1 completed, +0 total**. Baseline total: **38**.
 
 Replace the numbers with current counts, name the milestone worked/closed, and
 explain every total or scope change. Counts are whole milestones, not fractional
@@ -121,6 +121,7 @@ bound their matrices before implementation rather than expanding them indefinite
 |---|---|---|---|---|---|---|---|
 | B1 · 2026-10-16 | Evidence through `2c15e747`; retrospective fixed milestone baseline | FH-01–FH-17 documented; no new engineering closure in this reporting update | 17 | 38 | 12 | 9 | Initial estimate; no earlier numerical baseline |
 | U1 · 2026-10-16 | FH-19 checkpoint 1: bounded definition-only saved-file admission and explicit private recovered-copy evaluation; [contract](saved_recipe_recovery_contract.md), [evidence](validation_saved_recipe_core.json) | None; HTTP/process lifecycle and copy-download controls remain | 17 | 38 | 12 | 9 | +0; first engineering checkpoint spent on FH-19, no scope change |
+| U2 · 2026-10-16 | FH-19 checkpoint 2: isolated HTTP worker, exact server-text download and explicit File-menu review/cancellation; [evidence](validation_saved_recipe_delivery.json) | FH-19 implementation exit closed; existing FH-27 desktop/latency exit remains open | 18 | 38 | 11 | 9 | +0 total, +1 completed; two checkpoints spent on FH-19, no scope change or growth trigger |
 
 ## Active goal and priority override — October 15, 2026
 
@@ -301,26 +302,21 @@ model pins, comparison-v2 contract or admission limits changed.
 
 Next checkpoints, in order:
 
-1. Complete ISSUE-106 repair after the grouping-v2 prevention checkpoint.
-   New ordinary, generated and registered-batch grouping retains empty owner
-   identities; saved v1 output is unchanged. Explicit verification distinguishes
-   reproduction from bounded frame-reference validity; final history edits and
-   repairs must pass the structural gate. Direct frame-owner deletion refuses
-   before publication. No structural scan is added to deformation sliders.
-   The closed `upgrade_cluster_creation` repair action now handles recognized v1
-   rows with exact expected definition digest and group/version identities. It
-   preserves all other fields, rebuilds from inputs and requires valid final
-   closure. Durable proposals/rebase, metadata, job publication and the existing
-   repair panel carry the same explicit action; ordinary scalar editing remains
-   limited to snapshot/routing children. Invalid saved files still need a separate
-   bounded definition-only recovery entry; ordinary loading still refuses them.
+1. Complete FH-18 group deletion and membership/pose closure: incoming-reference
+   policy, recorded deletion, pose preservation, undo/reload and independent
+   replay. Grouping-v2 prevention and explicit live repair are implemented;
+   FH-19 now also reconstructs supported invalid saved recipes through a bounded,
+   explicit copy download. Ordinary loading still refuses invalid structure.
+   No structural scan is added to deformation sliders. Core scalar history
+   editing remains limited to snapshot/routing children until its own adapters
+   are completed.
 2. Qualify the complete private editor on representative desktop interactions
    and actual request/render tails, including repeated open/close, group/plane
    reversals, busy/expiry, lost Apply, source switches and one undo. Archive is
    still unavailable; do not manufacture an app or responsiveness pass.
 3. Enable/register the qualified bounded route and editor together; prune the
    obsolete peel/delete/seek-restore history path and its characterization only
-   after replacement behavior is proven. Then continue sweep, extrude,
+   after replacement behavior is proven. Then continue extrude, sweep,
    move/rotate and Fine Routing history editors under G2.
 
 Grouping changes membership, not identity lifetime. Keeping every existing
@@ -369,13 +365,13 @@ The explicit grouping repair uses the existing worker and publication boundary:
 - Acceptance: real broken v1 → private v2 repair → save/reopen/cold proof;
   unknown versions, wrong row digest after rebase, poisoned recovery, source ABA,
   cancellation, limits, and undo restoring the original broken state honestly.
-  The saved-invalid-file recovery entry remains a separate bounded continuation.
+  The separate saved-invalid-file recovery entry is implemented in FH-19.
 
 The repair is available for an already-open typed part; it does not bypass the
-ordinary file loader's structural validation. Next design a bounded read-only
-recovery admission for invalid saved files, preserving original bytes and feature
-definitions until explicit repair succeeds. Do not load arbitrary invalid output
-as editable geometry. Broader core-tool input/reference editors, logged cluster
+ordinary file loader's structural validation. FH-19 now provides separate bounded
+read-only recovery admission for supported invalid saved files, preserving
+original bytes and feature definitions until explicit repair succeeds. It never
+loads invalid output as editable geometry. Broader core-tool input/reference editors, logged cluster
 deletion and measured desktop qualification still follow G1–G5 above. No molecular
 algorithm, constant, numerical pin, or rollout gate changed in this increment.
 
@@ -387,7 +383,7 @@ Red/review failures and cleanup are retained. Selector dry-run chose FAST with
 FULL deferred; it ran no suite. **NOT VERIFIED IN APP**; actual desktop and
 request/render latency remain open, independently of the passing software tests.
 
-For that next recovery boundary, official CAD documentation distinguishes feature
+For that recovery boundary, official CAD documentation distinguishes feature
 repair from damaged-file recovery. [Onshape Repair](https://cad.onshape.com/help/Content/Document/repairing.htm)
 uses a read-only earlier state beside editable feature definitions.
 [SOLIDWORKS What's Wrong](https://help.solidworks.com/2023/english/SolidWorks/sldworks/HIDD_NEW_WHATS_WRONG.htm?format=P&value=)
@@ -400,9 +396,10 @@ definition admission separately, exclude materialized/recovery geometry from
 replay authority, reuse private repair evaluation, and publish a recovered copy
 only after structural and ordinary typed roundtrip checks. Never infer absent
 roots, silently change source bytes, discard unsupported definitions, or label a
-recovered candidate equivalent to the old displayed model without proof. Specify
-metadata retention and exact size limits before implementing; this checkpoint
-does not implement or qualify that recovery entry.
+recovered candidate equivalent to the old displayed model without proof. The
+[recovery contract](saved_recipe_recovery_contract.md) fixes metadata exclusions,
+size limits and copy-download ownership; its bounded implementation is complete
+in FH-19. Desktop/latency qualification remains in FH-27.
 
 The duplicate response walk is removed: DTO methods accept a closed scalar host
 envelope, reject collisions before native work, and bound the merged response

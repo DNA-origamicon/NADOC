@@ -122,6 +122,7 @@ from backend.api.routes_simulate import router as simulate_router
 from backend.api.routes_primitives import router as primitives_router
 from backend.api.routes_protein import router as protein_router
 from backend.api.routes_part_inputs import router as part_inputs_router
+from backend.api.routes_part_recipe_recovery import router as part_recipe_recovery_router
 from backend.api.routes_photoproducts import router as photoproducts_router
 from backend.api.routes_nanoparticles import router as nanoparticles_router
 from backend.api.routes_generate_design import router as generate_design_router
@@ -518,6 +519,7 @@ app.include_router(primitives_router, prefix="/api")
 app.include_router(fs_router, prefix="/api")
 app.include_router(protein_router, prefix="/api")
 app.include_router(part_inputs_router, prefix="/api")
+app.include_router(part_recipe_recovery_router, prefix="/api")
 app.include_router(photoproducts_router, prefix="/api")
 app.include_router(nanoparticles_router, prefix="/api")
 from backend.api.routes_nanoparticle_attachment import router as nanoparticle_attachment_router
