@@ -1,0 +1,320 @@
+{
+  "kind": "reviewed_immutable_recovery_phase_diagnostic",
+  "reviewed_date": "2026-10-15",
+  "evidence": {
+    "path": "docs/audits/feature_history_20261014/benchmark_immutable_recovery_phases.json",
+    "sha256": "4ae9648c72bc56803d931eb105ae8f1ae1cdac0a99384b0f9822eac2991de6cc",
+    "script": "scripts/benchmark_immutable_recovery.py",
+    "script_sha256": "ec4cad56d59b87ac88f2b2689238eb1c4a6f2b7b06261e50eec7746d4c00c705",
+    "execution": "Root ran three cycles; reported exit0. Reviewer inspected existing data only, without rerun."
+  },
+  "fixture": {
+    "payload_bytes": 15899997,
+    "payload_sha256": "9470ec749c7614ae5612d4d12c62808ad08ec44ce4718f961a8c7d443e2e29fc",
+    "recovery_bytes": 2649585,
+    "control_characters": 2649585,
+    "history_rows": 1,
+    "authoring_sha256": "b9a18c6569a132bf02c5f7559cbcd0e9cac9f03c26247be9f38dc8b17793efbe",
+    "retained_source_undo_bytes": 31995904,
+    "preparation_ms": 468.79672900104197
+  },
+  "integrity": {
+    "completed_cycles": 3,
+    "successful_cold_recoveries": 6,
+    "two_distinct_ready_candidates_each_cycle": true,
+    "phase_intervals_checked": 126,
+    "phase_drops": 0,
+    "concurrent_read_intervals_observed": 1554,
+    "read_drops": 0,
+    "reported_slowest_reads": 96,
+    "all_nested_intervals_and_exclusive_durations_consistent": true,
+    "reported_read_overlap_ids_recomputed": true,
+    "cleanup_verified": true,
+    "durable_io_and_commit_exercised": false,
+    "production_sources_changed": false
+  },
+  "phase_timings_ms": {
+    "prepare_stored": {
+      "count": 6,
+      "min_ms": 163.652877,
+      "median_ms": 174.923023,
+      "max_ms": 187.226798,
+      "exclusive_median_ms": 1.813802
+    },
+    "manifest_sha256_constructor": {
+      "count": 6,
+      "min_ms": 7.994251,
+      "median_ms": 8.252288,
+      "max_ms": 8.801456,
+      "exclusive_median_ms": 8.252288
+    },
+    "initial_json_decode": {
+      "count": 6,
+      "min_ms": 23.881391,
+      "median_ms": 24.441014,
+      "max_ms": 26.396313,
+      "exclusive_median_ms": 24.441014
+    },
+    "initial_structure_admission": {
+      "count": 6,
+      "min_ms": 1.4196,
+      "median_ms": 1.561994,
+      "max_ms": 1.762171,
+      "exclusive_median_ms": 1.561994
+    },
+    "initial_model_validation": {
+      "count": 6,
+      "min_ms": 0.136588,
+      "median_ms": 0.144162,
+      "max_ms": 0.38635,
+      "exclusive_median_ms": 0.144162
+    },
+    "seal_preparation": {
+      "count": 6,
+      "min_ms": 126.158109,
+      "median_ms": 136.452212,
+      "max_ms": 146.571562,
+      "exclusive_median_ms": 0.804257
+    },
+    "batch_scope_admission": {
+      "count": 6,
+      "min_ms": 0.101645,
+      "median_ms": 0.104309,
+      "max_ms": 0.138503,
+      "exclusive_median_ms": 0.104309
+    },
+    "ordinary_authoring_admission": {
+      "count": 6,
+      "min_ms": 0.118072,
+      "median_ms": 0.12196,
+      "max_ms": 0.146559,
+      "exclusive_median_ms": 0.12196
+    },
+    "model_structure_admission": {
+      "count": 6,
+      "min_ms": 0.904777,
+      "median_ms": 0.957,
+      "max_ms": 0.994154,
+      "exclusive_median_ms": 0.957
+    },
+    "authored_work_admission": {
+      "count": 6,
+      "min_ms": 0.0038,
+      "median_ms": 0.003897,
+      "max_ms": 0.005467,
+      "exclusive_median_ms": 0.003897
+    },
+    "canonical_encoding_initial": {
+      "count": 6,
+      "min_ms": 29.481743,
+      "median_ms": 36.932039,
+      "max_ms": 38.969767,
+      "exclusive_median_ms": 36.932039
+    },
+    "exact_roundtrip": {
+      "count": 6,
+      "min_ms": 65.597333,
+      "median_ms": 68.737675,
+      "max_ms": 71.1947,
+      "exclusive_median_ms": 43.084225
+    },
+    "canonical_encoding_roundtrip": {
+      "count": 6,
+      "min_ms": 22.681153,
+      "median_ms": 24.264336,
+      "max_ms": 27.729835,
+      "exclusive_median_ms": 24.264336
+    },
+    "authoring_digest": {
+      "count": 6,
+      "min_ms": 0.058111,
+      "median_ms": 0.078186,
+      "max_ms": 0.118744,
+      "exclusive_median_ms": 0.078186
+    },
+    "recipe_digest": {
+      "count": 6,
+      "min_ms": 28.17594,
+      "median_ms": 29.019471,
+      "max_ms": 35.89811,
+      "exclusive_median_ms": 29.019471
+    },
+    "final_proof_capture": {
+      "count": 6,
+      "min_ms": 1.265709,
+      "median_ms": 1.323753,
+      "max_ms": 1.351401,
+      "exclusive_median_ms": 1.323753
+    },
+    "worker_start": {
+      "count": 6,
+      "min_ms": 1.648,
+      "median_ms": 1.802771,
+      "max_ms": 3.043419,
+      "exclusive_median_ms": 1.802771
+    },
+    "recovery_supervisor": {
+      "count": 6,
+      "min_ms": 1447.372177,
+      "median_ms": 1517.886257,
+      "max_ms": 1590.174272,
+      "exclusive_median_ms": 1341.216694
+    }
+  },
+  "worst_read_each_cycle": [
+    {
+      "cycle": 0,
+      "document": 2,
+      "read_ms": 156.333901,
+      "read_start": 40172.691497678,
+      "read_end": 40172.847831579,
+      "entire_read_inside_prepare_stored": true,
+      "preparation_gc_overlap_ms": 0.156919,
+      "overlapping_large_json_phases": [
+        {
+          "phase": "initial_json_decode",
+          "parent_phase": "prepare_stored",
+          "overlap_ms": 26.396313
+        },
+        {
+          "phase": "canonical_encoding",
+          "parent_phase": "seal_preparation",
+          "overlap_ms": 38.969767
+        },
+        {
+          "phase": "exact_roundtrip",
+          "parent_phase": "seal_preparation",
+          "overlap_ms": 65.597333
+        },
+        {
+          "phase": "canonical_encoding",
+          "parent_phase": "exact_roundtrip",
+          "overlap_ms": 24.527003
+        },
+        {
+          "phase": "recipe_digest",
+          "parent_phase": "seal_preparation",
+          "overlap_ms": 21.480898
+        }
+      ]
+    },
+    {
+      "cycle": 1,
+      "document": 1,
+      "read_ms": 145.287336,
+      "read_start": 40174.219983061,
+      "read_end": 40174.365270397,
+      "entire_read_inside_prepare_stored": true,
+      "preparation_gc_overlap_ms": 0.487734,
+      "overlapping_large_json_phases": [
+        {
+          "phase": "initial_json_decode",
+          "parent_phase": "prepare_stored",
+          "overlap_ms": 24.432238
+        },
+        {
+          "phase": "canonical_encoding",
+          "parent_phase": "seal_preparation",
+          "overlap_ms": 29.481743
+        },
+        {
+          "phase": "exact_roundtrip",
+          "parent_phase": "seal_preparation",
+          "overlap_ms": 66.332818
+        },
+        {
+          "phase": "canonical_encoding",
+          "parent_phase": "exact_roundtrip",
+          "overlap_ms": 24.00167
+        },
+        {
+          "phase": "recipe_digest",
+          "parent_phase": "seal_preparation",
+          "overlap_ms": 21.166869
+        }
+      ]
+    },
+    {
+      "cycle": 2,
+      "document": 2,
+      "read_ms": 157.86263,
+      "read_start": 40178.772668911,
+      "read_end": 40178.930531541,
+      "entire_read_inside_prepare_stored": true,
+      "preparation_gc_overlap_ms": 0.146917,
+      "overlapping_large_json_phases": [
+        {
+          "phase": "initial_json_decode",
+          "parent_phase": "prepare_stored",
+          "overlap_ms": 24.383926
+        },
+        {
+          "phase": "canonical_encoding",
+          "parent_phase": "seal_preparation",
+          "overlap_ms": 36.858962
+        },
+        {
+          "phase": "exact_roundtrip",
+          "parent_phase": "seal_preparation",
+          "overlap_ms": 68.358048
+        },
+        {
+          "phase": "canonical_encoding",
+          "parent_phase": "exact_roundtrip",
+          "overlap_ms": 22.681153
+        },
+        {
+          "phase": "recipe_digest",
+          "parent_phase": "seal_preparation",
+          "overlap_ms": 24.192702
+        }
+      ]
+    }
+  ],
+  "responsiveness": {
+    "state_lock_max_ms": 0.204781,
+    "start_http_max_ms": 4.5779,
+    "start_concurrent_read_max_ms": 4.364376,
+    "preparation_wait_concurrent_read_p95_by_ordinal_ms": [
+      2.64882,
+      2.7155
+    ],
+    "preparation_wait_concurrent_read_max_ms": 157.872283,
+    "preparation_gc_overlap_max_ms": 0.487734,
+    "wait_sampler_cap_hits": 6
+  },
+  "memory": {
+    "sampled_increment_bytes_each_cycle": [
+      257183744,
+      187703296,
+      187674624
+    ],
+    "observed_within_256MiB_each_cycle": true,
+    "requested_interval_ms": 5.0,
+    "largest_sampling_gap_ms": 145.98196,
+    "heap_bound_qualified": false
+  },
+  "recommendation": {
+    "public_gates_remain_false": true,
+    "next_step": "Move unchanged bounded preparation and native proof into one admitted spawned worker, using the existing slot, supervisor and total deadline.",
+    "basis": "Large JSON decode, repeated canonical encoding, exact roundtrip and recipe digest dominate parent preparation and overlap every worst read. Final capture and admission are too small to explain or fix the observed stall.",
+    "minimal_optimization_sufficient": false,
+    "qualification": "No minimal optimization is demonstrated sufficient at the unchanged near16MB envelope; process isolation is recommended rather than claiming it is the only mathematically possible design.",
+    "authority_requirements": [
+      "Keep full current scope, structure, canonical roundtrip, digest, capture and native replay checks.",
+      "Parent retains exact input bytes and real file lease; accept only a private successful supervisor observation bound to the original worker ticket, input hash, admission/session/policy and current owner.",
+      "Validate bounded returned metadata; mint only a local owner-bound seal, never deserialize a child seal or accept saved/JSON proof labels.",
+      "Use the existing one-worker slot, two results, five-second admission deadline, cancellation/reaping and publication CAS; no second queue or expanded limits.",
+      "Avoid repeating full decode/encoding in the parent; validate the new host observation boundary with negative transport/identity/expiry tests and remeasure responsiveness/RSS before enablement."
+    ]
+  },
+  "attribution_limits": [
+    "Wall intervals include scheduling, GIL, GC and instrumentation; overlap supports attribution to the parent preparation chain, not proof of exclusive CPU/GIL ownership.",
+    "Exact roundtrip includes its nested encoding. Inclusive phase durations and overlap durations must not be added across parent and child phases.",
+    "Supervisor-exclusive time includes child startup/IPC/proof wait/cleanup; no child CPU-phase trace was collected.",
+    "Only the slowest32 read intervals per cycle are serialized. Each of six completion-wait sampling loops reached256 reads (1536 total), leaving a later unsampled wait tail.",
+    "Small p95 over many fast wait reads conceals a repeated145\u2013158ms outlier; start response latency alone does not qualify background responsiveness.",
+    "RSS sampling has gaps up to145.98ms despite a5ms request and may miss peaks; three cycles do not meet the declared30-cycle qualification.",
+    "The in-memory substituted read supplies no real lease and performs no file access or durable publication; those paths remain unqualified."
+  ]
+}

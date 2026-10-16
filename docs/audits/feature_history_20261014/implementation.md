@@ -101,6 +101,17 @@ attribution is the next diagnostic; do not advance to thirty-cycle qualification
 or enable public gates on these results. The read seam was memory-only, with
 disk access and durable publication tripwired. See [reviewed evidence](validation_immutable_recovery_memory.json).
 
+The bounded instrumented repeat locates this delay in full-document JSON decode,
+canonical encoding, exact roundtrip and recipe hashing; ordinary authoring
+admission has a 0.122 ms median and final proof capture 1.324 ms. Six preparations
+took 164–187 ms, with 145–158 ms concurrent reads wholly inside preparation and
+state-lock holds below 0.206 ms. All six cold proofs and cleanup passed again.
+Keep the existing checks and move preparation plus proof into one admitted
+spawned recovery worker, following [the reviewed boundary and transition plan](immutable_recovery_worker_plan.md).
+No recovery production boundary changed in this diagnostic checkpoint; public
+gates remain closed. [Phase evidence](validation_immutable_recovery_phases.json)
+retains nested timing, correlation and sampled-memory limitations.
+
 Recent completed checkpoints include pending NP motion (`a24b60b7`, 204 focused
 cases including 35 new), cold-qualified strict recovery (`d52a30a7`, 318 distinct
 cases), durable initial strict creation (`05707b38`, 283 distinct cases), and

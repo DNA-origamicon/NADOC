@@ -8,13 +8,16 @@ simulations, retries, raised limits or GC policy changes. stdout is compact JSON
 """
 
 import argparse
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
+from contextvars import ContextVar
 from hashlib import sha256
 import json
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
-from threading import Event
+from threading import Event, current_thread, get_ident
 from time import perf_counter
+from types import SimpleNamespace
+from unittest.mock import patch
 from uuid import uuid4
 from weakref import ref
 
@@ -23,6 +26,7 @@ from fastapi.testclient import TestClient
 
 from backend.api import part_evaluation_jobs as jobs, session_cache, state
 from backend.api import part_immutable_recovery as recovery, part_immutable_revision as revisions
+from backend.api import part_immutable_recovery_inputs as recovery_inputs, part_registered_batch
 from backend.api import part_publication_host as host, part_publication_policy as policy
 from backend.api.part_history_verification import _slot
 from backend.api.part_immutable_cache import CacheManifest, StoredRevision
@@ -40,6 +44,136 @@ from scripts.benchmark_runtime_probe import RuntimeProbe, overlap_ms
 
 RECOVERY_PATH = "/api/design/recovery/jobs"
 TARGET_BYTES = 15_900_000
+PHASE_CAPACITY = 256
+READ_CAPACITY = 6 * 256  # Two starts, two completion waits and two result releases.
+REPORTED_READS = 32
+
+
+class PreparationPhases:
+    """Benchmark-only nested intervals; retain no model, bytes or arguments."""
+
+    def __init__(self, docs):
+        self.documents = {doc: ordinal + 1 for ordinal, doc in enumerate(docs)}
+        self.stack = ContextVar("recovery_benchmark_phase_stack", default=())
+        self.active = False
+        self.reset()
+
+    def reset(self):
+        self.events, self.reads = [], []
+        self.started = self.dropped = self.read_started = self.read_dropped = 0
+
+    def wrap(self, function, phase):
+        def measured(*args, **kwargs):
+            if not self.active:
+                return function(*args, **kwargs)
+            if self.started >= PHASE_CAPACITY:
+                self.dropped += 1
+                return function(*args, **kwargs)
+            self.started += 1
+            parents = self.stack.get()
+            frame = {"id": self.started, "children_seconds": 0.}
+            token = self.stack.set((*parents, frame))
+            phase_token = _PHASE.set(phase)
+            started, error = perf_counter(), None
+            try:
+                return function(*args, **kwargs)
+            except BaseException as caught:
+                error = type(caught).__name__
+                raise
+            finally:
+                ended = perf_counter()
+                elapsed = ended - started
+                if parents:
+                    parents[-1]["children_seconds"] += elapsed
+                self.events.append({"id": frame["id"], "parent": parents[-1]["id"] if parents else None,
+                    "phase": phase, "thread": get_ident(), "start": started, "end": ended,
+                    "inclusive_ms": elapsed * 1000,
+                    "exclusive_ms": max(0., elapsed - frame["children_seconds"]) * 1000,
+                    "error": error})
+                _PHASE.reset(phase_token)
+                self.stack.reset(token)
+        return measured
+
+    def observe_get(self, function):
+        def measured(client, url, *args, **kwargs):
+            if (not self.active or current_thread().name != "batch-light-http-probe"
+                    or url != baseline.REVISION_PATH):
+                return function(client, url, *args, **kwargs)
+            if self.read_started >= READ_CAPACITY:
+                self.read_dropped += 1
+                return function(client, url, *args, **kwargs)
+            self.read_started += 1
+            started, status, error = perf_counter(), None, None
+            try:
+                response = function(client, url, *args, **kwargs)
+                status = response.status_code
+                return response
+            except BaseException as caught:
+                error = type(caught).__name__
+                raise
+            finally:
+                ended = perf_counter()
+                self.reads.append({"start": started, "end": ended, "ms": (ended - started) * 1000,
+                    "document": self.documents.get(kwargs.get("headers", {}).get("X-NADOC-Doc")),
+                    "status_code": status, "error": error})
+        return measured
+
+    def report(self, runtime):
+        events = sorted(self.events, key=lambda row: row["start"])
+        reads = list(self.reads)
+        enriched = []
+        for event in events:
+            overlaps = [row for row in reads if row["start"] <= event["end"] and row["end"] >= event["start"]]
+            enriched.append({**event, "gc_overlap_ms": overlap_ms(runtime.events, event["start"], event["end"]),
+                "overlapping_reads": len(overlaps),
+                "max_overlapping_read_ms": max((row["ms"] for row in overlaps), default=None)})
+        slowest = sorted(sorted(reads, key=lambda row: row["ms"], reverse=True)[:REPORTED_READS],
+                         key=lambda row: row["start"])
+        return {"clock": "time.perf_counter monotonic seconds, shared by all parent threads",
+            "phase_capacity": PHASE_CAPACITY, "phase_started": self.started,
+            "phase_completed": len(events), "phase_dropped": self.dropped,
+            "read_capacity": READ_CAPACITY, "read_started": self.read_started,
+            "read_completed": len(reads), "read_dropped": self.read_dropped,
+            "read_report_limit": REPORTED_READS, "read_report_omitted": max(0, len(reads) - REPORTED_READS),
+            "phases": enriched,
+            "slowest_reads": [{**row, "overlapping_phase_ids": [event["id"] for event in events
+                if row["start"] <= event["end"] and row["end"] >= event["start"]]} for row in slowest]}
+
+
+def instrument_preparation(stack, phases):
+    """Patch imported call sites only; never replace shared JSON/model methods."""
+    stack.enter_context(patch.object(recovery_inputs, "json",
+        SimpleNamespace(loads=phases.wrap(recovery_inputs.json.loads, "initial_json_decode"))))
+    stack.enter_context(patch.object(recovery_inputs, "Design",
+        SimpleNamespace(model_validate=phases.wrap(recovery_inputs.Design.model_validate, "initial_model_validation"))))
+    for owner, name, phase in (
+        (recovery_inputs, "sha256", "manifest_sha256_constructor"),
+        (recovery_inputs, "_check_structure", "initial_structure_admission"),
+        (recovery_inputs, "prepare_revision", "seal_preparation"),
+        (recovery_inputs, "capture", "final_proof_capture"),
+        (revisions, "preservation_digest", "preservation_admission_digest"),
+        (revisions, "admit_batch_source", "batch_scope_admission"),
+        (revisions, "admit", "ordinary_authoring_admission"),
+        (revisions, "_check_structure", "model_structure_admission"),
+        (part_registered_batch, "_reserve_work", "authored_work_admission"),
+        (revisions, "_canonical_payload", "canonical_encoding"),
+        (revisions, "_decoded_exact", "exact_roundtrip"),
+        (revisions, "retained_recovery_bytes", "recovery_storage_admission"),
+    ):
+        stack.enter_context(patch.object(owner, name, phases.wrap(getattr(owner, name), phase)))
+    digests = {name: phases.wrap(revisions.digest, name)
+               for name in ("authoring_digest", "recipe_digest", "other_metadata_digest")}
+
+    def projection_digest(value):
+        # The dictionaries have a fixed declared field inventory. Do not walk
+        # the potentially near-cap recovery strings to classify this call.
+        name = ("authoring_digest" if type(value) is dict and value.keys() == revisions.AUTHORING_FIELDS
+                else "recipe_digest" if type(value) is dict and value.keys() == revisions.RECIPE_FIELDS
+                else "other_metadata_digest")
+        return digests[name](value)
+
+    stack.enter_context(patch.object(revisions, "digest", projection_digest))
+    stack.enter_context(patch.object(TestClient, "get", phases.observe_get(TestClient.get)))
 
 
 def fixtures():
@@ -100,6 +234,10 @@ def main():
     admitted_idle = False
     ready_refs = []
     prior_jobs = dict(jobs._jobs)
+    phases, phase_patches = PreparationPhases(docs), ExitStack()
+    traced_prepare = phases.wrap(original["prepare"], "prepare_stored")
+    traced_run = phases.wrap(original["run"], "recovery_supervisor")
+    traced_worker_start = phases.wrap(original["worker_start"], "worker_start")
 
     def forbidden(*_args, **_kwargs):
         raise RuntimeError("Memory diagnostic attempted disk access or durable publication")
@@ -107,20 +245,20 @@ def main():
     def prepare(*args, **kwargs):
         begin = perf_counter()
         try:
-            return original["prepare"](*args, **kwargs)
+            return traced_prepare(*args, **kwargs)
         finally:
             preparation_times.append((perf_counter() - begin) * 1000)
 
     def run(job):
         done = completion.setdefault(id(job), Event())
         try:
-            return phase_wrapper(original["run"], "preparation")(job)
+            return traced_run(job)
         finally:
             done.set()
 
     def worker_start(worker):
         worker_records.append((worker, [part.name for part in worker._buffers]))
-        original["worker_start"](worker)
+        traced_worker_start(worker)
         if active_rss is not None:
             active_rss.register_child(worker._process.pid)
 
@@ -148,13 +286,22 @@ def main():
 
     def measure(client, doc, callback, runtime):
         begin = perf_counter()
-        response, metrics = baseline.concurrent_request(client, {"X-NADOC-Doc": doc}, callback, probe)
+        operation = {}
+
+        def timed_callback():
+            operation["start"] = perf_counter()
+            try:
+                return callback()
+            finally:
+                operation["end"] = perf_counter()
+
+        response, metrics = baseline.concurrent_request(client, {"X-NADOC-Doc": doc}, timed_callback, probe)
         end = perf_counter()
         events = runtime.intervals(begin, end)
         metrics.update(gc_overlap_ms=overlap_ms(events, begin, end),
             gc_generations={str(g): sum(e["generation"] == g for e in events) for g in range(3)},
             light_sample_cap_reached=len(metrics["revision_http_ms"]) == 256,
-            status_code=response.status_code)
+            status_code=response.status_code, operation_interval=operation)
         if response.is_error:
             metrics["refusal"] = response.json()
         if metrics["errors"]:
@@ -197,6 +344,7 @@ def main():
         began = perf_counter()
         payload, handles, fixture = fixtures()
         fixture["preparation_ms"] = (perf_counter() - began) * 1000
+        instrument_preparation(phase_patches, phases)
         # Constructor only resolves an existing directory. Every disk entry is
         # tripwired; no fake lease is minted and commit is intentionally absent.
         owner = StrictPersistence(Path.cwd())
@@ -234,6 +382,8 @@ def main():
 
         with TestClient(observed) as client:
             for iteration in range(args.repeats):
+                phases.reset()
+                phases.active = True
                 sample = {"iteration": iteration, "completed": False, "jobs": [], "releases": []}
                 samples.append(sample)
                 first_lock, first_prepare = len(probe.records), len(preparation_times)
@@ -290,7 +440,9 @@ def main():
                         sample.update(elapsed_ms=(end - begin) * 1000, gc_events=len(events),
                             gc_overlap_ms=overlap_ms(events, begin, end), gc_dropped=runtime.dropped_events,
                             preparation_ms=preparation_times[first_prepare:],
-                            state_lock_hold=stats([v["hold_ms"] for v in probe.records[first_lock:]]))
+                            state_lock_hold=stats([v["hold_ms"] for v in probe.records[first_lock:]]),
+                            phase_trace=phases.report(runtime))
+                        phases.active = False
                         active_rss = None
                 if not cleanup_jobs():
                     raise RuntimeError("Result catalog cleanup failed")
@@ -299,7 +451,11 @@ def main():
     except Exception as error:
         failure = {"exception": type(error).__name__, "detail": str(error)[:4096]}
     finally:
-        cleanup_jobs()
+        try:
+            cleanup_jobs()
+        finally:
+            phases.active = False
+            phase_patches.close()
         for worker, names in worker_records:
             if not worker._closed or not worker._process_closed:
                 cleanup_errors.append("Owned worker was not closed and reaped")
@@ -349,6 +505,20 @@ def main():
         "durable_commit_qualified": False, "public_availability_qualified": False,
         "memory_scope": "Scoped parent plus explicitly owned child RSS; baseline includes four near-8MB background handles and one shared near-16MB in-memory input. Gaps may miss peaks; shared pages double-count. No heap guarantee.",
         "storage_seam": "read_pending returns actual bounded StoredRevision bytes with no lease; disk access and publication tripwired; no cache files",
+        "phase_instrumentation": {
+            "scope": "Parent preparation only; module-local call-site wrappers preserve original arguments/results and do not replace global JSON or Design methods.",
+            "capacity_per_cycle": PHASE_CAPACITY, "read_capacity_per_cycle": READ_CAPACITY,
+            "reported_slowest_reads_per_cycle": REPORTED_READS,
+            "clock": "time.perf_counter process-wide monotonic seconds; phase/read/operation intervals align across parent threads.",
+            "attribution_limits": [
+                "Intervals include scheduling/GIL/GC delay and instrumentation overhead, not CPU attribution; no time is subtracted from user-observed latency.",
+                "Inclusive phases nest and must not be added. Exclusive time subtracts immediate traced children only, not all helper work.",
+                "Exact roundtrip includes model validation, model dump, byte comparison and a nested canonical encoding. Seal-exclusive time includes its initial model dump and untraced bookkeeping.",
+                "Manifest SHA256 phase times construction/update; its tiny hexdigest call remains in prepare_stored-exclusive time.",
+                "Recovery-supervisor exclusive time includes worker construction, IPC, native proof wait and cleanup; worker_start is launch only, not child runtime or a child CPU trace.",
+                "Read intervals begin outside ASGI inside the external sampler's TestClient.get call; they exclude the tiny caller-to-wrapper dispatch overhead.",
+                "All bounded observed reads contribute overlap counts; only the slowest32 intervals are printed. Overlap identifies correlation, not causation or exclusive blocking responsibility.",
+                "Dropped/unfinished counters disclose incomplete traces; current scopes, five-second deadline, fixtures and GC policy are unchanged."]},
         "targets": {"recovery_deadline_seconds_unchanged": recovery.TIME_BUDGET,
             "measured_cycles_for_qualification": 30, "state_lock_p95_ms": 1, "state_lock_max_ms": 5,
             "start_p95_ms": 10, "start_max_ms": 100, "concurrent_start_p95_ms": 10,
