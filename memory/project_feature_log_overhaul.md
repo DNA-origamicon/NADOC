@@ -14,9 +14,23 @@ recording and preview/commit integrity, history editors, dependency repair,
 responsiveness and registered automation before more nanoparticle/asset work.
 The user resumed after `c9f1d185`; follow G1–G6 in the
 [active delivery map](../docs/audits/feature_history_20261014/remaining_standard_part_checkpoints.md).
-Existing core command support is enabled, but ordinary grouping, preview and
-editor integration gaps prevent claiming end-to-end completion. Assemblies and
-machine-specific VR validation remain deferred.
+Existing core command support is enabled, but preview and editor integration
+gaps prevent claiming end-to-end completion. Assemblies and machine-specific
+VR validation remain deferred.
+
+**G1 current checkpoint:** ordinary/headless group creation always records a
+versioned input (ISSUE-99); `log` is now an ignored compatibility argument.
+The shared pure builder and existing lock-owned replacement publisher run under
+one non-reentrant state lock, with no nested `state.set_design` or full replay.
+Historical cursors explicitly refuse with HTTP 409 before allocation; missing
+legacy roots remain unverified. The first green focused run of 101 cases (108 warnings, 5.57 s)
+and overlapping 16-case group rerun (16 warnings, 2.88 s) establish **102 unique
+passes**. Ten deformation cases include characterization of **open ISSUE-100**:
+history preview replaces canonical state before Apply, which then refuses;
+Cancel's seek adds undo and clears redo. Next implement isolated bend/twist
+preview, preserving native calculations and one final guarded commit. G1 is not
+complete. App validation is MV-48 pending; no new broad/performance qualification
+is claimed. `main.js` delta is 0.
 
 The sections below retain earlier implementation context; use the latest
 [implementation checkpoint](../docs/audits/feature_history_20261014/implementation.md)

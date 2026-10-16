@@ -1409,3 +1409,50 @@ preview/Apply/cancel interactions; G2 covers the legacy editor restrictions.
 No private gate, source pin, budget or scientific algorithm changes in this
 planning checkpoint. Nanoparticle work stays at `c9f1d185`; assemblies and VR
 validation remain deferred.
+
+## G1 ordinary grouping checkpoint — October 15
+
+Ordinary cluster-panel, selection-menu and headless creation now always records
+one versioned `cluster_create` input. The `log` argument remains accepted for
+compatibility but is ignored; false cannot create an unlogged group. The thin
+route delegates to `part_group_recording.create_group`, which uses the existing
+pure overlay builder under one owning state lock and the lock-owned replacement
+publisher. It does not call `state.set_design` while already holding that
+non-reentrant lock. Validation/publication failure and cancellation preserve the
+source, history, undo/redo and revision. No whole-history proof or topology
+reconciliation is added to ordinary grouping.
+
+Grouping is explicitly latest-history-only: a historical outer or child cursor
+returns HTTP 409 `historical_cursor` before allocation/building, instead of
+guessing a branch/truncation policy. Native inputs preserve exact helix/domain
+membership and intentional overlap. Existing rootless documents remain
+unverified; a new grouping row cannot supply their missing construction history.
+The extra grouping row correctly separates earlier and later Fine Routing
+operations. Generated compilers already emit grouping commands directly and do
+not pass through this ordinary route, so they gain no duplicate entries.
+
+The first green focused run passed **101 cases, 108 warnings, 5.57 s**. An additional
+nicks→group→nick chronology and independent-replay test was then added; the group
+file rerun passed **16 cases, 16 warnings, 2.88 s**. The runs overlap, yielding
+**102 unique focused passes**, not 117. Existing headless/harness assertions
+requiring unlogged creation were replaced with mandatory-recording assertions
+and an explicit missing-receipt negative control. See ISSUE-99 in the root
+ledger and `tests/test_geometry_group_history.py`. The
+[validation record](validation_geometry_group_history.json) preserves the earlier
+red runs, interrupted nested-lock attempt, cleanup and remaining lint/selector
+debt alongside these green results.
+
+**G1 is still in progress.** The ten bend/twist cases in
+`tests/test_geometry_history_preview_lifecycle.py` include characterization of
+the current broken desktop request sequence. Preview removal/update/disposal
+leaves canonical state without its committed deformation; history Apply returns
+`recipe_not_reproducible` (409). Cancel restores the overlay by seeking history,
+but adds undo and clears redo. Direct native edits and their undo/redo controls
+work. These passing characterizations reproduce ISSUE-100; they are not a
+preview fix or the desired user contract. The next increment is the bounded
+isolated preview described in the [active delivery map](remaining_standard_part_checkpoints.md).
+
+**No app, broad-suite or performance qualification was performed for this
+checkpoint.** MV-48 retains desktop validation debt. `frontend/src/main.js`
+delta is **0**. No molecular formula, numerical source pin, limit or private
+rollout gate changed; assets, assemblies and machine-specific VR remain deferred.

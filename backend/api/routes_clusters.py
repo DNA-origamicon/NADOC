@@ -54,7 +54,7 @@ class AddClusterBody(BaseModel):
     name: str = "Cluster"
     helix_ids: List[str]
     domain_ids: List[dict] = Field(default_factory=list)  # [{strand_id, domain_index}]
-    log: bool = False  # when True: append a cluster_create feature_log entry
+    log: bool = False  # deprecated compatibility field; every creation is logged
 
 
 class PatchClusterBody(BaseModel):
@@ -91,42 +91,9 @@ def add_cluster(body: AddClusterBody) -> dict:
     If no clusters exist at all, auto-creates the default cluster first so the
     remainder always has a home.
     """
-    from backend.core.models import ClusterRigidTransform, DomainRef
-    from backend.core.validator import validate_design
+    from backend.api.part_group_recording import create_group
 
-    design = design_state.get_or_404()
-    domain_ids = [DomainRef(**d) for d in (body.domain_ids or [])]
-    ct = ClusterRigidTransform(
-        name=body.name, helix_ids=body.helix_ids, domain_ids=domain_ids
-    )
-
-    from backend.core.part_overlay_commands import build
-    grouped = build("cluster_create", design, {"cluster": ct.model_dump(mode="json")})
-
-    if body.log:
-        # Record the cluster-creation step in the feature log so a design's
-        # construction history can replay "group these helices into a bar"
-        # (mirrors the commit+log cursor discipline update_cluster uses).
-        log = list(design.feature_log)
-        if design.feature_log_cursor >= 0:
-            log = log[: design.feature_log_cursor + 1]
-        log_entry = ClusterCreateLogEntry(
-            proof_version=1,
-            cluster_snapshot=ct,
-            cluster_id=ct.id,
-            name=ct.name,
-            helix_ids=list(ct.helix_ids),
-            domain_ids=list(ct.domain_ids),
-        )
-        updated = design.copy_with(
-            cluster_transforms=grouped.cluster_transforms,
-            feature_log=log + [log_entry],
-            feature_log_cursor=-1,
-        )
-    else:
-        updated = design.copy_with(cluster_transforms=grouped.cluster_transforms)
-    design_state.set_design(updated)
-    report = validate_design(updated)
+    updated, report = create_group(body)
     return _design_response(updated, report)
 
 

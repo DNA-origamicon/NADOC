@@ -49,9 +49,11 @@ than overloading an unrelated command kind or silently accepting old proofs.
 
 - Ordinary native execution exists for all named tool families. It is enabled;
   the disabled nanoparticle rollout gate does not gate core geometry.
-- Cluster-panel creation omits `log`, whose route default is false; direct group
-  deletion lacks a history operation. Response-time default-group inference must
-  also be included in any deletion contract.
+- Ordinary group creation now always records exact inputs, including the old
+  `log=False` call form, and validates before one atomic publication. The 102
+  distinct focused checks include input-only replay across nick/group/nick.
+  Direct group deletion still lacks a history operation; response-time
+  default-group inference must be included in its deletion contract.
 - Committed bend/twist creation records inputs, but history previews remove or
   modify the canonical source before Apply. The newer editor verifies that source
   before changing it; reproduce the handoff/cancel mismatch before selecting a fix.
@@ -65,6 +67,105 @@ than overloading an unrelated command kind or silently accepting old proofs.
 Archive remains unavailable on this machine. Continue focused memory-only checks;
 no bulk/app/native-scratch output may silently fall back to the system disk.
 Unperformed desktop and broad-suite checks remain completion debt, not passes.
+
+### G1 next: isolated bend/twist history preview — proposed, not implemented
+
+The focused backend lifecycle tests reproduce the current desktop sequence:
+peel the committed deformation, add/update/discard its preview, then Apply.
+Apply rejects the altered source with `recipe_not_reproducible` (409); Cancel's
+timeline seek restores the overlay but adds an undo and clears redo. These are
+explicit legacy integration characterizations, not desired behavior. The direct
+native history-edit control establishes the existing successful commit path.
+
+Onshape distinguishes the local feature-stage preview, with later features
+hidden, from an explicit **Final** view that computes downstream results.
+Adopt that distinction without claiming a local overlay proves the final design.
+[Official feature tools](https://cad.onshape.com/help/Content/PartStudio/feature_tools.htm),
+[dialog preview behavior](https://cad.onshape.com/help/Content/Home/dialogs.htm).
+
+- **Open:** address a stable feature ID, not a remembered array index. Bind the
+  document identity, actual host session/source identity and revision. Use the
+  existing isolated authoring capture (`30,000` nodes, `2,000,000` bytes,
+  cooperative `25 ms`); recovery snapshots/diffs and physical/display data stay
+  excluded. Capture is a private independent input, not an immutable live Design
+  or a proof. Refuse malformed/missing/ambiguous targets and over-budget input
+  before preview work; never fall back to mutating the source.
+- **Prepare locally:** for an admitted native history, replay only the prefix
+  required to reach the feature once when opening the editor, outside the state
+  lock and under the existing execution limits. Keep that private prefix fixed
+  for the bound revision. A finite, expiring preview-session admission must
+  explicitly bound retained inputs/output before rollout; no unbounded Design
+  cache. Mixed/unsupported histories need an honest unavailable explanation.
+- **Drag:** apply the proposed deformation to that private prefix through the
+  unchanged native geometry functions. Use bounded typed parameter/target input
+  and a new bounded preview DTO, with an isolated renderer/controller owner.
+  Never install a preview in `currentDesign`, ordinary store geometry, history,
+  autosave, export or simulation state. Coalesce superseded requests and reject
+  late responses by editor epoch plus document/session/revision binding. No full
+  history proof or downstream regeneration on slider movement.
+- **Final / Apply:** downstream preview is a separate explicit bounded
+  evaluation, not the local drag path. Apply resolves the same feature ID against
+  the still-current guarded source and uses the existing full history edit and
+  atomic publication; retain stable output IDs and one undo. Add the missing
+  original-revision/feature-ID admission guard rather than silently rebasing a
+  stale index. Keep the editor available after a failed Apply.
+- **Cancel:** dispose preview geometry and requests only. No DELETE of committed
+  overlays, timeline seek, snapshot restore, undo entry or redo loss. Source
+  changes, document close/reopen and stale feature identity invalidate the
+  preview instead of restoring old state over newer work.
+
+Required next evidence: replace the legacy characterization flow with isolated
+preview/Apply/Cancel tests; assert exact source/history/revision/undo/redo
+preservation, poisoned recovery independence, earlier-feature versus Final
+semantics, stale/ABA/late-response rejection and bounded refusal. Add controller
+and renderer-disposal tests, then measure actual drag/request/geometry tails and
+exercise desktop Apply/Cancel. The existing DNA comparison is **disabled and
+qualification-only**; this proposal neither enables it nor borrows its renderer
+or DTO to bypass its admission bounds. No geometry algorithms or constants change.
+
+Concrete next checkpoint: implement and test the **private backend service and
+bounded DTO first**, with no frontend enablement. Open performs bounded native
+prefix preparation plus cheap command-coverage admission, not full-source
+equivalence proof; that remains Apply's guard. Return explicit
+`stage="feature"`, `downstream_evaluated=false` and
+`source_equivalence_checked=false`, never a certificate.
+
+Frontend integration boundaries after that contract freezes:
+
+- `api/deformation_preview_endpoints.js`: data-only requests, explicit document
+  context/abort signal, no protected-loadout retry or simulation preparation;
+  preview responses never enter `_syncFromDesignResponse`.
+- `features/deformation_history_controller.js`: factory owning the feature ID,
+  immutable context scalars, lease, one in-flight request plus latest pending
+  draft, response epoch and Apply/cancel lifecycle. Failed Apply keeps the editor
+  open; cancel/dispose never calls legacy preview mutations or seek.
+- `scene/deformation_history_preview.js`: owned before/candidate groups using
+  `buildHelixObjects` and existing native connection-building helpers directly.
+  Use a private palette identity; dispose private instances/materials/buffers
+  exactly once, preserve shared geometry templates, and restore visibility only
+  for the still-owned live renderer. Do not reuse the store-rebuild-dependent
+  `beginDeformPreview` or instantiate a second `initDesignRenderer`.
+- Thin `feature_editor`, `deformation_editor` and popup wiring supplies private
+  prefix context and preview/validation delegates while retaining existing
+  controls and plane math. No broad renderer/comparison migration.
+
+The DTO needs complete admitted native nucleotide positions/orientations and
+placement provenance (existing compact geometry wire fields), native axes, and
+an explicit bounded display-topology projection. Axes alone cannot show a
+single-helix twist. Open returns fixed pre-feature geometry plus the original
+feature result; drag returns only the replacement result. Prefix helix bounds,
+cluster/strand/domain membership, deformation metadata and periodic ligation
+references also feed plane picking, scope labels and existing polymer-circle
+controls; strand notes are needed by the current eligibility predicate. Obtain
+feasibility from that same prefix even with visual preview unchecked. Do not use
+latest committed geometry or its context as the historical reference.
+
+Meaningful frontend checks must exercise stale/out-of-order replies, close during
+Open, Apply during a pending drag, failed Apply retaining fields, exact Cancel
+with zero write requests, unchanged canonical store/autosave, prefix-based
+controls, native single-helix twist orientation and repeated owned-renderer
+replacement/disposal. API/DTO output and retained-session bounds require explicit
+qualification before wiring; no permissive partial rendering of omitted families.
 
 ## Completed pending candidates and motion; application rollout remains open
 

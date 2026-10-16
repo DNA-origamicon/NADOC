@@ -20,6 +20,7 @@ regress anything).
 
 | # | Date | Issue / phase | What changed (module) | Repro pinned by | Wall-clock | main.js LOC Δ | tests added | edits-to-green | app-validated | regression caught |
 |---|------|---------------|------------------------|-----------------|-----------|---------------|-------------|----------------|---------------|-------------------|
+| 34 | 2026-10-15 | ISSUE-99 — ordinary grouping inputs; G1 partial | New `part_group_recording.py`, thin cluster route, headless compatibility documentation | Default/false/true logging, group+move, routing chronology, independent replay, source/failure/lock guards | Focused 101 cases in 5.57 s; group rerun 16 in 2.88 s | 0 | New group dossier; obsolete unlogged expectations updated | 102 unique focused passes; overlapping runs retain 108/16 warnings respectively | **No** — MV-48; no broad/performance qualification | ISSUE-100 preview/Apply/Cancel defects separately reproduced; ten green deformation cases include characterization, not a fix |
 | 33 | 2026-10-15 | ISSUE-84 — repair proposal roundtrip budget | Canonical persisted-form admission in `part_repair_draft.py` | Three red maximum-node/byte save/reload cases, plus one control | P5 continuation | 0 | 4 boundary cases | 69 focused schema/API/persistence cases pass | backend only | Raw sparse input fit while serialized optional defaults exceeded the same limit |
 | 32 | 2026-10-14 | ISSUE-82 — producer/consumer regeneration, PARTIAL | Root-based recipe edit module, refreshed snapshots/diffs, revision/source guard | Native bundle→joint edit/delete and failure regressions | P3 continuation | 0 | 31 focused native/regeneration cases | compatibility regressions corrected; audit records checks | backend only | rootless recovery, sweep version parsing and persisted detachment |
 | 31 | 2026-10-14 | ISSUE-81 — long pose history overhead | Type-gated Join/Pattern scans; skip no-op cluster copy | Existing 1,000-pose A/B gates and independent replay oracle | P2 prerequisite audit | 0 | existing behavioral suites retained | all 14 A/B gates pass | backend only | yes — missing-attribute lookups dominated nominally linear scans |
@@ -78,6 +79,7 @@ multi-factor (CLAUDE.md's own warning). If the bug is a *class*, add a `LESSONS.
 
 | Issue | Root cause (5-Whys, one line) | Failed hypothesis (the "obvious fix" that was wrong, if any) | → LESSONS.md |
 |-------|-------------------------------|-------------------------------------------------------------|--------------|
+| ISSUE-99 | Group creation made recording optional → desktop/headless callers omitted `log` → membership existed without producer inputs → later native move/replay could not reconstruct the group; one lock-owned builder/publication now records every new group | Mandatory logging alone is insufficient if creation selects source outside its transaction or reacquires the non-reentrant lock through `state.set_design`; reuse the existing lock-owned publisher | `docs/audits/feature_history_20261014/implementation.md` |
 | ISSUE-80 (partial) | Cold display repeated work across native record expansion, JSON/gzip, hidden source readers, readiness assessment, primitive construction and eager maps → caches/scheduling were scoped to individual consumers instead of one versioned source lifecycle → first Full and representation saves still blocked after selection was fixed | A sub-millisecond CPU representation update was insufficient evidence: retained Full buffers do not prove Full drawing, backend save/readiness can still delay the gesture, and the initial runner omitted curved-cylinder slots; preserve the invalid run and require actual frame/triangle proof | `docs/audits/assembly_loading_performance_20261013.md` |
 | ISSUE-68 | Process-local thread maps were treated as global ownership → UI polling orphaned live headless runners; child PIDs also missed preparation/inter-stage work, and stale status writes could overwrite a restart → shared kernel lease, workspace scope and generation checks now cover those boundaries | A private workspace hid the original polling symptom; it was not the lifecycle fix | `memory/project_simulation_runtime.md` |
 | ISSUE-66 | Recomputed marks were merged into the original design → its obsolete marks had never been cleared → clearing happened only on the temporary calculation copy; commit now replaces active marks atomically and rejects stale revisions | None; integration assertions exposed the calculation/commit mismatch | — |
@@ -770,3 +772,26 @@ bytes, stage rendering and honest legacy absence alongside the existing seed,
 protocol and lineage contract. Initial present-file test failed as expected; both
 copy cases plus 42 related physics/freshness cases now pass. Complete physical
 input receipts and immutable preparation remain separate work.
+
+2026-10-15 — ISSUE-99 focused grouping fix: ordinary and headless group creation
+now always publishes one versioned `cluster_create` entry through the shared
+pure builder and existing lock-owned replacement transaction. `log=False` is
+accepted but cannot suppress recording. Historical cursor/sub-cursor input
+refuses explicitly before allocation rather than silently truncating history.
+Source, validation, undo, revision and failure checks stay inside one owning
+lock; no nested `state.set_design`, full history proof or topology reconciliation
+is added. Missing legacy roots remain unverified. The first green focused run passed
+101 cases with 108 warnings in 5.57 s; the group file then passed 16 cases with
+16 warnings in 2.88 s after adding the nicks→group→nick ordering regression.
+There are 102 unique passes across these overlapping runs, not 117. Two old
+tests requesting unlogged grouping were updated, retaining an explicit removed
+receipt negative. `main.js` delta is 0. No app, broad-suite or latency
+qualification; MV-48 remains open.
+
+The same checkpoint reproduces ISSUE-100 rather than fixing it: ten bend/twist
+tests include direct-edit controls and explicit assertions that the current
+preview sequence removes the committed overlay before Apply, and that Cancel's
+seek changes undo/redo. Apply refuses the resulting source correctly. The next
+G1 increment must isolate preview state; do not weaken source proof to accept
+the polluted document or preserve these characterization expectations as the
+desired user contract.

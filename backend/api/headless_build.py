@@ -1542,9 +1542,10 @@ def add_cluster(name: str, helix_ids, *, domain_ids=(), log: bool = False) -> De
     default catch-all cluster surrenders helices to the new one (intentional clusters
     are left intact).  Pushes undo.
 
-    ``log=True`` records a ``cluster_create`` feature-log entry (naming the cluster +
+    Every call records a ``cluster_create`` feature-log entry (naming the cluster +
     its exact helix set), so a generated multi-cluster part's construction history can
-    replay the *grouping* step, not just the later poses/joints.  Pin it with
+    replay the *grouping* step, not just the later poses/joints. ``log`` is retained
+    as an ignored compatibility argument; false cannot bypass recording. Pin it with
     :func:`tests.automation_harness.assert_cluster_in_feature_log`; ``canonical_topology``
     is blind to clusters, so the feature-log entry is what proves the grouping persisted
     across a round-trip.

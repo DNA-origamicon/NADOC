@@ -982,3 +982,28 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   Archive remains unavailable, and no browser or native/headset run was made.
   Assemblies and molecular-engine comparison authorization remain outside this
   display scope. The existing dedicated e2e isolation/output cleanup rules apply.
+
+- **MV-48 — PENDING — Ordinary grouping and geometry preview lifecycle (2026-10-15).**
+  **NOT VERIFIED IN APP.** On a fresh small native bundle, create a group from
+  selected strands and then selected domains through the normal cluster panel
+  or selection menu. Confirm one visible grouping entry, unchanged molecular
+  geometry, exact membership (including intentional overlap), and one undo/redo
+  step. Move/rotate that group, commit, edit its recorded parameters, save/reopen
+  and explicitly verify its recorded construction. Repeat nick→group→nick and
+  check that history preserves the operation order. At a historical cursor,
+  creating a group must explain that the user must first return to latest and
+  leave document/history unchanged.
+  ISSUE-99 has 102 unique focused checks: the first green 101-case run (108 warnings,
+  5.57 s) plus a 16-case overlapping group rerun (16 warnings, 2.88 s). These
+  checks do not establish browser behavior, visual correctness, broad regression
+  coverage or interaction latency. `main.js` delta is zero.
+  **Known open defect, ISSUE-100:** bend/twist history previews currently replace
+  canonical state before Apply; Cancel adds undo and clears redo. After the
+  isolated-preview fix, hand-check drag/Cancel/Apply, an existing redo branch,
+  stale/document switching, and upstream/downstream feature editing. Cancel
+  must preserve committed source/history/undo/revision, Apply must create one
+  valid edit, and no temporary preview may become export/simulation input.
+  The ten automated deformation cases presently include bug characterization;
+  their passing result does not discharge these steps. No browser was launched
+  for this checkpoint; Archive is unavailable for required browser/runtime
+  artifacts. VR/headset validation and assemblies remain separately deferred.

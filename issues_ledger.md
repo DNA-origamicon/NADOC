@@ -107,6 +107,11 @@ design decisions + research (so early sessions build the loop's muscle on tracta
 **Rebuilt 2026-08-08.** This table is the authoritative open set. Closed dossiers retained below are
 historical only and should move to `issues_ledger_archive.md` during the next archive compaction.
 
+**Active October 15 user override:** finish standard-part geometry first. G1's
+ordinary grouping omission is focused-fixed (ISSUE-99); the next item is the
+reproduced bend/twist preview lifecycle defect (ISSUE-100). The older ordering
+below remains background backlog, not the active geometry delivery sequence.
+
 | Order | Issue | Type | Size | Needs UX research? |
 |-------|-------|------|------|--------------------|
 | **→ 1** | **ISSUE-22** oxDNA/MD roll-return staleness remains user-confirmed broken after multiple fixes (promoted from MV-OXSTALE). | correctness / workflow | medium | reproduce exact gesture |
@@ -730,9 +735,20 @@ configuration plays back as a no-op, in the app and in every export.
 
 ## Next-session handoff
 
-_Living pointer — each session overwrites this. **Last updated 2026-08-08 (ledger reconciliation).**_
+_Living pointer — each session overwrites this. **Last updated 2026-10-15 (geometry-first G1 checkpoint).**_
 
-**NEXT PICK: ISSUE-22 live revalidation, then ISSUE-23.** The complete oxDNA/MD roll-return lifecycle is
+**NEXT PICK: ISSUE-100 isolated bend/twist history preview.** Ordinary grouping
+now always records its native input under one lock-owned publication transaction
+(ISSUE-99). G1 remains in progress: preview/Apply/Cancel still changes canonical
+state before acceptance. Follow the [geometry delivery map](docs/audits/feature_history_20261014/remaining_standard_part_checkpoints.md).
+There are 102 unique focused checks at this checkpoint; the ten deformation
+cases include explicit characterizations of unresolved defects. App, broad-suite
+and performance qualification are outstanding (MV-48); `main.js` delta is zero.
+Nanoparticle/asset expansion, assemblies and machine-specific VR work remain
+outside this next step.
+
+**Earlier queued work, deferred behind the user's geometry priority:** ISSUE-22
+live revalidation, then ISSUE-23. The complete oxDNA/MD roll-return lifecycle is
 now API-automated and green, and the missing-Return-action persistent-toast edge is fixed. Hand-drive the
 roll → follow/view → return gesture; if green, close ISSUE-22 as stale and proceed to ISSUE-23.
 
@@ -2166,3 +2182,57 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
 - Primary-source context: threadpoolctl documents that its inventory describes
   libraries loaded into the current process and expands with additional imports:
   [runtime introspection](https://github.com/joblib/threadpoolctl#python-runtime-programmatic-introspection).
+
+## ISSUE-99 — Ordinary grouping can omit its construction inputs (2026-10-15, FOCUSED FIX VALIDATED; APP OPEN)
+
+- The cluster panel and selection menu omit `log`; the ordinary route and
+  headless wrapper defaulted it to false. Group membership changed and was
+  persisted without a `cluster_create` record, so subsequent moves could depend
+  on a group that native history never created.
+- New `backend/api/part_group_recording.py` shares the pure `cluster_create`
+  builder and always publishes a versioned grouping entry. `log` remains an
+  accepted, ignored compatibility argument: omitted, false and true all record
+  exactly one group. No recipe root or missing historical construction is
+  inferred for legacy documents.
+- Source selection, allocation, building, validation and publication use one
+  existing non-reentrant state lock. The helper calls the lock-owned replacement
+  publisher rather than nesting `state.set_design`; failures and cancellation
+  preserve source, undo/redo and revision. Grouping directly owns membership,
+  so it adds neither topology reconciliation nor full history proof to the edit.
+- Creation at a historical cursor now refuses with explicit HTTP 409
+  `historical_cursor` before allocation/building. The user must return to latest;
+  the old partial timeline truncation is not retained as an implicit branching
+  policy. A grouping entry between two nicks preserves their chronological
+  routing boundaries and independently replays.
+- The first green focused run passed **101 cases, 108 warnings, 5.57 s**. After one
+  additional routing-boundary regression, the group file passed **16 cases,
+  16 warnings, 2.88 s**. These overlapping runs establish **102 unique checks**,
+  not 117. Ten checks cover deformation lifecycle controls/characterizations;
+  they do not mark ISSUE-100 fixed. Two obsolete unlogged-group tests were
+  updated while retaining the missing-provenance negative control.
+- **Not verified in app, broad suite or performance measurements.** MV-48 owns
+  desktop validation. `frontend/src/main.js` delta **0**; no scientific formula,
+  numerical pin, capture budget or private rollout gate changed. G1 remains open.
+
+## ISSUE-100 — Bend/twist history preview replaces canonical state before Apply (2026-10-15, REPRODUCED; OPEN)
+
+- `tests/test_geometry_history_preview_lifecycle.py` mirrors the current desktop
+  sequence on a tiny native part: delete the committed deformation with preview
+  mode, add/update a temporary preview, then discard it before history Apply.
+  The feature log still names the original operation, but the canonical design
+  no longer contains it. Apply correctly refuses with HTTP 409
+  `recipe_not_reproducible`, leaving that already-altered source in place.
+- Cancel's timeline seek restores the committed overlay but adds an undo entry
+  and clears redo. The added undo point contains the peeled, unreproducible
+  state. These are reproduced integration defects, not desired semantics.
+- All **10 bend/twist cases** pass as a mixture of bug characterization, direct
+  native-edit/undo controls, failure atomicity and a guard against full proof on
+  preview drag. Their green result does **not** certify preview correctness.
+- Root cause: the legacy preview workflow uses canonical silent setters as its
+  working state; the newer history editor correctly requires a reproducible
+  source. Next implement a bounded, source-bound private preview whose Cancel
+  only discards temporary state and whose Apply commits native inputs once.
+  Preserve current geometry calculations and keep full replay off drag paths.
+  See the [proposed G1 preview lifecycle](docs/audits/feature_history_20261014/remaining_standard_part_checkpoints.md).
+- No preview implementation fix, app check or performance qualification is
+  claimed in the grouping checkpoint. MV-48 retains desktop lifecycle debt.

@@ -2651,23 +2651,18 @@ def test_add_cluster_log_survives_roundtrip():
         assert_cluster_in_feature_log(reloaded, cid, expect_helix_ids=cluster_helix_ids)
 
 
-def test_add_cluster_default_does_not_log():
-    """add_cluster without log=True (the default, backward-compatible) appends NO
-    cluster_create entry — so the existing capstone/tests are unaffected and the oracle
-    can go red on an unlogged build."""
+def test_add_cluster_default_records_replayable_grouping():
+    """Headless construction uses the same mandatory grouping record as the UI."""
     with hb.scratch_session(LatticeType.HONEYCOMB):
         hb.create_bundle(SIX_HB_CELLS, 42, lattice=LatticeType.HONEYCOMB, name="6hb")
         design = design_state.get_or_404()
         cluster_helix_ids = [design.helices[0].id, design.helices[1].id]
-        hb.add_cluster("armA", cluster_helix_ids)  # default: log=False
+        hb.add_cluster("armA", cluster_helix_ids)
         after = design_state.get_or_404()
         cid = after.cluster_transforms[-1].id
-        assert not any(
-            getattr(e, "feature_type", None) == "cluster_create"
-            for e in after.feature_log
-        )
-        with pytest.raises(AssertionError, match="created without logging"):
-            assert_cluster_in_feature_log(after, cid)
+        entry = assert_cluster_in_feature_log(after, cid, expect_helix_ids=cluster_helix_ids)
+        assert entry.proof_version == 1
+        assert entry.cluster_snapshot.id == cid
 
 
 # ── Full sequencing automation (assign scaffold + WC-complement staples) ───────

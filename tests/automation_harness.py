@@ -3404,7 +3404,7 @@ def assert_cluster_translated(
 def assert_cluster_in_feature_log(design, cluster_id: str, *, expect_helix_ids=None):
     """Oracle: a logged cluster-creation is recorded in the design's feature log.
 
-    ``add_cluster(..., log=True)`` must append a ``cluster_create`` feature-log entry
+    Every ``add_cluster(...)`` call must append a ``cluster_create`` feature-log entry
     naming the new cluster and its exact helix set, so a design's construction history
     can replay "group these helices into a bar" — the cluster-creation step of a
     kinematic mechanism (e.g. the generated 4-bar parallelogram part).  Without it the
@@ -3420,8 +3420,8 @@ def assert_cluster_in_feature_log(design, cluster_id: str, *, expect_helix_ids=N
     Asserts:
 
       1. **The entry exists.** Exactly one ``cluster_create`` entry carries
-         ``cluster_id`` — a build that created the cluster *without* ``log=True`` leaves
-         none (the can-go-red guard).
+         ``cluster_id`` — deliberately removing that record makes this oracle fail.
+         The legacy ``log`` argument no longer disables recording.
       2. **It names the right helices.** Its ``helix_ids`` are exactly the live cluster's
          helix set (or ``expect_helix_ids`` when given) — so a build that logged the
          wrong helices, or whose cluster lost/gained helices after logging, fails.

@@ -1,0 +1,103 @@
+{
+  "date": "2026-10-15",
+  "scope": "G1 mandatory ordinary group creation recording and deformation preview failure characterization",
+  "validation": {
+    "unique_cases_passed": 102,
+    "runs": [
+      {
+        "phase": "initial regression attempt",
+        "passed": 4,
+        "failed": 6,
+        "errors": 13,
+        "seconds": 5.34,
+        "note": "Six intended grouping failures; fault-hook teardown contaminated later setup. Corrected fixture-local patch scope and failure-safe cleanup."
+      },
+      {
+        "phase": "clean red",
+        "passed": 15,
+        "failed": 6,
+        "seconds": 2.82,
+        "note": "Expected grouping recording/publication failures; deformation behavior reproduced."
+      },
+      {
+        "phase": "first implementation attempt",
+        "status": "interrupted",
+        "seconds": 44.42,
+        "note": "Nested non-reentrant state lock in public set_design call. Interrupted owned pytest process; fixed to lock-owned publish_replacement and added immediate non-reentrant trap."
+      },
+      {
+        "phase": "focused green",
+        "passed": 101,
+        "warnings": 108,
+        "seconds": 5.57,
+        "slowest_setup_seconds": 1.55,
+        "slowest_call_seconds": 0.06
+      },
+      {
+        "phase": "additional routing chronology regression",
+        "passed": 16,
+        "warnings": 16,
+        "seconds": 2.88,
+        "slowest_setup_seconds": 1.77,
+        "slowest_call_seconds": 0.01,
+        "note": "Reran group target with one additional nick/group/nick independent-proof case; 102 distinct cases overall."
+      }
+    ],
+    "command_prefix": "just validate-safe scripts/test_guard.sh test-focused 0 focused -- uv run pytest",
+    "targets": [
+      "tests/test_geometry_group_history.py",
+      "tests/test_geometry_history_preview_lifecycle.py",
+      "tests/test_native_overlay_proof.py",
+      "tests/test_headless_build.py::test_add_cluster_log_records_feature_log_entry",
+      "tests/test_headless_build.py::test_add_cluster_log_survives_roundtrip",
+      "tests/test_headless_build.py::test_add_cluster_default_records_replayable_grouping",
+      "tests/test_automation_harness.py::test_cluster_in_feature_log_detects_a_removed_grouping_record",
+      "tests/test_native_extrusion_proof.py",
+      "tests/test_native_routing_proof.py",
+      "tests/test_part_recipe_edit.py",
+      "tests/test_extrusion_clusters.py"
+    ],
+    "per_test_budget_violations": 0,
+    "coverage": [
+      "Omitted/False/True compatibility log values always record exact grouping inputs",
+      "Independent input-only proof with poisoned recovery snapshots; direct move and chronological fine-routing interactions",
+      "Exact undo/redo; source/session/revision checks; validation/publication/cancellation rollback",
+      "Historical-cursor refusal before allocation/build; unrooted legacy stays unverified",
+      "Non-reentrant lock ownership, single undo/publication, no full proof or topology reconciliation during grouping"
+    ],
+    "characterization": "10 deformation tests include controls and demonstrations of existing preview/Apply409 and Cancel undo/redo corruption. They are not a deformation fix and must be replaced when isolated preview integrates."
+  },
+  "lint": "Changed-file Ruff and diff whitespace pass. Repository just lint retains exactly five pre-existing F401 imports; no new violations.",
+  "backend_selector": {
+    "command": "just test-smart --dry-run",
+    "decision": "FAST (fast suite only)",
+    "executed": false,
+    "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\nThis is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\nOnly request `just test-session` when a broad/full sweep is actually needed.",
+    "caveat": "Selector wording says ran; no suite executed by dry run. Broad-suite debt remains."
+  },
+  "limits": [
+    "Not verified in app; shared live server was not mutated and Archive is unavailable.",
+    "No interactive/performance qualification, broad suite, native build or simulation.",
+    "Group creation at a historical cursor now explicitly refuses until latest; historical branching requires a separate policy.",
+    "Direct group deletion and live pose previews remain open G1 work.",
+    "Bend/twist isolated preview is designed, not yet integrated; G1-G5 unfinished."
+  ],
+  "frontend_main_js_loc_delta": 0,
+  "vr": "Deferred to capable-machine session",
+  "assemblies": "Deferred",
+  "cleanup": {
+    "owned_completed_pytest_roots": [
+      "/tmp/pytest-of-joshua/pytest-271",
+      "/tmp/pytest-of-joshua/pytest-272",
+      "/tmp/pytest-of-joshua/pytest-273"
+    ],
+    "active_references": 0,
+    "locks": 0,
+    "files_removed": 0,
+    "bytes_removed": 0,
+    "empty_fixture_directories_removed": true,
+    "removal_verified": true,
+    "historical_locked_pytest_268": "Preserved untouched",
+    "note": "Names reused after earlier checkpoint cleanup; this is a new inventory."
+  }
+}

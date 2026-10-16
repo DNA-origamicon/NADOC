@@ -2039,9 +2039,8 @@ def test_cluster_in_feature_log_passes_on_a_logged_creation():
         assert set(entry.helix_ids) == set(helix_ids)
 
 
-def test_cluster_in_feature_log_fires_when_creation_unlogged():
-    """Load-bearing red-test: a cluster created without log=True leaves no entry → the
-    oracle raises (the can-go-red guard)."""
+def test_cluster_in_feature_log_detects_a_removed_grouping_record():
+    """The oracle catches missing provenance even though new calls always record it."""
     from backend.api import headless_build as hb
     from backend.api import state as design_state
     from tests.automation_harness import assert_cluster_in_feature_log
@@ -2052,11 +2051,16 @@ def test_cluster_in_feature_log_fires_when_creation_unlogged():
         design = design_state.get_or_404()
         hb.add_cluster(
             "armA", [design.helices[0].id, design.helices[1].id]
-        )  # log=False
+        )
         after = design_state.get_or_404()
         cid = after.cluster_transforms[-1].id
+        assert_cluster_in_feature_log(after, cid)
+        missing = after.copy_with(feature_log=[
+            entry for entry in after.feature_log
+            if not (entry.feature_type == "cluster_create" and entry.cluster_id == cid)
+        ])
         with pytest.raises(AssertionError, match="created without logging"):
-            assert_cluster_in_feature_log(after, cid)
+            assert_cluster_in_feature_log(missing, cid)
 
 
 def test_cluster_in_feature_log_fires_on_wrong_helix_set():
