@@ -2132,3 +2132,37 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
 - Keep this as generated-asset coverage/placement debt. No collision threshold,
   molecular placement, optimizer, test expectation or numerical pin was changed.
   Diagnose the actual collision before any proposed scientific correction.
+
+## ISSUE-97 — Sequence application truncates a shared overhang host (2026-10-15, REPRODUCED; OPEN)
+
+- Two native 12-base overhangs can reuse the same 42-base helix, with reverse
+  domains 41→30 and 11→0. The existing connection-version Apply path normalizes
+  each sequence to its live domain length, then `_build_overhang_patch` resizes
+  the entire host to that sequence length. After the first patch, its range is
+  30–41; the other domain remains 11→0 and loses its canonical linker anchor.
+- Reproduced from the pending-connection test's authentic bundle/extrusion
+  recipe without changing generated coordinates. Both ssDNA and dsDNA legacy
+  Apply controls fail with `NativePlacementError` before a new adapter exists.
+- Initial registered finite-linker application requires a unique dedicated host
+  and a backing domain spanning that host. Shared/partial hosts must refuse
+  explicitly before sequence or topology work. Existing native kernels remain
+  unchanged; correcting the general shared-host sequence operation is open.
+
+## ISSUE-98 — Cold coating tests author numerical pins in the wrong process (2026-10-15, FOCUSED TEST FIX VALIDATED)
+
+- The two lifecycle modes passed alone but failed after the API/MDAnalysis group
+  with `runtime_mismatch`. A minimal inspection established that importing
+  MDAnalysis adds a GNU OpenMP library to the parent fingerprint; NumPy/SciPy
+  fingerprints otherwise remain identical. Limiting threads does not remove
+  this loaded library. The fresh evaluation worker correctly refuses that pin.
+- The cold lifecycle test now authors both packing/repacking and their pins in
+  the actual isolated append worker, then performs independent cold replay with
+  poisoned recovery. A parent runtime probe fails the test. Rigid move/remove
+  and retained-input/identity assertions remain; no pin, source algorithm or
+  production runtime policy was changed or weakened.
+- The formerly failing ten-module order passed **258 tests** (95 existing
+  warnings) in 29.43 s. Both lifecycle modes now perform five real workers and
+  are classified as intentional slow `namd` integration tests (7.10/7.22 s).
+- Primary-source context: threadpoolctl documents that its inventory describes
+  libraries loaded into the current process and expands with additional imports:
+  [runtime introspection](https://github.com/joblib/threadpoolctl#python-runtime-programmatic-introspection).

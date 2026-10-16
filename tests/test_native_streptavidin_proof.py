@@ -1,6 +1,7 @@
 """Registered coating replay; experimental captures do not enable a live profile."""
 
 import pytest
+from uuid import uuid4
 
 from backend.api.part_evaluation import evaluate
 from backend.api.part_evaluation_worker import EvaluationWorker
@@ -20,11 +21,14 @@ def append(design, kind, params):
         design_snapshot_gz_b64="poisoned recovery", post_state_gz_b64="poisoned output")])
 
 
-def recipe(sources, mode="adsorption"):
+def gold_recipe(sources):
     design = create_empty_part("Coating recipe", "HONEYCOMB").copy_with(input_sources=dict(sources["table"]))
-    design = append(design, "nanoparticle-create", {"_proof_version": 1, "nanoparticle_version": 1,
+    return append(design, "nanoparticle-create", {"_proof_version": 1, "nanoparticle_version": 1,
         "nanoparticle_id": "gold", "diameter_nm": 20.0})
-    return append(design, "nanoparticle-patch", inputs(sources, mode=mode,
+
+
+def recipe(sources, mode="adsorption"):
+    return append(gold_recipe(sources), "nanoparticle-patch", inputs(sources, mode=mode,
         spacer_nm=0.3 if mode == "adsorption" else 4.0, coverage_reference="gold_2007",
         coverage_source=sources["coverage_source"].model_dump()))
 
@@ -38,12 +42,16 @@ def operation(name, **changes):
             "request": {"operation": name, **changes}}
 
 
-def cold(design):
+def cold(design, request=None):
     # Qualification only. This test does not install a server-owned profile or
     # change ordinary capture defaults. Generous clock avoids a CI timing test;
     # the benchmark separately measures the prospective 100 ms profile.
-    isolated = capture(design, max_nodes=100_000, max_bytes=4_000_000, seconds=1.0)
-    worker = EvaluationWorker(isolated, operation("verify"))
+    isolated = capture(design, max_nodes=100_000, max_bytes=4_000_000, seconds=1.0,
+                       preserve_entry_types=request is not None)
+    envelope = operation("verify") if request is None else {
+        "request": request, "header": {"identity": str(uuid4()), "timestamp": "2026-10-15T00:00:00Z",
+            "source_design_id": design.id, "source_revision": 7}}
+    worker = EvaluationWorker(isolated, envelope)
     try:
         worker.start()
         assert worker.wait(30)
@@ -84,11 +92,25 @@ def test_explicit_coating_upgrade_rebuilds_old_pin_even_after_coating_removal(so
 
 
 @pytest.mark.parametrize("mode", ["adsorption", "biotin_tether"])
-def test_registered_lifecycle_cold_rebuilds_pinned_inputs_and_ignores_recovery(sources, mode):
-    design = recipe(sources, mode)
+def test_registered_lifecycle_cold_rebuilds_pinned_inputs_and_ignores_recovery(sources, mode, monkeypatch):
+    # A parent with unrelated imported BLAS/OpenMP libraries is not the worker
+    # runtime. Author both numerical steps in the actual worker; never swap a
+    # worker pin onto coordinates produced in the parent to make replay pass.
+    from backend.core import part_streptavidin_contract
+    monkeypatch.setattr(part_streptavidin_contract, "runtime_fingerprint",
+        lambda: pytest.fail("Cold lifecycle authored or checked a numerical pin in the parent"))
+    created = cold(gold_recipe(sources), {
+        "operation": "append", "kind": "streptavidin-coating", "expected_revision": 7,
+        "params": {"action": "set", "nanoparticle_id": "gold", "coating": {
+            "mode": mode, "spacer_nm": 0.3 if mode == "adsorption" else 4.0,
+            "coverage_reference": "gold_2007", "count_override": 1, "seed": 1}}})
+    assert created["status"] == "ready", created.get("issues", created)
+    design = Design.model_validate(created["candidate"])
+    for row in design.feature_log:
+        row.design_snapshot_gz_b64 = row.post_state_gz_b64 = "poisoned recovery"
     expected_sources = sorted(sources["table"])
     set_result = cold(Design.model_validate_json(design.model_dump_json()))
-    assert set_result["status"] == "reproduced_import", set_result
+    assert set_result["status"] == "reproduced_import", set_result.get("issues", set_result)
     assert set_result["imported_sources"] == [{"kind": "input_source", "identity": identity}
                                                for identity in expected_sources]
     assert not set_result["native_editable"]
@@ -97,8 +119,13 @@ def test_registered_lifecycle_cold_rebuilds_pinned_inputs_and_ignores_recovery(s
         "pivot": [0, 0, 0], "translation": [2, -1, 3], "rotation": [0, 0, 0, 1]}))
     assert design.nanoparticles[0].pose != original.pose
     assert design.nanoparticles[0].coating == original.coating
-    params = {**design.feature_log[1].params, "diameter_nm": 22.0}
-    design = append(design, "nanoparticle-patch", params)
+    repacked = cold(design, {"operation": "append", "kind": "streptavidin-coating", "expected_revision": 7,
+        "params": {"action": "repack", "nanoparticle_id": "gold", "diameter_nm": 22.0}})
+    assert repacked["status"] == "ready", repacked.get("issues", repacked)
+    design = Design.model_validate(repacked["candidate"])
+    assert design.feature_log[3].params["engine"] == design.feature_log[1].params["engine"]
+    for row in design.feature_log:
+        row.design_snapshot_gz_b64 = row.post_state_gz_b64 = "poisoned recovery"
     assert design.nanoparticles[0].coating.poses != original.coating.poses
     assert design.nanoparticles[0].diameter_nm == 22.0
     result = cold(Design.model_validate_json(design.model_dump_json()))

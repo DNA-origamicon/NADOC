@@ -920,6 +920,11 @@ quiet host condition before claiming complete four-profile coverage.
   Reusable workflow: Debug → VR Tours & Tests → Controls & layout → SteamVR final
   output · capture and calibration; original manual recordings remain preserved.
 
+Feature-history session scope update (2026-10-15): the user explicitly deferred
+VR/headset validation to a later machine-specific session on VR-capable hardware.
+This machine cannot perform those checks. Preserve their pending status; desktop
+checks in MV-45–MV-47 remain in scope and are not covered by this deferral.
+
 - **MV-45 — PENDING — Standard-part recipe repair panel (2026-10-15).**
   Exercise Check / repair recipe from the desktop Feature Log using an isolated
   `__e2e__` native part. Inspect a missing reference, choose a valid prefix target,

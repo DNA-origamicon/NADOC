@@ -150,7 +150,9 @@ LEAF_RULES: list[tuple[str, tuple[str, ...]]] = [
     # CPD conversion exercises the atomistic multi-start attachment relaxation.
     ("cpd_design", ("atomistic",)),
     ("part_cpd", ("atomistic",)),
-    ("part_evaluation", ("atomistic", "headless")),
+    ("part_coating", ("namd",)),
+    ("streptavidin", ("namd",)),
+    ("part_evaluation", ("atomistic", "headless", "namd")),
     # pdb_export.py builds on the atomistic model — its heavy export test lives in the
     # atomistic heavy group, so a change here must re-run that group.
     ("pdb_export", ("atomistic",)),

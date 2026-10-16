@@ -502,6 +502,7 @@ def extrude_valid_overhang(design: Design, length_bp: int = 12) -> tuple[Design,
 
 # Whole modules where every test is a heavy real-sim / trajectory test.
 _SLOW_MODULES = {
+    "test_native_join_proof",  # real two-cluster Join/edit + two independent spawned proofs (5.41 s)
     "test_generated_commands",  # shared real origami build + fixed-center attachment fitting
     "test_generated_fork_proof",  # two cold workers + real fork routing/curvature and edited suffix (5.85 s)
     # Every HMC check launches the real CUDA Chudoba oxDNA engine; the harmonic
@@ -569,6 +570,12 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # October 15: real pinned coating packing/repacking and spawned numerical
+    # upgrade lifecycles. Small admission/fault tests stay in the fast suite.
+    "test_real_native_lifecycle_defaults_sources_and_input_replay",  # 6.37 s, repeated one-site packing
+    "test_real_spawned_creation_then_cold_repack_uses_only_pinned_sources",  # 5.90 s, three workers
+    "test_spawned_explicit_duplex_engine_upgrade_preserves_old_revision_then_commits_and_cold_replays",  # 5.36 s, four workers
+    "test_registered_lifecycle_cold_rebuilds_pinned_inputs_and_ignores_recovery",  # coating set/repack + three independent proofs
     # Actual pinned CPD conversion/relaxation and independent spawned replay.
     "test_native_cpd_append_and_independent_cold_proof_ignore_recovery_and_physics",
     # Native routing + Join search / independent cold replay are intentional
@@ -1002,7 +1009,9 @@ def _slow_area_for(module: str) -> str:
     # so its heavy tests belong to the same "cando" heavy group.
     if "cando" in module or "fem" in module or "snupi" in module:
         return "cando"
-    if "namd" in module or module in {"test_remote_cutoff_eval", "test_nanoparticles"}:
+    if "namd" in module or module in {
+        "test_remote_cutoff_eval", "test_nanoparticles", "test_part_coating_evaluation", "test_native_streptavidin_proof",
+    }:
         return "namd"
     if "mrdna" in module or module == "test_helical_site":
         return "mrdna"
@@ -1029,6 +1038,7 @@ def _slow_area_for(module: str) -> str:
         return "md"
     if "headless" in module or "spec_build" in module or module in {
         "test_generated_commands", "test_generated_fork_proof", "test_generated_joined_steps", "test_generated_joined_proof",
+        "test_native_join_proof", "test_part_repair_evaluation",
     }:
         return "headless"
     # cluster autodetect's heavy test is heavy because it builds a fully ROUTED 18hb

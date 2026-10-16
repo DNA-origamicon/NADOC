@@ -2,6 +2,13 @@
 
 Scope approved October 14, 2026: implement standard-part validation, editability and agent enforcement first. [Assembly work is deferred](assembly_deferred.md). Part-local proteins, nanoparticles, duplexes, attachments and imports remain in scope; they are not assemblies merely because they contain multiple components.
 
+October 15 resumption: the user explicitly deferred VR/headset validation to a
+later machine-specific session because this machine is not VR capable. Retain
+that validation debt without making it a prerequisite for continued standard-part
+implementation here. Desktop validation and automated software checks remain in
+scope. The pushed pause checkpoint is `d5a53734`; its unfinished tests and broad
+regression debt are recorded in [the checkpoint evidence](validation_pause_checkpoint.json).
+
 ## Delivery sequence
 
 | Phase | Scope | State and exit condition |
@@ -10,8 +17,8 @@ Scope approved October 14, 2026: implement standard-part validation, editability
 | P1 | Standard-part recording transactions, executable replay registry and evidenced cleanup | Foundation implemented below. Retain legacy callbacks and compatibility recovery; no claim of general isolated evaluation |
 | P2 | Explicit recipe roots/versions, authoritative-field classification, read-only verification and incremental dependencies | Implementation exit checks complete: independent nonempty replay, content-pinned roots, typed dependencies, fingerprints, bounded capture/jobs and stale/cancel handling. Supported-family expansion continues in P3/P4; validation debt below remains explicit |
 | P3 | Native DNA command families and generated construction | DNA implementation exit checks recorded below, including joined/connectivity input compilation and bounded native-source CPD conversion/relaxation. Registered kinds retain method/action restrictions; their count is not universal operation coverage. Generated asset/attachment histories remain in P4 |
-| P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol, pinned small protein/catalog/aptamer inputs, supported protein conjugation and duplex lifecycle/relaxation implemented. Native unapplied NP connection create/rename/delete and coupled pending-handle motion pass independent replay; applied connection lifecycle is next. Full import/attachment coverage and complete physical-input receipts remain open |
-| P5 | Standard-part repair, drafts, desktop and part-mode VR | Saved draft evaluation/apply, reference selection, source staging/restoration and persistence pass. Desktop UI-1 and narrow invalid-gold repair pass. Private complete gold/QD/free-protein comparisons pass automated UI checks; complete DNA comparison, broader invalid-family selectors and native VR remain open. App review remains pending |
+| P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol, pinned small protein/catalog/aptamer inputs, supported protein conjugation and duplex lifecycle/relaxation implemented. Pending NP and ordinary overhang connection contracts pass independent replay. Bounded native applied NP lifecycle and active-version rename are implemented; ordinary applied-route migration and performance qualification remain open. Full import/attachment coverage and complete physical-input receipts remain open |
+| P5 | Standard-part repair, drafts, desktop and part-mode VR | Saved draft evaluation/apply, reference selection, source staging/restoration and persistence pass. Desktop UI-1 and narrow invalid-gold repair pass. Private gold/QD/free-protein and complete DNA comparisons pass automated checks; broader invalid-family selectors and desktop app review remain open. VR/headset validation is explicitly deferred to a later capable-machine session |
 | P6 | Strict standard-part agent transactions and legacy retirement | Private policy/permits, closed strict HTTP dispatch, immutable internal ownership and outside-lock evaluation/publication pass. Atomic typed records and pending-safe autosave pass. Cold-qualified recovery and durable initial creation pass focused lifecycle checks. Private byte transport now moves source decode/projection into the admitted worker; public immutable creation/batch stay disabled pending responsiveness and memory qualification. Catalog expansion, explicit imports and later replay reuse remain open |
 
 Assemblies are not an exit condition for any phase above. Existing assembly compatibility tests may catch collateral changes to shared infrastructure, but new assembly features and fixes remain deferred.
@@ -60,6 +67,17 @@ session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 No frontend behavior was changed in this foundation; no molecular geometry algorithm or locked constant was altered. No browser/headset validation was run. Benchmark models stayed in memory; retained task evidence consists of compact JSON and documentation, with no model/capture dumps or user-design modifications.
 
 ## Current implementation entry point
+
+Resumed October 15 from `d5a53734`, with VR/headset validation deferred by the
+user. Applied NP rename (`8f1ca5a9`) passes all 31 new and 231 related focused
+checks while preserving normal reconciliation. The previously failing API/coating
+order now passes 258 checks after correcting the cold test's process-owned
+numerical pin setup; production runtime checks remain unchanged. Four existing
+heavy replay/packing entries and the corrected five-worker coating lifecycle
+are classified through the slow-test registry without changing budgets. These
+focused checks do not clear the outstanding broad regression/app debt; see
+[resumption evidence](validation_resume_regressions.json). The prepared ordinary
+linker and physical-input capture contracts remain under implementation.
 
 P0–P3 implementation exit checks are recorded below; chronological entries retain
 their original phase status. P4–P6 proceed in independently reversible slices,

@@ -1,0 +1,101 @@
+{
+  "date": "2026-10-15",
+  "resumed_from": "d5a53734",
+  "scope": "User resumed standard-part implementation; VR/headset validation explicitly deferred to a later capable-machine session. Desktop and automated software checks remain in scope.",
+  "initial_contract_selection": {
+    "passed": 3,
+    "failed": 7,
+    "seconds": 3.51,
+    "causes": {
+      "np_rename": "2 expected absent-contract failures",
+      "oxdna_capture": "2 expected absent-module failures",
+      "ordinary_linker": "3 unexpected existing-oracle shared-host failures, later isolated as ISSUE-97"
+    }
+  },
+  "capture_factoring_baseline": {
+    "passed": 6,
+    "production_refactor_applied": false,
+    "source": "tests/test_capture_graph_parity.py",
+    "coverage": "Exact nodes/bytes, benign aliases, legacy cycles, local clock/deepcopy seams, opaque recovery bytes and child rows."
+  },
+  "regression_order_diagnosis": {
+    "initial": {
+      "passed": 256,
+      "failed": 2,
+      "seconds": 18.34
+    },
+    "repeat_with_explicit_issue_diagnostics": {
+      "passed": 238,
+      "failed": 2,
+      "seconds": 10.34
+    },
+    "isolated_coating_lifecycles": {
+      "passed": 2
+    },
+    "cause": "Parent MDAnalysis import adds libgomp to numerical runtime fingerprint; cold worker has no such import. Production runtime rejection is correct.",
+    "fixed": {
+      "passed": 258,
+      "failed": 0,
+      "warnings": 95,
+      "seconds": 29.43
+    },
+    "production_runtime_or_pin_changes": false
+  },
+  "slow_test_triage": {
+    "source": "backend_broad_20261015_timing.json",
+    "existing_budget_seconds": 5,
+    "budget_changed": false,
+    "entries": [
+      {
+        "test": "test_real_native_lifecycle_defaults_sources_and_input_replay",
+        "seconds": 6.37,
+        "reason": "Repeated genuine one-site native packing over growing recipe prefixes",
+        "area": "namd"
+      },
+      {
+        "test": "test_real_spawned_creation_then_cold_repack_uses_only_pinned_sources",
+        "seconds": 5.9,
+        "reason": "Three fresh native workers with pinned atom sources",
+        "area": "namd"
+      },
+      {
+        "test": "test_join_from_native_root_and_parameter_regeneration[False]",
+        "seconds": 5.41,
+        "reason": "Real two-cluster Join/edit plus two independent proofs; both module parameter cases retained as integration",
+        "area": "headless"
+      },
+      {
+        "test": "test_spawned_explicit_duplex_engine_upgrade_preserves_old_revision_then_commits_and_cold_replays",
+        "seconds": 5.36,
+        "reason": "Four fresh workers including existing numerical relaxation and explicit upgrade",
+        "area": "headless"
+      },
+      {
+        "test": "test_registered_lifecycle_cold_rebuilds_pinned_inputs_and_ignores_recovery",
+        "seconds": [
+          7.1,
+          7.22
+        ],
+        "reason": "Correct process-owned packing/repacking plus three independent cold proofs",
+        "area": "namd"
+      }
+    ],
+    "collection_check": "Initial four registry entries collected as all five parameter cases (5/51,46 deselected,1.23s). New two coating lifecycle cases executed through focused validation and marked slow.",
+    "leaf_routing_checked": {
+      "part_evaluation": [
+        "atomistic",
+        "headless",
+        "namd"
+      ],
+      "part_coating": [
+        "namd"
+      ],
+      "streptavidin": [
+        "namd"
+      ]
+    },
+    "broad_budget_recheck": "Pending frozen source/test snapshot; no full suite session opened or timing threshold raised."
+  },
+  "remaining_regression_debt": "Prior broad suite is not green. Affected 258-case rerun clears these groups only; remaining missing-artifact/environment/scientific failures require individual attribution.",
+  "application_status": "NOT VERIFIED IN APP; VR deferred by user, desktop remains pending."
+}
