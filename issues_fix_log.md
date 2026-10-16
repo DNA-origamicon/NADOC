@@ -732,3 +732,33 @@ Thirty-repeat measurement passed all ten cells/five native cold proofs, with
 cleanup; latency remains unqualified (native request/lock/light maxima
 88.57/82.35/86.30 ms). Initial larger-fixture cold capture refusal remains in the
 evidence. No app validation is claimed. Applied geometry is unchanged.
+
+2026-10-15 — ISSUE-92 tests-first application ownership correction: root recorded
+eight failures in 2.85 seconds across stale active constraints, unrelated legacy
+binding preservation, surface-carrier identity and bound-handle selection. The
+root cause is duplicated lifecycle state maintained separately from native
+relocation: the geometry/domain moved, while the surface carrier and inactive
+constraint fields did not; a global version-only sync also overwrote unrelated
+owners. The narrow correction updates only affected ownership, clears inactive
+constraints and explicitly excludes bound handles from free selection. Existing
+register/relocation/restoration formulas and numerical pins are unchanged. Root
+validation passed 181 distinct cases, after strengthening one stale status-only
+assertion to the existing complete typed 422 diagnostic. No new native applied
+contract or app check is claimed. No alternative geometry fix was attempted.
+
+2026-10-15 — ISSUE-93 private DNA comparison cleanup: a shared-template disposal
+regression exposed Three BufferGeometry's aliased userData on a geometry clone.
+Detaching the private clone's metadata preserves the shared native template.
+Added concurrent ordinary-scene identity/matrix/metadata survival assertions;
+migrated obsolete constructor regex checks into actual buffer behavior. The
+corrected 11-file run passed 195 cases in 3.97 seconds; real Python→Node packets
+also passed. Full frontend passed 8,291 cases (one skipped) in 314.43 seconds; resource and
+app qualification remain pending.
+
+2026-10-15 — ISSUE-94 strict cold DNA decoding: the actual-byte benchmark found
+that nested Design validation leaves Helix's forward-reference serializer deferred
+until direct construction. A fresh-process minimal diagnostic reproduced the
+MockValSer failure and confirmed schema initialization resolves it. The strict
+boundary now resolves the existing schema once; pinned model/engine files remain
+unchanged. Independent cold serialization and spawned DNA worker regressions
+are prepared, with validation and corrected measurements pending.

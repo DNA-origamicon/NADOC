@@ -477,17 +477,43 @@ def _surface_owner(design: Design, nanoparticle_id: str, strand_id: str):
     return None, None
 
 
-def _sync_np_applied_bindings(design: Design) -> Design:
+def _sync_np_applied_bindings(design: Design, affected: set[tuple[str, str]]) -> Design:
+    """Refresh only the handle ownership changed by this application transition.
+
+    A surface carrier follows its exact live strand/domain/auxiliary endpoint.
+    Ambiguous legacy ownership remains visible; this helper never guesses a
+    replacement or normalizes an unrelated direct binding.
+    """
     applied = {
         (version.nanoparticle_id, version.strand_id): version.overhang_id
         for version in design.nanoparticle_connection_versions if version.applied
     }
+    selected_strands = {strand_id for _, strand_id in affected}
+    strands, endpoints = {}, {}
+    for strand in design.strands:
+        if strand.id in selected_strands:
+            strands.setdefault(strand.id, []).append(strand)
+    for endpoint in design.overhangs:
+        if endpoint.strand_id in selected_strands:
+            endpoints.setdefault(endpoint.id, []).append(endpoint)
     conjugations = []
     for conjugation in design.nanoparticle_conjugations:
-        records = [record.model_copy(update={
-            "bound_overhang_id": applied.get((conjugation.nanoparticle_id, record.strand_id))
-        }) for record in conjugation.surface_strands]
-        conjugations.append(conjugation.model_copy(update={"surface_strands": records}))
+        changed, records = False, []
+        for record in conjugation.surface_strands:
+            key = conjugation.nanoparticle_id, record.strand_id
+            if key not in affected:
+                records.append(record)
+                continue
+            values = {"bound_overhang_id": applied.get(key)}
+            owners = strands.get(record.strand_id, ())
+            specs = endpoints.get(record.overhang_id, ())
+            if len(owners) == 1 and len(specs) == 1 and specs[0].auxiliary_endpoint:
+                domains = [domain for domain in owners[0].domains if domain.overhang_id == record.overhang_id]
+                if len(domains) == 1 and domains[0].helix_id == specs[0].helix_id:
+                    values["helix_id"] = domains[0].helix_id
+            records.append(record.model_copy(update=values))
+            changed = True
+        conjugations.append(conjugation.model_copy(update={"surface_strands": records}) if changed else conjugation)
     return design.model_copy(update={"nanoparticle_conjugations": conjugations})
 
 
@@ -577,15 +603,22 @@ def _set_np_version_applied(design: Design, version_id: str, applied: bool) -> D
         v.duplex_id for v in design.nanoparticle_connection_versions
         if v.id == version_id or (applied and v.id in conflict_ids)
     } - {None}
+    affected_handles = {(target.nanoparticle_id, target.strand_id)} | {
+        (version.nanoparticle_id, version.strand_id)
+        for version in design.nanoparticle_connection_versions
+        if applied and version.id in conflict_ids and (version.applied or version.duplex_id is not None)
+    }
     versions = []
     for version in design.nanoparticle_connection_versions:
         if version.id == version_id:
             versions.append(version.model_copy(update={
                 "applied": applied, "relaxed": False, "residual_nm": None, "duplex_id": None,
+                "constraint_root_nm": None, "constraint_radius_nm": None,
             }))
         elif applied and version.id in conflict_ids:
             versions.append(version.model_copy(update={
                 "applied": False, "relaxed": False, "residual_nm": None, "duplex_id": None,
+                "constraint_root_nm": None, "constraint_radius_nm": None,
             }))
         else:
             versions.append(version)
@@ -680,7 +713,7 @@ def _set_np_version_applied(design: Design, version_id: str, applied: bool) -> D
                 }) if version.id == version_id else version
                 for version in out.nanoparticle_connection_versions
             ]})
-    return _sync_np_applied_bindings(out)
+    return _sync_np_applied_bindings(out, affected_handles)
 
 
 def _next_np_version_name(design: Design, nanoparticle_id: str, strand_id: str, overhang_id: str) -> str:
@@ -890,10 +923,10 @@ def delete_np_connection_version(nanoparticle_id: str, version_id: str, expected
             # unrelated legacy direct-binding ownership verbatim (ISSUE-90).
             return d.model_copy(update={"nanoparticle_connection_versions": [
                 v for v in d.nanoparticle_connection_versions if v.id != version_id]})
-        out = _set_np_version_applied(d, version_id, False) if target_version.applied else d
-        return _sync_np_applied_bindings(out.model_copy(update={
+        out = _set_np_version_applied(d, version_id, False)
+        return out.model_copy(update={
             "nanoparticle_connection_versions": [v for v in out.nanoparticle_connection_versions if v.id != version_id],
-        }))
+        })
     updated, report, _ = design_state.mutate_with_feature_log(
         "nanoparticle-connection-version-delete", "Delete nanoparticle connection version",
         {"nanoparticle_id": nanoparticle_id, "version_id": version_id}, mutate,

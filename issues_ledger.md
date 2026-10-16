@@ -2011,3 +2011,88 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   result-selection qualification remain open under the physical freshness plan;
   MV-46 app validation is also open. No historical simulation receives a current
   certificate.
+
+## ISSUE-92 — Applied NP connection lifecycle leaves stale ownership and constraint metadata (2026-10-15, FOCUSED CORRECTION VALIDATED; APP OPEN)
+
+- Static audit found that `_set_np_version_applied` clears applied/relaxed/
+  residual/duplex state on unapply or conflict replacement, but retains
+  `constraint_root_nm` and `constraint_radius_nm`. The strict pending contract
+  correctly rejects that retained active state, so apply→unapply cannot return
+  to native pending-handle motion without a lifecycle correction.
+- The same helper calls `_sync_np_applied_bindings` over the whole design. Like
+  ISSUE-90's earlier pending delete, this can clear unrelated legacy direct
+  bindings absent from the candidate-version table. Applied deletion invokes
+  this global synchronization again. Only explicitly affected handles may be
+  synchronized; unrelated compatibility metadata must remain untouched.
+- Relocation updates the driven strand/domain and auxiliary overhang carrier,
+  but leaves the NP surface record's `helix_id` at its removed original helix.
+  Refreshing that metadata alone would make `compatible_particle_handle`
+  consider a bound handle free; it needs an explicit bound-owner exclusion.
+  Native placement, register, inverse-pose and restoration formulas remain
+  unchanged. Existing typed saved topology retains the original helix.
+- `tests/test_np_applied_lifecycle_ownership.py` is the eight-case tests-first
+  dossier: actual apply/unapply constraints, subsequent native motion, unrelated
+  binding preservation through apply/unapply/delete, current carrier and saved
+  roundtrip, explicit planner exclusion, and displaced-version cleanup. Root
+  recorded **eight failed in 2.85 seconds**: two stale-constraint/motion cases,
+  three unrelated-binding cases, and one each for carrier, planner and conflict
+  cleanup. The existing
+  native fixture supplies both owned handles and the ordinary target. No test
+  or simulation was run by the implementation agent.
+- The narrow correction passed all eight new cases plus related regressions:
+  180 passed and one older HTTP-status assertion failed in 29.18 seconds. The
+  failing pending-create path was identical to the earlier `a24b60b7` checkpoint;
+  it already returns typed 422 invalid_selection with an exact auxiliary target
+  reference. Updating that stale 400 assertion to the complete structured
+  diagnostic passed in the following focused run (181 distinct green total).
+  Only the
+  selected handle and actually displaced applied/retained handles synchronize;
+  untouched conjugations/records remain unchanged. Unique consistent live
+  strand/domain/auxiliary ownership refreshes the surface carrier; ambiguous
+  legacy ownership is left visible rather than guessed. Unapply/conflict reset
+  clears the inactive constraint root/radius, deletion avoids a second global
+  sync, and the generator explicitly excludes bound handles. No geometry
+  formula, numerical pin, solver or replay schema changed.
+- The parent authorized these local metadata corrections as part of P4 native
+  applied lifecycle work. The new replay contract, explicit output IDs, exact
+  conflict/restore selectors, bounded admission and cold proof still need their
+  own reviewed tests before broader implementation. Assemblies and collective
+  relaxation remain outside this checkpoint.
+
+## ISSUE-93 — Private DNA comparison disposal can mutate shared renderer metadata (2026-10-15, FOCUSED FIX VALIDATED; APP OPEN)
+
+- The unshipped private DNA adapter identifies alpha-enabled private geometry
+  clones before disposal. Three's `BufferGeometry.copy` shares the `userData`
+  object by reference, so clearing `shared` in place also changed the native
+  template marker and allowed a later disposal to release that template.
+- The first focused run caught a real shared-template disposal failure (alongside
+  five obsolete source-text assertions after extraction of the native connection
+  constructor): 193 passed and six failed in 3.79 seconds.
+- The correction detaches metadata on the proven private alpha clone before
+  clearing its private marker. Tests retain the normal scene's matrices, geometry
+  identity and shared metadata through private construction/disposal. The five
+  constructor-text checks were replaced by behavior checks of exact buffer
+  sizes, all RGBA channels, transparency and native quadratic samples.
+- Corrected focused run: 195 passed across 11 files in 3.97 seconds. Actual native
+  Python packets also pass the Node renderer oracle (14 matrix-parity packets
+  and two explicit refusals for metadata-only ligations). Full frontend subsequently passed 8,291 cases (one skipped) across 717 files in
+  314.43 seconds. Live app/resource qualification remains separate; no geometry
+  formula changed.
+
+## ISSUE-94 — Cold strict DNA decode depends on prior Helix construction (2026-10-15, CORRECTION AWAITING VALIDATION)
+
+- The first real strict-byte benchmark completed six gold publications and two
+  independent proofs, but mixed DNA and the 50,000-residue source both refused
+  before evaluation with `MockValSer` / `SchemaSerializer`. The source remained
+  unchanged and the worker/session cleanup passed. Failed measurements remain
+  in `benchmark_immutable_part_jobs_bytes_initial.json`.
+- A minimal fresh process independently reproduced the failure: validating
+  nested Helix data through Design builds the outer schema without completing
+  Helix's own serializer, whose LoopSkip type is declared later. Exact
+  `serialize_as_any=True` serialization then fails. Direct Helix construction
+  in ordinary fixture setup had hidden this initialization dependency.
+- Initialize the existing Helix schema once when the strict immutable boundary
+  is imported. No schema/geometry field, molecular formula or pinned model file
+  changes; exact serialized roundtrip and admission remain mandatory. Add an
+  independent subprocess with nested loop/skip data and a real spawned native
+  DNA worker regression. Focused validation and corrected benchmark are pending.

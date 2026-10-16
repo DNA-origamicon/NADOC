@@ -1,12 +1,13 @@
-# Native nanoparticle connection contract — proposed
+# Native nanoparticle connection contract — phased status and next scope
 
-Reviewed 2026-10-15. Planning only: no connection implementation, scientific calculation or assembly behavior changes are authorized by this document. The next useful slice is the existing nanoparticle connection-version create/apply/unapply/delete workflow. The visible overhang panel calls these routes (`frontend/src/ui/overhang_connections_panel.js:394,401`); the older direct surface-strand bind is exposed by the client/test API but is not this panel's action.
+Reviewed 2026-10-15. Pending CRUD and pending-version-preserving thiol motion are implemented and checkpointed; their evidence appears below. Applied lifecycle remains the next tests-first proposal. Scientific calculations and assembly behavior are unchanged. The visible overhang panel calls the connection-version routes (`frontend/src/ui/overhang_connections_panel.js:394,401`); the older direct surface-strand bind is exposed by the client/test API but is not this panel's action.
 
 **Checkpoint sequencing refinement:** implement pending create/rename/delete
 first, as specified in [the finite closure map](remaining_standard_part_checkpoints.md).
-The complete application contract below remains a later increment. The current
-tests-only dossier is `tests/test_part_pending_np_connections.py`; no pending
-connection production adapter or route migration is implemented yet.
+The complete application contract below remains a later increment. Pending
+contracts and routes are implemented; their original red dossier is
+`tests/test_part_pending_np_connections.py`. The new lifecycle ownership red
+target is `tests/test_np_applied_lifecycle_ownership.py` (ISSUE-92).
 
 ## Official CAD precedent and the NADOC decision
 
@@ -23,7 +24,10 @@ connection production adapter or route migration is implemented yet.
 
 The documentation supports editable, deterministic feature construction and explicit repair. It does **not** establish an Onshape/SOLIDWORKS prohibition on LLMs or whole-model custom features. NADOC's requirement that agents use granular editable operations is a separate product/admission policy. Registering these replay contracts does not automatically expose them in the public batch catalog or establish authentication/trust policy.
 
-## Existing implementation and concrete gaps
+## Original audit baseline and concrete gaps
+
+This is the pre-implementation inventory. The pending registration/recording
+gaps are closed below; application/ownership gaps remain current unless stated.
 
 - `api/part_proof_commands.py:58` recognizes exact integer `_proof_version == 1`, strips scope wrappers for strict schema admission, and treats unknown contracts as unknown. None of the three NP connection-version kinds or `nanoparticle-strand-bind` belongs to its registered proof families. The strings already exist in `core/models.py:2015`; persistence support is not execution support.
 - `api/routes_nanoparticles.py:827,870,894` currently logs IDs without all choices. Creation omits selected strand/overhang, name, variant, creation time and apply choice; patch omits the patch itself. `_set_np_version_applied` at line 596 generates a new Duplex identity/time implicitly, computes register and placement, stores the exact attachment joint, and relocates through the existing duplex builder.
@@ -288,6 +292,64 @@ shared mutable recording/copy path remains the appropriate follow-up, without
 raising limits, retrying refusals or changing collection policy.
 
 ### Later checkpoint: explicit application
+
+**Current tests-first refinement:** preserve the pending-v1 schemas rather than
+widening formerly unknown sparse applied receipts. The proposed separate
+`nanoparticle_application_version: 1` discriminator uses the same three kind
+strings and also requires `_proof_version: 1` and
+`nanoparticle_connection_version: 1`. Presence of a malformed application marker
+must fail closed. An unmarked pending row keeps exactly its existing semantics.
+
+The application envelope repeats the exact particle/conjugation/strand/target
+selectors and adds the explicit `handle_overhang_id`, UUID `history_seed`, exact
+nullable `prior_duplex_id` and unique bounded `conflict_version_ids`. Apply owns
+an explicit fresh `duplex_id` and finite `duplex_created_at`; deterministic child
+cluster/ligation IDs come from the existing `relocate_duplex(identity_seed=...)`
+factory. Unapply/delete accept no new output geometry or saved topology. Protect
+new output/discriminator slots through `part_edit_identity`, leaving pinned
+`feature_identity.py`, `duplex.py` and numerical manifests byte-stable.
+
+Start with one source-free uncoated gold conjugation and at most one applied
+version for its particle. Replacing that version with a competing pending
+candidate is useful and remains explicit. Another particle's applied conflict,
+relaxed state, unclassified ownership, ambiguous endpoint, competing nonselected
+binding/duplex, or external consumer of a removed helix/cluster remains outside
+this first scope. Pending conflicts are selected exactly; missing/extra entries
+must not silently change the deletion set after an upstream edit. Preserve the
+existing 10,000-reference-work ceiling and 128-version bound, with an additional
+conservative emitted-nucleotide/path-work admission before fitting. Qualify
+actual 1/16-handle operations before selecting the live geometry ceiling; the
+50,000-base thiol motion bound is not a performance certificate for application.
+
+Use a separate exact bound-ownership validator. It checks the current surface
+record, strand/domain and auxiliary OH against the live duplex and typed
+`part_saved_topology` restoration owner. Historical helix identities may be
+absent live, but restoring them cannot overwrite a foreign live identity.
+Unapply must not silently remove an externally referenced duplex child cluster.
+Do not weaken the existing unbound radial resolver or treat unknown saved data
+as a valid restoration input.
+
+ISSUE-92's eight-case dossier precedes production changes. The actual helper
+currently leaves active constraint root/radius after unapply or displacement,
+globally synchronizes unrelated legacy direct bindings, and leaves a stale
+surface carrier after relocation. Correct only affected version/handle metadata:
+clear inactive derived constraints, refresh the carrier from its unique live
+strand/domain/OH, and explicitly exclude bound handles in the generator's free
+handle selector. These corrections preserve the existing geometry math and
+selection intent. Root recorded **eight failures in 2.85 seconds**, matching the
+eight targeted defects/transitions. The narrow metadata/planner correction now
+awaits root validation; no new application proof or expanded native schema is
+claimed. Only the selected handle and actually displaced applied/retained
+handles synchronize; a merely pending alternative cannot erase an unrelated
+legacy binding. Ambiguous legacy carriers remain visible rather than guessed.
+
+Proposed cohesive files: new `api/part_np_application_commands.py`; extraction
+into existing unpinned `core/nanoparticle_connections.py` with optional explicit
+IDs/time/seed; thin existing route wrappers; registry/edit-identity integration;
+one explicit bound exclusion in `two_np_generator.py`. Keep scoped composition,
+bound particle motion, graft removal and collective relaxation separate. The
+following table is the broader original command design, narrowed by the
+application discriminator, exact ownership and first-scope conditions above.
 
 Reuse the three existing kind strings, strict schemas with extra fields forbidden, and `_proof_version: 1, nanoparticle_connection_version: 1`. IDs are nonempty bounded strings, names at most 256 characters, booleans/versions strict, and times finite/nonnegative. A UUID `history_seed` belongs to each feature, selected by the host and preserved during historical edits. No coordinates, frames, snapshots, solver outputs or Python are accepted.
 
