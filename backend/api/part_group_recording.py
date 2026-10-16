@@ -6,6 +6,7 @@ does not infer a recipe root or validate an entire historical recipe.
 """
 
 import math
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
@@ -22,6 +23,54 @@ from backend.core.part_structure_gate import PartStructureError, require_valid_s
 
 
 AUTHORED_FIELDS = frozenset({"name", "helix_ids", "domain_ids", "color", "opacity"})
+MAX_COMPONENT_GRAPH_WORK = 200_000
+MAX_COMPONENT_GROUPS = 128
+
+
+@dataclass(frozen=True)
+class GroupSource:
+    """Request-local admission; no global cache or retained candidate."""
+
+    source: object
+    captured: object
+    session: object
+    revision: int
+    identity: str
+    doc_id: str
+    policy_generation: int
+
+
+def capture_group_source(action):
+    """Capture independent authoring input while the host owns its state lock."""
+    from backend.api.part_publication_policy import resolve
+    from backend.core.part_verification_capture import CaptureLimit, capture
+
+    with state._lock:
+        session, source, revision, identity = _start(action)
+        doc_id = doc_context.get_current_doc()
+        generation = resolve(doc_id).generation
+        try:
+            captured = capture(source, preserve_entry_types=True)
+        except CaptureLimit as exc:
+            raise HTTPException(409, detail={"code": "group_capture_limit", "message": str(exc)}) from exc
+        return GroupSource(source, captured, session, revision, identity, doc_id, generation)
+
+
+def require_group_source_current(admission):
+    """Lock-owned origin check before allocating/publishing a final candidate."""
+    from backend.api.part_publication_policy import resolve
+
+    current = state._sessions.get(admission.doc_id)
+    if (doc_context.get_current_doc() != admission.doc_id or current is not admission.session
+            or current.identity != admission.identity or current.design is not admission.source
+            or current.revision != admission.revision):
+        raise HTTPException(409, detail={"code": "source_changed",
+            "message": "The document changed while grouping was being prepared."})
+    if resolve(admission.doc_id).generation != admission.policy_generation:
+        raise HTTPException(409, detail={"code": "policy_changed",
+            "message": "Construction policy changed while grouping was being prepared."})
+    state._require_compatibility_write("prepared_group_edit")
+    state._assert_active_loadout_editable(admission.source)
 
 
 def _start(action):
@@ -113,15 +162,18 @@ def _identity(value):
     return value
 
 
-def _check_members(source, group):
+def _check_members(source, group, *, indexes=None):
     """Bounded typed selectors, not a scan of geometry or historical snapshots."""
-    helices, strands = {}, {}
-    for helix in source.helices:
-        key = helix.id
-        helices[key] = helices.get(key, 0) + 1
-    for strand in source.strands:
-        key = strand.id
-        strands.setdefault(key, []).append(strand)
+    if indexes is None:
+        helices, strands = {}, {}
+        for helix in source.helices:
+            key = helix.id
+            helices[key] = helices.get(key, 0) + 1
+        for strand in source.strands:
+            key = strand.id
+            strands.setdefault(key, []).append(strand)
+    else:
+        helices, strands = indexes
     seen = set()
     for index, identity in enumerate(group.helix_ids):
         _identity(identity)
@@ -176,38 +228,141 @@ def update_group(cluster_id, fields):
     """
     with state._lock:
         session, source, revision, identity = _start("group_edit")
-        if len(source.cluster_transforms) > MAX_ITEMS:
-            _limit()
-        _identity(cluster_id)
-        matches = [c for c in source.cluster_transforms if c.id == cluster_id]
-        if len(matches) != 1:
-            _reference_error("cluster", cluster_id, ["cluster_id"],
-                             ambiguous=bool(matches), status=409 if matches else 404)
-        _check_input_bounds(source, matches[0], fields)
-        try:
-            group = ClusterRigidTransform.model_validate({**matches[0].model_dump(), **fields})
-        except ValidationError as exc:
-            raise HTTPException(422, detail={"code": "invalid_group_input", "message": str(exc)}) from exc
-        for key, size in (("translation", 3), ("rotation", 4), ("pivot", 3)):
-            values = getattr(group, key)
-            if len(values) != size or not all(math.isfinite(value) for value in values):
-                raise HTTPException(422, detail={"code": "invalid_group_pose", "field": key})
-        if not any(group.rotation) or not math.isfinite(group.opacity):
-            raise HTTPException(422, detail={"code": "invalid_group_pose"})
-        _check_members(source, group)
-        entry = ClusterOpLogEntry(
-            proof_version=1, cluster_id=cluster_id,
-            authored_fields=group.model_dump(mode="json", include=AUTHORED_FIELDS),
-            translation=list(group.translation), rotation=list(group.rotation), pivot=list(group.pivot),
-        )
-        from backend.core.part_overlay_commands import command_input
-        kind, params = command_input(entry)
-        # The exact emitted input must fit the same metadata envelope used by
-        # dependency admission, including unchanged legacy membership/name data.
-        _check_operation(params)
-        grouped = build(kind, source, params)
-        candidate = grouped.copy_with(feature_log=[*source.feature_log, entry])
+        candidate, _ = prepare_group_update(source, cluster_id, fields)
         return _publish(session, source, revision, identity, candidate)
+
+
+def prepare_group_update(source, cluster_id, fields, *, entry_source=None):
+    """Shared pure v1 pose/membership preparation for an owned source."""
+    if len(source.cluster_transforms) > MAX_ITEMS:
+        _limit()
+    _identity(cluster_id)
+    matches = [c for c in source.cluster_transforms if c.id == cluster_id]
+    if len(matches) != 1:
+        _reference_error("cluster", cluster_id, ["cluster_id"],
+                         ambiguous=bool(matches), status=409 if matches else 404)
+    _check_input_bounds(source, matches[0], fields)
+    try:
+        group = ClusterRigidTransform.model_validate({**matches[0].model_dump(), **fields})
+    except ValidationError as exc:
+        raise HTTPException(422, detail={"code": "invalid_group_input", "message": str(exc)}) from exc
+    for key, size in (("translation", 3), ("rotation", 4), ("pivot", 3)):
+        values = getattr(group, key)
+        if len(values) != size or not all(math.isfinite(value) for value in values):
+            raise HTTPException(422, detail={"code": "invalid_group_pose", "field": key})
+    if not any(group.rotation) or not math.isfinite(group.opacity):
+        raise HTTPException(422, detail={"code": "invalid_group_pose"})
+    _check_members(source, group)
+    entry = ClusterOpLogEntry(
+        proof_version=1, cluster_id=cluster_id, source=entry_source,
+        authored_fields=group.model_dump(mode="json", include=AUTHORED_FIELDS),
+        translation=list(group.translation), rotation=list(group.rotation), pivot=list(group.pivot),
+    )
+    from backend.core.part_overlay_commands import command_input
+    kind, params = command_input(entry)
+    # The emitted input must fit dependency admission, including unchanged
+    # legacy membership/name data. No source fields outside grouping change.
+    _check_operation(params)
+    grouped = build(kind, source, params)
+    return grouped.copy_with(feature_log=[*source.feature_log, entry]), entry
+
+
+def _component_input(source):
+    """Admit the graph's typed identities/membership before graph allocation."""
+    collections = (source.helices, source.strands, source.cluster_transforms,
+                   source.crossovers, source.forced_ligations)
+    items = sum(len(collection) for collection in collections)
+    if items > MAX_ITEMS:
+        _limit()
+    for strand in source.strands:
+        items += len(strand.domains)
+        if items > MAX_ITEMS:
+            _limit()
+    for group in source.cluster_transforms:
+        items += len(group.helix_ids) + len(group.domain_ids)
+        if items > MAX_ITEMS:
+            _limit()
+    indexes = []
+    for collection, kind in ((source.helices, "helix"), (source.strands, "strand"),
+                             (source.cluster_transforms, "cluster")):
+        index = {}
+        for item in collection:
+            identity = _identity(item.id)
+            if identity in index:
+                _reference_error(kind, identity, [kind + "_id"], ambiguous=True)
+            index[identity] = item
+        indexes.append(index)
+    helices, strands, _ = indexes
+
+    def helix_reference(identity, path):
+        _identity(identity)
+        if identity not in helices:
+            _reference_error("helix", identity, path)
+
+    for strand in source.strands:
+        for index, domain in enumerate(strand.domains):
+            helix_reference(domain.helix_id, ["strands", strand.id, "domains", index, "helix_id"])
+    member_indexes = ({key: 1 for key in helices}, {key: [value] for key, value in strands.items()})
+    for group in source.cluster_transforms:
+        _check_members(source, group, indexes=member_indexes)
+    for index, crossover in enumerate(source.crossovers):
+        for name in ("half_a", "half_b"):
+            helix_reference(getattr(crossover, name).helix_id, ["crossovers", index, name, "helix_id"])
+    for index, ligation in enumerate(source.forced_ligations):
+        for name in ("three_prime_helix_id", "five_prime_helix_id"):
+            helix_reference(getattr(ligation, name), ["forced_ligations", index, name])
+    try:
+        require_valid_structure(source)
+    except PartStructureError as exc:
+        raise HTTPException(409, detail=exc.as_issue()) from exc
+
+
+def repair_unassigned_groups():
+    """Plan privately, then publish sequential native v2 inputs in one undo.
+
+    Captured inputs exclude presentation, physical state and recovery payloads.
+    Only the prepared grouping and new input rows are merged onto the original
+    source after the exact origin check. Empty sources intentionally retain the
+    empty default owner created by the existing v2 grouping contract.
+    """
+    from backend.core.cluster_components import ClusterComponentLimit, cluster_unassigned_components
+
+    admission = capture_group_source("group_unassigned")
+    captured = admission.captured
+    _component_input(captured)
+    try:
+        planned = cluster_unassigned_components(captured, max_graph_work=MAX_COMPONENT_GRAPH_WORK)
+    except ClusterComponentLimit as exc:
+        raise HTTPException(409, detail={"code": "group_graph_limit", "message": str(exc),
+            "maximum_graph_work": MAX_COMPONENT_GRAPH_WORK}) from exc
+    groups = planned.cluster_transforms[len(captured.cluster_transforms):]
+    if len(groups) > MAX_COMPONENT_GROUPS:
+        raise HTTPException(409, detail={"code": "group_input_limit",
+            "message": "Too many unassigned components for one group operation.",
+            "maximum_groups": MAX_COMPONENT_GROUPS})
+    prepared, entries = captured, []
+    for group in groups:
+        params = {"cluster": group.model_dump(mode="json"), "_proof_version": GROUP_CREATE_VERSION}
+        _check_operation(params)
+        try:
+            prepared = build("cluster_create", prepared, params)
+        except ValueError as exc:
+            raise HTTPException(409, detail={"code": "invalid_group_input", "message": str(exc)}) from exc
+        entries.append(ClusterCreateLogEntry(
+            proof_version=GROUP_CREATE_VERSION, cluster_snapshot=group,
+            cluster_id=group.id, name=group.name, helix_ids=list(group.helix_ids),
+            domain_ids=list(group.domain_ids),
+        ))
+    with state._lock:
+        require_group_source_current(admission)
+        if not entries:
+            return admission.source, state.validate_design(admission.source)
+        candidate = admission.source.copy_with(
+            cluster_transforms=prepared.cluster_transforms,
+            feature_log=[*admission.source.feature_log, *entries],
+        )
+        return _publish(admission.session, admission.source, admission.revision,
+                        admission.identity, candidate)
 
 
 def dissolve_groups(cluster_ids):

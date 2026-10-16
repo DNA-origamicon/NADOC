@@ -9,6 +9,18 @@ metadata:
 
 # Overhang Duplex as a Cluster
 
+**October 16 feature-history update:** rotation-point POST now records the
+unchanged native rebase as a complete absolute `cluster_op` v1 input through
+`part_group_rotation_point.py`. Choosing a root/centroid is a one-time pivot
+choice, not a persistent follow-root constraint. Detached bounded capture and
+scalar-work admission precede native calculation outside the state lock; source,
+session, revision and policy must still match before one undo/publication.
+Original recovery, physical and presentation state remain intact. Frontend
+failures/stale replies preserve pending moves and selection. Native geometry,
+constants, schemas and pins are unchanged; the read-only GET picker retains its
+existing behavior. [U5 evidence](../docs/audits/feature_history_20261014/validation_group_auxiliary_recording.json)
+records software validation; app/latency acceptance remains MV-48/FH-27.
+
 **Status: SHIPPED and wired end-to-end.** Audited 2026-07-30 (`/audit-plan`): every anchor this
 plan names resolves in live code except one claimed test that never existed. **Rank: P2** — one
 narrow backend-only item is left (feature-log migrate-on-load, §Open items 1), it affects only

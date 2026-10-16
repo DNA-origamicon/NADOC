@@ -232,10 +232,10 @@ def _ensure_default_cluster(design: Design, *, persist: bool = True) -> Design:
     # Their native builders create any required placement cluster explicitly.
     if design.recipe_root is not None:
         return design
-    from backend.core.feature_history_clusters import has_group_dissolution
-    if has_group_dissolution(design.feature_log):
-        # A recorded removal is intentional even on an unverified legacy root.
-        # Response formatting must not reintroduce its groups or memberships.
+    from backend.core.feature_history_clusters import has_authored_group_history
+    if has_authored_group_history(design.feature_log):
+        # Recorded group intent is authoritative even on an unverified legacy
+        # root. Formatting must not silently refill authored empty membership.
         return design
     from backend.core.cluster_autodetect import repair_empty_auto_clusters
 

@@ -47,7 +47,6 @@ from backend.api.pattern_features import (
 )
 from backend.core.cluster_copy import paste_clusters
 from backend.core.cluster_reconcile import MutationReport
-from backend.core.models import ClusterCreateLogEntry
 
 router = APIRouter()
 
@@ -102,21 +101,10 @@ def add_cluster(body: AddClusterBody) -> dict:
 @router.post("/design/cluster-unassigned", status_code=200)
 def repair_unassigned_clusters() -> dict:
     """Undoable additive repair; existing cluster identities and poses survive."""
-    from backend.core.cluster_components import cluster_unassigned_components
-    from backend.core.validator import validate_design
+    from backend.api.part_group_recording import repair_unassigned_groups
 
-    design = design_state.get_or_404()
-    updated = cluster_unassigned_components(design)
-    if updated is not design:
-        log = list(design.feature_log)
-        if design.feature_log_cursor >= 0:
-            log = log[:design.feature_log_cursor + 1]
-        entries = [ClusterCreateLogEntry(cluster_id=c.id, name=c.name,
-                   helix_ids=list(c.helix_ids), domain_ids=list(c.domain_ids))
-                   for c in updated.cluster_transforms[len(design.cluster_transforms):]]
-        updated = updated.copy_with(feature_log=log + entries, feature_log_cursor=-1)
-        design_state.set_design(updated)
-    return _design_response(updated, validate_design(updated))
+    updated, report = repair_unassigned_groups()
+    return _design_response(updated, report, normalize_legacy=False)
 
 
 @router.patch("/design/cluster/{cluster_id}", status_code=200)
@@ -276,42 +264,11 @@ def get_cluster_movable_links(cluster_id: str) -> dict:
 
 @router.post("/design/cluster/{cluster_id}/rotation-point", status_code=200)
 def set_cluster_rotation_point(cluster_id: str, body: RotationPointBody) -> dict:
-    """Set a DUPLEX cluster's rotation pivot to one of its candidate points (an overhang's
-    root bead or the centroid), rebasing the translation so the geometry doesn't jump.
-    Pushes to the undo stack."""
-    from backend.core.duplex_cluster import (
-        duplex_cluster_rotation_points,
-        set_duplex_cluster_pivot,
-    )
-    from backend.core.validator import validate_design
+    """Record a native pivot rebase without moving the duplex geometry."""
+    from backend.api.part_group_rotation_point import record_rotation_point
 
-    design = design_state.get_or_404()
-    cl = next((c for c in design.cluster_transforms if c.id == cluster_id), None)
-    if cl is None or cl.overhang_duplex_driver_id is None:
-        raise HTTPException(
-            404, detail=f"Cluster {cluster_id!r} is not an overhang-duplex cluster."
-        )
-    pts = duplex_cluster_rotation_points(design, cl)
-    match = next(
-        (
-            p
-            for p in pts
-            if p["kind"] == body.kind
-            and (body.kind != "overhang_root" or p["overhang_id"] == body.overhang_id)
-        ),
-        None,
-    )
-    if match is None:
-        raise HTTPException(
-            422,
-            detail=f"No rotation point {body.kind!r}"
-            + (f" for overhang {body.overhang_id!r}" if body.overhang_id else "")
-            + ".",
-        )
-    updated = set_duplex_cluster_pivot(design, cluster_id, match["point"])
-    design_state.set_design(updated)
-    report = validate_design(updated)
-    return _design_response(updated, report)
+    updated, report = record_rotation_point(cluster_id, body)
+    return _design_response(updated, report, normalize_legacy=False)
 
 
 class ClusterPasteBody(BaseModel):

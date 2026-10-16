@@ -56,6 +56,25 @@ def has_group_dissolution(entries):
                for entry in entries)
 
 
+def has_authored_group_history(entries):
+    """Recorded group intent suppresses read-time legacy inference, not proof.
+
+    This cheap positive marker check never validates or blesses a recipe. Old
+    unversioned migration rows retain their established normalization behavior.
+    """
+    for entry in entries:
+        if entry.feature_type == "snapshot" and entry.op_kind == "cluster-dissolve":
+            return True
+        version = getattr(entry, "proof_version", None)
+        if type(version) is not int:
+            continue
+        if entry.feature_type == "cluster_create" and version in (1, 2):
+            return True
+        if entry.feature_type == "cluster_op" and version == 1:
+            return True
+    return False
+
+
 def _dissolved_ids(params, budget):
     from backend.core.part_group_dissolve import parse_command
 

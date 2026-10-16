@@ -4,6 +4,22 @@ description: Incremental cluster reconciliation after every topology mutation, r
 type: project
 originSessionId: ee620174-49a0-4f10-bf04-4e60bf23fabc
 ---
+## Recorded orphan grouping (2026-10-16)
+
+`POST /design/cluster-unassigned` now uses `part_group_recording` for detached
+bounded planning and one source/session/revision/policy-owned publication.
+Every component emits a complete native `cluster_create` v2 input; undo/reload
+and cold proof cover the native contract. Empty initial grouping retains v2's
+empty default owner. No-op leaves exact state unchanged; historical positions
+refuse rather than truncating a partial future. Native graph behavior is unchanged
+for other callers; only this explicit route opts into the 200k graph-work limit
+and 128-component allowance. Existing groups/poses survive. Later response
+normalization respects recognized authored group intent, including rootless
+histories, without promoting legacy inputs to verified recipes.
+See [U5 evidence](../docs/audits/feature_history_20261014/validation_group_auxiliary_recording.json).
+Actual desktop and latency acceptance remain MV-48/FH-27; general posed
+dissolve/regrouping remains the open FH-18 migration, not a reconciliation fix.
+
 ## Disconnected extrusion update (2026-10-03)
 
 Extrusion segment/circle/continuation reports opt into additive creation for

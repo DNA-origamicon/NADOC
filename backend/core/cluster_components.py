@@ -12,13 +12,25 @@ from backend.core.crossover_positions import crossover_neighbor
 from backend.core.models import ClusterRigidTransform, Design, LatticeType
 
 
-def lattice_cluster_graph(design: Design) -> dict[str, set[str]]:
+class ClusterComponentLimit(ValueError):
+    """An explicitly bounded caller refused graph work before edge allocation."""
+
+
+def lattice_cluster_graph(design: Design, *, max_work=None) -> dict[str, set[str]]:
     """Canonical lattice edges, separated by frame and legacy axial direction.
 
     Keep every helix at a cell (continuations may share cells). Reference and
     virtual linker helices are not movable lattice bodies. Forced-ligation-only
     edges remain articulation boundaries, matching geometry autodetection.
     """
+    work = 0
+
+    def charge(count):
+        nonlocal work
+        work += count
+        if max_work is not None and work > max_work:
+            raise ClusterComponentLimit("Lattice component adjacency exceeds the bounded grouping allowance.")
+
     refs = design.reference_helix_ids()
     helices = [
         h
@@ -60,12 +72,19 @@ def lattice_cluster_graph(design: Design) -> dict[str, set[str]]:
     for h in helices:
         for scaffold in (False, True):
             for index in range(period):
+                if max_work is not None:
+                    charge(1)
                 cell = crossover_neighbor(
                     design.lattice_type, *h.grid_pos, index, is_scaffold=scaffold
                 )
                 if cell is None:
                     continue
-                for other in cells.get((keys[h.id], *cell), ()):
+                neighbors = cells.get((keys[h.id], *cell), ())
+                # Co-located continuations can make a small cell table dense.
+                # Charge the complete bucket before allocating any new edges.
+                if max_work is not None:
+                    charge(len(neighbors))
+                for other in neighbors:
                     pair = frozenset((h.id, other))
                     if other != h.id and (pair not in forced or pair in canonical):
                         graph[h.id].add(other)
@@ -92,7 +111,8 @@ def lattice_components(graph: dict[str, set[str]], ids: set[str]) -> list[list[s
 
 
 def cluster_unassigned_components(
-    design: Design, eligible: set[str] | None = None, *, identity_seed=None
+    design: Design, eligible: set[str] | None = None, *, identity_seed=None,
+    max_graph_work=None,
 ) -> Design:
     """Append identity-pose clusters for unassigned lattice components.
 
@@ -109,7 +129,7 @@ def cluster_unassigned_components(
         for c in design.cluster_transforms
         for r in c.domain_ids
     )
-    graph = lattice_cluster_graph(design)
+    graph = lattice_cluster_graph(design, max_work=max_graph_work)
     candidates = graph.keys() - claimed
     if eligible is not None:
         candidates &= eligible

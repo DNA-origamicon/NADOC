@@ -984,6 +984,20 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   display scope. The existing dedicated e2e isolation/output cleanup rules apply.
 
 - **MV-48 — PENDING — Ordinary grouping and geometry preview lifecycle (2026-10-15).**
+  **October 16 FH-18 auxiliary checkpoint:** choose **Cluster Unassigned
+  Components**, confirm complete history entries but one undo/revision, and
+  save/reopen/verify. Existing groups and poses must survive; no-op must not add
+  history. A formerly groupless source retains the native empty default owner.
+  Change a duplex rotation point to each root and centroid: geometry must stay
+  in place, a pose row must appear, and undo/redo/seek/reopen must preserve it.
+  Reject/cancel a pivot request or switch document/group/tool before its reply;
+  an unfinished move and the newer selection must survive. Inspect actionable
+  historical/protected/stale/size-limit errors. Measure request, geometry,
+  lock/undo and render tails separately; admission limits are not latency proof.
+  Authored empty membership must stay empty after later reads, without silently
+  becoming verified. Posed dissolve/regrouping remains open under the finite
+  organization/placement migration plan; U5 is the third FH-18 checkpoint and
+  explicitly triggers task-growth review. No app or broad-suite pass is claimed.
   **October 16 FH-18 dissolve checkpoint:** use **Dissolve** on an ordinary
   unmoved/unrepivoted group. Members must stay in place, one history row/undo
   must appear, and repeated scrub/undo/redo/save/reopen must not resurrect it.

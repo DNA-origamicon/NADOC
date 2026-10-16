@@ -1,0 +1,158 @@
+{
+  "date": "2026-10-16",
+  "checkpoint_before": "3aa2529a13432404cbe1902f0f053af134e86f2f",
+  "scope": "U5 / FH-18 checkpoint 3: auxiliary group recording and finite placement migration plan",
+  "progress": {
+    "baseline": "B1: 17/38 through 2c15e747",
+    "completed": 18,
+    "estimated_total": 38,
+    "remaining": 20,
+    "core_remaining": 11,
+    "parked_remaining": 9,
+    "completed_delta": 0,
+    "total_delta": 0,
+    "milestone": "FH-18",
+    "major_checkpoints_spent_since_B1": 3,
+    "milestone_closed": false,
+    "task_growth_flag": true,
+    "remaining_exit": "Posed dissolution/regrouping with explicit editable placement and frame ownership; original fixed exit remains unchanged.",
+    "containment": "group_placement_migration_plan.md fixes five implementation batches and the consumer/acceptance matrix. Separate organizational membership from the existing sole ordered placement authority. Next substantive path: conversion → posed dissolve → regroup. No separate credit for batches, no denominator change."
+  },
+  "final_checks": {
+    "backend_focused": {
+      "command": "just validate-safe scripts/test_guard.sh test-focused 0 focused -- uv run pytest <explicit targets> -q --tb=short --disable-warnings --durations=8",
+      "targets": [
+        "tests/test_group_auxiliary_recording.py",
+        "tests/test_group_rotation_point_recording.py",
+        "tests/test_group_geometry_budget.py",
+        "tests/test_cluster_components.py",
+        "tests/test_geometry_group_history.py",
+        "tests/test_group_edit_recording.py",
+        "tests/test_group_owned_response.py",
+        "tests/test_group_creation_v2.py",
+        "tests/test_group_edit_dependencies.py",
+        "tests/test_feature_history_clusters.py",
+        "tests/test_duplex_cluster_rotation_point.py",
+        "tests/test_duplex_cluster_parity.py",
+        "tests/test_group_dissolve_recording.py",
+        "tests/test_group_dissolve_recovery.py",
+        "tests/test_group_dissolve_seek_admission.py",
+        "tests/test_feature_log_clusters.py",
+        "tests/test_recipe_load_preservation.py",
+        "tests/test_part_numerical_schema_compatibility.py",
+        "tests/test_cluster_reconcile_e2e.py::test_disconnected_extrude_clusters_undo_redo_and_repair"
+      ],
+      "passed": 389,
+      "warnings": 206,
+      "seconds": 10.61,
+      "new_cases": 72,
+      "new_cases_breakdown": {
+        "auxiliary": 33,
+        "pivot": 17,
+        "scalar_geometry_budget": 22
+      }
+    },
+    "frontend_full": {
+      "command": "just test-frontend",
+      "passed": 8564,
+      "skipped": 1,
+      "files": 731,
+      "seconds": 316.97,
+      "new_cases": 18
+    },
+    "overlapping_runs": "14 pivot checks, 226 related backend checks and 80 scoped frontend checks overlap final evidence; not additional distinct passes.",
+    "scoped_ruff": "All 10 changed/new Python implementation and test files passed.",
+    "diff_check": "Passed",
+    "main_js_line_delta": 0,
+    "app": "NOT VERIFIED IN APP. Archive is not mounted. No browser/visual or interaction latency pass; MV-48/FH-27 remain open. VR separately deferred.",
+    "resource_safety": "Root serialized heavy backend and frontend checks under validation_guard. Agents performed static review only. No native rebuild, scientific run, browser or bulk writer."
+  },
+  "selection_only": {
+    "command": "just test-smart --dry-run",
+    "decision": "FAST (fast suite only)",
+    "verbatim_deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+    "executed_suite": false,
+    "clarification": "The 'only the fast suite ran' text is selector boilerplate. Dry-run executed no suite; aggregate fast/FULL debt remains. No session marker or guard bypass was created."
+  },
+  "red_and_review_evidence": [
+    {
+      "scope": "Unassigned grouping baseline",
+      "failed": 18,
+      "passed": 2,
+      "warnings": 14,
+      "seconds": 2.98,
+      "finding": "Incomplete rows, missing detached ownership, historical/source/session guards and authored-inference protection."
+    },
+    {
+      "scope": "Pivot recording baseline",
+      "failed": 10,
+      "passed": 4,
+      "warnings": 14,
+      "seconds": 3.13,
+      "finding": "Unlogged pose, direct live source geometry, no historical/source/session guard and validation after publication."
+    },
+    {
+      "scope": "Frontend pivot baseline",
+      "failed": 14,
+      "passed": 32,
+      "seconds": 0.996,
+      "finding": "Failed/stale replies cleared pending transforms and reattached or overwrote selection. Three additional context leave/return controls were added after this red run."
+    },
+    {
+      "scope": "Independent review",
+      "finding": "Capture node/byte limits do not bound scalar-described geometry. Added a metadata-only preflight before native POST point picking, including sparse spans/loops, frames, sweep table counts and huge bridge-length conversion overflow. No numerical function changed."
+    }
+  ],
+  "delivered_contract": [
+    "Unassigned components compute on detached inputs outside the state lock; complete sequential existing cluster_create v2 rows publish in one source/session/revision/policy-owned undo transaction. Native v2 retains an empty default owner for a previously groupless source. Existing groups/poses survive; no-op preserves exact state.",
+    "Duplex rotation-point POST computes with unchanged native helpers, records one complete absolute cluster_op v1 with source=rotation-point and preserves native geometry. It is a one-time rebase convenience, not a persistent follow-root constraint. Native input replay never reruns point selection.",
+    "Only owned cluster fields/new rows merge onto the exact original source, preserving excluded recovery, presentation, physical and repair-draft state. Historical cursors, protected loadouts, stale origins/policy changes and failures refuse without partial state.",
+    "Recognized versioned authored group creation/edit or recorded dissolve suppresses later legacy response inference, including rootless histories; it is not a proof and creates no recipe root. Unversioned legacy inference remains.",
+    "Frontend accepts only a matching adopted absolute pose and unchanged pending move in the same active request/document/group/tool context. Null/throw/malformed/stale/superseded replies cannot clear the unfinished move or reattach a retired gizmo.",
+    "Removed unowned route publication and partial future truncation. Shared preparation and replacement publisher replace duplicate paths; existing native molecular helpers remain unchanged."
+  ],
+  "bounds_and_limits": {
+    "capture": {
+      "nodes": 30000,
+      "bytes": 2000000,
+      "cooperative_seconds": 0.025
+    },
+    "unassigned": {
+      "graph_work": 200000,
+      "new_groups": 128
+    },
+    "pivot": {
+      "provisional_native_work": 50000,
+      "metadata_accounting": "Nominal and domain-expanded helix spans, repeated domain/positive loop work, native-residue tail extents, extensions/modification/junction inserts, declared native bridge conversion, sparse deformation frame spans, scoped partitions and sweep table count.",
+      "qualification": "Conservative metadata admission, not hard time/RSS bound or scientific validity. Large legacy inputs may explicitly refuse. Read-only GET picker retains existing behavior."
+    },
+    "unqualified": "Full validation, undo copying and response costs remain; no whole-history proof enters ordinary edits or drag frames. Real workload tails remain FH-27."
+  },
+  "numerical_compatibility": {
+    "models_changed": false,
+    "kernels_changed": false,
+    "numerical_manifest_changes": false,
+    "stored_pins_rewritten": false,
+    "evidence": "Pure numerical-schema compatibility cases passed in the final focused run. Optional graph budget is outside all three manifests; existing unbounded graph callers keep native behavior. No new native-worker qualification claimed."
+  },
+  "cleanup": {
+    "archive_mounted": false,
+    "bulk_artifacts_created": false,
+    "removed_paths": [
+      "/tmp/pytest-of-joshua/pytest-2",
+      "/tmp/pytest-of-joshua/pytest-3",
+      "/tmp/pytest-of-joshua/pytest-4",
+      "/tmp/pytest-of-joshua/pytest-current"
+    ],
+    "remaining_pytest_paths": [],
+    "visible_active_references": [],
+    "remaining_nadoc_shared_memory": [],
+    "process_inspection_limit": "Startup systemd/PAM processes 435/436 have unreadable protected maps (and PAM fd). They predate the tests; no known test-artifact dependency. All available cwd/fd/maps paths were inspected.",
+    "removed_files": 24,
+    "removed_bytes": 110622,
+    "removed_directories": 659,
+    "removed_symlinks": 15,
+    "earlier_pytest_directories": "Earlier owned runs were automatically pruned by pytest retention.",
+    "retained": "Source tests, compact evidence and finite plan only. User designs/jobs/runtime assets untouched."
+  }
+}

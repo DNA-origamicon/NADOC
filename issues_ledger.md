@@ -2279,6 +2279,27 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   FH-18 remains open for posed/regrouped and auxiliary lifecycle; actual desktop,
   serialization/undo/geometry cost and interaction latency remain MV-48/FH-27.
 
+### ISSUE-99 continuation — auxiliary grouping recording (2026-10-16, IMPLEMENTED; APP OPEN)
+
+- Unassigned-component grouping previously authored incomplete unversioned rows
+  and could publish over newer state. It now emits complete native v2 inputs,
+  computes privately with reference/graph bounds, and publishes once after an
+  exact source/session/revision/policy check. No-op keeps state and undo intact.
+- Duplex pivot selection previously changed pose without a feature input. It
+  now records the native absolute pose rebase as v1, preserving original recovery,
+  physical and presentation data. Geometry work is preflighted and stays outside
+  the state lock; unchanged native helpers remain the oracle.
+- Frontend pivot failures and stale replies preserve pending moves and selection.
+  Later rootless reads respect recognized authored group intent, so empty
+  membership is not silently refilled. Unversioned legacy inference is unchanged.
+- Removed duplicate unowned route publication/truncation code; shared preparation
+  and the existing failure-atomic publisher own both paths. See
+  [U5 evidence](docs/audits/feature_history_20261014/validation_group_auxiliary_recording.json).
+  FH-18 remains open and has reached three checkpoints: task growth is explicitly
+  flagged, with a finite [migration plan](docs/audits/feature_history_20261014/group_placement_migration_plan.md).
+  Count remains 18/38, no changed exit/denominator. MV-48/FH-27 retain desktop and
+  measured latency acceptance.
+
 ## ISSUE-100 — Bend/twist history preview replaces canonical state before Apply (2026-10-15, REPRODUCED; OPEN)
 
 - `tests/test_geometry_history_preview_lifecycle.py` mirrors the current desktop

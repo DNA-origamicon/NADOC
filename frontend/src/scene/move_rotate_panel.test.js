@@ -7,6 +7,9 @@ import * as THREE from 'three'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 import { initMoveRotatePanel, moveRotateSelectionLabels } from './move_rotate_panel.js'
+import { showToast } from '../ui/toast.js'
+
+vi.mock('../ui/toast.js', () => ({ showToast: vi.fn() }))
 
 const DOM = {
   'move-rotate-panel':      'div',
@@ -106,7 +109,11 @@ function makeDeps(initialState = {}) {
     },
     applyAssemblyPrimaryLive: vi.fn(),
     queueAssemblyPrimaryCommit: vi.fn(),
-    setClusterRotationPoint: vi.fn(() => Promise.resolve()),
+    setClusterRotationPoint: vi.fn(async (_clusterId, spec) => {
+      const response = rotationPointResponse(store.getState().currentDesign, spec)
+      store.setState({ currentDesign: response.design })
+      return response
+    }),
     clearSelection: vi.fn(),
   }
 }
@@ -115,17 +122,28 @@ function makeDeps(initialState = {}) {
 // `ohD` + driven overhang `ohV` (its domain lives in the cluster's domain_ids).
 function duplexDesign() {
   return {
+    id: 'duplex-design',
     cluster_joints: [],
     overhangs: [{ id: 'ohD', label: 'Drv' }, { id: 'ohV', label: 'Dvn' }],
     strands: [{ id: 's1', domains: [{ overhang_id: 'ohV' }] }],
     cluster_transforms: [{
       id: 'dc1', overhang_duplex_driver_id: 'ohD',
       domain_ids: [{ strand_id: 's1', domain_index: 0 }],
+      translation: [0, 0, 0], rotation: [0, 0, 0, 1], pivot: [0, 0, 0],
     }],
   }
 }
 
-beforeEach(() => { clearDom() })
+// Explicit response data, not a second implementation of the native rebasing math.
+function rotationPointResponse(source, spec = { kind: 'overhang_root', overhangId: 'ohD' }) {
+  const design = structuredClone(source)
+  const cluster = design.cluster_transforms.find(c => c.id === 'dc1')
+  cluster.pivot = spec.kind === 'centroid' ? [2, 2, 2] : spec.overhangId === 'ohD' ? [1, 2, 3] : [4, 5, 6]
+  cluster.translation = [7, 8, 9]
+  return { design, revision: 2, validation: { passed: true } }
+}
+
+beforeEach(() => { clearDom(); vi.clearAllMocks() })
 
 describe('initMoveRotatePanel — view setters', () => {
   it('accepts an entity-neutral protein transform controller', () => {
@@ -464,6 +482,154 @@ describe('initMoveRotatePanel — dropdown handlers', () => {
     expect(deps.clusterGizmo.setConstraint).not.toHaveBeenCalledWith('centroid', null)
   })
 
+})
+
+describe('duplex pivot response ownership', () => {
+  function setup() {
+    const els = mountPanelDom()
+    const deps = makeDeps({ activeClusterId: 'dc1', currentDesign: duplexDesign(), assemblyActive: false, translateRotateActive: true })
+    const select = els['mr-pivot-sel']
+    const events = vi.spyOn(select, 'addEventListener')
+    const panel = initMoveRotatePanel(deps)
+    panel.setPivotOptions([], 'dc1')
+    const change = events.mock.calls.find(([type]) => type === 'change')[1]
+    let pending = { pivot: [8, 0, 0], translation: [9, 0, 0], rotation: [0, 0, 0, 1] }
+    const subscribe = deps.store.subscribe, releases = []
+    vi.spyOn(deps.store, 'subscribe').mockImplementation(listener => {
+      const release = vi.fn(subscribe(listener)); releases.push(release); return release
+    })
+    deps.clusterGizmo.getPendingTransform = vi.fn(() => pending && structuredClone(pending))
+    deps.clusterGizmo.clearPendingTransform.mockImplementation(() => { pending = null })
+    return { deps, select, panel, releases, getPending: () => pending, setPending: value => { pending = value },
+      choose(value) { select.value = value; return change(new Event('change')) } }
+  }
+  function deferred() {
+    let resolve
+    const promise = new Promise(r => { resolve = r })
+    return { promise, resolve }
+  }
+  function untouched(ctx, pending) {
+    expect(ctx.getPending()).toEqual(pending)
+    expect(ctx.deps.clusterGizmo.attach).not.toHaveBeenCalled()
+    expect(ctx.deps.clusterGizmo.clearPendingTransform).not.toHaveBeenCalled()
+    expect(ctx.releases.every(release => release.mock.calls.length === 1)).toBe(true)
+  }
+
+  it.each(['null', 'throw', 'missing design', 'missing cluster', 'malformed pose'])(
+    'preserves pending/live gizmo and restores prior choice after %s', async failure => {
+      const ctx = setup(), before = ctx.getPending(), design = ctx.deps.store.getState().currentDesign
+      ctx.panel.setSelectedPivot('dup:root:ohV')
+      ctx.deps.setClusterRotationPoint.mockImplementation(async () => {
+        if (failure === 'throw') throw new Error('Refused by server')
+        if (failure === 'null') return null
+        if (failure === 'missing design') return { revision: 2 }
+        if (failure === 'missing cluster') return { design: { ...design, cluster_transforms: [] } }
+        const response = rotationPointResponse(design)
+        response.design.cluster_transforms[0].pivot = [NaN, 0, 0]
+        return response
+      })
+      await expect(ctx.choose('dup:root:ohD')).resolves.toBeUndefined()
+      untouched(ctx, before)
+      expect(ctx.select.value).toBe('dup:root:ohV')
+      expect(ctx.deps.store.getState().currentDesign).toBe(design)
+      expect(showToast).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ severity: 'warning' }))
+    },
+  )
+
+  it.each(['document', 'selection', 'tool'])(
+    'does not revive an old request after leaving and returning to the same %s', async changed => {
+      const ctx = setup(), before = ctx.getPending(), old = ctx.deps.store.getState().currentDesign
+      const waiting = deferred(), response = rotationPointResponse(old)
+      ctx.deps.setClusterRotationPoint.mockReturnValue(waiting.promise)
+      const operation = ctx.choose('dup:root:ohD')
+      if (changed === 'document') ctx.deps.store.setState({ currentDesign: { ...old, id: 'other' } })
+      if (changed === 'selection') ctx.deps.store.setState({ activeClusterId: 'other' })
+      if (changed === 'tool') ctx.deps.store.setState({ translateRotateActive: false })
+      ctx.deps.store.setState({ activeClusterId: 'dc1', currentDesign: response.design, translateRotateActive: true })
+      ctx.panel.setSelectedPivot('centroid')
+      waiting.resolve(response); await operation
+      untouched(ctx, before)
+      expect(ctx.select.value).toBe('centroid')
+    },
+  )
+
+  it.each(['document', 'selection', 'assembly', 'inactive gizmo'])(
+    'ignores a late successful pivot after changing %s', async changed => {
+      const ctx = setup(), before = ctx.getPending(), old = ctx.deps.store.getState().currentDesign
+      const waiting = deferred()
+      ctx.deps.setClusterRotationPoint.mockReturnValue(waiting.promise)
+      const operation = ctx.choose('dup:root:ohD')
+      if (changed === 'document') ctx.deps.store.setState({ currentDesign: { ...duplexDesign(), id: 'other-design' } })
+      if (changed === 'selection') ctx.deps.store.setState({ activeClusterId: 'other-cluster' })
+      if (changed === 'assembly') ctx.deps.store.setState({ assemblyActive: true })
+      if (changed === 'inactive gizmo') ctx.deps.clusterGizmo.isActive.mockReturnValue(false)
+      ctx.panel.setSelectedPivot('centroid')
+      waiting.resolve(rotationPointResponse(old))
+      await operation
+      untouched(ctx, before)
+      expect(ctx.select.value).toBe('centroid')
+    },
+  )
+
+  it.each(['translation', 'rotation', 'pivot'])(
+    'does not adopt an older same-document response whose %s no longer matches', async field => {
+      const ctx = setup(), before = ctx.getPending(), old = ctx.deps.store.getState().currentDesign
+      const response = rotationPointResponse(old)
+      const current = structuredClone(response.design)
+      current.cluster_transforms[0][field][0] += 1
+      ctx.deps.setClusterRotationPoint.mockImplementation(async () => {
+        ctx.deps.store.setState({ currentDesign: current })
+        ctx.panel.setSelectedPivot('centroid')
+        return response // Shared client returns stale responses without adopting them.
+      })
+      await ctx.choose('dup:root:ohD')
+      untouched(ctx, before)
+      expect(ctx.select.value).toBe('centroid')
+      expect(ctx.deps.store.getState().currentDesign).toBe(current)
+    },
+  )
+
+  it('does not discard a newer local drag queued while the pivot request was pending', async () => {
+    const ctx = setup(), response = rotationPointResponse(ctx.deps.store.getState().currentDesign)
+    const waiting = deferred()
+    ctx.deps.setClusterRotationPoint.mockReturnValue(waiting.promise)
+    const operation = ctx.choose('dup:root:ohD')
+    const newPending = { pivot: [2, 3, 4], translation: [20, 0, 0], rotation: [0, 0, 0, 1] }
+    ctx.setPending(newPending)
+    ctx.deps.store.setState({ currentDesign: response.design })
+    ctx.panel.setSelectedPivot('centroid')
+    waiting.resolve(response); await operation
+    untouched(ctx, newPending)
+    expect(ctx.select.value).toBe('centroid')
+  })
+
+  it('only the latest pivot request can reattach even if both replies have the same absolute pose', async () => {
+    const ctx = setup(), first = deferred(), second = deferred()
+    const response = rotationPointResponse(ctx.deps.store.getState().currentDesign)
+    ctx.deps.setClusterRotationPoint.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+    const one = ctx.choose('dup:root:ohD'), two = ctx.choose('dup:root:ohV')
+    ctx.deps.store.setState({ currentDesign: response.design })
+    second.resolve(response); await two
+    first.resolve(structuredClone(response)); await one
+    expect(ctx.getPending()).toBeNull()
+    expect(ctx.deps.clusterGizmo.attach).toHaveBeenCalledExactlyOnceWith('dc1', ctx.deps.scene, ctx.deps.camera, ctx.deps.canvas)
+    expect(ctx.select.value).toBe('dup:root:ohV')
+  })
+
+  it('accepts matching absolute pose after harmless metadata adoption and holds the requested option after reattach', async () => {
+    const ctx = setup(), response = rotationPointResponse(ctx.deps.store.getState().currentDesign)
+    ctx.deps.setClusterRotationPoint.mockImplementation(async () => {
+      ctx.deps.store.setState({ currentDesign: { ...response.design, name: 'New metadata' } })
+      return response
+    })
+    ctx.deps.clusterGizmo.attach.mockImplementation(() => ctx.panel.setSelectedPivot('centroid'))
+    await ctx.choose('dup:root:ohD')
+    expect(ctx.getPending()).toBeNull()
+    expect(ctx.deps.clusterGizmo.attach).toHaveBeenCalledExactlyOnceWith('dc1', ctx.deps.scene, ctx.deps.camera, ctx.deps.canvas)
+    expect(ctx.select.value).toBe('dup:root:ohD')
+    expect(showToast).not.toHaveBeenCalled()
+    expect(ctx.releases[0]).toHaveBeenCalledOnce()
+  })
 })
 
 describe('moveRotateSelectionLabels', () => {

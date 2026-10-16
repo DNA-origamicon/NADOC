@@ -24,12 +24,41 @@ growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
 Engineering update U2 closed **FH-19 after two checkpoints**. Current
 counts are **18 / 38 complete, 20 remaining (11 core, 9 parked)**, delta
-for latest update U4 **+0 completed, +0 total**. U4 is **FH-18 checkpoint 2**:
-ordinary authored PATCH and admitted identity-group dissolution are implemented;
-posed/regrouped membership and auxiliary group lifecycle still keep FH-18 open.
-No scope-growth trigger fired. A third checkpoint leaving FH-18 open MUST flag
-task growth and review its remaining exit. The finite matrix is in the delivery
-map; next finish that lifecycle before the standard history editors.
+for latest update U5 **+0 completed, +0 total**. U5 is **FH-18 checkpoint 3**:
+ordinary authored PATCH, admitted identity-group dissolution and auxiliary
+recording are implemented; posed/regrouped placement still keeps FH-18 open.
+**Task growth is flagged.** The containment decision and five finite batches are
+in the [organization/placement migration plan](../docs/audits/feature_history_20261014/group_placement_migration_plan.md).
+Separate organizational membership from the existing ordered placement list;
+preserve that list as the sole numerical authority and expose its owners as
+editable placement features. No hidden replacement group, per-residue expansion
+or coordinate baking. New-group move/frame/extension semantics remain a required
+integration exit. Deliver conversion → posed dissolve → regroup next; do not
+inflate counts by splitting batches or accumulate more identity-only subsets.
+No total-growth trigger or estimate change; the full original FH-18 exit stands.
+
+**FH-18 auxiliary checkpoint:** unassigned-component grouping emits complete
+native `cluster_create` v2 rows atomically; the native retained empty default
+owner is deliberate. Duplex rotation-point choice records one absolute
+`cluster_op` v1 with `source="rotation-point"`, using the unchanged native pivot
+rebase. It is a one-time choice, not a follow-root constraint. Both compute on
+detached captured inputs and require source/session/revision/policy ownership
+before merging only owned fields and publishing one undo/revision. No-op grouping
+keeps exact state. Recognized authored creation/edit/removal suppresses later
+legacy membership inference without inventing a recipe root or proof.
+Frontend pivot failures/stale replies preserve the unfinished move and cannot
+reattach a retired gizmo or overwrite a newer selection. Capture/graph/scalar-work
+limits protect admission; full validation/undo/response and desktop latency
+remain unqualified. Models, native molecular kernels and numerical pins are
+unchanged. See [U5 evidence](../docs/audits/feature_history_20261014/validation_group_auxiliary_recording.json).
+Validation: **389 focused backend passes** (206 warnings, 10.61 s), including
+72 new cases; full frontend **8,564 passed/one skipped** (731 files, 316.97 s).
+Scoped Ruff/diff pass, `main.js` delta 0. Selector-only FAST/FULL-deferred ran no
+suite; aggregate fast/broad debt remains. Removed current owned pytest fixtures:
+24 files/110,622 bytes, 659 directories, 15 links; no remaining pytest paths or
+NADOC shared memory. Available process references were checked; protected startup
+systemd/PAM mapping inspection limitations are recorded in the evidence.
+**NOT VERIFIED IN APP:** Archive is unavailable; MV-48/FH-27 remain open.
 
 **FH-18 dissolve checkpoint:** single DELETE and atomic batch POST now record
 `cluster-dissolve` v1 (1–128 IDs), with one owned undo/revision and native input
@@ -58,9 +87,9 @@ Pattern-created reuse of a dissolved ID without an explicit creation is refused
 with typed 409 from the existing decoded birth facts; no new lifetime semantics
 or geometry arithmetic is inferred. General implicit/auxiliary recreation remains
 part of the open lifecycle matrix.
-Rootless normalized reads also skip inference when dissolution is in history;
+Rootless normalized reads also skip inference when authored grouping is in history;
 this prevents later responses from recreating deliberately removed groups without
-inventing a recipe root. Other rootless legacy inference remains unchanged.
+inventing a recipe root. Unversioned rootless legacy inference remains unchanged.
 The sidebar calls this **Dissolve**, keeps visibility unchanged on failure, and
 import omission uses one atomic request with stale/error checks before Save.
 No whole-history proof or atom scan enters ordinary admission or drag frames.
@@ -102,7 +131,7 @@ kernels and numerical pins are unchanged. Evidence is in
 [group edit validation](../docs/audits/feature_history_20261014/validation_group_edit_recording.json).
 Owned group responses now suppress legacy auto-membership inference; formatting
 cannot silently refill an explicitly emptied group or add a second revision.
-Other legacy readers retain their existing behavior; rootless inputs stay
+U5 extends this protection to later normalized reads; rootless inputs stay
 unverified. **292 distinct focused backend checks passed** (251 in 13.51 s plus
 41 in 3.56 s). Full frontend: **8,517 passed/one skip**, 731 files, 325.58 s.
 Scoped Ruff/diff pass, `main.js` delta 0. No models or numerical manifests changed.

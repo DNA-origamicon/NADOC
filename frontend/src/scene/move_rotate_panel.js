@@ -74,6 +74,8 @@ export function initMoveRotatePanel({
   let   _mrPivotIsJoint  = false
   let   _mrAssemblyCtx   = null
   let   _proteinController = null
+  let   _acceptedPivot = 'centroid'
+  let   _pivotRequest = 0
 
   // Attachment controllers (proteins and nanoparticles) are installed on the
   // panel after subsystem construction.  Handle their buttons here, where the
@@ -218,6 +220,7 @@ export function initMoveRotatePanel({
 
   function _mrSetSelectedPivot(id) {
     if (_mrPivotSel) _mrPivotSel.value = id ?? 'centroid'
+    _acceptedPivot = _mrPivotSel?.value ?? 'centroid'
     _mrShowJointMode(id !== 'centroid' && id != null)
   }
 
@@ -361,9 +364,61 @@ export function initMoveRotatePanel({
   // centroid we're overriding. It would silently drag the pivot back to the centroid (the
   // "always rotates about centroid" bug). Instead drop any pending (centroid) transform and
   // attach directly so the gizmo reads the server-set root pivot verbatim.
-  async function _setDuplexRotationPoint(clusterId, spec) {
+  const poseFields = [['pivot', 3], ['translation', 3], ['rotation', 4]]
+  function _samePose(left, right) {
+    return !!left && !!right && poseFields.every(([field, length]) => {
+      const a = left[field], b = right[field]
+      return Array.isArray(a) && Array.isArray(b) && a.length === length && b.length === length
+        && a.every((value, i) => Number.isFinite(value) && value === b[i])
+    })
+  }
+
+  async function _setDuplexRotationPoint(clusterId, spec, request) {
     if (!setClusterRotationPoint) return
-    await setClusterRotationPoint(clusterId, spec)
+    const source = store.getState().currentDesign
+    const prior = _acceptedPivot
+    const want = spec.kind === 'overhang_root' ? `dup:root:${spec.overhangId}` : 'centroid'
+    const pending = clusterGizmo.getPendingTransform?.(clusterId) ?? null
+    let contextChanged = false
+    const unsubscribe = store.subscribe((state, previous) => {
+      if (state.currentDesign?.id !== source?.id || state.activeClusterId !== clusterId
+        || state.assemblyActive || (previous.translateRotateActive && !state.translateRotateActive)) contextChanged = true
+    })
+    const ownsRequest = () => {
+      const state = store.getState()
+      return !contextChanged && request === _pivotRequest && state.currentDesign?.id === source?.id
+        && state.activeClusterId === clusterId && !state.assemblyActive && clusterGizmo.isActive()
+    }
+    const refuse = message => {
+      if (!ownsRequest()) return
+      // Do not replace a choice made by a newer selection/tool subscription.
+      if (_mrPivotSel?.value === want) _mrPivotSel.value = prior
+      showToast(message, { severity: 'warning' })
+    }
+    let response
+    try {
+      response = await setClusterRotationPoint(clusterId, spec)
+    } catch {
+      refuse('Could not change the rotation point. Your pending move was kept.')
+      return
+    } finally {
+      unsubscribe()
+    }
+    if (!ownsRequest()) return
+    const accepted = response?.design?.cluster_transforms?.find(c => c.id === clusterId)
+    const current = store.getState().currentDesign?.cluster_transforms?.find(c => c.id === clusterId)
+    const nowPending = clusterGizmo.getPendingTransform?.(clusterId) ?? null
+    // Shared synchronization returns stale responses without adopting them. Only
+    // a matching current pose can supersede the pending transform we started with.
+    if (response?.design?.id !== source?.id || !current?.overhang_duplex_driver_id
+      || accepted?.overhang_duplex_driver_id !== current.overhang_duplex_driver_id
+      || !_samePose(accepted, current)
+      || !(pending === null && nowPending === null || _samePose(pending, nowPending))) {
+      refuse(response
+        ? 'The rotation point response no longer matches this move. Your current move was kept.'
+        : 'Could not change the rotation point. Your pending move was kept.')
+      return
+    }
     clusterGizmo.clearPendingTransform?.(clusterId)
     clusterGizmo.attach(clusterId, scene, camera, canvas)
     // attach() re-sets activeClusterId (detach→null, then →clusterId). That change fires
@@ -371,8 +426,8 @@ export function initMoveRotatePanel({
     // hardcodes the selection back to 'centroid'. Re-assert the intended pivot AFTER the
     // attach so the dropdown reflects the point the user actually chose.
     if (_mrPivotSel) {
-      const want = spec.kind === 'overhang_root' ? `dup:root:${spec.overhangId}` : 'centroid'
       if ([..._mrPivotSel.options].some(o => o.value === want)) _mrPivotSel.value = want
+      _acceptedPivot = _mrPivotSel.value
     }
   }
 
@@ -385,11 +440,12 @@ export function initMoveRotatePanel({
   // Pivot dropdown change
   _mrPivotSel?.addEventListener('change', async () => {
     const val = _mrPivotSel.value
+    const request = ++_pivotRequest
     if (val.startsWith('dup:root:')) {
       _mrShowJointMode(false)
       const clusterId = store.getState().activeClusterId
       await _setDuplexRotationPoint(clusterId, {
-        kind: 'overhang_root', overhangId: val.slice('dup:root:'.length) })
+        kind: 'overhang_root', overhangId: val.slice('dup:root:'.length) }, request)
       return
     }
     if (val === 'dup:taut') {
@@ -400,9 +456,11 @@ export function initMoveRotatePanel({
       const payload = await flexRelax.buildDuplexTautPayload(clusterId)
       if (payload) {
         clusterGizmo.setConstraint('ssdna', payload)
+        _acceptedPivot = val
         showToast('Constrained: drag the duplex — connection bonds won’t overstretch')
       } else {
         clusterGizmo.setConstraint('centroid', null)
+        _acceptedPivot = 'centroid'
         showToast('No applied connection bonds to constrain this duplex.', { severity: 'warning' })
       }
       return
@@ -410,22 +468,25 @@ export function initMoveRotatePanel({
     if (val === 'centroid') {
       _mrShowJointMode(false)
       const dc = _activeDuplexCluster()
-      if (dc) { await _setDuplexRotationPoint(dc.id, { kind: 'centroid' }); return }
+      if (dc) { await _setDuplexRotationPoint(dc.id, { kind: 'centroid' }, request); return }
       clusterGizmo.setConstraint('centroid', null)
+      _acceptedPivot = val
     } else if (val === 'ssdna') {
       _mrShowJointMode(false)
       const clusterId = store.getState().activeClusterId
       const payload = await flexRelax.buildTethersPayload(clusterId)
       if (payload) {
         clusterGizmo.setConstraint('ssdna', payload)
+        _acceptedPivot = val
         showToast('Constrained: drag the cluster — ssDNA tethers & connections won’t overstretch')
       } else {
         clusterGizmo.setConstraint('centroid', null)
+        _acceptedPivot = 'centroid'
         showToast('No tethers to constrain this cluster.', { severity: 'warning' })
       }
     } else {
       const joint = store.getState().currentDesign?.cluster_joints?.find(j => j.id === val)
-      if (joint) { _mrShowJointMode(true); clusterGizmo.setConstraint('joint', joint) }
+      if (joint) { _mrShowJointMode(true); clusterGizmo.setConstraint('joint', joint); _acceptedPivot = val }
     }
   })
 
