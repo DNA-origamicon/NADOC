@@ -117,3 +117,26 @@ Durable create/flush/restart/restore/edit correctness has separate focused
 evidence. Its actual filesystem latency remains a distinct qualification subject
 to repository artifact/storage rules. Public gates stay false until all relevant
 scope, correctness, lifecycle, latency and memory evidence is reviewed explicitly.
+
+## Measured byte transport checkpoint
+
+The corrected four-case run completed120 publications and four independent cold
+proofs at30 repetitions per case, without retry or dropped GC samples. All
+predeclared latency targets passed for those42–307KB sources. Start p95 was at
+most6.99ms; commit p95 at most69.59ms; concurrent commit-read p95 at most21.34ms.
+Maximum observed state-lock hold was0.30ms. The scoped3-repeat RSS diagnostic
+recorded all12 operations within the existing +256MiB target.
+
+Separate near-retention stress retained31,995,904 bytes across four sealed
+handles, one7,998,976-byte source and two ready results of321,517 bytes each.
+All three publications, independent cold proof, exact undo eviction and cleanup
+passed. Scoped RSS increased at most178,237,440 bytes, with sampling gaps up to
+57.41ms; this is sampled evidence, not a hard heap guarantee. Commit concurrent
+reads reached p9554.53ms, exceeding the declared25ms criterion. Public gates
+remain false. Two occupied small results do not qualify two16MB results.
+
+The next review concerns removing a full source materialization used solely for
+non-proof metadata preservation. Any replacement must derive only from the
+exact host seal, retain ID/annotation state, enforce an explicit closed source
+scope and fail closed when preservation requirements expand. No thresholds or
+input limits are raised.

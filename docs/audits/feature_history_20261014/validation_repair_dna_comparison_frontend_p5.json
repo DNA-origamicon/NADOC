@@ -60,5 +60,15 @@
     "No GPU/app/native VR qualification",
     "No source coordinates or numerical placement formulas changed",
     "Default comparison version remains one until explicit qualification"
-  ]
+  ],
+  "natural_gc_cpu_benchmark": {
+    "report": "benchmark_dna_comparison_scene_natural_gc.json",
+    "cases": 9,
+    "repeats": 9,
+    "cleanup_and_source_preservation": true,
+    "two_pane_build_max_ms": 59.87,
+    "disposal_max_ms": 0.4,
+    "node_process_max_rss_kib": 172140,
+    "qualification": "CPU measurements only; no GPU/browser or general viewport latency qualification"
+  }
 }

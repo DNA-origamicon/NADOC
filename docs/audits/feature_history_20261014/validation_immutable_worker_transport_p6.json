@@ -48,9 +48,9 @@
   "latency_qualified": false,
   "http_wired": true,
   "next": [
-    "Measure actual start/worker/commit HTTP lifecycle and concurrent lightweight requests against the predeclared criteria",
-    "Measure scoped parent+child memory and retained source/undo/two-result ownership",
-    "Keep public storage and registered batch gates false until relevant qualification passes"
+    "Review closed scalar preservation from the exact source seal to avoid full recovery decode solely for publication metadata",
+    "Test full identity/presentation preservation and fail-closed scope evolution before optimizing",
+    "Repeat retention latency against unchanged predeclared criteria; gates remain false"
   ],
   "app_status": "NOT VERIFIED IN APP",
   "host_wiring": {
@@ -104,5 +104,46 @@
       "Bounded scoped RSS sampler20 cases including PID identity, missing reads, cap and cleanup"
     ],
     "pinned_model_or_engine_changed": false
+  },
+  "measurements": {
+    "corrected_diagnostic": {
+      "report": "benchmark_immutable_part_jobs_bytes_corrected.json",
+      "publications": 12,
+      "cold_proofs": 4,
+      "scoped_rss_all_observed_within_allowance": true
+    },
+    "repeated_default": {
+      "report": "benchmark_immutable_part_jobs_bytes_repeated.json",
+      "publications": 120,
+      "cold_proofs": 4,
+      "all_predeclared_per_fixture_latency_targets_passed": true,
+      "start_p95_max_ms": 6.99,
+      "start_max_ms": 10.85,
+      "commit_p95_max_ms": 69.59,
+      "commit_max_ms": 77.9,
+      "concurrent_commit_read_p95_max_ms": 21.34,
+      "concurrent_commit_read_max_ms": 74.21,
+      "state_lock_max_ms": 0.3,
+      "job_max_ms": 1578.5,
+      "gc_samples_retained": true,
+      "retries": 0
+    },
+    "retention_diagnostic": {
+      "report": "benchmark_immutable_part_jobs_bytes_retention.json",
+      "source_bytes": 7998976,
+      "retained_source_undo_bytes": 31995904,
+      "ready_results": 2,
+      "each_ready_result_bytes": 321517,
+      "publications": 3,
+      "cold_proofs": 1,
+      "exact_eviction_and_cleanup": true,
+      "rss_increase_max_bytes": 178237440,
+      "rss_sampling_gap_max_ms": 57.41,
+      "scoped_rss_all_observed_within_allowance": true,
+      "commit_p95_ms": 61.94,
+      "concurrent_commit_read_p95_ms": 54.53,
+      "latency_verdict": "Unqualified: commit concurrent-read p95 exceeds predeclared25ms target;3diagnostic repetitions do not satisfy30-cycle requirement",
+      "maximum_candidate_result_retention_qualified": false
+    }
   }
 }
