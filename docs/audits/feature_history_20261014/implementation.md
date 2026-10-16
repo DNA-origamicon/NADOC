@@ -1342,3 +1342,29 @@ closed worker objects and their input tickets. No source limit, native algorithm
 deadline, memory target or public gate changed. Retained-memory and whole-request
 qualification remain open. See [the worker plan](immutable_recovery_worker_plan.md)
 and [validation](validation_immutable_recovery_worker_stage2.json).
+
+
+## Recovery transport lifetime and 30-cycle diagnostic — October 15
+
+Recovery now copies its source once from the shared input and closes the child
+mapping before unchanged preparation/proof. Common framing retains exact
+length/hash/canonical checks and accepts platform allocation padding. A close
+failure cannot reach preparation. The parent still seals its exact original
+bytes only from its owned closed-worker observation.
+
+**168 unique recovery cases plus five sampler controls pass.** The updated
+scalar probe stays active through completion and reports its discrete coverage.
+The same-harness three-cycle sampled RSS maximum fell from 284.73 to 253.10 MB.
+The subsequent 30 cycles completed 60 proofs and cleanup, all below the existing
+256 MiB incremental target (255.45 MB maximum). Start p95 was 8.48/7.54 ms;
+state-lock maximum was 1.304 ms. No budget, scientific helper or public gate
+changed. Detailed gaps and late-phase overlaps remain explicit; these results
+do not establish hard peak memory, durable-file or full-app qualification.
+
+Changed-file checks pass; repository lint retains its five existing F401s. The
+backend selector remains FAST/deferred FULL in dry-run only. Archive is absent;
+no new broad/bulk/app run occurred. VR and assemblies remain deferred. Completed
+owned pytest fixtures were removed after reference/lock checks (39 files,
+87,233 bytes); historical locked data remains untouched. See the
+[worker plan](immutable_recovery_worker_plan.md) and
+[validation](validation_immutable_recovery_transport.json).

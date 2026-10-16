@@ -1,8 +1,10 @@
 # Move strict recovery preparation into its admitted worker
 
-Status: reviewed proposal, 2026-10-15. No production or test changes in this
-checkpoint. Root owns serialized validation. Public strict storage/batch gates
-stay closed; assemblies and VR remain deferred.
+Status: implemented through owned handoff and bounded transport optimization,
+2026-10-15; historical proposal and staged evidence retained below. The 30-cycle
+in-memory diagnostic passes its sampled thresholds; durable-file/app qualification
+remains open. Public strict storage/batch gates stay closed; assemblies and VR
+remain deferred. Root owns serialized validation.
 
 ## Evidence and decision
 
@@ -299,3 +301,43 @@ assertions remain. Obsolete host imports of parent preparation and the old worke
 were removed. Public gates and all budgets are unchanged. Near-cap independent
 read allocation, retained memory and HTTP response measurements remain the next
 checkpoint. See [validation](validation_immutable_recovery_worker_stage2.json).
+
+
+## Transport storage and paced measurement
+
+The first worker diagnostic exceeded the 256 MiB incremental RSS target in two
+of three cycles. Its tight-loop scalar probe also exhausted its 256 samples
+before final result validation/cleanup/handoff. Both findings and the initial
+report are retained. The local probe now spaces reads by 20 ms, stops promptly
+with its operation and explicitly records exhaustion, sampling intervals,
+uncovered tails and per-phase overlaps. Five focused sampler controls pass.
+
+One common frame parser copies only the fixed header, exact source and bounded
+context. It validates those immutable copies, releases every view, and the child
+closes its input mapping before canonical preparation. A loader retaining only
+buffer names/sizes avoids keeping a caller frame through proof. Platform mapping
+padding is allowed, while declared size must fit the mapping and exactly match
+the frame fields; this follows [Python's shared-memory contract](https://docs.python.org/3/library/multiprocessing.shared_memory.html).
+A failed input close refuses before preparation. Parent input identity, all
+canonical/proof checks, one-shot authority and resource limits are unchanged.
+
+Before the change, 13 controls passed and nine cases failed on the intended
+lifetime/copy/length defects. Afterward, 168 unique recovery cases pass across
+five files, including the final 24-case transport target and real spawned
+lifecycle/host/commit regressions. The overflow fixture now enlarges the actual
+proof result, retaining the real bounded output encoder.
+
+With identical paced harness hashes, three-cycle maximum sampled RSS increase
+fell from 284,725,248 to 253,104,128 bytes. A further 30 cycles completed all 60
+proofs and cleanup; all sampled increments stayed below 268,435,456 bytes
+(maximum 255,447,040). Start p95 was 8.48/7.54 ms for first/second retained
+results; completion-read p95 was 3.35/3.40 ms. Maximum state-lock hold was
+1.304 ms and all completions remained inside the original five seconds.
+
+These are diagnostic measurements, not hard peak/heap or full-app guarantees.
+RSS gaps reached 24.22 ms; combined RSS double-counts shared pages. Late result,
+cleanup and handoff phases overlapped reads in 4, 19 and 5 of 60 observations,
+respectively; other intervals remain unmeasured for responsiveness. Per-cycle
+idle RSS includes retained benchmark records and allocator state. Durable
+leases, file reads/commit, large-file storage and app lifecycle remain separate.
+Public gates/qualification flags stay false. See [validation](validation_immutable_recovery_transport.json).

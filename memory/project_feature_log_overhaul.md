@@ -41,6 +41,15 @@ Public gates remain false pending actual HTTP responsiveness, retained-memory
 and complete lifecycle qualification. This is
 not authentication or a sandbox for unrestricted local Python.
 
+Recovery canonical preparation and proof now share one disposable worker. The
+child copies only owned input fields and closes its shared mapping before
+preparation; the parent seals its exact original bytes only after the owned,
+closed-worker completion. A paced 30-cycle in-memory diagnostic completed 60
+proofs/cleanups within sampled RSS/start/lock thresholds. Sampling gaps remain
+explicit; durable-file/publication and full-app qualification are still open.
+See [transport validation](../docs/audits/feature_history_20261014/validation_immutable_recovery_transport.json).
+VR validation is explicitly deferred to a capable-machine session.
+
 An experimental ordinary free-protein importer records pinned original bytes and
 separate import/placement inputs, but its server-owned gate remains false after
 retained-history capture refusals. Existing ordinary import behavior remains

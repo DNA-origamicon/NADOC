@@ -182,14 +182,28 @@ def _unique(pairs):
 
 
 def _frame(payload):
-    if type(payload) is not bytes or not _HEADER.size < len(payload) <= MAX_INPUT_BYTES:
+    if type(payload) is not bytes:
         _reject("Invalid recovery frame size")
-    magic, size, context_size, source_hash, context_hash = _HEADER.unpack_from(payload)
-    if (magic != MAGIC or not 0 < size <= MAX_CANDIDATE_BYTES or not 0 < context_size <= MAX_HEADER_BYTES
-            or _HEADER.size + size + context_size != len(payload)):
-        _reject("Invalid recovery frame header")
-    source = payload[_HEADER.size:_HEADER.size + size]
-    raw = payload[_HEADER.size + size:]
+    return _read_frame(payload, len(payload))
+
+
+def _read_frame(buffer, frame_size):
+    """Copy bounded fields once, then validate only the owned immutable bytes."""
+    with memoryview(buffer) as view:
+        if (type(frame_size) is not int or not _HEADER.size < frame_size <= MAX_INPUT_BYTES
+                or frame_size > len(view)):
+            _reject("Invalid recovery frame size")
+        with view[:_HEADER.size] as part:
+            header = bytes(part)
+        magic, size, context_size, source_hash, context_hash = _HEADER.unpack(header)
+        if (magic != MAGIC or not 0 < size <= MAX_CANDIDATE_BYTES
+                or not 0 < context_size <= MAX_HEADER_BYTES
+                or _HEADER.size + size + context_size != frame_size):
+            _reject("Invalid recovery frame header")
+        with view[_HEADER.size:_HEADER.size + size] as part:
+            source = bytes(part)
+        with view[_HEADER.size + size:frame_size] as part:
+            raw = bytes(part)
     if sha256(source).digest() != source_hash or sha256(raw).digest() != context_hash:
         _reject("Recovery frame input digest mismatch")
     context = _context(json.loads(raw, object_pairs_hook=_unique,
@@ -203,9 +217,27 @@ def _frame(payload):
 
 def evaluate_payload(payload):
     """Child-only preparation and proof; returned JSON never grants a seal."""
+    return _evaluate_input(lambda: _frame(payload))
+
+
+def _read_shared_frame(input_name, input_size):
+    if type(input_size) is not int or not _HEADER.size < input_size <= MAX_INPUT_BYTES:
+        _reject("Invalid recovery input buffer size")
+    source = SharedMemory(name=input_name)
+    try:
+        # A platform may round its allocation up. Only the declared frame is
+        # input; its own lengths must match exactly and fit the actual mapping.
+        return _read_frame(source.buf, input_size)
+    finally:
+        source.close()
+
+
+def _evaluate_input(read_frame):
+    # The shared loader owns only names/sizes and closes its mapping before
+    # returning. No caller frame or tuple retains a second large byte copy.
     binding = metadata = None
     try:
-        source, context, binding = _frame(payload)
+        source, context, binding = read_frame()
         from backend.api.part_immutable_cache import CacheManifest, StoredRevision
         from backend.api.part_immutable_recovery_inputs import prepare_stored
         from backend.api.part_immutable_revision import revision_metadata
@@ -215,7 +247,7 @@ def evaluate_payload(payload):
         stored = StoredRevision(CacheManifest(context["doc_id"], len(source), binding["source_sha256"]),
                                 source, None)
         candidate, captured = prepare_stored(stored)
-        del stored, source, payload
+        del stored, source
         # Preserve the actual existing pickle ceiling, independently of capture
         # accounting, and the old private serialize/deserialize handoff semantics.
         with _BoundedInput() as stream:
@@ -315,14 +347,10 @@ def _evaluate(input_name, input_size, output_name):
     for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
                  "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
         os.environ[name] = "1"
-    source = None
     output = SharedMemory(name=output_name)
     try:
         try:
-            if not _HEADER.size < input_size <= MAX_INPUT_BYTES:
-                _reject("Invalid recovery input buffer size")
-            source = SharedMemory(name=input_name)
-            report = evaluate_payload(bytes(source.buf[:input_size]))
+            report = _evaluate_input(lambda: _read_shared_frame(input_name, input_size))
         except BaseException as error:
             report = {"issues": [], "binding": None, "metadata": None,
                       "result": failure("strict_recovery_error", error)}
@@ -333,8 +361,6 @@ def _evaluate(input_name, input_size, output_name):
         output.buf[RESULT_HEADER_BYTES:RESULT_HEADER_BYTES + len(encoded)] = encoded
         struct.pack_into("!I", output.buf, 0, len(encoded))
     finally:
-        if source is not None:
-            source.close()
         output.close()
 
 

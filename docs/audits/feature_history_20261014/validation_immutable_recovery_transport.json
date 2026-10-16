@@ -1,0 +1,134 @@
+{
+  "date": "2026-10-15",
+  "scope": "Eliminate redundant shared recovery frame copy and close child input before preparation",
+  "red": {
+    "passed": 13,
+    "failed": 9,
+    "seconds": 2.95,
+    "failures": "Early-close, old whole-frame slice shortcut, oversized declared input acceptance; controls passed"
+  },
+  "validation": {
+    "unique_recovery_cases_passed": 168,
+    "sampler_cases_passed": 5,
+    "runs": [
+      {
+        "passed": 166,
+        "seconds": 19.91,
+        "scope": "Transport, pure parity, real worker lifecycle, host and existing recovery across five files"
+      },
+      {
+        "passed": 24,
+        "seconds": 2.78,
+        "scope": "Final transport target including added close-failure and strict-integer cases"
+      },
+      {
+        "passed": 5,
+        "seconds": 2.58,
+        "scope": "Paced sampler controls"
+      }
+    ]
+  },
+  "comparison": {
+    "benchmark_sha256_matches": true,
+    "baseline_three_cycle_increments_bytes": [
+      284725248,
+      253341696,
+      254091264
+    ],
+    "optimized_three_cycle_increments_bytes": [
+      253104128,
+      221335552,
+      218660864
+    ]
+  },
+  "thirty_cycles": {
+    "completed": true,
+    "verified_workers": 60,
+    "cleanup": true,
+    "cleanup_errors": [],
+    "maximum_sampled_rss_increment_bytes": 255447040,
+    "rss_target_bytes": 268435456,
+    "cycles_over_rss_target": 0,
+    "maximum_rss_sample_gap_ms": 24.219851002271753,
+    "maximum_state_lock_hold_ms": 1.3036710006417707,
+    "maximum_cycle_state_lock_p95_ms": 0.033475000236649066,
+    "maximum_recovery_complete_ms": 1878.2205110037467,
+    "start_p95_ms_by_ordinal": [
+      8.47963699925458,
+      7.53631900442997
+    ],
+    "concurrent_start_p95_ms_by_ordinal": [
+      7.478708001144696,
+      6.222576004802249
+    ],
+    "completion_light_read_p95_ms_by_ordinal": [
+      3.3501959987916052,
+      3.396760999748949
+    ],
+    "completion_light_read_max_ms": 15.45162200636696,
+    "completion_probe_cap_exhaustions": 0,
+    "late_phase_observations": {
+      "parent_result_validation": {
+        "count": 60,
+        "with_overlapping_reads": 4,
+        "maximum_ms": 0.2776830006041564
+      },
+      "worker_cleanup": {
+        "count": 60,
+        "with_overlapping_reads": 19,
+        "maximum_ms": 6.804764001572039
+      },
+      "parent_revision_handoff": {
+        "count": 60,
+        "with_overlapping_reads": 5,
+        "maximum_ms": 0.1868029939942062
+      }
+    },
+    "initial_parent_idle_rss_bytes": 186212352,
+    "final_parent_idle_rss_bytes": 226058240
+  },
+  "limits": [
+    "All declared sampled diagnostic thresholds pass; no hard heap/peak guarantee. RSS sums count shared pages more than once, so the reduction is not entirely physical allocation savings.",
+    "Sampling remains discrete: report phase overlaps and uncovered tails, never infer responsiveness for zero-overlap intervals.",
+    "Baseline is measured per cycle; parent RSS includes retained benchmark trace/summary records and allocator retention. This is not a long-running app leak qualification.",
+    "No durable file read/lease/commit or full app lifecycle is measured. Public qualification flags/gates remain false.",
+    "Pure evaluate_payload retains its caller frame; the production loader holds names/sizes only. The buffer proxy detects the previous full-frame slice, not every possible allocation."
+  ],
+  "preserved": [
+    "One common parser checks bounded declared length, copied header, immutable source/context digests and canonical context. Mapping padding remains allowed.",
+    "Unchanged canonical document preparation, full native proof, 2 MB pickle/result, 16 MB source, five-second deadline, scope sealing and publication guards.",
+    "Child close failure refuses before preparation; supervisor owns process termination and parent buffer unlinking."
+  ],
+  "primary_reference": "https://docs.python.org/3/library/multiprocessing.shared_memory.html",
+  "lint": "Changed-file Ruff and whitespace pass; just lint retains exactly five pre-existing F401 imports.",
+  "backend_selector": {
+    "command": "just test-smart --dry-run",
+    "decision": "FAST (fast suite only)",
+    "executed": false,
+    "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\nThis is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\nOnly request `just test-session` when a broad/full sweep is actually needed.",
+    "caveat": "Selector wording says ran; this dry run did not execute FAST. Archive is unavailable; no additional broad/bulk run was attempted."
+  },
+  "app_status": "NOT VERIFIED IN APP",
+  "vr_status": "Explicitly deferred to a capable-machine session",
+  "assemblies": "Deferred",
+  "frontend_main_js_loc_delta": 0,
+  "cleanup": {
+    "owned_completed_pytest_roots": [
+      "/tmp/pytest-of-joshua/pytest-270",
+      "/tmp/pytest-of-joshua/pytest-271",
+      "/tmp/pytest-of-joshua/pytest-272"
+    ],
+    "files_removed": 39,
+    "bytes_removed": 87233,
+    "active_references": 0,
+    "locks": 0,
+    "removal_verified": true,
+    "historical_locked_pytest_268": "Preserved untouched"
+  },
+  "evidence": [
+    "benchmark_immutable_recovery_worker_initial.json",
+    "benchmark_immutable_recovery_worker_paced_baseline.json",
+    "benchmark_immutable_recovery_worker_transport.json",
+    "benchmark_immutable_recovery_worker_transport_30.json"
+  ]
+}

@@ -72,15 +72,16 @@ def _crash_child(_input_name, _input_size, _output_name):
 
 def _oversized_child(input_name, input_size, output_name):
     from backend.api import part_immutable_recovery_worker as transport
+    from backend.core import part_history_contract
 
-    original = transport.evaluate_payload
+    original = part_history_contract.assess_part_history
 
-    def evaluate(payload):
-        report = original(payload)
-        report["result"]["detail"] = "x" * transport.MAX_RESULT_BYTES
+    def assess(*args, **kwargs):
+        report = original(*args, **kwargs)
+        report["detail"] = "x" * transport.MAX_RESULT_BYTES
         return report
 
-    transport.evaluate_payload = evaluate
+    part_history_contract.assess_part_history = assess
     # Exercise the real shared-memory result encoder and its existing fallback.
     transport._evaluate(input_name, input_size, output_name)
 

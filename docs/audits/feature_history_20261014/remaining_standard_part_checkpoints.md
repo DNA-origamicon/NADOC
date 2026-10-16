@@ -84,11 +84,15 @@ replaces this per-family evidence.
    now also runs full canonical preparation and native proof there, with an exact
    one-shot host handoff and 384 focused passes. This addresses the path previously
    measured at 164–187 ms parent preparation and up to 158 ms scalar-read delay;
-   measure the new near-cap retained memory and HTTP behavior before claiming a
-   latency result. See the [worker plan](immutable_recovery_worker_plan.md). Qualify
-   actual HTTP start/evaluation/publication with concurrent light reads and
-   scoped parent/child memory. Public storage/batch gates remain closed until
-   the declared lifecycle, latency and retention criteria pass.
+   the child now releases its shared input before preparation. The paced 30-cycle
+   in-memory diagnostic completes 60 proofs/cleanup within the declared sampled
+   RSS/start/lock thresholds, with explicit gaps and limited late-phase overlap.
+   Durable-file read/lease/commit and full app qualification remain open. See the
+   [worker plan](immutable_recovery_worker_plan.md) and
+   [transport validation](validation_immutable_recovery_transport.json). Qualify
+   actual HTTP publication with concurrent light reads and scoped memory. Public
+   storage/batch gates remain closed until the declared lifecycle, latency and
+   retention criteria pass.
 4. **P6 catalog and policy:** extend the finite public native command catalog to
    the admitted P3/P4 families; imports require explicit host policy and retain
    imported provenance. Close all strict read/write routes against that catalog.
