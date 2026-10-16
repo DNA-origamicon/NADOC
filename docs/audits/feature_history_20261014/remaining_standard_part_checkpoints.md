@@ -53,7 +53,7 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 
 | ID | Status | Fixed remaining exit |
 |---|---|---|
-| FH-18 | In progress · 7 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Owned organization transactions, named native deformation selections, qualified final-topology lineage including extrusion/crossover edits and matching Fine Routing recovery are implemented; remaining tool/repair/UI migration and new-group movement stay open. |
+| FH-18 | In progress · 8 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Owned organization transactions, named native deformation selections, qualified final-topology lineage including extrusion/crossover and resize/domain-shift edits and matching Fine Routing recovery are implemented; remaining tool/repair/UI migration and new-group movement stay open. |
 | FH-20 | Remaining | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
 | FH-21 | Remaining | Extrusion history editor: eligible earlier edits through downstream features, stable identities, complete ordinary controls and validation. |
 | FH-22 | Remaining | Sweep history editor: input-based isolated preview, recovery-independent Apply/Cancel and downstream rebuild. |
@@ -129,6 +129,34 @@ bound their matrices before implementation rather than expanding them indefinite
 | U7 · 2026-10-16 | FH-18 checkpoint 5: owned group/explicit-placement transaction and bounded HTTP adapter, exact-candidate permits, undo/save/reload, complete organization-body recovery admission and rootless-load preservation; [evidence](validation_group_organization_recording.json) | None; complete consumer/repair migration, visible Groups/Placements and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** five checkpoints on unfinished FH-18. B/C advance within the same five finite batches; D/E remain. No exit or denominator change. |
 | U8 · 2026-10-16 | FH-18 checkpoint 6: typed named bend/twist selection, bounded final-domain ancestry for 14 qualified native kinds, incoming-reference diagnostics and matching Fine Routing recovery; [evidence](validation_group_organization_consumers.json) | None; relocation/extrusion and remaining consumer/repair/UI migration, rollout and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** six checkpoints on unfinished FH-18. B/C advance; the original exit and five finite batches remain. No extra completion credit for adapter kinds, tests or commits. |
 | U9 · 2026-10-16 | FH-18 checkpoint 7: five extrusion families and crossover placement/motion follow organizational ancestry through native replay; bounded atomic endpoint correspondence, exact parity and unused reconciliation-field cleanup; [evidence](validation_group_geometry_lineage.json) | None; resize/domain-shift, remaining consumer/repair/UI migration, rollout and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** seven checkpoints on unfinished FH-18. The nine added command kinds are coverage within B/C, not new milestones. Fixed exit and five batches unchanged. |
+| U10 · 2026-10-16 | FH-18 checkpoint 8: passive native resize/domain-shift contributor tracking, complete observed-material checks and private Fine Routing reconstruction; [evidence](validation_group_resize_lineage.json) | None; remaining consumer/repair/UI migration, rollout and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** eight checkpoints on unfinished FH-18. The bounded two-command batch is implemented; no new milestone, exit or estimate. |
+
+### FH-18 containment update — U10
+
+The qualified native lineage set now covers 25 kinds. Resize and domain shift
+observe actual native endpoint, merge/split and translation replacements; they
+do not duplicate those algorithms. Internal temporary merges retain separate
+contributors, so trimming an entire selected tail does not select the surviving
+core. A later command cannot resurrect that deleted selection. Whole final
+entities still inherit any surviving contributor at the registered boundary.
+Exact observed material must survive reconciliation/retry independently of the
+sparse membership ancestry, including both directional keys and coverage.
+
+This closes the promised two-command batch within B/C. Remaining preview/repair/
+generated consumers, frozen deformation-address comparison, visible Groups and
+Placements, new-group movement/frame semantics and rollout remain in the fixed
+FH-18 exit. ISSUE-108 remains open. The next bounded task is the named-selection
+preview/repair/comparison adapter; generated and visible controls follow within
+the same five batches. Do not add more milestone credit for coverage counts.
+
+The native source change is passive optional instrumentation, explicitly not a
+schema-only change. CPD/duplex compatibility uses exact direct edges from five
+captured generations; coating's four existing entries stay unchanged. No stored
+pins, molecular calculations, phase constants or goldens are rewritten. Small
+resize executor medians are 0.066 ms legacy and 0.482 ms organized; metadata-only
+500-domain shift tracking is 40.771 ms median, 88.415 ms maximum over 20 runs.
+These are not desktop/publication acceptance. The public gate stays closed.
+**18/38; +0 completed, +0 total; 20 remaining (11 core, 9 parked).**
 
 ### FH-18 containment update — U9
 

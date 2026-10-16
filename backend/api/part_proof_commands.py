@@ -387,8 +387,9 @@ def _execute(kind, design, params, *, expensive):
     from backend.core.cluster_reconcile import reconcile_cluster_membership
     from backend.core.lattice import retry_pending_ligations
     from backend.core.photoproducts import stale_photoproduct_ids
-    from backend.core.part_group_lineage import KINDS as LINEAGE_KINDS, prepare_lineage, advance_lineage, apply_lineage
+    from backend.core.part_group_lineage import KINDS as LINEAGE_KINDS, prepare_lineage, start_lineage, advance_lineage, apply_lineage
     lineage = prepare_lineage(design, kind, params) if kind in LINEAGE_KINDS else None
+    lineage_trace = start_lineage(lineage)
     report = None
     if kind == "photoproduct-relax" or (kind == "photoproduct-create" and params.get("method") == "convert"):
         if not expensive:
@@ -494,6 +495,9 @@ def _execute(kind, design, params, *, expensive):
     elif kind == "overhang-sequence":
         from backend.api.part_overhang_patch import build
         updated = build(design, params)
+    elif lineage_trace is not None:
+        from backend.api.part_resize_commands import build
+        updated = build(kind, design, params, lineage=lineage_trace)
     elif kind in MOVE_KINDS:
         from backend.api.part_crossover_moves import build
         updated = build(kind, design, params)
@@ -546,7 +550,7 @@ def _execute(kind, design, params, *, expensive):
         updated = replay_snapshot(kind, design, params)
     else:
         updated = replay_minor(kind, design, params)
-    lineage = advance_lineage(lineage, updated)
+    lineage = advance_lineage(lineage, updated, trace=lineage_trace)
     updated = reconcile_cluster_membership(design, updated, report)
     if kind not in {"auto-break", "full-autostaple", "cluster-join"}:
         updated = retry_pending_ligations(design, updated)

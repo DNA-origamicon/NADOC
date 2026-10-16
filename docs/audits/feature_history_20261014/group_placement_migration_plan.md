@@ -1,6 +1,6 @@
 # Group organization and placement: finite migration plan
 
-Architecture proposal, October 16, 2026; source baseline `3aa2529a`. The U6–U8 status
+Architecture proposal, October 16, 2026; source baseline `3aa2529a`. The U6–U10 status
 below records implementation after that proposal. FH-18 remains open. The
 overhaul count remains **18/38 complete**, with **11 core and 9 parked milestones
 remaining**. This plan and its implementation batches earn no separate milestone
@@ -376,6 +376,51 @@ the three used placement hints and all reconciliation calculations are retained.
 This is FH-18 checkpoint 7, still flagged for growth; the five original batches
 and full exit stand. No additional milestone credit, denominator change, public
 enablement or desktop performance claim.
+
+### U10: passive resize/domain-shift contributors
+
+`strand-end-resize` and `domain-shift` bring the private qualified set to 25.
+A small invocation-owned observer receives actual native endpoint replacements,
+translations and inline-tail merge/split events. It never supplies geometry or
+chooses native branches. Legacy calls construct no observer. The prepared source
+and final receipts contain only immutable scalar identities/intervals; no Design,
+Domain, geometry array or global trace is retained.
+
+Temporary inline normalization retains piecewise original contributors. Growth
+inherits the contributor at the edited endpoint; shrink clips removed material.
+An inverted intermediate tail has no material but can retain its endpoint owner
+if the same terminal regrows before normalization in the same invocation. Once
+normalization removes it, later commands cannot revive the empty group. Native
+normalization gaps have no invented ancestor. The final whole-domain rule still
+applies to surviving contributors; temporary internal merging alone is not an
+authored union. Domain translation carries its actual contributors even when
+addresses become disjoint or exchange positions.
+
+The raw observer receipt validates exact strand/domain identities and descriptors
+before reconciliation/retry. Final output must conserve all observed directional
+material (keys and interval coverage), separately from sparse contributor labels.
+Missing/foreign/reused observations, ambiguous occupancy, final inversions and
+budget overflow refuse without mutating the source. Existing node/byte/edge caps
+also bound cumulative list shifts and contributor work; no per-base expansion.
+The native molecular calculations, placements and branch predicates are unchanged.
+
+`lattice.py` participates in CPD/duplex manifests. The disclosed transition is
+`native-domain-lineage-v1`, explicitly passive instrumentation rather than a
+schema-only change. Five captured generations per affected family have direct
+exact edges to current manifests; coating's four policy entries are unchanged.
+All prior policy bytes remain in the audit, stored pins are preserved, and the
+16-entry/16KiB policy bounds remain (14 entries/14,216 bytes). Worker controls
+verify the same installed calculations under current and historical pins; they
+are not a historical-binary equivalence oracle.
+
+[U10 evidence](validation_group_resize_lineage.json) records native model/geometry/
+axis parity, cold input proof with poisoned recovery, upstream bundle edits with
+named bend/twist consumers, ordinary/composed child seek and private undo restore.
+The topology-only native-residue fixtures have no atomistic validity claim.
+No public Ctrl-Z/app qualification or rollout is implied. Metadata-only shift
+tracking at 500 domains measured 40.771 ms median and 88.415 ms maximum; complete
+transaction/display acceptance remains open. FH-18 is still open at checkpoint 8,
+with the same five batches and fixed exit: **18/38; +0 completed, +0 total**.
 
 ## Finite acceptance matrix
 

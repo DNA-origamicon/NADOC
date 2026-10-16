@@ -1,0 +1,264 @@
+{
+  "checkpoint": "U10 \u2014 FH-18 checkpoint 8; passive native resize/domain-shift lineage",
+  "source_checkpoint": "e1fca697",
+  "date": "2026-10-16",
+  "progress": {
+    "baseline": "B1: 17/38 through 2c15e747",
+    "completed": 18,
+    "estimated_total": 38,
+    "remaining": 20,
+    "core_remaining": 11,
+    "parked_remaining": 9,
+    "delta_completed": 0,
+    "delta_total": 0,
+    "fh18_checkpoints": 8,
+    "task_growth_flagged": true,
+    "note": "Two-command coverage within the existing B/C batches; original milestone exit and all five batches unchanged. No extra completion credit for kinds, tests or commits."
+  },
+  "scope": {
+    "implemented": [
+      "Invocation-owned passive scalar contributor tracking for strand-end-resize and domain-shift; qualified lineage set now 25 kinds.",
+      "Five native observation sites emit actual endpoint/translation/normalization replacements; native calculations and branch predicates are unchanged. Legacy execution constructs no observer.",
+      "Internal merge/re-split retains piecewise ancestry. Growth belongs to the edited terminal contributor; shrink removes only clipped material. An entirely trimmed tail does not select surviving core or resurrect in a later command.",
+      "Temporary inversion is empty material, with endpoint ownership retained only while the same terminal survives in the same invocation. Native-created normalization gaps receive no fabricated ancestor.",
+      "Complete observed raw material is validated separately from sparse ancestry after reconciliation/retry, including exact directional keys and interval coverage.",
+      "Closed two-command replay adapter forwards existing typed requests. Public organization flag remains false; no new ordinary UI or publication path.",
+      "Removed the two stale unsupported-kind regression cases; retained automatic reroute and unknown-kind refusal. No unrelated legacy cleanup."
+    ],
+    "non_goals": [
+      "Remaining preview/repair/generated consumers, frozen historical deformation-address comparison DTO, visible Groups/Placements and new-group movement/frame semantics remain FH-18 work.",
+      "ISSUE-108 native crossover-growth metadata loss remains open with its U9 refusal guard.",
+      "No molecular formula, phase constant, geometry golden, saved numerical pin or public gate change.",
+      "No desktop/VR qualification, assembly work or NP/asset priority expansion."
+    ]
+  },
+  "validation": {
+    "red": [
+      {
+        "target": "tests/test_group_lineage_resize.py",
+        "failed": 51,
+        "passed": 6,
+        "seconds": 3.91
+      },
+      {
+        "target": "initial trace and pipeline cases",
+        "failed": 18,
+        "passed": 1,
+        "seconds": 2.82
+      },
+      {
+        "target": "test_post_retry_cannot_add_unobserved_directional_material",
+        "failed": 1,
+        "seconds": 2.68,
+        "note": "Reported DID NOT RAISE before the exact directional-key guard; fixed and included in green runs."
+      },
+      {
+        "target": "tests/test_part_numerical_schema_compatibility.py before policy update",
+        "failed": 34,
+        "passed": 76,
+        "seconds": 3.7
+      }
+    ],
+    "intermediate": {
+      "passed": 222,
+      "seconds": 4.31,
+      "note": "New ancestry suites, existing lineage and exact policy tests. Overlaps final focused matrix; not added to its count."
+    },
+    "focused": {
+      "targets": [
+        "tests/test_part_group_domain_trace.py",
+        "tests/test_group_lineage_resize.py",
+        "tests/test_group_lineage_resize_pipeline.py",
+        "tests/test_group_lineage_transport.py",
+        "tests/test_group_lineage_extrusion.py",
+        "tests/test_group_lineage_crossovers.py",
+        "tests/test_part_group_lineage.py",
+        "tests/test_part_group_selection.py",
+        "tests/test_group_organization_pipeline.py",
+        "tests/test_group_organization_diffs.py",
+        "tests/test_group_organization_history.py",
+        "tests/test_group_organization_execution.py",
+        "tests/test_group_organization_public_gate.py",
+        "tests/test_group_organization_recording.py",
+        "tests/test_group_organization_permits.py",
+        "tests/test_part_group_organization_routes.py",
+        "tests/test_group_organization_boundaries.py",
+        "tests/test_group_organization_inventory.py",
+        "tests/test_group_organization_commands.py",
+        "tests/test_group_organization_recovery_admission.py",
+        "tests/test_native_extrusion_proof.py",
+        "tests/test_native_routing_proof.py",
+        "tests/test_native_overhang_proof.py",
+        "tests/test_cluster_reconcile.py",
+        "tests/test_cluster_reconcile_e2e.py",
+        "tests/test_extrusion_clusters.py",
+        "tests/test_part_proof_engine.py",
+        "tests/test_part_recipe_edit.py",
+        "tests/test_part_numerical_schema_compatibility.py",
+        "tests/test_part_command_references.py",
+        "tests/test_strand_end_resize_api.py",
+        "tests/test_domain_shift.py",
+        "tests/test_end_resize_deformation.py",
+        "tests/test_lattice.py::test_resize_strand_ends_extend_3p_within_helix",
+        "tests/test_lattice.py::test_resize_strand_ends_grow_helix_forward",
+        "tests/test_lattice.py::test_resize_strand_ends_trim_3p",
+        "tests/test_lattice.py::test_resize_inline_overhang_created_on_3p_extension",
+        "tests/test_lattice.py::test_resize_inline_overhang_grows_on_second_extension",
+        "tests/test_lattice.py::test_resize_inline_overhang_preserves_rotation_on_second_extension",
+        "tests/test_lattice.py::test_resize_inline_overhang_removed_when_trimmed_back"
+      ],
+      "new_test_files": 3,
+      "new_cases_in_those_files": 77,
+      "passed": 928,
+      "warnings": 110,
+      "seconds": 16.11
+    },
+    "native_workers": {
+      "targets": [
+        "tests/test_native_schema_compatibility.py::test_spawned_numerical_schema_transition_preserves_exact_authored_outputs[cpd]",
+        "tests/test_native_schema_compatibility.py::test_spawned_numerical_schema_transition_preserves_exact_authored_outputs[duplex]"
+      ],
+      "passed": 2,
+      "skipped": 0,
+      "seconds": 89.63,
+      "case_seconds": {
+        "cpd": 78.59,
+        "duplex": 8.36
+      },
+      "scope": "Each uses real existing tiny native fixtures: worker-authored current result and runtime/template, current-pin cold proof, all five captured old pins, poisoned recovery, complete authoring equality, unknown pin refusal and process/shared-buffer cleanup.",
+      "limits": "Same-installed-kernel compatibility, not historical binary equivalence. Coating manifest/policy unchanged, so its numerical worker was not rerun."
+    },
+    "native_parity": "Complete model excluding organization, native nucleotide geometry and helix axes match native controls. Both directions/ends, core-tail split/merge/removal, native-residue premerge, same-batch inversion/regrowth, later-command non-resurrection, disjoint/exchanged translations and scaffold-coverage updates are exercised. Native-residue fixtures use empty atom maps and prove topology branching, not atomistic placement.",
+    "pipeline": "Independent native-input replay with poisoned recovery, save/reload, upstream bundle edit with downstream named bend/twist, ordinary/composed eight-child seek, private undo restoration and last-child deletion. No public Ctrl-Z or invented retry merge claim.",
+    "independent_review": "Two read-only reviews found no remaining blocker after raw/final directional-key correction. Caller audit confirmed optional keyword compatibility and legacy monkeypatch preservation; agents ran no tests.",
+    "static": {
+      "ruff": "12 changed Python files passed",
+      "diff": "passed",
+      "main_js_delta": 0,
+      "repository_lint": {
+        "passed": false,
+        "unchanged_errors": 5,
+        "note": "Existing F401 in vr_prompts and four CPD tests. Changed files pass."
+      }
+    },
+    "selector": {
+      "command": "just test-smart --dry-run",
+      "changed_files_reported": 5545,
+      "decision": "FAST  (fast suite only)",
+      "routing": "FULL: backend/api/main.py matches foundational/shared 'backend/api/main.py'",
+      "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+      "tests_executed": 0,
+      "note": "The last clause is selector boilerplate, not evidence of execution: this was a dry-run only. Aggregate fast/FULL debt remains. Archive absent prevents bulk scratch fallback."
+    },
+    "memory_lint": {
+      "passed": false,
+      "errors": 6,
+      "warnings": 59,
+      "note": "Same pre-existing oversized CPD/VR heads, unindexed exp_predictor and three absent historical artifact links. Updated feature head has 150 lines with valid audit links."
+    },
+    "frontend": "No frontend source change or frontend suite rerun.",
+    "app": "Not exercised in app. Public organization gate remains false. Archive absent/unmounted; no bulk/browser scratch fallback. Existing desktop acceptance remains open."
+  },
+  "performance": {
+    "method": "Guarded in-memory probe, one warmup and 20 timed iterations with natural GC, then a separate tracemalloc sample. No new threshold or per-base expansion.",
+    "native_executor": {
+      "kind": "strand-end-resize",
+      "case": "full tail removal",
+      "legacy": {
+        "median_ms": 0.066,
+        "max_ms": 0.111,
+        "peak_python_bytes": 9472
+      },
+      "organized": {
+        "median_ms": 0.482,
+        "max_ms": 0.551,
+        "peak_python_bytes": 17288
+      }
+    },
+    "synthetic_metadata_only": [
+      {
+        "domains": 100,
+        "groups": 2,
+        "median_ms": 8.336,
+        "max_ms": 9.395,
+        "peak_python_bytes": 166376
+      },
+      {
+        "domains": 500,
+        "groups": 2,
+        "median_ms": 40.771,
+        "max_ms": 88.415,
+        "peak_python_bytes": 1062144
+      }
+    ],
+    "limits": "Synthetic scope is prepare + passive shift observations + raw validation + final lineage only, without native builder/geometry. Native sample is tiny. Neither includes durable capture/publication, serialization, display or process RSS. The 88.415 ms maximum is retained; no desktop responsiveness/neutral-overhead claim."
+  },
+  "bounds": {
+    "preparation": "Existing 30k nodes/2MB, bounded IDs/endpoints and disjoint directional source occupancy.",
+    "trace": "Cumulative event/contributor/list-shift accounting under the existing 30k relation and node/byte limits. No retained source models. One-shot finish bound to prepared source token.",
+    "final": "Complete bounded raw inventory/material and final interval inventory, followed by existing bounded relation/emitted membership joins.",
+    "legacy": "Absent organization constructs no observer or new topology walk. No drag-frame work.",
+    "policy": "14 exact direct edges / 14,216 bytes under unchanged 16-entry / 16KiB limits."
+  },
+  "numerical_manifests": {
+    "changed": true,
+    "part_cpd_contract": "c67da80884b973d6c5a5464aff030d55a51c0d055873380923f65c54944c8404",
+    "part_duplex_relax_contract": "b1205c2f9bdb9754bd646b18fb586e0e4719dbcda4a0644c6204dea2c7c318ce",
+    "part_streptavidin_contract": "67f3141feab0d5771926b7f532f7b40e3a13d31403fc1866e158b3a589406d9f",
+    "event": "native-domain-lineage-v1",
+    "immediate_delta": [
+      "backend/core/lattice.py"
+    ],
+    "note": "Passive optional observations, explicitly not schema-only. Numerical call paths pass no observer and do not execute the new tracker. Five direct generations for CPD/duplex; coating's four entries unchanged. Before manifests and exact prior 12-edge policy archived. No transitive acceptance or stored repin."
+  },
+  "cleanup": {
+    "paths": [
+      "/tmp/pytest-of-joshua/pytest-5",
+      "/tmp/pytest-of-joshua/pytest-6",
+      "/tmp/pytest-of-joshua/pytest-7",
+      "/tmp/pytest-of-joshua/pytest-current"
+    ],
+    "removed_files": 52,
+    "removed_bytes": 316234,
+    "removed_directories": 1209,
+    "removed_symlinks": 28,
+    "visible_processes": 54,
+    "visible_active_target_references": 0,
+    "permission_denied_pids": [
+      1,
+      2,
+      3,
+      11,
+      44,
+      94,
+      116,
+      117,
+      120,
+      124,
+      128,
+      130,
+      212,
+      213,
+      222,
+      223,
+      229,
+      230,
+      240,
+      245,
+      264,
+      384,
+      435,
+      436,
+      513,
+      514,
+      542,
+      543,
+      553,
+      557,
+      11464
+    ],
+    "pytest_root_remaining": [],
+    "nadoc_shared_memory_remaining": [],
+    "note": "Only this checkpoint's disposable pytest fixtures removed after visible cwd/root/fd/maps inspection. Protected processes prevent system-wide certainty. Workspace designs/jobs, runtimes and historical artifacts preserved. Earlier task fixtures were pruned automatically by pytest retention."
+  }
+}

@@ -2568,12 +2568,13 @@ def convert_binder_to_scaffold_endpoint(strand_id: str) -> dict:
     )
 
 
-def _build_strand_end_resize(d: Design, body: "StrandEndResizeRequest") -> Design:
+def _build_strand_end_resize(d: Design, body: "StrandEndResizeRequest", *, lineage=None) -> Design:
     """Pure builder for a strand end resize."""
     from backend.core.lattice import resize_strand_ends
     from backend.core.duplex import drop_invalid_duplexes
 
-    out = resize_strand_ends(d, [entry.model_dump() for entry in body.entries])
+    options = {"lineage": lineage} if lineage is not None else {}
+    out = resize_strand_ends(d, [entry.model_dump() for entry in body.entries], **options)
     # A shrink can push a duplex register out of its (now shorter) domain; drop
     # such duplexes so the resize doesn't break the connections graph.
     return drop_invalid_duplexes(out)
@@ -2608,7 +2609,7 @@ def strand_end_resize(body: StrandEndResizeRequest) -> dict:
     )
 
 
-def _build_domain_shift(d: Design, body: "DomainShiftRequest") -> Design:
+def _build_domain_shift(d: Design, body: "DomainShiftRequest", *, lineage=None) -> Design:
     """Pure builder for a domain-shift batch."""
     from backend.core.lattice import shift_domains
     from backend.core.duplex import shift_duplex_ends, drop_invalid_duplexes
@@ -2622,7 +2623,8 @@ def _build_domain_shift(d: Design, body: "DomainShiftRequest") -> Design:
             oid = strand.domains[entry.domain_index].overhang_id
             if oid:
                 deltas[oid] = deltas.get(oid, 0) + entry.delta_bp
-    out = shift_domains(d, [entry.model_dump() for entry in body.entries])
+    options = {"lineage": lineage} if lineage is not None else {}
+    out = shift_domains(d, [entry.model_dump() for entry in body.entries], **options)
     out = shift_duplex_ends(out, deltas)
     return drop_invalid_duplexes(out)
 

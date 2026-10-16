@@ -3764,6 +3764,8 @@ def _reconcile_inline_overhangs(
     scaf_cov: dict[str, tuple[int, int]],
     helices_by_id: dict | None = None,
     protected_overhang_ids: set[str] | None = None,
+    *,
+    lineage=None,
 ) -> None:
     """Detect/remove inline overhang splits on modified strand terminal domains.
 
@@ -3850,6 +3852,8 @@ def _reconcile_inline_overhangs(
                     }
                 )
                 lo = min(term_idx, adj_idx)
+                if lineage is not None:
+                    lineage.repartition(strand_id, lo, [first, second], [merged])
                 domains[lo : lo + 2] = [merged]
             else:
                 domains[term_idx] = term_dom.model_copy(update={"overhang_id": None})
@@ -3924,6 +3928,10 @@ def _reconcile_inline_overhangs(
                 domains[term_idx : term_idx + 1] = [scaf_part, new_ovhg]
 
         if new_ovhg is not None:
+            if lineage is not None:
+                lineage.repartition(
+                    strand_id, term_idx, [term_dom], domains[term_idx : term_idx + 2]
+                )
             # Junction bp = the scaffold boundary where the split occurred.
             junction_bp = (
                 scaf_lo if (is_5p and is_fwd) or (not is_5p and not is_fwd) else scaf_hi
@@ -5314,7 +5322,7 @@ def assign_overhang_connection_names(design: Design) -> Design:
     return design.copy_with(overhang_connections=new_list)
 
 
-def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
+def resize_strand_ends(design: Design, entries: list[dict], *, lineage=None) -> Design:
     """Resize one or more strand terminal domains by *delta_bp* each.
 
     Each entry dict must have::
@@ -5359,9 +5367,12 @@ def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
             if (term.overhang_id and term.overhang_id.startswith("ovhg_inline_")
                     and adj.helix_id == term.helix_id and adj.direction == term.direction):
                 first, last = domains[min(ti, ai)], domains[max(ti, ai)]
-                domains[min(ti, ai):max(ti, ai) + 1] = [term.model_copy(update={
+                merged = term.model_copy(update={
                     "start_bp": first.start_bp, "end_bp": last.end_bp,
-                })]
+                })
+                if lineage is not None:
+                    lineage.repartition(strand.id, min(ti, ai), [first, last], [merged])
+                domains[min(ti, ai):max(ti, ai) + 1] = [merged]
 
         if end == "5p":
             term_dom = domains[0]
@@ -5375,6 +5386,12 @@ def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
             new_bp = cur_bp + delta
             new_domain = term_dom.model_copy(update={"end_bp": new_bp})
             domains[-1] = new_domain
+
+        if lineage is not None:
+            lineage.resize(
+                strand.id, 0 if end == "5p" else len(domains) - 1,
+                term_dom, new_domain, end=end,
+            )
 
         sequence = None
         if strand.sequence is not None and any(
@@ -5460,7 +5477,8 @@ def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
     )
     scaf_cov = _scaffold_coverage_by_helix(updated_design)
     _reconcile_inline_overhangs(
-        strands_by_id, overhangs_by_id, modified, scaf_cov, helices_by_id
+        strands_by_id, overhangs_by_id, modified, scaf_cov, helices_by_id,
+        lineage=lineage,
     )
 
     new_strands = [strands_by_id.get(s.id, s) for s in design.strands]
@@ -5477,7 +5495,7 @@ def resize_strand_ends(design: Design, entries: list[dict]) -> Design:
     )
 
 
-def shift_domains(design: Design, entries: list[dict]) -> Design:
+def shift_domains(design: Design, entries: list[dict], *, lineage=None) -> Design:
     """Shift one or more domains by *delta_bp* each, keeping length fixed.
 
     Each entry dict must have::
@@ -5589,6 +5607,8 @@ def shift_domains(design: Design, entries: list[dict]) -> Design:
                     "end_bp": old_dom.end_bp + delta,
                 }
             )
+            if lineage is not None:
+                lineage.translate(sid, di, old_dom, new_dom)
             new_domains[di] = new_dom
             shifts_record.append(
                 (
@@ -5776,7 +5796,8 @@ def shift_domains(design: Design, entries: list[dict]) -> Design:
     )
     scaf_cov = _scaffold_coverage_by_helix(updated_design)
     _reconcile_inline_overhangs(
-        strands_by_id, overhangs_by_id, modified_terms, scaf_cov, helices_by_id
+        strands_by_id, overhangs_by_id, modified_terms, scaf_cov, helices_by_id,
+        lineage=lineage,
     )
 
     new_strands = [strands_by_id.get(s.id, s) for s in design.strands]

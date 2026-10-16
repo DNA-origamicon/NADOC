@@ -1,4 +1,4 @@
-"""Exact, disclosed schema-only compatibility; no numerical solver executes."""
+"""Exact, disclosed non-numerical compatibility; no numerical solver executes."""
 
 from copy import deepcopy
 from importlib import import_module
@@ -19,9 +19,14 @@ ORGANIZATION_BEFORE = ROOT / "docs/audits/feature_history_20261014/group_organiz
 PRIOR_POLICY = ROOT / "docs/audits/feature_history_20261014/group_organization_schema_compatibility_prior_policy.json"
 LOAD_BEFORE = ROOT / "docs/audits/feature_history_20261014/group_organization_load_schema_compatibility_before.json"
 LOAD_PRIOR_POLICY = ROOT / "docs/audits/feature_history_20261014/group_organization_load_schema_compatibility_prior_policy.json"
+LINEAGE_BEFORE = ROOT / "docs/audits/feature_history_20261014/domain_lineage_compatibility_before.json"
+LINEAGE_PRIOR_POLICY = ROOT / "docs/audits/feature_history_20261014/domain_lineage_compatibility_prior_policy.json"
 BASELINES = {"grouping-v1": BEFORE, "grouping-v2": DISSOLVE_BEFORE,
-             "cluster-dissolve-v1": ORGANIZATION_BEFORE, "group-organization-v1": LOAD_BEFORE}
+             "cluster-dissolve-v1": ORGANIZATION_BEFORE, "group-organization-v1": LOAD_BEFORE,
+             "organization-load-v1": LINEAGE_BEFORE}
 FAMILIES = ("part_cpd_contract", "part_duplex_relax_contract", "part_streptavidin_contract")
+LIVE_BASELINES = [(family, generation) for family in FAMILIES for generation in BASELINES
+                  if family != "part_streptavidin_contract" or generation != "organization-load-v1"]
 ENGINE = "nadoc.cpd-native-engine.v1"
 EVENT = "cluster-create-proof-v2"
 SCHEMA = "nadoc.numerical-schema-compatibility.v1"
@@ -170,12 +175,20 @@ def test_installed_policy_targets_only_current_engines_and_preserves_prior_audit
                digest(import_module(f"backend.core.{family}").implementation_manifest())
                for family in FAMILIES}
     entries = compatibility._policy()
-    assert len(entries) == 12
+    assert len(entries) == 14
     assert compatibility.POLICY_PATH.stat().st_size <= 16 * 1024
     assert all(entry["to_sha256"] == current[entry["engine_id"]] for entry in entries)
     historical = json.loads(LOAD_PRIOR_POLICY.read_text())["transitions"]
     assert len(historical) == 9
     assert all(entry["to_sha256"] != current[entry["engine_id"]] for entry in historical)
+    prior = json.loads(LINEAGE_PRIOR_POLICY.read_text())["transitions"]
+    assert len(prior) == 12
+    coating = "nadoc.streptavidin-native.v1"
+    assert [entry for entry in entries if entry["engine_id"] == coating] == [
+        entry for entry in prior if entry["engine_id"] == coating]
+    assert sum(entry["engine_id"] == coating for entry in entries) == 4
+    assert all((entry["to_sha256"] == current[entry["engine_id"]]) == (entry["engine_id"] == coating)
+               for entry in prior)
 
 
 def environment(monkeypatch, contract, implementation_pin):
@@ -194,8 +207,7 @@ def environment(monkeypatch, contract, implementation_pin):
     return command, engine
 
 
-@pytest.mark.parametrize("family", FAMILIES)
-@pytest.mark.parametrize("generation", BASELINES)
+@pytest.mark.parametrize("family,generation", LIVE_BASELINES)
 def test_real_captured_old_manifest_has_one_exact_reviewed_transition(compatibility, monkeypatch, family, generation):
     contract = import_module(f"backend.core.{family}")
     capture = json.loads(BASELINES[generation].read_text())
@@ -210,13 +222,14 @@ def test_real_captured_old_manifest_has_one_exact_reviewed_transition(compatibil
                and entry["to_sha256"] == digest(current)]
     assert len(entries) == 1
     entry = entries[0]
-    assert entry["id"] == f"organization-load-v1.from-{generation}.{contract.ENGINE_ID}"
-    assert entry["event"] == "organization-load-v1"
+    event = "organization-load-v1" if family == "part_streptavidin_contract" else "native-domain-lineage-v1"
+    assert entry["id"] == f"{event}.from-{generation}.{contract.ENGINE_ID}"
+    assert entry["event"] == event
     assert entry["source_checkpoint"] == capture["checkpoint"]
     old_files, new_files = before["manifest"]["files"], current["files"]
     changes = {path for path in old_files.keys() | new_files.keys() if old_files.get(path) != new_files.get(path)}
-    expected = {"backend/core/models.py"}
-    if generation != "group-organization-v1":
+    expected = set() if generation == "organization-load-v1" else {"backend/core/models.py"}
+    if generation not in {"group-organization-v1", "organization-load-v1"}:
         expected.update({"backend/core/part_group_model.py", f"backend/core/{family}.py"})
         if family == "part_streptavidin_contract":
             expected.add("backend/api/part_streptavidin_commands.py")
@@ -224,6 +237,8 @@ def test_real_captured_old_manifest_has_one_exact_reviewed_transition(compatibil
             expected.add("backend/core/part_history_contract.py")
         if generation == "grouping-v1":
             expected.add("backend/core/part_numerical_schema_compatibility.py")
+    if family != "part_streptavidin_contract":
+        expected.add("backend/core/lattice.py")
     assert changes == set(entry["changed_paths"]) == expected
     assert {key: value for key, value in before["manifest"].items() if key != "files"} == {
         key: value for key, value in current.items() if key != "files"}
@@ -282,6 +297,22 @@ def test_previous_organization_edges_remain_in_historical_audit(compatibility, m
 
 
 @pytest.mark.parametrize("family", FAMILIES)
+@pytest.mark.parametrize("generation", ["grouping-v1", "grouping-v2", "cluster-dissolve-v1", "group-organization-v1"])
+def test_immediate_prior_twelve_edges_still_accept_exact_archived_target(
+        compatibility, monkeypatch, family, generation):
+    contract = import_module(f"backend.core.{family}")
+    old = json.loads(BASELINES[generation].read_text())["engines"][contract.ENGINE_ID]
+    target = json.loads(LINEAGE_BEFORE.read_text())["engines"][contract.ENGINE_ID]
+    assert digest(old["manifest"]) == old["implementation_sha256"]
+    assert digest(target["manifest"]) == target["implementation_sha256"]
+    monkeypatch.setattr(compatibility, "POLICY_PATH", LINEAGE_PRIOR_POLICY)
+    entries = compatibility._policy()
+    assert len(entries) == 12
+    assert require(compatibility, old["implementation_sha256"], target["manifest"],
+                   engine=contract.ENGINE_ID) == f"organization-load-v1.from-{generation}.{contract.ENGINE_ID}"
+
+
+@pytest.mark.parametrize("family", FAMILIES)
 def test_real_three_generation_policy_requires_the_explicit_direct_edge(compatibility, monkeypatch, tmp_path, family):
     contract = import_module(f"backend.core.{family}")
     oldest = json.loads(BEFORE.read_text())["engines"][contract.ENGINE_ID]
@@ -308,8 +339,7 @@ def test_real_three_generation_policy_requires_the_explicit_direct_edge(compatib
     assert error.value.code == "engine_mismatch"
 
 
-@pytest.mark.parametrize("family", FAMILIES)
-@pytest.mark.parametrize("generation", BASELINES)
+@pytest.mark.parametrize("family,generation", LIVE_BASELINES)
 def test_every_participating_file_data_and_runtime_remain_strict(compatibility, monkeypatch, family, generation):
     contract = import_module(f"backend.core.{family}")
     before = json.loads(BASELINES[generation].read_text())["engines"][contract.ENGINE_ID]

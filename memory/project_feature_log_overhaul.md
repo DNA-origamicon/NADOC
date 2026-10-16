@@ -24,13 +24,13 @@ growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
 Engineering update U2 closed **FH-19 after two checkpoints**. Current
 counts are **18 / 38 complete, 20 remaining (11 core, 9 parked)**, delta
-for latest update U9 **+0 completed, +0 total**. U9 is **FH-18 checkpoint 7**:
+for latest update U10 **+0 completed, +0 total**. U10 is **FH-18 checkpoint 8**:
 ordinary authored PATCH, admitted identity-group dissolution and auxiliary
 recording are implemented; private separate organization/native replay and gated
 owned HTTP transactions now work. Named native deformation selection, qualified
 domain lineage and Fine Routing recovery now agree. U9 adds extrusion/crossover
-lineage; resize/domain-shift, remaining tool/repair/UI migration and new-group
-movement keep FH-18 open.
+lineage; U10 adds passive resize/domain-shift tracking. Remaining tool/repair/UI
+migration and new-group movement keep FH-18 open.
 **Task growth is flagged.** The containment decision and five finite batches are
 in the [organization/placement migration plan](../docs/audits/feature_history_20261014/group_placement_migration_plan.md).
 Separate organizational membership from the existing ordered placement list;
@@ -42,23 +42,23 @@ finish its typed consumer/repair/UI adapters next. Do not
 inflate counts by splitting batches or accumulate more identity-only subsets.
 No total-growth trigger or estimate change; the full original FH-18 exit stands.
 
-**FH-18 U9 consumer checkpoint:** batch A is implemented privately; B/C advance,
+**FH-18 U10 consumer checkpoint:** batch A is implemented privately; B/C advance,
 D/E remain open. Named `part_group` targets resolve on the owned native prefix
 into existing frozen ranges, independently of explicit placement `cluster_ids`.
 Upstream edits re-resolve the named selection during replay; later topology/group
 edits retain already evaluated ranges. Missing references diagnose; dissolution
 with a live named deformation consumer refuses. Legacy selector grammar is unchanged.
 The organization-only lineage adapter follows final split/merge/delete/sweep
-output after native retry for 23 qualified kinds. Five extrusion and four
-crossover kinds now have explicit additive/correspondence contracts. See the
-[U9 contract](../docs/audits/feature_history_20261014/group_placement_migration_plan.md#u9-extrusion-and-crossover-correspondence).
+output after native retry for 25 qualified kinds. Resize/shift now retain piecewise
+contributors through internal native merge/re-split, without reviving removed
+tails. See the [U10 contract](../docs/audits/feature_history_20261014/group_placement_migration_plan.md#u10-passive-resizedomain-shift-contributors).
 Whole merged domains inherit any selected ancestor; concatenation/new sweep
 domains do not select unrelated members. Ambiguity or undeclared relocation refuses.
 No proximity guess or per-base expansion. Crossover moves verify native ordinal
 correspondence before retry; both endpoints move atomically, then descendants map. The existing
 owned recorder/HTTP adapter remains disabled by the trusted host flag, with
 source/session/revision/policy checks and one publication/undo. Generic callbacks
-and unrelated permits stay closed. U9 adds no ordinary UI rollout.
+and unrelated permits stay closed. U10 adds no ordinary UI rollout.
 
 `Design.group_organization` is either legacy `None` or a closed version-1 wrapper
 of typed `PartGroup`/`GroupDomainRef` metadata. Its `part_group` resource namespace
@@ -74,7 +74,7 @@ carry bounded complete PRE/POST organization replacements with exact baseline ch
 Typed identity/remap/structure inventories include organization; legacy None adds
 no strand walk. The exact oxDNA archive schema still admits legacy documents and
 explicitly refuses active organization. Unadapted generated composition/removal
-and native authoring refuse; named deformation, the 23-kind lineage subset,
+and native authoring refuse; named deformation, the 25-kind lineage subset,
 pose-only placement and three numerical families work privately. Explicit load/startup restore,
 branch/save/undo/redo paths admit the mode only under the disabled host rollout
 flag. Generic writes and unrelated permits remain refused even with that flag.
@@ -95,22 +95,22 @@ occurrence so shared-container aliases cannot hide expanded JSON work. Bounds
 remain 30k metadata nodes/2 MB, 2k groups; source identity indexes each admit at
 most 30k records. These are not latency/heap measurements.
 
-All four historical numerical-schema generations retain twelve exact direct
-edges/12,980 bytes under unchanged 16-entry/16KiB limits. U9 changes no pinned
-molecular sources or manifests; no stored pins rewritten. The [U9 evidence](../docs/audits/feature_history_20261014/validation_group_geometry_lineage.json)
-records **752 focused passes**, 87 warnings, 12.35 s. Three new files contain 113
-cases. Four unused reconciliation report fields and their misleading docs were
-pruned; all placement calculations stay unchanged. ISSUE-108 records native
-crossover-growth metadata loss; the new path refuses affected growth rather than
-silently changing molecular behavior. Batch growth checks the original and final
-domain envelope, covering native intermediate use of original opposite endpoints.
-Metadata-only transport medians were 6.643 ms at 100 domains and 32.943 ms at 500
-(maximum 79.443 ms over 20 runs). Tiny native executor overhead was below 0.5 ms;
-these exclude publication/display and do not establish desktop responsiveness.
-Legacy absent organization adds no topology walk. No frontend production change;
-`main.js` delta 0. Archive is unmounted, app acceptance remains open. Selector
-dry-run ran no suite; aggregate fast/FULL debt remains. Existing gzip inflation
-precedes decoded-wrapper admission, which is not a whole-payload memory bound.
+Five captured generations for CPD/duplex now have exact direct compatibility
+edges; coating's four entries stay unchanged (14 total/14,216 bytes, unchanged
+16-entry/16KiB limits). The disclosed native-domain-lineage transition is passive
+instrumentation, not schema-only; calculations, predicates and stored pins remain
+unchanged. **928 focused + 2 native-worker checks passed**; see [U10 evidence](../docs/audits/feature_history_20261014/validation_group_resize_lineage.json).
+Native resize/shift only emits observations to an invocation-owned scalar tracker;
+full observed material must survive retry independently of sparse ancestry.
+Cumulative event/segment/list-shift work shares bounded relation accounting.
+ISSUE-108 crossover-growth metadata loss remains open with the U9 refusal guard.
+Metadata-only shift medians were 8.336 ms at 100 domains and 40.771 ms at 500
+(maximum 88.415 ms over 20 runs). Tiny resize executor medians were 0.066 ms legacy
+and 0.482 ms organized; neither qualifies desktop/publication responsiveness.
+Legacy absent organization adds no observer/topology walk. No frontend production
+change; `main.js` delta 0. Archive is unmounted; app acceptance remains open.
+Selector dry-run runs no suite; aggregate fast/FULL debt remains. Existing gzip
+inflation precedes decoded-wrapper admission, not a whole-payload memory bound.
 
 ## Working boundaries and next step
 
@@ -121,9 +121,9 @@ and ordinary controls must agree. Nanoparticle/protein/assets and their remainin
 benchmarks are parked; ordinary DNA connections are core. Assemblies and VR
 remain separately deferred. The persistent P3–P6 goal stays active.
 
-Next: passive native resize/domain-shift lineage, preserving contributors through
-internal merge/re-split; then remaining preview/repair/generated consumers
-and visible Groups/Placements. Partial named scopes cannot use the existing
+Next: named-selection preview/repair/comparison adapters, then remaining generated
+consumers and visible Groups/Placements within the original five batches.
+Partial named scopes cannot use the existing
 whole-helix loop/skip planner. Frozen range domain addresses can become historical;
 the current comparison DTO is not qualified for that. Do not enable organization
 until B/C/D adapters and E's applicable checks pass.

@@ -9,8 +9,8 @@ an exact old-entity ancestry relation without relying on strand IDs, ordinals,
 Python object identity, placement proximity, or per-nucleotide expansion.
 
 This is organization metadata only. The native builders, placement owners and
-their numerical algorithms remain authoritative. Resize/shift and
-automatic route replacement require separately qualified lineage contracts.
+their numerical algorithms remain authoritative. Resize/shift observes native
+replacements; automatic route replacement still needs its own qualified contract.
 """
 
 from bisect import bisect_right
@@ -35,12 +35,15 @@ KINDS = frozenset({
     "extrude-segment", "extrude-continuation", "extrude-deformed-continuation",
     "circle-segment", "extrude-frame", "crossover-place", "crossover-place-batch",
     "crossover-move", "crossover-move-batch",
+    "strand-end-resize", "domain-shift",
 })
 _REMOVING = frozenset({"strand-delete", "strand-delete-batch", "domain-delete"})
 _FRESH_HELICES = frozenset({"sweep", "extrude-segment", "extrude-continuation",
                           "extrude-deformed-continuation", "circle-segment", "extrude-frame"})
 _ADDITIVE = frozenset({"extrude-continuation"})
 _TRANSPORT = frozenset({"crossover-move", "crossover-move-batch"})
+_OBSERVED = frozenset({"strand-end-resize", "domain-shift"})
+_PARTIAL_ANCESTRY = _ADDITIVE | _OBSERVED
 MAX_ITEMS = 30_000
 MAX_BYTES = 2_000_000
 MAX_ID_CHARS = 512
@@ -78,8 +81,8 @@ class _Budget:
         except CaptureLimit:
             _limit()
 
-    def relation(self):
-        self.relations += 1
+    def relation(self, count=1):
+        self.relations += count
         if self.relations > MAX_RELATIONS:
             _limit()
 
@@ -130,6 +133,7 @@ class _Plan:
     intervals: tuple[tuple[tuple[str, Direction], tuple[_Interval, ...]], ...]
     groups: tuple[_Group, ...]
     transport: object = None
+    material: tuple | None = None
 
 
 def _inventory(design, budget):
@@ -257,16 +261,34 @@ def prepare_lineage(before, kind, params):
     if kind in _TRANSPORT:
         from backend.core.part_group_transport import prepare_crossover_transport
         transport = prepare_crossover_transport(before, kind, params, budget)
+    elif kind in _OBSERVED:
+        from backend.core.part_group_domain_trace import prepare_domain_trace
+        transport = prepare_domain_trace(before, budget)
     return _Plan(kind, frozenset(helices),
                  tuple((key, tuple(records)) for key, records in intervals.items()), groups, transport)
 
 
-def advance_lineage(plan, raw_after):
+def start_lineage(plan):
+    """Create a private observer only for the two qualified native editors."""
+    if plan is None or plan.kind not in _OBSERVED:
+        return None
+    from backend.core.part_group_domain_trace import DomainTrace
+    return DomainTrace(plan.transport)
+
+
+def advance_lineage(plan, raw_after, *, trace=None):
     """Validate native relocation before reconciliation can rename its domains."""
     if plan is None:
         return plan
     if type(plan) is not _Plan:
         _fail("Organization lineage requires its prepared private scalar plan.")
+    if plan.kind in _OBSERVED:
+        from backend.core.part_group_domain_trace import DomainTrace
+        if type(trace) is not DomainTrace:
+            _fail("Native resize/shift requires its complete passive domain trace.",
+                  "unsupported_group_lineage_output")
+        intervals, material = trace.finish(plan.transport, raw_after, plan.helices)
+        return replace(plan, intervals=intervals, material=material, transport=None)
     if plan.kind not in _TRANSPORT:
         return plan
     from backend.core.part_group_transport import finish_crossover_transport
@@ -308,6 +330,9 @@ def apply_lineage(plan, final_after_retry):
     budget = _Budget()
     helices, _, intervals, ordered = _inventory(final_after_retry, budget)
     old = dict(plan.intervals)
+    if plan.material is not None and set(intervals) != {key for key, _ in plan.material}:
+        _fail("The final output changed the observed directional material keys.",
+              "unsupported_group_lineage_output")
     if plan.kind not in _FRESH_HELICES and helices - plan.helices:
         _fail("This command unexpectedly introduced new helix identities.",
               "unsupported_group_lineage_output")
@@ -316,7 +341,7 @@ def apply_lineage(plan, final_after_retry):
             _covers(_coverage(intervals.get(key, ())), _coverage(records))
             if plan.kind in _ADDITIVE else
             _coverage(records) == _coverage(intervals.get(key, ()))
-            for key, records in plan.intervals)
+            for key, records in (plan.material if plan.material is not None else plan.intervals))
         if not plan.helices <= helices or not conserved:
             _fail("The native output changed material outside the admitted ancestry contract.",
                   "unsupported_group_lineage_output")
@@ -330,7 +355,7 @@ def apply_lineage(plan, final_after_retry):
     for key, final in ordered:
         records = old.get(key, ())
         if not records:
-            if plan.kind in _ADDITIVE or (plan.kind in _FRESH_HELICES and key[0] not in plan.helices):
+            if plan.kind in _PARTIAL_ANCESTRY or (plan.kind in _FRESH_HELICES and key[0] not in plan.helices):
                 continue  # New material without an old ancestor is not selected.
             _fail("The native output introduced directional material without admitted ancestry.",
                   "unsupported_group_lineage_output")
@@ -342,13 +367,13 @@ def apply_lineage(plan, final_after_retry):
             budget.relation()
             if ancestor.hi < final.lo:
                 continue
-            if plan.kind not in _ADDITIVE and ancestor.lo > covered + 1:
+            if plan.kind not in _PARTIAL_ANCESTRY and ancestor.lo > covered + 1:
                 break
             covered = max(covered, min(final.hi, ancestor.hi))
             for group_index in selected_by.get(ancestor.ref, ()):
                 budget.relation()
                 selected.add(group_index)
-        if plan.kind not in _ADDITIVE and covered < final.hi:
+        if plan.kind not in _PARTIAL_ANCESTRY and covered < final.hi:
             _fail("A final domain extends beyond its admitted directional ancestors.",
                   "unsupported_group_lineage_output")
         for group_index in sorted(selected):
