@@ -153,6 +153,9 @@ LEAF_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("part_coating", ("namd",)),
     ("streptavidin", ("namd",)),
     ("part_evaluation", ("atomistic", "headless", "namd")),
+    # Durable initial creation's integration oracle runs real registered batch,
+    # restart recovery and cold-proof workers; its lightweight faults stay fast.
+    ("part_immutable_creation", ("headless",)),
     # pdb_export.py builds on the atomistic model — its heavy export test lives in the
     # atomistic heavy group, so a change here must re-run that group.
     ("pdb_export", ("atomistic",)),

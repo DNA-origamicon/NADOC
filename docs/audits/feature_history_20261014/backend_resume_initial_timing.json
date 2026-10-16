@@ -1,0 +1,232 @@
+{
+  "per_test_budget_sec": 5.0,
+  "total_test_seconds": 817.1,
+  "n_tests": 14100,
+  "sim_running": false,
+  "sim_reason": "",
+  "slowest_files_15": [
+    {
+      "file": "tests/test_oxdna_relaxation.py",
+      "seconds": 62.0,
+      "n_tests": 248,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_cluster_join_api.py",
+      "seconds": 40.3,
+      "n_tests": 17,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_headless_oxdna_build.py",
+      "seconds": 33.7,
+      "n_tests": 45,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_cluster_join_constraints.py",
+      "seconds": 13.5,
+      "n_tests": 14,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_headless_spec_build.py",
+      "seconds": 11.8,
+      "n_tests": 81,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_atomistic_validation.py",
+      "seconds": 10.9,
+      "n_tests": 16,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_oxdna_surface.py",
+      "seconds": 10.6,
+      "n_tests": 33,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_automation_harness.py",
+      "seconds": 10.3,
+      "n_tests": 136,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_native_streptavidin_proof.py",
+      "seconds": 10.3,
+      "n_tests": 18,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_streptavidin.py",
+      "seconds": 9.2,
+      "n_tests": 10,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_native_connectivity_proof.py",
+      "seconds": 8.8,
+      "n_tests": 2,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_atomistic.py",
+      "seconds": 8.2,
+      "n_tests": 52,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_cluster_join_core.py",
+      "seconds": 7.8,
+      "n_tests": 17,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_join_scaffold_router.py",
+      "seconds": 7.4,
+      "n_tests": 10,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_namd_anchors.py",
+      "seconds": 7.3,
+      "n_tests": 39,
+      "n_slow_marked": 0
+    }
+  ],
+  "violators": [
+    {
+      "nodeid": "tests/test_part_immutable_creation.py::test_real_durable_create_batch_flush_restart_restore_and_edit",
+      "seconds": 5.56
+    }
+  ],
+  "slowest_25": [
+    {
+      "nodeid": "tests/test_part_immutable_creation.py::test_real_durable_create_batch_flush_restart_restore_and_edit",
+      "seconds": 5.56,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_native_connectivity_proof.py::test_registered_connectivity_pipeline_cold_replay_and_endpoint_edit",
+      "seconds": 4.45,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_native_connectivity_proof.py::test_two_face_cold_replay_endpoint_edit_and_changed_shared_junction_repair",
+      "seconds": 4.35,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_streptavidin.py::test_packing_is_deterministic_and_clash_checked[adsorption]",
+      "seconds": 4.14,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_generated_joined_proof.py::test_generated_joined_path_edit_regenerates_without_samples_or_recovery",
+      "seconds": 3.83,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_native_streptavidin_proof.py::test_explicit_coating_upgrade_rebuilds_old_pin_even_after_coating_removal",
+      "seconds": 3.82,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_part_coating_evaluation.py::test_public_coating_submission_uses_real_worker_then_one_commit_and_cold_replay",
+      "seconds": 3.74,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_native_branch_proof.py::test_generated_branch_cold_replay_edit_and_undo",
+      "seconds": 3.66,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_cluster_join_api.py::test_native_save_reload_and_history_seek_restore_pose_with_route",
+      "seconds": 3.52,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_native_path_proof.py::test_cold_path_replay_and_radius_edit_rebuild_outputs_with_stable_identity",
+      "seconds": 3.29,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_cluster_join_constraints.py::test_api_preview_is_readonly_apply_realizes_every_bridge_and_undo_redo",
+      "seconds": 3.07,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_part_batch_evaluation.py::test_spawned_mixed_batch_then_independent_cold_replay_survive_json_and_poisoned_recovery",
+      "seconds": 3.03,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_cluster_join_api.py::test_manual_moves_around_join_seek_and_delete_in_chronological_order",
+      "seconds": 2.96,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_streptavidin.py::test_packing_is_deterministic_and_clash_checked[biotin_tether]",
+      "seconds": 2.96,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_cluster_join_api.py::test_removing_join_restores_original_native_pose_and_routes[revert]",
+      "seconds": 2.87,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_native_duplex_relax_proof.py::test_spawned_relax_append_and_cold_proof_ignore_recovery_and_physical_output",
+      "seconds": 2.87,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_cluster_join_api.py::test_native_linear_routes_merge_preserving_fine_edits_and_one_undo[6-kinds1]",
+      "seconds": 2.85,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_surface_tiled.py::test_tiles_match_dense_field_without_seams[0.24]",
+      "seconds": 2.85,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_cluster_join_api.py::test_native_linear_routes_merge_preserving_fine_edits_and_one_undo[6-kinds2]",
+      "seconds": 2.82,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_part_immutable_evaluation.py::test_real_spawned_batch_then_cold_verify_keeps_immutable_publication",
+      "seconds": 2.82,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_cluster_join_api.py::test_rejected_join_is_transactionally_empty_and_preserves_redo[revision]",
+      "seconds": 2.81,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_part_repair_draft_jobs.py::test_http_saved_broken_draft_replays_privately_commits_once_and_cold_verifies",
+      "seconds": 2.8,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_cluster_join_api.py::test_removing_join_restores_original_native_pose_and_routes[delete]",
+      "seconds": 2.77,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_cluster_join_api.py::test_native_linear_routes_merge_preserving_fine_edits_and_one_undo[6-kinds0]",
+      "seconds": 2.75,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_cluster_join_api.py::test_rejected_join_is_transactionally_empty_and_preserves_redo[missing_port]",
+      "seconds": 2.74,
+      "slow_marked": false
+    }
+  ]
+}

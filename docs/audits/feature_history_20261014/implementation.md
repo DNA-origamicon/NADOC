@@ -76,8 +76,14 @@ numerical pin setup; production runtime checks remain unchanged. Four existing
 heavy replay/packing entries and the corrected five-worker coating lifecycle
 are classified through the slow-test registry without changing budgets. These
 focused checks do not clear the outstanding broad regression/app debt; see
-[resumption evidence](validation_resume_regressions.json). The prepared ordinary
-linker and physical-input capture contracts remain under implementation.
+[resumption evidence](validation_resume_regressions.json). Subsequent checkpoints
+implemented shared bounded capture accounting (`3e12323f`, 114 regressions),
+private full-archive oxDNA input capture (`9fbb392a`, 176 cases), and finite native
+ordinary linker Apply/reapply with dependency/edit/cold-proof checks (`921e4acc`,
+`b46104b2`, 157 cases). Their ordinary route integration and latency qualification
+remain separate. The duplicate private repair-definition admission walk was
+removed in `b91f7390`; 95 repair/planning/job cases preserve the source and final
+admission checks.
 
 P0–P3 implementation exit checks are recorded below; chronological entries retain
 their original phase status. P4–P6 proceed in independently reversible slices,
@@ -113,12 +119,29 @@ four independent cold proofs. All 12 scoped RSS observations stayed within the
 predeclared +256 MiB target, but these small-source cases do not qualify full
 retention or repeated latency. Public storage/batch gates remain false.
 
-Broad-suite/environment debt is separate: the latest FAST selection collected
-no executable tests because the archived CPD fixture was absent and a new
-UUID-parametrization collection mismatch was found. The latter was corrected in
-`cc5e96e9` and passed all 50 cache-identity tests on four workers. The absent
-fixture and FULL deferral remain; this is not a broad-suite pass. Archive, live
-app, browser and headset validation remain unavailable/unrun.
+Broad-suite/environment debt is separate: the resumed non-VR FAST selection at
+`b46104b2` ran 14,076 passing tests with nine failures and eight errors, all matching
+retained baseline evidence. The UUID-parametrization collection mismatch was
+already corrected in `cc5e96e9`. Missing Archive/CPD fixtures and existing
+junction-balance/preview failures remain; this is not a broad-suite pass. One
+four-worker durable-creation integration test is now individually classified
+slow/headless, with its lightweight fault siblings kept fast. The timing recheck
+passed 14,075 cases with the same baseline failures/errors; a 5.04-second native
+connectivity pipeline identified its two-case module as genuine integration work
+(two cold workers per case). Both still pass focused checks (9.97 seconds), and
+slow collection retains them. The final zero-violator check remains pending. See
+[backend evidence](validation_backend_resume.json) for timing triage and the
+verbatim FULL deferral. Archive, live app and browser validation remain unavailable;
+VR validation is explicitly deferred by the user.
+
+The natural-GC shared-capture A/B diagnostic compared 186 alternating pairs on
+six in-memory sources. All 371 successful captures matched completely and all
+372 source-immutability checks passed. No workload crossed both predeclared
+median regression thresholds; median differences ranged from -0.036 to +0.117 ms.
+One historical capture refused and two current successful captures exceeded
+25 ms with major-GC overlap; cooperative budgets are not hard wall-time bounds.
+No tail, HTTP, memory or public responsiveness qualification is claimed. See
+[reviewed evidence](validation_capture_graph_performance.json).
 
 ## P2 first increment — explicit provenance and assessment
 

@@ -1,0 +1,195 @@
+{
+  "date": "2026-10-15",
+  "scope": "Shared capture accounting extraction diagnostic, not a public latency or historical-binary qualification",
+  "raw_evidence": "benchmark_capture_graph_initial.json",
+  "reference_source": {
+    "reference": "5783b656",
+    "reference_source_sha256": "59e435a2e00a3f79c1d458ba12a5eb73a10f63d4e39b382a6504900bdd43a903",
+    "current_source_sha256": "2329d2cc1c9b0c7871edd296cc6f43ade1cfa790b8e6d26d69afec3db874236f",
+    "current_graph_sha256": "191829492ea19affbc4caafbd90c3ae96ee73ecff29f537349f2c1557ed6a669",
+    "hashes_independently_rechecked": true,
+    "comparison_limit": "Exact historical visit_inputs source executed with current imported dependencies; same actual monotonic clock, capture arguments and source objects"
+  },
+  "capture_args": {
+    "max_nodes": 30000,
+    "max_bytes": 2000000,
+    "seconds": 0.025,
+    "preserve_entry_types": false,
+    "copy_inputs": true,
+    "retain_owned": false
+  },
+  "cases": 6,
+  "alternating_pairs_per_case": 31,
+  "total_pairs": 186,
+  "matched_success_pairs": 185,
+  "source_immutability_checks": 372,
+  "successful_captured_outputs_checked": 371,
+  "correctness_verified": true,
+  "cleanup_verified": true,
+  "review_trigger_policy": {
+    "relative_median_regression": 0.05,
+    "absolute_median_regression_ms": 0.05,
+    "basis": "Both thresholds must be exceeded by the difference of matched-success arm medians; the median of per-pair differences is reported separately"
+  },
+  "review_required": false,
+  "diagnostics": {
+    "event_limit": 4096,
+    "gc_events": 1054,
+    "dropped_gc_events": 0
+  },
+  "case_summaries": [
+    {
+      "case": "protein-32",
+      "matched_success_pairs": 30,
+      "old_matched_median_ms": 3.690088000439573,
+      "current_matched_median_ms": 3.700600500451401,
+      "difference_of_arm_medians_ms": 0.010512500011827797,
+      "relative_difference_of_arm_medians": 0.0028488480520181417,
+      "paired_current_minus_old_median_ms": 0.05881150354980491,
+      "old_all_sample_p95_ms": 4.688970999268349,
+      "current_all_sample_p95_ms": 5.124005001562182,
+      "capture_refusals": {
+        "old": 1,
+        "current": 0
+      },
+      "review_trigger": false
+    },
+    {
+      "case": "protein-128",
+      "matched_success_pairs": 31,
+      "old_matched_median_ms": 11.875657997734379,
+      "current_matched_median_ms": 11.839309998322278,
+      "difference_of_arm_medians_ms": -0.03634799941210076,
+      "relative_difference_of_arm_medians": -0.003060714565797969,
+      "paired_current_minus_old_median_ms": 0.13399199815467,
+      "old_all_sample_p95_ms": 14.197422999131959,
+      "current_all_sample_p95_ms": 17.541082997922786,
+      "capture_refusals": {
+        "old": 0,
+        "current": 0
+      },
+      "review_trigger": false
+    },
+    {
+      "case": "np-six-cell-1",
+      "matched_success_pairs": 31,
+      "old_matched_median_ms": 1.9940970014431514,
+      "current_matched_median_ms": 2.042346000962425,
+      "difference_of_arm_medians_ms": 0.04824899951927364,
+      "relative_difference_of_arm_medians": 0.024195913982296383,
+      "paired_current_minus_old_median_ms": 0.024995999410748482,
+      "old_all_sample_p95_ms": 2.2844630002509803,
+      "current_all_sample_p95_ms": 2.461085001414176,
+      "capture_refusals": {
+        "old": 0,
+        "current": 0
+      },
+      "review_trigger": false
+    },
+    {
+      "case": "np-six-cell-16",
+      "matched_success_pairs": 31,
+      "old_matched_median_ms": 3.4595869947224855,
+      "current_matched_median_ms": 3.4820650034816936,
+      "difference_of_arm_medians_ms": 0.022478008759208024,
+      "relative_difference_of_arm_medians": 0.006497309879328853,
+      "paired_current_minus_old_median_ms": -0.015987003280315548,
+      "old_all_sample_p95_ms": 3.822713995759841,
+      "current_all_sample_p95_ms": 3.943240000808146,
+      "capture_refusals": {
+        "old": 0,
+        "current": 0
+      },
+      "review_trigger": false
+    },
+    {
+      "case": "np-36-cell-42bp-1",
+      "matched_success_pairs": 31,
+      "old_matched_median_ms": 4.84950599638978,
+      "current_matched_median_ms": 4.90560300386278,
+      "difference_of_arm_medians_ms": 0.056097007472999394,
+      "relative_difference_of_arm_medians": 0.01156757152476167,
+      "paired_current_minus_old_median_ms": 0.09000700083561242,
+      "old_all_sample_p95_ms": 5.462984998303,
+      "current_all_sample_p95_ms": 6.958509002288338,
+      "capture_refusals": {
+        "old": 0,
+        "current": 0
+      },
+      "review_trigger": false
+    },
+    {
+      "case": "np-36-cell-42bp-16",
+      "matched_success_pairs": 31,
+      "old_matched_median_ms": 6.310248994850554,
+      "current_matched_median_ms": 6.426899002690334,
+      "difference_of_arm_medians_ms": 0.1166500078397803,
+      "relative_difference_of_arm_medians": 0.018485801104674623,
+      "paired_current_minus_old_median_ms": 0.07479499618057162,
+      "old_all_sample_p95_ms": 6.780919000448193,
+      "current_all_sample_p95_ms": 7.46463899849914,
+      "capture_refusals": {
+        "old": 0,
+        "current": 0
+      },
+      "review_trigger": false
+    }
+  ],
+  "refusal_and_over_25ms_samples": [
+    {
+      "case": "protein-32",
+      "iteration": 3,
+      "arm": "old",
+      "status": "capture_limit",
+      "elapsed_ms": 45.05888400308322,
+      "gc_overlap_ms": 43.19569800281897,
+      "gc_generations": [
+        2
+      ],
+      "error": "Part verification capture budget exceeded"
+    },
+    {
+      "case": "np-six-cell-16",
+      "iteration": 1,
+      "arm": "current",
+      "status": "ok",
+      "elapsed_ms": 49.10418199870037,
+      "gc_overlap_ms": 45.62870600057067,
+      "gc_generations": [
+        2
+      ],
+      "error": null
+    },
+    {
+      "case": "np-36-cell-42bp-1",
+      "iteration": 19,
+      "arm": "current",
+      "status": "ok",
+      "elapsed_ms": 54.78389999916544,
+      "gc_overlap_ms": 50.03786800807575,
+      "gc_generations": [
+        1,
+        2
+      ],
+      "error": null
+    }
+  ],
+  "timing_interpretation": [
+    "No case crossed both predeclared median regression thresholds; this does not establish a speedup, tail equivalence or a hard wall-clock ceiling.",
+    "One historical protein32 capture refused after45.06ms with43.20ms generation2 collection overlap; current had no refusals in this run.",
+    "Two successful current NP captures took49.10ms and54.78ms with45.63ms and50.04ms GC overlap, including generation2; elapsed times remain unadjusted.",
+    "The25ms allowance is cooperative. The outer benchmark timer also includes work before the internal deadline is initialized, and model construction/return work follows the final explicit clock check.",
+    "GC interval correlation does not identify the exact instruction where a pause occurred; this trace cannot locate a successful overshoot before initialization versus after the final check.",
+    "No retries, limit changes, forced collection, disabled GC, proof replay, worker or simulation were used. HTTP lock/light-request latency and peak memory were not measured."
+  ],
+  "serializer_warning_followup": {
+    "initial_run": "Root reported approximately996 stderr lines of expected Pydantic serializer warnings while comparing projected proof-history headers outside timing.",
+    "change": "Only captured-result model_dump now passes warnings=False, with a header-projection comment. Source model_dump calls and global warning policy are unchanged.",
+    "rerun": false,
+    "limitation": "The initial report remains the evidence, including its original warning-producing workload. Suppression does not change compared values or the measured function, but future scheduling/allocation details can differ; no revised timings are inferred."
+  },
+  "latency_qualified": false,
+  "tail_latency_qualified": false,
+  "peak_memory_qualified": false,
+  "production_changed": false
+}

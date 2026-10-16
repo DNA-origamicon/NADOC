@@ -94,14 +94,18 @@
         "namd"
       ]
     },
-    "broad_budget_recheck": "Pending frozen source/test snapshot; no full suite session opened or timing threshold raised."
+    "broad_budget_recheck": "Two resumed non-VR FAST runs completed; all failures match retained baseline. Durable-creation and connectivity integration cases classified slow/headless, focused passed and collection verified; final zero-violator check pending. See validation_backend_resume.json."
   },
-  "remaining_regression_debt": "Prior broad suite is not green. Affected 258-case rerun clears these groups only; remaining missing-artifact/environment/scientific failures require individual attribution.",
+  "remaining_regression_debt": "Latest non-VR FAST:14,075passes,9baseline failures,8baseline errors. Full slow suite, app and environment/scientific baseline debt remain; VR explicitly deferred. See validation_backend_resume.json.",
   "repair_cleanup": {
     "change": "Remove the duplicate command_rows(source, 2000) traversal from private _definitions; sole production caller prepare_repair retains initial source admission and post-plan enumeration",
     "validation": {
       "passed": 95,
-      "targets": ["tests/test_part_recipe_repair.py", "tests/test_part_repair_planning.py", "tests/test_part_repair_jobs.py"],
+      "targets": [
+        "tests/test_part_recipe_repair.py",
+        "tests/test_part_repair_planning.py",
+        "tests/test_part_repair_jobs.py"
+      ],
       "combined_run_seconds": 3.51,
       "combined_run_other_results": "Two expected oxDNA opaque-key review failures; these are not repair regressions"
     },

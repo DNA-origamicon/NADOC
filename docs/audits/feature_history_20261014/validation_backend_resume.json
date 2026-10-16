@@ -1,0 +1,178 @@
+{
+  "date": "2026-10-15",
+  "source_checkpoint": "b46104b2",
+  "command": "just test-smart -- --ignore-glob=tests/test_vr* --ignore-glob=tests/test_scrywrite* --tb=short --disable-warnings -q",
+  "decision": "FAST  (fast suite only)",
+  "vr_deferral": "VR and ScryWrite modules omitted per explicit user instruction; prior VR failures are not cleared",
+  "result": {
+    "passed": 14076,
+    "failed": 9,
+    "skipped": 11,
+    "errors": 8,
+    "warnings": 2653,
+    "pytest_seconds": 233.66,
+    "guard_seconds": 246,
+    "exit_code": 1
+  },
+  "failed_groups": {
+    "junction_balance": {
+      "failed": 2,
+      "square_arc_difference_nm": 0.001015730377341928,
+      "honeycomb_arc_difference_nm": 0.0013676456009520388,
+      "threshold_nm": 0.001
+    },
+    "photoproduct_review": {
+      "failed": 7,
+      "reason": "Missing Archive definition_review_packet.json"
+    },
+    "cpd_preview": {
+      "setup_errors": 4,
+      "reason": "Incorrect preview stereochemistry: cis-anti-I"
+    },
+    "cpd_gpu_npt_context_v4": {
+      "collection_errors": 4,
+      "unique_missing_artifacts": 1,
+      "reason": "Missing .development-artifacts/cpd-anti-gpu-longbox-v3/assembly.json; same collection error once per worker"
+    }
+  },
+  "baseline_attribution": {
+    "evidence": "baseline_failure_check.json",
+    "baseline": "dfa63eeba98dd9325cd3a34b241a1f672c78b7d1",
+    "method": "Every current failing node and its reason matches the previously executed baseline reproduction, including exact junction deltas. No fresh baseline rerun was needed or claimed.",
+    "matching_baseline_records": [
+      {
+        "nodeid": "tests/test_cpd_gpu_npt_context_v4.py",
+        "phase": "collection",
+        "outcome": "failed",
+        "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: '/home/joshua/NADOC/.development-artifacts/cpd-anti-gpu-longbox-v3/assembly.json'"
+      },
+      {
+        "nodeid": "tests/test_junction_balance.py::test_the_square_full_rep_draws_both_arcs_of_a_dx_junction_equally",
+        "phase": "call",
+        "outcome": "failed",
+        "reason": "     +  where 0.001015730377341928 = max(<generator object test_the_square_full_rep_draws_both_arcs_of_a_dx_junction_equally.<locals>.<genexpr> at 0x73b73a71bed0>)"
+      },
+      {
+        "nodeid": "tests/test_junction_balance.py::test_the_honeycomb_full_rep_stays_balanced_and_unrolled",
+        "phase": "call",
+        "outcome": "failed",
+        "reason": "     +  where 0.0013676456009520388 = max(<generator object test_the_honeycomb_full_rep_stays_balanced_and_unrolled.<locals>.<genexpr> at 0x73b71be5fed0>)"
+      },
+      {
+        "nodeid": "tests/test_photoproduct_review.py::test_review_catalog_revalidates_sources_and_marks_focus_geometry",
+        "phase": "call",
+        "outcome": "failed",
+        "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: '/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-human-review-packet-v7/definition_review_packet.json'"
+      },
+      {
+        "nodeid": "tests/test_photoproduct_review.py::test_definition_decision_for_old_embedding_is_marked_stale",
+        "phase": "call",
+        "outcome": "failed",
+        "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: '/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-human-review-packet-v7/definition_review_packet.json'"
+      },
+      {
+        "nodeid": "tests/test_photoproduct_review.py::test_visual_decision_is_atomic_gate_neutral_and_revision_stays_unresolved",
+        "phase": "call",
+        "outcome": "failed",
+        "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: '/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-human-review-packet-v7/definition_review_packet.json'"
+      },
+      {
+        "nodeid": "tests/test_photoproduct_review.py::test_conformer_approval_requires_partition_and_source_hashes_are_immutable",
+        "phase": "call",
+        "outcome": "failed",
+        "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: '/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-human-review-packet-v7/definition_review_packet.json'"
+      },
+      {
+        "nodeid": "tests/test_photoproduct_review.py::test_boundary_review_is_hash_pinned_without_fit_partition",
+        "phase": "call",
+        "outcome": "failed",
+        "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: '/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-human-review-packet-v7/definition_review_packet.json'"
+      },
+      {
+        "nodeid": "tests/test_photoproduct_review.py::test_complete_visual_conformer_decisions_materialize_audited_plans",
+        "phase": "call",
+        "outcome": "failed",
+        "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: '/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-human-review-packet-v7/definition_review_packet.json'"
+      },
+      {
+        "nodeid": "tests/test_photoproduct_review.py::test_scientific_review_api_serves_geometry_and_records_gate_neutral_decisions",
+        "phase": "call",
+        "outcome": "failed",
+        "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: '/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-human-review-packet-v7/definition_review_packet.json'"
+      },
+      {
+        "nodeid": "tests/test_cpd_preview.py::test_all_eight_identities_and_crosslinks_match_registered_chemistry",
+        "phase": "setup",
+        "outcome": "failed",
+        "reason": "E   ValueError: Incorrect preview stereochemistry: cis-anti-I"
+      },
+      {
+        "nodeid": "tests/test_cpd_preview.py::test_estimated_sugars_preserve_reference_geometry_and_handedness",
+        "phase": "setup",
+        "outcome": "failed",
+        "reason": "E   ValueError: Incorrect preview stereochemistry: cis-anti-I"
+      },
+      {
+        "nodeid": "tests/test_cpd_preview.py::test_core_distances_preserved_and_current_cis_syn_template_used",
+        "phase": "setup",
+        "outcome": "failed",
+        "reason": "E   ValueError: Incorrect preview stereochemistry: cis-anti-I"
+      },
+      {
+        "nodeid": "tests/test_cpd_preview.py::test_snapshot_refresh_preserves_evidence_and_release_registry",
+        "phase": "setup",
+        "outcome": "failed",
+        "reason": "E   ValueError: Incorrect preview stereochemistry: cis-anti-I"
+      }
+    ]
+  },
+  "new_feature_failures_observed": 0,
+  "limitations": [
+    "Suite is not green or release-qualified",
+    "No throughput improvement claim: scope differs from pre-pause run and unmarked timings vary",
+    "Full slow sweep remains deferred; desktop app not exercised"
+  ],
+  "timing": {
+    "evidence": "backend_resume_initial_timing.json",
+    "unmarked_violators": [
+      {
+        "nodeid": "tests/test_part_immutable_creation.py::test_real_durable_create_batch_flush_restart_restore_and_edit",
+        "seconds": 5.56
+      }
+    ],
+    "triage": "Durable-creation integration individually classified slow/headless: four real workers plus tiny durable restart. Focused1pass6.98s; slow collection1/19cases0.37s. Lightweight siblings remain fast; source leaf routes headless."
+  },
+  "deferred_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\nThis is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\nOnly request `just test-session` when a broad/full sweep is actually needed.",
+  "repeat_after_durable_creation_classification": {
+    "decision": "FAST  (fast suite only)",
+    "passed": 14075,
+    "failed": 9,
+    "errors": 8,
+    "skipped": 11,
+    "warnings": 2653,
+    "pytest_seconds": 230.25,
+    "guard_seconds": 241,
+    "exit_code": 1,
+    "same_baseline_failures": true,
+    "new_feature_failures_observed": 0,
+    "timing_evidence": "backend_resume_recheck_timing.json",
+    "remaining_violator": {
+      "nodeid": "tests/test_native_connectivity_proof.py::test_registered_connectivity_pipeline_cold_replay_and_endpoint_edit",
+      "seconds": 5.04
+    },
+    "triage": "Both module cases run real native pipelines and edits plus two fresh proof workers; whole2-case integration module classifiedslow/headless. Command unit siblings remain fast. Existing generated_/part_connectivity_commands source leaves alreadyheadless. No timing budget changed. Final budget recheck remains pending next behavior-checkpoint FAST run.",
+    "focused_after_classification": {
+      "passed": 2,
+      "seconds": 9.97,
+      "call_seconds": [
+        3.74,
+        3.37
+      ],
+      "slow_collection": {
+        "collected": 2,
+        "seconds": 0.94
+      },
+      "independent_static_review": "Both cases perform real native pipelines, edits and two spawned proof lifecycles; no accidental sleep, retry or leak found."
+    }
+  }
+}
