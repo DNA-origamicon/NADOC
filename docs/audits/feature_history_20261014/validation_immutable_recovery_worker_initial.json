@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-15",
+  "scope": "First independent-read near-cap diagnostic after moving preparation to the recovery child",
+  "evidence": "benchmark_immutable_recovery_worker_initial.json",
+  "cycles": 3,
+  "verified_workers": 6,
+  "cleanup": true,
+  "memory_increment_bytes": [
+    287797248,
+    254541824,
+    271130624
+  ],
+  "memory_target_bytes": 268435456,
+  "cycles_exceeding_memory_target": 2,
+  "qualification": false,
+  "findings": [
+    "All proofs completed inside the unchanged five-second deadline; zero-exit workers were reaped, closed, released and buffers unlinked. Parent decode/preparation tripwires did not fire.",
+    "Every completion wait exhausted its 256 tight-loop scalar-read samples before result validation, cleanup and handoff. Late-phase responsiveness is unmeasured.",
+    "Initial historical parent-preparation reports used a shared read fixture; this report allocates independent original input bytes for both retained candidates. They are not an exact memory A/B.",
+    "The child currently copies the entire shared input frame, then copies the source slice and retains its input mapping through proof. Removing redundant transport storage is the next bounded optimization."
+  ],
+  "next": [
+    "Pace a local bounded scalar-read sampler across the operation and disclose exhaustion/coverage explicitly.",
+    "Prove shared-frame validation parity and early mapping release before optimizing the worker transport.",
+    "Repeat the diagnostic with unchanged source/result/deadline/memory limits; retain all initial evidence."
+  ],
+  "public_gates": "Unchanged and disabled",
+  "vr": "Deferred to capable-machine session",
+  "assemblies": "Deferred"
+}

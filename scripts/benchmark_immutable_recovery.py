@@ -16,7 +16,6 @@ from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
 from threading import Event, current_thread, get_ident
 from time import perf_counter
-from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 from weakref import ref
@@ -26,15 +25,16 @@ from fastapi.testclient import TestClient
 
 from backend.api import part_evaluation_jobs as jobs, session_cache, state
 from backend.api import part_immutable_recovery as recovery, part_immutable_revision as revisions
-from backend.api import part_immutable_recovery_inputs as recovery_inputs, part_registered_batch
+from backend.api import part_immutable_recovery_inputs as recovery_inputs
+from backend.api import part_immutable_recovery_worker as recovery_worker
 from backend.api import part_publication_host as host, part_publication_policy as policy
 from backend.api.part_history_verification import _slot
 from backend.api.part_immutable_cache import CacheManifest, StoredRevision
 from backend.api.part_immutable_persistence import StrictPersistence
 from backend.api.part_immutable_storage import MAX_RETAINED_REVISION_BYTES
 from backend.api.part_strict_http import StrictPartDispatch
-from backend.api.part_verification_worker import VerificationWorker
 from backend.core.part_history_contract import create_empty_part
+from backend.core.models import Design
 from scripts import benchmark_registered_batch_jobs as baseline
 from scripts.benchmark_cadnano_route import LockProbe, _PHASE, phase_wrapper, stats
 from scripts.benchmark_immutable_part_jobs import retention_stress_fixture
@@ -140,39 +140,24 @@ class PreparationPhases:
                 if row["start"] <= event["end"] and row["end"] >= event["start"]]} for row in slowest]}
 
 
-def instrument_preparation(stack, phases):
-    """Patch imported call sites only; never replace shared JSON/model methods."""
-    stack.enter_context(patch.object(recovery_inputs, "json",
-        SimpleNamespace(loads=phases.wrap(recovery_inputs.json.loads, "initial_json_decode"))))
-    stack.enter_context(patch.object(recovery_inputs, "Design",
-        SimpleNamespace(model_validate=phases.wrap(recovery_inputs.Design.model_validate, "initial_model_validation"))))
+def instrument_parent(stack, phases):
+    """Trace parent boundaries only; the fresh child keeps original preparation."""
     for owner, name, phase in (
-        (recovery_inputs, "sha256", "manifest_sha256_constructor"),
-        (recovery_inputs, "_check_structure", "initial_structure_admission"),
-        (recovery_inputs, "prepare_revision", "seal_preparation"),
-        (recovery_inputs, "capture", "final_proof_capture"),
-        (revisions, "preservation_digest", "preservation_admission_digest"),
-        (revisions, "admit_batch_source", "batch_scope_admission"),
-        (revisions, "admit", "ordinary_authoring_admission"),
-        (revisions, "_check_structure", "model_structure_admission"),
-        (part_registered_batch, "_reserve_work", "authored_work_admission"),
-        (revisions, "_canonical_payload", "canonical_encoding"),
-        (revisions, "_decoded_exact", "exact_roundtrip"),
-        (revisions, "retained_recovery_bytes", "recovery_storage_admission"),
+        (recovery, "reserve_input", "raw_reservation"),
+        (recovery_worker, "encode_input", "frame_admission"),
+        (recovery, "supervise", "worker_supervision"),
+        (recovery_worker.RecoveryWorker, "result", "parent_result_validation"),
+        (recovery_worker.RecoveryWorker, "take_revision", "parent_revision_handoff"),
     ):
         stack.enter_context(patch.object(owner, name, phases.wrap(getattr(owner, name), phase)))
-    digests = {name: phases.wrap(revisions.digest, name)
-               for name in ("authoring_digest", "recipe_digest", "other_metadata_digest")}
 
-    def projection_digest(value):
-        # The dictionaries have a fixed declared field inventory. Do not walk
-        # the potentially near-cap recovery strings to classify this call.
-        name = ("authoring_digest" if type(value) is dict and value.keys() == revisions.AUTHORING_FIELDS
-                else "recipe_digest" if type(value) is dict and value.keys() == revisions.RECIPE_FIELDS
-                else "other_metadata_digest")
-        return digests[name](value)
+    def forbidden(*_args, **_kwargs):
+        raise RuntimeError("Recovery unexpectedly decoded or re-prepared a Design in the parent")
 
-    stack.enter_context(patch.object(revisions, "digest", projection_digest))
+    for owner, name in ((recovery_inputs, "prepare_stored"), (revisions, "prepare_revision"),
+            (revisions, "_decoded_exact"), (revisions, "_canonical_payload"), (revisions, "digest"),
+            (Design, "model_validate"), (Design, "model_validate_json")):
+        stack.enter_context(patch.object(owner, name, forbidden))
     stack.enter_context(patch.object(TestClient, "get", phases.observe_get(TestClient.get)))
 
 
@@ -224,10 +209,13 @@ def main():
     background = f"__recovery_memory_{suffix}_background"
     previous_policy = policy.current_configuration()
     original = {"lock": state._lock, "owner": session_cache._strict_persistence,
-        "run": recovery._run, "start": recovery.start, "prepare": recovery.prepare_stored,
-        "worker_start": VerificationWorker.start, "revision_path": baseline.REVISION_PATH}
+        "run": recovery._run, "start": recovery.start,
+        "worker_start": recovery_worker.RecoveryWorker.start,
+        "worker_wait": recovery_worker.RecoveryWorker.wait,
+        "worker_close": recovery_worker.RecoveryWorker.close,
+        "revision_path": baseline.REVISION_PATH}
     probe = LockProbe(original["lock"])
-    completion, worker_records, preparation_times = {}, [], []
+    completion, worker_records, worker_index, read_ids = {}, [], {}, {}
     samples, cleanup_errors, failure, fixture = [], [], None, None
     active_rss = None
     configured = False
@@ -235,19 +223,12 @@ def main():
     ready_refs = []
     prior_jobs = dict(jobs._jobs)
     phases, phase_patches = PreparationPhases(docs), ExitStack()
-    traced_prepare = phases.wrap(original["prepare"], "prepare_stored")
     traced_run = phases.wrap(original["run"], "recovery_supervisor")
     traced_worker_start = phases.wrap(original["worker_start"], "worker_start")
+    traced_worker_close = phases.wrap(original["worker_close"], "worker_cleanup")
 
     def forbidden(*_args, **_kwargs):
         raise RuntimeError("Memory diagnostic attempted disk access or durable publication")
-
-    def prepare(*args, **kwargs):
-        begin = perf_counter()
-        try:
-            return traced_prepare(*args, **kwargs)
-        finally:
-            preparation_times.append((perf_counter() - begin) * 1000)
 
     def run(job):
         done = completion.setdefault(id(job), Event())
@@ -256,11 +237,64 @@ def main():
         finally:
             done.set()
 
+    def record_worker(worker):
+        record = worker_index.get(id(worker))
+        if record is None or record["owner"]() is not worker:
+            # Never retain a worker or bound method: each owns a near-16MB ticket.
+            record = {"owner": ref(worker), "buffers": [part.name for part in worker._buffers],
+                "started": False, "exitcode": None, "observed_reaped": False,
+                "closed": False, "process_closed": False, "close_error": None}
+            worker_records.append(record)
+            worker_index[id(worker)] = record
+        return record
+
+    def construct(ticket):
+        worker = recovery_worker.RecoveryWorker(ticket)
+        record_worker(worker)
+        return worker
+
     def worker_start(worker):
-        worker_records.append((worker, [part.name for part in worker._buffers]))
+        record = record_worker(worker)
         traced_worker_start(worker)
+        record["started"] = True
         if active_rss is not None:
             active_rss.register_child(worker._process.pid)
+
+    def worker_wait(worker, seconds):
+        finished = original["worker_wait"](worker, seconds)
+        if finished:
+            record = record_worker(worker)
+            record["exitcode"] = worker._process.exitcode
+            record["observed_reaped"] = not worker._process.is_alive() and record["exitcode"] is not None
+        return finished
+
+    def worker_close(worker):
+        record = record_worker(worker)
+        try:
+            return traced_worker_close(worker)
+        except BaseException as error:
+            record["close_error"] = type(error).__name__
+            raise
+        finally:
+            record["closed"] = worker._closed
+            record["process_closed"] = worker._process_closed
+
+    def worker_cleanup(records):
+        evidence = []
+        for record in records:
+            unlinked = True
+            for name in record["buffers"]:
+                try:
+                    leaked = SharedMemory(name=name)
+                except FileNotFoundError:
+                    continue
+                else:
+                    leaked.close()
+                    unlinked = False
+            evidence.append({key: record[key] for key in ("started", "exitcode", "observed_reaped",
+                "closed", "process_closed", "close_error")}
+                | {"buffers_unlinked": unlinked, "worker_released": record["owner"]() is None})
+        return evidence
 
     def wait_ready(client, doc, identity):
         with jobs._lock:
@@ -274,14 +308,14 @@ def main():
             raise RuntimeError(f"Recovery refused: {response.json()}")
         return response
 
-    def check_candidate(identity, payload, expected_authoring):
+    def check_candidate(doc, identity, payload, expected_authoring):
         with jobs._lock:
             candidate = jobs._jobs[identity].candidate
             ready_refs.append(ref(candidate))
         metadata = revisions.revision_metadata(candidate)
-        if (candidate.payload != payload or candidate.payload is payload
+        if (candidate.payload != payload or candidate.payload is payload or id(candidate.payload) != read_ids.get(doc)
                 or metadata.authoring_sha256 != expected_authoring):
-            raise RuntimeError("Recovered candidate did not preserve independently proved exact bytes")
+            raise RuntimeError("Recovered candidate did not retain its exact independently allocated read bytes")
         return len(candidate.payload)
 
     def measure(client, doc, callback, runtime):
@@ -344,7 +378,12 @@ def main():
         began = perf_counter()
         payload, handles, fixture = fixtures()
         fixture["preparation_ms"] = (perf_counter() - began) * 1000
-        instrument_preparation(phase_patches, phases)
+        instrument_parent(phase_patches, phases)
+        phase_patches.enter_context(patch.object(recovery, "RecoveryWorker",
+            phases.wrap(construct, "worker_construction")))
+        phase_patches.enter_context(patch.object(recovery_worker.RecoveryWorker, "start", worker_start))
+        phase_patches.enter_context(patch.object(recovery_worker.RecoveryWorker, "wait", worker_wait))
+        phase_patches.enter_context(patch.object(recovery_worker.RecoveryWorker, "close", worker_close))
         # Constructor only resolves an existing directory. Every disk entry is
         # tripwired; no fake lease is minted and commit is intentionally absent.
         owner = StrictPersistence(Path.cwd())
@@ -354,14 +393,17 @@ def main():
         def read_pending(doc):
             if doc not in docs:
                 raise RuntimeError("Substituted read received an unowned document")
-            return StoredRevision(CacheManifest(doc, len(payload), fixture["payload_sha256"]), payload, None)
+            independent = memoryview(payload).tobytes()
+            if independent is payload or doc in read_ids:
+                raise RuntimeError("Recovery read reused its fixture or repeated a document read")
+            read_ids[doc] = id(independent)
+            return StoredRevision(CacheManifest(doc, len(independent), fixture["payload_sha256"]), independent, None)
 
-        owner.read_pending = read_pending
+        owner.read_pending = phases.wrap(read_pending, "read_allocation")
         session_cache._strict_persistence = owner
         state._lock = probe
         recovery.start = phase_wrapper(original["start"], "capture")
-        recovery._run, recovery.prepare_stored = run, prepare
-        VerificationWorker.start = worker_start
+        recovery._run = run
         baseline.REVISION_PATH = "/api/design/revision"
         host.configure(policy.HostPolicyConfiguration(default_mode=previous_policy.default_mode,
             document_modes={**previous_policy.document_modes,
@@ -384,9 +426,10 @@ def main():
             for iteration in range(args.repeats):
                 phases.reset()
                 phases.active = True
+                read_ids.clear()
                 sample = {"iteration": iteration, "completed": False, "jobs": [], "releases": []}
                 samples.append(sample)
-                first_lock, first_prepare = len(probe.records), len(preparation_times)
+                first_lock, first_worker = len(probe.records), len(worker_records)
                 begin = perf_counter()
                 with measured_rss(sample) as rss, RuntimeProbe(phase=lambda: _PHASE.get()) as runtime:
                     active_rss = rss
@@ -410,14 +453,17 @@ def main():
                             finally:
                                 item["complete_ms"] = (perf_counter() - started) * 1000
                             item["retained_candidate_bytes"] = check_candidate(
-                                identity, payload, fixture["authoring_sha256"])
+                                doc, identity, payload, fixture["authoring_sha256"])
+                            item["retains_exact_read_allocation"] = True
                         rss.set_phase("ready")
                         with jobs._lock:
                             current = list(jobs._jobs.values())
                             sample["ready_count"] = sum(job.candidate is not None for job in current)
                             sample["distinct_ready_payloads"] = len({id(job.candidate.payload) for job in current})
+                            sample["distinct_read_allocations"] = len(set(read_ids.values()))
                         del current
-                        if sample["ready_count"] != jobs.MAX_RESULTS or sample["distinct_ready_payloads"] != 2:
+                        if (sample["ready_count"] != jobs.MAX_RESULTS or sample["distinct_ready_payloads"] != 2
+                                or sample["distinct_read_allocations"] != 2):
                             raise RuntimeError("Actual two-slot catalog did not retain two independent near-cap candidates")
                         for doc, identity in identities:
                             response, timing = measure(client, doc, lambda: client.delete(
@@ -426,6 +472,11 @@ def main():
                             response.raise_for_status()
                         if any(value() is not None for value in ready_refs):
                             raise RuntimeError("Cancellation retained an owned candidate")
+                        sample["worker_cleanup"] = worker_cleanup(worker_records[first_worker:])
+                        if any(not (row["closed"] and row["process_closed"] and row["observed_reaped"]
+                                   and row["buffers_unlinked"] and row["worker_released"])
+                               for row in sample["worker_cleanup"]):
+                            raise RuntimeError("Completed recovery retained a worker or leaked transport resources")
                         with state._lock:
                             if any(state._sessions[doc].design is not None or state._sessions[doc].revision != 0
                                    or state._sessions[doc].history for doc in docs):
@@ -439,7 +490,6 @@ def main():
                         events = runtime.intervals(begin, end)
                         sample.update(elapsed_ms=(end - begin) * 1000, gc_events=len(events),
                             gc_overlap_ms=overlap_ms(events, begin, end), gc_dropped=runtime.dropped_events,
-                            preparation_ms=preparation_times[first_prepare:],
                             state_lock_hold=stats([v["hold_ms"] for v in probe.records[first_lock:]]),
                             phase_trace=phases.report(runtime))
                         phases.active = False
@@ -456,24 +506,16 @@ def main():
         finally:
             phases.active = False
             phase_patches.close()
-        for worker, names in worker_records:
-            if not worker._closed or not worker._process_closed:
-                cleanup_errors.append("Owned worker was not closed and reaped")
-            for name in names:
-                try:
-                    leaked = SharedMemory(name=name)
-                except FileNotFoundError:
-                    continue
-                else:
-                    leaked.close()
-                    cleanup_errors.append("Owned shared-memory buffer remains linked")
+        worker_evidence = worker_cleanup(worker_records)
+        if any(not (row["closed"] and row["process_closed"] and row["buffers_unlinked"]
+                    and row["worker_released"]) for row in worker_evidence):
+            cleanup_errors.append("Owned worker or shared-memory buffers remain retained/unclosed")
         for doc in [*docs, background]:
             state.drop_doc(doc)
         if configured:
             host.configure(previous_policy)
         state._lock, session_cache._strict_persistence = original["lock"], original["owner"]
         recovery._run, recovery.start = original["run"], original["start"]
-        recovery.prepare_stored, VerificationWorker.start = original["prepare"], original["worker_start"]
         baseline.REVISION_PATH = original["revision_path"]
         if jobs._jobs != prior_jobs or any(value() is not None for value in ready_refs):
             cleanup_errors.append("Catalog or candidate ownership did not return to its initial state")
@@ -488,8 +530,8 @@ def main():
         items = [sample["jobs"][ordinal] for sample in samples if len(sample["jobs"]) > ordinal]
         summary.append({"ordinal": ordinal + 1,
             "start": summarize_metrics([item["start"] for item in items]),
-            "preparation_and_worker_wait": summarize_metrics([item["completion_wait"] for item in items
-                                                             if "completion_wait" in item]),
+            "child_preparation_proof_and_handoff_wait": summarize_metrics([item["completion_wait"] for item in items
+                                                                           if "completion_wait" in item]),
             "job_complete": stats([item["complete_ms"] for item in items if "complete_ms" in item])})
     release_summary = summarize_metrics([row for sample in samples for row in sample["releases"]])
     for sample in samples:
@@ -500,22 +542,30 @@ def main():
             for key in list(row):
                 if key.endswith("_ms") and isinstance(row[key], list):
                     row[key.removesuffix("_ms") + "_stats"] = stats(row.pop(key))
-    print(json.dumps({"scope": "In-memory substituted read; actual recovery preparation, worker proof, two-slot retention and cancellation",
+    print(json.dumps({"scope": "Independent in-memory reads; actual child preparation/proof, parent observation, two-slot retention and cancellation",
         "repeats": args.repeats, "completed": passed, "failure": failure, "fixture": fixture,
+        "source_sha256": {str(Path(module.__file__).relative_to(Path.cwd())):
+            sha256(Path(module.__file__).read_bytes()).hexdigest()
+            for module in (recovery, recovery_worker, recovery_inputs, revisions)},
+        "benchmark_sha256": sha256(Path(__file__).read_bytes()).hexdigest(),
         "durable_commit_qualified": False, "public_availability_qualified": False,
-        "memory_scope": "Scoped parent plus explicitly owned child RSS; baseline includes four near-8MB background handles and one shared near-16MB in-memory input. Gaps may miss peaks; shared pages double-count. No heap guarantee.",
-        "storage_seam": "read_pending returns actual bounded StoredRevision bytes with no lease; disk access and publication tripwired; no cache files",
+        "latency_qualified": False, "memory_qualified": False,
+        "completion_meaning": "Correctness and cleanup only; three cycles are diagnostic, and even 30 require review against declared targets and sampling gaps.",
+        "memory_scope": "Scoped parent plus explicitly owned child RSS; baseline includes four near-8MB background handles and one near-16MB fixture. Each read adds an independent allocation retained by its exact ready candidate. Worker tracking is weak only. Gaps may miss peaks; shared pages double-count. No heap guarantee.",
+        "storage_seam": "read_pending copies fixture bytes via memoryview.tobytes into actual bounded StoredRevision with no lease; read identity tracked by integer only; disk access/publication tripwired; no cache files",
+        "historical_comparison": "Initial/phase reports at be6f284a remain unchanged. Their parent preparation and shared substituted input differ from this worker preparation and independent-read allocation; this is not an exact A/B memory comparison.",
         "phase_instrumentation": {
-            "scope": "Parent preparation only; module-local call-site wrappers preserve original arguments/results and do not replace global JSON or Design methods.",
+            "scope": "Parent read allocation, reservation, framing, worker construction/launch/result/cleanup, and revision handoff only. Parent Design decode/prepare/canonicalization/digest are tripwired after fixture setup; fresh spawned child preparation is unchanged and untraced.",
             "capacity_per_cycle": PHASE_CAPACITY, "read_capacity_per_cycle": READ_CAPACITY,
             "reported_slowest_reads_per_cycle": REPORTED_READS,
             "clock": "time.perf_counter process-wide monotonic seconds; phase/read/operation intervals align across parent threads.",
             "attribution_limits": [
                 "Intervals include scheduling/GIL/GC delay and instrumentation overhead, not CPU attribution; no time is subtracted from user-observed latency.",
                 "Inclusive phases nest and must not be added. Exclusive time subtracts immediate traced children only, not all helper work.",
-                "Exact roundtrip includes model validation, model dump, byte comparison and a nested canonical encoding. Seal-exclusive time includes its initial model dump and untraced bookkeeping.",
-                "Manifest SHA256 phase times construction/update; its tiny hexdigest call remains in prepare_stored-exclusive time.",
-                "Recovery-supervisor exclusive time includes worker construction, IPC, native proof wait and cleanup; worker_start is launch only, not child runtime or a child CPU trace.",
+                "Raw reservation includes input hash and context checks. Read-allocation time is an in-memory copy, not filesystem I/O.",
+                "Worker supervision includes child preparation/proof wait plus traced launch, result and cleanup. Worker-start is launch only; no child CPU/phase attribution is claimed.",
+                "Frame admission is also called within parent revision handoff. Nested intervals must not be counted twice.",
+                "Only parent natural GC is observed; child GC is not sampled. Weak worker records store scalar close/reap evidence and buffer names, never tickets or bytes.",
                 "Read intervals begin outside ASGI inside the external sampler's TestClient.get call; they exclude the tiny caller-to-wrapper dispatch overhead.",
                 "All bounded observed reads contribute overlap counts; only the slowest32 intervals are printed. Overlap identifies correlation, not causation or exclusive blocking responsibility.",
                 "Dropped/unfinished counters disclose incomplete traces; current scopes, five-second deadline, fixtures and GC policy are unchanged."]},
@@ -524,6 +574,7 @@ def main():
             "start_p95_ms": 10, "start_max_ms": 100, "concurrent_start_p95_ms": 10,
             "concurrent_start_max_ms": 100, "rss_increment_bytes": 256 * 1024 * 1024},
         "cleanup": not cleanup_errors, "cleanup_errors": cleanup_errors,
+        "worker_lifecycle": worker_evidence,
         "summary_by_recovery_ordinal": summary, "completed_result_release": release_summary,
         "samples": samples}, separators=(",", ":")))
     return int(not passed)
