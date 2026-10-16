@@ -1,0 +1,143 @@
+{
+  "date": "2026-10-16",
+  "checkpoint_before": "64a262a2",
+  "scope": "Core geometry: explicit exact-definition grouping v1-to-v2 repair, durable drafts, private evaluation and existing desktop repair panel",
+  "objective_status": "Incomplete; main geometry and Fine Routing remain first; assets, assemblies and VR deferred",
+  "focused_targets": [
+    "tests/test_part_group_repair.py",
+    "tests/test_group_upgrade_metadata.py",
+    "tests/test_group_upgrade_draft_lifecycle.py",
+    "tests/test_group_upgrade_archive.py",
+    "tests/test_part_group_repair_evaluation.py",
+    "tests/test_part_recipe_repair.py",
+    "tests/test_part_repair_planning.py",
+    "tests/test_part_repair_capture.py",
+    "tests/test_part_repair_draft.py",
+    "tests/test_part_repair_persistence.py",
+    "tests/test_part_repair_draft_host.py",
+    "tests/test_part_repair_draft_transaction.py",
+    "tests/test_part_repair_draft_evaluation.py",
+    "tests/test_part_repair_draft_jobs.py",
+    "tests/test_part_repair_jobs.py",
+    "tests/test_part_repair_evaluation.py",
+    "tests/test_part_repair_input_metadata.py",
+    "tests/test_part_repair_drafts_api.py",
+    "tests/test_part_repair_expectations.py",
+    "tests/test_part_repair_expectation_transport.py",
+    "tests/test_part_repair_source_transport.py",
+    "tests/test_part_repair_source_host.py",
+    "tests/test_part_repair_sources.py",
+    "tests/test_part_repair_fingerprint.py",
+    "tests/test_oxdna_preparation_capture.py",
+    "tests/test_group_creation_v2.py",
+    "tests/test_part_structure_proof.py",
+    "tests/test_native_overlay_proof.py",
+    "tests/test_part_recipe_edit.py"
+  ],
+  "final_checks": {
+    "backend": {
+      "command": "just validate-safe scripts/test_guard.sh test-focused 0 focused -- uv run pytest <29 explicit targets> -q --tb=short --disable-warnings --durations=8",
+      "passed": 631,
+      "warnings": 14,
+      "seconds": 30.84
+    },
+    "frontend": {
+      "command": "just test-frontend",
+      "passed": 8464,
+      "skipped": 1,
+      "files": 727,
+      "seconds": 355.98
+    },
+    "scoped_ruff": "passed (15 changed Python files)",
+    "diff_check": "passed",
+    "main_js_line_delta": 0,
+    "app": "NOT VERIFIED IN APP; no isolated browser/desktop qualification; Archive is unavailable; no live server mutation. VR deferred by user."
+  },
+  "red_and_integration_evidence": [
+    {
+      "scope": "Foundation/metadata/draft tests-first",
+      "failed": 38,
+      "passed": 12,
+      "seconds": 3.66,
+      "cause": "Missing closed action/helper/metadata; one ClusterOp test fixture omitted required pose fields, corrected."
+    },
+    {
+      "scope": "Frontend tests-first",
+      "failed": 21,
+      "passed": 32,
+      "seconds": 2.18,
+      "cause": "Missing structural action/button/dedup; overlay selector label undefined."
+    },
+    {
+      "scope": "Root worker integration red",
+      "failed": 7,
+      "passed": 1,
+      "seconds": 7.74,
+      "cause": "Typed grouping row was not replaced, so invalid structure remained. Downstream test initially expected a typed reference error; existing overlay reports ValueError with Missing pose cluster, now asserted honestly."
+    },
+    {
+      "scope": "Backend first integration",
+      "failed": 3,
+      "passed": 58,
+      "seconds": 10.64,
+      "cause": "Metadata hash trap targeted unused wrapper; semantic rebase hit unchanged25ms wall budget under scheduling; downstream assertion expected owner ID absent from native error. Traps now observe actual digest/dump, semantic lifecycle test clock is controlled, native detail preserved. No production limits raised."
+    },
+    {
+      "scope": "Frontend first integration",
+      "failed": 1,
+      "passed": 52,
+      "seconds": 2.34,
+      "cause": "Test omitted existing transport context/signal second argument; corrected to assert both request and ownership context."
+    },
+    {
+      "scope": "Stronger locked discovery red",
+      "failed": 1,
+      "seconds": 2.77,
+      "cause": "ClusterRigidTransform.model_dump executed during source discovery; removed unnecessary serialization for exact reviewed source-free overlay types/versions and structural action discovery."
+    }
+  ],
+  "architecture": {
+    "action": "upgrade_cluster_creation; strict expected_version=1, expected_cluster_id, exact full typed-row expected_definition_sha256, no child or arbitrary target version",
+    "migration": "Only coherent recognized v1->v2; preserve feature/group IDs and all other fields; unchanged v1 reproduction remains available",
+    "provenance": "Separate definition_upgrades before/after digests; numerical upgrade metadata remains separate",
+    "capture": "Bounded typed clone under lock; hashing and admission outside lock; skip serialization only for exact reviewed source-free overlay types/versions; unknown future overlays retain ordinary discovery",
+    "publication": "Existing isolated worker and guarded job Apply; final structural closure plus ordinary candidate decoding; cancellation/source/revision/session guards and one undo",
+    "pruning": "Removed unused original-parameter copying for structural targets and unnecessary source-free overlay serialization; no extra job host or generic version editor",
+    "molecular_changes": false,
+    "numerical_pins_changed": false,
+    "rollout_gates_changed": false
+  },
+  "selector": {
+    "command": "just test-smart --dry-run",
+    "changed_files_since_last_full": 5457,
+    "decision": "FAST  (fast suite only)",
+    "tests_executed": false,
+    "deferred_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\n  This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\n  Only request `just test-session` when a broad/full sweep is actually needed.",
+    "clarification": "Selector only; quoted boilerplate says ran but no suite executed. Broad and aggregate fast-suite debt is not cleared."
+  },
+  "cleanup": {
+    "active_fd_cwd_map_references": 0,
+    "owned_roots": [
+      "/tmp/pytest-of-joshua/pytest-271",
+      "/tmp/pytest-of-joshua/pytest-272",
+      "/tmp/pytest-of-joshua/pytest-273"
+    ],
+    "removed_files": 27,
+    "removed_bytes": 38623,
+    "removed_directories": 730,
+    "removed_symlinks": 7,
+    "owned_roots_remaining": false,
+    "preserved": "Historical pytest-268 lock (6 bytes); user/runtime state untouched",
+    "shared_worker_buffers": 0,
+    "frontend_test_results_or_playwright_report": false,
+    "bulk_or_native_scratch_generated": false
+  },
+  "limitations": [
+    "Already-open typed parts only; invalid saved-file recovery entry is separate next work",
+    "No independent molecular-coordinate/physical equivalence claim from structural repair",
+    "No desktop visual or actual interaction latency qualification",
+    "Broader incoming cluster-delete dependencies and recorded deletion remain open",
+    "G1-G5 standard geometry editors, core input/reference repair and automation remain incomplete",
+    "Broad backend regression debt remains; focused checks do not clear FULL debt"
+  ]
+}

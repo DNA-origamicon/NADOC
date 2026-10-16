@@ -97,11 +97,23 @@ def _upgrade(kind, previous, action, provider):
 def _definitions(source, request, dependency_resolver, numerical_provider):
     """Plan edits after prepare_repair has admitted the complete source log."""
     from backend.api.part_repair_contracts import recognizes_invalid_inputs
+    from backend.core.part_group_repair import definition_sha256
 
     targets = plan_actions(source, request.actions, dependencies=dependency_resolver,
                            recognize_invalid=recognizes_invalid_inputs)
-    upgrades = []
+    upgrades, definition_upgrades = [], []
     for target in targets.values():
+        if target.structural_replacement is not None:
+            replacement = target.structural_replacement
+            definition_upgrades.append({
+                "feature_id": target.entry.id, "child_id": None, "kind": target.kind,
+                "cluster_id": target.entry.cluster_id,
+                "from_version": target.entry.proof_version, "to_version": replacement.proof_version,
+                # The planner already checked this exact receipt against the
+                # privately captured row; avoid hashing the same input twice.
+                "before_definition_sha256": target.action.expected_definition_sha256,
+                "after_definition_sha256": definition_sha256(replacement), "changed": True,
+            })
         if target.upgrade is not None:
             try:
                 target.params, provenance = _upgrade(target.kind, target.params, target.upgrade, numerical_provider)
@@ -117,9 +129,11 @@ def _definitions(source, request, dependency_resolver, numerical_provider):
                         if child.id in targets else child for child in entry.children]
             entry = entry.model_copy(update={"children": children})
         elif entry.id in targets:
-            entry = entry.model_copy(update={"params": targets[entry.id].params})
+            target = targets[entry.id]
+            entry = (target.structural_replacement if target.structural_replacement is not None
+                     else entry.model_copy(update={"params": target.params}))
         log.append(entry)
-    return log, upgrades
+    return log, upgrades, definition_upgrades
 
 
 class _ReplayStopped(Exception):
@@ -141,7 +155,7 @@ def prepare_repair(source, request, *, source_revision, executor, dependency_res
     from backend.core.part_structure_gate import require_valid_structure
 
     request = RepairRequest.model_validate(request)
-    rows, completed, upgrades = [], [], []
+    rows, completed, upgrades, definition_upgrades = [], [], [], []
     phase = "admission"
 
     def result(status, issue):
@@ -152,7 +166,7 @@ def prepare_repair(source, request, *, source_revision, executor, dependency_res
                 "source_design_id": source.id, "old_state_verified": False,
                 "completed_prefix": list(completed),
                 "not_evaluated": [identity for identity in pending if identity != failed],
-                "numerical_upgrades": upgrades}}
+                "numerical_upgrades": upgrades, "definition_upgrades": definition_upgrades}}
 
     try:
         checkpoint()
@@ -167,7 +181,8 @@ def prepare_repair(source, request, *, source_revision, executor, dependency_res
         if set(type(source).model_fields) - FIELD_ROLES.keys():
             raise CommandContractError("Design fields lack proof ownership", code="unclassified_fields")
         rows = list(command_rows(source, 2000))
-        log, upgrades = _definitions(source, request, dependency_resolver, numerical_provider or _current_numerical_pins)
+        log, upgrades, definition_upgrades = _definitions(
+            source, request, dependency_resolver, numerical_provider or _current_numerical_pins)
         rows = list(command_rows(source.copy_with(feature_log=log), 2000))
 
         def run(kind, current, params):
@@ -204,7 +219,8 @@ def prepare_repair(source, request, *, source_revision, executor, dependency_res
         return {"status": "ready", "issues": [], "candidate": candidate, "validation": validation,
             "repair": {"source_revision": source_revision, "source_design_id": source.id,
                 "old_state_verified": False, "completed_prefix": completed, "not_evaluated": [],
-                "numerical_upgrades": upgrades, "integrity_checked": True, "structure": structure}}
+                "numerical_upgrades": upgrades, "definition_upgrades": definition_upgrades,
+                "integrity_checked": True, "structure": structure}}
     except _ReplayStopped as error:
         return result(error.status, error.issue)
     except CommandContractError as error:

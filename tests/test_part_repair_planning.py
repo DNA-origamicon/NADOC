@@ -167,9 +167,9 @@ def test_worker_compatibility_alias_and_planned_log_keep_existing_error_and_meta
     assert worker.RepairInputError is RepairInputError
     design = source()
     before = design.model_dump_json()
-    log, upgrades = worker._definitions(design, parsed([action()]), known,
+    log, upgrades, definition_upgrades = worker._definitions(design, parsed([action()]), known,
         lambda *_: pytest.fail("A nonnumerical repair selected numerical pins"))
-    assert upgrades == [] and log[0].params["selector"] == "replacement"
+    assert upgrades == definition_upgrades == [] and log[0].params["selector"] == "replacement"
     assert log[0].id == "feature" and log[0].label == "Feature"
     assert log[1] == design.feature_log[1]
     assert design.model_dump_json() == before

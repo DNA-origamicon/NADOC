@@ -1,7 +1,7 @@
 import { createPartRepairController } from '../features/part_repair_controller.js'
 import { createPartComparisonController } from '../features/part_comparison_controller.js'
 import { cloneRepairInput, resolveRepairFeature, sameRepairContext } from '../features/part_repair_model.js'
-import { actionFromRepairField, replacementRepairSource, updateRepairActions } from '../features/part_repair_fields.js'
+import { actionFromRepairField, actionFromRepairUpgrade, replacementRepairSource, updateRepairActions } from '../features/part_repair_fields.js'
 import { getDocId } from '../shared/doc_id.js'
 import { createRepairInputEditor } from './part_repair_input_editor.js'
 import { createPartComparisonSurface } from './part_comparison_surface.js'
@@ -49,15 +49,16 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
   const selector = el('select', { attrs: { 'aria-label': 'Feature to repair' } })
   const showError = value => { localError = value?.message ?? String(value); error.textContent = localError }
   const clearNotice = () => { localError = ''; note = ''; error.textContent = '' }
-  const actionFor = (field, value) => {
+  const currentCatalog = () => {
     if (latest.inputs !== renderedCatalog || !renderedCatalog || renderedCatalog.revision !== latest.context?.revision) throw new Error('Inspect the current feature inputs before editing')
-    return actionFromRepairField(renderedCatalog, field, value)
+    return renderedCatalog
   }
-  function addChange(field, value) {
-    actions = updateRepairActions(actions, actionFor(field, value)); dirty = true
+  function addAction(action) {
+    actions = updateRepairActions(actions, action); dirty = true
     clearNotice()
     controller.cancel(); renderProposal(); renderState(controller.getState())
   }
+  const addChange = (field, value) => addAction(actionFromRepairField(currentCatalog(), field, value))
   async function sourceAction(field, file, operation, source) {
     const origin = latest.context, work = ++sourceWork
     clearNotice()
@@ -84,6 +85,7 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
     finally { if (work === sourceWork) { sourceBusy = false; renderState(controller.getState()) } }
   }
   const editor = createRepairInputEditor({ onChange: addChange, onError: showError, onSource: sourceAction,
+    onUpgrade: upgrade => addAction(actionFromRepairUpgrade(currentCatalog(), upgrade)),
     getSelectedFile: source => pendingFiles.get(source?.sha256),
     onSelect: field => {
       if (!renderedCatalog?.fields.includes(field)) throw new Error('Inspect the current reference input before selecting a replacement')
@@ -106,7 +108,7 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
     for (const [index, entry] of (getDesign()?.feature_log ?? []).entries()) {
       const entries = entry.feature_type === 'routing-cluster' ? (entry.children ?? []).map((child, sub) =>
         ({ label: `F${index + 1}.${sub + 1}: ${child.label ?? child.op_subtype}`, feature_id: entry.id, child_id: child.id }))
-        : [{ label: `F${index + 1}: ${entry.label ?? entry.op_kind}`, feature_id: entry.id, child_id: null }]
+        : [{ label: `F${index + 1}: ${entry.label ?? entry.op_kind ?? entry.name ?? entry.feature_type}`, feature_id: entry.id, child_id: null }]
       for (const target of entries) if (target.feature_id) selector.append(el('option', { text: target.label, attrs: { value: targetKey(target) } }))
     }
     selector.value = selectedTarget ? targetKey(selectedTarget) : ''
@@ -121,7 +123,11 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
     actions.forEach((action, index) => {
       const text = action.action === 'set_input'
         ? `${action.feature_id}${action.child_id ? ` / ${action.child_id}` : ''} — ${JSON.stringify(action.parameter_path)}: ${short(action.expected_old)} → ${short(action.value)}`
-        : `${action.feature_id}: numerical contract upgrade (separate molecular review required)`
+        : action.action === 'upgrade_cluster_creation'
+          ? `${action.feature_id}: structural group repair (preserve empty owners, v1 → v2)`
+          : action.action === 'upgrade_numerical_contract'
+            ? `${action.feature_id}: numerical contract upgrade (separate molecular review required)`
+            : `${action.feature_id}: ${action.action} (reviewed editor unavailable)`
       const remove = createButton({ label: 'Remove proposed change', size: 'sm', onClick: () => {
         actions = actions.filter((_item, position) => position !== index); dirty = true; controller.cancel(); renderProposal(); renderState(controller.getState())
       } })

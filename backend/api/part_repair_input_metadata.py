@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from backend.api.part_proof_commands import PROOF_MINOR_KINDS
 from backend.core.part_command_errors import CommandContractError
+from backend.core.models import ClusterCreateLogEntry
 from backend.core.part_repair_capture import _Copier
 from backend.core.part_repair_inputs import RepairIdentity
 from backend.core.part_repair_expectations import encode_expected_old
@@ -52,8 +53,8 @@ def _capture(source, selection):
         if entry.id != selection.feature_id:
             continue
         if selection.child_id is None:
-            if entry.feature_type != "snapshot":
-                _error("unsupported_repair_target", "Select a snapshot or an explicit routing child")
+            if entry.feature_type != "snapshot" and type(entry) is not ClusterCreateLogEntry:
+                _error("unsupported_repair_target", "Select a snapshot, explicit routing child, or grouping upgrade")
             selected = entry
         else:
             if entry.feature_type != "routing-cluster":
@@ -62,6 +63,10 @@ def _capture(source, selection):
     if selected is None:
         _error("missing_feature", "The selected feature or child no longer exists", 404)
     copier = _Copier(10_000, 256_000, max(0, deadline - monotonic()))
+    if selection.child_id is None and type(selected) is ClusterCreateLogEntry:
+        # Preserve the complete typed definition; recognition, serialization
+        # and its exact expectation digest belong outside the source lock.
+        return "cluster_create", copier.clone(selected)
     kind = getattr(selected, "op_kind", None) or getattr(selected, "op_subtype", None)
     if selection.child_id is not None:
         if kind not in PROOF_MINOR_KINDS:
@@ -77,11 +82,22 @@ def describe_inputs(kind, params):
     from backend.api.part_repair_source_policy import admit_descriptor
     from backend.core.part_input_sources import command_source_bindings
 
-    result = {"definition_supported": False, "inputs_valid": None, "reason": None, "fields": []}
+    result = {"definition_supported": False, "inputs_valid": None, "reason": None,
+              "fields": [], "upgrades": []}
 
     def unsupported(code, detail):
         result.update(reason={"code": code, "detail": detail}, fields=[])
         return result
+
+    if kind == "cluster_create":
+        from backend.core.part_group_repair import upgrade_action
+
+        try:
+            action = upgrade_action(params)
+        except CommandContractError as error:
+            return unsupported(error.code, str(error)[:512])
+        return {**result, "definition_supported": True, "inputs_valid": True,
+                "upgrades": [{"label": "Preserve empty group owners (v2)", "action": action}]}
 
     if type(params) is not dict or "_generated_scope" in params:
         return unsupported("unsupported_repair_inputs", "Generated scopes require a separate input editor")

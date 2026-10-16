@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cloneRepairInput, repairActions, repairGuards,
+import { cloneRepairInput, numericalRepairReviewRequired, repairActions, repairGuards,
   repairIssues, repairJobView, repairPublishedStatus, resolveRepairFeature } from './part_repair_model.js'
 
 const context = { docId: 'doc', designId: 'part', loadoutId: 'main', revision: 4,
@@ -7,6 +7,17 @@ const context = { docId: 'doc', designId: 'part', loadoutId: 'main', revision: 4
 const draft = { draft_id: 'proposal', generation: 2 }
 
 describe('input-only repair model', () => {
+  it('keeps a structural group upgrade separate from numerical review and resolves its stable row after reorder', () => {
+    const action = { action: 'upgrade_cluster_creation', feature_id: 'group-feature', child_id: null,
+      expected_version: 1, expected_cluster_id: 'group-owner', expected_definition_sha256: 'a'.repeat(64) }
+    const entry = { id: 'group-feature', feature_type: 'cluster_create', name: 'Arm', cluster_id: 'group-owner' }
+    expect(resolveRepairFeature({ feature_log: [{ id: 'preceding' }, entry] }, action.feature_id, null))
+      .toMatchObject({ featureId: 'group-feature', childId: null, index: 1, entry })
+    expect(repairActions([action])).toEqual([action])
+    expect(numericalRepairReviewRequired({ actions: [action] })).toBe(false)
+    expect(numericalRepairReviewRequired({ actions: [action, { action: 'upgrade_numerical_contract' }] })).toBe(true)
+  })
+
   it('resolves exact routing-child identities and proposal generation guards', () => {
     const design = { feature_log: [{ id: 'group', feature_type: 'routing-cluster', children: [
       { id: 'child', params: { inputs: ['missing', 'retained'] } },

@@ -92,7 +92,10 @@ def capture_draft_inputs(design, *, source_revision, draft=None, proposed_action
     Discard uses ``include_definitions=False`` so broken/large history cannot
     prevent clearing a draft. Limits bound cooperative work, not OS wall time.
     """
-    from backend.core.models import RoutingClusterLogEntry
+    from backend.core.models import (
+        ClusterCreateLogEntry, ClusterOpLogEntry, DeformationLogEntry,
+        OverhangRotationLogEntry, RoutingClusterLogEntry,
+    )
 
     if type(source_revision) is not int or source_revision < 0:
         raise ValueError("Draft capture requires a trusted nonnegative session revision")
@@ -147,8 +150,23 @@ def capture_draft_inputs(design, *, source_revision, draft=None, proposed_action
             if len(descriptors) > MAX_SOURCES:
                 raise CaptureLimit("Repair draft capture source count budget exceeded")
 
+    # These exact typed overlay contracts have no command_source_bindings.
+    # Keep the list/version inventory explicit: a future kind or contract must
+    # follow ordinary discovery until its source ownership is reviewed.
+    source_free_overlays = {
+        ClusterCreateLogEntry: ("cluster_create", (1, 2)),
+        ClusterOpLogEntry: ("cluster_op", (1,)),
+        DeformationLogEntry: ("deformation", (1,)),
+        OverhangRotationLogEntry: ("overhang_rotation", (1,)),
+    }
     for entry in log:
         for child in entry.children if entry.feature_type == "routing-cluster" else [entry]:
+            declaration = source_free_overlays.get(type(child))
+            if declaration is not None and child.feature_type == declaration[0] and (
+                child.proof_version is None
+                or type(child.proof_version) is int and child.proof_version in declaration[1]
+            ):
+                continue
             remember(*command_input(child))
     for kind, params in proposed_inputs(result, actions, copy_value=copier.clone, check_expectations=False):
         remember(kind, params)

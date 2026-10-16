@@ -46,7 +46,17 @@ class UpgradeNumericalContract(_Target):
     expected_template: dict[str, Any] | None = None
 
 
-RepairAction = Annotated[SetInput | UpgradeNumericalContract, Field(discriminator="action")]
+class UpgradeClusterCreation(_Target):
+    """A single reviewed semantic transition; no caller-selected new version."""
+
+    action: Literal["upgrade_cluster_creation"]
+    child_id: None = None
+    expected_version: StrictInt = Field(ge=1, le=1)
+    expected_cluster_id: RepairIdentity
+    expected_definition_sha256: Annotated[str, Field(strict=True, pattern=r"^[0-9a-f]{64}$")]
+
+
+RepairAction = Annotated[SetInput | UpgradeNumericalContract | UpgradeClusterCreation, Field(discriminator="action")]
 RepairActions = Annotated[list[RepairAction], Field(min_length=1, max_length=MAX_REPAIR_ACTIONS)]
 
 

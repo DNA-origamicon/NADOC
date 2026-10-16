@@ -11,13 +11,18 @@ const source = { version: 1, sha256: 'a'.repeat(64), size_bytes: 3, format: 'pdb
 const nameField = { parameter_path: ['name'], expected_old: 'Original', input_type: 'string', label: 'Name', max_length: 100 }
 const sourceField = { parameter_path: ['source'], expected_old: source, input_type: 'source', label: 'Protein source',
   source_binding: { source, parameter: 'source', max_size_bytes: 300, replacement_supported: true } }
+const groupUpgrade = () => ({ label: 'Preserve empty group owners (v2)', action: {
+  action: 'upgrade_cluster_creation', feature_id: 'group-feature', child_id: null,
+  expected_version: 1, expected_cluster_id: 'group-owner', expected_definition_sha256: 'a'.repeat(64),
+} })
+const groupRow = { id: 'group-feature', feature_type: 'cluster_create', name: 'Arm', cluster_id: 'group-owner', proof_version: 1 }
 const panels = []
 const flush = async () => { for (let index = 0; index < 20; index++) await Promise.resolve() }
 const button = text => [...document.querySelectorAll('button')].find(item => item.textContent === text)
 const click = async text => { const found = button(text); expect(found, text).toBeTruthy(); found.click(); await flush() }
 const deferred = () => { let resolve; const promise = new Promise(yes => { resolve = yes }); return { promise, resolve } }
 
-function setup({ draft = null, protectedLoadout = false, fields = [nameField], featureLog, cursor = -1, createComparisonViewer } = {}) {
+function setup({ draft = null, protectedLoadout = false, fields = [nameField], upgrades = [], featureLog, cursor = -1, createComparisonViewer } = {}) {
   let revision = 4, nextJob = 0
   const store = createMockStore({ currentDesign: { id: 'part', active_loadout_id: 'main',
     loadouts: [{ id: 'main', protected: protectedLoadout }], feature_log_cursor: cursor,
@@ -28,7 +33,7 @@ function setup({ draft = null, protectedLoadout = false, fields = [nameField], f
   const endpoints = {
     inspect: vi.fn(async () => metadata()),
     inspectInputs: vi.fn(async body => ({ version: 1, assessment: 'inputs_only', references_checked: false,
-      design_id: 'part', revision, feature_id: body.feature_id, child_id: body.child_id, definition_supported: true, fields })),
+      design_id: 'part', revision, feature_id: body.feature_id, child_id: body.child_id, definition_supported: true, fields, upgrades })),
     acknowledge: vi.fn(json => { revision = json.revision; store.setState({ repairMetadata: { designId: 'part', revision, summary: json.repair_draft } }); return true }),
     mutate: vi.fn(async body => {
       draft = body.operation === 'discard' ? null : { ...(draft ?? saved()),
@@ -72,6 +77,73 @@ beforeEach(() => vi.useFakeTimers())
 afterEach(() => { for (const panel of panels.splice(0)) panel.dispose(); document.body.replaceChildren(); vi.useRealTimers() })
 
 describe('desktop part recipe repair panel', () => {
+  it('saves, reloads, rebases and explicitly applies the exact group repair through the existing draft flow', async () => {
+    const upgrade = groupUpgrade(), h = setup({ fields: [], upgrades: [upgrade], featureLog: [groupRow] })
+    const original = h.store.getState().currentDesign
+    await open(h); await select('group-feature')
+    const option = [...document.querySelectorAll('[aria-label="Feature to repair"] option')]
+      .find(item => item.value === JSON.stringify(['group-feature', null]))
+    expect(option.textContent).toContain('Arm')
+    await click(upgrade.label); await click(upgrade.label)
+    expect(document.querySelectorAll('.part-repair__proposal li')).toHaveLength(1)
+    expect(document.querySelector('.part-repair__proposal').textContent).toContain('structural group repair')
+    expect(document.body.textContent).not.toContain('molecular review')
+    expect(h.endpoints.mutate).not.toHaveBeenCalled()
+    expect(h.store.getState().currentDesign).toBe(original)
+    await click('Save proposal')
+    expect(h.endpoints.mutate.mock.calls[0][0]).toMatchObject({ operation: 'create', expected_revision: 4,
+      actions: [upgrade.action] })
+    await click('Reload saved proposal')
+    expect(h.panel.controller.getState().draft.actions).toEqual([upgrade.action])
+    expect(document.querySelector('.part-repair__proposal').textContent).toContain('structural group repair')
+    await click('Rebase proposal')
+    const rebase = h.endpoints.mutate.mock.calls.at(-1)[0]
+    expect(rebase).toMatchObject({ operation: 'rebase', expected_revision: 5, expected_generation: 0 })
+    expect(rebase).not.toHaveProperty('actions')
+    expect(h.panel.controller.getState().draft.actions).toEqual([upgrade.action])
+    await evaluateReady(h)
+    expect(h.endpoints.evaluate).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      expected_design_id: 'part', expected_revision: 6, expected_draft_id: 'draft', expected_generation: 1,
+    }), {
+      context: expect.objectContaining({ docId: 'document', designId: 'part', loadoutId: 'main',
+        revision: 6, editable: true, cursor: -1, subCursor: null }),
+      signal: expect.any(AbortSignal),
+    })
+    expect(h.endpoints.commit).not.toHaveBeenCalled()
+    expect(h.store.getState().currentDesign).toBe(original)
+    await click('Apply evaluated proposal')
+    expect(h.endpoints.commit).toHaveBeenCalledTimes(1)
+    expect(h.endpoints.apply).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([{ protectedLoadout: true }, { cursor: 0 }])('keeps the structural repair read-only at %j', async boundary => {
+    const upgrade = groupUpgrade(), h = setup({ fields: [], upgrades: [upgrade], featureLog: [groupRow], ...boundary })
+    await open(h)
+    // Inspection remains read-only; direct controller inspection models a previously selected row at a historical cursor.
+    await h.panel.controller.inspectInputs({ feature_id: 'group-feature', child_id: null }); await flush()
+    const action = button(upgrade.label)
+    if (boundary.cursor == null) expect(action?.disabled).toBe(true)
+    action?.click(); await flush()
+    expect(h.endpoints.mutate).not.toHaveBeenCalled()
+    expect(button('Save proposal').disabled).toBe(true)
+    expect(button('Evaluate proposal').disabled).toBe(true)
+  })
+
+  it('rejects a detached old upgrade button after a new feature catalog is inspected', async () => {
+    const upgrade = groupUpgrade(), h = setup({ fields: [], upgrades: [upgrade], featureLog: [groupRow] })
+    await open(h); await select('group-feature')
+    const oldButton = button(upgrade.label)
+    expect(oldButton).toBeTruthy()
+    h.endpoints.inspectInputs.mockResolvedValueOnce({ version: 1, assessment: 'inputs_only', design_id: 'part', revision: 4,
+      feature_id: 'group-feature', child_id: null, definition_supported: true, fields: [], upgrades: [groupUpgrade()] })
+    await select('group-feature')
+    // A delayed event on a detached control must not reuse its earlier receipt.
+    oldButton.dispatchEvent(new Event('click')); await flush()
+    expect(document.querySelector('[role=alert]').textContent).toMatch(/reviewed|supported|current/)
+    expect(h.endpoints.mutate).not.toHaveBeenCalled()
+    expect(button('Save proposal').disabled).toBe(true)
+  })
+
   it('requests nothing on mount and saves, evaluates and explicitly applies a typed proposal', async () => {
     const h = setup(), original = h.store.getState().currentDesign
     expect(h.endpoints.inspect).not.toHaveBeenCalled(); expect(h.endpoints.start).not.toHaveBeenCalled()

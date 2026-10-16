@@ -12,7 +12,8 @@ from backend.core.part_edit_identity import preserve_proof_identity
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_history_proof import digest
 from backend.core.part_overlay_commands import command_input
-from backend.core.part_repair_inputs import SetInput, UpgradeNumericalContract
+from backend.core.models import ClusterCreateLogEntry
+from backend.core.part_repair_inputs import SetInput, UpgradeClusterCreation, UpgradeNumericalContract
 
 
 class RepairInputError(CommandContractError):
@@ -38,9 +39,12 @@ class RepairInputError(CommandContractError):
 class RepairTarget:
     entry: object
     kind: str
-    params: dict
-    action: SetInput | UpgradeNumericalContract
+    # Structural source discovery retains only its typed replacement. None is
+    # deliberately not executable input; final planning always fills params.
+    params: dict | None
+    action: SetInput | UpgradeNumericalContract | UpgradeClusterCreation
     upgrade: UpgradeNumericalContract | None = None
+    structural_replacement: ClusterCreateLogEntry | None = None
 
 
 def same_input(left, right):
@@ -86,7 +90,7 @@ def plan_actions(source, actions, *, dependencies=None, recognize_invalid=None, 
         raise CommandContractError("Empty routing groups have no replay contract", code="empty_routing_cluster")
     targets, paths = {}, {}
     for action in actions:
-        if not isinstance(action, (SetInput, UpgradeNumericalContract)):
+        if not isinstance(action, (SetInput, UpgradeNumericalContract, UpgradeClusterCreation)):
             raise TypeError("Repair planning requires parsed repair actions")
         entry = entries.get(action.feature_id)
         if entry is None:
@@ -97,9 +101,25 @@ def plan_actions(source, actions, *, dependencies=None, recognize_invalid=None, 
             entry = next((child for child in entry.children if child.id == action.child_id), None)
             if entry is None:
                 raise error_type("The selected routing child no longer exists in this group", code="missing_feature", action=action)
-        elif entry.feature_type != "snapshot":
+        elif entry.feature_type != "snapshot" and not isinstance(action, UpgradeClusterCreation):
             raise error_type("This repair version edits snapshot or explicit routing-child definitions",
                              code="unsupported_repair_target", action=action)
+        replacement = None
+        if isinstance(action, UpgradeClusterCreation):
+            from backend.core.part_group_repair import upgrade_entry
+
+            if entry.id in targets:
+                raise error_type("A grouping definition can be upgraded only once per repair",
+                                 code="duplicate_cluster_upgrade", action=action)
+            try:
+                replacement = upgrade_entry(entry, action, check_expectations=check_expectations,
+                                            copy_value=copy_value)
+            except CommandContractError as exc:
+                raise error_type(str(exc), code=exc.code, action=action) from exc
+            if not check_expectations:
+                targets[entry.id] = RepairTarget(entry, "cluster_create", None, action,
+                                                structural_replacement=replacement)
+                continue
         kind, previous = command_input(entry)
         if (check_expectations and dependencies is not None and not dependencies(kind, previous).known
                 and not (recognize_invalid is not None and recognize_invalid(kind, previous))):
@@ -107,6 +127,10 @@ def plan_actions(source, actions, *, dependencies=None, recognize_invalid=None, 
             if annotate_contract_errors:
                 raise error_type(detail, code="missing_proof_contract", action=action)
             raise CommandContractError(detail, code="missing_proof_contract")
+        if replacement is not None:
+            _, params = command_input(replacement)
+            targets[entry.id] = RepairTarget(entry, kind, params, action, structural_replacement=replacement)
+            continue
         if entry.id not in targets:
             targets[entry.id] = RepairTarget(entry, kind, copy_value(previous), action)
         target = targets[entry.id]
@@ -124,7 +148,7 @@ def plan_actions(source, actions, *, dependencies=None, recognize_invalid=None, 
             if check_expectations and not same_input(preserve_proof_identity(previous, target.params, kind=kind), target.params):
                 raise error_type("Repair cannot replace output identities, versions, namespaces or closed scopes",
                                  code="protected_recipe_identity", action=action)
-        else:
+        elif isinstance(action, UpgradeNumericalContract):
             if target.upgrade is not None:
                 raise error_type("A definition can be upgraded only once per repair", code="duplicate_numerical_upgrade", action=action)
             target.upgrade = action
@@ -141,6 +165,8 @@ def check_numerical_expectations(params, action, *, error_type=RepairInputError)
 
 def validate_target(target, dependencies, *, error_type=RepairInputError, annotate_contract_errors=False):
     """Validate final input shape, after any caller-owned numerical pin update."""
+    if target.params is None:
+        raise TypeError("Source discovery targets do not contain executable command inputs")
     if not dependencies(target.kind, target.params).known:
         options = {"action": target.action, "include_parameter_path": False} if annotate_contract_errors else {}
         raise error_type("Patched inputs do not satisfy the registered native command schema",

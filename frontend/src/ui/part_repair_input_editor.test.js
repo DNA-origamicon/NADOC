@@ -13,6 +13,27 @@ function setup(fields) {
 afterEach(() => document.body.replaceChildren())
 
 describe('reviewed repair field editor', () => {
+  it('offers the explicit structural repair without scalar version or arbitrary JSON controls', () => {
+    const onUpgrade = vi.fn(), onChange = vi.fn(), onError = vi.fn()
+    const editor = createRepairInputEditor({ onUpgrade, onChange, onError })
+    const upgrade = { label: 'Preserve empty group owners (v2)', action: {
+      action: 'upgrade_cluster_creation', feature_id: 'group', child_id: null,
+      expected_version: 1, expected_cluster_id: 'owner', expected_definition_sha256: 'a'.repeat(64),
+    } }
+    editor.render({ ...catalog([]), child_id: null, upgrades: [upgrade] })
+    const action = button(editor.root, upgrade.label)
+    expect(action).toBeTruthy()
+    expect(editor.root.textContent).toContain('Structural repair')
+    expect(editor.root.querySelector('input,select,textarea')).toBeNull()
+    editor.setDisabled(true); action.click()
+    expect(onUpgrade).not.toHaveBeenCalled()
+    editor.setDisabled(false); action.click()
+    expect(onUpgrade).toHaveBeenCalledExactlyOnceWith(upgrade)
+    expect(onChange).not.toHaveBeenCalled(); expect(onError).not.toHaveBeenCalled()
+    editor.render({ ...catalog([]), definition_supported: false, upgrades: [upgrade] })
+    expect(button(editor.root, upgrade.label)).toBeUndefined()
+  })
+
   it('shows published values separately and edits a saved nullable pose through typed controls', () => {
     const field = { input_type: 'number_list', parameter_path: ['pose'], expected_old: null,
       label: 'Pose', length: 2, nullable: true }

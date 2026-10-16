@@ -11,7 +11,7 @@ from backend.core import models as m
 from backend.core.part_history_contract import PartRecipeRoot
 from backend.core.part_input_sources import EmbeddedInput, InputSource
 from backend.core.part_repair_draft import RepairBaseFingerprint, RepairDraft
-from backend.core.part_repair_inputs import SetInput, UpgradeNumericalContract
+from backend.core.part_repair_inputs import SetInput, UpgradeClusterCreation, UpgradeNumericalContract
 
 
 _fields = {
@@ -90,6 +90,7 @@ _fields = {
     RepairBaseFingerprint: "version root_sha256 commands_sha256 sources_sha256",
     SetInput: "feature_id child_id action parameter_path expected_old expected_old_json value",
     UpgradeNumericalContract: "feature_id child_id action expected_engine expected_template",
+    UpgradeClusterCreation: "feature_id child_id action expected_version expected_cluster_id expected_definition_sha256",
 }
 
 _history = {

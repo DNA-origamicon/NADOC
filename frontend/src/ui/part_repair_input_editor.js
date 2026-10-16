@@ -5,7 +5,7 @@ const pathKey = path => JSON.stringify(path)
 const display = value => typeof value === 'string' ? value : JSON.stringify(value)
 
 /** Small typed form renderer; catalog admission and execution belong to the backend. */
-export function createRepairInputEditor({ onChange, onSelect, onSource, onError, getSelectedFile = () => null }) {
+export function createRepairInputEditor({ onChange, onUpgrade, onSelect, onSource, onError, getSelectedFile = () => null }) {
   const root = el('div', { className: 'part-repair__inputs' }), choices = new Map()
   let catalog = null, disabled = false
   function fileButton(label, field, operation, source = field.source_binding.source) {
@@ -29,6 +29,16 @@ export function createRepairInputEditor({ onChange, onSelect, onSource, onError,
       root.append(el('p', { text: catalog.reason?.detail ?? 'This definition needs a reviewed repair input editor.' })); return
     }
     root.append(el('p', { className: 'part-repair__muted', text: 'Inputs only. Reference validity and the complete result are checked by Evaluate.' }))
+    for (const upgrade of catalog.upgrades ?? []) {
+      if (upgrade?.action?.action !== 'upgrade_cluster_creation' || typeof upgrade.label !== 'string') continue
+      root.append(el('div', { className: 'part-repair__field', children: [
+        el('strong', { text: 'Structural repair' }),
+        el('small', { text: 'Keep group owners referenced by later features. Save and evaluate the proposal before applying it.' }),
+        createButton({ label: upgrade.label, size: 'sm', onClick: () => {
+          try { onUpgrade(upgrade) } catch (error) { onError(error) }
+        } }),
+      ] }))
+    }
     for (const field of catalog.fields) {
       const row = el('div', { className: 'part-repair__field', dataset: { repairPath: pathKey(field.parameter_path) }, attrs: { tabindex: -1 } })
       const saved = actions.find(action => action.action === 'set_input' && action.feature_id === catalog.feature_id

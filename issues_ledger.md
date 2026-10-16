@@ -2364,7 +2364,7 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   desktop All/None, group/plane reversals, undo/redo and save/reopen remain MV-48;
   do not claim ordinary desktop closure until the integration gate is qualified.
 
-## ISSUE-106 — Grouping every helix removes a retained lattice-frame owner (2026-10-16, PREVENTION IMPLEMENTED; REPAIR/APP OPEN)
+## ISSUE-106 — Grouping every helix removes a retained lattice-frame owner (2026-10-16, PREVENTION + LIVE REPAIR IMPLEMENTED; SAVED-FILE RECOVERY/APP OPEN)
 
 - `part_overlay_commands.build("cluster_create", ...)` drops the default group
   when its final helices move into named groups. A retained
@@ -2396,11 +2396,25 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
 - The schema extension uses an explicit exact-manifest compatibility policy for
   the three affected numerical families; no stored pins, numerical kernels,
   constants, data or geometry goldens are rewritten. Proof discloses transitions.
-- Still open: explicit v1→v2 definition repair and its UI/durable draft lifecycle;
-  definition-only admission for invalid saved files; broader cluster-delete
+- The explicit `upgrade_cluster_creation` action now replaces only a recognized
+  v1 typed row's version. Its complete original-definition digest survives saved
+  proposals and explicit rebase. The repair panel offers the action separately
+  from numerical upgrades; Evaluate rebuilds the full recipe in the existing
+  worker, and Apply publishes one valid candidate with one undo. Native tests
+  cover downstream move/bend/twist, save/reload/cold proof, stale revisions,
+  cancellation and session changes. Source-free overlay discovery no longer
+  serializes typed definitions under the state lock.
+- Still open: definition-only admission for invalid saved files; broader cluster-delete
   references and logged deletion; actual desktop save/reopen/selection/latency.
   Retention does not solve regrouping pose loss or grouped-end continuation.
 - Validation: **563 distinct backend passes**, including three fresh-process
   numerical compatibility cases. [Evidence](docs/audits/feature_history_20261014/validation_grouping_structure.json)
   retains red/integration failures and cleanup. MV-48 desktop/latency and broad
-  regression debt remain open; no frontend or scientific golden was changed.
+  regression debt remain open. That prevention checkpoint changed no frontend;
+  the later repair checkpoint adds the explicit panel choice. No scientific
+  golden or molecular algorithm was changed.
+- Repair validation: **631 focused backend passes/14 warnings**, full frontend
+  **8,464 passed/one skipped**, scoped Ruff/diff clean, `main.js` delta zero.
+  [Repair evidence](docs/audits/feature_history_20261014/validation_grouping_repair.json)
+  includes preserved red failures and cleanup. **NOT VERIFIED IN APP**; this
+  does not clear invalid-file recovery, broad backend or interaction timing debt.

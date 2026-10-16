@@ -39,17 +39,38 @@ all unrelated implementation changes still refuse. Explicit proof discloses
 applied transitions; the external fixed policy is reviewed host trust policy,
 not inferred schema compatibility. No molecular formulas/constants/goldens changed.
 
-Next: explicit `upgrade_cluster_creation` action for recognized v1 definitions,
-with exact original-definition digest plus version/group IDs retained across
-durable draft rebase. Replace the typed row rather than attaching `params` to
-an overlay, regenerate from inputs, then validate and publish once. Thread it
-through proposal/capture/metadata/jobs and a specific UI choice; ordinary field
-repair stays snapshot/child-only. Invalid saved files still need a separate
-definition-only recovery entry. Broader incoming cluster-delete dependencies
-and a logged delete contract remain open. Do not claim ISSUE-106 fully closed
-or G1 complete. Geometry/Fine Routing stays ahead of assets, assemblies and VR.
+**Explicit grouping repair is implemented:** `upgrade_cluster_creation` admits
+only coherent typed v1 definitions with exact original-row digest and version/group
+IDs. Saved proposals and explicit rebase retain those expectations. The planner
+replaces the typed row, changes only its version, and reports separate
+`definition_upgrades`; numerical pins are untouched. The existing repair panel
+offers **Preserve empty group owners (v2)** through Save/Evaluate/Apply. Generic
+overlay field editing remains unavailable. Worker tests cover native downstream
+move/bend/twist, valid JSON roundtrip, poisoned-recovery cold proof, one Apply/undo,
+redo, cancellation and same-source/same-revision/new-session rejection.
+Source discovery skips serialization only for explicitly reviewed source-free
+overlay types/versions; structural discovery retains nonexecutable typed inputs.
+Hashing/admission stay outside the lock, and the unused original-params clone is
+removed. New action fields are also retained by the owned oxDNA archive schema.
 
-Validation: **563 distinct backend passes**—560 focused cases/35 warnings in
+Validation: **631 backend passes/14 warnings in 30.84 s**, full frontend
+**8,464 passes/one skip across 727 files in 355.98 s**, scoped Ruff/diff clean and
+`main.js` delta zero. [Repair evidence](../docs/audits/feature_history_20261014/validation_grouping_repair.json)
+retains red/review failures and cleanup: 27 files/38,623 bytes, 730 directories,
+seven links removed after zero active references; no worker buffers or e2e output
+remain. Selector dry-run chose FAST with FULL deferred; no selector suite ran.
+**NOT VERIFIED IN APP**; Archive is unavailable, and actual desktop/latency
+qualification remains open. No shared-server mutation or molecular change.
+
+Next: a separate bounded **Recover recipe** entry for invalid saved files.
+Normal typed loading stays strict; preserve original bytes/digest and admit only
+reviewed input definitions before explicit private repair and recovered-copy
+publication. Primary Onshape/SOLIDWORKS recovery precedents and NADOC-specific
+inferences are in the delivery map. Broader incoming cluster-delete dependencies
+and a logged delete contract remain open. Do not claim ISSUE-106 fully closed or
+G1 complete. Geometry/Fine Routing stays ahead of assets, assemblies and VR.
+
+Prevention checkpoint validation: **563 distinct backend passes**—560 focused cases/35 warnings in
 51.22 s plus three real spawned numerical compatibility cases in 49.09 s. All
 three families reproduce exact current authoring with the approved historical
 implementation pin and refuse unknown pins; these are unchanged-kernel checks,

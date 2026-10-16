@@ -1,5 +1,13 @@
 import { expect, it, vi } from 'vitest'
 import { actionFromRepairField, parseRepairField, replacementRepairSource, updateRepairActions } from './part_repair_fields.js'
+import * as fields from './part_repair_fields.js'
+
+const groupUpgrade = () => ({ label: 'Preserve empty group owners (v2)', action: {
+  action: 'upgrade_cluster_creation', feature_id: 'group-feature', child_id: null,
+  expected_version: 1, expected_cluster_id: 'group-owner', expected_definition_sha256: 'a'.repeat(64),
+} })
+const groupCatalog = upgrade => ({ version: 1, assessment: 'inputs_only', definition_supported: true,
+  feature_id: 'group-feature', child_id: null, fields: [], upgrades: [upgrade] })
 
 it('uses backend exact old values, stable identities and typed paths for reviewed input actions', () => {
   const field = { input_type: 'integer', parameter_path: ['inputs', 0], expected_old: 2, minimum: 1, maximum: 10, label: 'Count' }
@@ -47,4 +55,46 @@ it('checks the named source ceiling before reading or digesting and forbids chan
   expect(arrayBuffer).not.toHaveBeenCalled(); expect(digest).not.toHaveBeenCalled()
   expect(await replacementRepairSource(field, { size: 3, arrayBuffer }, digest)).toEqual({ ...field.source_binding.source,
     sha256: '0f'.repeat(32), size_bytes: 3 })
+})
+
+it('forwards the exact reviewed structural upgrade receipt without synthesizing an editable version', () => {
+  const upgrade = groupUpgrade(), catalog = groupCatalog(upgrade)
+  const action = fields.actionFromRepairUpgrade(catalog, upgrade)
+  expect(action).toEqual(upgrade.action)
+  expect(action).not.toBe(upgrade.action)
+  expect(JSON.parse(JSON.stringify(updateRepairActions([], action)))).toEqual([upgrade.action])
+  action.expected_cluster_id = 'local-edit'
+  expect(upgrade.action.expected_cluster_id).toBe('group-owner')
+})
+
+it.each([
+  ['unsupported', catalog => { catalog.definition_supported = false }],
+  ['wrong catalog version', catalog => { catalog.version = 2 }],
+  ['not input inspection', catalog => { catalog.assessment = 'verified' }],
+  ['foreign descriptor', catalog => { catalog.upgrades = [groupUpgrade()] }],
+  ['different feature', (_catalog, upgrade) => { upgrade.action.feature_id = 'other' }],
+  ['routing child', (_catalog, upgrade) => { upgrade.action.child_id = 'child' }],
+  ['catalog child', catalog => { catalog.child_id = 'child' }],
+  ['wrong action', (_catalog, upgrade) => { upgrade.action.action = 'upgrade_numerical_contract' }],
+  ['wrong version', (_catalog, upgrade) => { upgrade.action.expected_version = 2 }],
+  ['boolean version', (_catalog, upgrade) => { upgrade.action.expected_version = true }],
+  ['missing owner', (_catalog, upgrade) => { upgrade.action.expected_cluster_id = '' }],
+  ['oversized owner', (_catalog, upgrade) => { upgrade.action.expected_cluster_id = 'x'.repeat(257) }],
+  ['invalid receipt', (_catalog, upgrade) => { upgrade.action.expected_definition_sha256 = 'A'.repeat(64) }],
+  ['missing receipt', (_catalog, upgrade) => { delete upgrade.action.expected_definition_sha256 }],
+  ['extra target version', (_catalog, upgrade) => { upgrade.action.target_proof_version = 2 }],
+])('refuses %s structural upgrade metadata', (_name, change) => {
+  const upgrade = groupUpgrade(), catalog = groupCatalog(upgrade)
+  change(catalog, upgrade)
+  expect(() => fields.actionFromRepairUpgrade(catalog, upgrade)).toThrow(/reviewed|current|supported/)
+})
+
+it('replaces only a deliberate proposal for the same group and preserves other action expectations', () => {
+  const first = groupUpgrade().action, other = { ...first, feature_id: 'other' }
+  const scalar = { action: 'set_input', feature_id: first.feature_id, child_id: null,
+    parameter_path: ['name'], expected_old: 'Original', value: 'Renamed' }
+  const refreshed = { ...first, expected_definition_sha256: 'b'.repeat(64) }
+  expect(updateRepairActions([scalar, first, other], refreshed)).toEqual([scalar, refreshed, other])
+  expect(updateRepairActions([first], { ...first })).toEqual([first])
+  expect(first.expected_definition_sha256).toBe('a'.repeat(64))
 })

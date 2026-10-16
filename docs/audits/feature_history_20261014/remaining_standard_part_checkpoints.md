@@ -21,9 +21,9 @@ DNA overhang/connection work remains in the core scope where a standard tool
 requires it. Assemblies remain deferred. VR validation remains explicitly
 deferred to a capable machine, independently of desktop completion.
 
-The user resumed work after the clean `c9f1d185` checkpoint. The persistent goal
-controller is active; this file and the project memory carry its revised priority
-sequence. Its existing P3–P6 objective encompasses this work. Do not mark that
+The user resumed work after the clean `c9f1d185` checkpoint. This file and the
+project memory carry the persistent goal's revised priority sequence. Its
+existing P3–P6 objective encompasses this work. Do not mark that
 goal complete or create a duplicate merely to change its metadata.
 
 ### Geometry-first completion sequence
@@ -190,12 +190,12 @@ Next checkpoints, in order:
    reproduction from bounded frame-reference validity; final history edits and
    repairs must pass the structural gate. Direct frame-owner deletion refuses
    before publication. No structural scan is added to deformation sliders.
-   Add a closed `upgrade_cluster_creation` repair action for recognized v1 rows,
-   with an exact expected definition digest and group/version identities. Preserve
-   all other fields, rebuild from inputs and require valid final closure. Carry
-   the same action through durable proposals/rebase, metadata, job publication
-   and an explicit UI choice. Do not expose generic version-field editing or
-   disguise this as a numerical upgrade. Invalid saved files need a separate
+   The closed `upgrade_cluster_creation` repair action now handles recognized v1
+   rows with exact expected definition digest and group/version identities. It
+   preserves all other fields, rebuilds from inputs and requires valid final
+   closure. Durable proposals/rebase, metadata, job publication and the existing
+   repair panel carry the same explicit action; ordinary scalar editing remains
+   limited to snapshot/routing children. Invalid saved files still need a separate
    bounded definition-only recovery entry; ordinary loading still refuses them.
 2. Qualify the complete private editor on representative desktop interactions
    and actual request/render tails, including repeated open/close, group/plane
@@ -231,7 +231,7 @@ repair remains a deliberate definition change, consistent with its
 [repair workflow](https://cad.onshape.com/help/Content/Document/repairing.htm).
 These sources establish workflow precedent, not numerical equivalence.
 
-The next repair increment uses the existing worker and publication boundary:
+The explicit grouping repair uses the existing worker and publication boundary:
 
 - Strict action: `upgrade_cluster_creation`, stable feature ID, no child target,
   `expected_version: 1`, `expected_cluster_id` and
@@ -240,7 +240,8 @@ The next repair increment uses the existing worker and publication boundary:
   overlay definition, including redundant wrapper fields, outside the state lock.
 - Planner: admit overlays only for that action, with a separate structural
   replacement field. Keep `set_input` snapshot/child-only and numerical upgrades
-  separate. Discovery-only source capture must neither hash nor execute.
+  separate. Discovery-only source capture neither hashes nor serializes source-free
+  overlay definitions; complete recognition and conversion stay outside the lock.
   Definition rebuilding must replace the actual typed overlay row, preserve both
   identities and all fields except its proof version, and regenerate recovery.
 - Proposal/draft/job lifecycle: preserve exact expectations through explicit
@@ -252,6 +253,39 @@ The next repair increment uses the existing worker and publication boundary:
   unknown versions, wrong row digest after rebase, poisoned recovery, source ABA,
   cancellation, limits, and undo restoring the original broken state honestly.
   The saved-invalid-file recovery entry remains a separate bounded continuation.
+
+The repair is available for an already-open typed part; it does not bypass the
+ordinary file loader's structural validation. Next design a bounded read-only
+recovery admission for invalid saved files, preserving original bytes and feature
+definitions until explicit repair succeeds. Do not load arbitrary invalid output
+as editable geometry. Broader core-tool input/reference editors, logged cluster
+deletion and measured desktop qualification still follow G1–G5 above. No molecular
+algorithm, constant, numerical pin, or rollout gate changed in this increment.
+
+[Repair checkpoint evidence](validation_grouping_repair.json): 631 focused
+backend passes/14 warnings in 30.84 s and full frontend 8,464 passes/one skip in
+355.98 s. Scoped Ruff/diff pass; `main.js` delta zero. Saved proposals, typed
+archive capture, native worker publication and new-session ABA are covered.
+Red/review failures and cleanup are retained. Selector dry-run chose FAST with
+FULL deferred; it ran no suite. **NOT VERIFIED IN APP**; actual desktop and
+request/render latency remain open, independently of the passing software tests.
+
+For that next recovery boundary, official CAD documentation distinguishes feature
+repair from damaged-file recovery. [Onshape Repair](https://cad.onshape.com/help/Content/Document/repairing.htm)
+uses a read-only earlier state beside editable feature definitions.
+[SOLIDWORKS What's Wrong](https://help.solidworks.com/2023/english/SolidWorks/sldworks/HIDD_NEW_WHATS_WRONG.htm?format=P&value=)
+reports rebuild/reference failures; [corrupted-file repair](https://help.solidworks.com/2023/english/SolidWorks/sldworks/t_repair_corrupt_files.htm)
+works on a copy and reports removed segments before the user saves. These are
+workflow precedents, not evidence of vendor parser or memory-budget internals.
+The NADOC inference is an explicit **Recover recipe** path for the known valid-JSON
+ownership defect: preserve original bytes/digest, bound decoding and typed
+definition admission separately, exclude materialized/recovery geometry from
+replay authority, reuse private repair evaluation, and publish a recovered copy
+only after structural and ordinary typed roundtrip checks. Never infer absent
+roots, silently change source bytes, discard unsupported definitions, or label a
+recovered candidate equivalent to the old displayed model without proof. Specify
+metadata retention and exact size limits before implementing; this checkpoint
+does not implement or qualify that recovery entry.
 
 The duplicate response walk is removed: DTO methods accept a closed scalar host
 envelope, reject collisions before native work, and bound the merged response

@@ -17,13 +17,19 @@ def proposed_inputs(source, actions, *, copy_value=deepcopy, check_expectations=
 
     Source capture uses the planner's nonhashing discovery mode. Draft admission
     adds numerical-family/old-pin checks without importing a numerical builder.
-    Only the existing isolated job may select upgraded implementation pins.
+    Structural replacements are already resolved by the shared typed planner;
+    only the existing isolated job may select upgraded implementation pins.
     """
     targets = plan_actions(source, actions, dependencies=dependencies, recognize_invalid=recognize_invalid,
         copy_value=copy_value,
         check_expectations=check_expectations, error_type=DraftInputError, annotate_contract_errors=True)
     result = []
     for target in targets.values():
+        if not check_expectations and target.structural_replacement is not None:
+            # This closed action changes only grouping v1→v2. Neither contract
+            # declares named byte sources, so locked discovery needs no JSON
+            # projection of the typed row or its cluster snapshot.
+            continue
         if check_expectations:
             if target.upgrade is not None:
                 kind, params = target.kind, target.params
