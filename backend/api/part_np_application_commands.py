@@ -6,6 +6,7 @@ restore/relocate operations execute with authored output IDs and timestamps.
 The conservative v1 work ceiling is not a latency qualification or live gate.
 """
 
+from dataclasses import dataclass
 from math import isfinite
 from typing import Annotated, Literal
 from uuid import UUID
@@ -108,6 +109,76 @@ def parse_command(kind, params):
     if model is PatchRequest and isinstance(params, dict) and "applied" not in params:
         model = RenameRequest
     return model.model_validate(params)
+
+
+@dataclass(frozen=True, slots=True)
+class _SelectionInputs:
+    """Source selectors before the host allocates any output identity.
+
+    These private values are neither a command schema nor a reusable validation
+    receipt. Creation has no existing version ID; its final ID belongs to the
+    later command binding, never to a provisional source selection.
+    """
+
+    action: Literal["create", "apply", "unapply", "rename", "delete"]
+    nanoparticle_id: str
+    conjugation_id: str
+    strand_id: str
+    overhang_id: str
+    handle_overhang_id: str
+    version_id: str | None
+    prior_duplex_id: str | None
+    conflict_version_ids: tuple[str, ...]
+    direct_variant: Literal["end-to-root", "root-to-root"] | None
+
+
+@dataclass(frozen=True, slots=True)
+class _Selection:
+    """Exact original-source references retained only within one operation."""
+
+    source: object
+    inputs: _SelectionInputs
+    prepared: pending._PreparedSource
+    particle: object
+    owner: object
+    strand: object
+    target: object
+    endpoint: object
+    current: object
+    variant: str
+    attaches: tuple[str, str]
+    restoring: tuple
+
+
+@dataclass(frozen=True, slots=True)
+class _BoundApplication:
+    """A parsed command bound to its privately selected source and outputs."""
+
+    source: object
+    kind: str
+    body: _Application
+    selection: _Selection
+    outputs: frozenset[tuple[str, str]]
+
+
+def _inputs_for(kind, body):
+    if kind == "nanoparticle-connection-version-create" and type(body) is CreateRequest:
+        action = "create"
+    elif kind == "nanoparticle-connection-version-patch" and type(body) is PatchRequest:
+        action = "apply" if body.applied else "unapply"
+    elif kind == "nanoparticle-connection-version-patch" and type(body) is RenameRequest:
+        action = "rename"
+    elif kind == "nanoparticle-connection-version-delete" and type(body) is DeleteRequest:
+        action = "delete"
+    else:
+        raise ValueError("Application command kind and parsed input disagree")
+    return _SelectionInputs(action=action, nanoparticle_id=body.nanoparticle_id,
+        conjugation_id=body.conjugation_id, strand_id=body.strand_id,
+        overhang_id=body.overhang_id, handle_overhang_id=body.handle_overhang_id,
+        version_id=None if action == "create" else body.version_id,
+        prior_duplex_id=body.prior_duplex_id,
+        conflict_version_ids=tuple(body.conflict_version_ids),
+        direct_variant=body.direct_variant if action == "create" else None)
 
 
 def _unsupported(detail):
@@ -347,16 +418,34 @@ def _prospective_occupancy(radial, body, owner, variant):
     _domain_consumers(prospective, {driven.id})
 
 
-def build(kind, design, params):
-    body = parse_command(kind, params)
+def _prepare_source(design):
+    """Admit and index the original source once, before any native work."""
     _work_admission(design)
-    prepared = pending._prepare_source(design)
+    return pending._prepare_source(design)
+
+
+def _select_inputs(design, inputs, prepared):
+    """Inspect structural ownership without allocating outputs or restoring.
+
+    Only this bounded phase may classify an ordinary route as unsupported.
+    Materialization failures must never reopen compatibility fallback.
+    """
+    if type(prepared) is not pending._PreparedSource or prepared.source is not design:
+        raise CommandContractError("Application preparation belongs to another source", code="source_changed")
+    if type(inputs) is not _SelectionInputs or inputs.action not in {
+            "create", "apply", "unapply", "rename", "delete"}:
+        raise ValueError("Expected private nanoparticle application selectors")
+    creating, applying = inputs.action == "create", inputs.action in {"create", "apply"}
+    if ((creating and (inputs.version_id is not None or inputs.prior_duplex_id is not None
+                       or inputs.direct_variant not in {"end-to-root", "root-to-root"}))
+            or (not creating and (inputs.version_id is None or inputs.direct_variant is not None))):
+        raise ValueError("Application selectors disagree with their operation")
     index = prepared.index
-    particle = pending._resolve(index, "nanoparticle", body.nanoparticle_id, "nanoparticle_id")
-    owner = pending._resolve(index, "nanoparticle_conjugation", body.conjugation_id, "conjugation_id")
-    strand = pending._resolve(index, "strand", body.strand_id, "strand_id")
-    target = pending._resolve(index, "overhang", body.overhang_id, "overhang_id")
-    endpoint = pending._resolve(index, "overhang", body.handle_overhang_id, "handle_overhang_id")
+    particle = pending._resolve(index, "nanoparticle", inputs.nanoparticle_id, "nanoparticle_id")
+    owner = pending._resolve(index, "nanoparticle_conjugation", inputs.conjugation_id, "conjugation_id")
+    strand = pending._resolve(index, "strand", inputs.strand_id, "strand_id")
+    target = pending._resolve(index, "overhang", inputs.overhang_id, "overhang_id")
+    endpoint = pending._resolve(index, "overhang", inputs.handle_overhang_id, "handle_overhang_id")
     if owner.nanoparticle_id != particle.id:
         pending._fail("Application conjugation belongs to another particle", "nanoparticle_conjugation", owner.id, "conjugation_id")
     if len(owner.surface_strands) > MAX_APPLICATION_HANDLES:
@@ -366,26 +455,22 @@ def build(kind, design, params):
         pending._fail("Application auxiliary endpoint disagrees with its selected handle", "overhang", endpoint.id, "handle_overhang_id")
     if len(design.nanoparticle_connection_versions) > MAX_VERSIONS:
         _unsupported("Native nanoparticle application exceeds its version allowance")
-    creating, applying = isinstance(body, CreateRequest), isinstance(body, _Transition) and body.applied
     current = None
-    if creating:
-        if ("nanoparticle_connection_version", body.version_id) in index:
-            pending._fail("Connection output identity already exists", "nanoparticle_connection_version", body.version_id, "version_id")
-    else:
-        current = pending._resolve(index, "nanoparticle_connection_version", body.version_id, "version_id")
+    if not creating:
+        current = pending._resolve(index, "nanoparticle_connection_version", inputs.version_id, "version_id")
         for field, resource in (("nanoparticle_id", "nanoparticle"), ("strand_id", "strand"), ("overhang_id", "overhang")):
-            if getattr(current, field) != getattr(body, field):
-                pending._fail("Application selection no longer matches its version", resource, getattr(body, field), field)
-        if body.prior_duplex_id != current.duplex_id:
-            pending._fail("Application must select the exact current duplex", "duplex", body.prior_duplex_id or "", "prior_duplex_id")
-        if isinstance(body, RenameRequest) and not current.applied:
+            if getattr(current, field) != getattr(inputs, field):
+                pending._fail("Application selection no longer matches its version", resource, getattr(inputs, field), field)
+        if inputs.prior_duplex_id != current.duplex_id:
+            pending._fail("Application must select the exact current duplex", "duplex", inputs.prior_duplex_id or "", "prior_duplex_id")
+        if inputs.action == "rename" and not current.applied:
             _unsupported("Native applied-connection rename requires an active applied version")
-    _conflicts(design, body)
-    variant = body.direct_variant if creating else current.direct_variant
+    _conflicts(design, inputs)
+    variant = inputs.direct_variant if creating else current.direct_variant
     attaches = pending._validate_endpoint(index, owner, strand, target, variant,
         pending._target_backings(design, {target.id}).get(target.id, ()), version=current)
     relevant = ([current] if current is not None else []) + ([index[("nanoparticle_connection_version", identity)]
-        for identity in body.conflict_version_ids] if applying else [])
+        for identity in inputs.conflict_version_ids] if applying else [])
     active = [item for item in design.nanoparticle_connection_versions if item.nanoparticle_id == particle.id and item.applied]
     if len(active) > 1:
         _unsupported("Native nanoparticle application admits one active version per particle")
@@ -398,6 +483,54 @@ def build(kind, design, params):
         restoring.append((item, *_restoration(design, index, owner, item)))
     if any(item.id not in {version.id for version, *_ in restoring} for item in active):
         _unsupported("Another applied handle lies outside the selected restoration")
+    if applying and not restoring and (list(target.rotation) != [0., 0., 0., 1.] or list(target.translation) != [0., 0., 0.]):
+        _unsupported("Native application requires an unposed target overhang before relocation")
+    return _Selection(design, inputs, prepared, particle, owner, strand, target,
+                      endpoint, current, variant, attaches, tuple(restoring))
+
+
+def _require_selection(design, selection):
+    if (type(selection) is not _Selection or selection.source is not design
+            or type(selection.prepared) is not pending._PreparedSource
+            or selection.prepared.source is not design):
+        raise CommandContractError("Application selection belongs to another source", code="source_changed")
+
+
+def _bind_command(kind, design, body, selection):
+    """Bind actual output identities only after structural source selection."""
+    _require_selection(design, selection)
+    if _inputs_for(kind, body) != selection.inputs:
+        raise CommandContractError("Application inputs changed after selection", code="source_changed")
+    index = selection.prepared.index
+    outputs = set()
+    if isinstance(body, CreateRequest):
+        if ("nanoparticle_connection_version", body.version_id) in index:
+            pending._fail("Connection output identity already exists", "nanoparticle_connection_version", body.version_id, "version_id")
+        outputs.add(("nanoparticle_connection_version", body.version_id))
+    if isinstance(body, _Transition) and body.applied:
+        factory = identity_factory(body.history_seed)
+        outputs.update({("duplex", body.duplex_id), ("cluster", factory("duplex-cluster", [body.duplex_id])),
+                        ("forced_ligation", factory("duplex-ligation", [body.duplex_id])),
+                        ("overhang_binding", factory("duplex-transient", [body.duplex_id]))})
+    for resource in sorted(outputs & index.keys()):
+        pending._fail("Application output identity already exists", *resource,
+                      "duplex_id" if resource[0] == "duplex" else "history_seed")
+    return _BoundApplication(design, kind, body, selection, frozenset(outputs))
+
+
+def _materialize(design, bound):
+    """Run the unchanged native lifecycle after compatibility selection closes."""
+    if type(bound) is not _BoundApplication or bound.source is not design:
+        raise CommandContractError("Bound application belongs to another source", code="source_changed")
+    selected, body = bound.selection, bound.body
+    _require_selection(design, selected)
+    if _inputs_for(bound.kind, body) != selected.inputs:
+        raise CommandContractError("Bound application inputs changed before materialization", code="source_changed")
+    index = selected.prepared.index
+    particle, owner, strand = selected.particle, selected.owner, selected.strand
+    target, endpoint, current = selected.target, selected.endpoint, selected.current
+    variant, attaches, restoring = selected.variant, selected.attaches, selected.restoring
+    creating, applying = isinstance(body, CreateRequest), isinstance(body, _Transition) and body.applied
     if isinstance(body, RenameRequest):
         # _restoration above inspects closed bound ownership only. A label edit
         # never restores/reapplies topology, allocates children, or changes the
@@ -432,20 +565,7 @@ def build(kind, design, params):
             changed.add(("helix", record.helix_id))
             radial_owners[record.helix_id] = record.strand_id
     _radial_carrier_consumers(radial, radial_owners)
-    if applying and not restoring and (list(target.rotation) != [0., 0., 0., 1.] or list(target.translation) != [0., 0., 0.]):
-        _unsupported("Native application requires an unposed target overhang before relocation")
-    outputs = set()
-    if creating:
-        outputs.add(("nanoparticle_connection_version", body.version_id))
-    if applying:
-        factory = identity_factory(body.history_seed)
-        outputs.update({("duplex", body.duplex_id), ("cluster", factory("duplex-cluster", [body.duplex_id])),
-                        ("forced_ligation", factory("duplex-ligation", [body.duplex_id])),
-                        ("overhang_binding", factory("duplex-transient", [body.duplex_id]))})
-    for resource in sorted(outputs & index.keys()):
-        pending._fail("Application output identity already exists", *resource,
-                      "duplex_id" if resource[0] == "duplex" else "history_seed")
-    _incoming(design, changed, allowed, outputs)
+    _incoming(design, changed, allowed, bound.outputs)
     _domain_consumers(design, {identity for kind, identity in changed if kind == "strand"})
     if applying:
         try:
@@ -477,3 +597,10 @@ def build(kind, design, params):
         candidate = candidate.copy_with(nanoparticle_connection_versions=[
             item for item in candidate.nanoparticle_connection_versions if item.id != body.version_id])
     return candidate
+
+
+def build(kind, design, params):
+    body = parse_command(kind, params)
+    prepared = _prepare_source(design)
+    selected = _select_inputs(design, _inputs_for(kind, body), prepared)
+    return _materialize(design, _bind_command(kind, design, body, selected))

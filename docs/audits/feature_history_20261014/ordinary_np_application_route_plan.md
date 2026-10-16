@@ -1,9 +1,11 @@
 # Ordinary nanoparticle application: private route migration
 
-Audit proposal, 2026-10-15. This checkpoint changes no production code. The
-proposed `routes_nanoparticles.OWNED_NP_APPLICATION_ENABLED` gate
-defaults to `False`. Pure registered application/rename contracts already exist;
-ordinary application recording and HTTP latency qualification remain open.
+Correctness checkpoint, 2026-10-15. The ordinary application recording adapter
+is implemented behind `routes_nanoparticles.OWNED_NP_APPLICATION_ENABLED = False`.
+The bounded lifecycle passes focused route and independent input-replay checks.
+HTTP/geometry performance and desktop qualification remain open; ordinary
+application behavior still uses the existing path. The audit and next benchmark
+proposal below are retained as implementation context.
 Scientific helpers, numerical pins, command schemas and global budgets stay
 unchanged. See the [contract and official CAD references](nanoparticle_connection_contract.md).
 
@@ -167,5 +169,68 @@ application lifespan, user files, persistent sessions, simulation, molecular
 solver/native scratch or bulk dumps. Use isolated document IDs, failure-safe
 session/context cleanup, memory-only fixtures and compact stdout reports. Retain
 failed measurements and verify no test-created session/shared-memory/worker
-resources remain. VR/app qualification stays deferred and must not be implied by
-these backend results.
+resources remain. VR qualification is explicitly deferred by the user to a
+capable machine. App qualification remains pending; these backend results do not
+establish browser or desktop behavior.
+
+## Proposed next benchmark matrix — unexecuted
+
+Benchmark authoring and execution are deferred to the next resumed session.
+The proposed memory-only script is `scripts/benchmark_np_application_route.py`;
+it has not been created. Keep the private application gate false.
+
+| DNA background | Thiol handles | Additional retained native rename rows |
+| --- | --- | --- |
+| 6 cells × 42 bp | 1 | 0 |
+| 6 cells × 42 bp | 16 | 0 |
+| 16 cells × 42 bp | 1 | 16 |
+| 16 cells × 42 bp | 16 | 16 |
+
+Every fixture starts with the authentic input-defined gold/graft/ordinary-target
+prefix and one pending version. Each arm performs Apply → active rename →
+reapply → applied Delete → create-and-apply → Unapply. Follow every mutation
+with the real geometry GET and report mutation, geometry and combined latency
+separately. Alternate legacy/native order; begin with one pair per case, then
+31 pairs only after the bounded diagnostic passes. Retain exact normalized
+authoring/response digests, not client graphs between requests, and run one
+independent cold proof per case on the actual applied create-and-apply result
+outside timing. Use the existing lock, bounded GC and concurrent revision-read
+probes; report their capacities/drops and clean every owned document in `finally`.
+This is a proposed diagnostic matrix, not latency qualification or rollout evidence.
+
+
+## Implemented stopping checkpoint — October 15
+
+The dispatcher retains the sole document lock and calls the new cohesive
+`part_np_application_recording.py` host after checking revision/editability.
+The pure builder and host share structural preparation, selection, exact command
+binding and materialization. The host prepares one original reference inventory;
+only explicitly unsupported structural sources may use compatibility dispatch.
+After selection, output collisions and native failures remain typed failures in
+the existing atomic recorder, without a second attempt through legacy code.
+Output identities and timestamps become recorded command inputs. Source/session
+identity, detached history append, reconciliation/retry, undo and publication
+remain owned by the existing transaction. No numerical helper or pin changed.
+
+**224 unique cases across eight files pass:** 219 in the first complete focused
+run (12.27 s), then all 34 route cases after five additions (6.39 s). Controls
+cover disabled dispatch, a real 17-handle structural fallback, selected-reference
+and generated-output collisions, conflict switching, exact authoring parity,
+one row/undo/revision, cancellation and publication rollback. An independently
+spawned replay reconstructs the actual applied result with unusable snapshots.
+The two obsolete pending-route traps now target real preparation/materialization.
+
+Seven route cases compare complete authored state with the legacy HTTP oracle;
+selected response fields are checked. This is **not** complete validation/geometry
+response parity or performance qualification. The standalone pure contracts
+retain upstream-edit coverage; a new HTTP-created upstream-edit integration is
+not claimed. One harmless first-error precedence difference remains for a doubly
+invalid pure create: an omitted conflicting version can be reported before that
+new output ID's collision. Valid commands and host selections are unchanged.
+
+The proposed benchmark script has not been created or run. The private gate
+stays false. P4–P6, full repair UI and strict automation rollout remain incomplete;
+assemblies and VR remain deferred. See
+[the compact validation record](validation_np_application_routes.json) for exact
+runs, selector/lint debt and artifact cleanup. This is the requested stopping
+point; resume with the predeclared HTTP/geometry benchmark, not gate activation.

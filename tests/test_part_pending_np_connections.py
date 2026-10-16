@@ -368,7 +368,7 @@ def test_stale_revision_refuses_before_identity_time_or_builder(document, monkey
     before = signature()
     def unexpected(*_args, **_kwargs):
         pytest.fail("Stale request reached native preparation")
-    for name in ("uuid4", "time", "build"):
+    for name in ("uuid4", "time", "_prepare_source", "_build_prepared"):
         monkeypatch.setattr(native, name, unexpected)
     with pytest.raises(HTTPException) as error:
         routes.create_np_connection_version("gold", request(document, expected_revision=state.revision() - 1))
@@ -467,7 +467,8 @@ def test_multiple_legacy_owners_keep_legacy_path_before_native_execution(documen
     # first native contract deliberately requires one exact radial owner.
     owner = document.nanoparticle_conjugations[0]
     document.nanoparticle_conjugations.append(owner.model_copy(update={"id": "legacy-second-owner"}))
-    monkeypatch.setattr(native, "build", lambda *_args: pytest.fail("Unsupported owner reached native builder"))
+    for name in ("_prepare_source", "_build_prepared"):
+        monkeypatch.setattr(native, name, lambda *_args: pytest.fail("Unsupported owner reached native preparation"))
     routes.create_np_connection_version("gold", request(document))
     row = state.get_or_404().feature_log[-1]
     assert "nanoparticle_connection_version" not in row.params

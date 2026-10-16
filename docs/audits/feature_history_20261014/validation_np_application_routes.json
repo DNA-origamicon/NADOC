@@ -1,0 +1,99 @@
+{
+  "date": "2026-10-15",
+  "scope": "Gated ordinary nanoparticle application recording through the existing transaction",
+  "gate": {
+    "name": "OWNED_NP_APPLICATION_ENABLED",
+    "enabled": false
+  },
+  "red": {
+    "passed": 2,
+    "failed": 3,
+    "seconds": 2.95,
+    "note": "Two intended native-route failures; one legacy-control expectation omitted existing recorder _proof_version metadata."
+  },
+  "corrected_legacy_control_before_production": {
+    "passed": 1,
+    "seconds": 2.67
+  },
+  "validation": {
+    "unique_cases_passed": 224,
+    "files": [
+      "tests/test_np_connection_application_routes.py",
+      "tests/test_part_np_application_commands.py",
+      "tests/test_part_np_application_admission.py",
+      "tests/test_part_np_application_rename.py",
+      "tests/test_part_pending_np_connections.py",
+      "tests/test_part_pending_np_preparation.py",
+      "tests/test_native_np_application_proof.py",
+      "tests/test_part_thiol_pending_motion.py"
+    ],
+    "runs": [
+      {
+        "passed": 219,
+        "seconds": 12.27,
+        "scope": "Eight-file focused run, including first 29 route cases"
+      },
+      {
+        "passed": 34,
+        "seconds": 6.39,
+        "scope": "Final route target including five additional structural-fallback, conflict-switch and output-collision cases"
+      }
+    ],
+    "command_prefix": "just validate-safe scripts/test_guard.sh test-focused 0 focused -- uv run pytest",
+    "per_test_budget_violations": 0,
+    "coverage": [
+      "Real FastAPI without application lifespan; isolated documents cleaned in finally",
+      "Disabled legacy controls and authentic 17-handle unsupported fallback",
+      "Complete authored-state legacy parity in seven cases; selected response fields",
+      "Apply/rename/unapply/reapply/delete/create-and-apply, conflict switching and measurement GET",
+      "One history row, undo entry and revision; undo/redo; real reconciliation/retry",
+      "Independent spawned input-only replay of applied route result with poisoned snapshots",
+      "One original inventory, non-reentrant lock, stale/protected checks before preparation/defaults",
+      "Typed missing references/output collisions and no fallback after selection",
+      "Source/session replacement guards and post-encode/publication/cancellation rollback",
+      "Existing pure upstream-edit, native proof and pending-motion regressions"
+    ]
+  },
+  "preserved": [
+    "Existing numerical helpers, source pins, native geometry sequence and command schemas",
+    "Existing recorder undo/encodes/reconciliation/retry/CPD guards/validation/publication",
+    "Ordinary response then separate geometry request; response failure after publication is not rollback",
+    "Legacy generator/attachment helper aliases and compatibility when private gate is disabled"
+  ],
+  "limits": [
+    "No complete validation/geometry response parity claim; authoring parity is distinct.",
+    "No new HTTP-created upstream-edit integration; existing pure upstream-edit cases pass.",
+    "Benchmark script proposed only, not created or executed; no ordinary NP performance qualification.",
+    "No browser/app qualification, broad suite, native build or simulation run. Archive unavailable.",
+    "P4-P6, repair UI and strict automation rollout remain incomplete.",
+    "Doubly invalid pure create may report conflict mismatch before output-version collision; valid commands unchanged."
+  ],
+  "lint": "Changed-file Ruff and whitespace checks pass; repository just lint retains exactly five pre-existing F401 imports.",
+  "backend_selector": {
+    "command": "just test-smart --dry-run",
+    "decision": "FAST (fast suite only)",
+    "executed": false,
+    "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\nThis is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\nOnly request `just test-session` when a broad/full sweep is actually needed.",
+    "caveat": "Selector wording says ran; this dry run executed no suite. Existing broad-suite debt is not cleared."
+  },
+  "app_status": "NOT VERIFIED IN APP",
+  "vr_status": "Explicitly deferred to a capable-machine session",
+  "assemblies": "Deferred",
+  "frontend_main_js_loc_delta": 0,
+  "cleanup": {
+    "owned_completed_pytest_roots": [
+      "/tmp/pytest-of-joshua/pytest-270",
+      "/tmp/pytest-of-joshua/pytest-271",
+      "/tmp/pytest-of-joshua/pytest-272"
+    ],
+    "files_removed": 0,
+    "bytes_removed": 0,
+    "empty_fixture_directories_removed": true,
+    "active_references": 0,
+    "locks": 0,
+    "removal_verified": true,
+    "historical_locked_pytest_268": "Preserved untouched",
+    "note": "Pytest reused these directory names after the earlier recovery checkpoint cleanup; this is a new empty fixture inventory."
+  },
+  "independent_review": "Read-only review found no blocking correctness issue; performance qualification and broader coverage remain pending."
+}

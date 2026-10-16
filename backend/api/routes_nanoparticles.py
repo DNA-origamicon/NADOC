@@ -24,6 +24,9 @@ from backend.core.quantum_dots import (
 
 router = APIRouter()
 
+# Enable only after ordinary HTTP/geometry, lifecycle and resource qualification.
+OWNED_NP_APPLICATION_ENABLED = False
+
 
 class StreptavidinRequest(BaseModel):
     coverage_reference: Optional[Literal["gold_2007", "gurtovenko_2019", "gold_2017"]] = None
@@ -632,7 +635,8 @@ def get_np_connection_versions(nanoparticle_id: str) -> dict:
 def create_np_connection_version(nanoparticle_id: str, body: NanoparticleConnectionVersionCreate) -> dict:
     from backend.api.part_nanoparticle_connection_commands import try_record
     recorded = try_record("nanoparticle-connection-version-create", nanoparticle_id,
-        body.model_dump(exclude={"expected_revision"}), expected_revision=body.expected_revision)
+        body.model_dump(exclude={"expected_revision"}), expected_revision=body.expected_revision,
+        allow_application=OWNED_NP_APPLICATION_ENABLED)
     if recorded is not None:
         updated, report, entry = recorded
         return {**_design_response(updated, report), "version_id": entry.params["version_id"]}
@@ -683,7 +687,7 @@ def patch_np_connection_version(nanoparticle_id: str, version_id: str, body: Nan
     from backend.api.part_nanoparticle_connection_commands import try_record
     recorded = try_record("nanoparticle-connection-version-patch", nanoparticle_id,
         body.model_dump(exclude={"expected_revision"}), version_id=version_id,
-        expected_revision=body.expected_revision)
+        expected_revision=body.expected_revision, allow_application=OWNED_NP_APPLICATION_ENABLED)
     if recorded is not None:
         return _design_response(recorded[0], recorded[1])
     design = design_state.get_or_404(); _particle_or_404(design, nanoparticle_id)
@@ -713,7 +717,8 @@ def patch_np_connection_version(nanoparticle_id: str, version_id: str, body: Nan
 def delete_np_connection_version(nanoparticle_id: str, version_id: str, expected_revision: int | None = None) -> dict:
     from backend.api.part_nanoparticle_connection_commands import try_record
     recorded = try_record("nanoparticle-connection-version-delete", nanoparticle_id, {},
-                          version_id=version_id, expected_revision=expected_revision)
+                          version_id=version_id, expected_revision=expected_revision,
+                          allow_application=OWNED_NP_APPLICATION_ENABLED)
     if recorded is not None:
         return _design_response(recorded[0], recorded[1])
     design = design_state.get_or_404(); _particle_or_404(design, nanoparticle_id)

@@ -1,7 +1,7 @@
-"""Pending NP candidate metadata, with exact native owner/reference inputs.
+"""Pending NP metadata and lock-owned dispatch for native application.
 
-No applied topology, placement or relaxation is accepted here. Unrelated owners
-are retained verbatim; in particular deletion performs no global binding sync.
+Pending operations retain unrelated owners verbatim; deletion performs no global
+binding sync. The separately gated application adapter owns applied topology.
 """
 
 from dataclasses import dataclass
@@ -342,7 +342,7 @@ def _route_eligible(design, particle_id, version, choices):
     return True
 
 
-def try_record(kind, particle_id, choices, *, version_id=None, expected_revision=None):
+def try_record(kind, particle_id, choices, *, version_id=None, expected_revision=None, allow_application=False):
     """One lock-owned eligibility/selection/recording transaction, or legacy scope.
 
     No privately prepared command survives a lock release. Only unsupported
@@ -359,10 +359,24 @@ def try_record(kind, particle_id, choices, *, version_id=None, expected_revision
             if source is None:
                 raise HTTPException(404, detail="No active design.")
             if expected_revision is not None and session.revision != expected_revision:
-                raise HTTPException(409, detail="Design changed before pending connection creation.")
+                raise HTTPException(409, detail="Design changed before nanoparticle connection editing.")
             if not _record_count_bounded(source):
                 return None
-            version = next((item for item in source.nanoparticle_connection_versions if item.id == version_id), None)
+            state._assert_active_loadout_editable(source)
+            if allow_application:
+                versions = [item for item in source.nanoparticle_connection_versions if item.id == version_id]
+                if len(versions) > 1:
+                    _fail("Connection version identity is ambiguous", "nanoparticle_connection_version", version_id, "version_id")
+                version = versions[0] if versions else None
+            else:
+                version = next((item for item in source.nanoparticle_connection_versions if item.id == version_id), None)
+            if allow_application and (
+                    (kind == "nanoparticle-connection-version-create" and choices.get("applied") is True)
+                    or (kind == "nanoparticle-connection-version-patch" and choices.get("applied") is not None)
+                    or (version is not None and not _pending(version))):
+                from backend.api.part_np_application_recording import try_record_locked
+                return try_record_locked(kind, particle_id, choices, session=session, source=source,
+                                         version_id=version_id, version=version)
             if not _route_scope_eligible(source, particle_id, version, choices):
                 return None
             try:
@@ -371,7 +385,6 @@ def try_record(kind, particle_id, choices, *, version_id=None, expected_revision
                 raise
             except (CommandContractError, NotImplementedError):
                 return None
-            state._assert_active_loadout_editable(source)
             if not any(item.id == particle_id for item in source.nanoparticles):
                 _fail("Selected nanoparticle is missing", "nanoparticle", particle_id, "nanoparticle_id", missing=True)
             if kind != "nanoparticle-connection-version-create" and version is None:
@@ -397,7 +410,7 @@ def try_record(kind, particle_id, choices, *, version_id=None, expected_revision
             body = parse_command(kind, values)
 
             def native(design):
-                if session.design is not source or design is not source:
+                if state._session() is not session or session.design is not source or design is not source:
                     raise HTTPException(409, detail="Pending connection source changed before recording.")
                 # The recorder appends its row in place. Keep that append off
                 # the source's list while retaining unchanged authoring models.

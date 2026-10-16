@@ -50,6 +50,14 @@ explicit; durable-file/publication and full-app qualification are still open.
 See [transport validation](../docs/audits/feature_history_20261014/validation_immutable_recovery_transport.json).
 VR validation is explicitly deferred to a capable-machine session.
 
+Ordinary nanoparticle Apply/rename/Unapply/Reapply/Delete and create-and-apply
+now share the registered pure command preparation through one lock-owned
+recording adapter. Its private gate remains false. All 224 unique focused cases
+pass, including actual HTTP lifecycle, conflict switching, rollback and cold
+input-only replay. Complete response/geometry latency and desktop qualification
+are next; the benchmark is planned but not created. See
+[route checkpoint](../docs/audits/feature_history_20261014/ordinary_np_application_route_plan.md).
+
 An experimental ordinary free-protein importer records pinned original bytes and
 separate import/placement inputs, but its server-owned gate remains false after
 retained-history capture refusals. Existing ordinary import behavior remains
@@ -91,7 +99,7 @@ snapshots without silently adding an unlogged cluster.
 Focused tests and small in-memory qualification run serially. The Archive
 filesystem is unavailable in this environment; broader suite, app, visual and
 headset validation debt is recorded separately and must not be described as a
-pass. The persistent goal remains active.
+pass. The persistent goal is paused at the user-requested stopping point.
 
 ## Architecture review and hardening (2026-10-15)
 

@@ -1368,3 +1368,30 @@ owned pytest fixtures were removed after reference/lock checks (39 files,
 87,233 bytes); historical locked data remains untouched. See the
 [worker plan](immutable_recovery_worker_plan.md) and
 [validation](validation_immutable_recovery_transport.json).
+
+
+## Ordinary nanoparticle application correctness checkpoint — October 15
+
+Apply, active rename, Unapply, Reapply, applied Delete and combined create/apply
+now have an ordinary route adapter behind a disabled private gate. It records
+exact command inputs through the existing single transaction and shares the
+pure builder's preparation/selection/materialization. Structural compatibility
+fallback ends before native work. Missing references, output collisions or late
+failures cannot silently switch implementations or publish a partial edit.
+
+**224 unique cases across eight files pass**, including authentic HTTP lifecycle,
+conflict switching, undo/redo, exact authoring parity, independently spawned
+input-only replay while applied, source/session guards and atomic failure.
+Stale pending-route traps were replaced with checks at the actual preparation
+seams. No scientific helper, numerical pin or budget changed.
+
+Normal application behavior remains on its existing path. Complete response and
+following geometry parity, latency/resource measurements and desktop checks are
+still pending; the next benchmark is proposed but not implemented. Repository
+lint retains five existing unused imports. Selector result is FAST/deferred FULL
+in dry-run only, with no new broad-suite execution. Archive remains absent;
+VR is user-deferred and assemblies remain deferred. Owned completed pytest
+folders were empty and removed after lock/reference checks; historical locked
+data was preserved. The persistent goal is paused at the user's requested
+stopping point. See [the route plan](ordinary_np_application_route_plan.md) and
+[validation](validation_np_application_routes.json).
