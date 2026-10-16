@@ -165,3 +165,18 @@ full-byte parity with the former preservation path, near-8 MB opaque recovery,
 hostile worker state, schema evolution, seal substitution and atomic refusal
 with a valid retry. Performance is not inferred from those tests: the same
 30-cycle retention measurement remains required against unchanged criteria.
+
+The unchanged retention fixture now completes 30 publications and an independent
+cold proof, with exact undo eviction and cleanup. All its predeclared latency
+criteria pass: start p95/max 6.09/6.12 ms; commit 36.54/65.05 ms; concurrent commit
+reads 17.38/59.08 ms; state-lock maximum 0.65 ms. Full source materializations at
+commit are zero. The prior three-cycle diagnostic's concurrent p95 was 54.53 ms;
+this is a follow-up measurement on the same fixture, not an interleaved A/B.
+
+All 30 scoped RSS measurements completed within +256 MiB; largest observed
+increase was 178,073,600 bytes and largest sampling gap 52.36 ms. Natural GC,
+including the 45.28 ms overlap tail, remains included. The 31,995,904 retained
+source/undo bytes and two 322,197-byte result slots do not qualify two maximum
+16 MB results. Ordinary four-case remeasurement and remaining storage/public
+lifecycle qualification are separate; public gates remain false. See
+`benchmark_immutable_part_jobs_preservation_retention.json`.

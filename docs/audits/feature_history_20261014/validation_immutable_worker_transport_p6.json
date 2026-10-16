@@ -48,7 +48,6 @@
   "latency_qualified": false,
   "http_wired": true,
   "next": [
-    "Repeat 30-cycle retention latency against unchanged predeclared criteria",
     "Repeat ordinary four-case HTTP timings after preservation change",
     "Qualify remaining storage and public lifecycle scope before enabling gates"
   ],
@@ -144,6 +143,34 @@
       "concurrent_commit_read_p95_ms": 54.53,
       "latency_verdict": "Unqualified: commit concurrent-read p95 exceeds predeclared25ms target;3diagnostic repetitions do not satisfy30-cycle requirement",
       "maximum_candidate_result_retention_qualified": false
+    },
+    "preserved_retention": {
+      "report": "benchmark_immutable_part_jobs_preservation_retention.json",
+      "publications": 30,
+      "cold_proofs": 1,
+      "all_predeclared_per_fixture_latency_targets_passed": true,
+      "source_bytes": 7998976,
+      "retained_source_undo_bytes": 31995904,
+      "ready_result_count": 2,
+      "each_ready_result_bytes": 322197,
+      "start_p95_ms": 6.090207003580872,
+      "start_max_ms": 6.124148996605072,
+      "commit_p95_ms": 36.53711600054521,
+      "commit_max_ms": 65.04531599784968,
+      "concurrent_commit_read_p95_ms": 17.382600999553688,
+      "concurrent_commit_read_max_ms": 59.078955004224554,
+      "state_lock_max_ms": 0.6489880033768713,
+      "job_max_ms": 1718.4255930042127,
+      "full_source_materializations_at_commit": 0,
+      "rss_samples": 30,
+      "scoped_rss_all_observed_within_allowance": true,
+      "rss_increase_max_bytes": 178073600,
+      "rss_sampling_gap_max_ms": 52.35570500371978,
+      "natural_gc": true,
+      "gc_samples_retained": true,
+      "retries": 0,
+      "cleanup": true,
+      "maximum_candidate_result_retention_qualified": false
     }
   },
   "closed_preservation": {
@@ -168,6 +195,6 @@
     },
     "source_decode_removed": true,
     "candidate_full_roundtrip_retained": true,
-    "retention_remeasurement_pending": true
+    "retention_remeasurement_pending": false
   }
 }
