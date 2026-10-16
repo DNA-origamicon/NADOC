@@ -1,19 +1,119 @@
 # Ordinary overhang Apply: next native contract
 
-Read-only audit, 2026-10-15. Pending CRUD is implemented at `acad1d51`; its
-measured refusal/recording regression must be addressed before expanding live
-admission. This document does not enable Apply, change a scientific algorithm or
-claim performance qualification. Assemblies remain deferred.
+Audit and pure-contract preparation, 2026-10-15. Pending CRUD is implemented at
+`acad1d51`; its avoidable refusal work has been corrected and successful-recording
+latency remains unqualified. This document does not enable Apply, change a
+scientific algorithm or claim performance qualification. Assemblies remain
+deferred; VR validation awaits a later capable-machine session.
 
-Tests-first pure slice is prepared in
-`tests/test_part_connection_application_commands.py` (36 cases, not yet run).
-Its proposed `build(design, params) -> (Design, MutationReport)` uses the closed
+The pure slice is implemented in
+`tests/test_part_connection_application_commands.py` (55 passing cases).
+Its `build(design, params) -> (Design, MutationReport)` uses the closed
 schema below. Two controls capture the existing route's actual callback against
 the authentic native bundle/extrusion prefix, injecting only the random output
 connection ID. The remaining cases compare complete authoring parity or require
 strict input/ownership/budget refusal. No route admission, dispatcher, model,
 identity policy or numerical source has changed for this new slice. Combined
 Connect and registered cold proof remain subsequent integration gates.
+
+Initial root validation failed before the missing adapter: both existing-callback
+controls and the first parity case raised `NativePlacementError` because a
+canonical linker anchor was unavailable. This is not an accepted red baseline
+for the new adapter. Production was held while the source and existing
+sequence-patch behavior were diagnosed. In particular, the pending fixture allows
+two ordinary overhangs to share a longer helix, while the old sequence patch
+resizes a non-inline overhang's entire helix to its individual domain length.
+Root's bounded diagnostic confirmed the existing gap: both overhangs use
+`h_XY_0_4`, initially `bp_start=0`, `length_bp=42`; A's reverse domain is 41→30
+and B's is 11→0. Patching A's sequence to its live 12-base length changes the
+host to `bp_start=30`, `length_bp=12`. B remains 11→0, outside that host, and its
+sequence patch leaves the invalid geometry unchanged. This source was validly
+constructed through native inputs; it is not arbitrary malformed fixture data.
+
+The original shared-host fixture remains an explicit unsupported/refusal case
+for this first contract. An application-specific fixture replays the same
+bundle/extrusion commands with the existing native
+`reuse_existing_helix=False` input, giving each overhang its own host. An added
+native proof control checks that prefix without editing generated geometry.
+Root reran the corrected native proof and two existing-callback controls: all
+three passed. The first parity case then failed exactly because the new adapter
+was absent (the combined run with NP regressions was 265 passed / 1 failed,
+35 warnings, 16.38 s). Root authorized the pure module after this proper red
+baseline; additional partial-host and multiple-owner cases now precede the
+sequence patch.
+Placement mocks, origin placeholders, kernel edits and silent topology repair
+are not remedies. The legacy shared-host Apply gap remains open separately.
+
+The prepared implementation in `backend/api/part_connection_application_commands.py`
+has a provisional 4,096-base allowance for both helix slots and emitted work,
+including prospective bridge/complement bases, plus at most 128 selected
+conflicts. Source typed values are bounded by the existing 256 KB / 10,000-node
+operation allowances before ownership indexing. It admits native DNA,
+ordinary poses/clusters, crossovers/ligations without extra bases, and the
+reviewed connection metadata; deformation, flexible, imported-residue, asset,
+binding and duplex families are deferred. These are explicit pure-contract
+limits, not new global budgets or a live performance qualification.
+
+No shared production seam changed. The finite orchestration temporarily retains
+an independent legacy-callback oracle; both call the same existing native
+helpers in the same order. Consolidation is required at the later live-route
+integration. Root's first complete pure run passed all 40 cases in 3.05 s.
+
+Read-only peer review identified additional ownership/admission gaps. Seven
+tests then failed as expected while the original 40 passed (3.14 s): a retained
+ordinary or tagged complementary strand, a dangling nucleotide pose/crossover/
+ligation address in the prospective complement, domain-level cluster membership
+introduced by normal reconciliation, and undercounted loop work when several
+domains occupy one address. The two callback controls do not run reconciliation,
+so their reapply parity alone was insufficient to establish that lifecycle.
+
+The correction is strictly at admission: reject retained complementary occupants
+and address consumers before native patching; exclude only exact old linker
+strands already proved wholly owned by the selected conflicts. Selected-host
+domain-level clusters are deferred before first Apply, while whole-helix
+clusters and unrelated domain scopes remain admitted. This avoids claiming
+reapply support where reconciliation would introduce unreviewed incoming
+DomainRefs. Charge insertion work separately for each domain using bounded
+declared intervals, rather than assuming at most two occupants. Two unaffected
+native-parity controls cover a backing-strand pose and an unrelated domain
+cluster. Root reran the resulting 49-case target: all passed. No scientific
+helper, shared dispatcher, live route, model or numerical pin changed.
+
+A subsequent static budget review caught the same insertion accounting gap in
+prospective complement domains: their plain host span was charged, but their
+inherited loop copies were not. The 50th test uses the existing native
+`strand_nucleotide_count` as an independent exact-boundary oracle and traps any
+sequence patch before a complete prospective-work check. Root confirmed the red
+failure in 2.63 s. A related review found that native geometry sums duplicate
+loop descriptors, unlike the sequence map's last-wins convention. One tiny
+native-array oracle confirmed its boundary test failed in 2.87 s. Admission now
+retains positive descriptor multiplicity, charges it to helix-array work, and
+charges every existing and prospective domain span. Skips remain conservatively
+unsubtracted. Native loop behavior, geometry and sequence functions remain
+unchanged.
+
+The final request→output identity review added two boundary failures and two
+controls. Root confirmed 53 passed / 2 failed in 3.40 s: an overly long output ID
+and a new output entering a retained owner's prefix-removal namespace reached
+the native patch trap. The contract now reserves the native seven-character
+prefix and three-character strand suffix (`connection_id` ≤246 characters;
+selectors stay ≤256), so maximal outputs remain reapplicable. It rejects a
+candidate prefix beginning any retained connection's prefix, as well as the
+previously checked reverse collision. Explicitly removed complete owners may
+reuse their namespace. The tests construct the unrelated endpoint pair through
+native extrusion; neither branch uses synthetic anchors. All 55 pure cases
+passed final root validation in 3.07 seconds. No further concrete closure blockers were
+found in that review.
+
+The next integration target is
+`tests/test_native_connection_application_proof.py`: strict registration and
+typed conflict/output dependencies, protected output identity with editable
+references, actual topology postprocessing, cold native prefix→pending→Apply→
+reapply, upstream length edits, exact missing-reference diagnostics and explicit
+cascade. Root recorded its registration baseline: 11 failed / 6 passed as
+expected (combined with the pure target, 55 passed / 11 failed in 3.63 s). These
+tests are not part of the pure-green checkpoint; shared integration awaits a
+separate authorization/checkpoint.
 
 ## Existing authority and behavior
 

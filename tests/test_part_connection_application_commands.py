@@ -14,10 +14,10 @@ from backend.api import routes_connection_versions as routes
 from backend.core.cluster_reconcile import MutationReport
 from backend.core.models import NucleotideTransform, OverhangBinding
 from backend.core.part_command_errors import CommandContractError, ReferenceResolutionError
+from backend.core.part_history_contract import create_empty_part
 from tests.test_part_pending_connection_versions import (
-    CREATE, append, authored, creation,
+    CREATE, append, authored, creation, proof,
     native_prefix as native_prefix,
-    source as source,
 )
 
 
@@ -25,6 +25,25 @@ ACTION = "connection-version-apply-linker"
 FINITE_TYPES = [f"{attach}-{material}dna-linker"
                 for attach in ("root-to-root", "root-to-end", "end-to-root", "end-to-end")
                 for material in ("ss", "ds")]
+
+
+@pytest.fixture(scope="module")
+def application_prefix(native_prefix):
+    # The unchanged sequence patch currently resizes an extruded OH's entire
+    # host. Use an explicit existing native input to give each selected OH its
+    # own host; never patch generated coordinates or model a fictitious anchor.
+    current = create_empty_part("Dedicated linker application", "HONEYCOMB")
+    for entry in native_prefix.feature_log:
+        params = deepcopy(entry.params)
+        if entry.op_kind == "overhang-extrude":
+            params["reuse_existing_helix"] = False
+        current = append(current, entry.op_kind, params, entry.id)
+    return current
+
+
+@pytest.fixture
+def source(application_prefix):
+    return application_prefix.model_copy(deep=True)
 
 
 def _pending(source, connection_type="root-to-root-ssdna-linker", **changes):
@@ -73,6 +92,48 @@ def _legacy(design, params, monkeypatch):
         routes._apply_connection_version_impl(params["version_id"])
     assert len(captured) == 1
     return captured[0]
+
+
+def test_dedicated_host_fixture_is_recreated_by_actual_native_input(source):
+    assert len({item.helix_id for item in source.overhangs}) == 2
+    assert all(entry.params["reuse_existing_helix"] is False
+               for entry in source.feature_log if entry.op_kind == "overhang-extrude")
+    result = proof(source)
+    assert result["status"] == "verified", result
+    assert result["checked_commands"] == 3
+
+
+def test_shared_overhang_host_refuses_before_legacy_sequence_resize(native_prefix):
+    source = _pending(native_prefix.model_copy(deep=True))
+    assert len({item.helix_id for item in source.overhangs}) == 1
+    before = source.model_dump_json()
+    with pytest.raises(CommandContractError) as caught:
+        _build(source, _params(source))
+    assert caught.value.code == "unsupported_connection_application_source"
+    assert source.model_dump_json() == before
+
+
+@pytest.mark.parametrize("change", ["larger_host", "additional_owner"])
+def test_partial_or_multiply_owned_host_refuses_before_sequence_patch(source, monkeypatch, change):
+    from backend.api import overhang_patch
+    source = _pending(source)
+    selected = source.overhangs[0]
+    if change == "larger_host":
+        source = source.copy_with(helices=[item.model_copy(update={"length_bp": item.length_bp + 1})
+            if item.id == selected.helix_id else item for item in source.helices])
+    else:
+        source = source.copy_with(overhangs=[*source.overhangs,
+            selected.model_copy(update={"id": "second-host-owner", "sub_domains": []})])
+    before = source.model_dump_json()
+
+    def unexpected(*_args, **_kwargs):
+        pytest.fail("Unsupported host reached the existing sequence patch")
+
+    monkeypatch.setattr(overhang_patch, "_build_overhang_patch", unexpected)
+    with pytest.raises(CommandContractError) as caught:
+        _build(source, _params(source))
+    assert caught.value.code == "unsupported_connection_application_source"
+    assert source.model_dump_json() == before
 
 
 @pytest.mark.parametrize("connection_type", [FINITE_TYPES[0], FINITE_TYPES[1]])
@@ -270,3 +331,241 @@ def test_contract_is_closed_and_never_accepts_direct_or_opaque_geometry(source, 
     source = _pending(source)
     with pytest.raises(ValueError):
         parse_command({**_params(source), **change})
+
+
+def _complement(source):
+    from backend.core.lattice import _make_complement_domain
+    selected = source.overhangs[0]
+    backing = next(domain for strand in source.strands for domain in strand.domains
+                   if domain.overhang_id == selected.id)
+    return _make_complement_domain(backing, selected.id)
+
+
+def _trap_sequence_patch(monkeypatch):
+    from backend.api import overhang_patch
+
+    def unexpected(*_args, **_kwargs):
+        pytest.fail("Unsafe complement ownership reached the existing sequence patch")
+
+    monkeypatch.setattr(overhang_patch, "_build_overhang_patch", unexpected)
+
+
+@pytest.mark.parametrize("tagged", [False, True])
+def test_retained_complement_occupant_refuses_before_native_sequence_patch(source, monkeypatch, tagged):
+    from backend.core.models import Strand
+    source = _pending(source)
+    complement = _complement(source)
+    if not tagged:
+        complement = complement.model_copy(update={"binds_overhang_id": None})
+    source = source.copy_with(strands=[*source.strands,
+        Strand(id="retained-complement", domains=[complement])])
+    before = source.model_dump_json()
+    _trap_sequence_patch(monkeypatch)
+    with pytest.raises(ReferenceResolutionError) as caught:
+        _build(source, _params(source))
+    assert caught.value.code == "invalid_selection"
+    assert caught.value.references[0]["parameter_path"] == ["overhang_a_id"]
+    assert source.model_dump_json() == before
+
+
+@pytest.mark.parametrize("consumer", ["nucleotide_transform", "crossover", "forced_ligation"])
+def test_dangling_complement_address_is_not_adopted_by_new_linker(source, monkeypatch, consumer):
+    from backend.core.models import Crossover, ForcedLigation, HalfCrossover
+    source = _pending(source)
+    complement = _complement(source)
+    other = source.strands[0].domains[0]
+    if consumer == "nucleotide_transform":
+        source = source.copy_with(nucleotide_transforms=[NucleotideTransform(
+            id="unowned-address", kind="base", helix_id=complement.helix_id,
+            bp_index=complement.start_bp, direction=complement.direction)])
+    elif consumer == "crossover":
+        source = source.copy_with(crossovers=[*source.crossovers, Crossover(id="unowned-address",
+            half_a=HalfCrossover(helix_id=complement.helix_id,
+                index=complement.start_bp, strand=complement.direction),
+            half_b=HalfCrossover(helix_id=other.helix_id,
+                index=complement.start_bp, strand=other.direction))])
+    else:
+        source = source.copy_with(forced_ligations=[*source.forced_ligations,
+            ForcedLigation(id="unowned-address", three_prime_helix_id=complement.helix_id,
+                three_prime_bp=complement.start_bp, three_prime_direction=complement.direction,
+                five_prime_helix_id=other.helix_id, five_prime_bp=other.start_bp,
+                five_prime_direction=other.direction)])
+    before = source.model_dump_json()
+    _trap_sequence_patch(monkeypatch)
+    with pytest.raises(ReferenceResolutionError) as caught:
+        _build(source, _params(source))
+    assert caught.value.code == "invalid_selection"
+    assert caught.value.references[0]["parameter_path"] == ["overhang_a_id"]
+    assert source.model_dump_json() == before
+
+
+def test_selected_domain_cluster_refuses_before_first_apply_not_after_reconciliation(source, monkeypatch):
+    from backend.core.cluster_reconcile import reconcile_cluster_membership
+    from backend.core.models import ClusterRigidTransform, DomainRef
+    source = _pending(source)
+    selected = source.overhangs[0]
+    owner = next(strand for strand in source.strands if strand.id == selected.strand_id)
+    index = next(i for i, domain in enumerate(owner.domains) if domain.overhang_id == selected.id)
+    source = source.copy_with(cluster_transforms=[ClusterRigidTransform(id="domain-owner",
+        helix_ids=[selected.helix_id], domain_ids=[DomainRef(strand_id=owner.id, domain_index=index)])])
+    native, report = _legacy(source, _params(source), monkeypatch)
+    reconciled = reconcile_cluster_membership(source, native, report)
+    assert any(ref.strand_id == "__lnk__applied-linker__s"
+               for cluster in reconciled.cluster_transforms for ref in cluster.domain_ids)
+    before = source.model_dump_json()
+    _trap_sequence_patch(monkeypatch)
+    with pytest.raises(CommandContractError) as caught:
+        _build(source, _params(source))
+    assert caught.value.code == "unsupported_connection_application_source"
+    assert source.model_dump_json() == before
+
+
+def test_loop_work_is_charged_for_every_emitted_domain_not_two_assumed_occupants(source, monkeypatch):
+    from backend.api import part_connection_application_commands as commands
+    from backend.core.models import Domain, LoopSkip, Strand
+    from backend.core.sequences import strand_sequence_length
+    helix = source.helices[0].model_copy(update={"bp_start": 0, "length_bp": 1,
+        "loop_skips": [LoopSkip(bp_index=0, delta=1)]})
+    domain = Domain(helix_id=helix.id, start_bp=0, end_bp=0, direction=helix.direction)
+    # Deliberately repeated occupancy is an admission input, not a valid native
+    # design claim. Work accounting must not assume it was already validated.
+    source = source.copy_with(helices=[helix], strands=[Strand(id="repeated",
+        domains=[domain.model_copy(deep=True) for _ in range(3)])])
+    assert strand_sequence_length(source, source.strands[0]) == 6
+    monkeypatch.setattr(commands, "MAX_APPLICATION_BASES", 7)
+    with pytest.raises(CommandContractError) as caught:
+        commands._work_admission(source, bridge_length=1, complement_domains=[])
+    assert caught.value.code == "unsupported_connection_application_source"
+
+
+@pytest.mark.parametrize("retained", ["backing_pose", "unrelated_domain_cluster"])
+def test_complement_guard_keeps_unaffected_authored_scopes_and_native_parity(source, monkeypatch, retained):
+    from backend.core.models import ClusterRigidTransform, DomainRef
+    source = _pending(source)
+    if retained == "backing_pose":
+        backing = next(domain for strand in source.strands for domain in strand.domains
+                       if domain.overhang_id == source.overhangs[0].id)
+        source = source.copy_with(nucleotide_transforms=[NucleotideTransform(id="backing-pose",
+            kind="base", helix_id=backing.helix_id, bp_index=backing.start_bp,
+            direction=backing.direction, translation=[1.0, 2.0, 3.0])])
+    else:
+        selected_hosts = {row.helix_id for row in source.overhangs}
+        strand, index, domain = next((strand, i, domain) for strand in source.strands
+            for i, domain in enumerate(strand.domains) if domain.helix_id not in selected_hosts)
+        source = source.copy_with(cluster_transforms=[ClusterRigidTransform(id="unrelated-domain-owner",
+            helix_ids=[domain.helix_id], domain_ids=[DomainRef(strand_id=strand.id, domain_index=index)])])
+    before = source.model_dump_json()
+    expected, expected_report = _legacy(source, _params(source), monkeypatch)
+    actual, report = _build(source, _params(source))
+    assert authored(actual) == authored(expected)
+    assert report == expected_report
+    assert source.model_dump_json() == before
+
+
+def test_prospective_complement_loop_copies_are_charged_before_native_patching(source, monkeypatch):
+    from backend.api import part_connection_application_commands as commands
+    from backend.core.lattice import _make_complement_domain
+    from backend.core.models import LoopSkip, Strand
+    from backend.core.sequences import strand_nucleotide_count
+    source = _pending(source)
+    selected = source.overhangs[0]
+    source = source.copy_with(helices=[helix.model_copy(update={"loop_skips": [
+        LoopSkip(bp_index=helix.bp_start + 1, delta=1)]}) if helix.id == selected.helix_id
+        else helix for helix in source.helices])
+    complements = [_make_complement_domain(domain, domain.overhang_id)
+        for strand in source.strands for domain in strand.domains
+        if domain.overhang_id in {row.id for row in source.overhangs}]
+    prospective = strand_nucleotide_count(Strand(id="prospective", domains=complements), source)
+    plain_complements = sum(abs(domain.end_bp - domain.start_bp) + 1 for domain in complements)
+    assert prospective == plain_complements + 1
+    source_work = sum(strand_nucleotide_count(strand, source) for strand in source.strands)
+    # Both old and prospective work use the existing native nucleotide counter
+    # as the oracle. No geometry is evaluated and no solver budget is changed.
+    monkeypatch.setattr(commands, "MAX_APPLICATION_BASES", source_work + 2 * 7 + prospective - 1)
+    before = source.model_dump_json()
+    _trap_sequence_patch(monkeypatch)
+    with pytest.raises(CommandContractError) as caught:
+        _build(source, _params(source))
+    assert caught.value.code == "unsupported_connection_application_source"
+    assert source.model_dump_json() == before
+
+
+def test_repeated_insertion_descriptors_bound_native_arrays_and_prospective_domains(source, monkeypatch):
+    from backend.api import part_connection_application_commands as commands
+    from backend.core.geometry import nucleotide_positions_arrays
+    from backend.core.models import Domain, LoopSkip, Strand
+    helix = source.helices[0].model_copy(update={"bp_start": 0, "length_bp": 1,
+        "loop_skips": [LoopSkip(bp_index=0, delta=1), LoopSkip(bp_index=0, delta=1)]})
+    domain = Domain(helix_id=helix.id, start_bp=0, end_bp=0, direction=helix.direction)
+    # Existing native geometry sums descriptors: three residues per direction,
+    # even though the sequence map's last-wins result is only two.
+    native_slots = len(nucleotide_positions_arrays(helix)["positions"]) // 2
+    assert native_slots == 3
+    source = source.copy_with(helices=[helix], strands=[Strand(id="occupied", domains=[domain])])
+    monkeypatch.setattr(commands, "MAX_APPLICATION_BASES", 2 + 2 * native_slots - 1)
+    with pytest.raises(CommandContractError):
+        commands._work_admission(source, bridge_length=1, complement_domains=[domain])
+    # Anchor arrays also include currently unoccupied residues. Do not infer
+    # their cost only from emitted/occupied strand domains.
+    monkeypatch.setattr(commands, "MAX_APPLICATION_BASES", native_slots)
+    with pytest.raises(CommandContractError):
+        commands._work_admission(source.copy_with(strands=[]), bridge_length=1, complement_domains=[])
+
+
+def test_generated_identity_length_refuses_before_materialization(source, monkeypatch):
+    source = _pending(source)
+    before = source.model_dump_json()
+    _trap_sequence_patch(monkeypatch)
+    with pytest.raises(ValueError):
+        _build(source, _params(source, connection_id="x" * 247))
+    assert source.model_dump_json() == before
+
+
+def test_maximum_generated_identity_remains_reapplicable(source):
+    source = _pending(source)
+    source, _ = _build(source, _params(source, connection_id="x" * 246))
+    assert len(next(row.id for row in source.strands if row.id.startswith("__lnk__"))) == 256
+    before = source.model_dump_json()
+    reapplied, _ = _build(source, _params(source, connection_id="y" * 246))
+    assert [row.id for row in reapplied.overhang_connections] == ["y" * 246]
+    assert source.model_dump_json() == before
+
+
+def test_output_cannot_enter_retained_connection_prefix_namespace(source, monkeypatch):
+    from uuid import UUID
+    from tests.conftest import valid_overhang_sites
+    source = _pending(source)
+    source, _ = _build(source, _params(source, connection_id="retained-owner"))
+    original_ends = {row.id for row in source.overhangs}
+    for i, five_prime in enumerate((False, True)):
+        host_ids = {row.helix_id for row in source.overhangs}
+        site = next(item for item in valid_overhang_sites(source)
+                    if item["is_five_prime"] == five_prime and item["helix_id"] not in host_ids)
+        source = append(source, "overhang-extrude", {"_proof_version": 1,
+            "history_seed": str(UUID(int=9000 + i)), **site,
+            "direction": site["direction"].value, "length_bp": 12,
+            "reuse_existing_helix": False}, f"unrelated-endpoint-{i}")
+    added = [row.id for row in source.overhangs if row.id not in original_ends]
+    assert len(added) == 2
+    source = append(source, CREATE, creation(source, version_id="unrelated-version",
+        overhang_a_id=added[0], overhang_b_id=added[1]), "unrelated-pending")
+    params = _params(source, version_id="unrelated-version", connection_id="retained-owner-child")
+    assert params["conflict_connection_ids"] == []
+    before = source.model_dump_json()
+    _trap_sequence_patch(monkeypatch)
+    with pytest.raises(ReferenceResolutionError) as caught:
+        _build(source, params)
+    assert caught.value.references[0]["parameter_path"] == ["connection_id"]
+    assert source.model_dump_json() == before
+
+
+def test_replacement_may_reuse_namespace_of_explicitly_removed_complete_owner(source):
+    source = _pending(source)
+    source, _ = _build(source, _params(source, connection_id="removed-owner"))
+    params = _params(source, connection_id="removed-owner-child")
+    assert params["conflict_connection_ids"] == ["removed-owner"]
+    before = source.model_dump_json()
+    replaced, _ = _build(source, params)
+    assert [row.id for row in replaced.overhang_connections] == ["removed-owner-child"]
+    assert not any(row.id == "__lnk__removed-owner" for row in replaced.helices)
+    assert source.model_dump_json() == before
