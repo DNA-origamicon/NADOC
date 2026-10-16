@@ -25,6 +25,7 @@ from backend.api.part_aptamer_commands import KINDS as APTAMER_KINDS
 from backend.api.part_element_copy_commands import KINDS as ELEMENT_COPY_KINDS
 from backend.api.part_cadnano_commands import KINDS as CADNANO_KINDS
 from backend.api.part_nanoparticle_connection_commands import KINDS as NP_CONNECTION_KINDS
+from backend.api.part_connection_version_commands import is_pending_action
 
 
 TOPOLOGY_MINOR_KINDS = frozenset({
@@ -60,6 +61,7 @@ def dependencies(kind, params):
     if type(params.get("_proof_version")) is not int or params["_proof_version"] != PROOF_VERSION:
         return Dependencies(known=False)
     if "_generated_scope" in params and (kind in NP_CONNECTION_KINDS or (
+            kind == "overhang-bulk" and is_pending_action(params)) or (
             kind == "nanoparticle-patch" and "thiol_version" in params
             and params.get("pending_connection_version_ids"))):
         return Dependencies(known=False)  # Compound scoped owner selection is not qualified yet.
@@ -67,6 +69,18 @@ def dependencies(kind, params):
     # strict command schema. Preserve source provenance during scoped admission.
     params = {key: value for key, value in params.items()
               if key not in {"_generated_scope", "_generator"}}
+    if kind == "overhang-bulk" and is_pending_action(params):
+        from backend.api.part_connection_version_commands import parse_command
+        try:
+            command = parse_command(params)
+        except ValueError:
+            return Dependencies(known=False)
+        reads = {PART_TOPOLOGY, Resource("overhang", command.overhang_a_id),
+                 Resource("overhang", command.overhang_b_id)}
+        version = Resource("connection_version", command.version_id)
+        if command.action != "connection-version-create":
+            reads.add(version)
+        return Dependencies(frozenset(reads), frozenset({PART_TOPOLOGY, version}), barrier=True)
     if kind in NP_CONNECTION_KINDS:
         from backend.api.part_nanoparticle_connection_commands import parse_command
         try:
@@ -161,7 +175,7 @@ def dependencies(kind, params):
         return Dependencies(frozenset({PART_TOPOLOGY}), frozenset({PART_TOPOLOGY}), barrier=True)
     if kind == "overhang-bulk":
         from backend.api.part_overhang_commands import ACTIONS
-        if params.get("action") not in ACTIONS:
+        if type(params.get("action")) is not str or params["action"] not in ACTIONS:
             return Dependencies(known=False)
     if kind == "cluster_op":
         cluster = Resource("cluster", params["cluster_id"])
@@ -239,6 +253,14 @@ def _execute(kind, design, params, *, expensive):
         params = {key: value for key, value in params.items() if key != "_generator"}
     from backend.api.part_command_references import validate_command_references
     validate_command_references(kind, design, params)
+    from backend.api.part_connection_version_commands import is_metadata_command
+    if is_metadata_command(kind, params):
+        from backend.api.part_connection_version_commands import build
+        from backend.core.photoproducts import stale_photoproduct_ids
+        updated = build(design, params)
+        if stale_photoproduct_ids(updated):
+            raise ValueError("photoproduct_dependency")
+        return updated
     if kind in OVERLAY_KINDS:
         from backend.core.part_overlay_commands import build
         return build(kind, design, params)

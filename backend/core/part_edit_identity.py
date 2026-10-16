@@ -20,4 +20,11 @@ _PROTECTED = {
 def preserve_proof_identity(previous, updated, *, kind=None):
     """Preserve only authored output/contract slots, never invent absent ones."""
     result = _preserve_base(previous, updated, kind=kind)
-    return {**result, **{key: previous[key] for key in _PROTECTED.get(kind, ()) if key in previous}}
+    keys = _PROTECTED.get(kind, ())
+    if kind == "overhang-bulk" and previous.get("connection_version_contract") == 1:
+        action = previous.get("action")
+        if type(action) is str and action in {"connection-version-create", "connection-version-patch", "connection-version-delete"}:
+            keys += ("action", "connection_version_contract")
+            if action == "connection-version-create":
+                keys += ("version_id",)
+    return {**result, **{key: previous[key] for key in keys if key in previous}}

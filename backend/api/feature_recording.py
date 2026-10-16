@@ -39,8 +39,10 @@ def _transaction(session, state):
         raise
 
 
-def _run(session, before, fn, state, *, retry=True):
+def _run(session, before, fn, state, *, retry=True, command=None):
     state._require_compatibility_write("feature_recording_callback")
+    from backend.api.part_connection_version_commands import metadata_policy
+    metadata_only = command is not None and metadata_policy(*command)
     result = fn(session.design)
     report = None
     if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], Design):
@@ -50,8 +52,9 @@ def _run(session, before, fn, state, *, retry=True):
         session.design = result
     elif isinstance(result, MutationReport):
         report = result
-    reconciled = state.reconcile_cluster_membership(before, session.design, report)
-    session.design = state._retry_pending_ligations(before, reconciled) if retry else reconciled
+    if not metadata_only:
+        reconciled = state.reconcile_cluster_membership(before, session.design, report)
+        session.design = state._retry_pending_ligations(before, reconciled) if retry else reconciled
     from backend.core.part_repair_document import preserve_repair_draft
     session.design = preserve_repair_draft(before, session.design)
     # Preserve the established photoproduct gate and diagnostic exactly.
@@ -85,7 +88,8 @@ def record_feature(session, op_kind, label, params, fn):
     with _transaction(session, state) as before:
         pre, pre_size = state.encode_design_snapshot(before)
         _run(session, before, fn, state,
-             retry=op_kind not in {"auto-break", "full-autostaple", "cluster-join"})
+             retry=op_kind not in {"auto-break", "full-autostaple", "cluster-join"},
+             command=(op_kind, params))
         from backend.api.part_proof_commands import PROOF_SNAPSHOT_KINDS
         if op_kind in PROOF_SNAPSHOT_KINDS:
             from backend.api.part_proof_commands import PROOF_VERSION
