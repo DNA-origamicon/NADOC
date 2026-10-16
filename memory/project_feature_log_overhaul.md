@@ -27,10 +27,30 @@ legacy roots remain unverified. The first green focused run of 101 cases (108 wa
 and overlapping 16-case group rerun (16 warnings, 2.88 s) establish **102 unique
 passes**. Ten deformation cases include characterization of **open ISSUE-100**:
 history preview replaces canonical state before Apply, which then refuses;
-Cancel's seek adds undo and clears redo. Next implement isolated bend/twist
-preview, preserving native calculations and one final guarded commit. G1 is not
+Cancel's seek adds undo and clears redo. Next complete isolated bend/twist
+preview host/UI integration, preserving native calculations and one guarded commit. G1 is not
 complete. App validation is MV-48 pending; no new broad/performance qualification
 is claimed. `main.js` delta is 0.
+
+**Forced-ligation continuation (ISSUE-101):** actual source selection, endpoint
+labels/partial-response scope and native building now share one lock-owned
+`record_minor` transaction. Existing native math, errors, extension fallback and
+one snapshot/reconcile/retry are preserved. All 107 related cases, including
+14 new tests, pass; see [continuation evidence](../docs/audits/feature_history_20261014/validation_geometry_integrity_continuation.json)
+for the red run and combined-run fixture correction. No app/broad/performance
+qualification. Batch-nick skipping, resize terminal-reference checks and
+prebuilt auto-crossover publication remain open; do not treat G1 as complete.
+
+**Private preview core:** bounded owned-input prefix preparation and local
+bend/twist evaluation are implemented, with 34 new/current private cases plus
+46 existing native/edit controls green. Prefixes currently admit empty roots
+and bundle/group/pose/deformation commands only; targets/cluster scope are fixed.
+It provides no live session/revision lease, render DTO, public route or editor
+wiring, and always leaves source equivalence/downstream evaluation unchecked.
+ISSUE-100 is still open. The unused silent-reconciliation setter was pruned after
+caller review; 38 remaining publication-state cases pass. Continuation evidence
+records 225 distinct cases across these scopes, with corrected fixture failures
+retained. No app or responsiveness qualification is implied.
 
 The sections below retain earlier implementation context; use the latest
 [implementation checkpoint](../docs/audits/feature_history_20261014/implementation.md)
@@ -557,7 +577,7 @@ geometry baked into a later snapshot's POST-state).
 
 ## Critical gotchas
 
-- **Don't use `design_state.snapshot()` + `set_design_silent_reconciled()` for new auto-op endpoints.** Use `mutate_with_feature_log` instead. The two patterns coexist (older non-snapshot routes still use the former) but new endpoints should standardize on the wrapper.
+- **Use `mutate_with_feature_log` for recorded auto-op endpoints.** The unused `set_design_silent_reconciled` helper was removed after caller review; do not restore the old snapshot-plus-silent-publication pattern.
 - **`_DESIGN_PANEL_IDS` at [main.js:3288](frontend/src/main.js#L3288)** still includes the four moved sections (`#physics-section`, etc.). Lookup is by `getElementById`, so the move is transparent — keep them in the list so they remain hidden during assembly mode.
 - **`_recenter_design` is for caDNAno / scadnano imports only.** Native `.nadoc` loads (`/design/load`, `/design/import`) do NOT recenter — see `feedback_native_files_preserve_positions.md`.
 - **Feature/minor recording publishes undo only after recording and validation succeed.** Exceptions or cancellation anywhere in that transaction restore design, full undo/redo, revision and request markers. Invalid pattern requests must preserve redo. Existing invalid-draft validation reports remain permitted; strict agent enforcement is separate future work.

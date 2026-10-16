@@ -39,7 +39,7 @@ def denied(call):
 @pytest.mark.parametrize("operation", [
     "load", "clear-load", "restore", "replace", "branch", "callback", "display", "reconcile",
     "replace-reconcile", "feature", "minor", "undo", "redo", "snapshot", "clear-history",
-    "close", "pdb", "add-asset", "remove-asset", "silent", "silent-reconcile", "save-copy",
+    "close", "pdb", "add-asset", "remove-asset", "silent", "save-copy",
     "save-ack", "heads",
 ])
 def test_generic_mutations_refuse_before_any_callback_snapshot_or_assignment(document, monkeypatch, operation):
@@ -74,7 +74,6 @@ def test_generic_mutations_refuse_before_any_callback_snapshot_or_assignment(doc
         "add-asset": lambda: state.add_protein_asset(object()),
         "remove-asset": lambda: state.remove_protein_asset("missing"),
         "silent": lambda: state.set_design_silent(candidate),
-        "silent-reconcile": lambda: state.set_design_silent_reconciled(candidate, source),
         "save-copy": state.copy_for_workspace_save,
         "save-ack": lambda: state.acknowledge_workspace_save(source, candidate, revision),
         "heads": lambda: state.restore_workspace_heads(doc, {"part": {"branch": ["revision"]}}),

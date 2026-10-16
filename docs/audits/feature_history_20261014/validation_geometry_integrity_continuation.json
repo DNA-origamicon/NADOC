@@ -1,0 +1,179 @@
+{
+  "date": "2026-10-15",
+  "scope": "G1 private bend/twist evaluation, ordinary forced-ligation transaction, and unused setter pruning",
+  "validation": {
+    "unique_cases_passed": 225,
+    "private_preview_unique_cases": 80,
+    "forced_ligation_and_related_unique_cases": 107,
+    "publication_state_unique_cases": 38,
+    "command_prefix": "just validate-safe scripts/test_guard.sh test-focused 0 focused -- uv run pytest",
+    "runs": [
+      {
+        "phase": "preview tests before implementation",
+        "passed": 2,
+        "failed": 28,
+        "seconds": 2.88,
+        "note": "Two native proof fixture controls passed; service absent caused28 import failures."
+      },
+      {
+        "phase": "pruned publication helper",
+        "passed": 38,
+        "seconds": 2.73,
+        "slowest_setup_seconds": 2.25
+      },
+      {
+        "phase": "initial preview implementation plus native controls",
+        "passed": 69,
+        "failed": 7,
+        "warnings": 17,
+        "seconds": 4.37,
+        "note": "Seven fixture/oracle defects: mutable expected design aliased a deliberately modified returned prefix; non-UUID group fixture; numerical suffix lacked real native contract. Fixed fixtures, froze expected authoring before mutation, used genuinely authored later bend; production coverage checks retained."
+      },
+      {
+        "phase": "corrected preview target",
+        "passed": 31,
+        "seconds": 2.99,
+        "note": "Includes new malformed-empty-root error-shape regression."
+      },
+      {
+        "phase": "forced ligation red",
+        "passed": 11,
+        "failed": 3,
+        "warnings": 14,
+        "seconds": 3.26,
+        "note": "Existing route built outside lock, discarded interleaved nick, and entered native build before protected-loadout refusal."
+      },
+      {
+        "phase": "forced ligation and preview boundary integration",
+        "passed": 139,
+        "failed": 2,
+        "warnings": 86,
+        "seconds": 5.23,
+        "slowest_call_seconds": 0.14,
+        "note": "All107 forced-ligation/related cases passed.32 of34 preview cases passed; two newly added identity-collision fixtures omitted required label."
+      },
+      {
+        "phase": "corrected routing identity collision fixtures",
+        "passed": 2,
+        "seconds": 2.56,
+        "note": "Added required fixture label; both header/child collision refusals pass. Final private target has34 distinct passing cases."
+      }
+    ],
+    "targets": [
+      "tests/test_part_deformation_preview.py",
+      "tests/test_native_overlay_proof.py",
+      "tests/test_deformation_params_core.py",
+      "tests/test_deformation_selection.py",
+      "tests/test_part_recipe_edit.py",
+      "tests/test_geometry_routing_recording.py",
+      "tests/test_forced_ligation.py",
+      "tests/test_native_routing_proof.py",
+      "tests/test_feature_recording_transactions.py",
+      "tests/test_headless_build.py::test_force_ligate_merges_and_records",
+      "tests/test_headless_build.py::test_force_ligate_then_delete_is_inverse",
+      "tests/test_part_publication_state.py"
+    ],
+    "per_test_budget_violations": 0,
+    "note": "Counts are distinct cases across overlapping runs, not cumulative successes. Do not add to earlier102 grouping cases without deduplicating shared targets."
+  },
+  "private_preview": {
+    "available": "Internal Python service only; no route, cache, host lease or UI enablement",
+    "entry": "prepare_from_capture requires an independently owned input captured under its source owner's lock with preserve_entry_types=True",
+    "prefix": [
+      "explicit empty native root",
+      "bundle-create",
+      "deformation",
+      "cluster_create",
+      "cluster_op"
+    ],
+    "limits": {
+      "commands": 128,
+      "helices": 16,
+      "prospective_sites": 1024,
+      "operations": 64,
+      "bp_span": 1024,
+      "cooperative_seconds": 1,
+      "input_nodes": 30000,
+      "input_bytes": 2000000
+    },
+    "semantics": [
+      "Prefix executes once from native inputs, never saved geometry/diffs",
+      "Each parameter evaluation owns independent prefix and definition copies and executes one native overlay",
+      "Fixed feature/deformation IDs and target membership; changed scope explicitly refused",
+      "Complete parent/child identity inventory and recognized command coverage, without suffix execution",
+      "source_equivalence_checked=false; downstream_evaluated=false; no proof certificate"
+    ],
+    "remaining": [
+      "broader standard-geometry prefixes",
+      "document/session/revision ownership, expiry, cancellation, guarded Apply",
+      "complete native rendering/control DTO and desktop integration",
+      "actual HTTP, lock/concurrent read, retained memory and interactive latency qualification"
+    ],
+    "known_live_bug": "ISSUE-100 remains open; existing desktop preview still mutates canonical state."
+  },
+  "forced_ligation": {
+    "issue": "ISSUE-101",
+    "behavior": "Resolve source, targets, output identity, label, affected response scope and native build under one lock-owned record_minor transaction",
+    "preserved": [
+      "existing native ligation and reconciliation algorithms",
+      "one snapshot, reconciliation and pending-ligation retry",
+      "exact missing/self target errors and periodic seam inputs",
+      "partial geometry response and extension-triggered full fallback",
+      "failure-atomic persisted source/stacks/revision/request markers, existing recorder rollback semantics"
+    ],
+    "evidence": [
+      "deterministic interleaved nick survives",
+      "protected loadout refuses before native build",
+      "exact native authoring parity and poisoned-recovery replay",
+      "one history child, undo/revision and undo/redo",
+      "native/validation/publication/cancellation rollback"
+    ],
+    "remaining": [
+      "batch nick silently skipped targets",
+      "resize terminal selection guard",
+      "auto-crossover prebuilt result",
+      "historical cursor/branch policy and remaining response-scope races"
+    ]
+  },
+  "pruning": {
+    "removed": "state.set_design_silent_reconciled",
+    "caller_audit": "No production callers; only sole strict-denial test, audit sink list, current guidance and historical provenance.",
+    "updated": [
+      "obsolete strict-denial case",
+      "static audit sink inventory",
+      "current cluster/history guidance"
+    ],
+    "preserved": "Historical audit inventory and migration/extraction records remain unchanged."
+  },
+  "lint": "Changed-file Ruff and diff check pass; just lint retains exactly5 pre-existing F401 imports in vr_prompts.py and4 CPD test files.",
+  "backend_selector": {
+    "command": "just test-smart --dry-run",
+    "decision": "FAST (fast suite only)",
+    "executed": false,
+    "accumulated_changed_files": 5406,
+    "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\nThis is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\nOnly request `just test-session` when a broad/full sweep is actually needed.",
+    "caveat": "Selector wording says ran; this dry run executed no suite and clears no broad-suite debt."
+  },
+  "app_status": "NOT VERIFIED IN APP; shared live server was not mutated and Archive remains unavailable.",
+  "performance": "No interactive or full-response performance qualification. No full proof added to ordinary grouping/ligation or per-slider private evaluation.",
+  "frontend_main_js_loc_delta": 0,
+  "assemblies": "Deferred",
+  "vr": "Deferred to capable-machine session",
+  "nanoparticle_assets": "Lower priority, parked; existing gates unchanged.",
+  "cleanup": {
+    "owned_completed_pytest_roots": [
+      "/tmp/pytest-of-joshua/pytest-273",
+      "/tmp/pytest-of-joshua/pytest-274",
+      "/tmp/pytest-of-joshua/pytest-275"
+    ],
+    "active_references": 0,
+    "locks": 0,
+    "files_removed": 0,
+    "bytes_removed": 0,
+    "empty_fixture_directories_removed": true,
+    "removal_verified": true,
+    "historical_locked_pytest_268": "Preserved untouched",
+    "note": "Names reused after grouping-checkpoint cleanup; this is a new inventory. Earlier transient roots retired by pytest retention."
+  },
+  "independent_review": "Read-only preview ownership/bounds review found no blocker; suggested routing-identity and oversized-capture controls were added and pass."
+}

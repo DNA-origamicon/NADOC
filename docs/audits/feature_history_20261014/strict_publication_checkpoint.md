@@ -91,7 +91,7 @@ Capabilities are constant-size metadata and never clone or replay a design.
 | `state.load_design` | Reject arbitrary replacement. Add a separate bounded `create_empty_part` host transaction using validated name/lattice; initial strict creation has no supplied Design. Load/import remain compatibility-only until admitted. |
 | `state.set_design` | Require a host publication permit for strict authoring. Preserve existing source/revision/session checks, CPD/loadout gates, one undo and assigned revision. |
 | `state.set_design_branch` | Strict rejection until branch target replay/provenance admission exists. Branch/loadout snapshots are not construction evidence. |
-| `state.set_design_silent`, `set_design_silent_reconciled` | Reject strict calls before reconcile or assignment. A silent setter is not an internal authority exemption. |
+| `state.set_design_silent` | Reject strict calls before assignment. A silent setter is not an internal authority exemption. The unused `set_design_silent_reconciled` seam was removed in G1 after caller review. |
 | `state.mutate_and_validate`, `mutate_with_reconcile`, `replace_with_reconcile` | Reject generic strict callbacks/replacements before invocation, snapshotting or reconciliation. |
 | `state.mutate_display_metadata` | Reject arbitrary callbacks in strict mode. Migrate only explicit typed presentation assignments later; this callback currently receives the entire live Design. |
 | `state.mutate_with_feature_log`, `mutate_with_minor_log` | Registered kind membership cannot authorize arbitrary callback output. Reject strict generic recording before initial-design installation/callback; migrate eligible callers to a registered execution host. |

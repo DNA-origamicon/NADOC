@@ -1107,27 +1107,3 @@ def set_design_silent(d: Design) -> None:
         _assert_photoproduct_dependencies(d)
         s.design = d
         _bump_revision(s)
-
-
-def set_design_silent_reconciled(
-    new_design: Design,
-    before: Design,
-    report: MutationReport | None = None,
-) -> tuple[Design, ValidationReport]:
-    """Reconcile cluster membership against ``before``, then silent-set + validate.
-
-    Pair with :func:`snapshot` for multi-step operations that build up the new
-    design across several steps (e.g. ``place_crossover``, ``forced_ligation``,
-    ``add_nick_batch``).  Caller is responsible for capturing ``before`` from
-    :func:`get_or_404` *before* :func:`snapshot` and passing it here.
-    """
-    with _lock:
-        _require_compatibility_write("set_design_silent_reconciled")
-        s = _session()
-        _assert_active_loadout_editable(s.design, new_design)
-        reconciled = reconcile_cluster_membership(before, new_design, report)
-        _assert_photoproduct_dependencies(reconciled)
-        s.design = reconciled
-        validation = validate_design(s.design)
-        _bump_revision(s)
-        return s.design, validation

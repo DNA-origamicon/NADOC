@@ -43,7 +43,11 @@ Shipped as 3 commits: `d8693fc` (chunk A — foundations + extrude pipelines), `
 |---|---|
 | `mutate_with_reconcile(fn)` | In-place style: `fn(design)` mutates the active design. Snapshots for undo. Most CRUD routes. |
 | `replace_with_reconcile(new_design, report=None)` | Immutable style: route built `new_design` via pure functions in `lattice.py`. Snapshots for undo. |
-| `set_design_silent_reconciled(new_design, before, report=None)` | Multi-step pattern: route called `snapshot()` once at start, then ran several `set_design_silent` updates. Caller passes `before = get_or_404()` from before the snapshot. |
+| `mutate_with_feature_log` / `mutate_with_minor_log` | Recorded authoring: resolve and build from the callback's lock-owned source; reconciliation, validation, history and undo share one failure-atomic transaction. |
+
+The unused `set_design_silent_reconciled` helper was removed October 15, 2026
+after a complete caller search found no production users. Do not revive its
+old snapshot-plus-silent-publication pattern for new authoring tools.
 
 **Bypass list** (must NOT call any reconcile wrapper — these explicitly edit `cluster_transforms` themselves):
 - Cluster CRUD: `add_cluster`, `update_cluster`, `delete_cluster`, all `*_joint*` routes.

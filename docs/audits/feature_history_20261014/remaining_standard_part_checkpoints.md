@@ -60,15 +60,26 @@ than overloading an unrelated command kind or silently accepting old proofs.
 - Sweep history preview still reads saved snapshots. Extrude's frontend still
   disables some edits with later snapshots. Fine Routing has backend child edits
   but no complete desktop parameter forms.
-- Several live batch selectors skip absent targets; some callbacks close over
-  results built before the recording lock. Replay is stricter. Close these
-  mismatches with bounded local checks, not a new full replay on every edit.
+- Forced ligation now resolves and builds inside its existing recording
+  transaction; a deterministic interleaved-nick regression proves it cannot
+  overwrite that edit. Batch nick still skips invalid targets, resize lacks the
+  replay terminal-selection guard, and auto-crossover still has a prebuilt
+  callback. Close those remaining mismatches with bounded local checks, not a
+  new full replay on every edit.
 
 Archive remains unavailable on this machine. Continue focused memory-only checks;
 no bulk/app/native-scratch output may silently fall back to the system disk.
 Unperformed desktop and broad-suite checks remain completion debt, not passes.
 
-### G1 next: isolated bend/twist history preview — proposed, not implemented
+### G1 next: isolated bend/twist history preview — private evaluator implemented
+
+`part_deformation_preview.py` now provides bounded prefix preparation and repeat
+local evaluation on owned input. Its 34 focused cases and existing native
+controls pass. It has no public route, retained host cache, session/revision
+lease, render DTO or frontend wiring. ISSUE-100 remains open. This first slice
+admits empty native roots and bundle/group/pose/bend/twist prefixes only;
+cluster/target membership stays fixed. Prefix expansion, complete controls,
+host lifecycle and actual interaction measurements are required before rollout.
 
 The focused backend lifecycle tests reproduce the current desktop sequence:
 peel the committed deformation, add/update/discard its preview, then Apply.
@@ -123,8 +134,8 @@ exercise desktop Apply/Cancel. The existing DNA comparison is **disabled and
 qualification-only**; this proposal neither enables it nor borrows its renderer
 or DTO to bypass its admission bounds. No geometry algorithms or constants change.
 
-Concrete next checkpoint: implement and test the **private backend service and
-bounded DTO first**, with no frontend enablement. Open performs bounded native
+Concrete next checkpoint: add and test the **bounded host lifecycle and render
+DTO** around the private evaluator, with no frontend enablement. Open performs bounded native
 prefix preparation plus cheap command-coverage admission, not full-source
 equivalence proof; that remains Apply's guard. Return explicit
 `stage="feature"`, `downstream_evaluated=false` and

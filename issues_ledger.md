@@ -741,9 +741,11 @@ _Living pointer — each session overwrites this. **Last updated 2026-10-15 (geo
 now always records its native input under one lock-owned publication transaction
 (ISSUE-99). G1 remains in progress: preview/Apply/Cancel still changes canonical
 state before acceptance. Follow the [geometry delivery map](docs/audits/feature_history_20261014/remaining_standard_part_checkpoints.md).
-There are 102 unique focused checks at this checkpoint; the ten deformation
+Grouping has 102 unique focused checks at its checkpoint; the ten deformation
 cases include explicit characterizations of unresolved defects. App, broad-suite
 and performance qualification are outstanding (MV-48); `main.js` delta is zero.
+Forced-ligation recording is also focused-fixed (ISSUE-101, 107 related cases);
+batch-nick skipping, resize selection and prebuilt auto-crossover remain open.
 Nanoparticle/asset expansion, assemblies and machine-specific VR work remain
 outside this next step.
 
@@ -2236,3 +2238,36 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   See the [proposed G1 preview lifecycle](docs/audits/feature_history_20261014/remaining_standard_part_checkpoints.md).
 - No preview implementation fix, app check or performance qualification is
   claimed in the grouping checkpoint. MV-48 retains desktop lifecycle debt.
+- Subsequent G1 work implements the private bounded prefix/local evaluator with
+  34 passing cases and 46 native controls. No live host lifecycle, render DTO or
+  frontend integration is enabled, so this issue remains open. Follow the
+  [continuation evidence](docs/audits/feature_history_20261014/validation_geometry_integrity_continuation.json).
+
+## ISSUE-101 — Forced ligation can replace an intervening authored edit (2026-10-15, FOCUSED FIX VALIDATED; APP OPEN)
+
+- The ordinary route selected strands and built `_ligate` output before taking
+  the recording lock, then returned that prebuilt design while ignoring the
+  recorder's current source. A deterministic intervening nick was discarded.
+  Protected-loadout refusal also occurred after native building had already run.
+- `part_routing_recording.record_forced_ligation` now owns selection, actual
+  endpoint labels, affected-helix scope, extension fallback and one `_fl_id`
+  allocation under the existing state lock. It invokes the shared pure ligation
+  builder through lock-owned `record_minor`, with a session/source/revision
+  guard. No nested lock, extra snapshot or replacement publisher is introduced;
+  the recorder retains one snapshot, reconciliation and pending-ligation retry.
+- Tests first: **3 failed / 11 passed, 14 warnings, 3.26 s**, exposing unlocked
+  building, the lost interleaved nick and protected-loadout work. All **107
+  forced-ligation-related cases, including the 14 new cases,** are now green. The
+  combined 141-case run had 139 passes and two unrelated preview-fixture failures
+  (86 warnings, 5.23 s); correcting those fixtures yielded two further passes.
+  These are overlapping runs, not an additional 14 beyond the 107.
+- Coverage preserves exact errors, extension full-response fallback, periodic
+  seams, native authoring parity, one undo/revision, input-only replay with
+  poisoned recovery, interleaved work, protected refusal and rollback of values,
+  stacks and request markers. Rollback keeps the existing detached-snapshot
+  semantics; it does not promise original source-object identity after failure.
+- Scientific formulas and valid geometry are unchanged. Batch-nick suppression,
+  resize terminal-reference admission and prebuilt auto-crossover publication
+  remain separate follow-ups; this fix does not close G1. **No app, broad-suite
+  or performance qualification**; MV-48 remains open and `main.js` delta is **0**.
+  See [continuation evidence](docs/audits/feature_history_20261014/validation_geometry_integrity_continuation.json).

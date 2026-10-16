@@ -1007,3 +1007,11 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   their passing result does not discharge these steps. No browser was launched
   for this checkpoint; Archive is unavailable for required browser/runtime
   artifacts. VR/headset validation and assemblies remain separately deferred.
+
+  **Forced-ligation continuation (ISSUE-101):** from the desktop and caDNAno
+  views, join selected 3′/5′ ends, then undo/redo and save/reopen/verify. Confirm
+  one Fine Routing child, correct strand/end ownership, unchanged nucleotide
+  positions, and preservation of a separate nick made during rapid edits.
+  Exercise periodic seams, selected terminal extensions (full geometry refresh)
+  and protected-loadout refusal without losing work. The 14 new tests sit within
+  107 green related cases; they do not qualify app behavior or responsiveness.

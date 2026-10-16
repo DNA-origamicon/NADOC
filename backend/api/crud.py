@@ -3956,77 +3956,9 @@ def forced_ligation(body: ForcedLigationRequest) -> dict:
     The result is a single multi-domain strand.  No Crossover record is
     created because this connection is not at a canonical crossover site.
     """
-    from backend.core.lattice import _ligate
+    from backend.api.part_routing_recording import record_forced_ligation
 
-    design = design_state.get_or_404()
-
-    strand_a: Strand | None = None
-    strand_b: Strand | None = None
-    for s in design.strands:
-        if s.id == body.three_prime_strand_id:
-            strand_a = s
-        if s.id == body.five_prime_strand_id:
-            strand_b = s
-    if strand_a is None:
-        raise HTTPException(
-            404, detail=f"3' strand {body.three_prime_strand_id!r} not found."
-        )
-    if strand_b is None:
-        raise HTTPException(
-            404, detail=f"5' strand {body.five_prime_strand_id!r} not found."
-        )
-    if strand_a.id == strand_b.id:
-        raise HTTPException(
-            409,
-            detail="Cannot ligate a strand to itself (would create circular strand).",
-        )
-
-    # Record the forced ligation endpoints before _ligate merges domains.
-    from backend.core.models import ForcedLigation
-
-    three_dom = strand_a.domains[-1]
-    five_dom = strand_b.domains[0]
-    fl = ForcedLigation(
-        three_prime_helix_id=three_dom.helix_id,
-        three_prime_bp=three_dom.end_bp,
-        three_prime_direction=three_dom.direction,
-        five_prime_helix_id=five_dom.helix_id,
-        five_prime_bp=five_dom.start_bp,
-        five_prime_direction=five_dom.direction,
-        is_periodic_seam=body.is_periodic_seam,
-    )
-
-    current = _ligate(design, strand_a, strand_b)
-    current = current.model_copy(
-        update={
-            "forced_ligations": list(current.forced_ligations) + [fl],
-        }
-    )
-
-    label = (
-        f"Forced ligation · h{_helix_label(design, three_dom.helix_id)}:{three_dom.end_bp} "
-        f"→ h{_helix_label(design, five_dom.helix_id)}:{five_dom.start_bp}"
-    )
-    current, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype="forced-ligation-create",
-        label=label,
-        params={**body.model_dump(mode="json"), "_fl_id": fl.id},
-        fn=lambda _d: current,
-    )
-    # A ligation moves NO nucleotide — it only re-tags strand_b's nucs onto
-    # strand_a and clears the two junction end-flags. So ship geometry for just
-    # the two strands' helices (partial fast path) instead of recomputing the
-    # whole design (~560 ms → a few ms on a 26-helix design). Extensions are
-    # only emitted in full-geometry mode, and _ligate can drop a 5' extension /
-    # remap a 3' one, so fall back to full when either strand carries one.
-    touches_extension = any(
-        ext.strand_id in (strand_a.id, strand_b.id) for ext in design.extensions
-    )
-    changed_helix_ids = (
-        None
-        if touches_extension
-        else list({d.helix_id for d in (*strand_a.domains, *strand_b.domains)})
-    )
+    current, report, changed_helix_ids = record_forced_ligation(body)
     return _design_response_with_geometry(
         current, report, changed_helix_ids=changed_helix_ids
     )

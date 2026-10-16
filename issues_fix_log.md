@@ -20,6 +20,7 @@ regress anything).
 
 | # | Date | Issue / phase | What changed (module) | Repro pinned by | Wall-clock | main.js LOC Δ | tests added | edits-to-green | app-validated | regression caught |
 |---|------|---------------|------------------------|-----------------|-----------|---------------|-------------|----------------|---------------|-------------------|
+| 35 | 2026-10-15 | ISSUE-101 — forced-ligation source ownership | New `part_routing_recording.py`, thin ordinary route | Deterministic intervening nick, lock ownership and protected-loadout refusal | Red 3.26 s; combined continuation run 5.23 s | 0 | 14 focused cases | Red 3 failed/11 passed; all 107 related cases green within combined run | **No** — MV-48; no broad/performance qualification | Prebuilt candidate discarded a later edit; shared native math and existing recording postprocessing retained |
 | 34 | 2026-10-15 | ISSUE-99 — ordinary grouping inputs; G1 partial | New `part_group_recording.py`, thin cluster route, headless compatibility documentation | Default/false/true logging, group+move, routing chronology, independent replay, source/failure/lock guards | Focused 101 cases in 5.57 s; group rerun 16 in 2.88 s | 0 | New group dossier; obsolete unlogged expectations updated | 102 unique focused passes; overlapping runs retain 108/16 warnings respectively | **No** — MV-48; no broad/performance qualification | ISSUE-100 preview/Apply/Cancel defects separately reproduced; ten green deformation cases include characterization, not a fix |
 | 33 | 2026-10-15 | ISSUE-84 — repair proposal roundtrip budget | Canonical persisted-form admission in `part_repair_draft.py` | Three red maximum-node/byte save/reload cases, plus one control | P5 continuation | 0 | 4 boundary cases | 69 focused schema/API/persistence cases pass | backend only | Raw sparse input fit while serialized optional defaults exceeded the same limit |
 | 32 | 2026-10-14 | ISSUE-82 — producer/consumer regeneration, PARTIAL | Root-based recipe edit module, refreshed snapshots/diffs, revision/source guard | Native bundle→joint edit/delete and failure regressions | P3 continuation | 0 | 31 focused native/regeneration cases | compatibility regressions corrected; audit records checks | backend only | rootless recovery, sweep version parsing and persisted detachment |
@@ -795,3 +796,13 @@ seek changes undo/redo. Apply refuses the resulting source correctly. The next
 G1 increment must isolate preview state; do not weaken source proof to accept
 the polluted document or preserve these characterization expectations as the
 desired user contract.
+
+2026-10-15 — ISSUE-101 forced-ligation recording: move source selection, endpoint
+label/response scope and native building into one lock-owned minor transaction.
+The shared builder preserves geometry and the recorder still snapshots,
+reconciles and retries once. The red dossier reproduced three defects; all 107
+related cases, including 14 new cases, now pass. The combined run's two preview-fixture
+failures and corrected rerun remain in the
+[continuation evidence](docs/audits/feature_history_20261014/validation_geometry_integrity_continuation.json).
+No app, broad-suite or performance claim; MV-48 remains pending, `main.js` delta
+is zero, and nick/resize/auto-crossover follow-ups remain open.

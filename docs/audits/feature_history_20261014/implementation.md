@@ -1456,3 +1456,62 @@ isolated preview described in the [active delivery map](remaining_standard_part_
 checkpoint.** MV-48 retains desktop validation debt. `frontend/src/main.js`
 delta is **0**. No molecular formula, numerical source pin, limit or private
 rollout gate changed; assets, assemblies and machine-specific VR remain deferred.
+
+## G1 forced-ligation recording continuation — October 15
+
+The ordinary forced-ligation route now resolves its actual source, endpoint
+labels and partial-response scope under one recording lock. A thin adapter
+delegates to `part_routing_recording`, the existing pure ligation builder and
+lock-owned `record_minor`; one snapshot, reconciliation and pending retry remain.
+This prevents a prebuilt candidate from discarding an intervening nick and
+refuses protected loadouts before building. Geometry, seam behavior, errors and
+the extension full-response fallback remain unchanged.
+
+All **107 related cases, including 14 new cases,** are green. The
+[continuation evidence](validation_geometry_integrity_continuation.json) retains
+the three-defect red run, combined 141-case run (139 passed/two preview-fixture
+failures, 86 warnings, 5.23 s) and corrected two-case rerun. ISSUE-101 records
+the test scope. No app, broad-suite or performance qualification is claimed;
+MV-48 remains pending and `main.js` delta is **0**. G1 remains ongoing, with
+batch-nick skipping, resize reference admission and prebuilt auto-crossover
+publication still separate follow-ups.
+
+## G1 private deformation evaluator and legacy pruning — October 15
+
+`part_deformation_preview.prepare_from_capture` takes independently owned input
+captured under the host's lock. It inventories stable parent/child IDs and native
+coverage, then executes only the prefix before the selected feature. Repeated
+`evaluate` calls copy that bounded prefix and definition, apply the existing
+native deformation command and validate it. They do not decode recovery,
+regenerate the suffix, access live state or establish source equivalence.
+Returned metadata explicitly leaves both source equivalence and downstream
+evaluation unchecked. Consumer mutation and failed native work cannot alter the
+next evaluation.
+
+This private slice admits empty native roots and bundle/group/pose/deformation
+prefixes, fixed target membership, 128 commands, 16 helices, 1,024 prospective
+sites, 64 overlays and a 1,024-bp frame span. Existing 30k-node/2MB capture
+accounting stays unchanged; native work has a one-second cooperative allowance.
+These are internal admission limits, not interactive latency measurements.
+There is no route, retained host cache, lease, render/control DTO or UI wiring.
+Expand core prefixes, establish document/session/revision ownership and guarded
+Apply, then preserve all existing controls before enabling the editor.
+**ISSUE-100 remains open.**
+
+All 34 private cases and 46 existing native/edit controls pass. The
+[continuation evidence](validation_geometry_integrity_continuation.json) keeps
+the initial module-absent red, corrected fixture/oracle failures and identity/
+input-limit controls. An independent ownership review found no blocker in this
+limited private scope.
+
+Caller review also proved `state.set_design_silent_reconciled` unused in
+production. Removed that obsolete publication path, its sole denial-test case
+and current guidance/audit entries; historical provenance is retained. All 38
+remaining publication-state checks pass. Across private preview, forced ligation
+and publication tests there are **225 distinct passing cases**; these overlap
+earlier checkpoint targets and must not be added to their totals. Changed-file
+Ruff/diff checks pass; repository lint retains five pre-existing F401 imports.
+The selector dry run reports FAST with accumulated FULL debt and executes no
+suite. App, broad regression and measured responsiveness remain open; `main.js`
+delta is zero. Completed disposable fixtures were empty and removed after active
+reference checks; no designs, captures or simulation outputs were retained.

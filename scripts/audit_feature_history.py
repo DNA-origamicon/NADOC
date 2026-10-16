@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SINKS = {
     "mutate_with_feature_log", "mutate_with_minor_log",
     "_apply_assembly_mutation_with_feature_log", "_apply_part_mutation_with_feature_log",
-    "set_design", "set_design_silent", "set_design_silent_reconciled",
+    "set_design", "set_design_silent",
     "set_design_branch", "load_design", "restore_doc_design", "snapshot",
     "set_assembly", "set_assembly_silent", "load_assembly", "restore_doc_assembly",
     "_replace_instance_design", "SnapshotLogEntry", "MinorMutationLogEntry",
