@@ -89,6 +89,12 @@ class PatchRequest(_Transition):
     name: pending._Name | None = None
 
 
+class RenameRequest(_Application):
+    """An applied label edit has no application toggle or output identities."""
+
+    name: pending._Name
+
+
 class DeleteRequest(_Application):
     pass
 
@@ -99,6 +105,8 @@ def parse_command(kind, params):
              "nanoparticle-connection-version-delete": DeleteRequest}.get(kind)
     if model is None:
         raise ValueError("Unsupported nanoparticle application command")
+    if model is PatchRequest and isinstance(params, dict) and "applied" not in params:
+        model = RenameRequest
     return model.model_validate(params)
 
 
@@ -358,7 +366,6 @@ def build(kind, design, params):
         pending._fail("Application auxiliary endpoint disagrees with its selected handle", "overhang", endpoint.id, "handle_overhang_id")
     if len(design.nanoparticle_connection_versions) > MAX_VERSIONS:
         _unsupported("Native nanoparticle application exceeds its version allowance")
-    _conflicts(design, body)
     creating, applying = isinstance(body, CreateRequest), isinstance(body, _Transition) and body.applied
     current = None
     if creating:
@@ -371,6 +378,9 @@ def build(kind, design, params):
                 pending._fail("Application selection no longer matches its version", resource, getattr(body, field), field)
         if body.prior_duplex_id != current.duplex_id:
             pending._fail("Application must select the exact current duplex", "duplex", body.prior_duplex_id or "", "prior_duplex_id")
+        if isinstance(body, RenameRequest) and not current.applied:
+            _unsupported("Native applied-connection rename requires an active applied version")
+    _conflicts(design, body)
     variant = body.direct_variant if creating else current.direct_variant
     attaches = pending._validate_endpoint(index, owner, strand, target, variant,
         pending._target_backings(design, {target.id}).get(target.id, ()), version=current)
@@ -388,6 +398,14 @@ def build(kind, design, params):
         restoring.append((item, *_restoration(design, index, owner, item)))
     if any(item.id not in {version.id for version, *_ in restoring} for item in active):
         _unsupported("Another applied handle lies outside the selected restoration")
+    if isinstance(body, RenameRequest):
+        # _restoration above inspects closed bound ownership only. A label edit
+        # never restores/reapplies topology, allocates children, or changes the
+        # duplex's own name. The common executor/recorder still reconciles and
+        # retries ligations exactly as the established ordinary PATCH route.
+        return design.copy_with(nanoparticle_connection_versions=[
+            item.model_copy(update={"name": body.name}) if item.id == current.id else item
+            for item in design.nanoparticle_connection_versions])
     changed = {("overhang", body.overhang_id), ("strand", strand.id), ("overhang", endpoint.id)}
     allowed = {("nanoparticle_conjugation", owner.id), ("strand", strand.id), ("overhang", endpoint.id),
                ("overhang", target.id), ("strand", target.strand_id)}

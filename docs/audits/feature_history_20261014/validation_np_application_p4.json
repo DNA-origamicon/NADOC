@@ -47,12 +47,40 @@
     ]
   },
   "distinct_green": 291,
+  "distinct_green_scope": "Application checkpoint before rename, across the original broad run and focused rerun; not the latest single-run total",
+  "rename_initial_red": {
+    "failed": 2,
+    "fixture_isolation_controls_passed": 3,
+    "reason": "Missing PatchRequest.applied and rejected versioned proof contract"
+  },
+  "rename_first_full": {
+    "passed": 30,
+    "failed": 1,
+    "reason": "Missing selected version_id was diagnosed as a conflict mismatch before version resolution",
+    "combined_passed": 38,
+    "combined_failed": 1,
+    "combined_seconds": 13.46,
+    "combined_extra_scope": "Six capture controls and two existing coating cases"
+  },
+  "rename_corrected_regression": {
+    "rename_cases_passed": 31,
+    "existing_np_and_shared_cases_passed": 231,
+    "scoped_np_passed": 262,
+    "scoped_np_failed": 0,
+    "combined_passed": 265,
+    "combined_failed": 1,
+    "combined_seconds": 16.38,
+    "combined_warnings": 35,
+    "combined_extra_scope": "Independent OH controls and one expected missing-adapter tests-first failure; excluded from NP counts",
+    "geometry_changed": false,
+    "normal_reconcile_and_retry_preserved": true,
+    "shared_registry_or_identity_changes": false
+  },
   "molecular_algorithms_or_pins_changed": false,
   "ordinary_applied_route_migrated": false,
   "latency_qualified": false,
   "app_status": "NOT VERIFIED IN APP",
   "remaining": [
-    "Metadata-only applied-version rename",
     "Pure bounded application timing",
     "Ordinary route migration and interactive latency",
     "Unequal-length cases that would shorten the NP handle remain explicit refusals",

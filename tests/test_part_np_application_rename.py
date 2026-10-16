@@ -14,7 +14,7 @@ from backend.api import doc_context, routes_nanoparticles as routes, state
 from backend.api.part_proof_commands import dependencies, execute
 from backend.api.part_recipe_edit import prepare_change, regenerate
 from backend.api.part_verification_worker import VerificationWorker
-from backend.core.part_command_errors import ReferenceResolutionError
+from backend.core.part_command_errors import CommandContractError, ReferenceResolutionError
 from backend.core.part_dependencies import Resource
 from backend.core.part_verification_capture import capture
 from tests.test_part_np_application_commands import application_params, version
@@ -156,6 +156,62 @@ def test_rename_requires_exact_current_duplex_and_preserves_source_on_refusal(ap
         commands().build(PATCH, applied, {**rename_params(applied), "prior_duplex_id": None})
     assert error.value.code == "invalid_selection"
     assert any(item["parameter_path"] == ["prior_duplex_id"] for item in error.value.references)
+    assert applied.model_dump_json() == original
+
+
+@pytest.mark.parametrize("damage", ["unknown_saved_topology", "missing_child", "wrong_carrier", "relaxed"])
+def test_rename_refuses_unqualified_bound_ownership_without_normalizing_it(applied, monkeypatch, damage):
+    if damage == "unknown_saved_topology":
+        applied.duplexes[0].prior_driven_topology["opaque_state"] = {}
+    elif damage == "missing_child":
+        applied.cluster_transforms = [item for item in applied.cluster_transforms
+                                      if item.overhang_duplex_driver_id is None]
+    elif damage == "wrong_carrier":
+        applied.nanoparticle_conjugations[0].surface_strands[0].helix_id = "missing-carrier"
+    else:
+        version(applied).relaxed = True
+    values = rename_params(applied)
+    original = applied.model_dump_json()
+    deny_application(monkeypatch)
+    with pytest.raises(CommandContractError):
+        commands().build(PATCH, applied, values)
+    assert applied.model_dump_json() == original
+
+
+def test_applied_rename_contract_does_not_promote_pending_version(applied, monkeypatch):
+    pending = commands().build(PATCH, applied, application_params(applied, PATCH, applied=False))
+    original = pending.model_dump_json()
+    deny_application(monkeypatch)
+    with pytest.raises(CommandContractError) as error:
+        commands().build(PATCH, pending, rename_params(pending))
+    assert error.value.code == "unsupported_np_application_source"
+    assert pending.model_dump_json() == original
+
+
+def test_rename_keeps_application_work_bound_before_source_inventory(applied, monkeypatch):
+    from backend.api import part_nanoparticle_connection_commands as pending
+
+    values = rename_params(applied)
+    applied.helices[0].length_bp = commands().MAX_APPLICATION_BASES + 1
+    original = applied.model_dump_json()
+    deny_application(monkeypatch)
+    monkeypatch.setattr(pending, "_prepare_source",
+        lambda *_args: pytest.fail("Oversize rename source entered typed inventory"))
+    with pytest.raises(CommandContractError) as error:
+        commands().build(PATCH, applied, values)
+    assert error.value.code == "unsupported_np_application_source"
+    assert applied.model_dump_json() == original
+
+
+def test_rename_requires_exact_conflict_selector_without_changing_other_versions(applied, monkeypatch):
+    original = applied.model_dump_json()
+    deny_application(monkeypatch)
+    values = {**rename_params(applied), "conflict_version_ids": ["missing-conflict"]}
+    with pytest.raises(ReferenceResolutionError) as error:
+        commands().build(PATCH, applied, values)
+    assert error.value.code == "missing_reference"
+    assert {"kind": "nanoparticle_connection_version", "identity": "missing-conflict",
+            "parameter_path": ["conflict_version_ids"]} in error.value.references
     assert applied.model_dump_json() == original
 
 

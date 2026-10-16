@@ -404,6 +404,40 @@ historical platform collision failure above.
 Ordinary applied-route recording and bounded performance qualification remain
 subsequent work.
 
+The following rename increment is implemented for root validation, with no
+ordinary-route migration. PATCH without an `applied` field selects a separate
+strict required-name variant; it cannot carry duplex output IDs/times. PATCH
+with `applied` retains the existing transition schema. The rename variant keeps
+the current application work limits and exact particle/conjugation/strand/
+target/auxiliary/version/duplex/conflict selectors, and inspects the selected
+active, unrelaxed bound ownership and typed restoration record. It changes only
+the version name before any native restoration, fitting or output allocation.
+Pending versions retain their existing pending-name contract; malformed or
+relaxed bound ownership is refused without normalization.
+
+The ordinary legacy NP PATCH recorder **does** reconcile cluster membership and
+retry pending ligations even for a name-only request. Native rename preserves
+that common postprocessing in both recording and replay; the separate ordinary
+OH pending-metadata exemption is not extended to NP. The duplex name, child
+identities/poses, active constraints and saved restoration state remain intact
+through the rename builder. Root recorded the first two rename tests failing
+at the old missing-`applied` schema/proof-contract boundary, with three fixture
+isolation controls passing. The 31-case rename target now includes full legacy
+route parity with postprocessing spies, strict shape/source refusals, cold
+input-only replay and a real upstream diameter edit. Root's first complete
+rename run passed 30 cases with one diagnostic failure: an absent selected
+version was reported as a conflict mismatch. The combined run, including six
+capture controls and two existing coating cases, was 38 passed / 1 failed in
+13.46 seconds. Resolving the selected version and current duplex before the
+existing exact conflict-set check corrects that diagnostic without weakening
+closure or reaching geometry. The corrected NP sweep passed all **31 rename
+cases plus 231 existing application/admission/cold/pending/identity/attachment/
+repair cases: 262 scoped passes**. The combined run was **265 passed / 1
+expected missing-adapter failure in 16.38 seconds**, with 35 deprecation
+warnings; the additional result belongs to the independent OH tests-first
+increment and is not an NP failure or NP pass count. No new live workflow or
+latency qualification is claimed.
+
 Proposed cohesive files: new `api/part_np_application_commands.py`; extraction
 into existing unpinned `core/nanoparticle_connections.py` with optional explicit
 IDs/time/seed; thin existing route wrappers; registry/edit-identity integration;
