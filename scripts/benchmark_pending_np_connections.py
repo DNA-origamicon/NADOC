@@ -11,7 +11,7 @@ import argparse
 from copy import deepcopy
 import json
 import pickle
-from threading import Barrier, Event, Thread
+from threading import Barrier, Event, Thread, get_ident
 from time import perf_counter
 from uuid import UUID, uuid4
 
@@ -27,11 +27,65 @@ from backend.core.models import SnapshotLogEntry
 from backend.core.part_history_contract import create_empty_part
 from backend.core.part_verification_capture import admit, capture
 from scripts.benchmark_cadnano_route import LockProbe, _PHASE, phase_wrapper, stats
+from scripts.benchmark_runtime_probe import RuntimeProbe, overlap_ms
 from tests.conftest import valid_overhang_sites
 
 
 PATH = "/api/design/nanoparticles/gold/connection-versions"
 LIGHT = "/__benchmark__/revision"
+MAX_DIAGNOSTIC_EVENTS = 4096
+
+
+class Diagnostics:
+    """Optional bounded correlation only; never alter collection or admission."""
+
+    def __init__(self):
+        self.runtime = RuntimeProbe(phase=lambda: _PHASE.get(), max_events=MAX_DIAGNOSTIC_EVENTS)
+        self.stages, self.dropped_stages = [], 0
+        self.originals = {}
+
+    @property
+    def gc_events(self):
+        return self.runtime.events
+
+    @property
+    def dropped_gc(self):
+        return self.runtime.dropped_events
+
+    def install(self):
+        self.runtime.__enter__()
+        for name in ("_bounded", "typed_ownership_supported", "identity_index"):
+            original = self.originals[name] = getattr(native, name)
+            def measured(*args, _name=name, _original=original, **kwargs):
+                if _PHASE.get() != "pending_native":
+                    return _original(*args, **kwargs)
+                start = perf_counter()
+                try:
+                    return _original(*args, **kwargs)
+                finally:
+                    end = perf_counter()
+                    if len(self.stages) < MAX_DIAGNOSTIC_EVENTS:
+                        self.stages.append({"stage": _name, "start": start, "end": end, "thread": get_ident()})
+                    else:
+                        self.dropped_stages += 1
+            setattr(native, name, measured)
+
+    def close(self):
+        self.runtime.__exit__()
+        for name, original in self.originals.items():
+            setattr(native, name, original)
+
+    def window(self, start, end, locks, light):
+        collections = self.runtime.intervals(start, end)
+        stages = [item for item in self.stages if start <= item["start"] and item["end"] <= end]
+        return {"correlation_only": True, "gc_events": collections,
+            "gc_route_overlap_ms": overlap_ms(collections, start, end),
+            "gc_recording_lock_overlap_ms": [overlap_ms(collections, row["entered"], row["ended"]) for row in locks],
+            "gc_light_request_overlap_ms": [overlap_ms(collections, row["start"], row["end"]) for row in light],
+            "native_leaf_stages": {name: stats([(row["end"] - row["start"]) * 1000 for row in stages
+                                               if row["stage"] == name]) for name in self.originals},
+            "native_leaf_total_ms": sum((row["end"] - row["start"]) * 1000 for row in stages),
+            "dropped_gc_events": self.dropped_gc, "dropped_stage_events": self.dropped_stages}
 
 
 def append(design, kind, params, identity):
@@ -73,7 +127,7 @@ def revision(doc):
         reset_current_doc(token)
 
 
-def timed_request(client, doc, probe, method, path, body=None):
+def timed_request(client, doc, probe, method, path, body=None, diagnostics=None):
     headers = {"X-NADOC-Doc": doc}
     start = perf_counter()
     baseline = client.get(LIGHT, headers=headers)
@@ -99,7 +153,8 @@ def timed_request(client, doc, probe, method, path, body=None):
         gate.wait(timeout=5)
         start = perf_counter()
         result = client.request(method, path, headers=headers, json=body)
-        elapsed = (perf_counter() - start) * 1000
+        end = perf_counter()
+        elapsed = (end - start) * 1000
     finally:
         finished.set()
         sampler.join(timeout=5)
@@ -115,7 +170,8 @@ def timed_request(client, doc, probe, method, path, body=None):
         "other_lock_ms": [row["hold_ms"] for row in locks if row not in recording],
         "light_lock_wait_ms": [row["wait_ms"] for row in locks if row["phase"] == "light_request"],
         "overlapping_light_requests": sum(any(row["start"] <= lock["ended"] and lock["entered"] <= row["end"]
-            for lock in recording) for row in light), "response_bytes": len(result.content), "errors": errors}
+            for lock in recording) for row in light), "response_bytes": len(result.content), "errors": errors,
+        **({"diagnostics": diagnostics.window(start, end, recording, light)} if diagnostics is not None else {})}
 
 
 def prepare_retained(client, doc, design, count):
@@ -151,7 +207,7 @@ def summarize(report):
                ("recording_lock_ms", "recording_wait_ms", "light_ms", "light_lock_wait_ms")}}
 
 
-def measure(client, doc, report, repeats, probe, handles, retained, mode, background):
+def measure(client, doc, report, repeats, probe, handles, retained, mode, background, diagnostics=None):
     report["active_phase"] = "fixture_preparation"
     template = prepare_retained(client, doc, prefix(handles, background=background), retained)
     report["active_phase"] = "template_node_byte_admission"
@@ -175,16 +231,16 @@ def measure(client, doc, report, repeats, probe, handles, retained, mode, backgr
         body = {"strand_id": template.nanoparticle_conjugations[0].surface_strands[0].strand_id,
             "overhang_id": next(item.id for item in template.overhangs if not item.auxiliary_endpoint),
             "expected_revision": start_revision, "name": "Measured candidate"}
-        result, timing = timed_request(client, doc, probe, "POST", PATH, body)
+        result, timing = timed_request(client, doc, probe, "POST", PATH, body, diagnostics=diagnostics)
         report["samples"].append({"iteration": iteration, "action": "create", **timing})
         result.raise_for_status()
         version_id = result.json()["version_id"]
         result, timing = timed_request(client, doc, probe, "PATCH", f"{PATH}/{version_id}",
-            {"expected_revision": start_revision + 1, "name": "Measured rename"})
+            {"expected_revision": start_revision + 1, "name": "Measured rename"}, diagnostics=diagnostics)
         report["samples"].append({"iteration": iteration, "action": "rename", **timing})
         result.raise_for_status()
         result, timing = timed_request(client, doc, probe, "DELETE",
-            f"{PATH}/{version_id}?expected_revision={start_revision + 2}")
+            f"{PATH}/{version_id}?expected_revision={start_revision + 2}", diagnostics=diagnostics)
         report["samples"].append({"iteration": iteration, "action": "delete", **timing})
         result.raise_for_status()
         token = set_current_doc(doc)
@@ -249,6 +305,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--mode", choices=("native", "legacy", "both"), default="both")
+    parser.add_argument("--diagnostics", action="store_true",
+                        help="Record bounded GC overlap and native admission leaf timings; no GC policy changes")
     args = parser.parse_args()
     if not 1 <= args.repeats <= 30:
         parser.error("repeats must be between 1 and 30")
@@ -268,7 +326,10 @@ def main():
         finally:
             _PHASE.reset(token)
     cases, failure = [], None
+    diagnostics = Diagnostics() if args.diagnostics else None
     try:
+        if diagnostics is not None:
+            diagnostics.install()
         with TestClient(app) as client:
             for mode in (("native", "legacy") if args.mode == "both" else (args.mode,)):
                 native.try_record = (phase_wrapper(originals[1], "pending_native") if mode == "native"
@@ -279,7 +340,7 @@ def main():
                     report = {"case": f"{mode}-{handles}-handles-{retained}-retained-{background}"}
                     cases.append(report)
                     try:
-                        measure(client, doc, report, args.repeats, probe, handles, retained, mode, background)
+                        measure(client, doc, report, args.repeats, probe, handles, retained, mode, background, diagnostics)
                         report["completed"] = True
                     except Exception as error:
                         # Each next case installs a fresh private native prefix.
@@ -295,6 +356,8 @@ def main():
         failure = {"case": cases[-1]["case"] if cases else None,
                    "exception": type(error).__name__, "detail": str(error)}
     finally:
+        if diagnostics is not None:
+            diagnostics.close()
         state.drop_doc(doc)
         state._lock, native.try_record, state.mutate_with_feature_log = originals
     clean = doc not in state.revision_map()
@@ -308,6 +371,11 @@ def main():
             "No source proof is required for UI recording; fresh-worker proof is measured once per native case afterward.",
             "No limits, GC policy, physics, retry behavior or production sessions are changed."],
         "repeats": args.repeats, "all_cases_attempted": failure is None,
+        "diagnostics": None if diagnostics is None else {
+            "scope": "Benchmark-only correlation; all GC policy and runtime limits unchanged",
+            "event_limit_per_family": MAX_DIAGNOSTIC_EVENTS,
+            "gc_events": len(diagnostics.gc_events), "stage_events": len(diagnostics.stages),
+            "dropped_gc_events": diagnostics.dropped_gc, "dropped_stage_events": diagnostics.dropped_stages},
         "completed": failure is None and all(item.get("completed", False) for item in cases),
         "correctness_verified": failure is None and not errors and clean,
         "latency_qualified": False,

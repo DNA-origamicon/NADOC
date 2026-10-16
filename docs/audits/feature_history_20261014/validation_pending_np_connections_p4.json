@@ -8,13 +8,16 @@
     "failed": 31,
     "passed": 18,
     "seconds": 3.29,
-    "defects": ["Missing native pending contracts", "ISSUE-90: deleting a pending candidate clears unrelated legacy direct-binding metadata"]
+    "defects": [
+      "Missing native pending contracts",
+      "ISSUE-90: deleting a pending candidate clears unrelated legacy direct-binding metadata"
+    ]
   },
   "final_pending": {
     "target": "tests/test_part_pending_np_connections.py",
     "passed": 66,
     "failed": 0,
-    "seconds": 4.20,
+    "seconds": 4.2,
     "real_cold_worker_seconds": 1.08
   },
   "identity_separate_run": {
@@ -25,7 +28,12 @@
     "included_in_editing_regressions": true
   },
   "editing_regressions": {
-    "targets": ["recipe_edit", "repair_planning", "recipe_repair", "edit_identity"],
+    "targets": [
+      "recipe_edit",
+      "repair_planning",
+      "recipe_repair",
+      "edit_identity"
+    ],
     "passed": 95,
     "failed": 0,
     "seconds": 3.58
@@ -49,8 +57,14 @@
     "cleanup": true,
     "correctness_verified": true,
     "latency_qualified": false,
-    "larger_native_route_p50_ms": [23.37892200011993, 24.11936849966878],
-    "larger_compatibility_route_p50_ms": [17.177323999931104, 17.63290150120156],
+    "larger_native_route_p50_ms": [
+      23.37892200011993,
+      24.11936849966878
+    ],
+    "larger_compatibility_route_p50_ms": [
+      17.177323999931104,
+      17.63290150120156
+    ],
     "native_max_request_ms": 88.56836000268231,
     "native_max_recording_lock_ms": 82.34846699997433,
     "native_max_light_request_ms": 86.30182999695535,
@@ -64,9 +78,67 @@
     "feature_identity.py byte-for-byte unchanged, preventing unrelated duplex numerical pin invalidation"
   ],
   "open": [
-    "Latency remains unqualified; duplicate preflight/build descriptor scans identified for narrow follow-up",
-    "Pending-version motion/resize tests authored separately but not executed or implemented in this checkpoint",
+    "Latency remains unqualified despite removing duplicate scans; shared allocation/isolation work and actual lock/light-request tails remain follow-up",
+    "Pending-version motion/resize has a recorded red baseline; production implementation follows this prepared-context checkpoint",
     "Applied connections, bound motion, graft-removal dependency policy and assemblies remain separate",
     "No application/browser/manual validation claim"
-  ]
+  ],
+  "prepared_context_validation": {
+    "targets": [
+      "tests/test_part_pending_np_connections.py",
+      "tests/test_part_pending_np_preparation.py",
+      "tests/test_benchmark_runtime_probe.py"
+    ],
+    "passed": 78,
+    "failed": 0,
+    "seconds": 4.55,
+    "real_cold_worker_seconds": 1.12,
+    "counting_note": "Includes the prior 66 pending cases; do not add all 78 to the existing 161 distinct cases.",
+    "boundaries": [
+      "Each locked native route prepares its bounded typed inventory once",
+      "Exact source object guard; no cross-revision cache or public skip flag",
+      "Standalone/cold build always validates independently",
+      "Supported missing/bad references fail atomically; unsupported scope classified before work",
+      "Benchmark callback ownership/cap/drop/overlap leaves GC policy unchanged"
+    ]
+  },
+  "benchmark_prepared": {
+    "report": "benchmark_pending_np_connections_prepared.json",
+    "repeats": 30,
+    "cases_completed": 10,
+    "native_lifecycles_correct": 150,
+    "native_cold_verified": 5,
+    "cleanup": true,
+    "correctness_verified": true,
+    "latency_qualified": false,
+    "native_requests": 450,
+    "calls_per_leaf_per_native_request": 1,
+    "dropped_diagnostic_events": 0,
+    "larger_native_route_p50_ms": [
+      20.099428498724592,
+      21.240376998321153
+    ],
+    "larger_compatibility_route_p50_ms": [
+      17.25642499877722,
+      17.887803998746676
+    ],
+    "larger_native_leaf_total_p50_ms": [
+      2.866703000108828,
+      2.9025205003563315
+    ],
+    "native_max_request_ms": 75.78759199896012,
+    "native_max_recording_lock_ms": 70.12912999925902,
+    "native_max_light_request_ms": 72.56704600149533,
+    "native_requests_overlapping_gen2": 9,
+    "compatibility_requests_overlapping_gen2": 7,
+    "note": "Gen-2 intervals overlap typed inventory, later recording work and work outside the recording lock. Sequential runs and correlation do not establish an isolated cause or permit subtracting GC from latency. No collection policy or limits changed."
+  },
+  "pending_motion_red": {
+    "target": "tests/test_part_thiol_pending_motion.py",
+    "cases": 31,
+    "failed": 26,
+    "passed": 5,
+    "seconds": 3.18,
+    "reason": "Selector/schema and native pending-consumer contract not yet implemented"
+  }
 }

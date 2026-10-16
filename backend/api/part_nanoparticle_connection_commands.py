@@ -4,6 +4,7 @@ No applied topology, placement or relaxation is accepted here. Unrelated owners
 are retained verbatim; in particular deletion performs no global binding sync.
 """
 
+from dataclasses import dataclass
 from time import time
 from typing import Annotated, Literal
 from uuid import uuid4
@@ -143,8 +144,19 @@ def _bounded(design):
     return True
 
 
-def build(kind, design, params):
-    body = parse_command(kind, params)
+@dataclass(frozen=True, slots=True)
+class _PreparedSource:
+    """Private references used only inside one uninterrupted recording lock.
+
+    This is neither an isolation snapshot nor a reusable validation receipt.
+    Standalone replay never accepts it as an input and prepares independently.
+    """
+
+    source: object
+    index: dict
+
+
+def _prepare_source(design):
     if not _bounded(design):
         raise CommandContractError("Pending connection source exceeds its reference allowance",
                                    code="unsupported_np_connection_source")
@@ -152,6 +164,19 @@ def build(kind, design, params):
         raise CommandContractError("Pending connection source has unsupported reference ownership",
                                    code="unsupported_np_connection_source")
     index, _ = identity_index(design)
+    return _PreparedSource(design, index)
+
+
+def build(kind, design, params):
+    body = parse_command(kind, params)
+    return _build_prepared(kind, design, body, _prepare_source(design))
+
+
+def _build_prepared(kind, design, body, prepared):
+    if type(prepared) is not _PreparedSource or prepared.source is not design:
+        raise CommandContractError("Pending connection preparation belongs to another source",
+                                   code="source_changed")
+    index = prepared.index
     version = None
     if kind != "nanoparticle-connection-version-create":
         version = _resolve(index, "nanoparticle_connection_version", body.version_id, "version_id")
@@ -213,7 +238,7 @@ def build(kind, design, params):
     return design.copy_with(nanoparticle_connection_versions=versions)
 
 
-def _route_eligible(design, particle_id, version, choices):
+def _route_scope_eligible(design, particle_id, version, choices):
     if not _record_count_bounded(design):
         return False
     particle = next((item for item in design.nanoparticles if item.id == particle_id), None)
@@ -226,12 +251,25 @@ def _route_eligible(design, particle_id, version, choices):
     if version is not None and (version.nanoparticle_attach is None or version.target_attach is None):
         return False  # Old unspecified endpoint metadata remains a legacy receipt.
     owners = [item for item in design.nanoparticle_conjugations if item.nanoparticle_id == particle_id]
-    if (len(owners) > 1 or not _bounded(design)
+    if (len(owners) > 1
             or sum(len(item.surface_strands) for item in owners) > MAX_HANDLES
             or any(record.bound_overhang_id is not None for item in owners for record in item.surface_strands)
             or len((choices.get("name") or "").strip()) > 256):
         return False
-    return typed_ownership_supported(design)
+    return True
+
+
+def _route_eligible(design, particle_id, version, choices):
+    """Compatibility predicate; the live recorder retains its own preparation."""
+    if not _route_scope_eligible(design, particle_id, version, choices):
+        return False
+    try:
+        _prepare_source(design)
+    except ReferenceResolutionError:
+        return True  # Supported reference damage must never trigger fallback.
+    except (CommandContractError, NotImplementedError):
+        return False
+    return True
 
 
 def try_record(kind, particle_id, choices, *, version_id=None, expected_revision=None):
@@ -255,7 +293,13 @@ def try_record(kind, particle_id, choices, *, version_id=None, expected_revision
             if not _record_count_bounded(source):
                 return None
             version = next((item for item in source.nanoparticle_connection_versions if item.id == version_id), None)
-            if not _route_eligible(source, particle_id, version, choices):
+            if not _route_scope_eligible(source, particle_id, version, choices):
+                return None
+            try:
+                prepared = _prepare_source(source)
+            except ReferenceResolutionError:
+                raise
+            except (CommandContractError, NotImplementedError):
                 return None
             state._assert_active_loadout_editable(source)
             if not any(item.id == particle_id for item in source.nanoparticles):
@@ -280,13 +324,14 @@ def try_record(kind, particle_id, choices, *, version_id=None, expected_revision
                 values["name"] = (choices.get("name") or "").strip() or version.name
             label = {"nanoparticle-connection-version-create": "Create", "nanoparticle-connection-version-patch": "Rename",
                      "nanoparticle-connection-version-delete": "Delete"}[kind] + " nanoparticle connection"
+            body = parse_command(kind, values)
 
             def native(design):
                 if session.design is not source or design is not source:
                     raise HTTPException(409, detail="Pending connection source changed before recording.")
                 # The recorder appends its row in place. Keep that append off
                 # the source's list while retaining unchanged authoring models.
-                return build(kind, design, values).copy_with(feature_log=list(design.feature_log))
+                return _build_prepared(kind, design, body, prepared).copy_with(feature_log=list(design.feature_log))
 
             return record_feature(session, kind, label, values, native)
     except ReferenceResolutionError as error:

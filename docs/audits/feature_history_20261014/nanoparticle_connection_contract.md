@@ -130,15 +130,45 @@ only, not a latency threshold. The harness now emits separate
 status tests correctness only. Further optimization/measurement is required
 before making a no-regression claim.
 
-Static audit found duplicate `_bounded` and `typed_ownership_supported` walks
-in route preflight and pure build. The ordinary recorder does not call the
-proof dependency graph or regenerate the prefix. A narrow next optimization
-can prepare the same bounded typed inventory once under the existing lock and
-pass it privately to a shared build core, bound to the exact source object;
-standalone/cold build must still prepare its own inventory. Do not introduce a
-public validation-skip flag or a cache across revisions. Existing snapshot
-copy, two recovery encodes, reconciliation, ligation retry and validation are
-separate costs and must not be removed based on these timings.
+The following prepared-context increment removes duplicate `_bounded` and
+`typed_ownership_supported` walks from route preflight and pure build. The
+ordinary recorder does not call the proof dependency graph or regenerate the
+prefix. It now prepares the bounded typed inventory once under the existing
+lock and passes it privately to a shared build core, bound to the exact source
+object. Standalone/cold build still prepares its own inventory; no public
+validation-skip flag, cross-revision cache or proof authority was introduced.
+This context is valid only within that locked operation, not a source snapshot.
+Root passed **78 cases in 4.55 seconds**, including a **1.12-second real cold
+proof**, across pending CRUD, preparation-boundary and benchmark-probe tests.
+These overlap the prior 66-case pending target and are not 78 additional cases.
+
+`benchmark_pending_np_connections_prepared.json` records the subsequent
+30-repeat diagnostic run: all ten cells completed, all 150 native lifecycles
+and five independent cold proofs passed, and cleanup succeeded. Each of the
+450 measured native requests called the three inventory leaves exactly once;
+no diagnostic events were dropped. In the larger background, native request
+medians were **20.10–21.24 ms** versus compatibility **17.26–17.89 ms**. The
+earlier native range was 23.38–24.12 ms. These sequential measurements show a
+useful improvement; instrumentation and run variability prevent a precise
+causal speedup claim. Median native leaf totals were **2.87–2.90 ms**.
+
+**Latency remains unqualified.** Maximum native request/recording-lock/light
+request times were **75.79 / 70.13 / 72.57 ms**. Nine native requests and seven
+compatibility requests overlapped generation-2 collection. Some long native
+samples collected inside `typed_ownership_supported`, others during later
+recording work, and the largest native request collected in phase `other`
+while its recording lock lasted 15.88 ms. Compatibility likewise reached a
+74.94 ms request and 69.47 ms recording lock with collection overlap. These
+intervals are correlation, not a counterfactual time saving: do not subtract
+them from user-visible latency, disable GC, retry, or raise limits. The report
+retains every generation-2 sample, action maxima, all errors and aggregate
+correlations while pruning repetitive samples and generated identity maps.
+
+Existing snapshot copying, recovery encoding, reconciliation, ligation retry
+and validation remain intact. The next performance step belongs to the shared
+source-isolation/publication work: reduce avoidable allocations and measure
+actual lock/light-request tails with the reusable bounded runtime probe.
+No broader recorder rewrite is justified solely by these leaf measurements.
 
 The initial implementation exposed unnecessary numerical pin coupling:
 `feature_identity.py` is a duplex-relax-v1 manifest member for `identity_factory`,
@@ -208,9 +238,11 @@ unrelated particle retention, selector/schema failures, applied/retained
 refusals, external consumers, missing targets, typed dependencies, native root
 cold proof with poisoned recovery, geometry-changing history edits, deletion of
 a selected producer, actual ordinary route undo/redo, locked selector capture
-and failure atomicity. No tests have been run by the authoring agent; the parent
+and failure atomicity. Root recorded the expected red baseline: **26 failed,
+5 passed, 31 cases in 3.18 seconds**; the new selector and native contract are
+not implemented yet. No tests have been run by the authoring agent; the parent
 serializes validation. After implementation, extend the existing pending HTTP
-benchmark with one move and resize at the already qualified scopes, reporting
+benchmark with one move and resize at the already measured scopes, reporting
 latency and proof capture separately without raising limits or retrying.
 
 ### Later checkpoint: explicit application

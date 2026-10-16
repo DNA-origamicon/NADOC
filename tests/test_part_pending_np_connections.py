@@ -391,7 +391,7 @@ def test_locked_adapter_is_not_reentrant_and_freezes_defaults_once(document, mon
     lock = GuardedLock()
     monkeypatch.setattr(state, "_lock", lock)
     calls = {"id": 0, "time": 0, "build": 0}
-    original_build = native.build
+    original_build = native._build_prepared
     def make_id():
         assert lock.held
         calls["id"] += 1
@@ -406,7 +406,7 @@ def test_locked_adapter_is_not_reentrant_and_freezes_defaults_once(document, mon
         return original_build(*args)
     monkeypatch.setattr(native, "uuid4", make_id)
     monkeypatch.setattr(native, "time", now)
-    monkeypatch.setattr(native, "build", build)
+    monkeypatch.setattr(native, "_build_prepared", build)
     result = routes.create_np_connection_version("gold", request(document, expected_revision=state.revision()))
     assert calls == {"id": 1, "time": 1, "build": 1}
     assert result["version_id"] == str(UUID(int=730))
