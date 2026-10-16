@@ -1,7 +1,7 @@
 """Tests first: one owned source for local DNA preparation and its archive.
 
-No geometry, solver, package writer or production lifespan runs here. The new
-boundary is deliberately absent until this dossier's contract is reviewed.
+No geometry, solver, package writer or production lifespan runs here. The
+boundary was implemented after this dossier's initial red contract review.
 An owned source is not a complete physical receipt or native feature proof.
 """
 
@@ -306,7 +306,7 @@ def test_unsupported_families_are_not_silently_dropped_or_labeled_owned(document
         # Scope refuses a nonempty family before reading, normalizing or copying
         # its opaque contents; no valid simulation fixture is needed here.
         setattr(original, family, [model.model_construct(id="unsupported")])
-    monkeypatch.setattr(core(), "capture_archive", forbidden)
+    monkeypatch.setattr(core(), "deepcopy", forbidden)
     captured = host().capture_current(options())
     assert not captured.supported and captured.design is None
     assert captured.coverage["status"] == "unknown" and captured.coverage["reasons"]
@@ -360,7 +360,7 @@ def test_new_unreviewed_fields_refuse_coverage_before_copy(document, monkeypatch
     else:
         monkeypatch.setattr(m.Helix, "model_fields", {
             **m.Helix.model_fields, "future_pose": m.Helix.model_fields["phase_offset"]})
-    monkeypatch.setattr(module, "capture_archive", forbidden)
+    monkeypatch.setattr(module, "deepcopy", forbidden)
     captured = host().capture_current(options())
     assert not captured.supported and captured.design is None
     assert captured.coverage["status"] == "unknown" and captured.coverage["reasons"]

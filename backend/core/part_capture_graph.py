@@ -43,6 +43,13 @@ class GraphBudget:
             if remaining[0] < 0 or remaining[1] < 0 or (deadline is not None and clock() > deadline):
                 raise CaptureLimit("Part verification capture budget exceeded")
             if validate is not None:
+                # A rejecting archive validator may inspect mapping keys. Admit
+                # that bounded work first, without touching subclass hooks or
+                # changing the ordinary proof walk (which has no validator).
+                if type(item) is dict and id(item) not in seen:
+                    waiting = pending_values if reject_cycles else len(pending)
+                    if len(item) * 2 + waiting > remaining[0]:
+                        raise CaptureLimit("Part verification capture node budget exceeded")
                 validate(item)
             if isinstance(item, str):
                 remaining[1] -= len(item) * 4

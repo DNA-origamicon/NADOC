@@ -1,8 +1,35 @@
 # Owned local DNA oxDNA preparation input
 
-Tests-first proposal, 2026-10-15. No production implementation, solver execution,
-scientific formula change or complete input receipt is part of this checkpoint.
-The live route remains unchanged until the boundary and its integration pass.
+Bounded core/host implementation, 2026-10-15; route integration remains pending.
+No solver execution, scientific formula change or complete input receipt is part
+of this slice. The live route remains unchanged until integration is reviewed
+and tested. VR/headset validation is deferred to a capable-machine session.
+
+## Current validation state
+
+The shared graph/recovery extraction was independently checked against six
+pre-extraction exact-accounting controls and 114 post-extraction capture/worker
+cases; it was committed as `3e12323f`. Its existing proof selection, deadlines,
+copy seams, alias/cycle behavior and recovery helper exports remain unchanged.
+The archive extension adds rejecting shape/cycle rules, never a field-exclusion
+or accounting-bypass option.
+
+The initial 58-case archive/host run produced 53 passes and five expected review
+failures: two opaque overhang truthiness cases, mapping key inspection preceding
+remaining-node admission, duplicate source classification, and unbumped source
+Design-ID drift. Corrections passed all 58 cases together with the 114 existing
+capture/worker cases (172 passed, four existing warnings, 10.01 seconds). Peer
+review then supplied one additional failing no-hook control: a dict subclass
+installed as an exact model's backing storage invoked its `keys()` hook. The
+model gate now requires exact dictionary storage before inspecting keys. Three
+further negative controls reproduced opaque-key equality hooks in storage and
+option headers and the host's early identity lookup. The shared header guard now
+checks fixed size and exact string keys before equality or ID extraction. The
+final run passed all 62 archive cases and 114 regression cases: 176 passed,
+four existing warnings, 10.17 seconds. The shared dictionary
+preflight is limited to callers supplying a rejecting validator; ordinary proof
+capture retains its existing path. The test result and exact target list are
+recorded in `validation_oxdna_preparation_capture.json`.
 
 ## Concrete boundary
 
@@ -33,6 +60,8 @@ active document. No generic callback receives the live source.
 
 - `core/oxdna_preparation_inputs.py`: closed profile/schema assessment and
   `capture_archive(source)`, using shared bounded graph accounting and copying.
+- `core/oxdna_preparation_schema.py`: positive exact inventories for each admitted
+  nested archival model; unknown fields, private state and copy hooks refuse.
 - `api/oxdna_preparation_capture.py`: `capture_current(options,
   expected_revision=None)` and `require_current(captured)`. It owns no session
   registry, job catalog, queue or lifespan.
@@ -48,6 +77,10 @@ Missing documents never cause lazy session creation. Required revision mismatch,
 source replacement, close/reopen ABA and a changed current document fail with
 409 before side effects. An absent part returns 404. Do not let callers supply a
 session incarnation or claim that a saved origin record is authoritative.
+The final guard also compares the captured Design ID. Strict immutable sources
+explicitly refuse this mutable capture API without decoding; a separate owned
+immutable adapter would need its own review. The host only classifies request
+options; `capture_archive` owns the single source-profile/accounting pass.
 
 After package creation starts, later ordinary edits must not mutate the frozen
 input. They may make the job describe an older source. Do not cancel an otherwise
@@ -98,12 +131,12 @@ content, including nested presentation, physical and source metadata, counts
 against the ordinary allowance. These are admission bounds, not a hard lock-time,
 heap, geometry-generation or simulation-runtime guarantee.
 
-`part_capture_inputs.visit_inputs` currently embeds its graph charge/deepcopy
-mechanics in the proof-specific selection loop. Factor those mechanics into a
-small shared utility only after tests demonstrate identical existing proof
-capture/accounting. Add full archive selection as a separate positive policy;
-do not duplicate a recursive walker or expose a generic skip-fields/budget-bypass
-flag. Recovery's separately charged immutable strings may be shared; mutable
+`part_capture_inputs.visit_inputs` retains its proof-specific selection/copy
+policy and now delegates graph charges to `part_capture_graph`.
+`part_recovery_storage` contains the existing encoded-storage accounting,
+re-exported unchanged by the API helper. Full archive selection remains a
+separate positive policy; no duplicated recursive walker or generic
+skip-fields/budget-bypass flag is exposed. Recovery's separately charged immutable strings may be shared; mutable
 containers must not be shared with the source. Unknown object hooks, private
 model state, schema drift and cyclic/non-JSON structures need explicit refusal,
 not arbitrary `deepcopy` execution followed by an apparent owned verdict.
@@ -117,8 +150,9 @@ Python/GIL/GC pauses must remain visible in eventual measurement.
 
 ## Tests-first dossier and remaining integration checks
 
-`tests/test_oxdna_preparation_capture.py` uses lazy module imports so the absent
-implementation does not break collection. It covers exact archival equality,
+`tests/test_oxdna_preparation_capture.py` used lazy module imports during the
+initial tests-first phase so the absent implementation did not break collection.
+It covers exact archival equality,
 legacy recipe acceptance, deep authoring/history/presentation alias independence,
 reference projection after isolation, retained DNA pose families, CPU/CUDA scope,
 honest unknown evidence, exact origin checks including ABA, absent/stale rejection
@@ -126,9 +160,9 @@ before copy, explicit unsupported families/settings, field evolution, recovery
 without decoding, node/byte/row/recovery refusal and cancellation. No geometry,
 package writer, project archive, solver or production lifespan is invoked.
 
-Before wiring, add factoring parity tests that compare old/new proof accounting
-at exact node/byte boundaries, deterministic deadline injection, alias/cycle
-handling, and the same separate recovery charge. Add route tests with fake
+Factoring parity tests now cover old/new proof accounting at exact node/byte
+boundaries, deterministic deadline injection, alias/cycle handling, and the same
+separate recovery charge. Before wiring, add route tests with fake
 geometry and package writers: mutate the original during threaded preparation,
 assert all consumers see the same captured source, preserve the archived full
 history/presentation and reference filtering, verify source guards precede all
@@ -141,3 +175,7 @@ calling the new route profile responsive. Package and attempt byte receipts,
 settings/start coordination, restart-file identity and solver provenance remain
 the next independently testable checkpoints described in
 `physical_freshness_plan.md`.
+
+New route test work is held until the frozen backend regression run finishes;
+the integration assertions above remain the finite next step. No claim is made
+that this unused boundary has fixed threaded live-route source aliasing yet.

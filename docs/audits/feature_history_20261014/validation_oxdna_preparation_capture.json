@@ -1,0 +1,82 @@
+{
+  "date": "2026-10-15",
+  "scope": "Bounded owned full archive and same-session host capture for ordinary local DNA2 oxDNA preparation; not wired to routes",
+  "shared_extraction_checkpoint": "3e12323f",
+  "tests": [
+    "tests/test_oxdna_preparation_capture.py",
+    "tests/test_oxdna_capture_shapes.py"
+  ],
+  "red_evidence": {
+    "initial_mixed_selection": {
+      "passed": 3, "failed": 7, "seconds": 3.51,
+      "scope_note": "Included unrelated overhang controls; these totals are not attributed solely to the absent archive module"
+    },
+    "review_target_before_corrections": {
+      "passed": 53,
+      "failed": 5,
+      "seconds": 3.11,
+      "failures": [
+        "Opaque overhang auxiliary_endpoint truthiness hook",
+        "Opaque overhang strand_anim_setup truthiness hook",
+        "Mapping key-shape scan before remaining-node refusal",
+        "Duplicate source classification under lock",
+        "Unbumped source Design-ID drift not rejected by packaging guard"
+      ]
+    }
+  },
+  "corrected_validation_before_peer_review": {
+    "passed": 172,
+    "warnings": 4,
+    "seconds": 10.01,
+    "composition": "58 archive/host cases plus 114 capture/worker regression cases"
+  },
+  "peer_review_red": {
+    "failed": 1,
+    "seconds": 2.73,
+    "case": "test_model_storage_dict_subclass_refuses_before_mapping_or_copy_hooks",
+    "finding": "An exact Pydantic model with a dict-subclass backing store invoked keys before storage-shape rejection"
+  },
+  "peer_key_shape_red": {
+    "failed": 2,
+    "seconds": 3.51,
+    "timing_scope": "Combined run also passed 95 unrelated repair regressions",
+    "finding": "Exact storage and options dictionaries with opaque keys invoked equality before key-type admission"
+  },
+  "host_origin_key_red": {
+    "failed": 1,
+    "seconds": 3.03,
+    "finding": "Live source.id lookup preceded exact header-key admission"
+  },
+  "final_validation": {
+    "passed": 176,
+    "warnings": 4,
+    "seconds": 10.17,
+    "composition": "62 archive/host cases plus 114 shared capture/worker regression cases",
+    "targets": [
+      "tests/test_oxdna_preparation_capture.py",
+      "tests/test_oxdna_capture_shapes.py",
+      "tests/test_capture_graph_parity.py",
+      "tests/test_part_capture_admission.py",
+      "tests/test_part_capture_copy.py",
+      "tests/test_part_owned_capture.py",
+      "tests/test_part_retained_recovery.py",
+      "tests/test_part_immutable_worker.py"
+    ]
+  },
+  "static": "Ruff passed for new core/schema/host/test files and narrow shared dictionary preflight",
+  "constraints": {
+    "ordinary_nodes": 30000,
+    "ordinary_bytes": 2000000,
+    "cooperative_capture_seconds": 0.025,
+    "history_rows_including_children": 2000,
+    "retained_recovery_bytes": 8000000
+  },
+  "limitations": [
+    "No route wiring, geometry, solver, package writer, complete physical receipt or native proof label",
+    "Unsupported source/request families return explicit unknown and remain outside owned-route coverage",
+    "Strict immutable sessions refuse this mutable-only boundary without decoding",
+    "Cooperative deadline is not a hard lock-time or heap bound; responsiveness unmeasured",
+    "Broader legacy aliases can still mutate a live source without bumping revision; the private archive stays internally independent",
+    "Broad regression run and route integration remain pending"
+  ]
+}
