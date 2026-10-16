@@ -1,0 +1,89 @@
+{
+  "date": "2026-10-15",
+  "scope": "Private immutable recovery: unchanged canonical preparation/native proof in a disposable child, exact original byte ownership and one-shot closed-worker handoff",
+  "unique_recovery_cases_passed": 384,
+  "files": [
+    "tests/test_immutable_recovery_worker.py",
+    "tests/test_immutable_recovery_worker_lifecycle.py",
+    "tests/test_immutable_recovery_worker_host.py",
+    "tests/test_part_immutable_recovery.py",
+    "tests/test_part_immutable_revision.py",
+    "tests/test_part_verification_worker.py",
+    "tests/test_part_verification_jobs.py",
+    "tests/test_part_immutable_worker.py",
+    "tests/test_part_publication_permit.py",
+    "tests/test_part_evaluation_session.py",
+    "tests/test_part_immutable_cache.py",
+    "tests/test_part_immutable_persistence.py"
+  ],
+  "executed_runs": [
+    {
+      "stage": "New host target before integration",
+      "passed": 1,
+      "failed": 12,
+      "seconds": 13.32,
+      "reason": "Old parent preparation and unused RecoveryWorker seam; no fixture failure"
+    },
+    {
+      "stage": "New worker lifecycle target before integration",
+      "passed": 26,
+      "failed": 11,
+      "seconds": 15.06,
+      "reason": "Ten positive handoffs unavailable, one concurrent observation race"
+    },
+    {
+      "stage": "Stage1/lifecycle/host/existing recovery targets after implementation",
+      "passed": 144,
+      "seconds": 19.37
+    },
+    {
+      "stage": "Eight related regression files plus independent finite-linker cold replay target",
+      "passed": 257,
+      "seconds": 14.3,
+      "recovery_cases": 240,
+      "finite_linker_cases": 17
+    }
+  ],
+  "established": [
+    "Real spawned empty/gold/DNA recovery preserves exact original bytes and every metadata field with parent prepare/decode/canonical/digest tripwires",
+    "Exact worker/ticket/admission and self-owned completion, successful zero exit, reaped process and closed/unlinked buffers precede local sealing",
+    "One worker lock serializes observation and consumption; copied/swapped/forged/reused/public-result mutation and concurrent readers cannot mint replacement authority",
+    "Actual 2 MB result overflow, child crash, mismatched authoring, malformed bindings and metadata refuse without a candidate",
+    "Original created+5 second deadline includes read, worker construction/start, cleanup and final handoff",
+    "Post-supervision cancel/session ABA/policy/storage-owner change, cleanup failure and catalog eviction prevent retention/qualification",
+    "Original file lease, final bound commit, source comparison, failure rollback and one-publication behavior remain"
+  ],
+  "limits": [
+    "Fixed child preparation remains trusted implementation; hashes bind input and do not independently prove arbitrary valid-shaped metadata",
+    "No generic bytes/metadata constructor or public gate expansion; local scope sealing is separate from host publication qualification",
+    "Near-cap independent-read retained memory, total parent/child RSS and whole-request responsiveness remain under qualification",
+    "No new scientific algorithm, numerical pin, command limit, GC policy, deadline or memory allowance"
+  ],
+  "lint": "Changed-file Ruff/whitespace pass. just lint retains five pre-existing F401 imports.",
+  "backend_selector": {
+    "command": "just test-smart --dry-run",
+    "decision": "FAST (fast suite only)",
+    "executed": false,
+    "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\nThis is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\nOnly request `just test-session` when a broad/full sweep is actually needed.",
+    "caveat": "Selector wording says ran; this dry run did not execute FAST. Archive is unavailable; no additional broad/bulk run was attempted."
+  },
+  "artifacts": "Only small pytest-owned cache/sentinel fixtures and bounded shared-memory workers; no simulation, native build, app lifespan or bulk output. Cleanup inventory remains recorded separately.",
+  "app_status": "NOT VERIFIED IN APP",
+  "vr_status": "Explicitly deferred by user to a later capable-machine session",
+  "assemblies": "Deferred",
+  "frontend_main_js_loc_delta": 0,
+  "cleanup": {
+    "owned_completed_pytest_roots": [
+      "pytest-504",
+      "pytest-505",
+      "pytest-506"
+    ],
+    "files_removed": 120,
+    "bytes_removed": 158801,
+    "active_fd_or_map_references": 0,
+    "lock_files": 0,
+    "removal_verified": true,
+    "historical_locked_pytest_268": "Preserved untouched",
+    "root_policy": "Only completed current-run fixtures; no user designs, historical artifacts or production cache removed."
+  }
+}

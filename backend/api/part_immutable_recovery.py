@@ -17,11 +17,12 @@ from backend.api import part_publication_policy as policy, state
 from backend.api.doc_context import get_current_doc
 from backend.api.document_identity import require_document_identity
 from backend.api.part_history_verification import _slot
-from backend.api.part_immutable_recovery_inputs import RestoreRequest, prepare_stored
+from backend.api.part_immutable_recovery_inputs import RestoreRequest
+from backend.api.part_immutable_recovery_worker import RecoveryWorker, reserve_input
 from backend.api.part_immutable_revision import revision_metadata
 from backend.api.part_immutable_storage import require_empty_session
 from backend.api.part_verification_jobs import Stopped, supervise
-from backend.api.part_verification_worker import VerificationWorker, failure
+from backend.api.part_verification_worker import failure
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_history_proof import digest
 from backend.core.part_verification_capture import CaptureLimit
@@ -183,24 +184,55 @@ def _checkpoint(job, deadline):
         expected_session_identity=job.session_identity, expected_policy_generation=job.policy_generation)
     if matches is False:
         raise Stopped("policy_changed" if jobs._policy_changed(job) else "source_changed")
+    return matches
 
 
 def _run(job):
     """Own one admission through private preparation, child reaping and cleanup."""
     deadline = job.created + TIME_BUDGET
     supervised = False
-    candidate = lease = None
+    worker = None
     try:
         checkpoint = lambda: _checkpoint(job, deadline)
         checkpoint()
         stored = job.persistence.read_pending(job.doc)
+        checkpoint()
         lease = stored.lease
-        candidate, captured = prepare_stored(stored, checkpoint=checkpoint)
+        ticket = reserve_input(stored, admission=job.admission)
         del stored
         checkpoint()
+
+        def construct(owned):
+            nonlocal worker
+            if owned is not ticket:
+                raise ValueError("Recovery supervisor changed its original input ticket")
+            worker = RecoveryWorker(owned)
+            return worker
+
         supervised = True  # supervise owns release, including constructor failure.
-        result = supervise(job, captured, VerificationWorker, max(0, deadline - monotonic()), status_lock=jobs._lock)
-        del captured
+        result = supervise(job, ticket, construct, max(0, deadline - monotonic()), status_lock=jobs._lock)
+        if (result.get("status") == "verified" and result.get("native_editable") is True
+                and result.get("issues") == []):
+            with jobs._lock:
+                # Supervision has released native admission. A subsequent job
+                # may have evicted this one; never resurrect its retained bytes.
+                if not any(retained is job for retained in jobs._jobs.values()):
+                    raise Stopped("result_expired")
+                if jobs._admission_context(job) is None:
+                    raise Stopped("invalid_evaluation_admission")
+                if checkpoint() is None:
+                    raise Stopped("source_busy")
+                candidate = worker.take_revision(ticket, admission=job.admission)
+                if checkpoint() is None:
+                    raise Stopped("source_busy")
+                job.candidate, job.lease = candidate, lease
+                job.qualification = _qualify(job, candidate)
+                design_id = revision_metadata(candidate).design_id
+                job.result = {"status": "ready", "native_editable": True, "issues": [],
+                    "restoration_assessment": {**result, "design_id": design_id},
+                    "source_revision": job.revision, "design_id": design_id}
+                job.status = "complete"
+                return
     except Stopped as error:
         result = failure(str(error))
     except CommandContractError as error:
@@ -213,16 +245,8 @@ def _run(job):
         if not supervised:
             _slot.release()
     with jobs._lock:
-        if (candidate is not None and result.get("status") == "verified" and result.get("native_editable") is True
-                and result.get("issues") == [] and not job.cancelled.is_set()):
-            job.candidate, job.lease = candidate, lease
-            job.qualification = _qualify(job, candidate)
-            job.result = {"status": "ready", "native_editable": True, "issues": [],
-                "restoration_assessment": result, "source_revision": job.revision,
-                "design_id": revision_metadata(candidate).design_id}
-        else:
-            discard_candidate(job)
-            job.result = result
+        discard_candidate(job)
+        job.result = result
         job.status = "complete"
 
 

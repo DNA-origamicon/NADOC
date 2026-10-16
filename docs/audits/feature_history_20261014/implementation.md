@@ -19,7 +19,7 @@ regression debt are recorded in [the checkpoint evidence](validation_pause_check
 | P3 | Native DNA command families and generated construction | DNA implementation exit checks recorded below, including joined/connectivity input compilation and bounded native-source CPD conversion/relaxation. Registered kinds retain method/action restrictions; their count is not universal operation coverage. Generated asset/attachment histories remain in P4 |
 | P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol, pinned small protein/catalog/aptamer inputs, supported protein conjugation and duplex lifecycle/relaxation implemented. Pending NP and ordinary overhang connection contracts pass independent replay. Bounded applied NP lifecycle/rename and finite ordinary linker Apply/reapply are implemented. Finite ordinary Apply/reapply has a private default-disabled route with 244 focused passes. A shared reference-walker lifetime refactor passes 247 cases and removes the observed median regression in the compact benchmark; HTTP tails and app qualification still keep rollout closed. Applied NP route migration remains open. Owned oxDNA preparation is also wired behind a default-disabled host gate; 182 focused cases pass, with live capture/HTTP responsiveness still under qualification. Full import/attachment coverage and complete physical-input receipts remain open |
 | P5 | Standard-part repair, drafts, desktop and part-mode VR | Saved draft evaluation/apply, reference selection, source staging/restoration and persistence pass. Desktop UI-1 and narrow invalid-gold repair pass. Private gold/QD/free-protein and complete DNA comparisons pass automated checks; broader invalid-family selectors and desktop app review remain open. VR/headset validation is explicitly deferred to a later capable-machine session |
-| P6 | Strict standard-part agent transactions and legacy retirement | Private policy/permits, closed strict HTTP dispatch, immutable internal ownership and outside-lock evaluation/publication pass. Atomic typed records and pending-safe autosave pass. Cold-qualified recovery and durable initial creation pass focused lifecycle checks. Private byte transport now moves source decode/projection into the admitted worker; public immutable creation/batch stay disabled pending responsiveness and memory qualification. Catalog expansion, explicit imports and later replay reuse remain open |
+| P6 | Strict standard-part agent transactions and legacy retirement | Private policy/permits, closed strict HTTP dispatch, immutable internal ownership and outside-lock evaluation/publication pass. Atomic typed records and pending-safe autosave pass. Cold-qualified recovery and durable initial creation pass focused lifecycle checks. Private byte transport moves source decode/projection into the admitted worker; recovery now also performs full canonical preparation there, with exact one-shot host handoff (384 focused cases). Public immutable creation/batch stay disabled pending responsiveness and retained-memory qualification. Catalog expansion, explicit imports and later replay reuse remain open |
 
 Assemblies are not an exit condition for any phase above. Existing assembly compatibility tests may catch collateral changes to shared infrastructure, but new assembly features and fixes remain deferred.
 
@@ -1316,3 +1316,29 @@ profiles share server and client allocation, so neither replaces app validation.
 The route gate remains false; initial and failed evidence is retained. See
 [the analysis](reference_inventory_lifetime.md) and
 [validation](validation_reference_inventory_lifetime.json).
+
+## Recovery preparation and owned worker handoff — October 15
+
+The near-cap recovery diagnostic isolated 164–187 ms of parent canonical
+preparation, with scalar reads delayed up to 158 ms. Recovery now performs that
+unchanged preparation and native proof in its existing disposable child. The
+parent retains the exact original bytes and lease, and seals them only from the
+closed worker's original one-shot observation. Copying metadata, tickets,
+observations or a returned proof dictionary grants no publication authority.
+
+**384 focused cases across twelve recovery/storage/worker/permit/session files
+pass**, including real spawned empty/gold/DNA input replay, parent decode traps,
+full metadata equality, crash/overflow, concurrent observation/consumption,
+cleanup and stale-context failures, original five-second deadline and eviction.
+Existing commit, lease and rollback checks remain. A separate 17-case finite-
+linker cold replay target passed in the same extended run. Changed-file checks
+pass; repository lint retains five existing unused imports. Broad validation is
+FAST/deferred FULL in dry-run only; Archive remains unavailable for broad/bulk
+outputs and app checks. VR remains explicitly deferred.
+
+This is a correctness checkpoint. The near-cap memory/HTTP harness must now
+allocate independent input bytes per simulated file read and avoid retaining
+closed worker objects and their input tickets. No source limit, native algorithm,
+deadline, memory target or public gate changed. Retained-memory and whole-request
+qualification remain open. See [the worker plan](immutable_recovery_worker_plan.md)
+and [validation](validation_immutable_recovery_worker_stage2.json).

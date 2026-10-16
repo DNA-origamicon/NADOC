@@ -256,9 +256,46 @@ nonfinite/duplicate JSON refuse before proof. Empty, gold and DNA/group fixtures
 match every reference metadata field and complete proof report, with saved
 recovery poisoned. Existing capture and actual 2 MB pickle admission remain.
 
-`take_revision` currently **always refuses** with `recovery_seal_unavailable`.
+At the stage-one checkpoint, `take_revision` **always refuses** with `recovery_seal_unavailable`.
 Positive worker completion, output overflow, zero-exit/cleanup, one-shot parent
 sealing and host integration are not established by these pure tests. They are
 the next separate checkpoint; existing parent preparation remains active. No
 public gate, model, scientific helper or numerical pin changed. See
 [the validation record](validation_immutable_recovery_worker_stage1.json).
+
+## Stage-two host handoff
+
+The host now sends the original stored bytes to the recovery child, which runs
+the unchanged full canonical preparation and native proof. The result remains a
+bounded JSON report. Only the exact worker's successful zero-exit observation,
+after reaping and buffer cleanup, can seal those original parent bytes. The
+revision entry accepts a worker/ticket/admission, never arbitrary bytes and
+metadata. Completion has both worker ownership and self identity; one lock
+serializes result observation and one-shot consumption. This rejects copied,
+swapped, reused and concurrently recreated completions. Child metadata remains
+trusted fixed-implementation output, not something proved solely by its hashes.
+
+Recovery preserves the original `created + 5 seconds` deadline. After supervision
+it checks that the exact job is still retained, its registered admission matches,
+the storage owner is unchanged, and the document/session/policy is positively
+current. Busy state probes refuse positive retention. It checks again after
+revision taking before attaching the existing qualification. Original file-lease
+ownership, final commit comparison and rollback are unchanged; no disk operation
+runs under the job or completion lock.
+
+Root observed **26 passes / 11 failures** in the 37-case worker target before
+implementation: ten unavailable positive handoffs and one concurrent result-read
+race. The new host target was **1 pass / 12 failures**, all from the old parent
+preparation/unused worker seam. After integration, **144 cases across four files
+passed in 19.37 seconds**, including real empty/gold/DNA child processes, parent
+decode tripwires, exact complete metadata, crash/2 MB output overflow, original
+deadline, cleanup failure, eviction and final publication guards. An additional
+**240 relevant regressions** passed alongside 17 finite-linker cold replay cases
+in a 257-case, 14.30-second run. No per-test budget was exceeded.
+
+The old recovery test double was replaced with actual worker result validation
+and cleanup at a controlled transport boundary; its existing file/commit/rollback
+assertions remain. Obsolete host imports of parent preparation and the old worker
+were removed. Public gates and all budgets are unchanged. Near-cap independent
+read allocation, retained memory and HTTP response measurements remain the next
+checkpoint. See [validation](validation_immutable_recovery_worker_stage2.json).

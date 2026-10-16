@@ -1,8 +1,9 @@
 """Private bounded recovery preparation and proof in one disposable child.
 
-Stage one only: this transport has no host publication or revision-seal factory.
 The child executes the existing preparation and proof implementations. Its JSON
 metadata is data, never a serialized scope seal or a publication capability.
+Only a closed worker's original one-shot observation can create a local revision;
+the host separately owns deadline/context checks and publication qualification.
 """
 
 from dataclasses import asdict, dataclass, field, fields
@@ -14,6 +15,7 @@ import pickle
 from re import fullmatch
 from secrets import token_hex
 import struct
+from threading import Lock
 from weakref import ref
 
 from backend.api.part_evaluation_worker import MAX_CANDIDATE_BYTES
@@ -269,9 +271,10 @@ def _metadata(value, payload_size):
     return RevisionMetadata(**value)
 
 
-@dataclass(frozen=True, slots=True, eq=False, init=False)
+@dataclass(frozen=True, slots=True, weakref_slot=True, eq=False, init=False)
 class _Completion:
     token: object
+    identity: object
     owner: object
     ticket: object
     admission: object
@@ -280,6 +283,32 @@ class _Completion:
 
     def __init__(self):
         raise TypeError("Recovery completion is a private host observation")
+
+
+def _consume_completion(worker, ticket, *, admission):
+    """Consume exact host-observed data for the private revision entry only.
+
+    This does not grant a publication permit. The caller must still own its job,
+    original deadline and file lease; current admission is rechecked here too.
+    """
+    if type(worker) is not RecoveryWorker:
+        _reject("Recovery completion requires its original exact worker")
+    with worker._completion_lock:
+        value = worker._completion
+        if (type(value) is not _Completion or value.token is not _OBSERVATION
+                or value.identity() is not value or value.owner() is not worker
+                or value.ticket is not ticket or worker._ticket is not ticket
+                or value.admission is not admission or ticket.admission is not admission
+                or not worker._result_read or not worker._closed or not worker._process_closed
+                or value.binding != worker._binding):
+            _reject("Recovery completion does not own this closed worker, ticket and admission")
+        # Rebuild only the tiny header from the exact retained reservation;
+        # never decode, copy or re-prepare the document in the parent.
+        _parts, binding = encode_input(ticket)
+        if _binding(binding) != value.binding:
+            _reject("Recovery completion no longer matches its original input")
+        worker._completion = None
+        return ticket.payload, value.metadata
 
 
 def _evaluate(input_name, input_size, output_name):
@@ -310,7 +339,7 @@ def _evaluate(input_name, input_size, output_name):
 
 
 class RecoveryWorker(VerificationWorker):
-    """One child and private completion; stage one cannot create a revision."""
+    """One child and one owned, closed-worker revision handoff."""
 
     def __init__(self, ticket):
         parts, binding = encode_input(ticket)
@@ -318,10 +347,17 @@ class RecoveryWorker(VerificationWorker):
         self._binding = _binding(binding)
         self._completion = None
         self._result_read = False
+        self._completion_lock = Lock()
         self._initialize_input(parts, _target=_evaluate, _result_limit=MAX_RESULT_BYTES,
                                _name="nadoc-part-recovery")
 
     def result(self):
+        # Observation and consumption share one boundary. Concurrent readers
+        # cannot recreate a completion after it has already been consumed.
+        with self._completion_lock:
+            return self._observe_result()
+
+    def _observe_result(self):
         if self._result_read:
             _reject("Recovery completion has already been observed")
         report = self._read_result()
@@ -346,7 +382,8 @@ class RecoveryWorker(VerificationWorker):
                     or result["authoring_fingerprint"] != metadata.authoring_sha256):
                 _reject("Recovery proof does not qualify its exact prepared metadata")
             observation = object.__new__(_Completion)
-            for name, value in (("token", _OBSERVATION), ("owner", ref(self)), ("ticket", self._ticket),
+            for name, value in (("token", _OBSERVATION), ("identity", ref(observation)),
+                                ("owner", ref(self)), ("ticket", self._ticket),
                                 ("admission", self._ticket.admission), ("binding", self._binding), ("metadata", metadata)):
                 object.__setattr__(observation, name, value)
             self._completion = observation
@@ -355,11 +392,7 @@ class RecoveryWorker(VerificationWorker):
         return result
 
     def take_revision(self, ticket, *, admission):
-        """Explicitly unavailable until separately tested host-seal integration.
+        """Consume a closed successful observation; publication is still separate."""
+        from backend.api.part_immutable_revision import _from_recovery_worker
 
-        A valid observation alone is not a scope seal. Stage two must also require
-        closed-worker ownership, exact ticket/admission, one-shot consumption and
-        the host's final deadline/context checks before installing a local seal.
-        """
-        raise CommandContractError("Recovery worker revision sealing is not integrated",
-                                   code="recovery_seal_unavailable")
+        return _from_recovery_worker(self, ticket, admission=admission)

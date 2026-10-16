@@ -11,12 +11,15 @@ import pytest
 
 from backend.api import doc_context, part_evaluation_jobs as jobs, session_cache, state
 from backend.api import part_immutable_recovery as recovery
+from backend.api import part_immutable_recovery_inputs as inputs
+from backend.api import part_immutable_recovery_worker as transport
 from backend.api import part_immutable_revision as revisions
 from backend.api import part_publication_host as host, part_publication_policy as policy
 from backend.api.part_history_verification import _slot
 from backend.api.part_immutable_persistence import StrictPersistence
 from backend.core.part_history_contract import create_empty_part
 from backend.core.models import Design
+from tests.test_immutable_recovery_worker_lifecycle import _controlled_output
 
 
 @pytest.fixture
@@ -41,30 +44,27 @@ def document(tmp_path, monkeypatch):
 
 @pytest.fixture
 def immediate(document, monkeypatch):
-    class Worker:
-        def __init__(self, design):
-            self.design = design
+    with ExitStack() as cleanup:
+        def construct(ticket):
+            worker = transport.RecoveryWorker(ticket)
+            cleanup.callback(worker.close)
+            parts, _binding = transport.encode_input(ticket)
+            report = transport.evaluate_payload(b"".join(parts))
+            # Control only process timing/output. Preparation and proof use the
+            # actual child implementation; result, close and take_revision stay
+            # real, including binding validation and private seal ownership.
+            _controlled_output(worker, report)
 
-        def start(self):
-            assert state._lock.acquire(blocking=False)
-            state._lock.release()
+            def start():
+                assert state._lock.acquire(blocking=False)
+                state._lock.release()
 
-        def wait(self, _timeout):
-            return True
+            worker.start = start
+            worker.wait = lambda _timeout: True
+            return worker
 
-        def is_alive(self):
-            return False
-
-        def result(self):
-            from backend.api.part_proof_commands import dependencies, execute
-            from backend.core.part_history_contract import assess_part_history
-            return assess_part_history(self.design, execute=execute, dependencies=dependencies)
-
-        def close(self):
-            pass
-
-    monkeypatch.setattr(recovery, "VerificationWorker", Worker)
-    return document
+        monkeypatch.setattr(recovery, "RecoveryWorker", construct, raising=False)
+        yield document
 
 
 def stored(document):
@@ -83,7 +83,7 @@ def test_status_is_pending_not_proof_and_never_creates_session(document, monkeyp
     doc, owner = document
     assert recovery.status()["record"]["state"] == "absent"
     source = stored(document)
-    monkeypatch.setattr(recovery, "prepare_stored", lambda *_a, **_k: pytest.fail("Status decoded a Design"))
+    monkeypatch.setattr(inputs, "prepare_stored", lambda *_a, **_k: pytest.fail("Status decoded a Design"))
     report = recovery.status()
     assert report["doc_id"] == doc and report["revision"] == 0
     assert report["record"] == {"state": "pending", "storage_version": 1, "payload_bytes": len(source.payload)}
@@ -225,14 +225,13 @@ def test_wrong_revision_and_nonempty_session_refuse_before_read(document, monkey
 
 
 def test_preparation_refuses_mutated_manifest_and_keeps_exact_full_payload(document):
-    from backend.api.part_immutable_recovery_inputs import prepare_stored
     from backend.core.part_command_errors import CommandContractError
 
     doc, owner = document
     stored(document)
     record = owner.read_pending(doc)
     with pytest.raises(CommandContractError):
-        prepare_stored(replace(record, payload=record.payload + b" "))
+        inputs.prepare_stored(replace(record, payload=record.payload + b" "))
 
 
 @pytest.mark.parametrize("alter", ["duplicate", "nonfinite", "normalize", "saved_seal", "depth"])
@@ -258,7 +257,7 @@ def test_untrusted_payload_has_no_decode_or_saved_receipt_shortcut(document, alt
         payload = json.dumps(data, sort_keys=True, separators=(",", ":")).encode()
     manifest = replace(record.manifest, payload_bytes=len(payload), payload_sha256=sha256(payload).hexdigest())
     with pytest.raises(CommandContractError):
-        recovery.prepare_stored(replace(record, payload=payload, manifest=manifest))
+        inputs.prepare_stored(replace(record, payload=payload, manifest=manifest))
 
 
 def test_poisoned_recovery_is_ignored_by_cold_proof_and_restored_recipe_stays_editable(immediate):

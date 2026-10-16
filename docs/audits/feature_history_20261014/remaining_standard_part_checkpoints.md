@@ -81,10 +81,11 @@ replaces this per-family evidence.
    retention, typed persistence, cold recovery and durable initial creation now
    have focused implementation evidence. The existing host now sends sealed
    source bytes to the admitted child without parent decode/projection. Recovery
-   still prepares canonical content in the parent: the near-cap diagnostic found
-   164–187 ms preparation and concurrent scalar reads delayed up to 158 ms.
-   Move that unchanged preparation into the admitted recovery child through the
-   separately staged [worker plan](immutable_recovery_worker_plan.md). Qualify
+   now also runs full canonical preparation and native proof there, with an exact
+   one-shot host handoff and 384 focused passes. This addresses the path previously
+   measured at 164–187 ms parent preparation and up to 158 ms scalar-read delay;
+   measure the new near-cap retained memory and HTTP behavior before claiming a
+   latency result. See the [worker plan](immutable_recovery_worker_plan.md). Qualify
    actual HTTP start/evaluation/publication with concurrent light reads and
    scoped parent/child memory. Public storage/batch gates remain closed until
    the declared lifecycle, latency and retention criteria pass.

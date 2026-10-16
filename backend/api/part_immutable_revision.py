@@ -262,6 +262,23 @@ def prepare_revision(candidate, *, checkpoint=lambda: None):
     return revision
 
 
+def _from_recovery_worker(worker, ticket, *, admission):
+    """Seal only an original host-observed, closed recovery worker completion.
+
+    The fixed child performed this module's unchanged canonical preparation.
+    Saved bytes or metadata alone cannot enter here. Job qualification, deadline
+    and final lease-bound publication remain the recovery host's responsibility.
+    """
+    from backend.api.part_immutable_recovery_worker import _consume_completion
+
+    payload, metadata = _consume_completion(worker, ticket, admission=admission)
+    revision = object.__new__(StrictPartRevision)
+    object.__setattr__(revision, "payload", payload)
+    object.__setattr__(revision, "_metadata", metadata)
+    object.__setattr__(revision, "_seal", _ScopeSeal(_TOKEN, ref(revision), payload, metadata))
+    return revision
+
+
 def materialize_revision(revision, *, checkpoint=lambda: None):
     """Decode a fresh, independent full Design outside all shared state locks."""
     _require_revision(revision)
