@@ -29,7 +29,7 @@ def verified():
     assert result["status"] == "verified", result
 
 
-def test_group_and_pose_commit_includes_previewed_fields():
+def test_group_authored_edit_and_pose_preview_each_rebuild_from_inputs():
     hid = state.get_or_404().helices[0].id
     add_cluster(AddClusterBody(name="Arm", helix_ids=[hid], log=True))
     cid = state.get_or_404().cluster_transforms[-1].id
@@ -37,14 +37,15 @@ def test_group_and_pose_commit_includes_previewed_fields():
     update_cluster(
         cid,
         PatchClusterBody(
-            translation=[1, 2, 3], name="Moved", color="#123456", opacity=0.5
+            name="Moved", color="#123456", opacity=0.5
         ),
     )
+    update_cluster(cid, PatchClusterBody(translation=[1, 2, 3]))
     update_cluster(cid, PatchClusterBody(commit=True))
     verified()
     crud.edit_feature(0, crud.EditFeatureBody(params={"length_bp": 48}))
     verified()
-    crud.edit_feature(2, crud.EditFeatureBody(params={"translation": [4, 5, 6]}))
+    crud.edit_feature(3, crud.EditFeatureBody(params={"translation": [4, 5, 6]}))
     assert state.get_or_404().cluster_transforms[-1].translation == [4, 5, 6]
     verified()
     assert crud.delete_feature(1)["needs_cascade_decision"]

@@ -425,9 +425,13 @@ def _design_response_with_geometry(
     partial_axes: bool = False,
     preserve_feature_log_id: str | None = None,
     full_feature_log: bool = False,
+    normalize_legacy: bool = True,
 ) -> dict:
     """Like _design_response but embeds geometry so the frontend needs only one
     round-trip and can update design + geometry atomically (one scene rebuild).
+
+    Owned authoring responses set ``normalize_legacy=False`` so formatting cannot
+    silently publish inferred membership after their validated transaction.
 
     *preserve_feature_log_id* / *full_feature_log* — passed through to
     _design_response (see there): preserve one newly-created entry's body, or
@@ -469,6 +473,7 @@ def _design_response_with_geometry(
             design, report,
             preserve_feature_log_id=preserve_feature_log_id,
             full_feature_log=full_feature_log,
+            normalize_legacy=normalize_legacy,
         )
     # Mutation and GET feeds resolve the same baseline/candidate display policy.
     measured_positioning = measured_display_placement(requested_measured_positioning())
@@ -502,6 +507,7 @@ def _design_response_with_geometry(
                 design, report,
                 preserve_feature_log_id=preserve_feature_log_id,
                 full_feature_log=full_feature_log,
+                normalize_legacy=normalize_legacy,
             ),
             **geometry_payload,
             "partial_geometry": True,
@@ -539,6 +545,7 @@ def _design_response_with_geometry(
                 design, report,
                 preserve_feature_log_id=preserve_feature_log_id,
                 full_feature_log=full_feature_log,
+                normalize_legacy=normalize_legacy,
             ),
             "nucleotides_compact": _compact_geometry_from_nucleotides(nucleotides),
             "helix_axes": axes,
@@ -549,6 +556,7 @@ def _design_response_with_geometry(
                 design, report,
                 preserve_feature_log_id=preserve_feature_log_id,
                 full_feature_log=full_feature_log,
+                normalize_legacy=normalize_legacy,
             ),
             "nucleotides": nucleotides,
             "helix_axes": axes,

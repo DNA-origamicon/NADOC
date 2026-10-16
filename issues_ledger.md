@@ -2221,6 +2221,28 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   desktop validation. `frontend/src/main.js` delta **0**; no scientific formula,
   numerical pin, capture budget or private rollout gate changed. G1 remains open.
 
+### ISSUE-99 continuation — ordinary group PATCH (2026-10-16, IMPLEMENTED; APP OPEN)
+
+- Sidebar name/style and selection-menu membership omitted `commit`, so the old
+  route silently changed authored state without a feature row. Explicit commits
+  also read outside ownership and validated after publication. New red tests
+  reproduced these paths, missing/ambiguous references and rollback failures.
+- Ordinary authored fields now force one recorded transaction and undo. Pure
+  pose previews retain their old lifecycle; direct pose confirm shares the owned
+  publisher. Typed/bounded selectors and exact emitted-input admission precede
+  publication. Membership dependencies include helices/owning strands and a
+  conservative topology barrier; no full proof runs during ordinary edits.
+- The client persists/broadcasts these operations and consumes embedded matching
+  geometry for membership/mixed-pose edits. Pure style and gizmo pose commits
+  remain lean. Legacy group inference is excluded from owned responses; it must
+  not silently rewrite a just-recorded candidate.
+- Existing tests that intentionally expected cosmetic edits outside history
+  were replaced with undoable/replayable style checks. Saved v1/v2 builder
+  semantics and numerical pins remain unchanged. See
+  [checkpoint evidence](docs/audits/feature_history_20261014/validation_group_edit_recording.json).
+- FH-18 remains open for logged deletion, placement-preserving regrouping and
+  auxiliary group lifecycle. MV-48 remains open; no app/performance claim.
+
 ## ISSUE-100 — Bend/twist history preview replaces canonical state before Apply (2026-10-15, REPRODUCED; OPEN)
 
 - `tests/test_geometry_history_preview_lifecycle.py` mirrors the current desktop
@@ -2418,3 +2440,21 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   [Repair evidence](docs/audits/feature_history_20261014/validation_grouping_repair.json)
   includes preserved red failures and cleanup. **NOT VERIFIED IN APP**; this
   does not clear invalid-file recovery, broad backend or interaction timing debt.
+
+## ISSUE-107 — Standalone geometry responses lack a revision contract (2026-10-16, SOURCE-AUDITED; OPEN)
+
+- `crud.get_geometry` captures a Design but its response has no document/revision
+  identity; `client._applyGeometryResponse` applies completed GET results without
+  a design-revision check. Two same-document reads can therefore finish out of
+  order. Document-reset cancellation alone does not address that interleaving.
+- Required reproduction before a general fix: hold GET A from revision A, apply
+  revision B and GET B, then release A. Verify the newest Design and geometry
+  stay paired. Include complementary partial reads and metadata-only revisions;
+  a global newest-request token could incorrectly discard useful partial data.
+- FH-18 membership/mixed authored-pose PATCH avoids this seam by embedding exact
+  accepted candidate geometry in the revision-bearing design response. The
+  client regression reverses those PATCH responses and retains the newest pair.
+  This does not fix standalone GETs or the older-server fallback.
+- General capture/response/merge qualification remains within the existing
+  FH-27 milestone, not a new estimated update. No live app reproduction or
+  general fix is claimed; MV-48 retains the interaction acceptance work.

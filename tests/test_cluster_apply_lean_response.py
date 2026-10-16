@@ -2,7 +2,7 @@
 
 Plan B's frontend optimisation depends on the PATCH /design/cluster/{id}
 endpoint returning a LEAN response (design + validation only, no geometry)
-on commit. The frontend's gizmo has already painted correct positions into
+on pose-only commit. The frontend's gizmo has already painted correct positions into
 the renderer's instance buffers; the backend's role is just to persist
 `cluster_transforms[idx]`. The frontend then runs an in-JS reconciliation
 (helixCtrl.commitClusterPositions) to keep currentGeometry consistent with
@@ -10,6 +10,8 @@ the rendered state.
 
 This test pins the response shape so a future commit can't regress by
 re-introducing embedded geometry (Plan A's failed pattern).
+Ordinary membership/mixed authored-pose edits have no gizmo-owned geometry and
+embed their exact candidate; that separate contract is in test_group_edit_recording.
 
 Plan: /home/joshua/.claude/plans/we-are-updating-some-adaptive-chipmunk.md
 """

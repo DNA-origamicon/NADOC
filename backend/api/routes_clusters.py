@@ -3,7 +3,7 @@ API layer — cluster rigid-transform route handlers (extracted from crud.py).
 
 This module hosts the ``/design/cluster`` CRUD endpoints: create a named cluster
 of helices/domains, patch its pose (the live gizmo-drag path — silent until a
-drag-end ``commit``, optionally feature-logged), and delete it. Clusters are the
+drag-end ``commit``), record ordinary membership/name/style edits, and delete it. Clusters are the
 rigid-body grouping that bend/twist/relax operate on; the transform they carry
 (translation/rotation/pivot) is a DISPLAY-layer pose — it never mutates topology.
 
@@ -24,6 +24,7 @@ URLs are unchanged from their previous home in crud.py. Mounting is done in
 
 from __future__ import annotations
 
+import math
 import re
 from typing import List, Optional
 
@@ -45,7 +46,7 @@ from backend.api.pattern_features import (
 )
 from backend.core.cluster_copy import paste_clusters
 from backend.core.cluster_reconcile import MutationReport
-from backend.core.models import ClusterCreateLogEntry, ClusterOpLogEntry
+from backend.core.models import ClusterCreateLogEntry
 
 router = APIRouter()
 
@@ -75,7 +76,7 @@ class PatchClusterBody(BaseModel):
     pivot: Optional[List[float]] = None  # [x, y, z] nm
     color: Optional[str] = None  # "#rrggbb"; "" clears to the auto palette
     opacity: Optional[float] = None  # 0..1, clamped
-    commit: bool = False  # when True: push to undo stack
+    commit: bool = False  # pose confirm; non-null authored fields always commit
     log: bool = False  # deprecated compatibility field; every commit is logged
 
 
@@ -94,7 +95,7 @@ def add_cluster(body: AddClusterBody) -> dict:
     from backend.api.part_group_recording import create_group
 
     updated, report = create_group(body)
-    return _design_response(updated, report)
+    return _design_response(updated, report, normalize_legacy=False)
 
 
 @router.post("/design/cluster-unassigned", status_code=200)
@@ -119,16 +120,9 @@ def repair_unassigned_clusters() -> dict:
 
 @router.patch("/design/cluster/{cluster_id}", status_code=200)
 def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
-    """Update a cluster; previews are silent and every committed update is logged."""
+    """Record authored edits; pose-only previews retain the legacy drag path."""
     from backend.core.validator import validate_design
-
-    design = design_state.get_or_404()
-    cts = list(design.cluster_transforms)
-    idx = next((i for i, c in enumerate(cts) if c.id == cluster_id), None)
-    if idx is None:
-        raise HTTPException(404, detail=f"Cluster {cluster_id!r} not found.")
-
-    from backend.core.models import DomainRef
+    from backend.api.part_group_recording import AUTHORED_FIELDS, update_group
 
     fields: dict = {}
     if body.name is not None:
@@ -136,7 +130,7 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
     if body.helix_ids is not None:
         fields["helix_ids"] = body.helix_ids
     if body.domain_ids is not None:
-        fields["domain_ids"] = [DomainRef(**d) for d in body.domain_ids]
+        fields["domain_ids"] = body.domain_ids
     if body.translation is not None:
         fields["translation"] = body.translation
     if body.rotation is not None:
@@ -153,42 +147,36 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
             )
         fields["color"] = c or None
     if body.opacity is not None:
+        if not math.isfinite(body.opacity):
+            raise HTTPException(422, detail={"code": "invalid_group_opacity"})
         fields["opacity"] = max(0.0, min(1.0, float(body.opacity)))
 
-    cts[idx] = cts[idx].model_copy(update=fields)
-    updated_ct = cts[idx]
-
     # Joints are stored in the cluster's LOCAL frame, so a cluster transform
-    # change leaves cluster_joints invariant — world-space axes are derived
-    # lazily from cluster_transforms[id] at read time. The legacy world-space
-    # update math (J_new = R_delta @ (J - D_old) + D_new) accumulated
-    # floating-point drift across many commits and is no longer needed.
-    updated_joints = list(design.cluster_joints)
+    # change leaves their authored axes invariant.
+    if body.commit or AUTHORED_FIELDS.intersection(fields):
+        updated, report = update_group(cluster_id, fields)
+        membership = {"helix_ids", "domain_ids"}.intersection(fields)
+        mixed_pose = AUTHORED_FIELDS.intersection(fields) and {"translation", "rotation", "pivot"}.intersection(fields)
+        if membership or mixed_pose:
+            from backend.api.crud import _design_response_with_geometry
 
-    if body.commit:
-        # Final tool confirm — push to undo stack and record in feature_log.
-        # Truncate suppressed future entries if cursor is not at end.
-        log = list(design.feature_log)
-        if design.feature_log_cursor >= 0:
-            log = log[: design.feature_log_cursor + 1]
-        log_entry = ClusterOpLogEntry(
-            proof_version=1,
-            authored_fields=updated_ct.model_dump(mode="json", include={"name", "helix_ids", "domain_ids", "color", "opacity"}),
-            cluster_id=cluster_id,
-            translation=list(updated_ct.translation),
-            rotation=list(updated_ct.rotation),
-            pivot=list(updated_ct.pivot),
-        )
-        updated = design.copy_with(
-            cluster_transforms=cts,
-            cluster_joints=updated_joints,
-            feature_log=log + [log_entry],
-            feature_log_cursor=-1,
-        )
-        design_state.set_design(updated)
-    else:
-        updated = design.copy_with(cluster_transforms=cts)
-        design_state.set_design_silent(updated)
+            # Use this exact accepted candidate and request revision outside the
+            # publication lock. A separate unrevisioned GET could race another
+            # membership edit and paint stale geometry over its newer design.
+            return _design_response_with_geometry(updated, report, normalize_legacy=False)
+        return _design_response(updated, report, normalize_legacy=False)
+
+    # Pose-only live preview compatibility. Private drag ownership/cancel/undo
+    # is a separate lifecycle change (FH-23); do not add history proof or the
+    # bounded structural/reference scan to this frame-rate path.
+    design = design_state.get_or_404()
+    cts = list(design.cluster_transforms)
+    idx = next((i for i, c in enumerate(cts) if c.id == cluster_id), None)
+    if idx is None:
+        raise HTTPException(404, detail=f"Cluster {cluster_id!r} not found.")
+    cts[idx] = cts[idx].model_copy(update=fields)
+    updated = design.copy_with(cluster_transforms=cts)
+    design_state.set_design_silent(updated)
     report = validate_design(updated)
     return _design_response(updated, report)
 

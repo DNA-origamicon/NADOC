@@ -121,19 +121,19 @@ def test_grouping_between_nicks_preserves_chronological_routing_boundaries(docum
     _verified(final)
 
 
-def test_pose_confirm_records_previewed_fields_without_logging_each_preview(document):
+def test_authored_style_with_pose_records_once_without_later_confirmation(document):
     grouped, group, _ = _create(document, log=True)
     depth = state.undo_depth()
     routes.update_cluster(group.id, routes.PatchClusterBody(
         translation=[3, 4, 5], name="Moved arm", color="#123456", opacity=0.5,
     ))
-    assert state.undo_depth() == depth
-    assert len(state.get_or_404().feature_log) == len(grouped.feature_log)
-    routes.update_cluster(group.id, routes.PatchClusterBody(commit=True))
     committed = state.get_or_404()
     assert state.undo_depth() == depth + 1
+    assert len(committed.feature_log) == len(grouped.feature_log) + 1
     assert committed.feature_log[-1].translation == [3, 4, 5]
     assert committed.feature_log[-1].authored_fields["name"] == "Moved arm"
+    assert committed.feature_log[-1].authored_fields["color"] == "#123456"
+    assert committed.feature_log[-1].authored_fields["opacity"] == 0.5
     _verified(committed)
 
 

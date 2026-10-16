@@ -1,0 +1,90 @@
+{
+  "date": "2026-10-16",
+  "checkpoint_before": "4f45aae5",
+  "scope": "FH-18 checkpoint 1: owned ordinary group edits, typed membership dependencies and matching response geometry",
+  "progress": {
+    "baseline": "B1: 17/38 through 2c15e747",
+    "completed": 18,
+    "estimated_total": 38,
+    "remaining": 20,
+    "core_remaining": 11,
+    "parked_remaining": 9,
+    "completed_delta": 0,
+    "total_delta": 0,
+    "milestone": "FH-18",
+    "major_checkpoints_spent_since_B1": 1,
+    "milestone_closed": false,
+    "scope_change": "None. Deletion, placement-preserving regrouping and auxiliary group lifecycle remain in the fixed FH-18 exit. No task-growth or total-growth trigger."
+  },
+  "final_checks": {
+    "backend_distinct_passes": 292,
+    "backend_runs": [
+      {
+        "targets": ["tests/test_group_owned_response.py", "tests/test_group_edit_recording.py", "tests/test_group_edit_dependencies.py", "tests/test_geometry_group_history.py", "tests/test_cluster_style.py", "tests/test_native_overlay_proof.py", "tests/test_group_creation_v2.py", "tests/test_cluster_apply_lean_response.py", "tests/test_feature_log_clusters.py", "tests/test_feature_history_clusters.py", "tests/test_part_group_repair.py", "tests/test_part_group_repair_evaluation.py"],
+        "passed": 251,
+        "warnings": 151,
+        "seconds": 13.51
+      },
+      {
+        "targets": ["tests/test_feature_dependencies.py", "tests/test_part_recipe_edit.py", "tests/test_group_upgrade_archive.py", "tests/test_group_upgrade_metadata.py", "tests/test_group_upgrade_draft_lifecycle.py"],
+        "passed": 41,
+        "warnings": 8,
+        "seconds": 3.56
+      }
+    ],
+    "backend_command": "just validate-safe scripts/test_guard.sh test-focused 0 focused -- uv run pytest <explicit targets> -q --tb=short --disable-warnings --durations=8",
+    "frontend_full": {"command": "just test-frontend", "passed": 8517, "skipped": 1, "files": 731, "seconds": 325.58, "new_cases": 21},
+    "frontend_scoped": {"passed": 20, "seconds": 1.18, "stage": "Intermediate before final embedded-response/fallback tests; overlaps full run, not additional credit"},
+    "scoped_ruff": "All eleven changed/new Python implementation and test files passed",
+    "diff_check": "Passed",
+    "main_js_line_delta": 0,
+    "app": "NOT VERIFIED IN APP. Archive is not mounted; no browser, smoke, visual geometry or interactive latency validation. MV-48 and FH-27 retain the debt. VR remains deferred separately.",
+    "resource_safety": "Heavy backend and frontend runs were serialized under validation_guard; no browser/native-build overlap. Only tiny memory fixtures and disposable empty pytest directories were created."
+  },
+  "selection_only": {
+    "command": "just test-smart --dry-run",
+    "decision": "FAST (fast suite only)",
+    "verbatim_deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+    "executed_suite": false,
+    "clarification": "The selector's 'only the fast suite ran' wording is boilerplate: dry-run executed no suite. Aggregate fast and broad FULL debt remain. Archive is unavailable for broad-run artifacts; no test session or escape hatch was created."
+  },
+  "red_and_review_evidence": [
+    {"scope": "Initial ordinary-edit client regressions", "failed": 12, "passed": 5, "seconds": 1.57, "finding": "Missing commit normalization, membership refresh, persisted history and stale-response adoption guard"},
+    {"scope": "Initial recording/dependency regressions", "failed": 51, "passed": 8, "seconds": 4.08, "finding": "Missing authored rows, reference/barrier declarations and failure ownership; includes one invalid Helix fixture subsequently corrected to native Vec3/Direction"},
+    {"scope": "Exact candidate geometry response", "failed": 4, "passed": 0, "seconds": 2.82, "finding": "Membership/mixed-pose PATCH did not yet embed matching candidate geometry"},
+    {"scope": "Owned rootless response", "failed": 8, "passed": 1, "seconds": 3.1, "finding": "Response-time legacy inference repopulated explicitly cleared membership, silently adding a second revision; shared helper lacked an opt-out"},
+    {"scope": "Integration corrections", "finding": "Updated stale cosmetic-no-undo and mixed-preview positional expectations to authored semantics. Isolated a style test from the bounded 50-step undo stack; replaced a nonexistent Design.name test mutation with an actual group-name mutation. No product requirement was weakened."}
+  ],
+  "delivered_contract": [
+    "Non-null name, membership, color and opacity always record one complete cluster_op v1 input, regardless of legacy commit/log flags. Pure pose preview remains unchanged; explicit pose confirm uses the same owned publication.",
+    "Creation and edits share lock-owned selection, early historical/loadout checks, detached native builder output, structural/member validation before publication, exact source/session/revision check and one rollback-safe undo/revision.",
+    "Typed member references reject missing, duplicate, repeated or ambiguous targets. IDs and collection counts are bounded before model parsing; request and exact emitted command fit the existing JSON operation envelope.",
+    "Membership dependencies read named helices, owning strands and topology, with a conservative barrier. Saved full-field pose rows are also barriers; old v1/v2 builder mathematics remain unchanged.",
+    "Membership/mixed authored-pose responses use accepted candidate geometry outside the publication lock, with the captured request revision. Client adoption handles design and geometry together and drops reversed stale responses. Name/style and gizmo pose-only commits stay lean.",
+    "Owned creation/edit response formatting disables legacy auto-membership inference in full, compact, partial and skip-geometry helper branches. Default inference remains unchanged for other legacy callers.",
+    "No full history proof, dependency indexing, atom traversal or reconciliation was added to drag previews. Models, numerical manifests, scientific constants and native geometry kernels were not changed."
+  ],
+  "remaining_limits": [
+    "FH-18 remains open: typed incoming deletion owners, an explicit recorded group-removal lifecycle, seek without resurrection, placement-preserving regrouping/deletion and unsupported-combination refusal, cluster-unassigned and duplex rotation-point authoring.",
+    "Pose-only previews still mutate compatibility state silently. Private ownership, cancel and undo lifecycle remain FH-23.",
+    "Whole-design undo copying and duplicate bounded member lookups under the lock require actual-workload timing. Unit durations do not qualify responsiveness.",
+    "Accepted compatibility Designs remain mutable. Holding their reference outside the lock protects against replacement, not arbitrary in-place legacy mutation. Immutable-host qualification remains FH-28.",
+    "Native response geometry/serialization runs after commit; failure there does not roll back the accepted edit. This follows existing response behavior and is not a claim of whole-HTTP rollback.",
+    "Standalone geometry GETs and older-server fallback lack a general revision pairing contract (ISSUE-107, FH-27). The new embedded group response avoids that path; it does not repair every caller.",
+    "Rootless legacy input remains unverified; response suppression does not invent a recipe root or remove legacy inference from unrelated GETs."
+  ],
+  "cleanup": {
+    "archive_mounted": false,
+    "bulk_artifacts_created": false,
+    "removed_paths": ["/tmp/pytest-of-joshua/pytest-6", "/tmp/pytest-of-joshua/pytest-7", "/tmp/pytest-of-joshua/pytest-8", "/tmp/pytest-of-joshua/pytest-current"],
+    "removed_files": 0,
+    "removed_bytes": 0,
+    "removed_directories": 304,
+    "removed_symlinks": 4,
+    "earlier_pytest_directories": "0-5 automatically pruned by pytest retention during serial runs",
+    "active_cwd_fd_maps_references": 0,
+    "remaining_pytest_paths": [],
+    "remaining_nadoc_shared_memory": [],
+    "retained": "Source tests and this compact evidence only; no designs, captures, traces, dumps or scientific outputs"
+  }
+}

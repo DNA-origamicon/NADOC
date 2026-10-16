@@ -168,22 +168,32 @@ def test_opacity_is_clamped(client, sent, expect):
     assert _cluster(r)["opacity"] == pytest.approx(expect)
 
 
-def test_patch_without_commit_does_not_push_undo(client):
-    """Recoloring is cosmetic: Ctrl+Z must undo the last STRUCTURAL op, not the
-    swatch. The sidebar sends the no-commit form for exactly this reason.
-
-    So one undo after seed-then-style must rewind PAST the styling to whatever
-    preceded the seed — cluster 'cA' disappears entirely. If the styling patch had
-    pushed a checkpoint, undo would instead land on the seed with cA unstyled.
-    """
+def test_sidebar_style_without_commit_records_one_undoable_authored_edit(client):
+    """The ordinary sidebar request must persist reproducible style inputs."""
     design_state.set_design(_seed())
+    design_state.clear_history()
+    depth = design_state.undo_depth()
     r = client.patch("/api/design/cluster/cA", json={"color": "#ff8800"})
     assert r.status_code == 200, r.text
     assert _cluster(r)["color"] == "#ff8800"
+    assert design_state.undo_depth() == depth + 1
+    assert design_state.get_or_404().feature_log[-1].authored_fields["color"] == "#ff8800"
 
-    client.post("/api/design/undo")
-    ids = {c.id for c in design_state.get_or_404().cluster_transforms}
-    assert "cA" not in ids, "the cosmetic patch pushed its own undo checkpoint"
+    undone = client.post("/api/design/undo")
+    assert undone.status_code == 200
+    assert _cluster(undone)["color"] is None
+    assert design_state.undo_depth() == depth
+
+
+@pytest.mark.parametrize("domain", [{}, {"strand_id": "s0"}, {"strand_id": "s0", "domain_index": "invalid"}])
+def test_malformed_membership_returns_actionable_http_error_without_mutation(client, domain):
+    design_state.set_design(_seed())
+    source, revision, depth = design_state.get_or_404(), design_state.revision(), design_state.undo_depth()
+    response = client.patch("/api/design/cluster/cA", json={"domain_ids": [domain]})
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"]["code"] == "invalid_group_input"
+    assert design_state.get_or_404() is source
+    assert design_state.revision() == revision and design_state.undo_depth() == depth
 
 
 # ── survival across copy + serialization ──────────────────────────────────────

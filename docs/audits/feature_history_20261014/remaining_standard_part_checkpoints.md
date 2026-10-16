@@ -53,7 +53,7 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 
 | ID | Status | Fixed remaining exit |
 |---|---|---|
-| FH-18 | Remaining | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. |
+| FH-18 | In progress · 1 checkpoint | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Ordinary PATCH recording is implemented; the full exit stays open. |
 | FH-20 | Remaining | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
 | FH-21 | Remaining | Extrusion history editor: eligible earlier edits through downstream features, stable identities, complete ordinary controls and validation. |
 | FH-22 | Remaining | Sweep history editor: input-based isolated preview, recovery-independent Apply/Cancel and downstream rebuild. |
@@ -89,7 +89,7 @@ memory, and include this line in the user-facing final report even when no
 milestone closed:
 
 > Overhaul: **18 / 38 complete**; **20 remaining** (11 core, 9 parked).
-> Change this update: **+1 completed, +0 total**. Baseline total: **38**.
+> Change this update: **+0 completed, +0 total**. Baseline total: **38**.
 
 Replace the numbers with current counts, name the milestone worked/closed, and
 explain every total or scope change. Counts are whole milestones, not fractional
@@ -122,6 +122,27 @@ bound their matrices before implementation rather than expanding them indefinite
 | B1 · 2026-10-16 | Evidence through `2c15e747`; retrospective fixed milestone baseline | FH-01–FH-17 documented; no new engineering closure in this reporting update | 17 | 38 | 12 | 9 | Initial estimate; no earlier numerical baseline |
 | U1 · 2026-10-16 | FH-19 checkpoint 1: bounded definition-only saved-file admission and explicit private recovered-copy evaluation; [contract](saved_recipe_recovery_contract.md), [evidence](validation_saved_recipe_core.json) | None; HTTP/process lifecycle and copy-download controls remain | 17 | 38 | 12 | 9 | +0; first engineering checkpoint spent on FH-19, no scope change |
 | U2 · 2026-10-16 | FH-19 checkpoint 2: isolated HTTP worker, exact server-text download and explicit File-menu review/cancellation; [evidence](validation_saved_recipe_delivery.json) | FH-19 implementation exit closed; existing FH-27 desktop/latency exit remains open | 18 | 38 | 11 | 9 | +0 total, +1 completed; two checkpoints spent on FH-19, no scope change or growth trigger |
+| U3 · 2026-10-16 | FH-18 checkpoint 1: owned ordinary group PATCH recording, bounded typed membership, conservative dependencies and exact-candidate geometry response; [evidence](validation_group_edit_recording.json) | None; deletion, regrouping pose preservation and auxiliary group paths remain | 18 | 38 | 11 | 9 | +0 total, +0 completed; first checkpoint on FH-18, existing scope, no growth trigger |
+
+### FH-18 finite closure matrix — U3
+
+The next work is within the existing FH-18 estimate; implementation substeps do
+not create new completion credit. The full milestone remains open.
+
+| Substep | Current evidence / remaining exit |
+|---|---|
+| Ordinary authored PATCH | Implemented: membership/name/style always record despite omitted/false legacy flags; direct pose confirm shares the owned transaction. One undo; exact reload/cold proof; missing/ambiguous references, historical/protected/stale sources and publication failures refuse atomically. Membership and mixed authored-pose responses embed their matching geometry outside the state lock. Pose-only gizmo responses remain lean. |
+| Explicit group removal | Open: typed live incoming owners include frame, child group, joint, Join attachment, flexible connection, deformation selectors and saved driven topology. Historical rows/inactive branch snapshots are not live consumers. Use a dedicated recorded lifecycle contract; do not disguise deletion as `cluster-pose`. Coordinate exact numerical-schema compatibility if the closed model enums change. |
+| Placement semantics | Open: deleting or regrouping may remove a transform layer or change implicit bend/twist arm selection. Cover translated/rotated defaults, partial/all membership, domains, children and overlaps without baking coordinates or changing molecular kernels. Unsupported combinations require an explicit refusal, not silent movement. Ordinary membership PATCH retains its existing transform-application meaning. |
+| Auxiliary paths and recovery | Open: `/cluster-unassigned`, duplex rotation-point publication, response-time legacy group inference and timeline creation-restoration must agree with authored lifecycle. A deleted group must not be resurrected during seek. Keep saved v1/v2 replay exact. |
+| Full milestone acceptance | Recorded lifecycle → undo/redo → save/reload → independent cold proof; supported placement preservation and complete incoming-reference decisions. Desktop/latency remain the existing FH-27/MV-48 exit. Pose-preview private ownership/cancel/history controls remain FH-23; this checkpoint does not close them. |
+
+CAD workflow precedent: Onshape's composite-part **Dissolve** removes the wrapper
+and retains its bodies, while creating a composite does not alter those bodies.
+[Official composite-part documentation](https://cad.onshape.com/help/Content/PartStudio/composite_part.htm).
+This supports a distinct group-dissolution action; it does not supply NADOC's
+transform/deformation composition policy. That policy still needs native parity
+evidence before implementation is claimed complete.
 
 ## Active goal and priority override — October 15, 2026
 
@@ -171,6 +192,13 @@ than overloading an unrelated command kind or silently accepting old proofs.
   distinct focused checks include input-only replay across nick/group/nick.
   Direct group deletion still lacks a history operation; response-time
   default-group inference must be included in its deletion contract.
+- Ordinary membership/name/style PATCH now records an owned input regardless of
+  old `commit`/`log` flags. It uses the same publication boundary as creation,
+  validates before publication and does not reconcile intentional membership
+  away. Typed membership dependencies conservatively invalidate later work;
+  saved full-field pose rows are also conservative barriers. No proof/indexing
+  runs during drag preview. Whole-design undo copying and bounded duplicate
+  member lookup still need real-workload timing, not an assumed speedup.
 - Committed bend/twist creation records inputs, but history previews remove or
   modify the canonical source before Apply. The newer editor verifies that source
   before changing it; reproduce the handoff/cancel mismatch before selecting a fix.

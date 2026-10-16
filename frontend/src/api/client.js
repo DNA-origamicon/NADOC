@@ -3796,18 +3796,28 @@ export async function createCluster(body) {
 }
 
 export async function patchCluster(clusterId, body) {
-  const json = await _request('PATCH', `/design/cluster/${clusterId}`, body)
+  // Ordinary sidebar/selection edits are authored operations even when an old
+  // caller supplies commit:false. Null fields retain PATCH's omitted semantics.
+  const authored = ['name', 'helix_ids', 'domain_ids', 'color', 'opacity'].some(key => body[key] != null)
+  const membership = body.helix_ids != null || body.domain_ids != null
+  const explicitPose = ['translation', 'rotation', 'pivot'].some(key => body[key] != null)
+  const refreshGeometry = membership || (authored && explicitPose)
+  const request = authored ? { ...body, commit: true } : body
+  const json = await _request('PATCH', `/design/cluster/${clusterId}`, request)
   if (!json) return null
-  if (body.commit) {
-    // Plan B: commit goes through the full design/validation sync but
-    // SKIPS the geometry refetch. The gizmo's live-drag has already painted
+  if (request.commit) {
+    // Membership can change which transform applies to a helix or domain, so
+    // adopt fresh geometry through the shared revision-checked response path.
+    // Mixed ordinary+pose requests need fresh geometry too: they have no gizmo
+    // ownership contract. Pure name/style changes retain geometry. Pose-only
+    // commits keep the existing gizmo contract: its live-drag has already painted
     // the world-space cluster-transformed positions into the renderer's
     // instance buffers; the backend's role here is just to persist
     // `cluster_transforms[idx]`. The caller (cluster_gizmo /
     // _confirmTranslateRotateTool) is responsible for calling
     // helixCtrl.commitClusterPositions(helix_ids) after a successful commit
     // so currentGeometry mirrors the rendered state for downstream consumers.
-    return _syncFromDesignResponse(json, { skipGeometry: true })
+    return _syncFromDesignResponse(json, { skipGeometry: !refreshGeometry })
   }
   // Live drag: minimal update (design only). No broadcast (would spam other
   // tabs at frame rate). Don't touch loopStrandIds: cluster transforms can't

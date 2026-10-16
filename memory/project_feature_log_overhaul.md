@@ -22,10 +22,43 @@ decrement completed if an exit reopens. Flag three major checkpoints spent on
 any still-open milestone (cumulative even across alternating work), or total
 growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
-Latest engineering update U2 closes **FH-19 after two checkpoints**. Current
+Engineering update U2 closed **FH-19 after two checkpoints**. Current
 counts are **18 / 38 complete, 20 remaining (11 core, 9 parked)**, delta
-**+1 completed, +0 total**. No scope-growth trigger fired. Next is FH-18 group
-deletion/membership/pose closure, followed by the standard history editors.
+for latest update U3 **+0 completed, +0 total**. U3 is **FH-18 checkpoint 1**:
+ordinary authored group PATCH is implemented, but deletion, placement-preserving
+regrouping and auxiliary group lifecycle still keep FH-18 open. No scope-growth
+trigger fired. The finite remaining matrix is in the delivery map; next finish
+that lifecycle before the standard history editors.
+
+**FH-18 ordinary group edits:** non-null membership/name/style fields always
+commit, even when old callers omit or falsify `commit`/`log`; pure pose previews
+retain their existing behavior and explicit pose confirm records. Creation and
+PATCH reuse one lock-owned publication boundary, validating before one undo and
+revision, with source/session/cursor/loadout guards and rollback. Malformed,
+missing, repeated and ambiguous typed members refuse with actionable errors.
+Member admission uses bounded metadata; exact emitted commands also fit the
+shared operation envelope. No full proof, atom traversal or reconciliation enters
+the edit. Scientific validation remains a separate report.
+
+The shared client now persists/broadcasts ordinary edits. Membership and mixed
+authored-pose responses carry exact accepted geometry outside the publication
+lock, so reversed responses cannot pair new Design with stale geometry. Pure
+name/style and gizmo-owned pose commits stay lean. Membership dependencies name
+helices/owning strands and conservatively invalidate later work; saved full-field
+pose inputs also become barriers. This is not a performance qualification.
+Full undo copying and duplicate bounded member lookups remain measurement debt.
+The standalone geometry GET race outside this new response path remains open
+under FH-27; pose preview isolation/cancel remains FH-23. Models, native molecular
+kernels and numerical pins are unchanged. Evidence is in
+[group edit validation](../docs/audits/feature_history_20261014/validation_group_edit_recording.json).
+Owned group responses now suppress legacy auto-membership inference; formatting
+cannot silently refill an explicitly emptied group or add a second revision.
+Other legacy readers retain their existing behavior; rootless inputs stay
+unverified. **292 distinct focused backend checks passed** (251 in 13.51 s plus
+41 in 3.56 s). Full frontend: **8,517 passed/one skip**, 731 files, 325.58 s.
+Scoped Ruff/diff pass, `main.js` delta 0. No models or numerical manifests changed.
+**NOT VERIFIED IN APP:** Archive remains unavailable; MV-48 owns actual sidebar,
+selection-menu, visual/undo/error and interaction-latency checks.
 
 **Saved recipe recovery core:** `core/part_recipe_file.py` admits exact original
 bytes/digest and separately typed root/definitions/sources without loading saved
@@ -59,7 +92,7 @@ Cancel/file changes/close invalidate late replies and hashes. The implementation
 exit is closed; unsupported roots/files remain explicit refusals. Desktop and
 latency qualification was already assigned to FH-27 and is now MV-49.
 
-Latest validation: **305 distinct focused backend passes** (106 shared
+FH-19 validation: **305 distinct focused backend passes** (106 shared
 regressions in 4.90 s, 199 core/worker/HTTP/runtime cases in 11.35 s), including
 real inspect→recover HTTP, exact ordinary reload and independent cold proof.
 Full frontend: **8,496 passed/one skip**, 730 files, 323.18 s; 77 scoped passes

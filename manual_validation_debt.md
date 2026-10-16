@@ -984,6 +984,19 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   display scope. The existing dedicated e2e isolation/output cleanup rules apply.
 
 - **MV-48 — PENDING — Ordinary grouping and geometry preview lifecycle (2026-10-15).**
+  **October 16 FH-18 authored-edit checkpoint:** rename/recolor/change opacity
+  and assign selected strands/domains to an existing group through ordinary
+  controls. Each accepted action must add one history row and one undo step,
+  survive save/reopen, and pass input regeneration. Clear color and empty
+  membership explicitly; membership display must match the accepted geometry.
+  Rapid successive edits must not let a late response revert design or geometry.
+  Reject missing members/historical positions/protected branches; inspect error
+  text and verify local style preview reverts on refusal (popover error cleanup
+  is still unqualified). Confirm pose-only dragging still stays responsive and
+  does not request geometry on each frame. Regrouping placement preservation and
+  deletion are not fixed by this checkpoint. Actual request/render timings,
+  viewport comparison and standalone geometry-GET race remain FH-27 debt;
+  no app or smoke pass is claimed without Archive storage.
   **Explicit group-repair continuation:** In an already-open legacy v1 part,
   inspect the broken grouping row in the repair panel and choose **Preserve empty
   group owners (v2)**. Check Save proposal, reopen the panel, explicit rebase,

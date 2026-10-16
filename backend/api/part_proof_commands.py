@@ -49,6 +49,52 @@ PROOF_VERSION = 1
 PART_TOPOLOGY = Resource("part", "topology")
 
 
+def _cluster_op_dependencies(params):
+    """Read only bounded command metadata; the saved v1 builder stays unchanged.
+
+    Domains have ordinal addresses within a strand, not stable identities. The
+    owning strand plus the topology barrier covers reordering and changes to its
+    helix mapping without looking up a Design. Explicit empty lists are writes
+    to membership too. Saved pose rows carrying full authored membership are
+    therefore conservative barriers even if the user only changed their pose.
+    """
+    from math import isfinite
+    from backend.core.models import ClusterRigidTransform
+    from backend.core.part_operation_input import validate_operation_input
+
+    if type(params) is not dict:
+        return Dependencies(known=False)
+    try:
+        validate_operation_input(params)
+        if not proof_version_supported("cluster_op", params.get("_proof_version")):
+            return Dependencies(known=False)
+        identity = params.get("cluster_id")
+        if type(identity) is not str or not identity:
+            return Dependencies(known=False)
+        # Reuse native field coercion, including legacy DomainRef integer input.
+        # No source model, model dump, UUID allocation or native builder is used.
+        fields = ("translation", "rotation", "pivot", "name", "helix_ids", "domain_ids", "color", "opacity")
+        selected = ClusterRigidTransform.model_validate({
+            "id": identity, **{field: params[field] for field in fields if field in params}})
+        for field, length in (("translation", 3), ("rotation", 4), ("pivot", 3)):
+            vector = getattr(selected, field)
+            if len(vector) != length or not all(isfinite(value) for value in vector):
+                return Dependencies(known=False)
+        if (not isfinite(selected.opacity) or any(not hid for hid in selected.helix_ids)
+                or any(not ref.strand_id or ref.domain_index < 0 for ref in selected.domain_ids)):
+            return Dependencies(known=False)
+    except ValueError:
+        return Dependencies(known=False)
+    cluster = Resource("cluster", identity)
+    reads = {cluster}
+    membership = "helix_ids" in params or "domain_ids" in params
+    if membership:
+        reads.add(PART_TOPOLOGY)
+        reads.update(Resource("helix", hid) for hid in selected.helix_ids)
+        reads.update(Resource("strand", ref.strand_id) for ref in selected.domain_ids)
+    return Dependencies(frozenset(reads), frozenset({cluster}), barrier=membership)
+
+
 def capabilities():
     from backend.core.feature_registry import part_replay_capabilities
     from backend.api.part_recipe_capabilities import editing_capabilities
@@ -61,6 +107,8 @@ def capabilities():
 
 
 def dependencies(kind, params):
+    if kind == "cluster_op":
+        return _cluster_op_dependencies(params)
     if not proof_version_supported(kind, params.get("_proof_version")):
         return Dependencies(known=False)
     if "_generated_scope" in params and (kind in NP_CONNECTION_KINDS or (
@@ -205,9 +253,6 @@ def dependencies(kind, params):
         from backend.api.part_overhang_commands import ACTIONS
         if type(params.get("action")) is not str or params["action"] not in ACTIONS:
             return Dependencies(known=False)
-    if kind == "cluster_op":
-        cluster = Resource("cluster", params["cluster_id"])
-        return Dependencies(frozenset({cluster}), frozenset({cluster}))
     if kind in OVERLAY_KINDS:
         return Dependencies(frozenset({PART_TOPOLOGY}), frozenset({PART_TOPOLOGY}), barrier=True)
     if kind == "bundle-create" and params.get("history_seed"):
