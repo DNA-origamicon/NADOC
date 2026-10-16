@@ -12,9 +12,10 @@ Its `build(design, params) -> (Design, MutationReport)` uses the closed
 schema below. Two controls capture the existing route's actual callback against
 the authentic native bundle/extrusion prefix, injecting only the random output
 connection ID. The remaining cases compare complete authoring parity or require
-strict input/ownership/budget refusal. No route admission, dispatcher, model,
-identity policy or numerical source has changed for this new slice. Combined
-Connect and registered cold proof remain subsequent integration gates.
+strict input/ownership/budget refusal. Pure checkpoint `921e4acc` passed all 55
+cases in 3.07 s without route admission, dispatcher, model, identity-policy or
+numerical-source changes. Registered replay is the separate integration below;
+combined Connect and live-route qualification remain subsequent gates.
 
 Initial root validation failed before the missing adapter: both existing-callback
 controls and the first parity case raised `NativePlacementError` because a
@@ -105,15 +106,37 @@ native extrusion; neither branch uses synthetic anchors. All 55 pure cases
 passed final root validation in 3.07 seconds. No further concrete closure blockers were
 found in that review.
 
-The next integration target is
+The registered integration target is
 `tests/test_native_connection_application_proof.py`: strict registration and
 typed conflict/output dependencies, protected output identity with editable
 references, actual topology postprocessing, cold native prefix→pending→Apply→
 reapply, upstream length edits, exact missing-reference diagnostics and explicit
 cascade. Root recorded its registration baseline: 11 failed / 6 passed as
 expected (combined with the pure target, 55 passed / 11 failed in 3.63 s). These
-tests are not part of the pure-green checkpoint; shared integration awaits a
-separate authorization/checkpoint.
+tests were excluded from the pure-green checkpoint. After `921e4acc`, root authorized that narrow
+integration: the registry parses the exact closed action/version, refuses
+generated scopes, exposes selected/conflict resources and generated identities,
+and keeps the conservative part barrier. Apply runs ordinary reconciliation,
+pending-ligation retry and CPD validation. Edit protection preserves only existing
+contract/output slots; version, endpoint and conflict references stay editable.
+All 17 registration/cold/edit cases passed. Root's combined regression run
+passed **157 tests**, with 28 warnings, in **8.76 s** across these six files:
+
+- `tests/test_part_connection_application_commands.py`: 55 pure cases.
+- `tests/test_native_connection_application_proof.py`: 17 registered cases.
+- `tests/test_part_pending_connection_versions.py`.
+- `tests/test_connection_versions.py`.
+- `tests/test_direct_connection_unified.py`.
+- `tests/test_targeted_reassign.py`.
+
+The cold ssDNA/dsDNA lifecycle cases completed in 1.16/1.18 s respectively,
+within the unchanged ordinary worker allowance. The complete native prefix,
+pending version, Apply and reapply were regenerated despite poisoned recovery
+fields. Upstream bridge/overhang-length edits retain output identity; missing
+producers yield typed diagnostics and require explicit cascade. Source/tests are
+frozen for root's broader regression run. No route, model, numerical pin or
+public capability gate changes accompany this increment, and these correctness
+results do not qualify live HTTP latency.
 
 ## Existing authority and behavior
 

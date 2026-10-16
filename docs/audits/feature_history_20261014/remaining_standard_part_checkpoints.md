@@ -1,11 +1,11 @@
 # Remaining standard-part checkpoints
 
-Read-only closure review, October 15, 2026. This is a finite delivery map, not a
+Closure map updated October 15, 2026. This is a finite delivery map, not a
 new claim that every registered kind or legacy receipt regenerates. Assemblies
 remain outside the agreed scope. Existing molecular builders and constants stay
 unchanged; each new adapter must preserve their complete admitted output.
 
-## Completed pending candidates and motion; next P4 checkpoint: application
+## Completed pending candidates and motion; application rollout remains open
 
 Implemented in `ee90a927`: the existing `nanoparticle-connection-version-create`, `-patch` and
 `-delete` kinds for **unapplied candidates only**. The visible overhang panel
@@ -41,18 +41,21 @@ measure allocation/GC overlap before expanding this path. Existing global
 capture/recovery limits do not change. Motion with pending versions subsequently passed native cold proof and 204
 focused cases in `a24b60b7` (35 new). Its 20-cell diagnostic retained correctness
 but did not qualify latency. Applied connections remain a separate topology-
-changing continuation; the ownership/constraint audit precedes their contract.
+changing continuation. Its bounded pure lifecycle and applied-version rename
+are now implemented (`bf50e62e`, `8f1ca5a9`). The nine-repeat benchmark recorded
+180 exact adapter/kernel parity pairs, four cold proofs and four upstream edits
+(`f71f4d5a`); ordinary route migration and interactive latency remain unqualified.
 
 ## Finite P4 remainder
 
 | Checkpoint | Concrete remaining work and exit |
 |---|---|
-| Applied NP connection lifecycle | Implement the apply/unapply/delete continuation in [the connection contract](nanoparticle_connection_contract.md). Reuse native register/relocation/restoration; author child IDs/time/selection. Correct only the affected surface record's live carrier after relocation/restoration, and explicitly exclude bound handles in `compatible_particle_handle`. Test both polarities, exact saved-topology closure, cold proof and upstream edits. No new solver. |
-| Ordinary OH connection versions | `routes_connection_versions.py:36–117` creates/patches/deletes authored `connection_versions` with `mutate_and_validate`, without feature rows. Apply at line 483 records `overhang-bulk` without an admitted action. Existing duplex/binding contracts do not cover this ownership layer. Add input-defined pending-version CRUD, then explicit native materialization using existing direct/indirect binding/linker builders, exact mutually-exclusive version choices and stable child IDs. Preserve the existing partial geometry response. |
+| Applied NP connection lifecycle | Bounded pure apply/reapply/unapply/delete and active-version rename are implemented with typed ownership, cold proof and upstream edits. Next migrate the ordinary lifecycle through one lock-owned recording transaction, then measure HTTP/lock/concurrent-read tails. Pending alternatives on an applied particle need a separate metadata-preservation contract; bound motion, collective relaxation and broader attachment ownership remain open. See [the connection contract](nanoparticle_connection_contract.md). |
+| Ordinary OH connection versions | Pending CRUD and bounded finite ssDNA/dsDNA Apply/reapply are input-defined, with typed registration, independent cold proof and upstream edit/delete checks (157 focused passes). Live routing, combined Connect, direct/indirect families and measured partial-response performance remain open. Preserve the native algorithms and existing partial geometry response; see [the Apply plan](ordinary_connection_apply_plan.md). |
 | Coupled attachment inputs | Pin the biotin tether source consumed by `gold_strep_dna.py`; compose it with existing pinned coating inputs and explicit pocket/sequence/linker choices. Add bounded biotin create/remove and separately NP viewport fit, bound motion and multi-anchor relaxation contracts. Numerical work uses the existing explicit job lifecycle and a reviewed runtime/source manifest; no sampled output as input. Legacy direct NP strand bind needs its auxiliary-owner inconsistency corrected or must remain explicitly unsupported, not silently aliased to the version workflow. |
 | Remaining import entry points | Small pinned protein/free placement is implemented but its ordinary migration remains gated after source-capture latency refusals; retain that gate until source isolation is qualified. Small caDNAno has an explicit pinned import endpoint; scadnano and DNA-PDB still need complete source/options/identity/loss contracts. Cross-document protein-library placement needs original bytes, never atom reconstruction. Multi-chain/oversize variants remain explicit measured exclusions until individually qualified. |
 | Generated asset composition | Replace remaining `two_np_build.py` asset/connection preparation receipts with calls to the above ordinary commands. In particular its old `nanoparticle-strand-bind` “prepare handles” receipt and connection creation are not inputs for the new connection adapter. Require complete generated asset + DNA cold proof and an upstream edit through the final connections. No all-model command or copy of candidate geometry. |
-| Physical provenance | Implement the separate [freshness receipt/comparator](physical_freshness_plan.md): current/stale/unknown, consumed model/parameters/source/solver/restart evidence, honest unknown legacy results, no result-to-topology writes. Qualify oxDNA/NAMD preparation receipts and atomistic-reference provenance with synthetic artifacts; no production simulation is necessary. |
+| Physical provenance | Additive current/stale/unknown comparison retains honest unknown legacy evidence. Private bounded full-archive oxDNA capture is implemented (`9fbb392a`,176 focused capture/worker passes); route integration must prove one owned input through threaded preparation and measure capture/concurrent-read latency. Complete packaged-file/solver/attempt/restart receipts, NAMD and atomistic-reference provenance remain open. See [the freshness plan](physical_freshness_plan.md); no production simulation is necessary. |
 
 Already implemented foundations include pinned inline/CAS input portability,
 bounded transport and inactive-source audits; native small protein/aptamer and
@@ -64,13 +67,15 @@ replaces this per-family evidence.
 
 ## P5 and P6 closure order
 
-1. **P5 recognized-invalid fields:** after ISSUE-86, qualify the implemented gold
-   diameter/pose recognition adapter, shared by metadata/draft/repair planning.
-   Keep exact expectations, protected identities, final schema and full replay.
+1. **P5 recognized-invalid fields:** the gold diameter/pose recognition adapter
+   has focused implementation evidence, shared by metadata/draft/repair planning.
+   Retain exact expectations, protected identities, final schema and full replay.
    Expand field/reference selectors per admitted family, not by kind membership.
 2. **P5 review and interaction:** complete candidate comparison before Apply,
    actionable earliest-error/downstream-blocked displays, explicit dependency
-   replacement/cascade, and desktop/part-mode VR parity. Keep failed drafts and
+   replacement/cascade, and desktop review of the implemented private comparisons.
+   The user explicitly deferred VR validation to a later capable-machine session.
+   Keep failed drafts and
    source repair portable; do not imply verified geometry from saved metadata.
 3. **P6 ownership and responsiveness:** exclusive immutable ownership, bounded
    retention, typed persistence, cold recovery and durable initial creation now
