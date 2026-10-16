@@ -846,3 +846,20 @@ metadata. U9's private organization adapter refuses the affected case before
 native work; algorithms and legacy behavior are unchanged. This is containment,
 not a fix or new milestone. The 752 focused U9 passes and remaining acceptance
 are recorded in [U9 evidence](docs/audits/feature_history_20261014/validation_group_geometry_lineage.json).
+
+
+2026-10-16 — ISSUE-110 Move Apply acknowledgement: extracted explicit-placement
+commit retains refused/newer input and returns accepted legacy partial results.
+Organized parts use one native batch publication with one undo/revision and
+matching geometry, avoiding a second client transform. Current failures retain
+the editor; reset retires old pending state. Actual factory/API/tool/native tests
+and observed failures are retained in [U12 evidence](docs/audits/feature_history_20261014/validation_group_placement_ui.json).
+The early InvalidURL factory mock failure is not a claimed behavior reproduction.
+Public gates remain false; desktop/latency and earlier move editing stay open.
+
+
+2026-10-16 — ISSUE-111 visibility queue review correction: bind rollback to each
+save's dispatch revision and isolate pending counts/hydration by reset generation.
+Regression cases cover successful earlier save followed by latest rejection and
+same-ID reload while a prior save is held. No persisted schema or topology change.
+See U12 evidence; this correction predates release and adds no milestone credit.

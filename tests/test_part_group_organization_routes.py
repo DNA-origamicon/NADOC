@@ -320,3 +320,42 @@ def test_noop_response_keeps_its_checked_revision_when_another_edit_commits(clie
     assert response.json()["design"]["group_organization"]["groups"][0]["name"] == group.name
     assert session.revision == revision + 1 and len(session.history) == depth + 1
     assert session.design.group_organization.groups[0].name == "Later edit"
+
+
+def test_ui_multi_placement_http_is_atomic_and_returns_matching_native_geometry(client, document):
+    from backend.core.design_geometry import _geometry_for_design
+
+    http, headers = client
+    assert http.post(PATH, headers=headers, json=body()).status_code == 200
+    session = document[1]
+    source, revision, depth = session.design, session.revision, len(session.history)
+    placements = [{"placement_id": item.id, "fields": {"translation": [5 + i, 2, 0]}}
+                  for i, item in enumerate(source.cluster_transforms)]
+    failed = [*placements, {"placement_id": "missing", "fields": {"translation": [0, 0, 0]}}]
+    response = http.post(PATH, headers=headers, json=body("placements-update", {"placements": failed}))
+    assert response.status_code == 409, response.text
+    assert session.design is source and session.revision == revision and len(session.history) == depth
+    response = http.post(PATH, headers=headers, json=body("placements-update", {"placements": placements}))
+    assert response.status_code == 200, response.text
+    value = response.json()
+    assert value["revision"] == revision + 1 and len(session.history) == depth + 1
+    assert value["nucleotides"] == _geometry_for_design(session.design)
+    assert value["design"]["group_organization"] == source.group_organization.model_dump(mode="json")
+    _verified(session.design)
+
+
+def test_ui_visibility_http_preserves_recipe_and_geometry_while_saving_base_addresses(client, document):
+    http, headers = client
+    assert http.post(PATH, headers=headers, json=body()).status_code == 200
+    session = document[1]
+    source, revision = session.design, session.revision
+    visibility = {"hidden_base_keys": ["h:0:FORWARD"], "shown_base_keys": [], "hidden_cluster_ids": []}
+    response = http.post(PATH, headers=headers, json=body("visibility-update", {"visibility_state": visibility}))
+    assert response.status_code == 200, response.text
+    value = response.json()
+    assert value["revision"] == revision + 1
+    assert value["design"]["visibility_state"] == visibility
+    assert "nucleotides" not in value and "helix_axes" not in value
+    assert session.design.feature_log is source.feature_log
+    assert session.design.cluster_transforms is source.cluster_transforms
+    assert session.design.group_organization is source.group_organization

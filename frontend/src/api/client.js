@@ -14,6 +14,7 @@ import { readGeometryResponse } from '../viewer/native_geometry_binary.js'
 import { welcomeVisible } from '../shared/welcome_visibility.js'
 import { createPartRepairEndpoints } from './part_repair_endpoints.js'
 import { createPartRepairResponse } from './part_repair_response.js'
+import { createGroupOrganizationEndpoint } from './group_organization_endpoints.js'
 
 const _documentRequests = createDocumentRequestScope()
 const _seekHistory = createSeekHistoryAcknowledgement()
@@ -78,6 +79,9 @@ const _designRevisions = createDesignRevisionTracker()
 const _partRepairResponse = createPartRepairResponse({ store, revisions: _designRevisions, getDocId, syncDesign: _syncFromDesignResponse })
 export const partRepairAPI = createPartRepairEndpoints({ request: _request, headersFor: docHeadersFor,
   acknowledge: _partRepairResponse.acknowledge, apply: _partRepairResponse.apply })
+export const groupOrganizationCommand = createGroupOrganizationEndpoint({ store, request: _request,
+  syncDesign: _syncFromDesignResponse, getDocId, currentRevision: currentRevisionWatermark,
+  documentRequests: _documentRequests })
 const _assemblyRevisions = createDesignRevisionTracker()
 let _assemblyRevisionId = null
 
@@ -1246,6 +1250,8 @@ export function changeDimensions(kind, id, upsert, deleted, context) {
 
 /** Persist display-only nucleotide/cluster visibility in the .nadoc file. */
 export async function saveVisibilityState(visibilityState) {
+  if (store.getState().currentDesign?.group_organization != null)
+    return groupOrganizationCommand('visibility-update', { visibility_state: visibilityState })
   const json = await _request('PUT', '/design/visibility', visibilityState)
   return _syncFromDesignResponse(json, { skipGeometry: true })
 }

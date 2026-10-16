@@ -1,6 +1,7 @@
 // ── Palette ───────────────────────────────────────────────────────────────────
 
 import { isAutoCluster } from '../cluster_entries.js'
+import { hasOrganization, displayGroups, partGroupColorIndex } from '../part_group_display.js'
 import { assembleOverhangSequence } from '../design_queries.js'
 
 export const C = {
@@ -136,6 +137,7 @@ export function buildNucLetterMap(design, nucs) {
  * @returns {(nuc:object) => number|undefined}
  */
 export function buildClusterLookup(design) {
+  if (hasOrganization(design)) return partGroupColorIndex(design)
   const clusters = design?.cluster_transforms ?? []
   if (!clusters.length) return () => undefined
 
@@ -222,6 +224,12 @@ function _hexToInt(c) {
  * @returns {(nuc:object) => number|undefined}   packed 0xRRGGBB
  */
 export function buildClusterColorLookup(design) {
+  if (hasOrganization(design)) {
+    const colors = displayGroups(design).map((group, i) =>
+      _hexToInt(group.color) ?? STAPLE_PALETTE[i % STAPLE_PALETTE.length])
+    const index = partGroupColorIndex(design)
+    return nuc => colors[index(nuc)]
+  }
   const clusters = design?.cluster_transforms ?? []
   if (!clusters.length) return () => undefined
 

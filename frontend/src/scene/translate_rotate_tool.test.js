@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { initTranslateRotateTool, decideSelectionAction, resolveSelectionClusterId } from './translate_rotate_tool.js'
 import { createSelectionController } from './selection_controller.js'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 import { clearShortcuts } from '../input/shortcuts.js'
+import { hideOpProgress } from '../ui/op_progress.js'
 
 // Mock the imported (non-DI) side-effect helpers so the factory body is testable
 // without real toast/progress DOM. showToast capture lets us assert guard paths.
@@ -102,7 +103,15 @@ function makeDeps(overrides = {}) {
   return { deps, store, clusterGizmo, proteinGizmo, jointRenderer, helixCtrl, get active() { return active }, get dirty() { return dirty }, get editCtx() { return editCtx } }
 }
 
+let resetListeners = []
+let resetListenerSpy
 beforeEach(() => {
+  const addEventListener = window.addEventListener.bind(window)
+  resetListeners = []
+  resetListenerSpy = vi.spyOn(window, 'addEventListener').mockImplementation((type, listener, options) => {
+    if (type === 'nadoc:document-reset') resetListeners.push(listener)
+    addEventListener(type, listener, options)
+  })
   clearDom()
   clearShortcuts()
   toastCalls.length = 0
@@ -111,8 +120,121 @@ beforeEach(() => {
             '__mrPanel', '__mrPivotSel'])
   global.requestAnimationFrame = (cb) => { cb(0); return 0 }
 })
+afterEach(() => {
+  for (const listener of resetListeners) window.removeEventListener('nadoc:document-reset', listener)
+  resetListenerSpy.mockRestore()
+})
 
 describe('initTranslateRotateTool — API + init side effects', () => {
+  it('keeps failed Apply pending and the tool open for retry or Cancel', async () => {
+    const ctx = makeDeps()
+    ctx.deps.setActive(true); ctx.deps.setClusterDirty(true)
+    ctx.clusterGizmo.commitPendingTransforms.mockResolvedValue({ clusterIds: [], error: Error('Stale source') })
+    const tool = initTranslateRotateTool(ctx.deps)
+    expect(await tool.confirm()).toBe(false)
+    expect(ctx.active).toBe(true); expect(ctx.dirty).toBe(true)
+    expect(ctx.clusterGizmo.detach).not.toHaveBeenCalled()
+    expect(ctx.clusterGizmo.discardPendingTransforms).not.toHaveBeenCalled()
+    expect(document.getElementById('__mrPanel').style.display).toBe('')
+    expect(toastCalls.at(-1)[0]).toMatch(/Stale/)
+  })
+
+  it('does not reopen a failed Apply after a same-ID document reset', async () => {
+    const ctx = makeDeps()
+    ctx.deps.setActive(true); ctx.deps.setClusterDirty(true)
+    ctx.clusterGizmo.commitPendingTransforms.mockImplementation(async () => {
+      window.dispatchEvent(new Event('nadoc:document-reset'))
+      return { clusterIds: [], error: Error('Retired request') }
+    })
+    const tool = initTranslateRotateTool(ctx.deps)
+    expect(await tool.confirm()).toBe(false)
+    expect(ctx.active).toBe(false)
+    expect(document.getElementById('__mrPanel').style.display).toBe('none')
+    expect(toastCalls).toHaveLength(0)
+  })
+
+  it.each(['accepted', 'refused'])('locally retires held Apply on reset without disturbing the next document tool (%s)', async outcome => {
+    const design = { id: 'same-document', group_organization: { version: 1, groups: [] },
+      cluster_transforms: [{ id: 'C1', pivot: [0, 0, 0], translation: [0, 0, 0],
+        rotation: [0, 0, 0, 1], helix_ids: ['h1'] }], cluster_joints: [] }
+    const geometry = [{ id: 'old-geometry' }], axes = { old: true }
+    const ctx = makeDeps({ state: { currentDesign: design, currentGeometry: geometry, currentHelixAxes: axes } })
+    let pickMode = 'groups'
+    ctx.deps.selectionManager.getGroupPickMode = () => pickMode
+    ctx.deps.selectionManager.setGroupPickMode = vi.fn(mode => { pickMode = mode })
+    const pending = new Map([['C1', { original: true }]])
+    ctx.clusterGizmo.discardPendingTransforms.mockImplementation(() => pending.clear())
+    ctx.clusterGizmo.getAllPendingTransforms = () => [...pending.values()]
+    let release, entered
+    const response = new Promise(resolve => { release = resolve })
+    const started = new Promise(resolve => { entered = resolve })
+    ctx.clusterGizmo.commitPendingTransforms.mockImplementation(() => { entered(); return response })
+    const tool = initTranslateRotateTool(ctx.deps)
+    await tool.activate('C1')
+    ctx.deps.setClusterDirty(true)
+    expect(pickMode).toBe('placements')
+    const confirming = tool.confirm()
+    await started
+    expect(ctx.active).toBe(false) // Apply is still pending, so active alone cannot own cleanup.
+
+    window.dispatchEvent(new Event('nadoc:document-reset'))
+    expect(ctx.clusterGizmo.detach).toHaveBeenCalledTimes(1)
+    expect(ctx.clusterGizmo.discardPendingTransforms).toHaveBeenCalledTimes(1)
+    expect(pending.size).toBe(0)
+    expect(ctx.dirty).toBe(false)
+    expect(pickMode).toBe('groups')
+    expect(ctx.deps.canvas.removeEventListener).toHaveBeenCalledWith('pointerdown', expect.any(Function))
+    expect(document.getElementById('__mrPanel').style.display).toBe('none')
+    expect(ctx.store.getState().currentGeometry).toBe(geometry)
+    expect(ctx.store.getState().currentHelixAxes).toBe(axes)
+    expect(ctx.deps.api.seekFeatures).not.toHaveBeenCalled()
+    expect(ctx.deps.api.editFeature).not.toHaveBeenCalled()
+    expect(ctx.jointRenderer.rebuild).not.toHaveBeenCalled()
+    expect(ctx.helixCtrl.commitClusterPositions).not.toHaveBeenCalled()
+
+    // A same-ID replacement opens a new tool before the retired request settles.
+    ctx.store.setState({ currentDesign: { ...design } })
+    await tool.activate('C1')
+    const newerPending = { newer: true }
+    pending.set('C1', newerPending)
+    ctx.deps.setClusterDirty(true)
+    hideOpProgress.mockClear()
+    release(outcome === 'accepted'
+      ? { clusterIds: ['C1'], geometryApplied: true }
+      : { clusterIds: [], error: Error('Retired request') })
+    expect(await confirming).toBe(false)
+    expect(ctx.active).toBe(true)
+    expect(ctx.dirty).toBe(true)
+    expect(pending.get('C1')).toBe(newerPending)
+    expect(pickMode).toBe('placements')
+    expect(document.getElementById('__mrPanel').style.display).toBe('')
+    expect(ctx.clusterGizmo.detach).toHaveBeenCalledTimes(1)
+    expect(ctx.clusterGizmo.discardPendingTransforms).toHaveBeenCalledTimes(1)
+    expect(ctx.clusterGizmo.commitPendingTransforms).toHaveBeenCalledTimes(1)
+    expect(hideOpProgress).not.toHaveBeenCalled()
+    expect(toastCalls).toHaveLength(0)
+  })
+
+  it('does not rebake an accepted organized move with exact server geometry', async () => {
+    const ctx = makeDeps()
+    ctx.deps.setActive(true); ctx.deps.setClusterDirty(true)
+    ctx.clusterGizmo.commitPendingTransforms.mockResolvedValue({ clusterIds: ['same'], geometryApplied: true })
+    const tool = initTranslateRotateTool(ctx.deps)
+    await tool.confirm()
+    expect(ctx.helixCtrl.commitClusterPositions).not.toHaveBeenCalled()
+    expect(ctx.deps.rebakeHelixAxesForClusterDelta).not.toHaveBeenCalled()
+    expect(ctx.clusterGizmo.detach).toHaveBeenCalled()
+    expect(ctx.dirty).toBe(false)
+  })
+
+  it('never resolves an organizational or partial selection to an overlapping placement', () => {
+    const design = { group_organization: { version: 1, groups: [{ id: 'same', helix_ids: ['h'] }] },
+      cluster_transforms: [{ id: 'same', helix_ids: ['h'] }], strands: [{ id: 's', domains: [{ helix_id: 'h' }] }] }
+    expect(resolveSelectionClusterId({ kind: 'part_group', id: 'same' }, design)).toBeNull()
+    expect(resolveSelectionClusterId({ kind: 'strand', id: 's' }, design)).toBeNull()
+    expect(resolveSelectionClusterId({ kind: 'cluster', id: 'same' }, design)).toBe('same')
+  })
+
   it('routes Apply, Cancel, and Reset to an attached protein session', () => {
     const proteinGizmo = {
       isAttached: vi.fn(() => true), commit: vi.fn(), cancel: vi.fn(), reset: vi.fn(),

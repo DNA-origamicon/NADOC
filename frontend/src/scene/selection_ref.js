@@ -10,7 +10,7 @@
 import { parseBaseKey } from './base_ref.js'
 
 export const STABLE_SELECTION_KINDS = Object.freeze([
-  'cluster', 'strand', 'domain', 'base', 'end', 'bond', 'crossover',
+  'cluster', 'part_group', 'strand', 'domain', 'base', 'end', 'bond', 'crossover',
   'overhang', 'extension', 'protein', 'nanoparticle',
 ])
 
@@ -122,6 +122,7 @@ export function isSelectionRefLive(input, design) {
     case 'domain': return !!design.strands?.find(s => s.id === ref.strandId)?.domains?.[ref.domainIndex]
     case 'overhang': return !!design.overhangs?.some(item => item.id === ref.id)
     case 'extension': return !!design.extensions?.some(item => item.id === ref.id)
+    case 'part_group': return design.group_organization?.version === 1 && !!design.group_organization.groups?.some(item => item.id === ref.id)
     case 'cluster': return !!design.cluster_transforms?.some(item => item.id === ref.id)
     case 'protein': return !!design.protein_attachments?.some(item => item.id === ref.id)
     case 'nanoparticle': return !!design.nanoparticles?.some(item => item.id === ref.id)

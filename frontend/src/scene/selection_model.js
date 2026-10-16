@@ -97,6 +97,7 @@ export const selectedIdsOfKind = (state, kind) =>
 
 export const selectedOverhangIds = state => selectedIdsOfKind(state, 'overhang')
 export const selectedExtensionIds = state => selectedIdsOfKind(state, 'extension')
+export const selectedPartGroupIds = state => selectedIdsOfKind(state, 'part_group')
 export const selectedClusterIds = state => selectedIdsOfKind(state, 'cluster')
 export const selectedCrossoverRefs = state =>
   canonicalSelection(state).items.filter(ref => ref.kind === 'crossover')
@@ -110,6 +111,7 @@ export const primaryRefOfKind = (state, kind) => {
 
 export const primaryOverhangId = state => primaryRefOfKind(state, 'overhang')?.id ?? null
 export const primaryExtensionId = state => primaryRefOfKind(state, 'extension')?.id ?? null
+export const primaryPartGroupId = state => primaryRefOfKind(state, 'part_group')?.id ?? null
 export const primaryClusterId = state => primaryRefOfKind(state, 'cluster')?.id ?? null
 export const primaryCrossoverRef = state => primaryRefOfKind(state, 'crossover')
 export const primaryEndRef = state => primaryRefOfKind(state, 'end')

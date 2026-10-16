@@ -984,6 +984,25 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   display scope. The existing dedicated e2e isolation/output cleanup rules apply.
 
 - **MV-48 — PENDING — Ordinary grouping and geometry preview lifecycle (2026-10-15).**
+  **October 16 U12 Groups/Placements continuation (FH-18 checkpoint 10):**
+  after explicit qualification enables the gates, verify separate ordered
+  Placements and Groups lists, scene/sidebar selection and framing (including
+  equal text IDs, overlaps, empty groups and domain-backed groups). Create,
+  replace membership, rename, style and dissolve through sidebar and context
+  menus; confirm failures retain the document and selected inputs. Inspect all
+  representations, terminal extensions, minimum overlapping opacity and saved
+  hide/show of **current member bases**. Later membership additions must not be
+  described as dynamically hidden. Reject queued visibility saves, reload the
+  same document during a save and verify rollback never changes newer content.
+  Select explicit placements and Apply one/multiple moves; exactly one undo must
+  restore them, save/reopen/cold replay must agree, and geometry must not move
+  twice. Refuse a move, retry, cancel/reset and reload during Apply; no old gizmo
+  or pending transforms may survive into the next document. Organized ordinary
+  new Bend/Twist and earlier placement edits currently explain unavailable owned
+  adapters; these guards do not qualify those tools. Record structural redraw,
+  style/selection, full undo lock and request/render tails on larger designs.
+  **NOT VERIFIED IN APP:** Archive is unmounted; conversion/backend gates stay
+  false, MV-48/FH-27 remain open. U12 changes no numerical algorithm or golden.
   **October 16 U11 named-selection continuation (FH-18 checkpoint 9):** after
   explicit qualification enables the organization and isolated-preview gates,
   edit a named-group bend and twist with whole-helix and domain-backed groups.

@@ -1,3 +1,4 @@
+import { partGroupRanges } from './part_group_selection.js'
 import { canonicalSelection, createSelectionState } from './selection_model.js'
 
 /** Resolve bounds for interaction only. The server validates and freezes membership. */
@@ -17,6 +18,8 @@ export function deformationTargets(state) {
         const strand = design?.strands?.find(s => s.id === ref.id)
         if (!strand) throw new Error('Selected strand no longer exists')
         strand.domains.forEach((_, i) => addDomain(strand.id, i))
+      } else if (ref.kind === 'part_group') {
+        ranges.push(...partGroupRanges(design, ref.id))
       } else if (ref.kind === 'cluster') {
         const c = design?.cluster_transforms?.find(c => c.id === ref.id)
         if (!c) throw new Error('Selected cluster no longer exists')
@@ -26,9 +29,9 @@ export function deformationTargets(state) {
           if (!h) throw new Error('Selected helix no longer exists')
           ranges.push({ helixId: id, lo: h.bp_start ?? 0, hi: (h.bp_start ?? 0) + h.length_bp - 1 })
         }
-      } else throw new Error('Select clusters, strands, or domains for Bend / Twist')
+      } else throw new Error('Select groups, placements, strands, or domains for Bend / Twist')
     }
-    return { targets, ranges, error: ranges.length ? null : 'Select clusters, strands, or domains in the scene or lists.' }
+    return { targets, ranges, error: ranges.length ? null : 'Select groups, placements, strands, or domains in the scene or lists.' }
   } catch (error) { return { targets, ranges: [], error: error.message } }
 }
 

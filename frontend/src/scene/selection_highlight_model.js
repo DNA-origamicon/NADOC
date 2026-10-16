@@ -19,6 +19,7 @@ export function selectionHighlightDescriptor(state) {
   return {
     context: selection.context,
     primary: selection.primary,
+    partGroupIds: byKind('part_group').map(ref => ref.id),
     clusterIds: byKind('cluster').map(ref => ref.id),
     strandIds: byKind('strand').map(ref => ref.id),
     domains: byKind('domain').map(ref => ({ strandId: ref.strandId, domainIndex: ref.domainIndex })),
@@ -36,6 +37,6 @@ export function selectionHighlightDescriptor(state) {
 
 export const highlightDescriptorIsEmpty = descriptor =>
   !descriptor || ![
-    'clusterIds', 'strandIds', 'domains', 'baseKeys', 'endKeys', 'bonds',
+    'partGroupIds', 'clusterIds', 'strandIds', 'domains', 'baseKeys', 'endKeys', 'bonds',
     'crossovers', 'overhangIds', 'extensionIds', 'proteinIds',
   ].some(key => descriptor[key]?.length)

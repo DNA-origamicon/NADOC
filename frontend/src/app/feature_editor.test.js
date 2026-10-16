@@ -3,7 +3,7 @@ const f = vi.hoisted(() => ({ history: { open: vi.fn(), active: vi.fn(() => fals
   create: vi.fn(), deleteDeformation: vi.fn(), seekFeatures: vi.fn(), start: vi.fn(), scope: vi.fn(), listeners: new Set() }))
 vi.mock('./deformation_history_editor.js', () => ({ createDeformationHistoryEditor: (...args) => { f.create(...args); return f.history } }))
 vi.mock('../api/client.js', () => ({ deleteDeformation: f.deleteDeformation, seekFeatures: f.seekFeatures }))
-vi.mock('../state/store.js', () => ({ store: { getState: () => ({ currentDesign: { id: 'part', feature_log: [] } }),
+vi.mock('../state/store.js', () => ({ store: { getState: () => ({ currentDesign: f.design ?? { id: 'part', feature_log: [] } }),
   subscribe: callback => { f.listeners.add(callback); return () => f.listeners.delete(callback) }, setState: vi.fn() } }))
 vi.mock('../scene/deformation_editor.js', () => ({ initDeformationEditor: vi.fn(), previewDeformation: vi.fn(), confirmDeformation: vi.fn(),
   waitForDeformationIdle: vi.fn(), discardDeformationPreview: vi.fn(), exitTool: vi.fn(), getPlanes: () => ({}), repositionPlane: vi.fn(),
@@ -12,7 +12,18 @@ vi.mock('../scene/deformation_editor.js', () => ({ initDeformationEditor: vi.fn(
 vi.mock('../ui/bend_twist_popup.js', () => ({ showPickingPopup: vi.fn(), initBendTwistPopup: vi.fn(), openPopup: vi.fn(), closePopup: vi.fn(),
   setPlanePositions: vi.fn(), setHistoryPopupStatus: vi.fn() }))
 import { initFeatureEditor } from './feature_editor.js'
-afterEach(() => vi.clearAllMocks())
+afterEach(() => { f.design = null; vi.clearAllMocks() })
+
+it('does not seek or open the old mutating placement history editor for separate groups', async () => {
+  f.design = { id: 'part', group_organization: { version: 1, groups: [] }, feature_log: [] }
+  const showToast = vi.fn(), activateTranslateRotateTool = vi.fn()
+  const owner = initFeatureEditor({ showToast, activateTranslateRotateTool })
+  await owner.onEditFeature({ feature_type: 'cluster_op', cluster_id: 'same' }, 0)
+  expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/isolated history/), 5000)
+  expect(f.seekFeatures).not.toHaveBeenCalled()
+  expect(activateTranslateRotateTool).not.toHaveBeenCalled()
+  owner.dispose()
+})
 
 it('qualified history dispatch uses the stable private editor and never peels or seeks on refusal', async () => {
   f.history.open.mockResolvedValue(false)

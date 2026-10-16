@@ -9,8 +9,9 @@ export function moveRotateSelectionLabels(state) {
     if (ref.kind === 'base' || ref.kind === 'end') return `${ref.kind === 'base' ? 'Base' : 'End'} · ${ref.key}`
     if (ref.kind === 'cluster') {
       const name = design?.cluster_transforms?.find(c => c.id === ref.id)?.name ?? ref.id
-      return `Cluster · ${name}`
+      return `${design?.group_organization != null ? 'Placement' : 'Cluster'} · ${name}`
     }
+    if (ref.kind === 'part_group') return `Group · ${design?.group_organization?.groups?.find(g => g.id === ref.id)?.name ?? ref.id}`
     if (ref.kind === 'strand') return `Strand · ${ref.id}`
     if (ref.kind === 'domain') return `Domain · ${ref.strandId} [${ref.domainIndex}]`
     return `${ref.kind} · ${ref.id ?? ref.key}`

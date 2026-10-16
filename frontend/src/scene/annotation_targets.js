@@ -6,12 +6,13 @@
  * live THREE.Vector3 (kept current by unfold / cluster / cadnano overlays), so
  * callers cache the matched entries and read `.pos` every frame.
  */
+import { partGroupById, partGroupNucKeys } from './part_group_display.js'
 import { baseKey } from './base_ref.js'
 import { ovhgDomainIds } from './design_queries.js'
 
 const KIND_LABELS = {
   'assembly-part': 'Part', 'assembly-overhang': 'Overhang',
-  base: 'Base', end: 'End', domain: 'Domain', strand: 'Strand', cluster: 'Cluster',
+  base: 'Base', end: 'End', domain: 'Domain', strand: 'Strand', cluster: 'Cluster', part_group: 'Group',
   crossover: 'Crossover', bond: 'Bond', overhang: 'Overhang', extension: 'Extension',
   protein: 'Protein', nanoparticle: 'Nanoparticle',
 }
@@ -29,6 +30,13 @@ export function buildTargetMatcher(refs, design) {
       case 'base': case 'end': m.bases.add(ref.key); break
       case 'bond': m.bases.add(ref.fromKey); m.bases.add(ref.toKey); break
       case 'extension': m.extHelices.add(`__ext_${ref.id}`); break
+      case 'part_group': {
+        for (const key of partGroupNucKeys(partGroupById(design, ref.id), design)) {
+          if (key.startsWith('d:')) m.domains.add(key.slice(2))
+          else if (key.startsWith('h:')) m.helices.add(key.slice(2))
+        }
+        break
+      }
       case 'cluster': {
         const cluster = design?.cluster_transforms?.find(c => c.id === ref.id)
         if (!cluster) break
@@ -152,6 +160,7 @@ function describeOne(ref, design) {
       return `${kind} ${ref.domainIndex + 1} · ${s?.name || shortId(ref.strandId)}`
     }
     case 'base': case 'end': return `${kind} · ${ref.key}`
+    case 'part_group': return `${kind} · ${partGroupById(design, ref.id)?.name || shortId(ref.id)}`
     case 'cluster': return `${kind} · ${design?.cluster_transforms?.find(c => c.id === ref.id)?.name || shortId(ref.id)}`
     case 'overhang': return `${kind} · ${shortId(ref.id)}`
     case 'nanoparticle': {

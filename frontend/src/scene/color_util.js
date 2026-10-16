@@ -6,6 +6,8 @@
 import { nucleotideColorKey } from './nucleotide_color_key.js'
 
 import { isAutoCluster } from './cluster_entries.js'
+import { displayGroups, hasOrganization, partGroupColorIndex, partGroupAlphaKeys,
+  partGroupNucleotideValues } from './part_group_display.js'
 
 // Strand-length heatmap domain (nt): clamps below 14 / above 60.
 const HEATMAP_MIN = 14, HEATMAP_MAX = 60
@@ -93,11 +95,12 @@ export function computeAtomStrandColors(state, staplePalette) {
   // 'cluster' coloring: replace each strand's color with its cluster's
   // palette colour, keyed off the strand's first domain helix.
   // 'base' is left as strand colour (atomistic lacks per-atom base mapping).
-  if (coloringMode === 'cluster' && currentDesign?.cluster_transforms?.length) {
+  const groups = displayGroups(currentDesign)
+  if (coloringMode === 'cluster' && groups.length) {
     for (const [sid, ci] of resolveStrandClusters(currentDesign)) {
       // A user-set cluster colour overrides the auto palette slot, matching the CG
       // path (helix_renderer/palette.js::buildClusterColorLookup).
-      const custom = currentDesign.cluster_transforms[ci]?.color
+      const custom = groups[ci]?.color
       effective[sid] = (typeof custom === 'string' && /^#[0-9a-fA-F]{6}$/.test(custom))
         ? parseInt(custom.slice(1), 16)
         : ATOM_STAPLE_PALETTE[ci % ATOM_STAPLE_PALETTE.length]
@@ -127,6 +130,16 @@ export function computeAtomStrandColors(state, staplePalette) {
  */
 export function resolveStrandClusters(currentDesign) {
   const out = new Map()
+  if (hasOrganization(currentDesign)) {
+    const resolve = partGroupColorIndex(currentDesign)
+    for (const strand of currentDesign.strands ?? []) {
+      for (let di = 0; di < (strand.domains ?? []).length; di++) {
+        const index = resolve({ strand_id: strand.id, domain_index: di, helix_id: strand.domains[di].helix_id })
+        if (index != null) { out.set(strand.id, index); break }
+      }
+    }
+    return out
+  }
   const clusters = currentDesign?.cluster_transforms ?? []
   if (!clusters.length) return out
   const helixCluster = new Map()
@@ -182,6 +195,20 @@ export function resolveStrandClusters(currentDesign) {
  */
 export function computeAtomStrandAlphas(currentDesign) {
   const out = new Map()
+  if (hasOrganization(currentDesign)) {
+    // Old surfaces without nucleotide ownership have only a strand fallback.
+    // Use its minimum fade, never the color winner's unrelated opacity.
+    const alpha = partGroupAlphaKeys(currentDesign)
+    for (const strand of currentDesign.strands ?? []) {
+      let minimum = 1
+      strand.domains?.forEach((domain, di) => {
+        minimum = Math.min(minimum, alpha.get(`d:${strand.id}:${di}`) ??
+          alpha.get(`h:${domain.helix_id}`) ?? 1)
+      })
+      if (minimum < 1) out.set(strand.id, minimum)
+    }
+    return out
+  }
   const clusters = currentDesign?.cluster_transforms ?? []
   if (!clusters.length) return out
   for (const [sid, ci] of resolveStrandClusters(currentDesign)) {
@@ -214,6 +241,7 @@ export function computeAtomStrandAlphas(currentDesign) {
  * @returns {Map<string, number>} 'helix:bp:dir' → cluster index
  */
 export function buildNucClusterIndex(design) {
+  if (hasOrganization(design)) return partGroupNucleotideValues(design, 'color')
   const out = new Map()
   const clusters = design?.cluster_transforms ?? []
   if (!clusters.length) return out
@@ -312,7 +340,7 @@ export function computeAtomNucColors(state) {
   const out = new Map()
   const design = state?.currentDesign
   if (state?.coloringMode !== 'cluster') return out
-  const clusters = design?.cluster_transforms ?? []
+  const clusters = displayGroups(design)
   if (!clusters.length) return out
   const resolved = clusters.map((c, i) => {
     const custom = c?.color
@@ -332,6 +360,7 @@ export function computeAtomNucColors(state) {
  * @returns {Map<string, number>}
  */
 export function computeAtomNucAlphas(design) {
+  if (hasOrganization(design)) return new Map(partGroupNucleotideValues(design, 'alpha'))
   const out = new Map()
   const clusters = design?.cluster_transforms ?? []
   if (!clusters.some(c => typeof c?.opacity === 'number' && c.opacity < 1)) return out

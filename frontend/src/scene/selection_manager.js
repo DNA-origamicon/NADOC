@@ -39,6 +39,9 @@ import { instanceBounds, boundsInRect, createRectangleCollector, segmentInRect }
 import { deferrableContextMenu } from './right_click_menu.js'
 import { showConfirm } from '../ui/primitives/confirm.js'
 import { clusterIdForNucleotide, clusterMemberFilter } from './cluster_entries.js'
+import { sceneGroupRef, groupRefMemberFilter } from './part_group_selection.js'
+import { appendPartGroupMembershipMenu, appendPartGroupActions } from './part_group_selection_menu.js'
+import { hasOrganization, partGroupById } from './part_group_display.js'
 import { strandsToSegments, clustersToSegments, domainsToSegments, editOverridesForSegments, createRepresentationMenuItem } from './representation_overrides.js'
 import { normalizeLevel, hoverPreviewTarget, lassoCaptureType, extensionSelectionEntries, extensionContextIds } from './selection_level.js'
 import { buildStrandMenuItems } from '../ui/strand_menu_items.js'
@@ -701,6 +704,27 @@ function _openExtensionDialog(x, y, strandIds, existingsByStrand) {
 let _onEditStrandSequence = null
 let _onHideSelection = null
 
+function _appendOrganizationMembership(menu, refs) {
+  if (store.getState().assemblyActive) return
+  appendPartGroupMembershipMenu(menu, { refs,
+    getDesign: () => store.getState().currentDesign,
+    command: (kind, inputs) => api.groupOrganizationCommand(kind, inputs),
+    onAccepted: () => _dismissMenu(),
+  })
+}
+
+function _showPartGroupMenu(x, y, id) {
+  _dismissMenu()
+  const menu = _menuBase(x, y)
+  appendPartGroupActions(menu, { id,
+    getDesign: () => store.getState().currentDesign,
+    command: (kind, inputs) => api.groupOrganizationCommand(kind, inputs),
+    onAccepted: () => _dismissMenu(),
+    onHide: refs => { _onHideSelection?.(refs); _dismissMenu() },
+  })
+  document.body.appendChild(menu); _menuEl = menu; _menuOutsideListeners(menu)
+}
+
 function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], overhangOpts = null, ovhgMultiIds = null, onOpenOverhangsManager = null, domainRef = null) {
   _dismissMenu()
   const menu = _menuBase(x, y)
@@ -762,6 +786,9 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
 
   // Check if this strand is a scaffold
   const design = store.getState().currentDesign
+  _appendOrganizationMembership(menu, domainRef
+    ? [{ kind: 'domain', ...domainRef }]
+    : [...new Set([...multiStrandIds, strandId])].map(id => ({ kind: 'strand', id })))
   const _stype = design?.strands?.find(s => s.id === strandId)?.strand_type
   const isScaffold = _stype === 'scaffold'
   const hideRefs = domainRef
@@ -870,8 +897,8 @@ function _showColorMenu(x, y, strandId, designRenderer, multiStrandIds = [], ove
     menu.appendChild(rgbRow)
   }
 
-  // Groups section (non-scaffold only)
-  if (!isScaffold) {
+  // Groups section (non-scaffold only); organized parts use the owned group actions.
+  if (!isScaffold && (!hasOrganization(design) || store.getState().assemblyActive)) {
     menu.appendChild(_menuSep())
     const grpHeader = document.createElement('div')
     grpHeader.textContent = 'Group'
@@ -1145,6 +1172,7 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
   rgbRow.appendChild(rgbInput)
   menu.appendChild(rgbRow)
 
+  if (!hasOrganization(store.getState().currentDesign) || store.getState().assemblyActive) {
   // Groups
   menu.appendChild(_menuSep())
   const grpHdr = document.createElement('div')
@@ -1249,6 +1277,11 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
   multiGrpRow.appendChild(multiNewInput)
   menu.appendChild(multiGrpRow)
 
+  }
+
+  if (hasOrganization(store.getState().currentDesign) && !store.getState().assemblyActive) {
+    _appendOrganizationMembership(menu, strandIds.map(id => ({ kind: 'strand', id })))
+  } else {
   // Clusters
   menu.appendChild(_menuSep())
   const clusterHdr = document.createElement('div')
@@ -1303,6 +1336,8 @@ function _showMultiMenu(x, y, strandIds, designRenderer) {
 
   clusterRow.appendChild(clusterSel)
   menu.appendChild(clusterRow)
+
+  }
 
   // Extensions (all strand types)
   const design = store.getState().currentDesign
@@ -1506,6 +1541,7 @@ function _showScaffoldMenu(x, y, ctx, cbs) {
   _dismissMenu()
   const menu = _menuBase(x, y)
   const design = store.getState().currentDesign
+  _appendOrganizationMembership(menu, [{ kind: 'strand', id: strandId }])
 
   const hdr = document.createElement('div')
   hdr.textContent = 'Scaffold strand'
@@ -1728,6 +1764,9 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // scene/selection_level.js. The cluster a click landed on (so the cluster
   // right-click menu + post-rebuild highlight can find it).
   let _drillClusterId = null
+  let _drillPartGroupId = null
+  let _groupPickMode = 'groups'
+  let _vrPlacementPicking = false
   let _selLevel  = 'default'   // 'default' | 'cluster' | 'strand' | 'domain' | 'end' | 'xover'
   // Hover-preview affordance (default level, strand selected): the bead/cone under
   // the cursor previews the leaf a 2nd click would select.
@@ -1745,19 +1784,31 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     return clusterIdForNucleotide(nuc, design)
   }
 
+  function _sceneGroupRef(nuc, design = store.getState().currentDesign) {
+    return sceneGroupRef(nuc, design, { mode: _vrPlacementPicking ? 'placements' : _groupPickMode, selection: selectionController.getState() })
+  }
+
+  // Native VR retains its existing placement-only contract until separately migrated.
+  // Synchronous entry points restore the desktop mode even when a renderer throws.
+  function _withVRPlacementPicking(action) {
+    const previous = _vrPlacementPicking
+    _vrPlacementPicking = true
+    try { return action() } finally { _vrPlacementPicking = previous }
+  }
+
   const _clusterMembershipCache = new WeakMap()
-  function _clusterEntries(clusterId, design, backboneEntries) {
+  function _groupEntries(ref, design, backboneEntries) {
     let cached = _clusterMembershipCache.get(backboneEntries)
     if (!cached || cached.design !== design || cached.length !== backboneEntries.length) {
       cached = { design, length: backboneEntries.length, clusters: new Map() }
       _clusterMembershipCache.set(backboneEntries, cached)
     }
-    if (!cached.clusters.has(clusterId)) {
-      const cluster = design?.cluster_transforms?.find(c => c.id === clusterId)
-      const f = cluster ? clusterMemberFilter(cluster, design) : null
-      cached.clusters.set(clusterId, f ? backboneEntries.filter(e => f(e.nuc)) : [])
+    const key = JSON.stringify([ref.kind, ref.id])
+    if (!cached.clusters.has(key)) {
+      const f = groupRefMemberFilter(ref, design)
+      cached.clusters.set(key, backboneEntries.filter(e => f(e.nuc)))
     }
-    return cached.clusters.get(clusterId)
+    return cached.clusters.get(key)
   }
 
   // Strand ids of a cluster's members. Beads are the primary source; at cylinder LOD
@@ -1789,16 +1840,15 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
   }
 
-  function _highlightClusters(clusterIds, backboneEntries) {
+  function _highlightGroups(groupRefs, backboneEntries) {
     designRenderer.beginClusterSelection?.()
     const design = store.getState().currentDesign
     const atoms = [getAtomisticRenderer?.(), getRegionVdwRenderer?.(), getRegionBallstickRenderer?.(), getRegionStickRenderer?.()]
       .filter((r, i, all) => r && r.getMode?.() !== 'off' && all.indexOf(r) === i)
-    const groups = clusterIds.map(clusterId => {
-      const entries = _clusterEntries(clusterId, design, backboneEntries)
-      const slabs = _clusterEntries(clusterId, design, designRenderer.getSlabEntries?.() ?? [])
-      const cluster = design?.cluster_transforms?.find(c => c.id === clusterId)
-      const matches = (cluster && clusterMemberFilter(cluster, design)) || (() => false)
+    const groups = groupRefs.map(ref => {
+      const entries = _groupEntries(ref, design, backboneEntries)
+      const slabs = _groupEntries(ref, design, designRenderer.getSlabEntries?.() ?? [])
+      const matches = groupRefMemberFilter(ref, design)
       const cones = designRenderer.getConeEntries().filter(e =>
         (e.fromNuc && matches(e.fromNuc)) || (e.toNuc && matches(e.toNuc)))
       const refs = [...(designRenderer.getCylinderDomainData?.() ?? []),
@@ -1812,12 +1862,6 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       ]
     })
     designRenderer.setClusterSelectionGroups?.(groups)
-  }
-
-  function _highlightCluster(clusterId, backboneEntries) {
-    _restoreStrand()
-    _highlightClusters([clusterId], backboneEntries)
-    _drillClusterId = clusterId
   }
 
   // ── Selection-level select primitives ──────────────────────────────────────
@@ -1848,9 +1892,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   function _selectClusterV2(nuc, hitStrandId, backboneEntries) {
     const design = store.getState().currentDesign
-    const cid = _resolveClusterId(nuc, design)
-    if (!cid) return false
-    return _applyClusterSelection(cid, { toggle: true })
+    const ref = _sceneGroupRef(nuc, design)
+    if (!ref) return false
+    const selected = selectionController.select(ref)
+    if (!selected.items.length) _finishCanonicalDeselect()
+    return true
   }
 
   function _selectDomainV2(hitEntry, hitStrandId, backboneEntries, coneEntries) {
@@ -2204,6 +2250,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (_mode === 'strand')  return `strand:${_strandId}`
     if (_mode === 'domain')  return `domain:${_strandId}:${_domainIndex}`
     if (_mode === 'cluster') return `cluster:${_drillClusterId}`
+    if (_mode === 'part_group') return `part_group:${_drillPartGroupId}`
     return null
   }
 
@@ -2222,11 +2269,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     }
     // cluster
     const design = store.getState().currentDesign
-    const cid = _resolveClusterId(entry.nuc, design)
-    if (!cid) return null
-    const f = clusterMemberFilter(design?.cluster_transforms?.find(c => c.id === cid), design)
-    if (!f) return null
-    return { key: `cluster:${cid}`, beads: bb.filter(e => f(e.nuc)) }
+    const ref = _sceneGroupRef(entry.nuc, design)
+    if (!ref) return null
+    const f = groupRefMemberFilter(ref, design)
+    return { key: `${ref.kind}:${ref.id}`, beads: bb.filter(e => f(e.nuc)) }
   }
 
   function _updateHoverPreview(clientX, clientY) {
@@ -2801,7 +2847,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
 
   function _finishCanonicalDeselect() {
     _mode = 'none'; _strandId = null; _domainIndex = null
-    _crossoverId = null; _drillClusterId = null
+    _crossoverId = null; _drillClusterId = null; _drillPartGroupId = null
     _emitDrillLevel(_selLevel)
   }
 
@@ -3054,6 +3100,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     menu.appendChild(hdr)
     menu.appendChild(_menuItem('Hide selected', () => _onHideSelection?.({ domainRefs })))
     menu.appendChild(_menuSep())
+    _appendOrganizationMembership(menu, domainRefs.map(ref => ({ kind: 'domain', ...ref })))
     _appendRepresentationMenu(menu, { domainRefs })
     document.body.appendChild(menu)
     _menuEl = menu
@@ -3339,7 +3386,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     _mode = 'none'
     _strandId = null
     _crossoverId = null
-    _drillClusterId = null
+    _drillClusterId = null; _drillPartGroupId = null
     if (_baseKeys.length === 1 && _baseKeys[0] === key) { _setBaseKeys([]); return }
     _setBaseKeys([key])
   }
@@ -3429,7 +3476,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // Replace cluster membership atomically. Clearing it first rewrites unchanged
     // masks and needlessly toggles the merged-cylinder representation twice.
     const previousProjection = _projectingClusters
-    _projectingClusters = !geometryChanged && highlight.clusterIds.length > 0
+    _projectingClusters = !geometryChanged && (highlight.clusterIds.length + highlight.partGroupIds.length) > 0
     try {
 
       // Geometry rebuilds invalidate cached entry adapters. They are painter output,
@@ -3445,7 +3492,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       _clearMultiOverhangSelection({ commit: false })
       _clearMultiExtensionSelection({ commit: false })
       _clearMultiCrossoverArcs()
-      _mode = 'none'; _strandId = null; _domainIndex = null; _drillClusterId = null
+      _mode = 'none'; _strandId = null; _domainIndex = null; _drillClusterId = null; _drillPartGroupId = null
 
       if (highlight.overhangIds.length) _applyMultiOverhangHighlight(highlight.overhangIds)
       if (highlight.extensionIds.length) _applyMultiExtensionHighlight(highlight.extensionIds)
@@ -3466,13 +3513,18 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         _applyMultiDomainHighlight(highlight.domains)
       }
 
-      if (highlight.clusterIds.length === 1) {
-        _mode = 'cluster'; _strandId = null
-        _highlightCluster(highlight.clusterIds[0], backboneEntries)
-      } else if (highlight.clusterIds.length > 1) {
-        const design = store.getState().currentDesign
-        _mode = 'none'; _strandId = null; _drillClusterId = null
-        _highlightClusters(highlight.clusterIds, backboneEntries)
+      const groupRefs = [
+        ...highlight.clusterIds.map(id => ({ kind: 'cluster', id })),
+        ...highlight.partGroupIds.map(id => ({ kind: 'part_group', id })),
+      ]
+      if (groupRefs.length) {
+        _mode = 'none'; _strandId = null
+        _highlightGroups(groupRefs, backboneEntries)
+        if (groupRefs.length === 1) {
+          _mode = groupRefs[0].kind
+          if (_mode === 'cluster') _drillClusterId = groupRefs[0].id
+          else _drillPartGroupId = groupRefs[0].id
+        }
       }
 
       const bondRef = highlight.primary?.kind === 'bond'
@@ -3629,7 +3681,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   }
 
   function _toggleCluster(nuc) {
-    _toggleClusterById(_resolveClusterId(nuc, store.getState().currentDesign))
+    const ref = _sceneGroupRef(nuc)
+    if (ref) selectionController.toggle(ref)
   }
 
   // Dispatch a Ctrl/Shift+click to the right toggle for the active selection level —
@@ -3782,8 +3835,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       collector.add(`domain:${nuc.strand_id}:${nuc.domain_index ?? 0}`, bounds)
       if (nuc.overhang_id) collector.add(`overhang:${nuc.overhang_id}`, bounds)
       if (nuc.extension_id) collector.add(`extension:${nuc.extension_id}`, bounds)
-      const cid = useCluster && _resolveClusterId(nuc, store.getState().currentDesign)
-      if (cid) collector.add(`cluster:${cid}`, bounds)
+      const ref = useCluster && _sceneGroupRef(nuc)
+      if (ref) collector.add(`${ref.kind}:${ref.id}`, bounds)
       const end = endRefForEntry({ nuc, _copy: copy })
       if (end) collector.add(`end:${end.key}`, bounds)
       return boundsInRect(bounds, selectionRect, crossing)
@@ -3794,7 +3847,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     const extensionIdSet = new Set()  // extension_id strings
     const endEntries    = []   // termini captured as canonical End refs
     const clusterHitNucs = []  // nucs of in-rect beads, when drilling at cluster level
-    const clusterIdSet  = new Set()   // clusters those nucs resolve to
+    const groupHitRefs  = new Map()   // clusters those nucs resolve to
 
     const st = store.getState().selectableTypes
     // What the lasso captures (single source of truth, unit-tested in
@@ -3962,8 +4015,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     if (useCluster && clusterHitNucs.length) {
       const design = store.getState().currentDesign
       for (const nuc of clusterHitNucs) {
-        const cid = _resolveClusterId(nuc, design)
-        if (cid) clusterIdSet.add(cid)
+        const ref = _sceneGroupRef(nuc, design)
+        if (ref) groupHitRefs.set(`${ref.kind}:${ref.id}`, ref)
       }
     }
 
@@ -3971,7 +4024,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     for (const key of domainKeyMap.keys()) if (!collector.has(`domain:${key}`)) domainKeyMap.delete(key)
     for (const id of ovhangIdSet) if (!collector.has(`overhang:${id}`)) ovhangIdSet.delete(id)
     for (const id of extensionIdSet) if (!collector.has(`extension:${id}`)) extensionIdSet.delete(id)
-    for (const id of clusterIdSet) if (!collector.has(`cluster:${id}`)) clusterIdSet.delete(id)
+    for (const key of groupHitRefs.keys()) if (!collector.has(key)) groupHitRefs.delete(key)
     for (let i = endEntries.length - 1; i >= 0; i--) {
       if (!collector.has(`end:${endRefForEntry(endEntries[i])?.key}`)) endEntries.splice(i, 1)
     }
@@ -4038,15 +4091,12 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       selectionController.extend(newIds.map(id => ({ kind: 'extension', id })))
     }
 
-    if (clusterIdSet.size) {
-      const ids = [...clusterIdSet]
-      selectionController.extend(ids.map(id => ({ kind: 'cluster', id })))
-    }
+    if (groupHitRefs.size) selectionController.extend([...groupHitRefs.values()])
 
     // ── Strand multi-select result (additive) ─────────────────────────────
     const strandIds = [...strandIdSet]
     if (strandIds.length) {
-      if (!clusterIdSet.size) {
+      if (!groupHitRefs.size) {
         selectionController.extend(strandIds.map(id => ({ kind: 'strand', id })))
       }
     }
@@ -4774,6 +4824,10 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     // A cluster is the active selection (click-drill landed on the cluster
     // level) → offer the move/rotate gizmo for it. Takes priority over the
     // per-strand color menu so a selected cluster is always actionable.
+    if (_mode === 'part_group' && _drillPartGroupId) {
+      _showPartGroupMenu(e.clientX, e.clientY, _drillPartGroupId)
+      return
+    }
     if (_mode === 'cluster' && _drillClusterId && onClusterMoveRotate) {
       _showClusterMenu(e.clientX, e.clientY, _drillClusterId, onClusterMoveRotate)
       return
@@ -4987,6 +5041,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   }
 
   store.subscribe((newState, prevState) => {
+    if (newState.currentDesign?.id !== prevState.currentDesign?.id || newState.selection?.context !== prevState.selection?.context) _groupPickMode = 'groups'
     // Any change that triggers a design_renderer rebuild (geometry, design topology,
     // strandGroups) invalidates our cached entry references and clears glow.
     // Re-apply highlights so they survive view transitions and cross-tab syncs.
@@ -5001,6 +5056,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   // fires and the selection halo would vanish on every surface-strand edit.
   window.addEventListener('nadoc:display-rebuilt', () => _reresolveAfterRebuild(store.getState()))
   window.addEventListener('nadoc:representation-change', () => _reresolveAfterRebuild(store.getState()))
+  window.addEventListener('nadoc:document-reset', () => { _groupPickMode = 'groups'; _clearHoverPreview() })
 
   // Canonical refs are the source of truth. Keep renderer adapters synchronized for
   // programmatic/controller mutations as well as pointer gestures.
@@ -5067,6 +5123,22 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
      *  state. Re-selecting the active cluster toggles it off. */
     selectCluster(clusterId) { _applyClusterSelection(clusterId, { toggle: true }) },
 
+    selectPartGroup(id) {
+      if (!partGroupById(store.getState().currentDesign, id)) return false
+      const selected = selectionController.select({ kind: 'part_group', id })
+      if (!selected.items.length) _finishCanonicalDeselect()
+      return true
+    },
+    togglePartGroup(id) {
+      if (!partGroupById(store.getState().currentDesign, id)) return false
+      selectionController.toggle({ kind: 'part_group', id }); return true
+    },
+    getGroupPickMode() { return _groupPickMode },
+    setGroupPickMode(mode) {
+      if (mode !== 'groups' && mode !== 'placements') throw new Error('Unknown group pick mode')
+      _groupPickMode = mode; _clearHoverPreview()
+    },
+
     /** Programmatically add/remove a cluster from the multi-selection — the same
      *  additive toggle as Ctrl+click at cluster level (folds a prior plain-click
      *  cluster into the pool first). Used by Ctrl/Shift+click on the sidebar
@@ -5077,13 +5149,13 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
     getSelectionLevel() { return _selLevel },
 
     /** Read-only native-VR hover projection; never dispatches a selection intent. */
-    previewVRIdentity(identity) { return _previewVrIdentity(identity) },
+    previewVRIdentity(identity) { return _withVRPlacementPicking(() => _previewVrIdentity(identity)) },
 
     /** Level-aware native Select routed through the canonical selection controller. */
-    selectVRIdentity(identity) { return _selectVrIdentity(identity) },
+    selectVRIdentity(identity) { return _withVRPlacementPicking(() => _selectVrIdentity(identity)) },
 
     /** Bounded controller Selection Volume routed into canonical multi-selection. */
-    selectVRIdentities(identities) { return _selectVrIdentities(identities) },
+    selectVRIdentities(identities) { return _withVRPlacementPicking(() => _selectVrIdentities(identities)) },
 
     /** Read-only canonical target for the browser-authoritative VR tool shell. */
     getPrimarySelectionRef() { return selectionController.getState().primary ?? null },

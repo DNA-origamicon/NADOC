@@ -20,7 +20,7 @@ describe('selection highlight descriptor', () => {
     } }
     expect(selectionHighlightDescriptor(state)).toEqual({
       context: 'design', primary: { kind: 'protein', id: 'p1' },
-      clusterIds: ['c1'], strandIds: ['s1'], domains: [{ strandId: 's1', domainIndex: 2 }],
+      partGroupIds: [], clusterIds: ['c1'], strandIds: ['s1'], domains: [{ strandId: 's1', domainIndex: 2 }],
       baseKeys: ['h1:3:FORWARD'], endKeys: ['h1:4:FORWARD'],
       bonds: [{ fromKey: 'h1:3:FORWARD', toKey: 'h1:4:FORWARD', strandId: 's1' }],
       crossovers: [{ id: 'x1', subtype: 'forced_ligation' }],

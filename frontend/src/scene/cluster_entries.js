@@ -10,6 +10,7 @@
  * membership fix lands once. Pure — entries and design are arguments.
  * Unit-tested in cluster_entries.test.js.
  */
+import { hasOrganization, partGroupAlphaKeys, partGroupDisplaySignature } from './part_group_display.js'
 
 /**
  * Predicate deciding whether a nucleotide belongs to a cluster. A plain cluster =
@@ -208,6 +209,7 @@ export function clusterNucKeysFor(design, idSet) {
  * @returns {Map<string, number>}
  */
 export function clusterAlphaKeys(design) {
+  if (hasOrganization(design)) return partGroupAlphaKeys(design)
   const out = new Map()
   for (const c of design?.cluster_transforms ?? []) {
     const a = typeof c.opacity === 'number' ? c.opacity : 1
@@ -276,6 +278,7 @@ export function clusterAlphaForNuc(map, nuc) {
  * @returns {string}
  */
 export function clusterDisplaySignature(design) {
+  if (hasOrganization(design)) return partGroupDisplaySignature(design)
   return (design?.cluster_transforms ?? [])
     .map(c => `${c.id}:${c.color ?? ''}:${c.opacity ?? 1}`)
     .join('|')

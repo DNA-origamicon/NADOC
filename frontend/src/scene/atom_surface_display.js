@@ -28,6 +28,7 @@ import {
   computeAtomNucColors,
 } from './color_util.js'
 import { clusterDisplaySignature } from './cluster_entries.js'
+import { partGroupById, partGroupNucKeysFor } from './part_group_display.js'
 import { baseKey, parseBaseKey } from './base_ref.js'
 import { canonicalSelection, overhangSelectionTarget } from './selection_model.js'
 import { selectionHighlightDescriptor } from './selection_highlight_model.js'
@@ -35,6 +36,14 @@ import { showPersistentToast, dismissToast, showToast } from '../ui/toast.js'
 import { docHeaders } from '../shared/doc_id.js'
 import { parseSurfaceBin } from './surface_bin.js'
 import { withSurfaceProgress } from '../api/surface_progress_request.js'
+
+// These records describe presentation or the history used to produce the live
+// model. Atom construction reads the resulting materialized fields below them.
+const ATOM_NEUTRAL_DESIGN_FIELDS = new Set([
+  'metadata', 'id', 'view_volumes', 'camera_poses', 'animations', 'group_organization',
+  'feature_log', 'feature_log_cursor', 'feature_log_sub_cursor', 'recipe_root',
+  'repair_draft', 'visibility_state',
+])
 
 // Stable signature for a design's per-region surface columns — used to skip a
 // (slow) surface recompute when the pinned columns are unchanged.
@@ -66,9 +75,9 @@ export function isViewVolumeOnlyDesignChange(next, previous) {
 export function atomisticDesignInputsChanged(next, previous) {
   if (next === previous) return false
   if (!next || !previous) return true
-  const ignored = new Set(['metadata', 'id', 'view_volumes', 'camera_poses', 'animations'])
   return [...new Set([...Object.keys(next), ...Object.keys(previous)])].some(key =>
-    !ignored.has(key) && next[key] !== previous[key] && JSON.stringify(next[key]) !== JSON.stringify(previous[key]))
+    !ATOM_NEUTRAL_DESIGN_FIELDS.has(key) && next[key] !== previous[key] &&
+    JSON.stringify(next[key]) !== JSON.stringify(previous[key]))
 }
 
 /** Compile canonical refs to the small renderer-neutral predicate descriptor used by
@@ -81,7 +90,10 @@ export function atomSelectionForState(state) {
     const cluster = state?.currentDesign?.cluster_transforms?.find(item => item.id === id)
     return cluster ? [cluster] : []
   })
-  const clusterDomainRefs = selectedClusters.flatMap(cluster => (cluster.domain_ids ?? []).map(domain => ({
+  const selectedGroups = (highlight.partGroupIds ?? [])
+    .map(id => partGroupById(state?.currentDesign, id)).filter(Boolean)
+  const selectedMembers = [...selectedClusters, ...selectedGroups]
+  const clusterDomainRefs = selectedMembers.flatMap(cluster => (cluster.domain_ids ?? []).map(domain => ({
     kind: 'domain', strandId: domain.strand_id, domainIndex: domain.domain_index,
   })))
   const domainRefs = [...highlight.domains.map(domain => ({ kind: 'domain', ...domain })), ...clusterDomainRefs]
@@ -100,10 +112,13 @@ export function atomSelectionForState(state) {
   })
   const bases = [...highlight.baseKeys, ...highlight.endKeys]
     .map(parseBaseKey).filter(ref => ref && ref.helix_id !== '__xb__')
-  const extensionIds = highlight.extensionIds
+  const groupKeys = partGroupNucKeysFor(state?.currentDesign, highlight.partGroupIds)
+  const extensionIds = [...new Set([...highlight.extensionIds,
+    ...(state?.currentDesign?.extensions ?? []).filter(ext => groupKeys.has(`h:__ext_${ext.id}`)).map(ext => ext.id),
+  ])]
   // A domain-scoped cluster must not widen to its whole helix. Helix membership is
   // used only by ordinary clusters with no exact domain_ids.
-  const helixIds = [...new Set(selectedClusters
+  const helixIds = [...new Set(selectedMembers
     .filter(cluster => !(cluster.domain_ids ?? []).length)
     .flatMap(cluster => cluster.helix_ids ?? []))]
   return { strandIds: strands, domains, bases, extensionIds, helixIds }

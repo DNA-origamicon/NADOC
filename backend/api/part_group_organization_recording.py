@@ -22,7 +22,7 @@ from backend.api import part_publication_policy as policy
 from backend.api.part_model_serialization import admit_model_serialization
 from backend.api.part_recovery_budget import RecoveryBudget
 from backend.api.part_replacement_transaction import publish_replacement
-from backend.core.models import ClusterOpLogEntry, SnapshotLogEntry
+from backend.core.models import ClusterOpLogEntry, SnapshotLogEntry, VisibilityState
 from backend.core.part_command_errors import CommandContractError, ReferenceResolutionError
 from backend.core.part_group_model import PartGroup
 from backend.core.part_group_organization import EDIT_FIELDS, KINDS, build as build_organization
@@ -35,6 +35,8 @@ from backend.core.part_structure_gate import PartStructureError, require_valid_s
 
 POSE_FIELDS = {"translation": 3, "rotation": 4, "pivot": 3}
 MAX_HISTORY_ROWS = 2_000
+PLACEMENT_KINDS = frozenset({"placement-update", "placements-update"})
+MAX_PLACEMENTS_PER_EDIT = 64
 
 
 def _invalid(message):
@@ -44,7 +46,7 @@ def _invalid(message):
 def _request(kind, inputs, expected_revision):
     if type(expected_revision) is not int or expected_revision < 0:
         _invalid("An exact nonnegative document revision is required.")
-    if type(kind) is not str or kind not in KINDS | {"placement-update"} or type(inputs) is not dict:
+    if type(kind) is not str or kind not in KINDS | PLACEMENT_KINDS | {"visibility-update"} or type(inputs) is not dict:
         _invalid("Select a supported group or explicit placement command.")
     try:
         validate_operation_input(inputs)
@@ -56,9 +58,9 @@ def _request(kind, inputs, expected_revision):
     return json.loads(encoded)["inputs"], hashlib.sha256(encoded.encode()).hexdigest()
 
 
-def _editable(source):
+def _editable(source, *, display=False):
     state._assert_active_loadout_editable(source)
-    if source.feature_log_cursor != -1 or source.feature_log_sub_cursor is not None:
+    if not display and (source.feature_log_cursor != -1 or source.feature_log_sub_cursor is not None):
         raise HTTPException(409, detail={"code": "historical_cursor",
             "message": "Return to the latest history position before editing a group."})
 
@@ -74,7 +76,7 @@ def _current(context, session):
         raise HTTPException(409, detail={"code": "source_changed",
             "message": "The document changed while the group edit was being prepared."})
     policy.require_compatibility(context.doc_id, "owned_group_edit")
-    _editable(session.design)
+    _editable(session.design, display=context.operation == "visibility-update")
 
 
 def _placement(source, inputs):
@@ -107,6 +109,32 @@ def _placement(source, inputs):
 def _prepare(kind, source, inputs):
     if kind == "placement-update":
         return _placement(source, inputs)
+    if kind == "placements-update":
+        if (set(inputs) != {"placements"} or type(inputs["placements"]) is not list
+                or not 1 <= len(inputs["placements"]) <= MAX_PLACEMENTS_PER_EDIT):
+            _invalid("Select between one and 64 explicit placements for one move.")
+        identities = set()
+        result, entries = source, []
+        for item in inputs["placements"]:
+            if type(item) is not dict or type(item.get("placement_id")) is not str:
+                _invalid("Each move requires an explicit placement identity and pose fields.")
+            if item["placement_id"] in identities:
+                _invalid("A move cannot repeat a placement identity.")
+            identities.add(item["placement_id"])
+            updated, entry = _placement(result, item)
+            if updated.cluster_transforms != result.cluster_transforms:
+                entries.append(entry)
+            result = updated
+        return result, entries
+    if kind == "visibility-update":
+        value = inputs.get("visibility_state")
+        if (set(inputs) != {"visibility_state"} or type(value) is not dict
+                or set(value) != set(VisibilityState.model_fields)
+                or any(type(items) is not list or any(type(item) is not str for item in items)
+                       for items in value.values())):
+            _invalid("Visibility requires the three existing lists of exact nucleotide/placement addresses.")
+        visibility = VisibilityState(**{key: list(dict.fromkeys(items)) for key, items in value.items()})
+        return source.copy_with(visibility_state=visibility), None
     if kind == "group-create":
         if set(inputs) - EDIT_FIELDS:
             _invalid("New groups accept membership, name and style only; identities are allocated by the host.")
@@ -124,7 +152,7 @@ def _prepare(kind, source, inputs):
 
 
 def apply(kind, inputs, *, expected_revision):
-    """Publish one host-authored native row, one undo step and one revision."""
+    """Publish an owned edit atomically; visibility has no native feature row."""
     from backend.core.part_verification_capture import CaptureLimit, admit, capture
 
     gate.require_group_edit_enabled()
@@ -141,29 +169,35 @@ def apply(kind, inputs, *, expected_revision):
                 raise HTTPException(409, detail={"code": "source_changed",
                     "message": "Refresh the design before editing its groups."})
             source = session.design
-            _editable(source)
+            _editable(source, display=kind == "visibility-update")
             admission = permits.admit_group_edit(doc_context.get_current_doc(), session,
-                operation="cluster_op" if kind == "placement-update" else kind, request_sha256=digest)
+                operation="cluster_op" if kind in PLACEMENT_KINDS else kind, request_sha256=digest)
             context = permits.admission_context(admission)
-            retained = retained_recovery_bytes(source.feature_log, max_rows=MAX_HISTORY_ROWS - 1)
+            retained = retained_recovery_bytes(source.feature_log, max_rows=MAX_HISTORY_ROWS)
             captured = capture(source, preserve_entry_types=True)
 
         admit_model_serialization(captured, max_nodes=30_000, max_bytes=2_000_000,
                                   label="Group authoring serialization")
         prepared, entry = _prepare(kind, captured, inputs)
-        changed = (prepared.cluster_transforms != captured.cluster_transforms if kind == "placement-update"
-                   else prepared.group_organization != captured.group_organization)
+        entries = entry if type(entry) is list else ([] if entry is None else [entry])
+        owned_field = ("cluster_transforms" if kind in PLACEMENT_KINDS else
+                       "visibility_state" if kind == "visibility-update" else "group_organization")
+        changed = getattr(prepared, owned_field) != getattr(source, owned_field)
         # Validate the bounded private input, without serializing live physical
         # state or repeating a whole recipe replay on an ordinary group gesture.
         if changed:
-            admitted = prepared.copy_with(feature_log=[*prepared.feature_log, entry])
+            # Charge actual appended rows against the same aggregate inventory,
+            # including Fine Routing children. The captured definition is owned;
+            # its stripped recovery bodies are not used as storage evidence.
+            retained_recovery_bytes(captured.feature_log, max_rows=MAX_HISTORY_ROWS - len(entries))
+            admitted = prepared.copy_with(feature_log=[*prepared.feature_log, *entries])
             admit(admitted, preserve_entry_types=True)
             admit_model_serialization(admitted, max_nodes=30_000, max_bytes=2_000_000,
                                       label="Group authoring serialization")
         require_valid_structure(prepared)
         state._assert_photoproduct_dependencies(prepared)
         report = state.validate_design(prepared)
-        if changed and kind != "placement-update":
+        if changed and kind in KINDS:
             budget = RecoveryBudget(MAX_RECOVERY_BYTES - retained)
             pre, pre_size = state.encode_design_snapshot(captured)
             budget.charge(pre)
@@ -171,21 +205,22 @@ def apply(kind, inputs, *, expected_revision):
             budget.charge(post)
             entry = entry.model_copy(update={"design_snapshot_gz_b64": pre, "snapshot_size_bytes": pre_size,
                 "post_state_gz_b64": post, "post_state_size_bytes": post_size})
+            entries = [entry]
 
         with state._lock:
             _current(context, session)
             if not changed:
                 doc_context.set_request_revision(context.source_revision)
                 return source, report, None
-            owned = ({"cluster_transforms": prepared.cluster_transforms} if kind == "placement-update"
-                     else {"group_organization": prepared.group_organization})
-            candidate = source.copy_with(**owned, feature_log=[*source.feature_log, entry])
+            candidate = source.copy_with(**{owned_field: getattr(prepared, owned_field)},
+                feature_log=[*source.feature_log, *entries] if entries else source.feature_log)
             state._assert_active_loadout_editable(source, candidate)
             permit = permits.issue_group_edit_permit(admission, candidate,
                 request_sha256=digest, expires=monotonic() + 60)
             publish_replacement(session, candidate, publication_permit=permit)
-            doc_context.set_request_feature_log_entry_id(entry.id)
-            return candidate, report, entry
+            last_entry = entries[-1] if entries else None
+            doc_context.set_request_feature_log_entry_id(last_entry.id if last_entry else None)
+            return candidate, report, last_entry
     except (CaptureLimit, ProofBudgetExceeded) as error:
         raise HTTPException(409, detail={"code": "group_capture_limit", "message": str(error)}) from error
     except (CommandContractError, PartStructureError) as error:

@@ -7,6 +7,8 @@ export function initSelectionHud({ store, selectionManager, selectedCrossoverRef
     const state = store.getState()
     const refs = state.selection?.items ?? []
     const counts = [
+      [refs.filter(ref => ref.kind === 'part_group').length, 'group'],
+      [refs.filter(ref => ref.kind === 'cluster').length, state.currentDesign?.group_organization != null ? 'placement' : 'cluster'],
       [refs.filter(ref => ref.kind === 'strand').length, 'strand'],
       [refs.filter(ref => ref.kind === 'domain').length, 'domain'],
       [(selectionManager.getMultiOverhangs?.() ?? []).length, 'overhang'],

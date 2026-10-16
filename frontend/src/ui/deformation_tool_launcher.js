@@ -4,6 +4,7 @@ import { moveRotateSelectionLabels } from '../scene/move_rotate_panel.js'
 import { startToolForSelection, exitTool, setDeformSessionTargets, waitForDeformationIdle } from '../scene/deformation_editor.js'
 import { showSelectionPopup, setDeformationSelectionUI, closePopup } from './bend_twist_popup.js'
 import { armToolClusterSelection } from './tool_cluster_selection.js'
+import { hasOrganization } from '../scene/part_group_display.js'
 
 /** Persistent selection → planes → parameters workflow, sharing canonical selection. */
 export function initDeformationToolLauncher({
@@ -14,7 +15,7 @@ export function initDeformationToolLauncher({
   let type = null, phase = 'selection', unsubscribe = null, resetting = false
   let finishClusterPick = null
   let selectionEpoch = 0, startError = null
-  const cancel = () => {
+  const cancel = ({ localOnly = false } = {}) => {
     selectionEpoch++
     resetting = false
     type = null
@@ -22,7 +23,8 @@ export function initDeformationToolLauncher({
     finishClusterPick?.(); finishClusterPick = null
     document.removeEventListener('keydown', escape, true)
     setDeformationSelectionUI(null)
-    exit(); closePopup()
+    if (!localOnly) exit()
+    closePopup()
   }
   const escape = event => {
     if (phase !== 'selection' || event.key !== 'Escape' || event.defaultPrevented) return
@@ -50,6 +52,9 @@ export function initDeformationToolLauncher({
     // Let a complete click/lasso gesture settle before freezing its target set.
     queueMicrotask(() => {
       if (epoch !== selectionEpoch || !type || resetting || phase !== 'selection') return
+      if (hasOrganization(store.getState().currentDesign)) {
+        cancel({ localOnly: true }); organizationUnavailable(); return
+      }
       const current = deformationTargets(store.getState())
       if (current.error) return
       try {
@@ -78,6 +83,7 @@ export function initDeformationToolLauncher({
     })
   }
   function open(nextType) {
+    if (hasOrganization(store.getState().currentDesign)) { organizationUnavailable(); return }
     cancel()
     const state = store.getState()
     if (state.assemblyActive) { showToast('Not available in assembly mode.', { severity: 'error' }); return }
@@ -101,6 +107,9 @@ export function initDeformationToolLauncher({
     })
     document.addEventListener('keydown', escape, true)
     scheduleStart()
+  }
+  function organizationUnavailable() {
+    showToast('Creating Bend / Twist on organized parts requires the owned preview workflow, which is not available yet. Existing deformations can be edited through isolated history editing when enabled.', { severity: 'error' })
   }
   for (const kind of ['bend', 'twist']) document.getElementById(`menu-tools-${kind}`)?.addEventListener('click', () => open(kind))
   return { open, cancel }

@@ -210,7 +210,7 @@ import { initDocSpawn } from './app/doc_spawn.js'
 import { initBeltPathRenderer }      from './scene/belt_path_renderer.js'
 import { computeFixedDepths } from './scene/assembly_constraint_graph.js'
 import { initClusterPanel } from './ui/cluster_panel.js'
-import { withClusterDisplay } from './scene/cluster_entries.js'
+import { createGroupPanelBindings } from './app/group_panel_bindings.js'
 import { initPlatesTab }                          from './ui/plates_tab.js'
 import { initHairpinDimerChecker }                from './ui/hairpin_dimer_checker.js'
 import { initHairpinDimerMarkers }                from './scene/hairpin_dimer_markers.js'
@@ -1020,10 +1020,12 @@ async function main() {
   visibilityController = initVisibilityController({
     store, designRenderer, unfoldView,
     onPersist: (visibilityState) => api.saveVisibilityState(visibilityState),
-    onChange: (_hiddenBases, hiddenClusterIds) => {
+    getRevision: api.currentRevisionWatermark,
+    onChange: (_hiddenBases, hiddenClusterIds, hiddenGroupIds) => {
       _atomSurface?.setHiddenNucs?.(_hiddenBases)
       spreadsheet?.refresh?.()
       clusterPanel?.syncVisibility?.(hiddenClusterIds)
+      clusterPanel?.syncGroupVisibility?.(hiddenGroupIds)
     },
   })
   // Crossover arcs (owned by unfold_view) follow applyFemPositions (mrDNA/oxDNA display).
@@ -4498,6 +4500,7 @@ async function main() {
         _mrSetJointAngle(extractJointAngleDeg(quaternion, activeJoint))
       }
     },
+    api,
   )
   // Phase 4 — per-sub-domain rotation gizmo DISABLED 2026-05-11.
   // The gizmo's gold/cyan rings used to attach in the main 3D scene whenever
@@ -5751,26 +5754,9 @@ async function main() {
     onVisibilityChange: (hiddenClusterIds) => {
       visibilityController?.setHiddenClusters(hiddenClusterIds)
     },
-    // Live preview while the style popover's colour/opacity controls are dragged —
-    // a locally-patched design, so nothing hits the network until pointer-up. Both
-    // halves of the repaint are O(nucleotides), so only the one that changed runs.
-    onStylePreview: (clusterId, patch, uiState) => {
-      // Build the preview from the popover's FULL current state, not just the field that
-      // changed: the previous field's commit is debounced and may still be in flight, so
-      // `currentDesign` can lag it. `patch` is only used to decide which half to repaint.
-      const preview = withClusterDisplay(store.getState().currentDesign, clusterId,
-                                         uiState ?? patch)
-      designRenderer.refreshClusterDisplay(preview,
-        { color: patch.color !== undefined, opacity: patch.opacity !== undefined })
-      // The four arc-like systems each own their meshes and only see COMMITTED
-      // store changes, so the live preview has to reach them directly. Crossover
-      // arcs (unfoldView) are drawn in the 3D view too, just straight.
-      unfoldView.refreshClusterDisplay(preview)
-      overhangLinkArcs.refreshClusterDisplay(preview)
-      flexibleArcs.refreshClusterDisplay(preview)
-      // Atomistic + surface are their own renderers again, driven by atom_surface_display.
-      _atomSurface?.refreshClusterDisplay(preview)
-    },
+    ...createGroupPanelBindings({ store, selectionManager, visibilityController,
+      designRenderer, unfoldView, overhangLinkArcs, flexibleArcs,
+      getAtomSurface: () => _atomSurface }),
   })
 
   // Sync cluster panel assembly mode with assemblyActive + instance list changes

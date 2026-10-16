@@ -178,6 +178,10 @@ export function initFeatureEditor({
 
     // ── Move/rotate (cluster_op) edit — highlight cluster and open tool ─────
     if (entry.feature_type === 'cluster_op') {
+      if (store.getState().currentDesign?.group_organization != null) {
+        showToast('Earlier placement editing needs the isolated history editor. Select a Placement to record a new move.', 5000)
+        return
+      }
       const clusterId = entry.cluster_id
       if (!clusterId) return
       // Editing an EARLIER op (a later cluster_op for this cluster exists): seek

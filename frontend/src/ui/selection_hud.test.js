@@ -4,6 +4,15 @@ import { describe, expect, it, vi } from 'vitest'
 import { initSelectionHud } from './selection_hud.js'
 
 describe('initSelectionHud', () => {
+  it('names group and placement selections independently even with equal IDs', () => {
+    document.body.innerHTML = '<div id="selection-count-hud"></div>'
+    const state = { currentDesign: { group_organization: { version: 1, groups: [] } },
+      selection: { items: [{ kind: 'part_group', id: 'same' }, { kind: 'cluster', id: 'same' }] } }
+    const hud = initSelectionHud({ store: { getState: () => state, subscribe: () => vi.fn() },
+      selectionManager: {}, selectedCrossoverRefs: () => [] })
+    hud.update()
+    expect(document.getElementById('selection-count-hud').textContent).toBe('1 group · 1 placement selected')
+  })
   it('summarizes canonical and renderer-owned selection kinds', () => {
     document.body.innerHTML = '<div id="selection-count-hud"></div>'
     const state = { selection: { items: [{ kind: 'strand' }, { kind: 'end' }] } }

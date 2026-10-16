@@ -26,7 +26,8 @@ _input_slot = Lock()
 class GroupCommandRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    kind: Literal["group-organize", "group-create", "group-update", "group-dissolve", "placement-update"]
+    kind: Literal["group-organize", "group-create", "group-update", "group-dissolve",
+                  "placement-update", "placements-update", "visibility-update"]
     inputs: dict
     expected_revision: StrictInt = Field(ge=0)
 
@@ -51,7 +52,7 @@ def _respond(value, generation):
 
     candidate, report, entry = host.apply(command.kind, command.inputs,
                                          expected_revision=command.expected_revision)
-    response = (crud._design_response_with_geometry if command.kind == "placement-update"
+    response = (crud._design_response_with_geometry if command.kind in host.PLACEMENT_KINDS
                 else crud._design_response)
     return ORJSONResponse(response(candidate, report, normalize_legacy=False,
                                   preserve_feature_log_id=entry.id if entry is not None else None))

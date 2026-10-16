@@ -1,0 +1,255 @@
+{
+  "checkpoint": "U12 \u2014 FH-18 checkpoint 10; private Groups/Placements interface and explicit placement Apply",
+  "source_checkpoint": "287f21a4",
+  "date": "2026-10-16",
+  "progress": {
+    "baseline": "B1: 17/38 through 2c15e747",
+    "completed": 18,
+    "estimated_total": 38,
+    "remaining": 20,
+    "core_remaining": 11,
+    "parked_remaining": 9,
+    "delta_completed": 0,
+    "delta_total": 0,
+    "fh18_checkpoints": 10,
+    "engineering_checkpoints_since_b1": 12,
+    "milestones_closed_since_b1": 1,
+    "task_growth_flagged": true
+  },
+  "scope": {
+    "implemented": [
+      "Separate Group/Placement sidebar; revision-bound native create/replace-members/name/style/dissolve actions and shared context-menu actions. Browser-only grouping suppressed only in active organization.",
+      "Typed organization scene/sidebar selection, highlights, framing, labels and atom/surface selection; same-text IDs remain separate. Default group picking, explicit placement picking for movement, legacy/VR placement semantics preserved.",
+      "Shared exact-domain membership and style indexes, terminal-extension display, minimum overlapping opacity, current-member hide/show persisted in existing base-address visibility without a new authoring/model field.",
+      "One bounded explicit multi-placement command (1\u201364 unique IDs), unchanged native absolute pose builder, one publication/revision/undo, actual row accounting including routing children, no-op row omission and complete matching response geometry.",
+      "Refused/stale/current failed Apply retains unaccepted movement; legacy sequential partial acceptance reconciles only accepted IDs. Exact accepted geometry skips duplicate client transform.",
+      "Queued visibility failure rollback is bound to dispatch revision; document/reset generations prevent old saves or pending movement from affecting replacement documents.",
+      "Shared panel wiring/membership/commit modules remove duplicate logic; main.js net -14 lines."
+    ],
+    "remaining": [
+      "FH-18 remains open: ordinary new Bend/Twist owned creation preview, generated compatibility, arbitrary new-group movement/frame/extension semantics and qualification.",
+      "Organized ordinary new Bend/Twist and earlier placement editing explicitly refuse unadapted legacy entry paths. Refusal does not count as completed tool parity.",
+      "Both public rollout gates and UI conversion gate remain false. Assemblies and machine-specific VR qualification deferred; NP/assets parked.",
+      "ISSUE-108 crossover-growth metadata loss, broader dependency/repair/tool histories, integrated desktop/performance and aggregate backend exits remain open.",
+      "Current-member hide/show does not close D\u2019s previously planned persistent group-identity visibility requirement. Future membership does not inherit hidden state; this remains an explicit consumer exit, not silently weakened scope."
+    ]
+  },
+  "validation": {
+    "backend": {
+      "files": [
+        "tests/test_group_placement_ui_host.py",
+        "tests/test_group_organization_recording.py",
+        "tests/test_part_group_organization_routes.py",
+        "tests/test_group_organization_permits.py"
+      ],
+      "initial": {
+        "passed": 128,
+        "warnings": 3,
+        "seconds": 4.39
+      },
+      "expanded_first": {
+        "passed": 130,
+        "failed": 1,
+        "warnings": 5,
+        "seconds": 4.56,
+        "failure": "New nested-routing history limit fixture hit the real capture deadline during its visibility control. Limits unchanged; no numerical/schema source touched."
+      },
+      "unchanged_final_rerun": {
+        "passed": 131,
+        "warnings": 5,
+        "seconds": 4.36
+      },
+      "distinct_final_passes": 131,
+      "fixture_binding_check": {
+        "file": "tests/test_group_placement_ui_host.py",
+        "passed": 16,
+        "seconds": 2.97,
+        "note": "After lint-only fixture import alias; subset of final131, not additional distinct passes."
+      }
+    },
+    "frontend": {
+      "initial_red": {
+        "failed": 26,
+        "passed": 1,
+        "missing_module_suites": 3,
+        "seconds": 2.81
+      },
+      "commit_helper_red": "Missing new module before implementation.",
+      "gizmo_factory_first_red": "Two failures were InvalidURL from an unintended real-client dynamic import; not a behavioral reproduction. Factory now has an optional injected client used by main/tests.",
+      "focused_runs": [
+        {
+          "files": 10,
+          "passed": 197,
+          "failed": 1,
+          "seconds": 4.9,
+          "failure": "Panel test targeted the hidden legacy style popover; corrected to visible active popover, preserving delayed-work negative."
+        },
+        {
+          "files": 11,
+          "passed": 114,
+          "seconds": 4.99
+        },
+        {
+          "files": 9,
+          "passed": 259,
+          "seconds": 4.28
+        },
+        {
+          "files": 7,
+          "passed": 108,
+          "seconds": 3.54
+        },
+        {
+          "files": 5,
+          "passed": 117,
+          "seconds": 2.83,
+          "note": "Frozen final review corrections: display, visibility, move reset, actual selection manager and shared panel."
+        }
+      ],
+      "note": "Focused runs overlap; do not add counts. Final full-suite results recorded separately.",
+      "first_full": {
+        "files": 740,
+        "passed_files": 739,
+        "failed_files": 1,
+        "passed": 8712,
+        "failed": 1,
+        "skipped": 1,
+        "seconds": 323.28,
+        "note": "Nonfinal run overlapped the last review corrections. New empty-selection test executed against an already loaded older display module; source line shows eager snapshot while final source is lazy. New move reset cases were not present when its file ran (51 cases). Retained as failed intermediate evidence, not final-snapshot qualification."
+      },
+      "final_full": {
+        "files": 740,
+        "passed": 8715,
+        "skipped": 1,
+        "seconds": 323.58,
+        "note": "Frozen final implementation; source hashes unchanged before and after run."
+      }
+    },
+    "app": "NOT VERIFIED IN APP. Archive /media/jojo/Archive is unmounted (findmnt exit1); no browser/bulk scratch fallback. MV-48/FH-27 remain open.",
+    "main_js_delta": -14,
+    "selector": {
+      "command": "just test-smart --dry-run",
+      "changed_files_reported": 5567,
+      "decision": "FAST  (fast suite only)",
+      "routing": "FULL: backend/api/main.py matches foundational/shared 'backend/api/main.py'",
+      "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+      "tests_executed": 0,
+      "note": "Selector boilerplate says fast suite ran, but dry-run executes zero tests. Aggregate FAST/FULL debt remains; no bulk-output fallback while Archive unavailable."
+    },
+    "static": {
+      "changed_python_files": 5,
+      "ruff": "passed after replacing imported fixture binding; initial eight F811 fixture-shadow findings corrected",
+      "javascript_files": 49,
+      "node_syntax": "passed",
+      "diff": "passed",
+      "repository_lint": {
+        "passed": false,
+        "unchanged_errors": 5,
+        "note": "Existing F401 in vr_prompts and four CPD tests; changed-file findings zero."
+      },
+      "memory_lint": {
+        "passed": false,
+        "errors": 6,
+        "warnings": 59,
+        "note": "Existing unrelated findings; feature-log head remains 171 lines."
+      },
+      "ledger": "38 unique milestone IDs; 18 done, 11 core open, 9 parked; 12 engineering updates, 10 on FH-18."
+    },
+    "frozen_source_sha256": {
+      "frontend/src/api/group_organization_client.test.js": "90b8a4ba4b338f2960cb52132749b5749e4b0a3bb98632dc6786aac9eb72e3ab",
+      "frontend/src/api/group_organization_endpoints.js": "601ba7f71b174bb66e340672220d87bf9349bbfa219611bf1108289c681e48f6",
+      "frontend/src/app/group_panel_bindings.js": "7d1461d02435c425b7a6252587426a6455471b2ac7b6288559f45b729c77e6cd",
+      "frontend/src/app/group_panel_bindings.test.js": "3631f90377664c9e46eb7dbbd4f2f87852db535dab0e99edaeb8132454997fb6",
+      "frontend/src/scene/cluster_gizmo_commit.test.js": "c0664694dcf9d9c739241bee877d7a4ccdfb50ed67b6ee67824e1d4fa861501d",
+      "frontend/src/scene/part_group_display.js": "ea0da7eeb3853f641450e40545482ca001f7b2d98dd9c14295caf078ffbbf92a",
+      "frontend/src/scene/part_group_display.test.js": "3ac77c09855df669c03c5c084187c6c37cb1fd2c17fd7e20bf5499b2d1764231",
+      "frontend/src/scene/part_group_selection.js": "7cc54b16e229f81cffd4e234eebad329c4372c09ce5e1744757aa521812d27e7",
+      "frontend/src/scene/part_group_selection.test.js": "1387652fb958659e4119f715ae8e7b33ea0353ed71634f252f3cd2840927d31f",
+      "frontend/src/scene/part_group_selection_manager.test.js": "f5ea4cb32dddee818ca4082a4bdb6e98a1eb50722b2766a0bdf55c93d48ce5fc",
+      "frontend/src/scene/part_group_selection_menu.js": "5d7c83f901ef310c98a11c885297208e527763b2be65b514c114386b888dc626",
+      "frontend/src/scene/part_group_selection_menu.test.js": "b8cd2caab04fa4e10ecaaae1b8467dc6cbea7fcffbcbcfab24bec77f0736b7cb",
+      "frontend/src/scene/placement_commit.js": "edf2d76162d15f05d518add245d067d9455dd5bc1ad0bfedbe84d6ff3b7876e8",
+      "frontend/src/scene/placement_commit.test.js": "51db74ed1a1a8d4fdcf48ad0e1632b7b61be9205d40e25071fd531a293be8d36",
+      "frontend/src/test-helpers/part_groups.js": "dc49eab5ac53dccefbd9c21f2df34f4511c94cad0a716d7372ce45c0be2b6f0e",
+      "frontend/src/ui/part_group_panel.js": "e0b6e0923e9a1ef784cc090ccd9c9831f17f28eabcf9a4508943a4bf3265531e",
+      "frontend/src/ui/part_group_panel.test.js": "2099216ff5633862565b2266d280c13678c0fbc7e91ff62b2dc23bf154b4b16e",
+      "tests/test_group_placement_ui_host.py": "f925cf57a227d4da3879c4aa8fb5045f2bc417eb328b17cc928244cfd83a64f3",
+      "backend/api/part_group_organization_recording.py": "275782a30345902628f70b8425fb75da904180b001c99c5b86b9d931320bb527",
+      "backend/api/part_publication_permit.py": "39f2b87e470f1d5ca9a9088a887fc3b8d12be0a0da3339820a3b1da754d0e414",
+      "backend/api/routes_part_group_organization.py": "f7993ac4cc1fd7460da163f71c0f5a55bc0b7a1ae7f157c5823da3909be623cc",
+      "frontend/src/api/client.js": "7b93b8fe99d5e8700333885f44be60fa93f1f54685b78e01ee30496ce41deaf1",
+      "frontend/src/app/feature_editor.js": "c1ed3256f2bcc9478c02f124988eb8f39b468c866bcad026752bef7adde6d379",
+      "frontend/src/app/feature_editor.test.js": "75ba7ac53ad270eb771f248a798adde07ab48302823f9f01f375dad661718610",
+      "frontend/src/main.js": "c6e37bae3cf80721c9c0349ecbe43873ed52ff9b4f915ec2ae65b57a90de0ef9",
+      "frontend/src/scene/annotation_targets.js": "dee6a417824fd46919b1572677539e1cefe8daa1d3095afcc8deac39e6e10d3c",
+      "frontend/src/scene/atom_surface_display.js": "97acb49e2454c847a6724e6d48e38392a1d4c3fb72ddd61472561e6b72225d6e",
+      "frontend/src/scene/atom_surface_display.test.js": "bb3c2c52d43d5d621a29dbb893d6d40f329e62134a442efbe0b35a4fc2106c15",
+      "frontend/src/scene/cluster_entries.js": "0df290aff9d6aa645f4b5ea532e37acdf6546a86bc16eab936b22d16e9b7ac0a",
+      "frontend/src/scene/cluster_gizmo.js": "38e4be9195b8225ff819884fdbb4930d0eca2623a491e315651e72e6f309a317",
+      "frontend/src/scene/color_util.js": "0a2cb206f4ec18b37f3517ac832cfe0046ec26ef55746aef31132de049194aa6",
+      "frontend/src/scene/deformation_targets.js": "43dab11197e4e7b6e8b6036625de72e6eb450e31d99c1fe07f0d36336a57c542",
+      "frontend/src/scene/design_renderer.js": "d5ad468fd4f1e595aa9c7a5d57da38f557d3aaaa76ef3f13958393857869e629",
+      "frontend/src/scene/design_renderer.test.js": "46feb2c6b5d4b908943cc4fb47d673b2842c5e7a002ba3828f0cb0259271408a",
+      "frontend/src/scene/helix_renderer/palette.js": "13dfe895832978afec60d79ecef2241f345c33b09a48f21fc8076adeba111f01",
+      "frontend/src/scene/move_rotate_panel.js": "ca2818f664cec5949f4bfb9797cf5deee1c62f97d077a82a3192450848c32e30",
+      "frontend/src/scene/selection_highlight_model.js": "078d2dd3da5e02dd3d16152e62455f00ad48c936f72178ec24950901ca2254dd",
+      "frontend/src/scene/selection_highlight_model.test.js": "5c330de7188789224ebac64fd43be04c1ddc9e45130d6492815e8b07e375d076",
+      "frontend/src/scene/selection_manager.js": "dd0199536155400727fe18598adecd5e72e8a84583297a9b27b765d36963452b",
+      "frontend/src/scene/selection_model.js": "79ef68b5eca01b3f2b159f48f947d2c02a0ec5c1caa54b3a28f1ac63f7871238",
+      "frontend/src/scene/selection_ref.js": "9063fb861c575cdce5947c3cf21ea5577f86580c621f48647ff06750b73ba299",
+      "frontend/src/scene/selection_ref.test.js": "19e63a19e0eb35f651d62c18a6c115086ad31ad1eba57c402c8d445cee653366",
+      "frontend/src/scene/translate_rotate_tool.js": "6894d65528518483f2571d32ccefdfcb016242a740e3768b68ec2904f080f308",
+      "frontend/src/scene/translate_rotate_tool.test.js": "a18de09dac76946e3e0127215714d06818458d340fa018333efc281766f98c29",
+      "frontend/src/scene/visibility_controller.js": "533dbedcea33606bd9011199acc43f34f181e30ddb1e8fcf17c58d64fee3c8ce",
+      "frontend/src/scene/visibility_controller.test.js": "26a6beda397ff36b18c39a56698f75b8fdb1f529ee2cd2656588e489c1729496",
+      "frontend/src/ui/cluster_panel.js": "617006c59e5121a566ed9ad9d55d28b4aec86ecae98342f4b9c773953f463513",
+      "frontend/src/ui/deformation_tool_launcher.js": "be177956a587264cf268c466b92037b3492afeaf4659fb256fa3c61f50b53a71",
+      "frontend/src/ui/deformation_tool_launcher.test.js": "fa677457271963ff466445c4c67627b1ccc7888067c381b605ad45b0adbd4112",
+      "frontend/src/ui/selection_hud.js": "03102f944bb90b80294b0697de21700a02f077a429e3159bf03c73ce4417f453",
+      "frontend/src/ui/selection_hud.test.js": "27340cbcc4279a77bf3b4e8c553b102a826afc258c36e7a78a1e7b5aa2550072",
+      "frontend/src/ui/tool_cluster_selection.js": "b07254886c80034b194113e7c64993d8555344c88c0b2d6b1330c29f57eef22a",
+      "frontend/src/ui/tool_cluster_selection.test.js": "1a5a7a45b5c691f558c9c7919bb009374db68ffb9c97f294ec2f544f314391b4",
+      "tests/test_part_group_organization_routes.py": "a61c964966ae558b99950669ee6a52d8114184f36338a52184e34ab5d5cca0ae"
+    }
+  },
+  "performance": {
+    "qualified": false,
+    "preserved": "No per-frame proof/history replay or new molecular calculation. Immutable snapshot/style caches; empty group-selection lookup does not build indexes; metadata-only changes avoid atomistic refetch. Existing capture/node/byte/row bounds unchanged.",
+    "remaining": [
+      "Full undo snapshot copying under lock is not bounded by private authoring admission.",
+      "Active-organization structural partial overlay uses full rebuild to preserve source domain ordinals; cost unmeasured.",
+      "New full Design wrappers may rebuild membership indexes. Large named atom selection still uses per-domain strand lookup.",
+      "Legacy atom/surface payload without nucleotide ownership has only strand-level fallback detail.",
+      "Observed small-fixture capture-deadline refusal is retained; passing rerun does not establish latency acceptance."
+    ]
+  },
+  "numerical_compatibility": {
+    "changed": false,
+    "model_or_golden_changes": false,
+    "manifest_sha256": {
+      "cpd": "c67da80884b973d6c5a5464aff030d55a51c0d055873380923f65c54944c8404",
+      "duplex": "b1205c2f9bdb9754bd646b18fb586e0e4719dbcda4a0644c6204dea2c7c318ce",
+      "coating": "67f3141feab0d5771926b7f532f7b40e3a13d31403fc1866e158b3a589406d9f"
+    }
+  },
+  "independent_review": "Three agents provided bounded UI/selection/display work and read-only reviews. Final review found queued visibility and in-flight move-reset lifecycle gaps; corrections and regressions included. Root alone executes suites.",
+  "cleanup": {
+    "status": "completed",
+    "paths": [
+      "/tmp/pytest-of-joshua/pytest-1",
+      "/tmp/pytest-of-joshua/pytest-2",
+      "/tmp/pytest-of-joshua/pytest-3",
+      "/tmp/pytest-of-joshua/pytest-current"
+    ],
+    "removed": {
+      "files": 0,
+      "bytes": 0,
+      "directories": 281,
+      "symlinks": 4
+    },
+    "visible_processes": 32,
+    "visible_active_references": 0,
+    "permission_denied_process_count": 32,
+    "limitations": "Protected process namespaces are not globally observable. Only this task\u2019s empty completed pytest directories were removed. Current-task pytest-0 had already been pruned by pytest retention. No browser, native build, simulation, workspace design or managed job output was created; runtime caches preserved."
+  }
+}

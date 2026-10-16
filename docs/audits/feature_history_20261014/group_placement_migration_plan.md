@@ -1,6 +1,6 @@
 # Group organization and placement: finite migration plan
 
-Architecture proposal, October 16, 2026; source baseline `3aa2529a`. The U6–U11 status
+Architecture proposal, October 16, 2026; source baseline `3aa2529a`. The U6–U12 status
 below records implementation after that proposal. FH-18 remains open. The
 overhaul count remains **18/38 complete**, with **11 core and 9 parked milestones
 remaining**. This plan and its implementation batches earn no separate milestone
@@ -572,3 +572,55 @@ NADOC schema and preservation contract are our architectural inference. The
 sources do not establish that changing an earlier grouping feature preserves all
 downstream world positions, nor do they supply a migration for NADOC's implicit
 deformation frames. The finite native matrix above remains necessary.
+
+
+### U12: private Groups/Placements interface and explicit placement Apply
+
+The sidebar now separates Groups from ordered Placements. Typed group selection
+runs through scene picking, highlights, labels, framing and atom/surface selection.
+Both sidebar and context-menu edits use the revision-checked organization host;
+unsupported mixed membership refuses. Browser-only group actions are suppressed
+for active organized parts, with legacy/assembly behavior retained. Shared
+membership/display/commit modules replace duplicated logic; main.js loses 14 lines.
+
+Group color and opacity use exact domains when supplied; helix IDs are contextual
+in that case. Extension display follows its actual terminal-domain ownership.
+Overlapping opacity keeps the minimum. Hide/Show expands current members to the
+existing base-address visibility state. This is a scoped current-member action without a new hidden-group schema: hidden_cluster_ids
+continues to mean placements, and the UI says “current members.” It does not
+promise that later added group members inherit an earlier hide action.
+The earlier D requirement for persistent group-identity visibility remains open;
+this adapter is not its completion or a quiet replacement of that exit.
+
+Existing-placement Apply now calls one bounded multi-placement transaction
+(maximum 64 unique explicit IDs), skips no-op rows, counts nested Fine Routing
+children against the unchanged history cap, and publishes one undo/revision.
+The response embeds matching complete native geometry. The client acknowledges
+only adopted source-bound responses; the move tool avoids a second transform.
+Null/failed/stale responses retain unaccepted local movement. Legacy sequential
+publication reports partial acceptance instead of clearing the entire preview.
+These paths use unchanged native placement arithmetic and ordered ownership.
+
+This does **not** close D: ordinary new Bend/Twist still needs an isolated owned
+creation adapter. Active organization refuses that legacy launcher before it
+writes preview state. Earlier placement editing similarly refuses the obsolete
+edit-in-place branch until its owned history editor is integrated. Private named
+history preview/repair already works, but is not ordinary creation parity.
+Generated consumers and arbitrary new-group motion/frame/extension semantics
+remain the original B/C obligations. No v3 compiler or new placement semantics
+were implemented here; no numerical source, pin, model or golden changed.
+
+The next bounded delivery is the ordinary named-deformation creation adapter,
+using the existing private preview lifecycle and native target resolution. Then
+resolve new-group motion ownership and generated compatibility, with research
+before uncertain semantics. Keep the five batches/fixed exit and do not move
+unfinished compatibility to parked FH-36. Public gates remain false.
+
+No history replay runs in a frame callback. Metadata-only group changes avoid
+atomistic geometry fetch; membership indexes use immutable snapshots. Full
+structural redraw fallback preserves original domain ordinals, but needs profiling.
+Whole undo copying under lock, larger-design style/selection costs and actual
+request/render tails remain qualification debt, alongside desktop acceptance.
+[U12 evidence](validation_group_placement_ui.json) retains software outcomes,
+observed failures, scope limits and cleanup. **18/38 complete; +0/+0; FH-18
+checkpoint 10**, still flagged for task growth.

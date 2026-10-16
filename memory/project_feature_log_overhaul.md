@@ -22,19 +22,21 @@ decrement completed if an exit reopens. Flag three major checkpoints spent on
 any still-open milestone (cumulative even across alternating work), or total
 growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
-Effort is separate: U1–U11 are 11 engineering checkpoints since B1, closing one
-additional milestone; nine went to still-open FH-18. The unchanged 38 is not an
+Effort is separate: U1–U12 are 12 engineering checkpoints since B1, closing one
+additional milestone; ten went to still-open FH-18. The unchanged 38 is not an
 estimate of commits/messages. The post-U11 source/sequence audit earns no credit.
 Engineering update U2 closed **FH-19 after two checkpoints**. Current
 counts are **18 / 38 complete, 20 remaining (11 core, 9 parked)**, delta
-for latest update U11 **+0 completed, +0 total**. U11 is **FH-18 checkpoint 9**:
+for latest update U12 **+0 completed, +0 total**. U12 is **FH-18 checkpoint 10**:
 ordinary authored PATCH, admitted identity-group dissolution and auxiliary
 recording are implemented; private separate organization/native replay and gated
 owned HTTP transactions now work. Named native deformation selection, qualified
 domain lineage and Fine Routing recovery now agree. U9 adds extrusion/crossover
 lineage; U10 adds passive resize/domain-shift tracking. U11 connects named
-preview/repair/comparison and owned publication. Generated consumers, visible
-Groups/Placements and new-group movement keep FH-18 open.
+preview/repair/comparison and owned publication. U12 integrates private
+Groups/Placements, typed scene display/selection and atomic placement Apply.
+Ordinary new deformation creation, generated consumers, new-group movement
+and qualification keep FH-18 open.
 **Task growth is flagged.** The containment decision and five finite batches are
 in the [organization/placement migration plan](../docs/audits/feature_history_20261014/group_placement_migration_plan.md).
 Separate organizational membership from the existing ordered placement list;
@@ -42,12 +44,12 @@ preserve that list as the sole numerical authority and expose its owners as
 editable placement features. No hidden replacement group, per-residue expansion
 or coordinate baking. New-group move/frame/extension semantics remain a required
 integration exit. Recorded conversion → posed dissolve → regroup is implemented;
-finish its typed consumer/repair/UI adapters next. Do not
+finish its remaining ordinary consumer and movement adapters next. Do not
 inflate counts by splitting batches or accumulate more identity-only subsets.
 No total-growth trigger or estimate change; the full original FH-18 exit stands.
 
-**FH-18 U11 consumer checkpoint:** batch A is implemented privately; B/C advance,
-D/E remain open. Named `part_group` targets resolve on the owned native prefix
+**FH-18 consumer status:** batch A is implemented privately; B/C/D advance,
+E and incomplete consumer exits remain open. Named `part_group` targets resolve on the owned native prefix
 into existing frozen ranges, independently of explicit placement `cluster_ids`.
 Upstream edits re-resolve the named selection during replay; later topology/group
 edits retain already evaluated ranges. Missing references diagnose; dissolution
@@ -86,7 +88,7 @@ of recovery payloads. Recovery now checks closed inputs, IDs, metadata/storage
 budgets and complete non-evicted PRE/POST bodies before decoding; malformed or
 unavailable bodies give actionable errors. Full snapshot revert/edit publication
 remains closed until authoring-only bodies preserve physical/presentation state.
-The rest of the consumer matrix, visible Groups/Placements and
+The rest of the consumer matrix, ordinary new deformation creation and
 new-group move semantics remain B–E work. All milestone exits remain unchanged.
 Before serialization, metadata admission charges each group and domain-reference
 occurrence so shared-container aliases cannot hide expanded JSON work. Bounds
@@ -125,16 +127,27 @@ and ordinary controls must agree. Nanoparticle/protein/assets and their remainin
 benchmarks are parked; ordinary DNA connections are core. Assemblies and VR
 remain separately deferred. The persistent P3–P6 goal stays active.
 
-Next: visible Groups/Placements with complete selection/style/visibility,
-ordinary deformation and guarded placement-commit adapters, then remaining
-generated consumers and new-group movement/frame semantics. The [post-U11 caller audit](../docs/audits/feature_history_20261014/group_placement_migration_plan.md#post-u11-caller-audit-and-next-delivery)
+Next: the ordinary named-deformation creation adapter using isolated owned
+preview; then new-group movement/frame semantics and generated compatibility.
+U12 supplies sidebar/context native CRUD, typed scene selection/style/visibility
+and atomic explicit placement Apply. Hide/Show persists **current member bases**,
+not a dynamic group intent; D’s persistent group-identity visibility exit remains
+open. Null/stale/refused moves retain unaccepted input.
+Old ordinary Bend/Twist creation and earlier placement editing explicitly refuse
+active organization until their owned adapters exist; those guards are not parity.
+The [caller audit](../docs/audits/feature_history_20261014/group_placement_migration_plan.md#post-u11-caller-audit-and-next-delivery)
 found no ordinary core caller needing a new generic scope compiler first.
 GeneratedHistory serves NP orchestration; shared merge also serves branch/section
-commands. Keep generated compatibility explicitly open in FH-18, not silently
-transferred to FH-36. No tenth engineering checkpoint or exit change. Partial named scopes
-cannot use the existing whole-helix loop/skip planner. U11 qualifies historical
-frozen range display; current axis/membership validation stays strict. Do not
-enable organization until B/C/D adapters and E's applicable checks pass.
+commands. Generated compatibility remains FH-18, not silently transferred to FH-36.
+No fixed exit changed; U12 is checkpoint10. Full redraw for structural partial
+updates and full undo copying under lock remain performance debt. Metadata-only
+group edits avoid atomistic refetch; no per-frame history proof is introduced.
+See [U12 evidence](../docs/audits/feature_history_20261014/validation_group_placement_ui.json).
+U12 validation: **131 focused backend / 8,715 frontend passes, one skip**.
+Scoped lint passes; repository lint retains five unrelated findings. Broad
+backend debt and MV-48/FH-27 remain open; these are software checks only.
+`main.js` delta -14. Archive remains unmounted; app acceptance remains open.
+Do not enable organization until B/C/D adapters and E's applicable checks pass.
 Research unresolved CAD workflow decisions before choosing semantics. Any
 scientific placement change still requires the separate demonstrated-geometry
 authorization process. Commit/push reversible checkpoints; no numerical repins.

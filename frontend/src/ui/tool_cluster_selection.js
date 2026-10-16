@@ -45,6 +45,8 @@ function selectedCluster(state) {
 export function beginClusterSelection({ store, selectionManager, onSelected, onCancelled, resolveTarget = selectedCluster }) {
   const designId = store.getState().currentDesign?.id
   const filters = store.getState().selectableTypes
+  const previousPickMode = selectionManager.getGroupPickMode?.()
+  if (store.getState().currentDesign?.group_organization != null) selectionManager.setGroupPickMode?.('placements')
   selectionManager.clearSelection()
   store.setState({ activeClusterId: null, selectableTypes: {
     ...filters, scaffold: true, staples: true, loops: false, skips: false, extensions: false, overhangs: false,
@@ -55,6 +57,7 @@ export function beginClusterSelection({ store, selectionManager, onSelected, onC
     if (!active) return
     active = false
     unsubscribe()
+    if (previousPickMode != null) selectionManager.setGroupPickMode?.(previousPickMode)
     selectionManager.setSelectionLevel('default')
     if (filters) store.setState({ selectableTypes: filters })
   }

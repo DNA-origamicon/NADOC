@@ -104,3 +104,25 @@ it('shows a plane placement error without entering an invalid editing session', 
   expect(document.getElementById('def-current-selection').textContent).toContain('at least two')
   expect(document.getElementById('def-change-selection')).toBeNull()
 })
+
+it.each(['bend', 'twist'])('refuses ordinary organized %s before touching the legacy preview', async type => {
+  const d = setup()
+  d.store.setState({ currentDesign: { ...d.store.getState().currentDesign,
+    group_organization: { version: 1, groups: [{ id: 'g', helix_ids: ['h'], domain_ids: [] }] } } })
+  d.controller.replace([{ kind: 'part_group', id: 'g' }])
+  const before = d.store.getState()
+  launcher.open(type); await Promise.resolve()
+  expect(d.start).not.toHaveBeenCalled(); expect(d.setScope).not.toHaveBeenCalled(); expect(d.exit).not.toHaveBeenCalled()
+  expect(d.store.getState()).toBe(before)
+  expect(d.showToast.mock.calls.at(-1)[0]).toContain('owned preview workflow')
+})
+
+it('rechecks organization before an already queued legacy plane start', async () => {
+  const d = setup()
+  d.controller.replace([{ kind: 'strand', id: 's' }]); launcher.open('bend')
+  d.exit.mockClear()
+  d.store.setState({ currentDesign: { ...d.store.getState().currentDesign, group_organization: { version: 1, groups: [] } } })
+  await Promise.resolve()
+  expect(d.start).not.toHaveBeenCalled(); expect(d.setScope).not.toHaveBeenCalled(); expect(d.exit).not.toHaveBeenCalled()
+  expect(d.controller.getState().items).toEqual([{ kind: 'strand', id: 's' }])
+})

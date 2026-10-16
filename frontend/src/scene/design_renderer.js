@@ -21,6 +21,7 @@ import { buildCrossoverExtraPlacements, crossoverControlPoint as arcControlPoint
 import { auditRenderedBonds, inventoryRenderedElements } from './render_bond_audit.js'
 import { createGlowLayer, createMultiColorGlowLayer } from './glow_layer.js'
 import { clusterAlphaForNuc, clusterAlphaKeys, clusterDisplaySignature } from './cluster_entries.js'
+import { hasOrganization } from './part_group_display.js'
 import { buildClusterColorLookup } from './helix_renderer/palette.js'
 import { installInstanceAlpha, setInstanceAlpha } from './instance_alpha.js'
 import { markOperationTiming, finishOperationAfterRender } from '../perf/operation_timing.js'
@@ -870,6 +871,9 @@ export function initDesignRenderer(scene, storeRef) {
    */
   function _tryStructuralOverlay(changedHelixIds, newGeo, prevState, newState, coverageChanged = false) {
     if (!_helixCtrl || _structuralOverlay || _ghostOpacity !== null) return false
+    // The partial strand projection below renumbers domains. Organizational
+    // membership uses original ordinals, so use the complete rebuild for it.
+    if (hasOrganization(newState.currentDesign)) return false
     const realIds = changedHelixIds.filter(id => !id.startsWith('__'))
     if (!realIds.length || realIds.length > 12) return false
     const realSet = new Set(realIds)

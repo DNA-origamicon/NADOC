@@ -1,7 +1,7 @@
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { createSelectionController } from '../scene/selection_controller.js'
-import { armToolClusterSelection } from './tool_cluster_selection.js'
+import { armToolClusterSelection, beginClusterSelection } from './tool_cluster_selection.js'
 
 function setup(state = {}) {
   const store = createMockStore({ currentDesign: { id: 'design' }, ...state })
@@ -58,4 +58,27 @@ it('cancels pending reset callbacks and returns to default on close or document 
   next.store.setState({ currentDesign: { id: 'other' } })
   await Promise.resolve()
   expect(next.controller.getState().level).toBe('default')
+})
+
+it.each(['selected', 'cancelled'])('uses explicit placement picking and restores the prior mode when %s', async outcome => {
+  const placement = { id: 'placement' }
+  const store = createMockStore({ currentDesign: {
+    id: 'design', group_organization: { version: 1, groups: [] }, cluster_transforms: [placement],
+  }, selectableTypes: { overhangs: true } })
+  const controller = createSelectionController({ store })
+  let pickMode = 'groups'
+  const onSelected = vi.fn()
+  const picker = beginClusterSelection({ store, onSelected, selectionManager: {
+    setSelectionLevel: controller.setLevel, clearSelection: controller.clear,
+    getGroupPickMode: () => pickMode, setGroupPickMode: value => { pickMode = value },
+  } })
+  expect(pickMode).toBe('placements')
+  if (outcome === 'selected') controller.select({ kind: 'cluster', id: placement.id })
+  else picker.cancel()
+  await Promise.resolve()
+  expect(pickMode).toBe('groups')
+  expect(controller.getState().level).toBe('default')
+  expect(store.getState().selectableTypes).toEqual({ overhangs: true })
+  if (outcome === 'selected') expect(onSelected).toHaveBeenCalledWith(placement)
+  else expect(onSelected).not.toHaveBeenCalled()
 })

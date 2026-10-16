@@ -17,6 +17,7 @@ function makeAtomStub() {
     setColorMode: vi.fn(),
     setVdwScale: vi.fn(),
     setUniformOpacity: vi.fn(),
+    setClusterDisplay: vi.fn(),
     _setMode: (m) => { mode = m },
   }
   return stub
@@ -30,6 +31,7 @@ function makeSurfaceStub() {
     dispose: vi.fn(),
     highlight: vi.fn(),
     applyStrandColors: vi.fn(),
+    applyClusterDisplay: vi.fn(),
     setCrispZones: vi.fn(),
     setOpacity: vi.fn(),
     setColorMode: vi.fn(),
@@ -49,7 +51,8 @@ vi.mock('./representation_overrides.js', () => ({
   repColumnsByRep: vi.fn(() => ({ vdw: new Set(), ballstick: new Set(), stick: new Set() })),
 }))
 
-import { initAtomSurfaceDisplay, regionSurfaceSignature, atomSelectionForState, isViewVolumeOnlyDesignChange } from './atom_surface_display.js'
+import { initAtomSurfaceDisplay, regionSurfaceSignature, atomSelectionForState, isViewVolumeOnlyDesignChange,
+  atomisticDesignInputsChanged } from './atom_surface_display.js'
 import { surfaceSegments } from './design_queries.js'
 
 const DOM = [
@@ -62,6 +65,50 @@ const DOM = [
 ]
 
 describe('atomSelectionForState', () => {
+  it('selects named group domains and only their terminal extensions without a same-text placement', () => {
+    const design = {
+      strands: [{ id: 's', domains: [
+        { helix_id: 'h1', direction: 'FORWARD', start_bp: 0, end_bp: 3 },
+        { helix_id: 'h2', direction: 'REVERSE', start_bp: 8, end_bp: 4 },
+      ] }],
+      cluster_transforms: [{ id: 'same', helix_ids: ['wrong'] }],
+      group_organization: { version: 1, groups: [
+        { id: 'same', helix_ids: ['h1', 'h2'], domain_ids: [{ strand_id: 's', domain_index: 1 }] },
+        { id: 'empty', helix_ids: [], domain_ids: [] },
+      ] },
+      extensions: [{ id: 'five', strand_id: 's', end: 'five_prime' },
+        { id: 'three', strand_id: 's', end: 'three_prime' }],
+    }
+    const state = { currentDesign: design, selection: { items: [{ kind: 'part_group', id: 'same' }] } }
+    expect(atomSelectionForState(state)).toEqual({ strandIds: [], bases: [], helixIds: [],
+      domains: [{ strandId: 's', helixId: 'h2', direction: 'REVERSE', lo: 4, hi: 8 }],
+      extensionIds: ['three'],
+    })
+    state.selection.items = [{ kind: 'part_group', id: 'empty' }]
+    expect(atomSelectionForState(state)).toEqual({ strandIds: [], domains: [], bases: [], extensionIds: [], helixIds: [] })
+    state.selection.items = [{ kind: 'cluster', id: 'same' }]
+    expect(atomSelectionForState(state).helixIds).toEqual(['wrong'])
+  })
+
+  it('treats organization membership/style as display metadata while retaining placement/topology invalidation', () => {
+    const previous = { id: 'design', strands: [{ id: 's', domains: [] }],
+      cluster_transforms: [{ id: 'pose', translation: [0, 0, 0] }],
+      group_organization: { version: 1, groups: [] } }
+    const next = { ...previous, group_organization: { version: 1, groups: [
+      { id: 'group', color: '#ff0000', opacity: .2, helix_ids: [], domain_ids: [] },
+    ] }, feature_log: [{ kind: 'snapshot', op: 'group-update' }], feature_log_cursor: -1,
+    feature_log_sub_cursor: null, recipe_root: { version: 1, kind: 'empty' },
+    repair_draft: { actions: [] }, visibility_state: { hidden_base_keys: ['h:1:FORWARD'] } }
+    expect(atomisticDesignInputsChanged(next, previous)).toBe(false)
+    expect(atomisticDesignInputsChanged({ ...next,
+      cluster_transforms: [{ id: 'pose', translation: [1, 0, 0] }] }, previous)).toBe(true)
+    expect(atomisticDesignInputsChanged({ ...next, strands: [] }, previous)).toBe(true)
+    expect(atomisticDesignInputsChanged({ ...next, deformations: [{ type: 'bend' }] }, previous)).toBe(true)
+    expect(atomisticDesignInputsChanged({ ...next, strands: [
+      { ...previous.strands[0], sequence: 'ATGC' },
+    ] }, previous)).toBe(true)
+  })
+
   it('compiles strand, exact domain range, and base refs from canonical state', () => {
     const state = {
       currentDesign: { strands: [{ id: 's2', domains: [
@@ -541,6 +588,33 @@ describe('initAtomSurfaceDisplay', () => {
     } })
     await Promise.resolve()
     expect(global.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('repaints an authored group response with new history without refetching atoms', async () => {
+    mountIds(DOM)
+    const original = { id: 'design',
+      strands: [{ id: 's', domains: [{ helix_id: 'h', start_bp: 0, end_bp: 1, direction: 'FORWARD' }] }],
+      cluster_transforms: [{ id: 'pose', helix_ids: ['h'], color: '#00ff00', opacity: .1 }],
+      group_organization: { version: 1, groups: [] }, feature_log: [],
+    }
+    const store = createMockStore({ currentDesign: original, currentGeometry: null, coloringMode: 'cluster' })
+    const deps = makeDeps({ store })
+    const api = initAtomSurfaceDisplay(deps)
+    await api.applyAtomisticMode('vdw')
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    deps.atomisticRenderer._setMode('vdw')
+    store.setState({ currentDesign: { ...structuredClone(original),
+      group_organization: { version: 1, groups: [
+        { id: 'group', helix_ids: ['h'], domain_ids: [], color: '#ff0000', opacity: .3 },
+      ] }, feature_log: [{ kind: 'snapshot', op: 'group-create' }],
+      feature_log_cursor: -1, feature_log_sub_cursor: null,
+    } })
+    await Promise.resolve()
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    const [alphas, colors] = deps.atomisticRenderer.setClusterDisplay.mock.calls.at(-1)
+    expect(alphas.get('h:0:FORWARD')).toBe(.3)
+    expect(colors.get('h:0:FORWARD')).toBe(0xff0000)
+    expect(deps.surfaceRenderer.applyClusterDisplay).toHaveBeenCalledWith(expect.objectContaining({ nucAlphas: alphas }))
   })
 
   it('an initial autosave during loading does not invalidate the in-flight atom model', async () => {

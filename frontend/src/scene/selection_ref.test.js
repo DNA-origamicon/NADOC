@@ -9,13 +9,13 @@ import {
 describe('selection_ref — decision-independent Phase 1 identity contract', () => {
   it('lists only the stable kinds ratified independently of pending semantic decisions', () => {
     expect(STABLE_SELECTION_KINDS).toEqual([
-      'cluster', 'strand', 'domain', 'base', 'end', 'bond', 'crossover',
+      'cluster', 'part_group', 'strand', 'domain', 'base', 'end', 'bond', 'crossover',
       'overhang', 'extension', 'protein', 'nanoparticle',
     ])
     expect(STABLE_SELECTION_KINDS).not.toContain('forced_ligation') // classification gate
   })
 
-  it.each(['cluster', 'strand', 'overhang', 'extension', 'protein', 'nanoparticle'])(
+  it.each(['cluster', 'part_group', 'strand', 'overhang', 'extension', 'protein', 'nanoparticle'])(
     'normalizes a minimal %s ref and strips mutable payload',
     (kind) => {
       expect(normalizeSelectionRef({ kind, id: `${kind}:1`, data: { stale: true }, mesh: {} }))

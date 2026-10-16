@@ -23,6 +23,8 @@ import { initClusterStylePopover } from './cluster_style_popover.js'
 import { STAPLE_PALETTE } from '../scene/helix_renderer/palette.js'
 import { canonicalSelection, selectedClusterIds } from '../scene/selection_model.js'
 import { initInstanceDesignCache } from './assembly_instance_designs.js'
+import { createPartGroupPanel, GROUP_ORGANIZATION_CONVERSION_ENABLED } from './part_group_panel.js'
+import { hasOrganization } from '../scene/part_group_display.js'
 
 /** The auto palette slot a cluster gets when it has no explicit colour — the same
  *  index-mod-12 rule the 3D cluster coloring uses, so the swatch agrees with it. */
@@ -31,27 +33,37 @@ function _paletteHex(index) {
   return '#' + c.toString(16).padStart(6, '0')
 }
 
-export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick = null, api, onVisibilityChange = null, onStylePreview = null, getInstanceDesign, fetchInstanceDesign, waitForAssemblyReady }) {
+export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick = null, api, onVisibilityChange = null, onStylePreview = null,
+  onGroupClick = null, onGroupVisibilityChange = null, onGroupStylePreview = null, getInstanceDesign, fetchInstanceDesign, waitForAssemblyReady }) {
   const listEl   = document.getElementById('cluster-list')
   const newBtn   = document.getElementById('cluster-new-btn')
   const heading  = document.getElementById('cluster-panel-heading')
   const arrow    = document.getElementById('cluster-panel-arrow')
   const body     = document.getElementById('cluster-panel-body')
   if (!listEl || !newBtn || !heading) return {}
+  const subscriptions = []
+  const title = [...heading.querySelectorAll('span')].find(node => node !== arrow)
+  const legacyTitle = title?.textContent, legacyNewLabel = newBtn.textContent
+  const groupPanel = createPartGroupPanel({ store, container: listEl, api, onGroupClick, onClusterClick,
+    onGroupVisibilityChange, onGroupStylePreview })
 
   const repairBtn = document.getElementById('cluster-repair-btn')
   let repairing = false
   const syncRepair = () => {
-    if (repairBtn) repairBtn.disabled = repairing || !!store.getState().assemblyActive || !store.getState().currentDesign
+    if (repairBtn) {
+      const state = store.getState()
+      repairBtn.hidden = !state.assemblyActive && hasOrganization(state.currentDesign)
+      repairBtn.disabled = repairing || !!state.assemblyActive || !state.currentDesign || hasOrganization(state.currentDesign)
+    }
   }
   repairBtn?.addEventListener('click', async () => {
-    if (repairing || store.getState().assemblyActive) return
+    if (repairing || store.getState().assemblyActive || hasOrganization(store.getState().currentDesign)) return
     repairing = true; syncRepair()
     try { await api.clusterUnassignedComponents() }
     catch (error) { showToast(`Could not cluster unassigned components: ${error.message}`, { severity: 'error' }) }
     finally { repairing = false; syncRepair() }
   })
-  store.subscribe(syncRepair)
+  subscriptions.push(store.subscribe(syncRepair))
   syncRepair()
 
   // ── Cluster visibility state ──────────────────────────────────────────────────
@@ -89,18 +101,26 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
   // ── Enable / disable new-cluster button ──────────────────────────────────────
   function _syncNewBtn(state) {
     const refs = canonicalSelection(state).items
+    if (!_assemblyMode && hasOrganization(state.currentDesign)) {
+      newBtn.textContent = '+ New Group from Selection'
+      newBtn.disabled = !groupPanel.canCreate()
+      return
+    }
+    newBtn.textContent = legacyNewLabel
     newBtn.disabled = _assemblyMode ||
       !refs.some(ref => ref.kind === 'strand' || ref.kind === 'domain')
   }
 
-  store.subscribe((n, p) => {
+  subscriptions.push(store.subscribe((n, p) => {
     if (n.selection !== p.selection) _syncNewBtn(n)
-  })
+  }))
 
   // ── New cluster from selection ────────────────────────────────────────────────
   newBtn.addEventListener('click', async () => {
     const state = store.getState()
     const { currentDesign } = state
+    if (_assemblyMode || state.assemblyActive) return
+    if (hasOrganization(currentDesign)) { await groupPanel.createFromSelection(); return }
     const refs = canonicalSelection(state).items
     const strandIds = refs.filter(ref => ref.kind === 'strand').map(ref => ref.id)
     const domainRefs = refs.filter(ref => ref.kind === 'domain')
@@ -121,12 +141,12 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
   })
 
   // ── Rebuild list when design or active cluster changes ───────────────────────
-  store.subscribe((n, p) => {
+  subscriptions.push(store.subscribe((n, p) => {
     if (n.currentDesign === p.currentDesign && n.activeClusterId === p.activeClusterId &&
         n.selection === p.selection) return
     if (_assemblyMode) return
     if (!_collapsed) _rebuild(n.currentDesign?.cluster_transforms ?? [], n.activeClusterId)
-  })
+  }))
 
   // ── Assembly mode state ───────────────────────────────────────────────────────
   let _assemblyMode    = false
@@ -144,8 +164,34 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
   let _activeAsmClusterId = null
 
   function _rebuild(clusters, activeId) {
+    const organized = !_assemblyMode && hasOrganization(store.getState().currentDesign)
+    groupPanel.setActive(organized)
+    if (title) title.textContent = organized ? 'Groups and Placements' : legacyTitle
+    _syncNewBtn(store.getState())
     if (_assemblyMode) { _rebuildAssembly(); return }
+    if (organized) return
     _rebuildFlat(clusters, activeId)
+    if (GROUP_ORGANIZATION_CONVERSION_ENABLED && store.getState().currentDesign) {
+      const convert = document.createElement('button')
+      convert.dataset.action = 'organize-groups'
+      convert.textContent = 'Separate Groups and Placements'
+      convert.title = 'Record separate organization while preserving all existing placement inputs'
+      convert.addEventListener('click', async () => {
+        if (!GROUP_ORGANIZATION_CONVERSION_ENABLED || store.getState().assemblyActive) return
+        const source = store.getState().currentDesign
+        if (!source || hasOrganization(source)) return
+        _stylePopover.close()
+        convert.disabled = true
+        try {
+          const result = await api.groupOrganizationCommand('group-organize', {
+            expected_placement_ids: (source.cluster_transforms ?? []).map(item => item.id),
+          })
+          if (!result) showToast('Could not separate groups and placements. The current part was kept.', { severity: 'error' })
+        } catch (error) { showToast(error.message, { severity: 'error' }) }
+        finally { convert.disabled = false }
+      })
+      listEl.append(convert)
+    }
   }
 
   /** A row is lit for the single active cluster OR any cluster in the multi-selection
@@ -495,6 +541,9 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
     const instances = assembly?.instances ?? []
     _assemblySnapshot = assembly
     _assemblyMode = true
+    groupPanel.setActive(false)
+    if (title) title.textContent = legacyTitle
+    newBtn.textContent = legacyNewLabel
     _stylePopover.close()   // the assembly list has no swatches
     _instanceOrder.length = 0
     _instanceNames.clear()
@@ -529,7 +578,7 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
     _syncNewBtn(store.getState())
     if (!_collapsed) {
       const { currentDesign, activeClusterId } = store.getState()
-      _rebuildFlat(currentDesign?.cluster_transforms ?? [], activeClusterId)
+      _rebuild(currentDesign?.cluster_transforms ?? [], activeClusterId)
     }
   }
 
@@ -554,6 +603,8 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
     if (!_collapsed) _rebuildAssembly()
   }
 
+  if (hasOrganization(store.getState().currentDesign)) _rebuild(store.getState().currentDesign.cluster_transforms, store.getState().activeClusterId)
+
   return {
     setAssemblyMode, clearAssemblyMode, syncInstanceDesign, expandInstance, selectAssemblyCluster,
     syncVisibility(ids) {
@@ -561,18 +612,20 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
       for (const id of ids ?? []) _hiddenClusterIds.add(id)
       if (!_collapsed && !_assemblyMode) {
         const { currentDesign, activeClusterId } = store.getState()
-        _rebuildFlat(currentDesign?.cluster_transforms ?? [], activeClusterId)
+        _rebuild(currentDesign?.cluster_transforms ?? [], activeClusterId)
       }
     },
+    syncGroupVisibility(ids) { groupPanel.syncVisibility(ids) },
     resetVisibility() {
       _hiddenClusterIds.clear()
+      groupPanel.resetVisibility()
       if (!_collapsed && !_assemblyMode) {
         const { currentDesign, activeClusterId } = store.getState()
-        _rebuildFlat(currentDesign?.cluster_transforms ?? [], activeClusterId)
+        _rebuild(currentDesign?.cluster_transforms ?? [], activeClusterId)
       }
     },
     /** Cancel background reads and tear down the popover's document listeners. */
-    destroy() { _instanceDesigns.prune([]); _stylePopover.destroy() },
+    destroy() { subscriptions.forEach(unsubscribe => unsubscribe()); groupPanel.destroy(); _instanceDesigns.prune([]); _stylePopover.destroy() },
   }
 }
 

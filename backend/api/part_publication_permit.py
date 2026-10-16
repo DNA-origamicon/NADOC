@@ -101,7 +101,7 @@ def context_matches(context, doc_id, session, *, include_source=True):
 
 def _group_operation(operation):
     from backend.core.part_group_organization import KINDS
-    return type(operation) is str and (operation in KINDS or operation == "cluster_op")
+    return type(operation) is str and (operation in KINDS or operation in {"cluster_op", "visibility-update"})
 
 
 def _group_source(source, operation):

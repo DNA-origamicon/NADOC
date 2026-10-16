@@ -107,6 +107,13 @@ describe('structural partial reconciliation', () => {
     expect(body).toContain('_rebuild(newGeo, fullDesign')
   })
 
+  it('keeps original domain ordinals for organizational styling by declining the filtered-domain overlay', () => {
+    const body = functionBody(SRC, '_tryStructuralOverlay')
+    const guard = body.indexOf('if (hasOrganization(newState.currentDesign)) return false')
+    expect(guard).toBeGreaterThan(-1)
+    expect(guard).toBeLessThan(body.indexOf('const patchDesign'))
+  })
+
   it('disposes an overlay before every global scene rebuild', () => {
     const body = functionBody(SRC, '_rebuild')
     expect(body).toContain('_clearStructuralOverlay()')

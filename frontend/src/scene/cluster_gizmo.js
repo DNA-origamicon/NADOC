@@ -28,6 +28,7 @@
  */
 
 import * as THREE from 'three'
+import { commitPlacementTransforms } from './placement_commit.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
 
 import { clampQuatToJointBounds } from './assembly_revolute_math.js'
@@ -211,7 +212,7 @@ function _ringRadius(cluster, currentHelixAxes) {
   return Math.max(3, maxDist * 1.4 + 1.0)
 }
 
-export function initClusterGizmo(store, controls, onLiveTransform = null, captureBase = null, onTransformUpdate = null) {
+export function initClusterGizmo(store, controls, onLiveTransform = null, captureBase = null, onTransformUpdate = null, client = null) {
   let _tc             = null   // TransformControls instance (translate mode)
   let _rotationSnapDeg = null  // rotate-drag angle snap in degrees, or null for free drag
   let _dummy          = null   // Object3D TC is attached to
@@ -252,6 +253,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
   let _ssLinks         = null
   let _ssLinkNearArmed = null
   const _pendingTransforms = new Map()  // clusterId -> { pivot, translation, rotation }
+  let _pendingSource = null
 
   // ── Axis-ring state ─────────────────────────────────────────────────────────
   let _ringMesh       = null   // THREE.Mesh — the single-axis torus
@@ -304,6 +306,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
 
   function setPendingTransform(clusterId, transform) {
     if (!clusterId || !transform) return
+    if (!_pendingTransforms.size) _pendingSource = store.getState().currentDesign
     const prev = _pendingTransforms.get(clusterId) ?? {}
     _pendingTransforms.set(clusterId, {
       pivot:       transform.pivot       ?? prev.pivot,
@@ -339,6 +342,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
 
   function discardPendingTransforms() {
     _pendingTransforms.clear()
+    _pendingSource = null
   }
 
   // ── Key handler (Tab cycles translate/rotate) ───────────────────────────────
@@ -737,13 +741,13 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     }
   }
 
-  let _getClient = () => ({})
+  let _getClient = () => client ?? {}
   async function _loadClient() {
-    const client = await import('../api/client.js')
-    _getClient = () => client
-    return client
+    const loaded = client ?? await import('../api/client.js')
+    _getClient = () => loaded
+    return loaded
   }
-  _loadClient()
+  if (!client) _loadClient()
 
   // ── Attach ──────────────────────────────────────────────────────────────────
   /**
@@ -1018,28 +1022,15 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
   }
 
   async function commitPendingTransforms({ log = true } = {}) {
-    const entries = [..._pendingTransforms.entries()]
-    if (!entries.length) return { count: 0, clusterIds: [] }
-    let { patchCluster } = _getClient()
-    if (!patchCluster) ({ patchCluster } = await _loadClient())
-    if (!patchCluster) return { count: 0, clusterIds: [] }
-
-    const clusterIds = []
-    for (const [clusterId, transform] of entries) {
-      await patchCluster(clusterId, {
-        ...transform,
-        commit: true,
-        log,
-      })
-      clusterIds.push(clusterId)
-    }
-    _pendingTransforms.clear()
-    // Return the IDs of the clusters that just committed so the caller can
-    // run post-commit reconciliation (Plan B: helixCtrl.commitClusterPositions
-    // for each cluster's helix_ids — required because patchCluster no longer
-    // refreshes the backend geometry, and currentGeometry must be brought
-    // up-to-date with the rendered state for downstream consumers).
-    return { count: clusterIds.length, clusterIds }
+    let client = _getClient()
+    if (!client.patchCluster) client = await _loadClient()
+    const organized = _pendingSource?.group_organization != null
+    const result = await commitPlacementTransforms(_pendingTransforms, {
+      organized, command: client.groupOrganizationCommand, patch: client.patchCluster, log,
+      isCurrent: () => !organized || store.getState().currentDesign === _pendingSource,
+    })
+    if (result.count) _pendingSource = store.getState().currentDesign
+    return result
   }
 
   // ── ssDNA-constrained projection ─────────────────────────────────────────────

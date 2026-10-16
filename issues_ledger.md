@@ -2564,3 +2564,44 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   U11 integration around it. **NOT VERIFIED IN APP**; rollout gates remain
   disabled, MV-48/FH-27 remain open, and FH-18 checkpoint 9 does not change the
   overall **18/38** milestone count.
+
+
+## ISSUE-110 — Move Apply discarded refused pending placement input (2026-10-16, FIXED IN SOFTWARE CHECKS)
+
+- **Trigger/source evidence:** the gizmo's sequential commit awaited
+  `patchCluster` without checking its nullable response, counted the request as
+  accepted, then cleared every pending transform. A failed request could therefore
+  close the tool and lose the preview without a recorded edit. No live-app
+  reproduction is claimed; the original source is preserved in the parent commit.
+- **Correction:** extracted placement commit checks each acknowledgement and
+  removes only the exact accepted local inputs. Legacy partial acceptance reports
+  accepted IDs for geometry reconciliation and retains all unaccepted/newer inputs.
+  Active organized parts use one bounded atomic existing-placement command with
+  complete matching geometry; the tool avoids a second geometry transform.
+  Failure keeps the current editor open. Document/reset/attempt guards retire
+  obsolete replies and local tool state without restoring an old design.
+- **Evidence:** actual gizmo factory, shared commit, tool lifecycle, API adoption
+  and HTTP/native cold-replay/undo tests are recorded in
+  `docs/audits/feature_history_20261014/validation_group_placement_ui.json`.
+  The first attempted factory red run failed on an InvalidURL mock/import seam,
+  not this behavior; it is explicitly not counted as a behavioral reproduction.
+- **Remaining:** ordinary earlier placement editing is still guarded for active
+  organization pending FH-23's isolated editor. New-group movement ownership,
+  desktop/VR and latency acceptance remain open. No placement arithmetic changed;
+  the public organization gate stays false. MV-48 still applies.
+
+
+## ISSUE-111 — Queued visibility rollback and same-ID reload (2026-10-16, CORRECTED BEFORE U12 CHECKPOINT)
+
+- Final review of the new organized visibility adapter found two cases:
+  an earlier successful save advances the document revision before the latest
+  queued save fails, invalidating a gesture-time rollback token; and old pending
+  saves suppress hydration when a replacement uses the same design ID.
+- Bind rollback to serialized dispatch while retaining the gesture's prior
+  visibility/undo and local edit epoch. Count pending saves per document-reset
+  generation, force replacement hydration, and ignore old completion bookkeeping.
+  An empty named-group selection also avoids building a topology index.
+- Focused regressions hold the requests and assert both visible bases and undo
+  after success/failure/reset interleavings. U12 evidence records actual results.
+  This was corrected during implementation, not a claimed released-app defect
+  or a new milestone. Desktop/latency acceptance remains MV-48/FH-27.

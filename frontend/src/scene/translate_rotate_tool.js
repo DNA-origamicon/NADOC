@@ -6,6 +6,11 @@ import { registerShortcut } from '../input/shortcuts.js'
 import { canonicalSelection, selectedClusterIds } from './selection_model.js'
 import { parseBaseKey } from './base_ref.js'
 import { armToolClusterSelection } from '../ui/tool_cluster_selection.js'
+import { createDocumentRequestScope } from '../api/document_request_scope.js'
+import { getDocId } from '../shared/doc_id.js'
+
+const moveDocumentScope = createDocumentRequestScope()
+if (import.meta.hot) import.meta.hot.dispose(() => moveDocumentScope.dispose())
 
 /**
  * Translate/Rotate tool — the design-mode cluster gizmo + assembly-mode instance
@@ -54,6 +59,9 @@ export function resolveSelectionClusterId(ref, design) {
     const id = ref.id ?? null
     return clusters.some(c => c.id === id) ? id : null
   }
+  // Organization is not rigid ownership. The active regime requires an explicit
+  // placement, even when its ID or member subset happens to match a group.
+  if (design?.group_organization != null) return null
 
   const strandId = ref.kind === 'strand' ? ref.id : ref.kind === 'domain' ? ref.strandId : null
   const domainIndex = ref.kind === 'domain' ? ref.domainIndex : null
@@ -106,6 +114,8 @@ export function initTranslateRotateTool(deps) {
   const _hideProgress = hideOpProgress
   const _mrPanel = mrPanel
   let finishClusterPick = null
+  let previousGroupPickMode = null
+  let moveEpoch = 0
   const _mrPivotSel = mrPivotSel
   const _mrSetTransformValues = setTransformValues
   const _mrSetTransformValuesFromMatrix = setTransformValuesFromMatrix
@@ -324,6 +334,7 @@ export function initTranslateRotateTool(deps) {
   document.body.appendChild(_confirmBtn)
 
   async function _activateTranslateRotateTool(targetClusterId = null) {
+    moveEpoch++
     rightSidebar?.open?.('properties')
     const { assemblyActive, activeInstanceId, currentDesign } = store.getState()
 
@@ -360,6 +371,14 @@ export function initTranslateRotateTool(deps) {
     }
 
     // ── Design mode: attach cluster gizmo ───────────────────────────────────
+    if (currentDesign?.group_organization != null) {
+      if (!targetClusterId && canonicalSelection(store.getState()).items.some(ref => ref.kind !== 'cluster')) {
+        showToast('Select a Placement to edit its transform. A group does not define a new placement.', { severity: 'error' })
+        return
+      }
+      if (previousGroupPickMode === null) previousGroupPickMode = selectionManager.getGroupPickMode?.() ?? 'groups'
+      selectionManager.setGroupPickMode?.('placements')
+    }
     const clusters = currentDesign?.cluster_transforms ?? []
     setClusterDirty(false)
     setActive(true)
@@ -441,10 +460,36 @@ export function initTranslateRotateTool(deps) {
     clusterGizmo.setConstraint('joint', joint)
   }
 
-  function _removeToolPickListeners() {
+  function _removeToolPickListeners({ preserveGroupPickMode = false } = {}) {
     finishClusterPick?.(); finishClusterPick = null
+    if (!preserveGroupPickMode && previousGroupPickMode !== null) {
+      selectionManager.setGroupPickMode?.(previousGroupPickMode)
+      previousGroupPickMode = null
+    }
     canvas.removeEventListener('pointerdown', _onToolPickPointerDown)
   }
+
+  function _resetDocumentTool() {
+    // Apply temporarily clears the active flag while its request is pending.
+    // Reset must still release the old local preview; a late reply owns no UI
+    // or pending transforms in the replacement document.
+    const hadTool = getActive() || getClusterDirty() || previousGroupPickMode !== null
+    moveEpoch++
+    _vrPreview = null
+    _vrQueuedMatrix = null
+    setActive(false)
+    setClusterDirty(false)
+    if (getEditContext()?.editingFeatureType === 'cluster_op') setEditContext(null)
+    clusterGizmo.discardPendingTransforms?.()
+    clusterGizmo.detach()
+    _removeToolPickListeners()
+    selectionManager.setGroupPickMode?.('groups')
+    _confirmBtn.style.display = 'none'
+    if (_mrPanel) _mrPanel.style.display = 'none'
+    if (hadTool) _hideProgress()
+  }
+  window.addEventListener('nadoc:document-reset', _resetDocumentTool)
+  if (import.meta.hot) import.meta.hot.dispose(() => window.removeEventListener('nadoc:document-reset', _resetDocumentTool))
 
   async function _restoreTransformPreviewFromStore() {
     const { currentDesign, currentGeometry, currentHelixAxes } = store.getState()
@@ -467,6 +512,11 @@ export function initTranslateRotateTool(deps) {
       showToast('VR Move / Rotate is preview-only; use Cancel to restore the design.')
       return
     }
+    const docId = getDocId(), generation = moveDocumentScope.capture(), attempt = ++moveEpoch
+    const designId = store.getState().currentDesign?.id
+    const current = () => attempt === moveEpoch && moveDocumentScope.isCurrent(generation)
+      && getDocId() === docId && store.getState().currentDesign?.id === designId
+      && !store.getState().assemblyActive
     setActive(false)
     _confirmBtn.style.display = 'none'
     if (_mrPanel) _mrPanel.style.display = 'none'
@@ -573,6 +623,7 @@ export function initTranslateRotateTool(deps) {
     if (getClusterDirty()) {
       _showProgress('Applying Change', 'Updating transformed geometry…', { indeterminate: true })
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      if (!current()) return false
       try {
         // Snapshot pre-commit cluster_transforms so we can compute the
         // OLD→NEW delta after commit and rebake currentHelixAxes (which
@@ -589,12 +640,13 @@ export function initTranslateRotateTool(deps) {
             helix_ids:   [...(ct.helix_ids ?? [])],
           })
         }
-        const { clusterIds } = await clusterGizmo.commitPendingTransforms({ log: true })
+        const { clusterIds, geometryApplied, error } = await clusterGizmo.commitPendingTransforms({ log: true })
+        if (!current()) return false
         // Plan B: patchCluster no longer refreshes backend geometry. Reconcile
         // currentGeometry with the rendered state for each committed cluster
         // so downstream consumers (oxDNA / atomistic / surface mesh /
         // save-and-reload / undo) see the post-cluster-transform positions.
-        if (clusterIds.length) {
+        if (clusterIds.length && !geometryApplied) {
           const helixCtrl = designRenderer.getHelixCtrl()
           if (helixCtrl) {
             const design = store.getState().currentDesign
@@ -627,6 +679,7 @@ export function initTranslateRotateTool(deps) {
               // single source of truth in response_delta.js. We want it before
               // the overlay rebuilds below.
               await _reemitClusterBridges(clusterIds)
+              if (!current()) return false
               // Refresh overlays whose subscribers fired during patchCluster's
               // setState (with currentGeometry's nuc.backbone_position still
               // stale) and rebuilt themselves at pre-cluster-transform
@@ -636,8 +689,19 @@ export function initTranslateRotateTool(deps) {
             }
           }
         }
+        if (error) throw error
+        if (clusterGizmo.getAllPendingTransforms?.().length) {
+          throw new Error('Newer movement is still pending. Apply again or Cancel.')
+        }
+      } catch (error) {
+        if (!current()) return false
+        setActive(true)
+        _confirmBtn.style.display = 'flex'
+        if (_mrPanel) _mrPanel.style.display = ''
+        showToast(error?.message || 'The move was not accepted.', { severity: 'error' })
+        return false
       } finally {
-        _hideProgress()
+        if (current()) _hideProgress()
       }
     }
     setClusterDirty(false)
@@ -647,6 +711,7 @@ export function initTranslateRotateTool(deps) {
   }
 
   async function _cancelTranslateRotateTool() {
+    moveEpoch++
     if (!getActive()) return
     _vrPreview = null
     _vrQueuedMatrix = null
@@ -707,7 +772,7 @@ export function initTranslateRotateTool(deps) {
   async function _showClusterGroup(groupIds, clusters) {
     for (const id of groupIds) await _refreshClusterPivotForAttach(id)
     clusterGizmo.attachGroup(groupIds, scene, camera, canvas)
-    _removeToolPickListeners()   // group mode has no joint picking
+    _removeToolPickListeners({ preserveGroupPickMode: true })   // group mode has no joint picking
     document.getElementById('mode-indicator').textContent =
       `MOVE/ROTATE (${groupIds.length} clusters) — Tab: move/rotate · Esc: cancel`
     _moveRotatePanel.setAssemblyCtx(null)
@@ -799,6 +864,7 @@ export function initTranslateRotateTool(deps) {
   // identity/creation pose.) Reuses the cancel path's pending-discard + geometry-restore, then
   // re-attaches the gizmo at the committed pose so the user can keep working.
   async function _resetActiveClusterToSaved() {
+    moveEpoch++
     if (!getActive()) return
 
     if (store.getState().assemblyActive) {

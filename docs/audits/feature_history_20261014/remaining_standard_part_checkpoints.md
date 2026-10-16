@@ -14,11 +14,11 @@ agreed; do not invent historical estimate deltas. This is a milestone estimate,
 not a count of messages/commits or a percentage of time or user-ready features.
 Core estimates have moderate confidence; parked work has lower confidence.
 
-Keep delivery and effort visible separately: **11 engineering checkpoints have
-been delivered since B1 (U1–U11), closing one additional milestone**. Nine of
+Keep delivery and effort visible separately: **12 engineering checkpoints have
+been delivered since B1 (U1–U12), closing one additional milestone**. Ten of
 those checkpoints were spent on still-open FH-18. The 38 is an estimate of
 deliverable milestones, not a promise of 38 commits or assistant responses;
-the nine-checkpoint effort must not disappear behind the unchanged denominator.
+the ten-checkpoint effort must not disappear behind the unchanged denominator.
 
 One counted update is a named, reviewable milestone with a fixed exit. Completed
 implementation foundations below have scoped tests/evidence; some remain gated.
@@ -59,7 +59,7 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 
 | ID | Status | Fixed remaining exit |
 |---|---|---|
-| FH-18 | In progress · 9 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Owned organization transactions, named deformation preview/repair/comparison, qualified final-topology lineage including extrusion/crossover and resize/domain-shift edits and matching Fine Routing recovery are implemented; generated consumers, visible Groups/Placements and new-group movement stay open. |
+| FH-18 | In progress · 10 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Owned organization transactions, named deformation preview/repair/comparison, qualified final-topology lineage including extrusion/crossover and resize/domain-shift edits and matching Fine Routing recovery are implemented; Groups/Placements UI and explicit placement Apply are integrated privately; ordinary new deformation creation, generated consumers, new-group movement and qualification stay open. |
 | FH-20 | Remaining | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
 | FH-21 | Remaining | Extrusion history editor: eligible earlier edits through downstream features, stable identities, complete ordinary controls and validation. |
 | FH-22 | Remaining | Sweep history editor: input-based isolated preview, recovery-independent Apply/Cancel and downstream rebuild. |
@@ -137,6 +137,52 @@ bound their matrices before implementation rather than expanding them indefinite
 | U9 · 2026-10-16 | FH-18 checkpoint 7: five extrusion families and crossover placement/motion follow organizational ancestry through native replay; bounded atomic endpoint correspondence, exact parity and unused reconciliation-field cleanup; [evidence](validation_group_geometry_lineage.json) | None; resize/domain-shift, remaining consumer/repair/UI migration, rollout and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** seven checkpoints on unfinished FH-18. The nine added command kinds are coverage within B/C, not new milestones. Fixed exit and five batches unchanged. |
 | U10 · 2026-10-16 | FH-18 checkpoint 8: passive native resize/domain-shift contributor tracking, complete observed-material checks and private Fine Routing reconstruction; [evidence](validation_group_resize_lineage.json) | None; remaining consumer/repair/UI migration, rollout and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** eight checkpoints on unfinished FH-18. The bounded two-command batch is implemented; no new milestone, exit or estimate. |
 | U11 · 2026-10-16 | FH-18 checkpoint 9: named bend/twist preview, explicit reference repair, historical frozen-range display and guarded host Apply/repair commit; [evidence](validation_named_deformation_lifecycle.json) | None; generated consumers, visible Groups/Placements, new-group movement and rollout remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** nine checkpoints on unfinished FH-18. Completes the promised named-selection integration within B/C, with no new milestone or weakened exit. |
+
+| U12 · 2026-10-16 | FH-18 checkpoint 10: separate Groups/Placements sidebar, native context actions, typed scene selection/style/visibility and atomic explicit placement Apply; [evidence](validation_group_placement_ui.json) | None; ordinary new Bend/Twist creation, generated consumers, new-group movement and qualification remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** ten checkpoints on unfinished FH-18. D advances within the original five batches; guarded unavailable consumers do not count as implemented. |
+
+### FH-18 containment update — U12
+
+Batch D now has an integrated private interface and explicit placement commit:
+Groups own organization, style and exact domain membership; Placements preserve
+ordered native transform owners. Sidebar and context edits use the owned command
+host. Scene selection, highlight, labels and atom/surface display distinguish the
+two identities, including coincident text IDs. Hiding a group persists its **current
+member base addresses** in the existing visibility model, not a dynamic hidden
+group identity or a feature row. A changed membership therefore requires a fresh
+hide action; this is explicit UI behavior, not a new model field or numerical pin.
+This current-member action does not close the planned persistent group-identity
+visibility requirement in D; that behavior remains an explicit consumer exit.
+
+One Apply publishes at most 64 explicit existing placements atomically with one
+undo/revision and matching geometry. Refused moves retain pending input; accepted
+native geometry is not transformed a second time. Legacy sequential commits now
+retain unaccepted inputs and report partial success honestly. Browser-only group
+creation is suppressed only for active organized parts; shared membership and
+style wiring were extracted rather than duplicated. No native algorithm changed.
+
+**Containment remains necessary:** ordinary new Bend/Twist creation still needs
+an owned preview adapter; it now refuses active organization before mutating the
+legacy preview. Earlier placement editing likewise refuses the obsolete entry
+path until FH-23's isolated editor exists. These are explicit incomplete consumer
+exits, not a substitute for their implementation or reasons to enable rollout.
+New arbitrary group movement/frame semantics and generated compatibility remain
+FH-18 obligations. Follow with the bounded ordinary new-deformation adapter,
+then resolve movement ownership and generated consumers before qualification.
+Do not transfer them to parked work or close D/FH-18 from unit tests alone.
+
+No full history proof runs on a drag frame. Display membership is cached against
+immutable snapshots, and metadata-only group edits avoid atomistic refetch.
+Active organization currently uses a full renderer rebuild for structural partial
+updates to preserve domain ordinals; its cost and full undo copying under lock
+remain unqualified. **131 backend and 8,715 frontend tests pass (one frontend
+skip)**; the evidence retains a capture-deadline refusal seen once and the
+unchanged passing rerun. Archive
+is unmounted: app/latency and aggregate backend acceptance remain open.
+
+**18/38 complete; 20 remaining (11 core, 9 parked); +0 completed, +0 total.**
+Twelve engineering checkpoints since B1 have closed one milestone; ten were spent
+on FH-18. This visibility is intentional. No estimate, fixed exit or batch was
+changed. Public gates remain false; assemblies and VR remain deferred.
 
 ### Sequencing review after U11 — no engineering credit
 

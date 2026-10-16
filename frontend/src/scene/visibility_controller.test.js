@@ -150,3 +150,224 @@ describe('visibility controller', () => {
     ]))
   })
 })
+
+describe('organization current-member visibility', () => {
+  function organized(options = {}) {
+    const state = { currentGeometry: geometry, currentDesign: {
+      id: 'design', cluster_transforms: [{ id: 'same', helix_ids: ['h2'] }],
+      strands: [{ id: 's1', domains: [{ helix_id: 'h1' }] },
+        { id: 's2', domains: [{ helix_id: 'h2' }] }], extensions: [],
+      group_organization: { version: 1, groups: [
+        { id: 'same', helix_ids: ['h1', 'h2'], domain_ids: [{ strand_id: 's1', domain_index: 0 }] },
+        { id: 'whole', helix_ids: ['h1'], domain_ids: [] },
+        { id: 'empty', helix_ids: [], domain_ids: [] },
+      ] },
+    } }
+    let listener
+    const onChange = vi.fn(), onPersist = vi.fn(async () => {})
+    const renderer = { setHiddenNucs: vi.fn(), setHiddenCrossovers: vi.fn() }
+    const api = initVisibilityController({
+      store: { getState: () => state, subscribe: fn => { listener = fn; return vi.fn() } },
+      designRenderer: renderer, onChange, onPersist, ...options,
+    })
+    return { api, state, onChange, onPersist, renderer, change: patch => {
+      Object.assign(state, patch); listener(state)
+    } }
+  }
+
+  it('persists exact current member bases without aliasing same-text placement IDs', async () => {
+    const { api, onPersist, onChange } = organized()
+    api.hide({ partGroupIds: ['same'] })
+    expect(api.isBaseShown('h1:0:FORWARD')).toBe(false)
+    expect(api.isBaseShown('h1:1:FORWARD:1')).toBe(false)
+    expect(api.isBaseShown('h2:0:REVERSE')).toBe(true)
+    expect(api.isPartGroupShown('same')).toBe(false)
+    expect(api.isPartGroupShown('whole')).toBe(false)
+    expect(api.isPartGroupShown('empty')).toBe(true)
+    expect(onChange.mock.calls.at(-1)[2]).toEqual(new Set(['same', 'whole']))
+    await api.flushPersistence()
+    expect(onPersist.mock.calls.at(-1)[0]).toEqual({
+      hidden_base_keys: ['h1:0:FORWARD', 'h1:1:FORWARD', 'h1:1:FORWARD:1'],
+      shown_base_keys: [], hidden_cluster_ids: [],
+    })
+    api.setHiddenClusters(['same'])
+    expect(api.isBaseShown('h2:0:REVERSE')).toBe(false)
+  })
+
+  it('derived group visibility follows union hiding and explicit show exceptions through undo/redo', () => {
+    const { api, onChange } = organized()
+    api.hide({ partGroupIds: ['same', 'empty'] })
+    api.show({ baseKeys: ['h1:0:FORWARD'] })
+    expect(api.isPartGroupShown('same')).toBe(true)
+    expect(onChange.mock.calls.at(-1)[2]).toEqual(new Set())
+    api.undo()
+    expect(api.isPartGroupShown('same')).toBe(false)
+    api.redo()
+    expect(api.isPartGroupShown('same')).toBe(true)
+    api.show({ partGroupIds: ['same'] })
+    expect(api.isBaseShown('h1:1:FORWARD:1')).toBe(true)
+  })
+
+  it('membership edits and dissolution do not turn base-addressed hiding into dynamic group intent', async () => {
+    const { api, state, change, onPersist } = organized()
+    api.hide({ partGroupIds: ['same'] })
+    await api.flushPersistence()
+    const saved = onPersist.mock.calls.at(-1)[0]
+    change({ currentDesign: { ...state.currentDesign, visibility_state: saved,
+      group_organization: { version: 1, groups: [
+        { id: 'same', helix_ids: ['h2'], domain_ids: [] },
+      ] } } })
+    expect(api.isBaseShown('h1:0:FORWARD')).toBe(false)
+    expect(api.isPartGroupShown('same')).toBe(true)
+    change({ currentDesign: { ...state.currentDesign,
+      group_organization: { version: 1, groups: [] } } })
+    expect(api.isBaseShown('h1:0:FORWARD')).toBe(false)
+    expect(api.isPartGroupShown('same')).toBe(true)
+  })
+
+  it('rebuilds cached group base membership only when design or geometry changes', () => {
+    const { api, state, change } = organized()
+    api.hide({ partGroupIds: ['same'] })
+    expect(api.isPartGroupShown('same')).toBe(false)
+    const old = state.currentGeometry
+    const extended = [...old, { helix_id: 'h1', strand_id: 's1', domain_index: 0,
+      bp_index: 2, direction: 'FORWARD' }]
+    change({ currentGeometry: extended })
+    expect(api.isPartGroupShown('same')).toBe(true)
+    api.hide({ partGroupIds: ['same'] })
+    expect(api.isBaseShown('h1:2:FORWARD')).toBe(false)
+  })
+
+  it.each(['null', 'throw'])('rolls back failed %s persistence including visibility undo', async failure => {
+    const persist = vi.fn(async () => {
+      if (failure === 'throw') throw new Error('publication refused')
+      return null
+    })
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const { api, onChange, renderer } = organized({ onPersist: persist, getRevision: () => 4 })
+      api.hide({ partGroupIds: ['same'] })
+      expect(api.isPartGroupShown('same')).toBe(false)
+      await api.flushPersistence()
+      expect(api.isBaseShown('h1:0:FORWARD')).toBe(true)
+      expect(api.isPartGroupShown('same')).toBe(true)
+      expect(renderer.setHiddenNucs.mock.calls.at(-1)[0]).toEqual(new Set())
+      expect(onChange.mock.calls.at(-1)[2]).toEqual(new Set())
+      expect(api.undo()).toBe(false)
+      expect(persist).toHaveBeenCalledTimes(1)
+      api.destroy()
+    } finally { log.mockRestore() }
+  })
+
+  it('does not overwrite a newer local visibility edit when an earlier save fails', async () => {
+    let finish
+    const first = new Promise(resolve => { finish = resolve })
+    const persist = vi.fn().mockReturnValueOnce(first).mockResolvedValue(undefined)
+    const { api } = organized({ onPersist: persist, getRevision: () => 4 })
+    api.hide({ partGroupIds: ['same'] })
+    await Promise.resolve()
+    api.show({ baseKeys: ['h1:0:FORWARD'] })
+    finish(null)
+    await api.flushPersistence()
+    expect(api.isBaseShown('h1:0:FORWARD')).toBe(true)
+    expect(api.isBaseShown('h1:1:FORWARD')).toBe(false)
+    expect(persist).toHaveBeenCalledTimes(2)
+    api.destroy()
+  })
+
+  it('rolls back only the latest queued edit after the earlier save installs its revision', async () => {
+    let finish, revision = 4
+    const first = new Promise(resolve => { finish = resolve })
+    const persist = vi.fn().mockResolvedValue(undefined)
+    const { api, state, change } = organized({ onPersist: persist, getRevision: () => revision })
+    persist.mockImplementationOnce(async visibility => {
+      await first
+      revision++
+      const currentDesign = { ...state.currentDesign, visibility_state: visibility }
+      change({ currentDesign })
+      return { design: currentDesign, revision }
+    }).mockResolvedValueOnce(null)
+    api.hide({ baseKeys: ['h1:0:FORWARD'] })
+    await Promise.resolve()
+    api.hide({ baseKeys: ['h1:1:FORWARD'] })
+    finish()
+    await api.flushPersistence()
+    expect(revision).toBe(5)
+    expect(api.getHiddenBaseKeys()).toEqual(new Set(['h1:0:FORWARD']))
+    expect(api.isBaseShown('h1:1:FORWARD')).toBe(true)
+    expect(api.undo()).toBe(true)
+    expect(api.undo()).toBe(false)
+    await api.flushPersistence()
+    expect(persist).toHaveBeenCalledTimes(3)
+    api.destroy()
+  })
+
+  it.each(['revision', 'design', 'reset', 'destroy'])('ignores a failed save after %s changes its origin', async changeKind => {
+    let finish, revision = 4
+    const pending = new Promise(resolve => { finish = resolve })
+    const events = new EventTarget()
+    const { api, state, change, renderer } = organized({
+      onPersist: () => pending, getRevision: () => revision, eventTarget: events,
+    })
+    api.hide({ partGroupIds: ['same'] })
+    await Promise.resolve()
+    if (changeKind === 'revision') revision++
+    if (changeKind === 'design') change({ currentDesign: { ...state.currentDesign } })
+    if (changeKind === 'reset') events.dispatchEvent(new Event('nadoc:document-reset'))
+    if (changeKind === 'destroy') api.destroy()
+    await Promise.resolve()
+    const calls = renderer.setHiddenNucs.mock.calls.length
+    finish(null)
+    await api.flushPersistence()
+    expect(renderer.setHiddenNucs.mock.calls.length).toBe(calls)
+    api.destroy()
+  })
+
+  it('does not send an old queued visibility request after a same-ID document reset', async () => {
+    let finish
+    const pending = new Promise(resolve => { finish = resolve })
+    const persist = vi.fn().mockReturnValueOnce(pending).mockResolvedValue(undefined)
+    const events = new EventTarget()
+    const { api } = organized({ onPersist: persist, eventTarget: events })
+    api.hide({ partGroupIds: ['same'] })
+    await Promise.resolve()
+    api.show({ partGroupIds: ['same'] })
+    events.dispatchEvent(new Event('nadoc:document-reset'))
+    finish(null)
+    await api.flushPersistence()
+    expect(persist).toHaveBeenCalledTimes(1)
+    api.destroy()
+  })
+
+  it('hydrates a same-ID replacement while an old-generation visibility save is still held', async () => {
+    let finish
+    const pending = new Promise(resolve => { finish = resolve })
+    const events = new EventTarget()
+    const persist = vi.fn().mockReturnValueOnce(pending).mockResolvedValue(undefined)
+    const { api, state, change } = organized({ onPersist: persist, eventTarget: events })
+    api.hide({ partGroupIds: ['same'] })
+    await Promise.resolve()
+    events.dispatchEvent(new Event('nadoc:document-reset'))
+    change({ currentDesign: { ...state.currentDesign, visibility_state: {
+      hidden_base_keys: ['h2:0:REVERSE'], shown_base_keys: [], hidden_cluster_ids: [],
+    } } })
+    expect(api.getHiddenBaseKeys()).toEqual(new Set(['h2:0:REVERSE']))
+    expect(api.isPartGroupShown('same')).toBe(true)
+    expect(api.undo()).toBe(false)
+    persist.mockImplementationOnce(async visibility => {
+      const currentDesign = { ...state.currentDesign, visibility_state: visibility }
+      change({ currentDesign })
+      return { design: currentDesign }
+    })
+    // Queue a new-generation save before the obsolete one drains. Its success
+    // must preserve its own visibility undo even while adopting a design reply.
+    api.show({ baseKeys: ['h2:0:REVERSE'] })
+    finish(null)
+    await api.flushPersistence()
+    expect(api.isBaseShown('h2:0:REVERSE')).toBe(true)
+    expect(api.undo()).toBe(true)
+    expect(api.getHiddenBaseKeys()).toEqual(new Set(['h2:0:REVERSE']))
+    await api.flushPersistence()
+    api.destroy()
+  })
+})
