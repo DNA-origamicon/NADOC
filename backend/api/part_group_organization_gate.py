@@ -13,7 +13,8 @@ from backend.core.part_group_organization import KINDS
 # variables cannot enable authoring or its explicitly reviewed lifecycle paths.
 GROUP_ORGANIZATION_ENABLED = False
 _LIFECYCLES = frozenset({"load_design", "restore_doc_design", "set_design_branch",
-    "copy_for_workspace_save", "acknowledge_workspace_save", "undo", "redo"})
+    "copy_for_workspace_save", "acknowledge_workspace_save", "undo", "redo",
+    "repair_draft", "repair_draft_evaluation"})
 
 
 def _refuse():
@@ -42,6 +43,12 @@ def require_group_publication(source, candidate, checked):
     """Called only after the publisher validates its opaque registered permit."""
     if checked is not None and checked.admission.scope_tag == "group_organization_v1":
         if checked.evidence_class != "owned_group_edit":
+            _refuse()
+        require_group_edit_enabled()
+        return
+    if checked is not None and checked.admission.scope_tag == "organized_recipe_v1":
+        if (checked.evidence_class != "owned_recipe_rebuild"
+                or checked.admission.operation not in {"repair", "deformation_preview"}):
             _refuse()
         require_group_edit_enabled()
         return

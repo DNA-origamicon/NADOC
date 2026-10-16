@@ -131,6 +131,7 @@ def _definitions(source, request, dependency_resolver, numerical_provider):
         elif entry.id in targets:
             target = targets[entry.id]
             entry = (target.structural_replacement if target.structural_replacement is not None
+                     else target.definition_replacement if target.definition_replacement is not None
                      else entry.model_copy(update={"params": target.params}))
         log.append(entry)
     return log, upgrades, definition_upgrades

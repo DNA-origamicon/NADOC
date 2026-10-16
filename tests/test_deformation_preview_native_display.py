@@ -86,6 +86,31 @@ def test_single_helix_twist_is_visible_in_actual_native_scene():
     _check(prepare_display(*_component_input("twist")))
 
 
+@pytest.mark.parametrize("kind", ["bend", "twist"])
+def test_named_retarget_crosses_native_wire_and_renders_exact_scope(kind):
+    from tests.test_named_deformation_preview import named_source
+
+    prepared = preview.prepare_from_capture(owned_capture(named_source(kind)), "edited-feature")
+    evaluated = preview.evaluate(prepared, {"targets": [{"kind": "part_group", "id": "other"}]})
+    _check(prepare_display(prepared.copy_prefix(), evaluated))
+
+
+def test_historical_range_survives_trim_in_actual_native_preview_scene():
+    from backend.api.part_proof_commands import execute
+    from backend.core.models import DeformationLogEntry, DeformationOp, TwistParams
+    from backend.core.validator import validate_design
+    from tests.test_group_deformation_comparison import retained_tail
+
+    _, prefix = retained_tail()
+    operation = DeformationOp(id="next-twist", type="twist", plane_a_bp=0, plane_b_bp=24,
+                               params=TwistParams(total_degrees=15))
+    candidate = execute("deformation", prefix, {**operation.model_dump(mode="json"), "_proof_version": 1})
+    entry = DeformationLogEntry(id="next-feature", deformation_id=operation.id,
+        op_snapshot=candidate.deformations[-1], proof_version=1)
+    evaluated = preview.EvaluatedPreview(candidate, entry, validate_design(candidate))
+    _check(prepare_display(prefix, evaluated))
+
+
 @pytest.mark.parametrize("case", ["controls_only", "prior_sweep", "periodic", "host_envelope"])
 def test_complete_native_control_envelope_crosses_the_actual_javascript_boundary(case):
     if case == "prior_sweep":

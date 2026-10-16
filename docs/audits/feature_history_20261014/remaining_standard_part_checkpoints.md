@@ -53,7 +53,7 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 
 | ID | Status | Fixed remaining exit |
 |---|---|---|
-| FH-18 | In progress · 8 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Owned organization transactions, named native deformation selections, qualified final-topology lineage including extrusion/crossover and resize/domain-shift edits and matching Fine Routing recovery are implemented; remaining tool/repair/UI migration and new-group movement stay open. |
+| FH-18 | In progress · 9 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Owned organization transactions, named deformation preview/repair/comparison, qualified final-topology lineage including extrusion/crossover and resize/domain-shift edits and matching Fine Routing recovery are implemented; generated consumers, visible Groups/Placements and new-group movement stay open. |
 | FH-20 | Remaining | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
 | FH-21 | Remaining | Extrusion history editor: eligible earlier edits through downstream features, stable identities, complete ordinary controls and validation. |
 | FH-22 | Remaining | Sweep history editor: input-based isolated preview, recovery-independent Apply/Cancel and downstream rebuild. |
@@ -130,8 +130,26 @@ bound their matrices before implementation rather than expanding them indefinite
 | U8 · 2026-10-16 | FH-18 checkpoint 6: typed named bend/twist selection, bounded final-domain ancestry for 14 qualified native kinds, incoming-reference diagnostics and matching Fine Routing recovery; [evidence](validation_group_organization_consumers.json) | None; relocation/extrusion and remaining consumer/repair/UI migration, rollout and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** six checkpoints on unfinished FH-18. B/C advance; the original exit and five finite batches remain. No extra completion credit for adapter kinds, tests or commits. |
 | U9 · 2026-10-16 | FH-18 checkpoint 7: five extrusion families and crossover placement/motion follow organizational ancestry through native replay; bounded atomic endpoint correspondence, exact parity and unused reconciliation-field cleanup; [evidence](validation_group_geometry_lineage.json) | None; resize/domain-shift, remaining consumer/repair/UI migration, rollout and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** seven checkpoints on unfinished FH-18. The nine added command kinds are coverage within B/C, not new milestones. Fixed exit and five batches unchanged. |
 | U10 · 2026-10-16 | FH-18 checkpoint 8: passive native resize/domain-shift contributor tracking, complete observed-material checks and private Fine Routing reconstruction; [evidence](validation_group_resize_lineage.json) | None; remaining consumer/repair/UI migration, rollout and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** eight checkpoints on unfinished FH-18. The bounded two-command batch is implemented; no new milestone, exit or estimate. |
+| U11 · 2026-10-16 | FH-18 checkpoint 9: named bend/twist preview, explicit reference repair, historical frozen-range display and guarded host Apply/repair commit; [evidence](validation_named_deformation_lifecycle.json) | None; generated consumers, visible Groups/Placements, new-group movement and rollout remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** nine checkpoints on unfinished FH-18. Completes the promised named-selection integration within B/C, with no new milestone or weakened exit. |
 
-### FH-18 containment update — U10
+### FH-18 containment update — U11
+
+The named-selection adapter now spans private native preview, complete comparison
+display, reviewed repair inputs/picker/drafts, and exact-candidate publication.
+Historical frozen intervals retain their feature-stage addresses after later
+topology changes. New or repaired selections resolve on the independently rebuilt
+prefix. Numerical placement owners remain separate and unchanged.
+
+This is one integrated checkpoint, not separate credit for UI, worker, permit,
+test or DTO changes. The same five batches and original exit remain. The next
+bounded work is the remaining generated-consumer inventory, followed by visible
+Groups/Placements and new-group motion/frame semantics. Their desktop/latency and
+rollout acceptance stays open; both public gates remain false. ISSUE-108 remains
+open. No new scientific behavior or numerical compatibility transition is needed.
+
+**18/38; +0 completed, +0 total; 20 remaining (11 core, 9 parked).**
+
+### Prior containment update — U10
 
 The qualified native lineage set now covers 25 kinds. Resize and domain shift
 observe actual native endpoint, merge/split and translation replacements; they

@@ -53,7 +53,7 @@ def test_complete_native_geometry_and_controls_are_owned(kind, grouped, scoped):
         records, axes = _ordinary_geometry(design)
         component = wire[label]
         assert component["component_kind"] == "deformation-preview-dna"
-        assert component["component_version"] == 1
+        assert component["component_version"] == 2
         assert unpack_records(component["nucleotides"]) == records
         assert component["helix_axes"] == axes
     assert result["stage"] == "feature"
@@ -217,14 +217,25 @@ def test_combined_result_has_independent_output_allowances(monkeypatch, limit):
     assert caught.value.code == "preview_limit"
 
 
-def test_comparison_v2_does_not_silently_accept_new_preview_axis_schema():
-    from backend.core.part_dna_comparison import project
+def test_comparison_v3_and_preview_v2_preserve_same_scoped_axes_and_limits(monkeypatch):
+    from backend.core import part_dna_comparison as projection
 
-    prefix, evaluated = _owned(scoped=True)
-    with pytest.raises(CommandContractError) as caught:
-        project(evaluated.design)
-    assert caught.value.code == "unsupported_comparison_scope"
-    assert project(prefix)["component_version"] == 2
+    _prefix, evaluated = _owned(scoped=True)
+    comparison = projection.project(evaluated.design)
+    displayed = projection.project_for_deformation_preview(evaluated.design)
+    assert comparison["component_version"] == 3
+    assert displayed["component_version"] == 2
+    assert displayed["component_kind"] == "deformation-preview-dna"
+    assert {key: value for key, value in displayed.items() if key not in {
+        "component_version", "component_kind"}} == {
+        key: value for key, value in comparison.items() if key != "component_version"}
+    assert comparison["helix_axes"] == _ordinary_geometry(evaluated.design)[1]
+    assert any("samples" in segment for axis in comparison["helix_axes"] for segment in axis["segments"])
+    monkeypatch.setattr(projection, "MAX_AXIS_POINTS", 1)
+    for project in (projection.project, projection.project_for_deformation_preview):
+        with pytest.raises(CommandContractError) as caught:
+            project(evaluated.design)
+        assert caught.value.code == "comparison_limit"
 
 
 def _host_envelope():

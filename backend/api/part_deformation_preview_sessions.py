@@ -20,6 +20,9 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_validator
 
 from backend.api import doc_context, state
+from backend.api import part_group_organization_gate as group_gate
+from backend.api import part_publication_permit as permits
+from backend.api import part_publication_policy as construction_policy
 from backend.api.part_deformation_preview import evaluate as local_evaluate, prepare_from_capture
 from backend.api.part_deformation_preview_dto import (
     evaluate_display,
@@ -186,10 +189,10 @@ def _source_current(entry):
     """State-lock owned; never creates a closed document/session."""
     if doc_context.get_current_doc() != entry.doc:
         _conflict("The request belongs to a different document")
-    policy = state._require_compatibility_write("deformation_preview", doc_id=entry.doc)
+    session = state._sessions.get(entry.doc)
+    policy = _source_policy(entry.doc, None if session is None else session.design)
     if policy.generation != entry.policy_generation:
         _conflict("Construction policy changed; open a new preview", "policy_changed")
-    session = state._sessions.get(entry.doc)
     expected_revision = (entry.publication["revision"] if entry.phase == "applied"
                          else entry.request.expected_revision)
     if (session is None or session.identity != entry.session_identity
@@ -199,6 +202,19 @@ def _source_current(entry):
         _conflict("The preview's original part or session changed", "source_changed")
     state._assert_active_loadout_editable(session.design)
     return session
+
+
+def _source_policy(doc, source):
+    """Only this owned preview host may read staged organization for editing.
+
+    This grants no generic mutation/publication bypass: Apply still needs its
+    full recipe rebuild and exact candidate-bound host permit.
+    """
+    if type(source) is Design and source.group_organization is not None:
+        selected = construction_policy.require_compatibility(doc, "deformation_preview")
+        group_gate.require_group_edit_enabled()
+        return selected
+    return state._require_compatibility_write("deformation_preview", doc_id=doc)
 
 
 def _current(entry, sequence=None):
@@ -266,9 +282,9 @@ def prepare(value):
         with _mapped_errors():
             with state._lock:
                 doc = doc_context.get_current_doc()
-                policy = state._require_compatibility_write("deformation_preview", doc_id=doc)
                 session = state._sessions.get(doc)
                 source = None if session is None else session.design
+                policy = _source_policy(doc, source)
                 if type(source) is not Design:
                     _conflict("Preview requires an existing mutable standard part")
                 if source.id != request.expected_design_id or session.revision != request.expected_revision:
@@ -381,6 +397,8 @@ def apply(value):
     from backend.api.part_history_verification import _slot as proof_slot
 
     request = _parse(Change, value)
+    from backend.core.part_history_proof import digest
+    request_sha256 = digest(request.model_dump(mode="json"))
     entry, prepared = _claim(request, applying=True)
     proof_admitted = False
     committing = False
@@ -406,6 +424,9 @@ def apply(value):
                     raise HTTPException(408, detail="Recipe regeneration time limit")
                 with _lock:
                     _catalog_current(entry, request.request_sequence)
+                admission = (permits.admit_organized_recipe(entry.doc, session,
+                    operation="deformation_preview", request_sha256=request_sha256)
+                    if session.design.group_organization is not None else None)
                 captured = capture(session.design, preserve_entry_types=True)
             del session
             indices = [i for i, row in enumerate(captured.feature_log) if row.id == request.feature_id]
@@ -426,7 +447,11 @@ def apply(value):
                 candidate = preserve_document_state(session.design, candidate)
                 state._assert_active_loadout_editable(session.design, candidate)
                 state._assert_photoproduct_dependencies(candidate)
-                revision = publish_replacement(session, candidate)
+                permit = (permits.issue_organized_recipe_permit(admission, candidate,
+                    request_sha256=request_sha256, expires=min(deadline, entry.expires))
+                    if admission is not None else None)
+                revision = (publish_replacement(session, candidate, publication_permit=permit)
+                            if permit is not None else publish_replacement(session, candidate))
                 receipt = {**entry.request.model_dump(), "status": "applied",
                            "lease_id": entry.lease_id, "design_id": candidate.id,
                            "revision": revision, "deformation_id": prepared.deformation_id,

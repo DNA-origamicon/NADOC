@@ -16,6 +16,7 @@ from backend.core.models import BendParams, DeformationLogEntry, DeformationOp, 
 from backend.core.part_command_errors import CommandContractError, ReferenceResolutionError
 from backend.core.part_history_contract import FIELD_ROLES
 from backend.core.part_history_proof import command_rows, root_design
+from backend.core.part_group_organization import KINDS as ORGANIZATION_KINDS
 from backend.core.part_operation_input import validate_operation_input
 from backend.core.part_overlay_commands import command_input, edit_entry
 from backend.core.part_verification_capture import CaptureLimit, admit
@@ -42,10 +43,10 @@ ROUTING = frozenset({
     "loop-skip-insert", "loop-skip-twist", "loop-skip-bend", "loop-skip-clear",
     "loop-skip-clear-all", "apply-loop-skips",
 })
-PREFIX_KINDS = EXTRUSIONS | ROUTING | frozenset({
+PREFIX_KINDS = EXTRUSIONS | ROUTING | ORGANIZATION_KINDS | frozenset({
     "bundle-create", "sweep", "deformation", "cluster_create", "cluster_op",
 })
-PATCH_FIELDS = frozenset({"type", "plane_a_bp", "plane_b_bp", "params", "cluster_ids"})
+PATCH_FIELDS = frozenset({"type", "plane_a_bp", "plane_b_bp", "params", "cluster_ids", "targets"})
 
 
 def _reject(detail, code="unsupported_preview_scope"):
@@ -451,7 +452,7 @@ def evaluate(prepared, patch):
         _reject("Preview requires prepared native inputs and an object patch", "invalid_preview_definition")
     _json(patch)
     if set(patch) - PATCH_FIELDS:
-        _reject("This preview edits parameters/planes only; target membership is retained")
+        _reject("This preview edits parameters, planes, or reviewed group selection only")
     original = prepared._entry.op_snapshot
     if patch.get("type", original.type) != original.type:
         _reject("A preview cannot change the recorded deformation family")

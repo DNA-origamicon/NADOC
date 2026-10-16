@@ -132,6 +132,8 @@ def _topology(design):
              for field, fields in TOPOLOGY_FIELDS.items()}
     for entry, overhang in zip(value["overhangs"], design.overhangs, strict=True):
         entry["sub_domains"] = [sub.model_dump(mode="json", include=SUBDOMAIN_FIELDS) for sub in overhang.sub_domains]
+    value["group_organization"] = (design.group_organization.model_dump(mode="json")
+                                   if design.group_organization is not None else None)
     # Native continuity/seam decisions use provenance, but never reapply poses.
     value["deformations"] = []
     for op in design.deformations:
@@ -176,15 +178,15 @@ def _project(design, *, scoped_segments=False):
 
 
 def project(design):
-    """Existing comparison v2 schema and admission remain unchanged."""
-    return _project(design)
+    """Complete v3 DNA component, including native scoped axis samples."""
+    return _project(design, scoped_segments=True)
 
 
 def project_for_deformation_preview(design):
     """Private preview schema preserving native per-domain axis samples.
 
-    This does not enable the comparison host or expand its v2 schema. The same
-    inventory, prospective work and emitted-site/axis limits still apply.
+    Preview v2 and comparison v3 share the complete native inventory. The same
+    prospective work and emitted-site/axis limits still apply.
     """
     return {**_project(design, scoped_segments=True),
-            "component_kind": "deformation-preview-dna", "component_version": 1}
+            "component_kind": "deformation-preview-dna", "component_version": 2}

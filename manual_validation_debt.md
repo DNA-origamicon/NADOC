@@ -984,6 +984,27 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   display scope. The existing dedicated e2e isolation/output cleanup rules apply.
 
 - **MV-48 — PENDING — Ordinary grouping and geometry preview lifecycle (2026-10-15).**
+  **October 16 U11 named-selection continuation (FH-18 checkpoint 9):** after
+  explicit qualification enables the organization and isolated-preview gates,
+  edit a named-group bend and twist with whole-helix and domain-backed groups.
+  Retarget, return to the original group, change planes/parameters, and toggle
+  visual preview off/on. Private plane guides must follow the server's selected
+  scope even with geometry off; placement context must remain unchanged, even
+  when a group and placement share the same ID. Empty selection must refuse;
+  mixed/primitive selections must remain read-only. Later nick/resize/shift must
+  not reinterpret an earlier operation's frozen interval from current ordinals.
+  Exercise Cancel, failed Apply, delayed responses, expiry and document switches;
+  canonical state must change only after confirmed Apply, with one undo step.
+  In the repair panel, replace a missing named target using prefix-valid groups,
+  save/reopen/rebase the proposal, Evaluate/Compare/Apply, then undo/redo and
+  save/reopen/verify. Inspect native curved axes and nucleotide orientation,
+  including a comparison after later routing changed source domain identities.
+  **NOT VERIFIED IN APP:** gates remain disabled; automated software results do
+  not establish popup usability, responsiveness, memory/geometry tails or broad
+  rollout. Record actual interaction measurements under FH-27. This continuation
+  adds no milestone credit: overall **18/38**, FH-18 remains open. Final software
+  evidence belongs in `validation_named_deformation_lifecycle.json` in the
+  existing feature-history audit directory.
   **October 16 FH-18 auxiliary checkpoint:** choose **Cluster Unassigned
   Components**, confirm complete history entries but one undo/revision, and
   save/reopen/verify. Existing groups and poses must survive; no-op must not add

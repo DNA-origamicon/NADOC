@@ -28,6 +28,11 @@ def test_actual_native_packets_render_exact_source_frames_in_javascript():
         source = small(kind)
         packets.append({"kind": kind, "component": project(source), "design": source.model_dump(mode="json"),
                         "records": _geometry_for_design(source)})
+    from tests.test_group_deformation_comparison import retained_tail
+    for kind, source in zip(("named-selection", "historical-after-trim"), retained_tail()):
+        kinds.append(kind)
+        packets.append({"kind": kind, "component": project(source), "design": source.model_dump(mode="json"),
+                        "records": _geometry_for_design(source)})
     program = r"""
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
@@ -86,4 +91,4 @@ process.stdout.write(JSON.stringify(outcomes))
     assert result.returncode == 0, result.stderr
     outcomes = json.loads(result.stdout)
     assert len(outcomes) == len(kinds)
-    assert sum(row["status"] == "exact_native_matrices" for row in outcomes) == 14
+    assert sum(row["status"] == "exact_native_matrices" for row in outcomes) == 16

@@ -79,6 +79,8 @@ def admission_context(admission):
 def admit_evaluation(doc_id, session, *, operation, request_sha256):
     """Lock-owned admission after capture and exact live-source revalidation."""
     effective = policy.require_evaluation(doc_id, operation)
+    if operation == "repair" and getattr(session.design, "group_organization", None) is not None:
+        return admit_organized_recipe(doc_id, session, operation=operation, request_sha256=request_sha256)
     if operation not in {"verify", "selection", "append", "edit", "delete", "repair", "batch"}:
         _refusal("Unknown evaluation operation", code="invalid_operation_admission")
     if type(request_sha256) is not str or fullmatch(r"[0-9a-f]{64}", request_sha256) is None:
@@ -178,6 +180,59 @@ def issue_group_edit_permit(admission, candidate, *, request_sha256, expires):
         _refusal("Group publication needs its distinct owned candidate for the captured part")
     return _register(_permits, PublicationPermit(), _PermitContext(context, ref(candidate),
         None, None, "owned_group_edit", expires, None))
+
+
+def _require_organized_recipe_policy(context):
+    from backend.api.part_group_organization_gate import require_group_edit_enabled
+
+    if context.policy_generation != policy.resolve(context.doc_id).generation:
+        _refusal("Construction policy changed before recipe publication", code="policy_changed")
+    policy.require_compatibility(context.doc_id, "owned_recipe_rebuild")
+    require_group_edit_enabled()
+
+
+def admit_organized_recipe(doc_id, session, *, operation, request_sha256):
+    """Admit the two owned recipe hosts; this never grants generic edit authority."""
+    from backend.api.part_group_organization_gate import require_group_edit_enabled
+
+    effective = policy.require_compatibility(doc_id, "owned_recipe_rebuild")
+    require_group_edit_enabled()
+    if type(operation) is not str or operation not in {"repair", "deformation_preview"}:
+        _refusal("Unknown owned recipe operation", code="invalid_operation_admission")
+    if type(request_sha256) is not str or fullmatch(r"[0-9a-f]{64}", request_sha256) is None:
+        raise ValueError("Admission requires the canonical bounded request digest")
+    if (not _group_source(session.design, operation)
+            or type(session.revision) is not int or session.revision < 0):
+        _refusal("Recipe admission needs its organized source", code="invalid_evaluation_context")
+    context = AdmissionContext(doc_id, session.identity, ref(session.design), session.revision,
+        effective.generation, operation, request_sha256, "organized_recipe_v1")
+    return _register(_admissions, EvaluationAdmission(), context)
+
+
+def issue_organized_recipe_permit(admission, candidate, *, request_sha256, expires, cancelled=None):
+    """Bind the candidate after the owned host completes its full recipe rebuild.
+
+    Preview retains its complete source proof. Repair uses its checked explicit
+    proposal and independently rebuilt candidate. Neither accepts client geometry
+    or treats an ordinary group edit as proof of an entire recipe.
+    """
+    context = admission_context(admission)
+    if (context is None or context.scope_tag != "organized_recipe_v1"
+            or context.operation not in {"repair", "deformation_preview"}):
+        _refusal("Recipe publication requires its original owned host admission")
+    _require_organized_recipe_policy(context)
+    if type(request_sha256) is not str or request_sha256 != context.request_sha256:
+        _refusal("The recipe request does not match its host admission")
+    now = monotonic()
+    if type(expires) not in {int, float} or not now < expires <= now + MAX_LIFETIME:
+        _refusal("The recipe candidate has expired", code="publication_expired")
+    if cancelled is not None and (not isinstance(cancelled, Event) or cancelled.is_set()):
+        _refusal("The recipe candidate was cancelled", code="cancelled")
+    source = context.source()
+    if not _group_source(source, context.operation) or not _group_candidate(source, candidate):
+        _refusal("Recipe publication needs its distinct owned candidate for the captured part")
+    return _register(_permits, PublicationPermit(), _PermitContext(context, ref(candidate),
+        None, None, "owned_recipe_rebuild", expires, cancelled))
 
 
 def issue_batch_permit(admission, candidate, *, request_sha256, authoring_sha256, recipe_sha256, expires,
@@ -322,6 +377,12 @@ def check_publication(permit, *, doc_id, session, candidate):
                 or not _group_source(session.design, context.admission.operation)
                 or not _group_candidate(session.design, candidate)):
             _refusal("Group publication lost its checked source or candidate binding")
+    elif context.admission.scope_tag == "organized_recipe_v1":
+        if (context.evidence_class != "owned_recipe_rebuild"
+                or context.admission.operation not in {"repair", "deformation_preview"}
+                or not _group_source(session.design, context.admission.operation)
+                or not _group_candidate(session.design, candidate)):
+            _refusal("Recipe publication lost its checked source or candidate binding")
     elif context.admission.scope_tag == "registered_batch_v1":
         from backend.api.part_batch_publication_scope import admit_batch_source
         from backend.core.part_command_errors import CommandContractError
@@ -361,6 +422,8 @@ def check_liveness(context):
     """Repeat after undo preparation, immediately before assignment."""
     if context.admission.scope_tag == "group_organization_v1":
         _require_group_policy(context.admission)
+    elif context.admission.scope_tag == "organized_recipe_v1":
+        _require_organized_recipe_policy(context.admission)
     if monotonic() >= context.expires:
         _refusal("The publication permit expired", code="publication_expired")
     if context.cancelled is not None and context.cancelled.is_set():

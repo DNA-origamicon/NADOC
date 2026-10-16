@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest'
 const f = vi.hoisted(() => ({ history: { open: vi.fn(), active: vi.fn(() => false), onToolExit: vi.fn(), dispose: vi.fn() },
-  create: vi.fn(), deleteDeformation: vi.fn(), seekFeatures: vi.fn(), start: vi.fn(), listeners: new Set() }))
+  create: vi.fn(), deleteDeformation: vi.fn(), seekFeatures: vi.fn(), start: vi.fn(), scope: vi.fn(), listeners: new Set() }))
 vi.mock('./deformation_history_editor.js', () => ({ createDeformationHistoryEditor: (...args) => { f.create(...args); return f.history } }))
 vi.mock('../api/client.js', () => ({ deleteDeformation: f.deleteDeformation, seekFeatures: f.seekFeatures }))
 vi.mock('../state/store.js', () => ({ store: { getState: () => ({ currentDesign: { id: 'part', feature_log: [] } }),
@@ -8,7 +8,7 @@ vi.mock('../state/store.js', () => ({ store: { getState: () => ({ currentDesign:
 vi.mock('../scene/deformation_editor.js', () => ({ initDeformationEditor: vi.fn(), previewDeformation: vi.fn(), confirmDeformation: vi.fn(),
   waitForDeformationIdle: vi.fn(), discardDeformationPreview: vi.fn(), exitTool: vi.fn(), getPlanes: () => ({}), repositionPlane: vi.fn(),
   getState: () => 'IDLE', getToolType: () => null, startToolForEdit: f.start, markEditCommitted: vi.fn(),
-  startToolForHistory: vi.fn(), finishHistoryTool: vi.fn(), STATES: { IDLE: 'IDLE' } }))
+  startToolForHistory: vi.fn(), finishHistoryTool: vi.fn(), updateHistoryScope: f.scope, STATES: { IDLE: 'IDLE' } }))
 vi.mock('../ui/bend_twist_popup.js', () => ({ showPickingPopup: vi.fn(), initBendTwistPopup: vi.fn(), openPopup: vi.fn(), closePopup: vi.fn(),
   setPlanePositions: vi.fn(), setHistoryPopupStatus: vi.fn() }))
 import { initFeatureEditor } from './feature_editor.js'
@@ -27,5 +27,15 @@ it('qualified history dispatch uses the stable private editor and never peels or
 it('keeps ordinary rollout gated pending desktop and latency qualification', () => {
   const owner = initFeatureEditor({ showToast: vi.fn() })
   expect(f.create).not.toHaveBeenCalled()
+  owner.dispose(); expect(f.listeners.size).toBe(0)
+})
+
+
+it('wires server-selected private guide scope without a canonical update path', () => {
+  const owner = initFeatureEditor({ isolatedHistoryEnabled: true, showToast: vi.fn() })
+  const scope = { id: 'bend', affected_helix_ids: ['h'], target_ranges: null }
+  f.create.mock.lastCall[0].editor.updateHistoryScope(scope)
+  expect(f.scope).toHaveBeenCalledWith(scope)
+  expect(f.deleteDeformation).not.toHaveBeenCalled(); expect(f.seekFeatures).not.toHaveBeenCalled()
   owner.dispose(); expect(f.listeners.size).toBe(0)
 })

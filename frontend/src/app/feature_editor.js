@@ -9,7 +9,7 @@ import {
   getState as getDeformState, getToolType as getDeformToolType,
   startToolForEdit as startDeformToolForEdit,
   markEditCommitted as markDeformEditCommitted,
-  startToolForHistory, finishHistoryTool,
+  startToolForHistory, finishHistoryTool, updateHistoryScope,
   STATES as DEFORM_STATES,
 } from '../scene/deformation_editor.js'
 import {
@@ -31,7 +31,7 @@ export function initFeatureEditor({
   let _editContext = null  // { priorCursor, pendingParams }
   const history = isolatedHistoryEnabled ? createDeformationHistoryEditor({
     store, api, scene, camera, designRenderer, showToast,
-    editor: { startToolForHistory, finishHistoryTool, repositionPlane: repositionDeformPlane },
+    editor: { startToolForHistory, finishHistoryTool, updateHistoryScope, repositionPlane: repositionDeformPlane },
     popup: { openPopup: openDeformPopup, closePopup: closeDeformPopup, setHistoryPopupStatus },
     setMode: value => { const node = document.getElementById('mode-indicator'); if (node) node.textContent = value ?? 'NADOC · WORKSPACE' },
   }) : null

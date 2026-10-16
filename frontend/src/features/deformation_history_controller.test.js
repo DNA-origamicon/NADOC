@@ -16,7 +16,7 @@ const patch = curvature => ({ params: { kind: 'bend', curvature_deg_per_bp: curv
 function packet(body, extra = {}) {
   return { ...body, doc_id: 'doc', lease_id: LEASE, deformation_id: 'operation',
     request_sequence: body.request_sequence ?? 0, remaining_seconds: 60,
-    projection_version: 1, stage: 'feature', source_equivalence_checked: false,
+    projection_version: 2, stage: 'feature', source_equivalence_checked: false,
     downstream_evaluated: false, physical_validity: false,
     before: { pane: 'before' }, candidate: { pane: 'candidate' },
     control_context: { selected_operation: structuredClone(operation) }, feasibility: { status: 'ok' }, ...extra }

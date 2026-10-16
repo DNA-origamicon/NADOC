@@ -49,13 +49,70 @@ describe('closed DNA comparison transport', () => {
     expect(records.every(n => n.is_reference)).toBe(true)
   })
 
-  it('requires frozen display provenance to identify the exact bounded domain', () => {
+  it('keeps frozen addresses historical while validating actual live geometry owners', () => {
     const value = dnaComponent()
     value.display_topology.deformations = [{ id: 'd', type: 'bend', affected_helix_ids: ['h'],
       plane_a_bp: 0, plane_b_bp: 1, params: { curvature_deg_per_bp: 2 },
-      target_ranges: [{ helix_id: 'h', start_bp: 0, end_bp: 1, direction: 'FORWARD', strand_id: 's', domain_index: 0 }] }]
+      target_ranges: [{ helix_id: 'h', start_bp: 0, end_bp: 7, direction: 'FORWARD', strand_id: 'old-strand', domain_index: 9 }] }]
     expect(validateDnaComparisonComponent(value)).toBe(value)
-    value.display_topology.deformations[0].target_ranges[0].end_bp = 2
-    expect(() => validateDnaComparisonComponent(value)).toThrow(/owner/)
+    value.helix_axes[0].segments[0].domain_ids[0].domain_index = 9
+    expect(() => validateDnaComparisonComponent(value)).toThrow(/domain/)
   })
+
+  it.each([
+    ['missing helix', r => { r.helix_id = 'missing' }],
+    ['one-sided address', r => { r.strand_id = null }],
+    ['missing ordinal', r => { r.domain_index = null }],
+    ['boolean ordinal', r => { r.domain_index = true }],
+    ['negative ordinal', r => { r.domain_index = -1 }],
+    ['unbounded interval', r => { r.end_bp = 1000001 }],
+    ['unordered range', r => { r.start_bp = 8 }],
+  ])('refuses malformed historical frozen provenance: %s', (_name, mutate) => {
+    const value = dnaComponent(), range = { helix_id: 'h', start_bp: 0, end_bp: 7, direction: 'REVERSE', strand_id: 'old', domain_index: 9 }
+    value.display_topology.deformations = [{ id: 'd', type: 'twist', affected_helix_ids: ['h'],
+      plane_a_bp: 0, plane_b_bp: 1, params: {}, target_ranges: [range] }]
+    mutate(range); expect(() => validateDnaComparisonComponent(value)).toThrow()
+  })
+
+  it('carries organization membership independently from same-named placement owners', () => {
+    const value = dnaComponent(), before = structuredClone(value)
+    value.display_topology.cluster_transforms = [{ id: 'same', name: 'Placement', is_default: false,
+      helix_ids: ['h'], domain_ids: [], color: null, auto_created: false }]
+    value.display_topology.group_organization = { version: 1, groups: [{ id: 'same', name: 'Organization',
+      helix_ids: [], domain_ids: [{ strand_id: 's', domain_index: 0 }], color: '#123456', opacity: .5,
+      is_default: false, auto_created: false }] }
+    expect(validateDnaComparisonComponent(value)).toBe(value)
+    expect(value.nucleotides).toEqual(before.nucleotides)
+    expect(value.helix_axes).toEqual(before.helix_axes)
+    value.display_topology.group_organization.groups[0].domain_ids[0].domain_index = 9
+    expect(() => validateDnaComparisonComponent(value)).toThrow(/domain/)
+  })
+
+  it.each([
+    ['version', org => { org.version = true }],
+    ['pose', org => { org.groups[0].translation = [0, 0, 0] }],
+    ['unknown owner', org => { org.groups[0].helix_ids = ['missing'] }],
+    ['duplicate identity', org => { org.groups.push({ ...org.groups[0] }) }],
+    ['opacity', org => { org.groups[0].opacity = 2 }],
+    ['duplicate member', org => { org.groups[0].helix_ids = ['h', 'h'] }],
+  ])('refuses unsupported organization %s', (_name, mutate) => {
+    const value = dnaComponent()
+    value.display_topology.group_organization = { version: 1, groups: [{ id: 'org', name: 'Arm', helix_ids: ['h'],
+      domain_ids: [], color: null, opacity: 1, is_default: false, auto_created: false }] }
+    mutate(value.display_topology.group_organization)
+    expect(() => validateDnaComparisonComponent(value)).toThrow()
+  })
+})
+
+
+it('charges organization groups and membership occurrences against the shared selector budget', () => {
+  const value = dnaComponent(), group = { id: 'g'.repeat(512), name: 'Arm', helix_ids: ['h'], domain_ids: [],
+    color: null, opacity: 1, is_default: false, auto_created: false }
+  value.display_topology.group_organization = { version: 1, groups: [group] }
+  expect(validateDnaComparisonComponent(value)).toBe(value)
+  value.display_topology.group_organization.groups = Array.from({ length: 256 }, (_, i) => ({ ...group, id: `g${i}` }))
+  expect(validateDnaComparisonComponent(value)).toBe(value)
+  value.display_topology.cluster_transforms = [{ id: 'p', name: 'Placement', helix_ids: ['h'], domain_ids: [],
+    color: null, is_default: false, auto_created: false }]
+  expect(() => validateDnaComparisonComponent(value)).toThrow(/selector allowance/)
 })

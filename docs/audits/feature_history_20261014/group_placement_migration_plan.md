@@ -1,6 +1,6 @@
 # Group organization and placement: finite migration plan
 
-Architecture proposal, October 16, 2026; source baseline `3aa2529a`. The U6–U10 status
+Architecture proposal, October 16, 2026; source baseline `3aa2529a`. The U6–U11 status
 below records implementation after that proposal. FH-18 remains open. The
 overhaul count remains **18/38 complete**, with **11 core and 9 parked milestones
 remaining**. This plan and its implementation batches earn no separate milestone
@@ -421,6 +421,49 @@ No public Ctrl-Z/app qualification or rollout is implied. Metadata-only shift
 tracking at 500 domains measured 40.771 ms median and 88.415 ms maximum; complete
 transaction/display acceptance remains open. FH-18 is still open at checkpoint 8,
 with the same five batches and fixed exit: **18/38; +0 completed, +0 total**.
+
+### U11: named selection preview, repair and historical display
+
+The existing private bend/twist editor admits the four organization commands in
+its independently rebuilt prefix. Pure named selectors can change through a
+`targets` patch; mixed/primitive scopes stay protected. The native builder freezes
+the resulting intervals and affected helices. Numerical `cluster_ids` remain
+unchanged placement context. Controls-only evaluation also returns the resolved
+scope, so private plane guides follow the same result without a client resolver.
+
+Repair exposes only existing `targets[i].id` inputs of coherent typed bend/twist
+rows. Its picker builds one bounded prefix index, excluding invalid, empty or
+already-selected groups. The saved proposal uses exact old-value expectations;
+the normal repair evaluator rebuilds the complete candidate from inputs. A closed
+native `Direction` capture omission is fixed without admitting arbitrary enums.
+
+The owned preview Apply and saved-repair commit use the same opaque publication
+registry under a distinct `organized_recipe_v1` scope and `owned_recipe_rebuild`
+evidence. Their exact source/session/revision/policy/request/candidate checks,
+expiry, cancellation, failure rollback and one undo remain. Generic writes,
+serialized authority claims and unrelated permits remain refused. The host-only
+organization switch and public preview HTTP gate both remain disabled.
+
+DNA comparison component v3 and preview component/envelope v2 carry closed group
+metadata and interpret frozen strand/domain addresses as historical provenance.
+Native geometry consumes the helix/direction/interval; current topology members,
+axes and named group dependencies remain live. No prior operation is re-resolved
+against later membership. Scoped native axis samples are preserved in both views.
+Organization counts share the existing 512-selector limit, separately from the
+64 numerical-operation allowance. Capture preflight does no group serialization;
+full scalar schema validation occurs on bounded owned input outside the lock.
+
+[U11 evidence](validation_named_deformation_lifecycle.json) records pure/native,
+HTTP/job/permit and Python-to-actual-Three.js parity checks. New named controls
+preserve placement context and update private guides even with geometry hidden.
+Existing renderer color authority is unchanged; visible Groups/Placements remains
+separate D work. Actual desktop interaction and complete latency acceptance remain
+MV-48/FH-27. Tiny named feedback medians are 2.019 ms controls-only and 20.770 ms
+with geometry; 500 empty-group preflight is 4.197 ms median versus 0.019 ms legacy.
+These omit HTTP/publication/rendering and do not qualify desktop latency.
+Remaining generated consumers, new-group movement and rollout are
+still within the fixed FH-18 exit. **Checkpoint 9; task growth flagged;
+18/38 complete; +0 completed, +0 total.**
 
 ## Finite acceptance matrix
 

@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from backend.api.part_proof_commands import PROOF_MINOR_KINDS
 from backend.core.part_command_errors import CommandContractError
-from backend.core.models import ClusterCreateLogEntry
+from backend.core.models import ClusterCreateLogEntry, DeformationLogEntry
 from backend.core.part_repair_capture import _Copier
 from backend.core.part_repair_inputs import RepairIdentity
 from backend.core.part_repair_expectations import encode_expected_old
@@ -53,7 +53,7 @@ def _capture(source, selection):
         if entry.id != selection.feature_id:
             continue
         if selection.child_id is None:
-            if entry.feature_type != "snapshot" and type(entry) is not ClusterCreateLogEntry:
+            if entry.feature_type != "snapshot" and type(entry) not in {ClusterCreateLogEntry, DeformationLogEntry}:
                 _error("unsupported_repair_target", "Select a snapshot, explicit routing child, or grouping upgrade")
             selected = entry
         else:
@@ -67,6 +67,8 @@ def _capture(source, selection):
         # Preserve the complete typed definition; recognition, serialization
         # and its exact expectation digest belong outside the source lock.
         return "cluster_create", copier.clone(selected)
+    if selection.child_id is None and type(selected) is DeformationLogEntry:
+        return "deformation", copier.clone(selected)
     kind = getattr(selected, "op_kind", None) or getattr(selected, "op_subtype", None)
     if selection.child_id is not None:
         if kind not in PROOF_MINOR_KINDS:
@@ -99,6 +101,16 @@ def describe_inputs(kind, params):
         return {**result, "definition_supported": True, "inputs_valid": True,
                 "upgrades": [{"label": "Preserve empty group owners (v2)", "action": action}]}
 
+    if kind == "deformation":
+        from backend.core.part_deformation_repair import require_named_entry
+        from backend.core.part_overlay_commands import command_input
+
+        try:
+            require_named_entry(params)
+            params = command_input(params)[1]
+        except CommandContractError as error:
+            return unsupported(error.code, str(error)[:512])
+
     if type(params) is not dict or "_generated_scope" in params:
         return unsupported("unsupported_repair_inputs", "Generated scopes require a separate input editor")
     values = {key: value for key, value in params.items() if key != "_generator"}
@@ -121,13 +133,18 @@ def describe_inputs(kind, params):
 
         def reference(path, label):
             slot = reference_slot(kind, values, path)
-            old = values[path[0]] if len(path) == 1 else values[path[0]][path[1]]
+            old = values
+            for token in path:
+                old = old[token]
             fields.append({"parameter_path": path, "expected_old": old, "label": label,
                            "expected_old_json": encode_expected_old(old),
                            "input_type": "reference", "reference_selection": {
                                "resource_kind": slot.resource_kind, "max_candidates": 100}})
 
-        if kind in {"nanoparticle-create", "nanoparticle-patch", "nanoparticle-delete"} and not {
+        if kind == "deformation":
+            for index in range(len(values["targets"])):
+                reference(["targets", index, "id"], f"Organizational group {index + 1}")
+        elif kind in {"nanoparticle-create", "nanoparticle-patch", "nanoparticle-delete"} and not {
                 "coating_version", "thiol_version"}.intersection(values):
             from backend.api.part_nanoparticle_commands import parse_command
             if executable:

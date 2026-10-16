@@ -14,7 +14,45 @@ def can_edit_groups(operation):
     return operation.targets is None and operation.target_ranges is None
 
 
+def can_edit_named_groups(operation):
+    """Schema-only eligibility; missing named identities remain repairable.
+
+    Membership and the numerical placement context are deliberately not read.
+    The source-owned edit/replay boundary resolves these inputs on its prefix.
+    """
+    from backend.core.part_group_selection import target_references
+    from backend.core.part_operation_input import MAX_OPERATION_NODES
+
+    targets = operation.targets
+    if type(targets) is not list or not 0 < len(targets) <= MAX_OPERATION_NODES:
+        return False
+    try:
+        target_references(targets)
+    except CommandContractError:
+        return False
+    return all(target["kind"] == "part_group" for target in targets)
+
+
+def _named_edit(prefix, original, proposed):
+    if not can_edit_named_groups(original) or not can_edit_named_groups(proposed):
+        raise CommandContractError("Only existing pure named-group selections can be retargeted",
+                                   code="protected_deformation_selection")
+    if proposed.cluster_ids != original.cluster_ids:
+        raise CommandContractError("Named selection cannot change numerical placement context",
+                                   code="protected_deformation_selection")
+    if prefix is None:
+        raise CommandContractError("Changing named groups requires the owned feature-stage prefix",
+                                   code="missing_deformation_prefix")
+    from backend.core.part_group_selection import resolve_deformation_targets
+
+    ranges = resolve_deformation_targets(prefix, proposed.targets)
+    return proposed.model_copy(update={"target_ranges": ranges,
+                                       "affected_helix_ids": sorted({item.helix_id for item in ranges})})
+
+
 def resolve_group_edit(prefix, original, proposed, patch):
+    if "targets" in patch:
+        proposed = _named_edit(prefix, original, proposed)
     if "cluster_ids" not in patch:
         return proposed
     identities = patch["cluster_ids"]

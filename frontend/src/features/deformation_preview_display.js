@@ -1,8 +1,8 @@
 /** Closed feature-stage display inputs. This validates; it never constructs a Design. */
 import { fail, finite, integer, text, shape, vector, list, unique } from './part_comparison_validation.js'
-import { validateDeformationPreviewComponent } from './part_dna_comparison_model.js'
+import { validateDeformationPreviewComponent, validateFrozenDeformationRange } from './part_dna_comparison_model.js'
 
-const FLAGS = ['projection_version', 'stage', 'source_equivalence_checked', 'downstream_evaluated', 'physical_validity', 'feasibility']
+const FLAGS = ['projection_version', 'stage', 'source_equivalence_checked', 'downstream_evaluated', 'physical_validity', 'feasibility', 'selected_scope']
 const ENVELOPE = ['preview_id', 'expected_design_id', 'expected_revision', 'feature_id', 'lease_id', 'doc_id', 'deformation_id', 'request_sequence', 'remaining_seconds']
 const OP_FIELDS = ['id', 'type', 'targets', 'target_ranges', 'plane_a_bp', 'plane_b_bp', 'affected_helix_ids', 'cluster_ids', 'params']
 const PROVENANCE = ['id', 'type', 'target_ranges', 'plane_a_bp', 'plane_b_bp', 'affected_helix_ids']
@@ -48,21 +48,26 @@ function feasibility(value, string) {
   string(value.message)
 }
 
-function targets(values, strands, groups) {
+function targets(values, strands, placements, organization, historical) {
   if (values === null) return
   list(values, 512)
   if (!values.length) fail('empty deformation target selection')
+  const named = new Set()
   for (const value of values) {
     if (value?.kind === 'domain') {
       const camel = Object.hasOwn(value, 'strandId') || Object.hasOwn(value, 'domainIndex')
       shape(value, camel ? ['kind', 'strandId', 'domainIndex'] : ['kind', 'strand_id', 'domain_index'])
       const id = camel ? value.strandId : value.strand_id, index = camel ? value.domainIndex : value.domain_index
       text(id)
-      if (!integer(index) || !strands.get(id)?.domains[index]) fail('unresolved deformation target domain')
+      if (!integer(index) || (!historical && !strands.get(id)?.domains[index])) fail('unresolved deformation target domain')
     } else {
-      shape(value, ['kind', 'id']); text(value.id)
-      const owners = value.kind === 'strand' ? strands : value.kind === 'cluster' ? groups : null
-      if (!owners?.has(value.id)) fail('unresolved deformation target owner')
+      shape(value, ['kind', 'id']); text(value.id, value.kind === 'part_group' ? 512 : 256)
+      const owners = value.kind === 'strand' ? strands : value.kind === 'cluster' ? placements : value.kind === 'part_group' ? organization : null
+      if (!owners || ((!historical || value.kind === 'part_group') && !owners.has(value.id))) fail('unresolved deformation target owner')
+      if (value.kind === 'part_group') {
+        if (named.has(value.id)) fail('ambiguous named deformation target')
+        named.add(value.id)
+      }
     }
   }
 }
@@ -109,23 +114,23 @@ function parameters(op, projected, priorIds, string) {
   } else fail('unsupported deformation control operation')
 }
 
-function operation(op, projected, strands, groups, priorIds, string) {
+function operation(op, projected, strands, groups, organization, priorIds, string, historical = false) {
   shape(op, OP_FIELDS)
   fields(op, projected, PROVENANCE)
   if (op.plane_a_bp > op.plane_b_bp || (op.type !== 'sweep' && op.plane_a_bp === op.plane_b_bp)) fail('invalid deformation control window')
-  targets(op.targets, strands, groups); referenceIds(op.cluster_ids, groups)
+  targets(op.targets, strands, groups, organization, historical && op.target_ranges !== null); referenceIds(op.cluster_ids, groups)
   parameters(op, projected.params, priorIds, string)
 }
 
 function controls(value, before, candidate, feedback, string) {
-  shape(value, ['helices', 'strands', 'cluster_transforms', 'deformations', 'forced_ligations', 'selected_operation', 'capabilities'])
+  shape(value, ['helices', 'strands', 'cluster_transforms', 'group_organization', 'deformations', 'forced_ligations', 'selected_operation', 'capabilities'])
   const prefix = before.display_topology, output = candidate.display_topology
   for (const key of ['helices', 'strands', 'cluster_transforms', 'deformations', 'forced_ligations']) {
     list(value[key], prefix[key].length)
     if (value[key].length !== prefix[key].length) fail('incomplete fixed-prefix controls')
     unique(value[key])
   }
-  for (const key of ['helices', 'strands', 'overhangs', 'cluster_transforms', 'crossovers', 'forced_ligations']) same(output[key], prefix[key])
+  for (const key of ['helices', 'strands', 'overhangs', 'cluster_transforms', 'group_organization', 'crossovers', 'forced_ligations']) same(output[key], prefix[key])
   for (let i = 0; i < value.helices.length; i++) {
     shape(value.helices[i], HELIX); fields(value.helices[i], prefix.helices[i], HELIX)
   }
@@ -134,6 +139,8 @@ function controls(value, before, candidate, feedback, string) {
     const strand = value.strands[i]; shape(strand, [...STRAND, 'notes']); fields(strand, prefix.strands[i], STRAND)
     if (strand.notes !== null) string(strand.notes)
   }
+  same(value.group_organization, prefix.group_organization)
+  const organization = new Map((prefix.group_organization?.groups ?? []).map(group => [group.id, group]))
   const groups = new Map(value.cluster_transforms.map(item => [item.id, item]))
   for (let i = 0; i < value.cluster_transforms.length; i++) {
     const group = value.cluster_transforms[i]
@@ -152,14 +159,16 @@ function controls(value, before, candidate, feedback, string) {
   const priorIds = new Set()
   for (let i = 0; i < value.deformations.length; i++) {
     same(output.deformations[i], prefix.deformations[i])
-    operation(value.deformations[i], prefix.deformations[i], strands, groups, priorIds, string)
+    operation(value.deformations[i], prefix.deformations[i], strands, groups, organization, priorIds, string, true)
     priorIds.add(value.deformations[i].id)
   }
   const op = value.selected_operation
-  operation(op, output.deformations.at(-1), strands, groups, priorIds, string)
+  operation(op, output.deformations.at(-1), strands, groups, organization, priorIds, string)
   if (priorIds.has(op.id) || op.type !== feedback.op_type) fail('ambiguous selected deformation control')
   shape(value.capabilities, ['change_targets', 'change_clusters', 'native_feasibility', 'polymer_circle_inputs'])
-  if (value.capabilities.change_targets !== false || value.capabilities.change_clusters !== (op.targets === null && op.target_ranges === null)
+  const named = Array.isArray(op.targets) && op.targets.length > 0 && op.targets.every(t => t.kind === 'part_group')
+    && new Set(op.targets.map(t => t.id)).size === op.targets.length
+  if (value.capabilities.change_targets !== named || value.capabilities.change_clusters !== (op.targets === null && op.target_ranges === null)
       || value.capabilities.native_feasibility !== true || value.capabilities.polymer_circle_inputs !== true) fail('unsupported deformation control capability')
 }
 
@@ -169,7 +178,7 @@ export function validateDeformationPreviewDisplay(value, { prepare, requireEnvel
   const hasEnvelope = ENVELOPE.some(key => Object.hasOwn(value ?? {}, key))
   if (requireEnvelope && !hasEnvelope) fail('missing deformation host envelope')
   shape(value, [...FLAGS, 'candidate', ...(prepare ? ['before', 'control_context'] : []), ...(hasEnvelope ? ENVELOPE : [])])
-  if (value.projection_version !== 1 || value.stage !== 'feature' || value.source_equivalence_checked !== false
+  if (value.projection_version !== 2 || value.stage !== 'feature' || value.source_equivalence_checked !== false
       || value.downstream_evaluated !== false || value.physical_validity !== false) fail('unsupported deformation display claim')
   if (hasEnvelope) {
     for (const key of ['preview_id', 'expected_design_id', 'feature_id', 'lease_id', 'deformation_id']) text(value[key])
@@ -179,13 +188,33 @@ export function validateDeformationPreviewDisplay(value, { prepare, requireEnvel
   }
   const string = textBudget()
   feasibility(value.feasibility, string)
+  const scope = value.selected_scope
+  shape(scope, ['id', 'affected_helix_ids', 'target_ranges']); text(scope.id)
+  list(scope.affected_helix_ids, 512)
+  const helixIds = new Set()
+  for (const id of scope.affected_helix_ids) {
+    text(id)
+    if (helixIds.has(id)) fail('ambiguous selected scope helix')
+    helixIds.add(id)
+  }
+  if (scope.target_ranges !== null) {
+    list(scope.target_ranges, 512 - scope.affected_helix_ids.length)
+    for (const range of scope.target_ranges) validateFrozenDeformationRange(range)
+  }
+  if (hasEnvelope && scope.id !== value.deformation_id) fail('wrong selected scope identity')
   if (prepare) validateDeformationPreviewComponent(value.before)
   if (value.candidate !== null) {
     validateDeformationPreviewComponent(value.candidate)
     const selected = value.candidate.display_topology.deformations.at(-1)
+    if (selected) fields(scope, selected, ['id', 'affected_helix_ids', 'target_ranges'])
     if (!selected || selected.type !== value.feasibility.op_type
         || (hasEnvelope && selected.id !== value.deformation_id)) fail('candidate does not identify the selected deformation')
   } else if (prepare) fail('missing initial deformation display')
+  if (prepare) {
+    const helices = new Set(value.before.display_topology.helices.map(h => h.id))
+    referenceIds(scope.affected_helix_ids, helices)
+    for (const range of scope.target_ranges ?? []) validateFrozenDeformationRange(range, helices)
+  }
   if (prepare) controls(value.control_context, value.before, value.candidate, value.feasibility, string)
   return value
 }

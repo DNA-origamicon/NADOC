@@ -322,6 +322,10 @@ def commit(identity):
                     request_sha256=job.request_sha256, authoring_sha256=expected_authoring,
                     recipe_sha256=expected_recipe, expires=job.created + RESULT_TTL,
                     cancelled=job.cancelled, source_status=job.result.get("source_assessment", {}).get("status"))
+            elif (context := permits.admission_context(job.admission)) is not None and context.scope_tag == "organized_recipe_v1":
+                permit = permits.issue_organized_recipe_permit(job.admission, candidate,
+                    request_sha256=job.request_sha256, expires=job.created + RESULT_TTL,
+                    cancelled=job.cancelled)
             job.committed_revision = state.set_design(candidate, expected_revision=job.revision, expected_source=source,
                 expected_session_identity=job.session_identity, expected_policy_generation=job.policy_generation,
                 publication_permit=permit)

@@ -15,7 +15,7 @@ afterEach(() => {
   popup.closePopup(); popup.setDeformationSelectionUI(null)
   store.setState(previous); document.body.innerHTML = ''; vi.useRealTimers(); vi.clearAllMocks()
 })
-function setup({ clusters = 2, targets = null } = {}) {
+function setup({ clusters = 2, targets = null, named = false, placementIds = [] } = {}) {
   document.body.innerHTML = '<div id="deform-panel" style="display:none"><div class="def-fields"></div></div>'
   const panel = document.querySelector('.def-fields')
   for (const name of ['panel-title', 'twist-controls', 'bend-controls', 'twist-value', 'twist-value-label', 'twist-unit',
@@ -34,16 +34,17 @@ function setup({ clusters = 2, targets = null } = {}) {
     strands: [], forced_ligations: [] } })
   const creation = { onPreview: vi.fn(), onConfirm: vi.fn(), onCancel: vi.fn(), onPlaneChanged: vi.fn() }
   popup.initBendTwistPopup(creation); popup.setDeformationSelectionUI(null)
-  const operation = { id: 'op', type: 'bend', plane_a_bp: 0, plane_b_bp: 100, params, cluster_ids: [], targets }
+  const operation = { id: 'op', type: 'bend', plane_a_bp: 0, plane_b_bp: 100, params, cluster_ids: placementIds, targets }
   const design = { id: 'prefix', helices: [], deformations: [],
     strands: [{ id: 'prefix-strand', notes: 'polymerization connector', domains: [{ helix_id: 'h', start_bp: 0, end_bp: 90 }] }],
     forced_ligations: [{ is_periodic_seam: true, three_prime_bp: 0, five_prime_bp: 90 }],
     cluster_transforms: Array.from({ length: clusters }, (_, i) => ({ id: `prefix-${i}`, name: `Prefix ${i}`, helix_ids: ['h'], domain_ids: [] })) }
-  const session = { design, operation, capabilities: { change_clusters: targets === null, change_targets: false },
+  if (named) design.group_organization = { version: 1, groups: ['prefix-0', 'other-org'].map(id => ({ id, name: `Organization ${id}`, helix_ids: ['h'], domain_ids: [] })) }
+  const session = { design, operation, capabilities: { change_clusters: targets === null, change_targets: named && targets.every(t => t.kind === 'part_group') },
     onChange: vi.fn(async () => ({ feasibility: { status: 'ok' } })), onApply: vi.fn(async () => false),
     onCancel: vi.fn(async () => false), onPlaneChanged: vi.fn(),
     onResolvePublication: vi.fn(async () => false), onRefreshCommitted: vi.fn(async () => false) }
-  popup.openPopup('bend', 0, 100, params, [], true, session)
+  popup.openPopup('bend', 0, 100, params, placementIds, true, session)
   return { session, creation }
 }
 const node = name => document.getElementById(`def-${name}`)
@@ -195,4 +196,59 @@ it('a delayed history group update cannot preview after its popup was closed', a
   expect(f.session.onChange).not.toHaveBeenCalled()
   expect(f.creation.onPreview).not.toHaveBeenCalled()
   expect(validateDeformation).not.toHaveBeenCalled()
+})
+
+it('edits named group selection privately without replacing independent placement IDs', async () => {
+  const f = setup({ named: true, targets: [{ kind: 'part_group', id: 'prefix-0' }], placementIds: ['prefix-0'] })
+  const canonical = store.getState().currentDesign, original = structuredClone(f.session.operation)
+  const selection = document.getElementById('def-current-selection')
+  expect(selection.textContent).toContain('Organization prefix-0')
+  expect(selection.textContent).not.toContain('Later group')
+  const current = selection.querySelector('input[value="prefix-0"]'), other = selection.querySelector('input[value="other-org"]')
+  expect(current.checked).toBe(true)
+  other.checked = true; other.dispatchEvent(new Event('change')); await tick()
+  current.checked = false; current.dispatchEvent(new Event('change')); await tick()
+  input('bend-dir', '40'); node('apply-btn').click(); await tick()
+  const patch = f.session.onApply.mock.lastCall[0]
+  expect(patch.targets).toEqual([{ kind: 'part_group', id: 'other-org' }])
+  expect(patch).not.toHaveProperty('cluster_ids')
+  expect(patch).not.toHaveProperty('target_ranges')
+  expect(patch).not.toHaveProperty('affected_helix_ids')
+  expect(patch.params.direction_deg).toBe(40)
+  expect(f.session.operation).toEqual(original)
+  expect(store.getState().currentDesign).toBe(canonical)
+  expect(validateDeformation).not.toHaveBeenCalled()
+  expect(setDeformSessionClusterIds).not.toHaveBeenCalled()
+})
+
+it('restores named selection explicitly after reversal and blocks empty named Apply', async () => {
+  const f = setup({ named: true, targets: [{ kind: 'part_group', id: 'prefix-0' }] })
+  const check = document.querySelector('#def-current-selection input[value="prefix-0"]')
+  check.checked = false; check.dispatchEvent(new Event('change')); await tick()
+  node('apply-btn').click(); await tick()
+  expect(f.session.onApply).not.toHaveBeenCalled()
+  expect(document.getElementById('def-current-selection').textContent).toMatch(/select.*group/i)
+  check.checked = true; check.dispatchEvent(new Event('change')); await tick()
+  node('apply-btn').click(); await tick()
+  expect(f.session.onApply.mock.lastCall[0].targets).toEqual([{ kind: 'part_group', id: 'prefix-0' }])
+})
+
+it('mixed named and primitive scopes remain read-only and preserve placement context', async () => {
+  const f = setup({ named: true, targets: [{ kind: 'part_group', id: 'prefix-0' }, { kind: 'strand', id: 'prefix-strand' }], placementIds: ['prefix-1'] })
+  const selection = document.getElementById('def-current-selection')
+  expect(selection.textContent).toContain('Organization prefix-0')
+  expect(selection.textContent).toContain('prefix-strand')
+  expect(selection.querySelector('input')).toBeNull()
+  node('apply-btn').click(); await tick()
+  expect(f.session.onApply.mock.lastCall[0]).toEqual({})
+})
+
+it('retired named controls cannot dispatch after Cancel or another session opens', async () => {
+  const f = setup({ named: true, targets: [{ kind: 'part_group', id: 'prefix-0' }] })
+  const check = document.querySelector('#def-current-selection input[value="other-org"]')
+  f.session.onCancel.mockResolvedValue(true)
+  node('cancel-btn').click(); await tick()
+  check.checked = true; check.dispatchEvent(new Event('change')); await tick()
+  expect(f.session.onChange).not.toHaveBeenCalled()
+  expect(f.creation.onPreview).not.toHaveBeenCalled()
 })

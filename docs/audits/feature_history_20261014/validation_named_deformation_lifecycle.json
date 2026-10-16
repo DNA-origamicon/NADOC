@@ -1,0 +1,301 @@
+{
+  "checkpoint": "U11 — FH-18 checkpoint 9; named deformation preview, repair and historical display",
+  "source_checkpoint": "e949b2c5",
+  "date": "2026-10-16",
+  "progress": {
+    "baseline": "B1: 17/38 through 2c15e747",
+    "completed": 18,
+    "estimated_total": 38,
+    "remaining": 20,
+    "core_remaining": 11,
+    "parked_remaining": 9,
+    "delta_completed": 0,
+    "delta_total": 0,
+    "fh18_checkpoints": 9,
+    "task_growth_flagged": true,
+    "note": "Named-selection integration within the same B/C batches. Original exit and five finite batches unchanged; no extra completion credit for tests, adapters, DTOs or commits."
+  },
+  "scope": {
+    "implemented": [
+      "Pure named bend/twist targets retarget on an owned independently rebuilt feature prefix. Numerical placement cluster_ids stay unchanged.",
+      "Native selected_scope accompanies geometry-off feedback, updating private plane guides without client resolution or canonical mutation.",
+      "Typed reference repair exposes only existing targets[i].id. One bounded prefix inventory excludes empty, invalid and already-selected candidates; exact proposal expectations remain.",
+      "Distinct organized_recipe_v1 permits bind owned preview Apply and repaired candidate commit. Source/session/revision/policy/request/candidate guards, cancellation/expiry, rollback, one undo and reload/cold proof are exercised.",
+      "DNA comparison component v3 and preview component/envelope v2 carry exact organization and historical frozen source addresses. Native scoped axis samples, current membership and live group dependencies remain checked.",
+      "Exact native Direction enum capture omission fixed (ISSUE-109); arbitrary enum coercion remains refused.",
+      "Obsolete comparison-v2 scoped-axis refusal replaced by exact v3/preview-v2 parity and shared-bound checks. No unrelated legacy pruning."
+    ],
+    "remaining": [
+      "Generated consumers, visible Groups/Placements, new-group movement/frame semantics and public rollout remain in FH-18.",
+      "ISSUE-108 native crossover-growth metadata loss remains open.",
+      "Both organization and preview HTTP public gates remain false. Assembly and machine-specific VR remain deferred; NP/assets remain parked.",
+      "Desktop interaction, larger-design responsiveness and broad backend acceptance remain open."
+    ]
+  },
+  "contracts": {
+    "organization": "Closed GroupOrganization v1, 512-character group IDs; exact current typed membership. Organization group/member occurrences share existing 512 selector cap, separately from 64 numerical operations.",
+    "historical_ranges": "strand_id/domain_index are feature-stage provenance; native geometry consumes current helix identity plus frozen direction and ordered interval. No current-domain containment or ordinal requirement for retained operations. Selected operation inputs resolve on its rebuilt prefix.",
+    "publication": "Owned recipe scope/evidence is distinct from ordinary owned group edits and registered batch composition. No serialized label grants authority, and generic state writes remain closed.",
+    "capture": "Existing 30k nodes/2MB bounds retained. Group preflight does no model_dump under lock; full scalar schema validation happens on privately owned bounded input.",
+    "repair_identity_limit": "The existing repair reference protocol remains 256 characters. Longer valid group IDs display normally but are excluded from replacement candidates; this is an explicit inherited repair transport bound.",
+    "native_math": "No native algorithm, molecular constant, stored numerical pin or geometry golden changed."
+  },
+  "validation": {
+    "red": [
+      {
+        "target": "group deformation comparison",
+        "failed": 6,
+        "passed": 11,
+        "seconds": 2.88
+      },
+      {
+        "target": "named preview",
+        "failed": 22,
+        "passed": 1,
+        "seconds": 3.01
+      },
+      {
+        "target": "named repair",
+        "failed": 18,
+        "passed": 8,
+        "seconds": 2.82
+      },
+      {
+        "target": "frontend first five files",
+        "failed": 24,
+        "passed": 99,
+        "seconds": 3
+      },
+      {
+        "target": "named preview host",
+        "failed": 13,
+        "passed": 1,
+        "seconds": 3.01
+      },
+      {
+        "target": "organized recipe permits",
+        "failed": 22,
+        "passed": 0,
+        "seconds": 2.87
+      },
+      {
+        "target": "always selected_scope",
+        "failed": 3,
+        "passed": 0,
+        "seconds": 2.76
+      },
+      {
+        "target": "no locked serialization and group-ID limit",
+        "failed": 2,
+        "passed": 0,
+        "seconds": 2.63
+      }
+    ],
+    "review_corrections": [
+      "Strict Python parsing rejected canonical JSON Direction strings; strict JSON parsing preserves declared wire form without weakening integer/bool checks.",
+      "Native oracle shared unmodified organization with a caller-owned prefix; freeze expected JSON before deliberate alias-mutation isolation check.",
+      "Repair set_design candidate guard preceded validated permit publication; generic gate now applies only without permit. Forged/absent/unregistered/wrong-candidate handles refuse before snapshot.",
+      "Comparison scoped-axis refusal was obsolete after explicit component version change; replaced with full native parity and unchanged size limits.",
+      "Actual feature_editor composition needed the new guide callback. Legacy global guides retain no extra helix filter when affected IDs are empty and ranges are null."
+    ],
+    "backend": {
+      "matrix_a": {
+        "passed": 610,
+        "failed": 1,
+        "warnings": 18,
+        "seconds": 14.03,
+        "note": "610 other cases passed; the sole obsolete comparison DTO test was replaced and passed the focused rerun. No production edits followed.",
+        "final_rerun": {
+          "target": "tests/test_part_deformation_preview_dto.py::test_comparison_v3_and_preview_v2_preserve_same_scoped_axes_and_limits",
+          "passed": 1,
+          "seconds": 2.74
+        },
+        "targets": [
+          "tests/test_part_dna_comparison.py",
+          "tests/test_group_deformation_comparison.py",
+          "tests/test_part_dna_comparison_integration.py",
+          "tests/test_part_deformation_preview.py",
+          "tests/test_part_deformation_preview_dto.py",
+          "tests/test_part_deformation_preview_sessions.py",
+          "tests/test_named_deformation_preview.py",
+          "tests/test_named_deformation_preview_sessions.py",
+          "tests/test_part_deformation_preview_routes.py",
+          "tests/test_part_deformation_group_retarget.py",
+          "tests/test_organized_recipe_permit.py",
+          "tests/test_part_publication_permit.py",
+          "tests/test_part_publication_state.py",
+          "tests/test_part_publication_jobs.py",
+          "tests/test_group_organization_permits.py",
+          "tests/test_group_organization_public_gate.py",
+          "tests/test_part_evaluation_jobs.py",
+          "tests/test_part_evaluation_capture.py"
+        ]
+      },
+      "matrix_b": {
+        "passed": 356,
+        "failed": 0,
+        "warnings": 1,
+        "seconds": 9.56,
+        "note": "Includes 15 memory-only Python-to-Node renderer cases; real native wire, axes and instance matrices, not browser/GPU.",
+        "targets": [
+          "tests/test_deformation_preview_native_display.py",
+          "tests/test_part_dna_comparison_frontend.py",
+          "tests/test_part_deformation_repair.py",
+          "tests/test_part_deformation_repair_jobs.py",
+          "tests/test_part_recipe_repair.py",
+          "tests/test_part_repair_selection.py",
+          "tests/test_part_repair_input_metadata.py",
+          "tests/test_group_upgrade_draft_lifecycle.py",
+          "tests/test_part_repair_draft_transaction.py",
+          "tests/test_part_repair_capture.py",
+          "tests/test_part_repair_planning.py",
+          "tests/test_part_repair_drafts_api.py",
+          "tests/test_part_repair_draft_evaluation.py",
+          "tests/test_part_repair_document_boundaries.py",
+          "tests/test_part_repair_jobs.py"
+        ]
+      },
+      "new_dossiers": 6,
+      "new_dossier_cases": 124,
+      "distinct_passed": 967
+    },
+    "frontend": {
+      "focused": {
+        "files": 10,
+        "passed": 198,
+        "seconds": 4.16
+      },
+      "full": {
+        "files": 731,
+        "passed": 8601,
+        "skipped": 1,
+        "seconds": 319.13
+      }
+    },
+    "app": "NOT VERIFIED IN APP. Archive is unavailable/unmounted; no bulk/browser scratch fallback. MV-48/FH-27 remain open.",
+    "main_js_delta": 0,
+    "independent_review": "Two final read-only reviews found no blocker: historical/live reference distinction, owned capture, permit facade and final liveness checks, named UI placement context, stale-response and Cancel/Apply lifecycle. Agents ran no suites.",
+    "static": {
+      "changed_python_files": 29,
+      "ruff": "passed",
+      "diff": "passed",
+      "repository_lint": {
+        "passed": false,
+        "unchanged_errors": 5,
+        "note": "Pre-existing F401 in vr_prompts and four CPD tests; zero changed-file findings."
+      },
+      "memory_lint": {
+        "passed": false,
+        "errors": 6,
+        "warnings": 59,
+        "note": "Same pre-existing oversized CPD/VR heads, unindexed exp_predictor and three absent historical artifact links; updated feature head remains150lines."
+      }
+    },
+    "selector": {
+      "command": "just test-smart --dry-run",
+      "changed_files_reported": 5553,
+      "decision": "FAST  (fast suite only)",
+      "routing": "FULL: backend/api/main.py matches foundational/shared 'backend/api/main.py'",
+      "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+      "tests_executed": 0,
+      "note": "The final clause is selector boilerplate: dry-run executed no tests. Aggregate fast/FULL debt remains; no bulk scratch fallback while Archive is unavailable."
+    }
+  },
+  "performance": {
+    "method": "Guarded in-memory probe with one warmup, natural GC, 50 preflight iterations or20 native preview iterations; separate tracemalloc sample. No timer thresholds changed.",
+    "fixture": {
+      "features": 7,
+      "groups": 2,
+      "helices": 2,
+      "strands": 4
+    },
+    "named_evaluate_controls": {
+      "iterations": 20,
+      "max_ms": 2.2,
+      "median_ms": 2.019,
+      "peak_python_bytes": 54256
+    },
+    "named_evaluate_geometry": {
+      "iterations": 20,
+      "max_ms": 22.278,
+      "median_ms": 20.77,
+      "peak_python_bytes": 555199
+    },
+    "prepare_named_native_prefix": {
+      "iterations": 20,
+      "max_ms": 5.371,
+      "median_ms": 4.887,
+      "peak_python_bytes": 778326
+    },
+    "scope_500_empty_groups": {
+      "iterations": 50,
+      "max_ms": 4.9,
+      "median_ms": 4.197,
+      "peak_python_bytes": 19808
+    },
+    "scope_legacy": {
+      "iterations": 50,
+      "max_ms": 0.041,
+      "median_ms": 0.019,
+      "peak_python_bytes": 5112
+    },
+    "limits": "Preflight500groups are empty synthetic metadata; native preview fixture is tiny. Timings exclude HTTP/session/publication, renderer, event loop and process RSS. Two native selection resolutions remain in edit+build; no neutral-overhead or desktop responsiveness claim."
+  },
+  "numerical_manifests": {
+    "changed": false,
+    "part_cpd_contract": "c67da80884b973d6c5a5464aff030d55a51c0d055873380923f65c54944c8404",
+    "part_duplex_relax_contract": "b1205c2f9bdb9754bd646b18fb586e0e4719dbcda4a0644c6204dea2c7c318ce",
+    "part_streptavidin_contract": "67f3141feab0d5771926b7f532f7b40e3a13d31403fc1866e158b3a589406d9f"
+  },
+  "cleanup": {
+    "paths": [
+      "/tmp/pytest-of-joshua/pytest-11",
+      "/tmp/pytest-of-joshua/pytest-12",
+      "/tmp/pytest-of-joshua/pytest-13",
+      "/tmp/pytest-of-joshua/pytest-current"
+    ],
+    "removed_files": 0,
+    "removed_bytes": 0,
+    "removed_directories": 971,
+    "removed_symlinks": 4,
+    "visible_processes": 55,
+    "visible_active_target_references": 0,
+    "permission_denied_pids": [
+      1,
+      2,
+      3,
+      11,
+      44,
+      94,
+      116,
+      117,
+      120,
+      124,
+      128,
+      130,
+      212,
+      213,
+      222,
+      223,
+      229,
+      230,
+      240,
+      245,
+      264,
+      384,
+      435,
+      436,
+      513,
+      514,
+      542,
+      543,
+      553,
+      557,
+      11464,
+      165638
+    ],
+    "pytest_root_remaining": [],
+    "nadoc_shared_memory_remaining": [],
+    "note": "Only this task's completed empty fixture directories and symlinks removed after visible cwd/root/fd/maps inspection. Protected processes prevent system-wide certainty. Earlier fixtures were removed by normal pytest retention. Workspace designs/jobs, runtime and historical artifacts preserved. No browser/capture/simulation files created."
+  }
+}

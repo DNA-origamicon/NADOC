@@ -28,27 +28,37 @@ function referenceIds(values, owners) {
   for (const id of values) { text(id); if (!owners.has(id)) fail('unresolved DNA display reference') }
 }
 
-export function validateDnaComparisonComponent(value) {
-  shape(value, ['component_version', 'representation', 'units', 'nucleotides', 'helix_axes', 'display_topology', 'bounds_nm'])
-  if (value.component_version !== 2 || value.representation !== 'native-full-v1' || value.units !== 'nm') fail('unsupported DNA display version')
-  return validateNativeComponent(value, false)
+/** Frozen addresses identify the historical source, not a current domain ordinal. */
+export function validateFrozenDeformationRange(range, helices = null) {
+  shape(range, ['helix_id', 'start_bp', 'end_bp', 'direction', 'strand_id', 'domain_index'])
+  text(range.helix_id)
+  if (helices && !helices.has(range.helix_id)) fail('unresolved frozen deformation helix')
+  bp(range.start_bp); bp(range.end_bp); direction(range.direction); nullableId(range.strand_id)
+  if (range.start_bp > range.end_bp) fail('unordered frozen deformation range')
+  if (range.strand_id === null ? range.domain_index !== null : !integer(range.domain_index)) fail('unpaired frozen deformation source address')
 }
 
-/** Separate closed wire contract; comparison v2 still refuses scoped samples. */
+export function validateDnaComparisonComponent(value) {
+  shape(value, ['component_version', 'representation', 'units', 'nucleotides', 'helix_axes', 'display_topology', 'bounds_nm'])
+  if (value.component_version !== 3 || value.representation !== 'native-full-v1' || value.units !== 'nm') fail('unsupported DNA display version')
+  return validateNativeComponent(value, true)
+}
+
+/** Preview and comparison share native scoped samples under distinct contracts. */
 export function validateDeformationPreviewComponent(value) {
   shape(value, ['component_kind', 'component_version', 'representation', 'units', 'nucleotides', 'helix_axes', 'display_topology', 'bounds_nm'])
-  if (value.component_kind !== 'deformation-preview-dna' || value.component_version !== 1
+  if (value.component_kind !== 'deformation-preview-dna' || value.component_version !== 2
       || value.representation !== 'native-full-v1' || value.units !== 'nm') fail('unsupported deformation display version')
   return validateNativeComponent(value, true)
 }
 
 function validateNativeComponent(value, scopedSamples) {
   const topology = value.display_topology
-  shape(topology, ['helices', 'strands', 'overhangs', 'cluster_transforms', 'deformations', 'crossovers', 'forced_ligations'])
+  shape(topology, ['helices', 'strands', 'overhangs', 'cluster_transforms', 'group_organization', 'deformations', 'crossovers', 'forced_ligations'])
   list(topology.helices, 16); list(topology.strands, 128)
   for (const key of ['overhangs', 'cluster_transforms', 'deformations', 'crossovers', 'forced_ligations']) list(topology[key], MAX_SELECTORS)
   if (topology.cluster_transforms.length + topology.deformations.length > 64) fail('DNA operation allowance exceeded')
-  for (const items of Object.values(topology)) unique(items)
+  for (const [key, items] of Object.entries(topology)) if (key !== 'group_organization') unique(items)
   const helices = new Map(topology.helices.map(h => [h.id, h]))
   const strands = new Map(topology.strands.map(s => [s.id, s]))
   const overhangs = new Map(topology.overhangs.map(o => [o.id, o]))
@@ -133,6 +143,34 @@ function validateNativeComponent(value, scopedSamples) {
     selectors += cluster.helix_ids.length + cluster.domain_ids.length
     for (const ref of cluster.domain_ids) domainRef(ref, strands)
   }
+  if (topology.group_organization !== null) {
+    const organization = topology.group_organization
+    shape(organization, ['version', 'groups'])
+    if (organization.version !== 1) fail('unsupported organization display version')
+    list(organization.groups, MAX_SELECTORS)
+    selectors += organization.groups.length
+    const ids = new Set()
+    for (const group of organization.groups) {
+      shape(group, ['id', 'name', 'helix_ids', 'domain_ids', 'color', 'opacity', 'is_default', 'auto_created'])
+      text(group.id, 512); text(group.name, 512, true)
+      if (ids.has(group.id)) fail('ambiguous organizational group identity')
+      ids.add(group.id)
+      list(group.helix_ids, MAX_SELECTORS); list(group.domain_ids, MAX_SELECTORS)
+      selectors += group.helix_ids.length + group.domain_ids.length
+      if (selectors > MAX_SELECTORS) fail('DNA selector allowance exceeded')
+      referenceIds(group.helix_ids, helices)
+      const members = new Set(group.helix_ids), domainMembers = new Set()
+      if (members.size !== group.helix_ids.length) fail('ambiguous organizational helix membership')
+      for (const ref of group.domain_ids) {
+        domainRef(ref, strands)
+        const key = ownerKey(ref.strand_id, ref.domain_index)
+        if (domainMembers.has(key)) fail('ambiguous organizational domain membership')
+        domainMembers.add(key)
+      }
+      color(group.color); boolean(group.is_default); boolean(group.auto_created)
+      if (!finite(group.opacity) || group.opacity < 0 || group.opacity > 1) fail('invalid group opacity')
+    }
+  }
   for (const op of topology.deformations) {
     shape(op, ['id', 'type', 'affected_helix_ids', 'target_ranges', 'plane_a_bp', 'plane_b_bp', 'params'])
     if (!['bend', 'twist', 'sweep'].includes(op.type)) fail('unsupported DNA display provenance')
@@ -141,16 +179,7 @@ function validateNativeComponent(value, scopedSamples) {
     if (op.target_ranges !== null) {
       list(op.target_ranges, MAX_SELECTORS); selectors += op.target_ranges.length
       for (const range of op.target_ranges) {
-        shape(range, ['helix_id', 'start_bp', 'end_bp', 'direction', 'strand_id', 'domain_index'])
-        if (!helices.has(range.helix_id)) fail('unresolved frozen deformation helix')
-        bp(range.start_bp); bp(range.end_bp); direction(range.direction); nullableId(range.strand_id)
-        if (range.strand_id !== null) {
-          const domain = domainRef({ strand_id: range.strand_id, domain_index: range.domain_index }, strands)
-          if (domain.helix_id !== range.helix_id || domain.direction !== range.direction
-              || Math.min(range.start_bp, range.end_bp) < Math.min(domain.start_bp, domain.end_bp)
-              || Math.max(range.start_bp, range.end_bp) > Math.max(domain.start_bp, domain.end_bp)) fail('frozen deformation range disagrees with its owner')
-        }
-        else if (range.domain_index !== null) fail('unowned frozen deformation domain')
+        validateFrozenDeformationRange(range, helices)
       }
     }
     if (op.type === 'sweep') {

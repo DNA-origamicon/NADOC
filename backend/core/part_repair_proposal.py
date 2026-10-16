@@ -25,10 +25,12 @@ def proposed_inputs(source, actions, *, copy_value=deepcopy, check_expectations=
         check_expectations=check_expectations, error_type=DraftInputError, annotate_contract_errors=True)
     result = []
     for target in targets.values():
-        if not check_expectations and target.structural_replacement is not None:
+        if not check_expectations and (target.structural_replacement is not None
+                                       or target.definition_replacement is not None):
             # This closed action changes only grouping v1→v2. Neither contract
             # declares named byte sources, so locked discovery needs no JSON
-            # projection of the typed row or its cluster snapshot.
+            # projection of the typed row or its cluster snapshot. The closed
+            # named deformation selector edit is likewise source-free.
             continue
         if check_expectations:
             if target.upgrade is not None:

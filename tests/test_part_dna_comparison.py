@@ -88,7 +88,7 @@ def test_exact_native_records_axes_and_source_are_preserved(kind):
     wire = json.loads(json.dumps(result, allow_nan=False))
     assert unpack_records(wire["nucleotides"]) == records
     assert result["helix_axes"] == axes
-    assert result["component_version"] == 2
+    assert result["component_version"] == 3
     assert result["representation"] == "native-full-v1"
     assert result["units"] == "nm"
     assert design.model_dump_json() == before
@@ -111,7 +111,7 @@ def test_display_topology_is_closed_and_does_not_reapply_geometry():
     design = small("sweep")
     design.metadata.name = "private authoring metadata"
     value = project(design)["display_topology"]
-    assert set(value) == {"helices", "strands", "overhangs", "cluster_transforms", "deformations", "crossovers", "forced_ligations"}
+    assert set(value) == {"helices", "strands", "overhangs", "cluster_transforms", "deformations", "crossovers", "forced_ligations", "group_organization"}
     assert value["deformations"][0]["params"] == {"direction": 1, "start_step": 0}
     assert "params" not in value["helices"][0]
     assert {"direction", "grid_pos", "lattice_frame_id", "loop_skips"} <= set(value["helices"][0])

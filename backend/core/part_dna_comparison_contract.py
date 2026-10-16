@@ -2,7 +2,7 @@
 
 This is display admission, not molecular validation or a construction recipe.
 All counts precede native array allocation. Limits remain provisional until the
-host qualifies the version-two projection; no normal geometry path uses them.
+host qualifies the complete projection; no normal geometry path uses them.
 """
 
 from dataclasses import dataclass
@@ -12,7 +12,7 @@ from backend.core.part_comparison_projection import _identity, _reject, _unique
 from backend.core.part_history_contract import FIELD_ROLES
 
 
-COMPONENT_VERSION = 2
+COMPONENT_VERSION = 3
 MAX_HELICES = 16
 MAX_STRANDS = 128
 MAX_DOMAINS = 256
@@ -25,7 +25,7 @@ DNA_FIELDS = frozenset({"lattice_frames", "helices", "strands", "deformations",
     "cluster_transforms", "nucleotide_transforms", "overhangs", "crossovers",
     "crossover_constraints", "forced_ligations"})
 ALLOWED_AUTHORING = DNA_FIELDS | frozenset({"dimensions", "lattice_type", "metadata",
-    "tm_settings", "nanoparticles", "protein_assets", "protein_attachments"})
+    "tm_settings", "nanoparticles", "protein_assets", "protein_attachments", "group_organization"})
 
 
 def _limit(value, maximum, label):
@@ -116,7 +116,9 @@ def check_scope(design, *, checkpoint=lambda: None):
         # the last requested site, including empty gaps between short helices.
         _limit(max(hi for _, hi in extent.values()) - min(lo for lo, _ in extent.values()) + 1,
                MAX_SLOTS, "deformed arm span")
-    selectors, stations = 0, 0
+    from backend.core.part_dna_display_scope import organization_index
+    indices["group_organization"], selectors = organization_index(design, checkpoint, indices)
+    stations = 0
     for cluster in design.cluster_transforms:
         checkpoint()
         selectors += len(cluster.helix_ids) + len(cluster.domain_ids)
@@ -167,15 +169,23 @@ class Inventory:
 def inventory(design):
     """Validate exact references on already-owned, bounded worker inputs."""
     from backend.core.part_scope_references import COLLECTIONS, referenced_resources
+    from backend.core.part_dna_display_scope import validate_owned_organization
 
     indices = check_scope(design)
-    resources = {(COLLECTIONS[field], identity) for field, entries in indices.items() for identity in entries}
+    validate_owned_organization(design)
+    resources = {(COLLECTIONS[field], identity) for field, entries in indices.items()
+                 if field != "group_organization" for identity in entries}
+    resources.update(("part_group", identity) for identity in indices["group_organization"])
     subdomains = _unique([sub for overhang in design.overhangs for sub in overhang.sub_domains], "subdomain", lambda: None)
     resources.update(("sub_domain", identity) for identity in subdomains)
     for field in DNA_FIELDS:
         for item in getattr(design, field):
             try:
-                references = referenced_resources(item)
+                if field == "deformations":
+                    from backend.core.part_dna_display_scope import deformation_references
+                    references = deformation_references(item)
+                else:
+                    references = referenced_resources(item)
             except NotImplementedError as error:
                 _reject(str(error))
             if references - resources:
@@ -200,16 +210,9 @@ def inventory(design):
                 _reject("Child clusters require explicit domain membership", "invalid_comparison_reference")
             current = indices["cluster_transforms"][current.parent_cluster_id]
     for op in design.deformations:
-        for target in op.targets or []:
+        for target in (op.targets or []) if op.target_ranges is None else []:
             if target["kind"] == "domain":
                 domain_ref(target.get("strand_id", target.get("strandId")), target.get("domain_index", target.get("domainIndex")))
-        for target in op.target_ranges or []:
-            if target.strand_id is not None:
-                domain = domain_ref(target.strand_id, target.domain_index)
-                if (domain.helix_id != target.helix_id or domain.direction != target.direction
-                        or min(target.start_bp, target.end_bp) < min(domain.start_bp, domain.end_bp)
-                        or max(target.start_bp, target.end_bp) > max(domain.start_bp, domain.end_bp)):
-                    _reject("A frozen deformation range no longer matches its domain", "invalid_comparison_reference")
     deltas = {}
     for helix in design.helices:
         for change in helix.loop_skips:

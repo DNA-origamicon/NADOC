@@ -3,7 +3,8 @@
 No live source, session, publication, renderer or cache is read here. The host
 supplies a copy of the fixed prefix and an isolated EvaluatedPreview. These DTOs
 are display values, never authoring inputs or proof/physical-validity receipts.
-The existing comparison host and its v2 wire contract remain unchanged.
+The display retains historical interval provenance without re-resolving prior
+operations against current topology. No comparison or live host gate is enabled.
 """
 
 import json
@@ -19,10 +20,10 @@ from backend.core.part_history_contract import FIELD_ROLES
 from backend.core.part_verification_capture import admit
 
 
-PROJECTION_VERSION = 1
+PROJECTION_VERSION = 2
 MAX_OUTPUT_NODES = 200_000
 MAX_OUTPUT_BYTES = 2_000_000
-_NON_GEOMETRY = frozenset({"dimensions", "lattice_type", "metadata", "tm_settings"})
+_NON_GEOMETRY = frozenset({"dimensions", "lattice_type", "metadata", "tm_settings", "group_organization"})
 _CONTROL_FIELDS = {
     "helices": {"id", "bp_start", "length_bp", "axis_start", "axis_end"},
     "strands": {"id", "strand_type", "domains", "notes", "is_reference"},
@@ -91,14 +92,17 @@ def _inputs(prefix, evaluated):
 def _feasibility(prefix, op):
     """Same native classification and selection warning as the ordinary editor."""
     from backend.core.deformation import helices_crossing_planes, resolve_cluster_scope
-    from backend.core.deformation_scope import resolve_deformation_targets, selection_boundary_warning
+    from backend.core.deformation_scope import selection_boundary_warning
+    from backend.core.part_group_selection import resolve_deformation_targets
     from backend.core.loop_skip_calculator import classify_deformation
 
     identities = op.affected_helix_ids or helices_crossing_planes(prefix, op.plane_a_bp, op.plane_b_bp)
     identities = resolve_cluster_scope(prefix, op.cluster_ids, identities)["helix_ids"]
     ranges = None
     if op.targets is not None:
-        ranges = resolve_deformation_targets(prefix, op.targets)
+        # The selected operation was built on this exact owned prefix. Reuse
+        # its resolved intervals; prior retained operations are never retargeted.
+        ranges = op.target_ranges if op.target_ranges is not None else resolve_deformation_targets(prefix, op.targets)
         identities = sorted({item.helix_id for item in ranges})
         if not any(item.start_bp < op.plane_b_bp and item.end_bp > op.plane_a_bp for item in ranges):
             _reject("Selection does not intersect the deformation window", "invalid_preview_reference")
@@ -113,17 +117,19 @@ def _feasibility(prefix, op):
 
 
 def _controls(prefix, op):
-    from backend.core.part_deformation_edit import can_edit_groups
+    from backend.core.part_deformation_edit import can_edit_groups, can_edit_named_groups
 
     # _inputs has already charged the complete prefix and concrete operation
     # under the ordinary 30k/2MB admission, before these model_dump allocations.
     result = {name: [item.model_dump(mode="json", include=fields) for item in getattr(prefix, name)]
               for name, fields in _CONTROL_FIELDS.items()}
     result.update(
+        group_organization=(prefix.group_organization.model_dump(mode="json")
+                            if prefix.group_organization is not None else None),
         deformations=[item.model_dump(mode="json") for item in prefix.deformations],
         forced_ligations=[item.model_dump(mode="json") for item in prefix.forced_ligations],
         selected_operation=op.model_dump(mode="json"),
-        capabilities={"change_targets": False, "change_clusters": can_edit_groups(op),
+        capabilities={"change_targets": can_edit_named_groups(op), "change_clusters": can_edit_groups(op),
                       "native_feasibility": True, "polymer_circle_inputs": True},
     )
     return result
@@ -149,10 +155,14 @@ def _bounded(result):
     return result
 
 
-def _base(feasibility):
+def _base(feasibility, operation):
     return {"projection_version": PROJECTION_VERSION, "stage": "feature",
             "source_equivalence_checked": False, "downstream_evaluated": False,
-            "physical_validity": False, "feasibility": feasibility}
+            "physical_validity": False, "feasibility": feasibility,
+            # Explicit selected-stage intervals keep private plane guides in
+            # sync even when native visual projection is switched off.
+            "selected_scope": operation.model_dump(mode="json", include={
+                "id", "affected_helix_ids", "target_ranges"})}
 
 
 def _envelope(value):
@@ -182,7 +192,7 @@ def prepare_display(prefix, original, *, envelope=None):
 
     envelope = _envelope(envelope)
     op = _inputs(prefix, original)
-    result = {**_base(_feasibility(prefix, op)), "control_context": _controls(prefix, op),
+    result = {**_base(_feasibility(prefix, op), op), "control_context": _controls(prefix, op),
               "before": _native(project_for_deformation_preview, prefix),
               "candidate": _native(project_for_deformation_preview, original.design)}
     return _bounded({**result, **envelope})
@@ -196,6 +206,6 @@ def evaluate_display(prefix, evaluated, *, include_geometry=True, envelope=None)
         _reject("Preview geometry choice must be a boolean", "invalid_preview_definition")
     envelope = _envelope(envelope)
     op = _inputs(prefix, evaluated)
-    result = {**_base(_feasibility(prefix, op)),
+    result = {**_base(_feasibility(prefix, op), op),
               "candidate": _native(project_for_deformation_preview, evaluated.design) if include_geometry else None}
     return _bounded({**result, **envelope})

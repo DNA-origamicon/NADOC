@@ -13,7 +13,7 @@ function setup() {
   let revision = 7, doc = 'doc'
   const packet = body => ({ preview_id: body.preview_id, expected_design_id: 'part', expected_revision: 7,
     feature_id: 'feature', lease_id: LEASE, doc_id: 'doc', deformation_id: 'bend', request_sequence: body.request_sequence ?? 0,
-    remaining_seconds: 60, before, candidate: { which: 'candidate' }, feasibility: { status: 'ok' },
+    remaining_seconds: 60, selected_scope: { id: 'bend', affected_helix_ids: [], target_ranges: null }, before, candidate: { which: 'candidate' }, feasibility: { status: 'ok' },
     control_context: { helices: [], strands: [], cluster_transforms: [], deformations: [], forced_ligations: [], selected_operation: op } })
   const previewAPI = { prepare: vi.fn(async body => packet(body)), evaluate: vi.fn(async body => ({ ...packet(body), candidate: body.include_geometry ? { which: 'new' } : null })),
     cancel: vi.fn(async () => ({ status: 'cancelled' })),
@@ -22,7 +22,7 @@ function setup() {
   const api = { currentRevisionWatermark: () => revision, syncDesignResponse: vi.fn(value => {
     revision = value.revision; store.setState({ currentDesign: value.design }); return Promise.resolve(value)
   }) }
-  const editor = { startToolForHistory: vi.fn(), finishHistoryTool: vi.fn(), repositionPlane: vi.fn() }
+  const editor = { startToolForHistory: vi.fn(), finishHistoryTool: vi.fn(), updateHistoryScope: vi.fn(), repositionPlane: vi.fn() }
   const popup = { openPopup: vi.fn(), closePopup: vi.fn(), setHistoryPopupStatus: vi.fn() }
   const preview = { open: vi.fn(), replaceCandidate: vi.fn(), show: vi.fn(), dispose: vi.fn() }
   const showToast = vi.fn(), setMode = vi.fn()
@@ -118,4 +118,42 @@ describe('deformation history editor integration', () => {
     expect(await f.session().onApply({})).toBe(true)
     expect(f.previewAPI.apply).toHaveBeenCalledOnce(); expect(f.api.syncDesignResponse).toHaveBeenCalledOnce()
   })
+})
+
+it('carries organization metadata to private controls and forwards only named targets through Apply', async () => {
+  const f = setup(), organization = { version: 1, groups: [{ id: 'org', name: 'Arm', helix_ids: ['h'], domain_ids: [] }] }
+  f.previewAPI.prepare.mockImplementation(async body => ({ ...f.packet(body), control_context: {
+    ...f.packet(body).control_context, group_organization: organization,
+    selected_operation: { ...op, targets: [{ kind: 'part_group', id: 'org' }], cluster_ids: ['placement'] },
+    capabilities: { change_targets: true, change_clusters: false },
+  } }))
+  await f.owner.open(f.design.feature_log[0], 0)
+  expect(f.session().design.group_organization).toEqual(organization)
+  const targets = [{ kind: 'part_group', id: 'other' }]
+  await f.session().onChange({ targets }, { includeGeometry: true })
+  targets[0].id = 'mutated-after-request'
+  expect(f.previewAPI.evaluate.mock.lastCall[0].params.targets).toEqual([{ kind: 'part_group', id: 'other' }])
+  expect(f.api.syncDesignResponse).not.toHaveBeenCalled()
+  await f.session().onApply({})
+  expect(f.previewAPI.apply.mock.lastCall[0].params.targets).toEqual([{ kind: 'part_group', id: 'other' }])
+  expect(f.previewAPI.apply.mock.lastCall[0].params).not.toHaveProperty('cluster_ids')
+  expect(f.api.syncDesignResponse).toHaveBeenCalledOnce()
+})
+
+
+it('refreshes private guides from successful controls-only scope, never from stale requests', async () => {
+  const f = setup(); await f.owner.open(f.design.feature_log[0], 0)
+  const scope = { id: 'bend', affected_helix_ids: ['other'], target_ranges: [{ helix_id: 'other', start_bp: 2, end_bp: 8,
+    direction: 'FORWARD', strand_id: 'historical', domain_index: 3 }] }
+  f.previewAPI.evaluate.mockImplementation(async body => ({ ...f.packet(body), candidate: null, selected_scope: scope }))
+  await f.session().onChange({ targets: [{ kind: 'part_group', id: 'other-org' }] }, { includeGeometry: false })
+  expect(f.editor.updateHistoryScope).toHaveBeenLastCalledWith(scope)
+  expect(f.preview.show).toHaveBeenLastCalledWith('before')
+  expect(f.api.syncDesignResponse).not.toHaveBeenCalled()
+  let finish
+  f.previewAPI.evaluate.mockImplementation(body => new Promise(resolve => { finish = () => resolve({ ...f.packet(body), selected_scope: scope }) }))
+  const pending = f.session().onChange({ plane_b_bp: 9 })
+  f.switchDocument(); await tick()
+  f.editor.updateHistoryScope.mockClear(); finish(); await pending
+  expect(f.editor.updateHistoryScope).not.toHaveBeenCalled()
 })

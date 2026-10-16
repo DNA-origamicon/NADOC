@@ -6,7 +6,7 @@ import { buildDeformationPreviewLayer } from './part_dna_comparison_layer.js'
 import { dnaComponent, dnaRecord, dnaRow } from '../test-helpers/part_dna_comparison.js'
 
 const owned = []
-const component = () => ({ ...dnaComponent(), component_kind: 'deformation-preview-dna', component_version: 1 })
+const component = () => ({ ...dnaComponent(), component_kind: 'deformation-preview-dna', component_version: 2 })
 function setup() {
   const scene = new THREE.Scene(), live = new THREE.Group(); scene.add(live)
   let current = live

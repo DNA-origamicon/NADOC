@@ -590,7 +590,7 @@ def set_design(d: Design | StrictPartRevision, *, expected_revision: int | None 
     with _lock:
         if publication_permit is None:
             _require_compatibility_write("set_design")
-        _require_live_design(d)
+            _require_live_design(d)
         if expected_policy_generation is not None:
             from backend.api.part_publication_policy import resolve
             if resolve(get_current_doc()).generation != expected_policy_generation:

@@ -2540,3 +2540,27 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   actual scientific change requires the existing A/B authorization gate.
   This belongs to existing core geometry/Fine Routing qualification, not a new
   counted overhaul milestone. Desktop acceptance remains open.
+
+## ISSUE-109 — Repair capture rejects native deformation direction enums (2026-10-16, FIXED IN FOCUSED CHECKS)
+
+- **Trigger:** a recipe contains a resolved scoped deformation. Its typed
+  `DeformationRange.direction` is the native `Direction` enum; cloning the
+  definition for repair inspection or a saved proposal raised the generic
+  "typed definitions and JSON inputs only" error. This also affected repairs
+  of another row when the capture included that deformation definition.
+- **Cause and fix:** `_Copier.clone` admitted exact strings and typed models but
+  omitted their closed immutable direction scalar. It now admits only the exact
+  native `Direction` type, charges its value against the existing byte budget,
+  and preserves the enum. Arbitrary enums remain rejected; there is no generic
+  stringify fallback, serialization under the source lock, or budget increase.
+- **Evidence:** `tests/test_part_deformation_repair.py` includes the native enum
+  control, an unrelated string-enum refusal, resolved named bend/twist recipes,
+  and their repair lifecycle: 31 core cases and eight repair-job cases pass.
+  Complete checkpoint evidence records 967 distinct focused backend passes
+  and 8,601 frontend passes/one existing skip in
+  `docs/audits/feature_history_20261014/validation_named_deformation_lifecycle.json`.
+- **Scope:** this fixes capture of existing native definitions. Named target
+  editing, historical display intervals and owned publication are the separate
+  U11 integration around it. **NOT VERIFIED IN APP**; rollout gates remain
+  disabled, MV-48/FH-27 remain open, and FH-18 checkpoint 9 does not change the
+  overall **18/38** milestone count.

@@ -3,7 +3,7 @@ import { validateDeformationPreviewComponent, validateDnaComparisonComponent } f
 import { dnaComponent } from '../test-helpers/part_dna_comparison.js'
 
 function component() {
-  return { ...dnaComponent(), component_kind: 'deformation-preview-dna', component_version: 1 }
+  return { ...dnaComponent(), component_kind: 'deformation-preview-dna', component_version: 2 }
 }
 
 describe('separately versioned native deformation display', () => {
@@ -16,17 +16,19 @@ describe('separately versioned native deformation display', () => {
     expect(() => validateDnaComparisonComponent(value)).toThrow()
   })
 
-  it('does not silently reinterpret the comparison v2 schema', () => {
+  it('admits native scoped samples only under the new comparison component version', () => {
     const value = dnaComponent()
     expect(validateDnaComparisonComponent(value)).toBe(value)
     expect(() => validateDeformationPreviewComponent(value)).toThrow()
     value.helix_axes[0].segments[0].samples = [[0, 0, 0]]
+    expect(validateDnaComparisonComponent(value)).toBe(value)
+    value.component_version = 2
     expect(() => validateDnaComparisonComponent(value)).toThrow()
   })
 
   it.each([
     ['wrong family', d => { d.component_kind = 'comparison-dna' }],
-    ['wrong version', d => { d.component_version = 2 }],
+    ['wrong version', d => { d.component_version = 1 }],
     ['omitted family', d => { delete d.component_kind }],
     ['extra family', d => { d.display_topology.duplexes = [] }],
     ['omitted nucleotide', d => { d.nucleotides.pop() }],

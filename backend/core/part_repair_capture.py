@@ -6,6 +6,7 @@ from time import monotonic
 
 from pydantic import BaseModel
 
+from backend.core.models import Direction
 from backend.core.part_input_sources import MAX_SOURCES, EmbeddedInput, command_source_bindings
 from backend.core.part_overlay_commands import KINDS as OVERLAY_KINDS, command_input
 from backend.core.part_repair_draft import RepairDraft
@@ -44,7 +45,12 @@ class _Copier:
         self.check()
         if depth > 64:
             raise CaptureLimit("Repair draft capture depth exceeded")
-        if type(value) is str:
+        if type(value) is Direction:
+            # Resolved native deformation ranges retain this closed immutable
+            # enum. Do not admit arbitrary Enum subclasses or stringify them.
+            self.size -= 4 * len(value.value)
+            result = value
+        elif type(value) is str:
             self.size -= 4 * len(value)
             result = value  # immutable; charge before retaining it
         elif value is None or type(value) is bool:

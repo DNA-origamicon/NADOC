@@ -8,6 +8,7 @@
  * angles increase counter-clockwise (standard math convention).
  */
 
+import { createHistoryGroupControls } from './deformation_history_groups.js'
 import { createToolPopup } from './tool_popup.js'
 import { el } from './primitives/dom.js'
 import { BDNA_RISE_PER_BP } from '../constants.js'
@@ -28,6 +29,7 @@ let _historySession = null, _historyInitial = null, _historyParamsDirty = false,
 let _historyPlanesTouched = false, _historyGroupsTouched = false
 let _historyStatus = {}, _historyApplying = false, _historyMessage = null, _historyRecovery = null
 let _historyChangeSequence = 0
+let _historyGroupControls = null
 const _historyDisabled = new Map()
 const _historyParamIds = new Set(['def-twist-value', 'def-twist-rh', 'def-twist-lh', 'def-twist-total-radio',
   'def-twist-pernm-radio', 'def-bend-dir', 'def-bend-angle', 'def-bend-radius', 'def-polymer-circle', 'def-polymer-count'])
@@ -324,6 +326,7 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
       || ['onChange', 'onApply', 'onCancel'].some(key => typeof historySession[key] !== 'function'))) {
     throw new Error('Prepared history controls and private delegates are required')
   }
+  _historyGroupControls?.dispose(); _historyGroupControls = null
   _historySession = historySession
   if (historySession) setDeformationSelectionUI(null)
   _historyInitial = { a: Math.min(bpA, bpB), b: Math.max(bpA, bpB), groups: [...(initialClusterIds ?? historySession?.operation.cluster_ids ?? [])] }
@@ -346,13 +349,17 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
   // the editor's default scope (active cluster / single cluster / none).
   const initIds = initialClusterIds ?? (_historySession ? _historySession.operation.cluster_ids : getDeformDefaultClusterIds())
   if (_sourceTargets() !== null) {
-    _selectedClusterIds = []
+    _selectedClusterIds = _historySession ? [...initIds] : []
     if (_clusterSection) _clusterSection.style.display = 'none'
     if (!_selectionUI && _selectionSection) {
       _selectionSection.hidden = false
       _selectionSection.replaceChildren(el('div', { className: 'mr-section-label', text: 'Current selection' }))
-      const labels = moveRotateSelectionLabels(targetState(_sourceDesign(), _sourceTargets()))
-      for (const label of labels) _selectionSection.append(el('div', { className: 'mr-selection-item', text: label }))
+      const labelsFor = targets => moveRotateSelectionLabels(targetState(_sourceDesign(), targets))
+      if (_historySession) _historyGroupControls = createHistoryGroupControls({ container: _selectionSection,
+        session: _historySession, primitiveLabels: labelsFor,
+        onChange: () => { _renderHistoryStatus(); void _historyChange() } })
+      if (!_historyGroupControls) for (const label of labelsFor(_sourceTargets()))
+        _selectionSection.append(el('div', { className: 'mr-selection-item', text: label }))
     }
   } else {
     if (!_selectionUI && _selectionSection) _selectionSection.hidden = true
@@ -535,11 +542,13 @@ function _historyPatch() {
   const params = _historyParamsDirty || planesChanged ? _readParams() : { ..._historySession.operation.params }
   return { ...(_historyPlanesTouched ? { plane_a_bp: lo, plane_b_bp: hi } : {}),
     ...(_historyParamsDirty || _historyPlanesTouched ? { params } : {}),
-    ...(_historyGroupsTouched ? { cluster_ids: [..._selectedClusterIds] } : {}) }
+    ...(_historyGroupsTouched ? { cluster_ids: [..._selectedClusterIds] } : {}),
+    ...(_historyGroupControls?.patch() ?? {}) }
 }
 
 async function _historyChange() {
   const session = _historySession, sequence = ++_historyChangeSequence
+  if (_historyGroupControls && !_historyGroupControls.valid()) return
   if (!session || _openingHistory || _historyApplying || _historyStatus.expired || _historyStatus.publicationUnknown || _historyStatus.refreshNeeded) return
   try {
     const result = await session.onChange(_historyPatch(), { includeGeometry: !!_previewChk.checked })
@@ -549,6 +558,7 @@ async function _historyChange() {
 
 async function _historyAction(action) {
   const session = _historySession
+  if (action === 'onApply' && _historyGroupControls && !_historyGroupControls.valid()) return
   if (!session || (action === 'onApply' && (_historyApplying || _historyStatus.expired || _historyStatus.publicationUnknown || _historyStatus.refreshNeeded))) return
   if (action === 'onApply') { clearTimeout(_validateTimer); _historyApplying = true; _renderHistoryStatus() }
   try {
@@ -580,6 +590,7 @@ function _renderHistoryStatus() {
     for (const [control, disabled] of _historyDisabled) control.disabled = disabled
     _historyDisabled.clear()
   }
+  _applyBtn.disabled = !!locked || !!(_historyGroupControls && !_historyGroupControls.valid())
   const message = status.expired ? 'Preview expired. Reopen the feature to continue.'
     : status.publicationUnknown ? 'Publication status is unknown. Check it before continuing.'
     : status.refreshNeeded ? 'The change is published. Refresh its display.'
@@ -595,6 +606,7 @@ function _renderHistoryStatus() {
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 function _hide() {
+  _historyGroupControls?.dispose(); _historyGroupControls = null
   _historySession = null; _historyInitial = null; _historyChangeSequence++
   _clearHistoryStatus()
   _restorePickingControls()

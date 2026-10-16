@@ -38,11 +38,16 @@ def _current(session, *, expected_session, expected_source, expected_doc_id,
 
 def _publish_field(session, before, field, value, *, bump_revision, context):
     from backend.api.part_publication_policy import require_compatibility
+    from backend.api.part_group_organization_gate import require_live_design
     require_compatibility(context.get_current_doc(), "repair_metadata_publication")
     # Strictly internal: public publishers below choose the sole allowed field.
     # Never accept an arbitrary request-provided Design update dictionary.
     if field not in {"repair_draft", "input_sources"}:
         raise ValueError("Unsupported repair metadata field")
+    # Recheck the live organization gate after outside-lock preparation. Only
+    # proposal metadata has a reviewed lifecycle; source replacement stays on
+    # its separately closed ordinary source-mutation path.
+    require_live_design(before, lifecycle="repair_draft" if field == "repair_draft" else None)
     revision = session.revision
     request_revision = context.current_request_revision()
     request_entry = context.current_request_feature_log_entry_id()

@@ -1,5 +1,5 @@
 import { deformationTargets, targetState } from './deformation_targets.js'
-import { createDeformationHistoryTool, disposeDeformationGuide, setDeformationGuideLayer } from './deformation_history_tool.js'
+import { createDeformationHistoryTool, deformationHistoryScope, disposeDeformationGuide, setDeformationGuideLayer } from './deformation_history_tool.js'
 /**
  * Deformation Editor — Bend and Twist tool state machine.
  *
@@ -61,6 +61,7 @@ let _editOpId          = null   // id of the op being edited in place (null = ne
 let _editOrigParams    = null   // op's params at edit-start, for cancel revert
 let _editDirty         = false  // a live preview PATCH has been applied
 let _historyTool = null
+let _historyScope = null
 let _historyRayMask = null
 let _historyHover = null
 let _editCommitted     = false  // edit was confirmed (don't revert on exit)
@@ -204,6 +205,15 @@ export function startToolForHistory(operation, adapter) {
   _raycaster.layers.set(adapter.displayLayer ?? 0)
   _sessionClusterIds = [...operation.cluster_ids]
   startToolForEdit(operation.type, operation.plane_a_bp, operation.plane_b_bp, null, null, operation)
+}
+
+/** Refresh only private guides from a successfully evaluated server scope. */
+export function updateHistoryScope(scope) {
+  if (!_historyTool) return
+  const selected = deformationHistoryScope(_historyTool.operation, _historyTool.design, scope)
+  _historyScope = selected.affected; _sessionRanges = selected.ranges
+  if (_solidA && _planeA) _updateSolidPlane(_solidA, _planeA.bp)
+  if (_solidB && _planeB) _updateSolidPlane(_solidB, _planeB.bp)
 }
 
 /** Local teardown after the host has resolved publication/cancellation. */
@@ -540,7 +550,7 @@ function _exitTool() {
   }
   _historyHover = null
   _setState(STATE.IDLE)
-  _historyTool = null
+  _historyTool = null; _historyScope = null
   if (_historyRayMask !== null) _raycaster.layers.mask = _historyRayMask
   _historyRayMask = null
   if (_onExit) _onExit()
@@ -631,7 +641,7 @@ function _getHelixAxisData(clusterIdsOverride = null) {
   // Restrict plane interaction to the union of selected clusters' helices so ghost
   // planes, picking, and centering are all scoped to the clusters being deformed.
   const cids = clusterIdsOverride === null
-    ? _effectiveClusterIds() : clusterIdsOverride
+    ? (_historyTool && _sessionTargets !== null ? [] : _effectiveClusterIds()) : clusterIdsOverride
   let clusterHelixIds = null
   if (cids.length > 0) {
     clusterHelixIds = new Set()
@@ -642,7 +652,8 @@ function _getHelixAxisData(clusterIdsOverride = null) {
   }
 
   return currentDesign.helices
-    .filter(h => (!clusterHelixIds || clusterHelixIds.has(h.id)) &&
+    .filter(h => (!_historyScope || clusterIdsOverride !== null || _historyScope.has(h.id)) &&
+      (!clusterHelixIds || clusterHelixIds.has(h.id)) &&
       (clusterIdsOverride !== null || !_sessionRanges || _sessionRanges.some(r => r.helixId === h.id)))
     .map(h => {
       const axDef = helixAxes?.[h.id]

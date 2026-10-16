@@ -21,7 +21,7 @@ export function dnaRecord(index = 0) {
 export const dnaRow = record => DNA_RECORD_COLUMNS.map(field => record[field])
 
 export function dnaComponent() {
-  return { component_version: 2, representation: 'native-full-v1', units: 'nm',
+  return { component_version: 3, representation: 'native-full-v1', units: 'nm',
     nucleotides: [dnaRow(dnaRecord(0)), dnaRow(dnaRecord(1))],
     helix_axes: [{ helix_id: 'h', start: [0, 0, 0], end: [0, 0, .34], samples: [],
       segments: [{ strand_id: 's', domain_index: 0, ovhg_id: null, bp_lo: 0, bp_hi: 1,
@@ -31,7 +31,7 @@ export function dnaComponent() {
       direction: 'FORWARD', grid_pos: null, lattice_frame_id: null, loop_skips: [] }],
     strands: [{ id: 's', strand_type: 'scaffold', sequence: null, color: null, is_reference: false,
       domains: [{ helix_id: 'h', start_bp: 0, end_bp: 1, direction: 'FORWARD', overhang_id: null, binds_overhang_id: null }] }],
-    overhangs: [], cluster_transforms: [], deformations: [], crossovers: [], forced_ligations: [] },
+    overhangs: [], group_organization: null, cluster_transforms: [], deformations: [], crossovers: [], forced_ligations: [] },
     bounds_nm: { minimum: [-1, -1, -.1], maximum: [1, 1, 1] } }
 }
 

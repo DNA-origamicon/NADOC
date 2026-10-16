@@ -1,3 +1,6 @@
+import { validateFrozenDeformationRange } from '../features/part_dna_comparison_model.js'
+import { shape, list, text } from '../features/part_comparison_validation.js'
+
 /** Fixed private control inputs and delegates; no store or network dependencies. */
 export function createDeformationHistoryTool(operation, adapter) {
   if (!operation || !['bend', 'twist'].includes(operation.type)
@@ -33,4 +36,29 @@ export function disposeDeformationGuide(root) {
   })
   root.removeFromParent()
   for (const resource of owned) resource.dispose()
+}
+
+
+/** Validate server-selected guide inputs against the fixed private prefix. */
+export function deformationHistoryScope(operation, design, scope) {
+  shape(scope, ['id', 'affected_helix_ids', 'target_ranges'])
+  if (scope.id !== operation.id) throw new Error('Selected deformation scope changed identity')
+  const helices = new Set(design.helices.map(helix => helix.id)), affected = new Set()
+  list(scope.affected_helix_ids, 512)
+  for (const id of scope.affected_helix_ids) {
+    text(id)
+    if (!helices.has(id) || affected.has(id)) throw new Error('Selected deformation scope has an unresolved helix')
+    affected.add(id)
+  }
+  let ranges = null
+  if (scope.target_ranges !== null) {
+    list(scope.target_ranges, 512 - affected.size)
+    ranges = scope.target_ranges.map(range => {
+      validateFrozenDeformationRange(range, helices)
+      return { helixId: range.helix_id, lo: range.start_bp, hi: range.end_bp }
+    })
+  }
+  // A legacy unscoped window may currently cross no helices. Keep its prefix
+  // guides usable so the user can move the planes back onto the structure.
+  return { affected: ranges === null && affected.size === 0 ? null : affected, ranges }
 }

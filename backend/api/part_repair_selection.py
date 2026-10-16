@@ -67,6 +67,14 @@ def reference_slot(kind, params, path):
     if "_generated_scope" in params:
         _unsupported("Generated local scopes need a separate selection adapter")
     values = {key: value for key, value in params.items() if key != "_generator"}
+    if kind == "deformation":
+        from backend.core.part_deformation_repair import operation_from_params, reference_index
+
+        try:
+            reference_index(operation_from_params(values), path)
+        except CommandContractError as error:
+            _unsupported(str(error))
+        return ReferenceSlot("part_group", "group_organization", "named_group")
     if kind in {"nanoparticle-patch", "nanoparticle-delete"} and path == ["nanoparticle_id"]:
         if "coating_version" in values or "thiol_version" in values:
             _unsupported("Coating and thiol ownership are outside this selection contract")
@@ -112,7 +120,12 @@ def resolve_prefix(source, feature_id, child_id):
         prefix = list(source.feature_log[:index])
         if child_id is None:
             if entry.feature_type != "snapshot":
-                _unsupported("Select a supported snapshot command or an explicit routing child")
+                from backend.core.part_deformation_repair import require_named_entry
+
+                try:
+                    require_named_entry(entry)
+                except CommandContractError as error:
+                    _unsupported(str(error))
             return entry, prefix
         if entry.feature_type != "routing-cluster":
             raise SelectionInputError("A child selection needs its containing routing group", code="invalid_selection_target")
@@ -138,6 +151,10 @@ def _old_value(params, path):
 
 
 def _candidates(design, slot, kind, params, request, checkpoint):
+    if slot.resource_kind == "part_group":
+        from backend.core.part_deformation_repair import group_candidates
+
+        return group_candidates(design, params, request, checkpoint)
     records = getattr(design, slot.collection)
     seen = set()
     for record in records:

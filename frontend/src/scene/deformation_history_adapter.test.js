@@ -179,3 +179,33 @@ it('finishing during a plane drag releases controls without a final preview or p
   expect(f.onPlaneDragEnd).not.toHaveBeenCalled()
   canonicalUntouched(f)
 })
+
+
+it('refreshes guide membership only from an exact selected private operation scope', () => {
+  const f = setup()
+  f.adapter.design.helices.push({ ...f.adapter.design.helices[0], id: 'second' })
+  f.adapter.helixAxes.second = { start: [30, 0, 0], end: [30, 0, 7] }
+  const original = { ...operation, targets: [{ kind: 'part_group', id: 'original-org' }],
+    target_ranges: [{ helix_id: 'h', start_bp: 0, end_bp: 21, direction: 'FORWARD', strand_id: 'old', domain_index: 4 }] }
+  editor.startToolForHistory(original, f.adapter)
+  expect(editor.getDeformationPlaneFrame(7).center[0]).toBe(10)
+  const scope = { id: original.id, affected_helix_ids: ['second'], target_ranges: [
+    { helix_id: 'second', start_bp: 0, end_bp: 21, direction: 'FORWARD', strand_id: 'past', domain_index: 9 }] }
+  editor.updateHistoryScope(scope)
+  expect(editor.getDeformationPlaneFrame(7).center[0]).toBe(30)
+  scope.target_ranges[0].helix_id = 'h'
+  expect(editor.getDeformationPlaneFrame(7).center[0]).toBe(30)
+  expect(original.target_ranges[0].helix_id).toBe('h')
+  expect(() => editor.updateHistoryScope({ ...scope, id: 'not-this-operation' })).toThrow()
+  expect(editor.getDeformationPlaneFrame(7).center[0]).toBe(30)
+  canonicalUntouched(f)
+})
+
+
+it('keeps global legacy plane guides available when no helix crosses the current window', () => {
+  const f = setup(); editor.startToolForHistory(operation, f.adapter)
+  editor.updateHistoryScope({ id: operation.id, affected_helix_ids: [], target_ranges: null })
+  expect(editor.getDeformationPlaneFrame(7).center[0]).toBe(10)
+  expect(editor.getPlanes()).toEqual({ a: { bp: 0 }, b: { bp: 21 } })
+  canonicalUntouched(f)
+})

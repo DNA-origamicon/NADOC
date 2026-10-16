@@ -47,6 +47,7 @@ export function createDeformationHistoryEditor({ store, api, scene, camera, desi
         } else {
           preview.show('before'); preview.replaceCandidate(null)
         }
+        editor.updateHistoryScope(state.projection.selected_scope)
         localError = null
       } catch (error) { localError = error }
     }
@@ -87,7 +88,7 @@ export function createDeformationHistoryEditor({ store, api, scene, camera, desi
       if (!packet || disposed) throw controller.getState().error ?? new Error('Feature preview is no longer current')
       const controls = packet.control_context, operation = controls.selected_operation
       const design = { helices: controls.helices, strands: controls.strands,
-        cluster_transforms: controls.cluster_transforms, deformations: controls.deformations, forced_ligations: controls.forced_ligations }
+        cluster_transforms: controls.cluster_transforms, group_organization: controls.group_organization, deformations: controls.deformations, forced_ligations: controls.forced_ligations }
       const helixAxes = Object.fromEntries(packet.before.helix_axes.map(axis => [axis.helix_id,
         { start: axis.start, end: axis.end, samples: axis.samples, segments: axis.segments, ovhgAxes: axis.ovhg_axes ?? null }]))
       preview = createPreview(); preview.open(packet); lastProjection = packet; ready = true
