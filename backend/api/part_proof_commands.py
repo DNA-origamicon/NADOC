@@ -59,7 +59,9 @@ def capabilities():
 def dependencies(kind, params):
     if type(params.get("_proof_version")) is not int or params["_proof_version"] != PROOF_VERSION:
         return Dependencies(known=False)
-    if kind in NP_CONNECTION_KINDS and "_generated_scope" in params:
+    if "_generated_scope" in params and (kind in NP_CONNECTION_KINDS or (
+            kind == "nanoparticle-patch" and "thiol_version" in params
+            and params.get("pending_connection_version_ids"))):
         return Dependencies(known=False)  # Compound scoped owner selection is not qualified yet.
     # Composition metadata belongs to the scope executor, not the underlying
     # strict command schema. Preserve source provenance during scoped admission.
@@ -139,9 +141,13 @@ def dependencies(kind, params):
             return Dependencies(known=False)
         particle = Resource("nanoparticle", command.nanoparticle_id)
         sources = frozenset(Resource("input_source", source.sha256) for source in contract["sources"])
+        reads = {PART_TOPOLOGY, particle}
+        if kind == "nanoparticle-patch" and "thiol_version" in params:
+            reads.update(Resource("nanoparticle_connection_version", identity)
+                         for identity in command.pending_connection_version_ids)
         # Shared postprocessors can retry pending ligations. Retain the part
         # barrier until that interaction has a narrower proved write contract.
-        return Dependencies(frozenset({PART_TOPOLOGY, particle}) | sources,
+        return Dependencies(frozenset(reads) | sources,
                             frozenset({PART_TOPOLOGY, particle}), barrier=True,
                             imported_sources=sources if contract["imports"] else frozenset())
     if kind == "photoproduct-relax" or (kind == "photoproduct-create" and params.get("method") != "preflight"):

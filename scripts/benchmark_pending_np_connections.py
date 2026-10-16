@@ -19,6 +19,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.api import part_nanoparticle_connection_commands as native
+from backend.api import part_thiol_patch_commands as thiol
 from backend.api import routes_nanoparticles as routes, state
 from backend.api.doc_context import DocContextMiddleware, reset_current_doc, set_current_doc
 from backend.api.part_proof_commands import execute
@@ -200,14 +201,15 @@ def prepare_retained(client, doc, design, count):
 
 def summarize(report):
     """Retain timing evidence even when a later capture or worker refuses."""
-    for action in ("create", "rename", "delete"):
+    actions = ("create", "rename", "move", "resize", "delete") if report.get("motion") else ("create", "rename", "delete")
+    for action in actions:
         samples = [row for row in report.get("samples", []) if row["action"] == action]
         report[action] = {"route": stats([row["route_ms"] for row in samples]),
             **{key: stats([value for row in samples for value in row[key]]) for key in
                ("recording_lock_ms", "recording_wait_ms", "light_ms", "light_lock_wait_ms")}}
 
 
-def measure(client, doc, report, repeats, probe, handles, retained, mode, background, diagnostics=None):
+def measure(client, doc, report, repeats, probe, handles, retained, mode, background, diagnostics=None, *, motion=False):
     report["active_phase"] = "fixture_preparation"
     template = prepare_retained(client, doc, prefix(handles, background=background), retained)
     report["active_phase"] = "template_node_byte_admission"
@@ -215,11 +217,20 @@ def measure(client, doc, report, repeats, probe, handles, retained, mode, backgr
     if mode == "native" and not native._bounded(template):
         raise RuntimeError("Declared native background exceeds reference admission")
     expected_rows = len(template.feature_log)
-    report.update(handles=handles, retained_rows=expected_rows, mode=mode, background=background,
+    report.update(handles=handles, retained_rows=expected_rows, mode=mode, background=background, motion=motion,
         native_capture_node_byte_admission=True, helices=len(template.helices),
         strands=len(template.strands), domains=sum(len(item.domains) for item in template.strands),
         declared_bp=sum(item.length_bp for item in template.helices), samples=[], errors=[])
     captured = None
+    expected_steps = 5 if motion else 3
+    move = {"pivot": [2., -1., 3.], "translation": [1., 3., -2.], "rotation": [0., 0., .6, .8]}
+    if motion:
+        from backend.core.nanoparticle import replace_gold_nanosphere
+        from backend.core.part_history_proof import AUTHORING_FIELDS
+
+        expected = replace_gold_nanosphere(template, "gold", gizmo_move=move)
+        expected = replace_gold_nanosphere(expected, "gold", diameter_nm=14.)
+        expected_authoring = expected.model_dump(mode="json", include=AUTHORING_FIELDS)
     for iteration in range(repeats):
         report["active_phase"] = "route_lifecycle"
         token = set_current_doc(doc)
@@ -239,20 +250,35 @@ def measure(client, doc, report, repeats, probe, handles, retained, mode, backgr
             {"expected_revision": start_revision + 1, "name": "Measured rename"}, diagnostics=diagnostics)
         report["samples"].append({"iteration": iteration, "action": "rename", **timing})
         result.raise_for_status()
+        if motion:
+            for action, patch in (("move", {"gizmo_move": move}), ("resize", {"diameter_nm": 14.})):
+                result, timing = timed_request(client, doc, probe, "PATCH", "/api/design/nanoparticles/gold",
+                                               patch, diagnostics=diagnostics)
+                report["samples"].append({"iteration": iteration, "action": action, **timing})
+                result.raise_for_status()
         result, timing = timed_request(client, doc, probe, "DELETE",
-            f"{PATH}/{version_id}?expected_revision={start_revision + 2}", diagnostics=diagnostics)
+            f"{PATH}/{version_id}?expected_revision={start_revision + expected_steps - 1}", diagnostics=diagnostics)
         report["samples"].append({"iteration": iteration, "action": "delete", **timing})
         result.raise_for_status()
         token = set_current_doc(doc)
         try:
             design = state.get_or_404()
-            correct = (state.revision() == start_revision + 3 and state.undo_depth() == start_depth + 3
-                and len(design.feature_log) == expected_rows + 3
+            suffix = design.feature_log[-expected_steps:]
+            connection_rows = [suffix[index] for index in ((0, 1, 4) if motion else (0, 1, 2))]
+            correct = (state.revision() == start_revision + expected_steps and state.undo_depth() == start_depth + expected_steps
+                and len(design.feature_log) == expected_rows + expected_steps
                 and design.nanoparticle_connection_versions == template.nanoparticle_connection_versions
-                and design.nanoparticle_conjugations == template.nanoparticle_conjugations
-                and design.helices == template.helices and design.strands == template.strands
                 and all(("nanoparticle_connection_version" in row.params) == (mode == "native")
-                        for row in design.feature_log[-3:]))
+                        for row in connection_rows))
+            if motion:
+                correct = correct and design.model_dump(mode="json", include=AUTHORING_FIELDS) == expected_authoring
+                correct = correct and all(("thiol_version" in row.params) == (mode == "native") for row in suffix[2:4])
+                if mode == "native":
+                    selected = [item.id for item in template.nanoparticle_connection_versions] + [version_id]
+                    correct = correct and all(row.params.get("pending_connection_version_ids") == selected for row in suffix[2:4])
+            else:
+                correct = correct and (design.nanoparticle_conjugations == template.nanoparticle_conjugations
+                    and design.helices == template.helices and design.strands == template.strands)
             if not correct:
                 report["errors"].append({"iteration": iteration, "publication_mismatch": True})
             report["samples"][-1]["correct_lifecycle"] = correct
@@ -307,11 +333,13 @@ def main():
     parser.add_argument("--mode", choices=("native", "legacy", "both"), default="both")
     parser.add_argument("--diagnostics", action="store_true",
                         help="Record bounded GC overlap and native admission leaf timings; no GC policy changes")
+    parser.add_argument("--motion", action="store_true",
+                        help="Add pending move/resize lifecycle cells while retaining all baseline cells")
     args = parser.parse_args()
     if not 1 <= args.repeats <= 30:
         parser.error("repeats must be between 1 and 30")
     doc = f"__pending_np_benchmark_{uuid4()}"
-    originals = state._lock, native.try_record, state.mutate_with_feature_log
+    originals = state._lock, native.try_record, state.mutate_with_feature_log, thiol.native_route_eligible
     probe = LockProbe(originals[0])
     state._lock = probe
     state.mutate_with_feature_log = phase_wrapper(originals[2], "pending_legacy")
@@ -334,13 +362,18 @@ def main():
             for mode in (("native", "legacy") if args.mode == "both" else (args.mode,)):
                 native.try_record = (phase_wrapper(originals[1], "pending_native") if mode == "native"
                                      else lambda *_args, **_kwargs: None)
+                thiol.native_route_eligible = originals[3] if mode == "native" else lambda *_args: False
+                state.mutate_with_feature_log = phase_wrapper(originals[2], "pending_" + mode)
                 selected = [(handles, retained, "six-cell") for handles in (1, 16) for retained in (0, 16)]
                 selected.append((16, 16, "64-cell-126bp"))
-                for handles, retained, background in selected:
-                    report = {"case": f"{mode}-{handles}-handles-{retained}-retained-{background}"}
+                selected = [(handles, retained, background, moving) for moving in ((False, True) if args.motion else (False,))
+                            for handles, retained, background in selected]
+                for handles, retained, background, moving in selected:
+                    report = {"case": f"{mode}-{handles}-handles-{retained}-retained-{background}" + ("-motion" if moving else ""),
+                              "motion": moving}
                     cases.append(report)
                     try:
-                        measure(client, doc, report, args.repeats, probe, handles, retained, mode, background, diagnostics)
+                        measure(client, doc, report, args.repeats, probe, handles, retained, mode, background, diagnostics, motion=moving)
                         report["completed"] = True
                     except Exception as error:
                         # Each next case installs a fresh private native prefix.
@@ -359,16 +392,18 @@ def main():
         if diagnostics is not None:
             diagnostics.close()
         state.drop_doc(doc)
-        state._lock, native.try_record, state.mutate_with_feature_log = originals
+        state._lock, native.try_record, state.mutate_with_feature_log, thiol.native_route_eligible = originals
     clean = doc not in state.revision_map()
     errors = any(item.get("errors") or any(row["errors"] for row in item.get("samples", [])) for item in cases)
-    print(json.dumps({"scope": "Actual pending NP HTTP create/rename/delete; no application geometry",
+    print(json.dumps({"scope": "Actual pending NP HTTP create/rename/delete; optional native move/resize, no application solver",
         "notes": ["Compatibility baseline bypasses only the new native adapter; same current process and endpoints.",
             "Native owner/target prefix and retained rows are built before measurement, never copied from candidate geometry.",
             "The larger background is a 64-cell, 126bp native bundle plus 16 thiol handles and 16 retained candidate rows.",
             "Every measured template must pass unchanged ordinary node/byte admission; no fixture shrinking or retries.",
             "Common recovery and metadata reconciliation remain inside the existing recording lock.",
             "No source proof is required for UI recording; fresh-worker proof is measured once per native case afterward.",
+            "Optional motion adds two atomic rows before deletion; its geometry oracle uses unchanged native replacement outside timing.",
+            "Diagnostic event limits apply to the whole run, including extra motion cells; dropped counts remain explicit.",
             "No limits, GC policy, physics, retry behavior or production sessions are changed."],
         "repeats": args.repeats, "all_cases_attempted": failure is None,
         "diagnostics": None if diagnostics is None else {

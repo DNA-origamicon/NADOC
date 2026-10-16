@@ -183,19 +183,16 @@ manifest, accepted hash, runtime pin or upgrade policy changes. CPD and coating
 manifests are also unaffected. An exact source/hash and manifest regression pins
 this boundary; future genuine engine changes still require explicit upgrading.
 
-Remaining ordinary-workflow seam: `part_thiol_patch_commands.py` currently
-rejects every connection version, including pending metadata. Creating a pending
-candidate and then dragging/resizing the particle therefore still uses legacy
-recording; this increment only proves upstream history edits regenerate that
-candidate. A small subsequent contract should select exact pending-version IDs,
-validate those untouched unapplied consumers, and reuse the unchanged particle
-replacement helper while preserving their metadata. Applied/retained state and
-other incoming consumers stay rejected. Graft replacement/removal likewise needs
-an explicit dependent-version deletion policy; no silent cascade is introduced.
+The prepared-context checkpoint leaves an ordinary-workflow seam: dragging or
+resizing a particle after creating a pending candidate uses legacy recording.
+The following motion increment addresses that seam. Applied/retained state and
+other incoming consumers stay outside its native scope. Graft replacement/removal
+likewise needs an explicit dependent-version deletion policy; no silent cascade
+is introduced.
 
 ### Next bounded increment: pending candidates through thiol motion
 
-**Tests-only proposal; production support is not yet implemented.** Extend the
+**Implemented; focused correctness validation passed, latency unqualified.** Extend the
 existing `nanoparticle-patch` / `thiol_version: 1` contract with
 `pending_connection_version_ids: list[str]`, defaulting to an empty list for
 existing no-connection rows. The list is unique, identities retain the existing
@@ -239,11 +236,56 @@ refusals, external consumers, missing targets, typed dependencies, native root
 cold proof with poisoned recovery, geometry-changing history edits, deletion of
 a selected producer, actual ordinary route undo/redo, locked selector capture
 and failure atomicity. Root recorded the expected red baseline: **26 failed,
-5 passed, 31 cases in 3.18 seconds**; the new selector and native contract are
-not implemented yet. No tests have been run by the authoring agent; the parent
-serializes validation. After implementation, extend the existing pending HTTP
-benchmark with one move and resize at the already measured scopes, reporting
-latency and proof capture separately without raising limits or retrying.
+5 passed, 31 cases in 3.18 seconds**. Four added boundary tests cover 128
+alternatives with one prepared inventory/backing map/owned-handle resolution,
+custom target identity polarity parity, compound-scope refusal and oversized
+reference admission before indexing. No tests have been run by the authoring
+agent; the parent serializes validation.
+
+Root's combined run passed **204/204 cases in 9.09 seconds** across the new
+35-case motion target and eight existing thiol, native proof, pending ownership,
+preparation and edit-identity regression files. This includes real spawned
+motion replay, a geometry-changing historical edit, ordinary route undo/redo
+and compatibility boundaries. These targets overlap prior validation; do not
+add all 204 cases to the earlier distinct-test count.
+
+The pure motion builder reuses the pending command's prepared reference table.
+Its target map scans domains once; after validating unique backing, it invokes
+the unchanged native polarity helper on that target strand. Existing no-version
+rows retain their original admission path. A document containing NP versions
+uses the bounded reference allowance even when another particle owns them;
+this conservative whole-document check avoids unbounded incoming-reference
+work. The live route's preliminary compatibility predicate is not a reusable
+receipt: its locked builder independently validates the actual source. No
+unlocked prepared index survives into publication.
+
+`scripts/benchmark_pending_np_connections.py --motion` retains every existing
+baseline cell and adds move/resize lifecycle cells at the same measured scopes.
+Each adds two native rows before pending deletion; the unchanged particle
+replacement helper supplies the complete authoring oracle outside timing.
+Actual revision/undo/row counts, exact pending selectors, geometry, metadata,
+fresh worker proof, capture refusal and concurrent lightweight requests remain
+separate checks. The whole-run diagnostic cap is unchanged and explicitly
+reports any dropped events. No limits, retries or GC policy changes.
+
+The initial root-run motion diagnostic (`benchmark_pending_np_motion_initial.json`,
+three repeats) completed all **20 cells**, including 30 native lifecycles and
+**10 independently verified cold proofs**. All ordinary captures and cleanup
+checks passed; 1,668 GC and 648 native-stage events were retained with no drops.
+The five motion-native cold captures took 2.30–9.86 ms; their spawned proofs
+took 1.21–1.40 seconds. Maximum recovery across both modes was 673,940 bytes.
+
+For the larger DNA fixture, native move/resize request medians were
+24.56/25.37 ms versus compatibility's 18.84/17.48 ms; recording-lock medians were
+15.91/16.57 ms versus 12.38/11.75 ms. A native resize reached 59.65 ms, with a
+54.84 ms recording lock. Across the whole native lifecycle the maximum request,
+lock and concurrent lightweight request were 75.90, 69.89 and 73.62 ms. The
+largest delete overlapped a 55.21 ms generation-2 collection, and compatibility
+also had collection-overlapping outliers. Correlation is not an isolated cause
+and no time is subtracted from user-visible latency. **Correctness is verified;
+latency is unqualified.** Three repeats cannot establish a tail guarantee; the
+shared mutable recording/copy path remains the appropriate follow-up, without
+raising limits, retrying refusals or changing collection policy.
 
 ### Later checkpoint: explicit application
 

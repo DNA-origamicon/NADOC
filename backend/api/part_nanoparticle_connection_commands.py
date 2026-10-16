@@ -6,6 +6,7 @@ are retained verbatim; in particular deletion performs no global binding sync.
 
 from dataclasses import dataclass
 from time import time
+from types import SimpleNamespace
 from typing import Annotated, Literal
 from uuid import uuid4
 
@@ -167,6 +168,82 @@ def _prepare_source(design):
     return _PreparedSource(design, index)
 
 
+def _target_backings(design, identities):
+    backings = {}
+    for strand in design.strands:
+        for domain in strand.domains:
+            if domain.overhang_id in identities:
+                backings.setdefault(domain.overhang_id, []).append((strand, domain))
+    return backings
+
+
+def _validate_endpoint(index, owner, strand, target, variant, backing, *, version=None):
+    """The existing pending endpoint rules, after one bounded owner lookup.
+
+    The unique target strand is sufficient for the unchanged polarity helper:
+    tagged IDs are authoritative there, otherwise its sole backing domain is
+    resolved by the same first/last-domain rule. No coordinate work occurs.
+    """
+    if not any(item.strand_id == strand.id for item in owner.surface_strands):
+        _fail("Selected strand is not owned by the selected conjugation", "strand", strand.id, "strand_id")
+    if target.auxiliary_endpoint or target.strand_id == strand.id:
+        _fail("Target must be an ordinary non-nanoparticle overhang", "overhang", target.id, "overhang_id")
+    if (len(backing) != 1 or backing[0][0].id != target.strand_id
+            or backing[0][1].helix_id != target.helix_id or ("helix", target.helix_id) not in index):
+        _fail("Target overhang must have one consistent live backing domain", "overhang", target.id, "overhang_id")
+    error = polarity_error(SimpleNamespace(strands=(backing[0][0],)), owner, target.id, variant)
+    if error:
+        detail, parameter = error
+        _fail(detail, "overhang", target.id, parameter)
+    attaches = connection_attaches(owner, variant)
+    if version is not None and (version.nanoparticle_attach, version.target_attach) != attaches:
+        _fail("Pending version endpoint mapping disagrees with its owner", "nanoparticle_connection_version", version.id, "version_id")
+    return attaches
+
+
+def validate_pending_selection(design, particle_id, identities, prepared, selected):
+    """Retain an exact pending set during motion, after whole-handle admission.
+
+    One prepared inventory and one backing-domain map serve every version. The
+    caller has resolved the selected radial graph once; no per-version budget,
+    full identity scan, geometry execution or ownership bypass is introduced.
+    """
+    if type(prepared) is not _PreparedSource or prepared.source is not design:
+        raise CommandContractError("Pending connection preparation belongs to another source",
+                                   code="source_changed")
+    parameter = "pending_connection_version_ids"
+    actual = {item.id for item in design.nanoparticle_connection_versions if item.nanoparticle_id == particle_id}
+    expected = set(identities)
+    if actual != expected:
+        identity = sorted(expected - actual or actual - expected)[0]
+        _fail("Motion must select exactly the particle's current pending versions",
+              "nanoparticle_connection_version", identity, parameter,
+              missing=("nanoparticle_connection_version", identity) not in prepared.index)
+    if not identities:
+        return set()
+    owners = {record.strand_id: owner for owner in design.nanoparticle_conjugations
+              if ("nanoparticle_conjugation", owner.id) in selected for record in owner.surface_strands}
+    backings = _target_backings(design, {
+        prepared.index[("nanoparticle_connection_version", identity)].overhang_id for identity in identities})
+    for offset, identity in enumerate(identities):
+        try:
+            version = _resolve(prepared.index, "nanoparticle_connection_version", identity, parameter)
+            if not _pending(version) or version.connection_type != "direct":
+                _fail("Native motion cannot change applied or retained connection state",
+                      "nanoparticle_connection_version", version.id, parameter)
+            strand = _resolve(prepared.index, "strand", version.strand_id, parameter)
+            owner = owners.get(strand.id)
+            if owner is None:
+                _fail("Pending version handle is not owned by the selected particle", "strand", strand.id, parameter)
+            target = _resolve(prepared.index, "overhang", version.overhang_id, parameter)
+            _validate_endpoint(prepared.index, owner, strand, target, version.direct_variant,
+                               backings.get(target.id, ()), version=version)
+        except ReferenceResolutionError as error:
+            raise ReferenceResolutionError(str(error), code=error.code, references=[
+                {**reference, "parameter_path": [parameter, offset]} for reference in error.references]) from error
+    return {("nanoparticle_connection_version", identity) for identity in identities}
+
+
 def build(kind, design, params):
     body = parse_command(kind, params)
     return _build_prepared(kind, design, body, _prepare_source(design))
@@ -198,8 +275,6 @@ def _build_prepared(kind, design, body, prepared):
         _fail("Pending native connections require source-free uncoated gold", "nanoparticle", particle.id, "nanoparticle_id")
     if owner.nanoparticle_id != particle.id:
         _fail("Selected conjugation belongs to a different particle", "nanoparticle_conjugation", owner.id, "conjugation_id")
-    if not any(item.strand_id == strand.id for item in owner.surface_strands):
-        _fail("Selected strand is not owned by the selected conjugation", "strand", strand.id, "strand_id")
     # Resolve complete radial ownership, without its separate destructive
     # incoming-consumer guard: adding metadata does not remove those handles.
     try:
@@ -210,20 +285,9 @@ def _build_prepared(kind, design, body, prepared):
         raise ReferenceResolutionError(str(error), code=error.code, references=[
             {**reference, "parameter_path": ["conjugation_id"]}
             for reference in error.references]) from error
-    if target.auxiliary_endpoint or target.strand_id == strand.id:
-        _fail("Target must be an ordinary non-nanoparticle overhang", "overhang", target.id, "overhang_id")
-    backing = [(item, domain) for item in design.strands for domain in item.domains if domain.overhang_id == target.id]
-    if (len(backing) != 1 or backing[0][0].id != target.strand_id
-            or backing[0][1].helix_id != target.helix_id or ("helix", target.helix_id) not in index):
-        _fail("Target overhang must have one consistent live backing domain", "overhang", target.id, "overhang_id")
     variant = body.direct_variant if version is None else version.direct_variant
-    error = polarity_error(design, owner, target.id, variant)
-    if error:
-        detail, parameter = error
-        _fail(detail, "overhang", target.id, parameter)
-    attaches = connection_attaches(owner, variant)
-    if version is not None and (version.nanoparticle_attach, version.target_attach) != attaches:
-        _fail("Pending version endpoint mapping disagrees with its owner", "nanoparticle_connection_version", version.id, "version_id")
+    attaches = _validate_endpoint(index, owner, strand, target, variant,
+                                 _target_backings(design, {target.id}).get(target.id, ()), version=version)
     if version is None:
         version = NanoparticleConnectionVersion(id=body.version_id, name=body.name, created_at=body.created_at,
             nanoparticle_id=particle.id, strand_id=strand.id, overhang_id=target.id,
