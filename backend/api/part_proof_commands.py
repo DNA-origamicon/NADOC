@@ -275,6 +275,22 @@ def dependencies(kind, params):
         if type(params.get("action")) is not str or params["action"] not in ACTIONS:
             return Dependencies(known=False)
     if kind in OVERLAY_KINDS:
+        if kind == "deformation":
+            from backend.core.part_group_selection import has_part_group_targets, target_references
+            try:
+                if not has_part_group_targets(params.get("targets")):
+                    return Dependencies(frozenset({PART_TOPOLOGY}), frozenset({PART_TOPOLOGY}), barrier=True)
+                from backend.core.part_operation_input import validate_operation_input
+                validate_operation_input(params)
+                placements = params.get("cluster_ids", [])
+                if type(placements) is not list or any(
+                        type(identity) is not str or not 1 <= len(identity) <= 512 for identity in placements):
+                    return Dependencies(known=False)
+                reads = {PART_TOPOLOGY, *(Resource(*ref) for ref in target_references(params.get("targets"))),
+                         *(Resource("cluster", identity) for identity in placements)}
+            except (ValueError, TypeError, KeyError):
+                return Dependencies(known=False)
+            return Dependencies(frozenset(reads), frozenset({PART_TOPOLOGY}), barrier=True)
         return Dependencies(frozenset({PART_TOPOLOGY}), frozenset({PART_TOPOLOGY}), barrier=True)
     if kind == "bundle-create" and params.get("history_seed"):
         return Dependencies(writes=frozenset({PART_TOPOLOGY}), barrier=True)
@@ -371,6 +387,8 @@ def _execute(kind, design, params, *, expensive):
     from backend.core.cluster_reconcile import reconcile_cluster_membership
     from backend.core.lattice import retry_pending_ligations
     from backend.core.photoproducts import stale_photoproduct_ids
+    from backend.core.part_group_lineage import KINDS as LINEAGE_KINDS, prepare_lineage, apply_lineage
+    lineage = prepare_lineage(design, kind, params) if kind in LINEAGE_KINDS else None
     report = None
     if kind == "photoproduct-relax" or (kind == "photoproduct-create" and params.get("method") == "convert"):
         if not expensive:
@@ -531,6 +549,7 @@ def _execute(kind, design, params, *, expensive):
     updated = reconcile_cluster_membership(design, updated, report)
     if kind not in {"auto-break", "full-autostaple", "cluster-join"}:
         updated = retry_pending_ligations(design, updated)
+    updated = apply_lineage(lineage, updated)
     if stale_photoproduct_ids(updated):
         raise ValueError("photoproduct_dependency")
     return updated

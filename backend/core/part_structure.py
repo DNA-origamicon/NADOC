@@ -182,6 +182,14 @@ def assess_structure(design, *, checkpoint=None, max_items=MAX_ITEMS, max_issues
                             "strands", strand_index[0][strand_id], "domains", member.domain_index])
                     reference(domain.helix_id, [*path, "domain_index"], "part_group", owner,
                               "helix", indexes["helices"])
+            from backend.core.part_command_errors import CommandContractError
+            from backend.core.part_group_consumers import group_targets
+            try:
+                consumers, _ = group_targets(design, max_items=max_items - total, checkpoint=check)
+            except CommandContractError as error:
+                raise _Incomplete(error.code, model_path=["deformations"]) from error
+            for owner, target, path in consumers:
+                reference(target, path, "deformation", owner, "part_group", group_index)
         check()
     except _Incomplete as error:
         result.update(status="incomplete", complete=False, limit=error.detail)

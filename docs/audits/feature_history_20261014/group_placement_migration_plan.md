@@ -1,6 +1,6 @@
 # Group organization and placement: finite migration plan
 
-Architecture proposal, October 16, 2026; source baseline `3aa2529a`. The U6/U7 status
+Architecture proposal, October 16, 2026; source baseline `3aa2529a`. The U6–U8 status
 below records implementation after that proposal. FH-18 remains open. The
 overhaul count remains **18/38 complete**, with **11 core and 9 parked milestones
 remaining**. This plan and its implementation batches earn no separate milestone
@@ -260,6 +260,71 @@ the explicit move interpretation above: the current frontend's first-matching
 placement lookup can move outsiders or only part of a group. Visible **Edit
 Placement** is valid; arbitrary **Move Group** is not established by conversion
 or dissolution parity.
+
+### U8: named selection and final-entity lineage contract
+
+New `targets: [{kind: "part_group", id: ...}]` retain named selection provenance.
+The closed mixed grammar resolves on the owned native prefix into existing
+`target_ranges` and `affected_helix_ids`; `cluster_ids` remains independently
+authored numerical placement/fitting context. Equal text IDs never alias the
+namespaces. Domain members take precedence over helix labels. Existing legacy
+targets keep their native grammar and saved meaning. Later topology or group
+edits do not refresh an existing operation's frozen ranges; editing an upstream
+feature and replaying that deformation resolves its named inputs again.
+
+Missing named groups are structural/reference errors. Group dissolution checks
+bounded live deformation consumers and refuses with their typed paths; historical
+rows refer to their own prefixes and are not counted as live incoming owners.
+The ordinary preview/editor and comparison DTOs still need organization adapters;
+historical frozen range domain addresses must not be mistaken for live membership.
+The existing loop/skip planner consumes whole helices, so partial/directional named
+scopes refuse before planning. No post-filtering or molecular formula change.
+
+The lineage contract is **whole final entities at each registered command
+boundary**, after placement reconciliation and pending-ligation retry:
+
+- Split: every descendant retains every ancestor group's membership.
+- Actual domain coalescence: each group containing any contributor selects the
+  whole merged domain. This can broaden membership; it is not an exact material mask.
+- Strand concatenation: separate domains keep their own ancestry. A newly swept
+  domain on a new helix does not inherit membership through a surviving strand ID.
+- Last selected-domain deletion: retain the empty group and clear both selector
+  lists, preventing accidental expansion to whole-helix selection.
+- Whole-helix groups retain surviving explicit IDs; fresh helices are not inferred
+  members. Group order, identity and style remain unchanged.
+
+The first qualified set is exactly `nick`, `nick-batch`, `ligate`,
+`forced-ligation-create`, `forced-ligation-delete`, `forced-ligation-delete-batch`,
+`crossover-delete`, `crossover-delete-batch`, `strand-delete`, `strand-delete-batch`,
+`domain-delete`, `sweep`, `loop-skip-insert`, `assign-staple-sequences`.
+Their reviewed effects conserve/delete directional material, except separate new
+sweep helices. Bounded directional interval joins therefore establish ancestry;
+same-direction overlapping occupancy, gaps or undeclared relocation/new material
+refuse. No proximity guess, ordinal identity, object identity or per-base expansion.
+This does not qualify resize/shift, crossover creation/movement, extrusion,
+automatic rerouting, all loop/sequence tools or ordinary live publication.
+
+Fine Routing stores an optional complete organization replacement in both
+modified PRE and POST. Ordinary and composed recovery require the exact recorded
+baseline even in defensive mode; a missing key on both sides keeps legacy behavior.
+Inputs and decoded wrapper construction keep 30k-node/2MB admission. Existing gzip
+inflation/JSON allocation is not bounded by that new metadata check. Native proof
+never consumes these recovery bodies. Snapshot-only group commands remain top-level.
+
+The helper bounds source/output metadata, relation edges and emitted memberships
+across overlapping groups. Legacy absent organization adds no topology walk.
+No native numerical manifests changed. The small isolated timing probe and full
+focused evidence are in [U8 validation](validation_group_organization_consumers.json);
+they do not establish desktop latency or heap limits for the complete transaction.
+
+Onshape exposes configurable split/merge and partial-dependency tracking in its
+[FeatureScript library](https://cad.onshape.com/FsDoc/library.html), and warns that
+upstream edits may change selection cardinality in its
+[feature UI guidance](https://cad.onshape.com/FsDoc/uispec.html). SOLIDWORKS provides
+[model-associated persistent references](https://help.solidworks.com/2025/English/api/sldworksapiprogguide/overview/Persistent_Reference_IDs.htm).
+These support explicit entity tracking rather than ordinal reuse. The whole-final-
+entity and mixed-merge policy above is NADOC's chosen contract, not a universal
+CAD behavior inferred from those sources.
 
 ## Finite acceptance matrix
 

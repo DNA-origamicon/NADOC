@@ -1,0 +1,243 @@
+{
+  "date": "2026-10-16",
+  "checkpoint_before": "47901256a578c5d30f8c4615097b4089f755d128",
+  "scope": "U8 / FH-18 checkpoint 6: named organization selections, qualified final-domain lineage and matching Fine Routing recovery",
+  "progress": {
+    "completed": 18,
+    "estimated_total": 38,
+    "remaining": 20,
+    "core_remaining": 11,
+    "parked_remaining": 9,
+    "completed_delta": 0,
+    "total_delta": 0,
+    "milestone": "FH-18",
+    "major_checkpoints_spent_since_B1": 6,
+    "milestone_closed": false,
+    "task_growth_flag": true,
+    "containment": "Same fixed exit and five finite migration batches. B/C advance; no new milestone credit for adapter kinds, tests, commits or reporting. Next bounded matrix: resize/domain-shift/crossover-move relocation and extrusion/continuation, then remaining consumers/UI and new-group movement."
+  },
+  "delivered": [
+    "Closed part_group deformation targets retain named provenance and resolve against the owned native prefix, separately from explicit numerical placement cluster_ids. Equal text IDs never alias.",
+    "Upstream group edits regenerate downstream bend/twist membership. Later topology/group edits leave already evaluated frozen ranges unchanged. Legacy selector grammar remains native-compatible.",
+    "Bounded live incoming-reference scan and structural diagnostics report missing named groups; dissolution with a named deformation consumer refuses with typed paths.",
+    "Prepared scalar directional ancestry is applied after complete native placement reconciliation and pending-ligation retry. Splits select all descendants; true coalescence selects the whole merged entity for every contributing group; concatenation and separate new sweep domains do not adopt unrelated members.",
+    "Same-direction overlapping source/output occupancy and undeclared relocation/new material refuse. Domain precedence, overlapping independent groups and last-domain emptying are explicit.",
+    "Fine Routing diffs carry optional complete organization PRE/POST replacement. Ordinary, defensive and optimized recovery require exact recorded baseline. Historical absent-key behavior remains unchanged; diagnostics treat organization replacement as a barrier.",
+    "Shared group metadata budget reused. No legacy placement reconciler, molecular kernel, native numerical manifest, UI or public gate changed."
+  ],
+  "qualified_native_lineage_kinds": [
+    "nick",
+    "nick-batch",
+    "ligate",
+    "forced-ligation-create",
+    "forced-ligation-delete",
+    "forced-ligation-delete-batch",
+    "crossover-delete",
+    "crossover-delete-batch",
+    "strand-delete",
+    "strand-delete-batch",
+    "domain-delete",
+    "sweep",
+    "loop-skip-insert",
+    "assign-staple-sequences"
+  ],
+  "remaining": [
+    "Relocation lineage for strand-end-resize, domain-shift and crossover-move; crossover creation/batches and other unqualified routing kinds.",
+    "Extrude/continuation/frame and generated consumer matrices; keeping a wrapper alone is insufficient qualification.",
+    "Ordinary create/edit/preview/repair publication and closed DTO migration, including historical frozen range domain addresses.",
+    "Whole-helix loop/skip realization qualification; partial/directional named scopes explicitly refuse the existing planner before native work.",
+    "Visible Groups/Placements controls and arbitrary regrouped-set movement with frame/extension semantics.",
+    "Desktop/complete-transaction latency and heap acceptance, aggregate regressions and public rollout. Assemblies and VR remain deferred; parked assets retain their existing priority."
+  ],
+  "validation": {
+    "tests_first": [
+      {
+        "target": "tests/test_part_group_selection.py",
+        "failed": 33,
+        "passed": 1,
+        "seconds": 3.29
+      },
+      {
+        "target": "tests/test_part_group_lineage.py",
+        "failed": 37,
+        "passed": 2,
+        "seconds": 3.29
+      },
+      {
+        "target": "tests/test_group_organization_diffs.py",
+        "failed": 34,
+        "passed": 1,
+        "seconds": 3.01
+      },
+      {
+        "target": "tests/test_group_organization_consumers.py",
+        "failed": 7,
+        "passed": 0,
+        "seconds": 2.7
+      },
+      {
+        "note": "Subsequent red regressions reproduced legacy selector rejection and unbounded/invalid placement-context dependency parsing before fixes. Initial pipeline fixture omissions were corrected; they are not counted as behavioral evidence."
+      }
+    ],
+    "focused": {
+      "targets": [
+        "tests/test_part_group_selection.py",
+        "tests/test_part_group_lineage.py",
+        "tests/test_group_organization_consumers.py",
+        "tests/test_group_organization_diffs.py",
+        "tests/test_group_organization_pipeline.py",
+        "tests/test_group_organization_commands.py",
+        "tests/test_group_organization_history.py",
+        "tests/test_group_organization_execution.py",
+        "tests/test_group_organization_inventory.py",
+        "tests/test_group_organization_boundaries.py",
+        "tests/test_group_organization_public_gate.py",
+        "tests/test_group_organization_recording.py",
+        "tests/test_group_organization_permits.py",
+        "tests/test_part_group_organization_routes.py",
+        "tests/test_group_organization_recovery_admission.py",
+        "tests/test_part_structure.py",
+        "tests/test_part_structure_proof.py",
+        "tests/test_part_proof_engine.py",
+        "tests/test_part_recipe_edit.py",
+        "tests/test_part_deformation_preview.py",
+        "tests/test_part_deformation_group_retarget.py",
+        "tests/test_deformation_selection.py",
+        "tests/test_feature_evaluation.py",
+        "tests/test_fine_routing_diffs.py",
+        "tests/test_part_numerical_schema_compatibility.py",
+        "tests/test_sweep_loop_skips.py"
+      ],
+      "passed": 761,
+      "warnings": 33,
+      "seconds": 16.87,
+      "new_test_files": 5,
+      "new_cases_in_those_files": 129
+    },
+    "additional": {
+      "passed": 66,
+      "warnings": 12,
+      "seconds": 4.48,
+      "note": "Intermediate new-diff plus existing feature-evaluation/Fine Routing pass; overlaps the final run and is not added to its count."
+    },
+    "native_checks": "Actual native sweep/nick/ligation/retry, derived geometry and bend/twist arrays/axes; ordinary and >=32-row optimized child seek, save/reload and full input proof with deliberately poisoned recovery. No production scientific run or new native worker compatibility rerun.",
+    "static": {
+      "ruff": "17 changed Python files passed",
+      "diff": "passed",
+      "main_js_delta": 0
+    },
+    "memory_lint": {
+      "passed": false,
+      "errors": 6,
+      "warnings": 59,
+      "note": "Same pre-existing unrelated errors: oversized CPD/VR heads, unindexed exp_predictor and three missing artifact links. Updated project head is 143 lines, indexed, with valid audit links."
+    },
+    "selector": {
+      "command": "just test-smart --dry-run",
+      "changed_files_reported": 5531,
+      "decision": "FAST (fast suite only)",
+      "routing": "FULL: backend/api/main.py matches foundational/shared 'backend/api/main.py'",
+      "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated session is open",
+      "tests_executed": 0,
+      "note": "Dry run only; boilerplate claiming the fast suite ran is not an execution result. Aggregate fast/FULL debt remains."
+    },
+    "frontend": "No frontend production changes or frontend suite rerun.",
+    "app": "NOT VERIFIED IN APP. Archive absent/unmounted; no browser/bulk scratch fallback. Desktop acceptance remains open."
+  },
+  "microbenchmark": {
+    "scope": "Metadata preparation plus final ancestry application only; synthetic disjoint domains. Excludes native editing, capture, publication, serialization, geometry, UI and process RSS. Timings are evidence, not CI thresholds or UI guarantees.",
+    "command": "just validate-safe uv run python3 (memory-only probe; 1 warmup + 20 timed iterations, separate tracemalloc sample)",
+    "results": [
+      {
+        "input_domains": 100,
+        "output_domains": 200,
+        "groups": 2,
+        "timed_iterations": 20,
+        "median_ms": 3.145,
+        "max_ms": 3.241,
+        "peak_python_allocated_bytes": 82560
+      },
+      {
+        "input_domains": 500,
+        "output_domains": 1000,
+        "groups": 2,
+        "timed_iterations": 20,
+        "median_ms": 15.45,
+        "max_ms": 15.812,
+        "peak_python_allocated_bytes": 501600
+      }
+    ]
+  },
+  "bounds": {
+    "source_and_output": "30k metadata nodes/2MB; bounded IDs and integer spans, no per-base expansion; legacy organization=None has no added topology inventory.",
+    "lineage": "30k relation edges and 30k emitted member references, also charged to cumulative metadata bounds across overlapping groups.",
+    "recovery": "New organization wrapper admission is before typed construction, after existing gzip/JSON decoding. It does not bound legacy decompression allocation.",
+    "publication": "Existing rollout flag remains false; generic writes and unrelated permits remain closed."
+  },
+  "numerical_manifests": {
+    "changed": false,
+    "part_cpd_contract": "57c8533168455febc6b2717f825c9571391b748272ae72739834d09197b1c3fa",
+    "part_duplex_relax_contract": "c9e922c333b5756e73775da00e7a3bfbd659d03e41c1d841196cda6f9d0e3996",
+    "part_streptavidin_contract": "67f3141feab0d5771926b7f532f7b40e3a13d31403fc1866e158b3a589406d9f",
+    "note": "Exact U7 values; no compatibility-policy edits or stored-pin rewrites."
+  },
+  "research": {
+    "sources": [
+      "https://cad.onshape.com/FsDoc/library.html",
+      "https://cad.onshape.com/FsDoc/uispec.html",
+      "https://help.solidworks.com/2025/English/api/sldworksapiprogguide/overview/Persistent_Reference_IDs.htm"
+    ],
+    "inference": "Explicit configurable entity tracking supports the approach; whole-final-entity mixed-merge membership is NADOC's chosen contract, not a claim of universal CAD behavior."
+  },
+  "cleanup": {
+    "paths": [
+      "/tmp/pytest-of-joshua/pytest-9",
+      "/tmp/pytest-of-joshua/pytest-10",
+      "/tmp/pytest-of-joshua/pytest-11",
+      "/tmp/pytest-of-joshua/pytest-current"
+    ],
+    "removed_files": 26,
+    "removed_bytes": 154905,
+    "removed_directories": 918,
+    "removed_symlinks": 16,
+    "visible_processes": 55,
+    "visible_active_target_references": 0,
+    "permission_denied_pids": [
+      1,
+      2,
+      3,
+      11,
+      44,
+      94,
+      116,
+      117,
+      120,
+      124,
+      128,
+      130,
+      212,
+      213,
+      222,
+      223,
+      229,
+      230,
+      240,
+      245,
+      264,
+      384,
+      435,
+      436,
+      513,
+      514,
+      542,
+      543,
+      553,
+      557,
+      11464,
+      120420
+    ],
+    "pytest_root_remaining": [],
+    "nadoc_shared_memory_remaining": [],
+    "note": "Visible cwd/root/fd/maps references checked before cleanup; protected processes prevented a complete system-wide audit. Only current-task disposable fixtures removed; workspace designs/jobs/runtime and historical evidence preserved."
+  }
+}

@@ -88,6 +88,8 @@ def recorded_effects(child) -> Effects:
     if not is_diff_child(child) or child.diff_added_b64 or child.diff_removed_b64:
         return Effects(known=False)
     modified = json.loads(_ungzip_b64(child.diff_modified_b64)) if child.diff_modified_b64 else {}
+    if any("group_organization" in modified.get(side, {}) for side in ("pre", "post")):
+        return Effects(known=False)  # Replacement has an exact incoming metadata baseline.
     targets = [(field, item["id"]) for field, items in modified.get("post", {}).items()
                if field in _DIFF_FIELDS for item in items]
     return Effects(frozenset((*key, "exists") for key in targets),

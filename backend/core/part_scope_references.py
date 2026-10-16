@@ -272,8 +272,13 @@ def _targets(targets, reference):
     result = []
     for target in targets:
         kind = target.get("kind")
+        if kind == "part_group":
+            from backend.core.part_group_selection import target_references
+            target_references([target])
         value = dict(target)
-        if kind in {"cluster", "strand"} and set(target) == {"kind", "id"}:
+        if kind == "part_group":
+            value["id"] = reference(kind, target["id"])
+        elif kind in {"cluster", "strand"} and set(target) == {"kind", "id"}:
             value["id"] = reference(kind, target["id"])
         elif kind == "domain" and set(target) in (
             {"kind", "strandId", "domainIndex"}, {"kind", "strand_id", "domain_index"}

@@ -51,9 +51,12 @@ def require_group_publication(source, candidate, checked):
 
 def require_native_command(kind, params):
     """Only already-qualified roles may follow conversion in a private recipe."""
+    from backend.core.part_group_lineage import KINDS as LINEAGE_KINDS
     if "_generated_scope" not in params:
-        if kind in KINDS:
+        if kind in KINDS or kind in LINEAGE_KINDS:
             return
+        if kind == "deformation":
+            return  # Typed named selections resolve separately from placement context.
         if kind == "cluster_op" and not set(params) - {
                 "_proof_version", "_generator", "cluster_id", "translation", "rotation", "pivot"}:
             return  # Explicit existing placement, with no organizational writes.

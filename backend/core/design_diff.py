@@ -10,9 +10,9 @@ child diffs forward, never by replaying operations.
 
 This mirrors the assembly-level diff pattern in
 ``backend/api/assembly_state.py`` (encode_diff_snapshot / apply_diff_forward),
-generalized over the Design topology fields. Every diffed field is an id-keyed
-list of Pydantic v2 models, so ``!=`` detects "modified" and
-``model_validate(model_dump(mode="json"))`` round-trips a single object.
+generalized over the Design topology fields. Topology collections are id-keyed
+lists. Organizational membership is an optional whole-wrapper replacement in
+the modified pre/post envelope; its recorded baseline must match exactly.
 
 CORE INVARIANT: diffs are captured AFTER reconcile_cluster_membership +
 _retry_pending_ligations, so a child diff already includes reconcile effects.
@@ -24,6 +24,7 @@ from __future__ import annotations
 import base64
 import gzip
 import json
+from math import isfinite
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -47,6 +48,70 @@ _DIFF_FIELDS: tuple[str, ...] = (
     "cluster_joints",
     "cluster_join_constraints",
 )
+
+_ORGANIZATION = "group_organization"
+_UNCHANGED = object()
+
+
+def _admit_organization_json(value):
+    """Bound decoded/emitted metadata before constructing its typed wrapper.
+
+    The encoder applies this same admission after its typed preflight, so it
+    cannot emit a replacement that its reader rejects on structural budget.
+    Legacy diffs without this field retain their existing format and reader.
+    """
+    from backend.core.part_capture_graph import GraphBudget
+    from backend.core.part_group_model import PartGroup
+
+    def json_value(item):
+        if (item is not None and type(item) not in {dict, list, str, bool, int, float}
+                or type(item) is dict and any(type(key) is not str for key in item)
+                or type(item) is float and not isfinite(item)
+                or type(item) is int and item.bit_length() > 64):
+            raise ValueError("Group organization recovery requires finite bounded JSON values")
+
+    GraphBudget(max_nodes=30_000, max_bytes=2_000_000, seconds=None,
+        clock=lambda: 0).charge(value, validate=json_value, reject_cycles=True)
+    if value is None:
+        return
+    if (type(value) is not dict or set(value) != {"version", "groups"}
+            or type(value["groups"]) is not list):
+        raise ValueError("Group organization recovery requires a complete wrapper")
+    fields = set(PartGroup.model_fields)
+    if any(type(group) is not dict or set(group) != fields for group in value["groups"]):
+        raise ValueError("Group organization recovery requires complete group metadata")
+
+
+def _organization_replacement(current, modified):
+    """Refuse deleted/changed ancestry instead of restoring unrelated groups.
+
+    Defensive topology replay may append an absent modified strand, but a whole
+    organizational replacement cannot safely infer its missing baseline. This
+    rule also applies to each transition inside the optimized recorded run.
+    """
+    from backend.core.part_group_model import GroupOrganization
+    from backend.core.part_group_organization import _bounded_groups
+
+    if type(modified) is not dict:
+        raise ValueError("Recorded modifications require a pre/post object")
+    pre, post = modified.get("pre", {}), modified.get("post", {})
+    if type(pre) is not dict or type(post) is not dict:
+        raise ValueError("Recorded modifications require pre/post objects")
+    has_pre, has_post = _ORGANIZATION in pre, _ORGANIZATION in post
+    if not has_pre and not has_post:
+        return _UNCHANGED
+    if not has_pre or not has_post:
+        raise ValueError("Group organization recovery requires both recorded pre and post states")
+    before, after = pre[_ORGANIZATION], post[_ORGANIZATION]
+    _admit_organization_json(before)
+    _admit_organization_json(after)
+    expected = GroupOrganization.model_validate(before) if before is not None else None
+    replacement = GroupOrganization.model_validate(after) if after is not None else None
+    if current is not None:
+        _bounded_groups(current)
+    if current != expected:
+        raise ValueError("Group organization recovery baseline is missing or changed")
+    return replacement
 
 
 def _model_classes() -> dict[str, type]:
@@ -107,8 +172,22 @@ def encode_child_diff(pre: "Design", post: "Design") -> tuple[str, str, str, int
     """
     added: dict[str, list] = {}
     removed: dict[str, list] = {}
-    mod_pre: dict[str, list] = {}
-    mod_post: dict[str, list] = {}
+    mod_pre: dict = {}
+    mod_post: dict = {}
+
+    pre_organization, post_organization = pre.group_organization, post.group_organization
+    if pre_organization is not post_organization:
+        from backend.core.part_group_organization import _bounded_groups
+
+        # Admit both inputs before either serializer can expand shared values.
+        for organization in (pre_organization, post_organization):
+            if organization is not None:
+                _bounded_groups(organization)
+        if pre_organization != post_organization:
+            for target, organization in ((mod_pre, pre_organization), (mod_post, post_organization)):
+                value = organization.model_dump(mode="json") if organization is not None else None
+                _admit_organization_json(value)
+                target[_ORGANIZATION] = value
 
     for field in _DIFF_FIELDS:
         pre_list = list(getattr(pre, field) or [])
@@ -180,8 +259,9 @@ def apply_child_diff_forward(
     return ``(post_state, warnings)``.
 
     Per field, in order: drop removed ids, replace modified by their POST
-    object, append added objects. Topology fields only — feature_log,
-    deformations, cluster_transforms, overhangs etc. pass through unchanged.
+    object, append added objects. An optional organization replacement restores
+    membership only after its recorded pre-state matches. Feature history,
+    deformations and numerical cluster transforms pass through unchanged.
 
     ``defensive=True`` (used only by per-step DELETE when applying the tail of
     survivors after an earlier step was removed): a removal whose id is absent
@@ -200,9 +280,12 @@ def apply_child_diff_forward(
         json.loads(_ungzip_b64(modified_b64).decode("utf-8")) if modified_b64 else {}
     )
     mod_post = modified.get("post", {}) if modified else {}
+    organization = _organization_replacement(anchor.group_organization, modified)
 
     warnings: list[str] = []
-    overrides: dict[str, list] = {}
+    overrides: dict = {}
+    if organization is not _UNCHANGED:
+        overrides[_ORGANIZATION] = organization
 
     for field in _DIFF_FIELDS:
         model_cls = classes[field]
@@ -276,6 +359,8 @@ def apply_child_diff_run(anchor: "Design", children) -> "Design":
 
     classes = _model_classes()
     collections: dict[str, dict] = {}
+    organization = anchor.group_organization
+    organization_changed = False
 
     def reference():
         state = anchor
@@ -293,6 +378,10 @@ def apply_child_diff_run(anchor: "Design", children) -> "Design":
         removed = json.loads(_ungzip_b64(child.diff_removed_b64)) if child.diff_removed_b64 else {}
         modified = json.loads(_ungzip_b64(child.diff_modified_b64)) if child.diff_modified_b64 else {}
         post = modified.get("post", {})
+        replacement = _organization_replacement(organization, modified)
+        if replacement is not _UNCHANGED:
+            organization = replacement
+            organization_changed = True
         for field in (added.keys() | removed.keys() | post.keys()) & classes.keys():
             if field not in collections:
                 original = getattr(anchor, field) or []
@@ -316,4 +405,6 @@ def apply_child_diff_run(anchor: "Design", children) -> "Design":
                 for obj in current.values()]
         for field, current in collections.items()
     }
+    if organization_changed:
+        overrides[_ORGANIZATION] = organization
     return anchor.copy_with(**overrides) if overrides else anchor

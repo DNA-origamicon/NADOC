@@ -5,6 +5,8 @@ from fastapi import HTTPException
 
 
 def plan(design):
+    from backend.core.part_group_consumers import require_whole_helix_realization
+    require_whole_helix_realization(design)
     from backend.core.loop_skip_calculator import (
         bend_loop_skips,
         clear_loop_skips,

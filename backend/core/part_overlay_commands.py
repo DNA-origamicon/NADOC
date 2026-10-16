@@ -76,14 +76,16 @@ def build(kind, design, params):
 
     if kind == "deformation":
         from backend.core.deformation import validate_bend_endpoint_fit
-        from backend.core.deformation_scope import resolve_deformation_targets
+        from backend.core.part_group_selection import has_part_group_targets, resolve_deformation_targets
 
         op = DeformationOp.model_validate(
             {k: v for k, v in params.items() if k != "_proof_version"}
         )
         if op.id in {d.id for d in design.deformations}:
             raise ValueError("Duplicate deformation identity")
-        check_members(op.affected_helix_ids)
+        named_group = has_part_group_targets(op.targets)
+        if not named_group:
+            check_members(op.affected_helix_ids)
         if set(op.cluster_ids) - {c.id for c in design.cluster_transforms}:
             raise ValueError("Missing deformation cluster")
         if op.targets is not None:
@@ -94,6 +96,8 @@ def build(kind, design, params):
                     "affected_helix_ids": sorted({r.helix_id for r in ranges}),
                 }
             )
+        if named_group:
+            check_members(op.affected_helix_ids)
         updated = design.copy_with(deformations=[*design.deformations, op])
         validate_bend_endpoint_fit(updated, op)
         return updated

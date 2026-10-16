@@ -138,7 +138,7 @@ def _members(group, helices, strands, path):
         seen.add(key)
 
 
-def _bounded_groups(value):
+def _bounded_groups(value, *, budget=None):
     from backend.core.part_capture_graph import CaptureLimit, GraphBudget
     from backend.core.models import ClusterRigidTransform, DomainRef
 
@@ -150,7 +150,8 @@ def _bounded_groups(value):
         groups = value
     if type(groups) is not list or len(groups) > 2_000:
         _invalid("Group source requires a bounded typed list.", "group_organization_limit")
-    budget = GraphBudget(max_nodes=30_000, max_bytes=2_000_000, seconds=None, clock=lambda: 0)
+    if budget is None:
+        budget = GraphBudget(max_nodes=30_000, max_bytes=2_000_000, seconds=None, clock=lambda: 0)
     try:
         budget.charge(None)  # Outer collection/wrapper.
         for group in groups:
@@ -223,6 +224,8 @@ def build(kind, design, params):
                 if identity not in index:
                     _reference("part_group", identity, ["group_ids", position])
             selected = set(command.group_ids)
+            from backend.core.part_group_consumers import require_no_incoming_groups
+            require_no_incoming_groups(design, selected)
             groups = [group for group in groups if group.id not in selected]
     _bounded_groups(groups)
     try:
