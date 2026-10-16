@@ -6425,6 +6425,10 @@ def edit_feature(index: int, body: EditFeatureBody, sub_index: int | None = None
 
     entry = log[index]
 
+    from backend.api.part_extrusion_feature_route import owns_edit, edit_response
+    if owns_edit(design, entry, body):
+        return edit_response(index, body, sub_index=sub_index)
+
     if (design.group_organization is not None
             and getattr(entry, "op_kind", None) in {"linear-pattern", "circular-pattern"}):
         from backend.api.part_pattern_recording import edit

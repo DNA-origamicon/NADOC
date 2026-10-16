@@ -16,6 +16,7 @@ import { createPartRepairEndpoints } from './part_repair_endpoints.js'
 import { createPartRepairResponse } from './part_repair_response.js'
 import { createGroupOrganizationEndpoint } from './group_organization_endpoints.js'
 import { createPatternRequests } from './pattern_requests.js'
+import { createSourceBoundRequests } from './source_bound_requests.js'
 
 const _documentRequests = createDocumentRequestScope()
 const _seekHistory = createSeekHistoryAcknowledgement()
@@ -3761,6 +3762,12 @@ export const isPatternContextCurrent = (context, state) => _patterns.isCurrent(c
 export const createLinearPattern = (body, context) => _patterns.create('linear-pattern', body, context)
 export const createCircularPattern = (body, context) => _patterns.create('circular-pattern', body, context)
 export const editPatternFeatureInputs = (index, params, context, featureId) => _patterns.edit(index, params, context, featureId)
+
+const _featureInputs = createSourceBoundRequests({ store, request: _request, syncDesign: _syncFromDesignResponse,
+  getDocId, currentRevision: currentRevisionWatermark, documentRequests: _documentRequests, label: 'extrusion' })
+export const captureFeatureEditContext = state => _featureInputs.capture(state)
+export const isFeatureEditContextCurrent = (context, state) => _featureInputs.isCurrent(context, state)
+export const editNativeExtrusionFeature = (index, params, context, featureId) => _featureInputs.edit(index, params, context, featureId)
 
 export async function createCluster(body) {
   const json = await _request('POST', '/design/cluster', body)

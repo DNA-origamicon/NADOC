@@ -26,6 +26,12 @@ def host():
     return part_pattern_recording
 
 
+def transaction_host():
+    from backend.api import part_ordinary_recipe_recording
+
+    return part_ordinary_recipe_recording
+
+
 @pytest.fixture
 def document(monkeypatch):
     _, states = history()
@@ -78,7 +84,7 @@ def worker(monkeypatch):
         def close(self):
             self.closed = True
 
-    monkeypatch.setattr(host(), "EvaluationWorker", Worker)
+    monkeypatch.setattr(transaction_host(), "EvaluationWorker", Worker)
     return controls
 
 
@@ -198,7 +204,7 @@ def test_stale_expectations_refuse_before_worker_or_default_allocation(document,
         create(document)
     before = saved(document)
     count = len(worker.instances)
-    monkeypatch.setattr(host(), "uuid4", lambda: pytest.fail("Stale request allocated identity"))
+    monkeypatch.setattr(transaction_host(), "uuid4", lambda: pytest.fail("Stale request allocated identity"))
     with pytest.raises(HTTPException) as caught:
         if guard == "feature":
             edit(document, {"instances": 3}, expected_feature_id="other-feature")
@@ -308,7 +314,7 @@ def test_bounded_stop_preserves_state_and_releases_shared_slot(document, worker,
     if stop == "cancelled":
         cancelled.set()
     elif stop == "deadline":
-        monkeypatch.setattr(host(), "TIME_BUDGET", 0)
+        monkeypatch.setattr(transaction_host(), "TIME_BUDGET", 0)
     else:
         def fail(_worker):
             raise WorkerLimit("bounded input")

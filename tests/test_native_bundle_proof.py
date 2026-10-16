@@ -124,3 +124,6 @@ def test_capabilities_distinguish_executors_from_proof_contracts():
     assert not dependencies("nanoparticle-create", {"_proof_version": 1}).known
     assert result["nanoparticle_contract"]["scope"].startswith("uncoated gold")
     assert result["certifies_history"] is False
+    assert result["command_editors"]["extrude-frame"]["history_ui"] == "complete_native_inputs"
+    assert result["command_editors"]["circle-segment"]["history_ui"] == "complete_native_inputs"
+    assert "expected_feature_id" in result["extrusion_history_editor"]["requires"]

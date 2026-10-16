@@ -1,0 +1,174 @@
+{
+  "checkpoint": "U16 — FH-21 checkpoint 1; complete ordinary extrusion history input editor",
+  "source_checkpoint": "6442a481",
+  "date": "2026-10-16",
+  "evidence_status": "Focused software checks passed; NOT VERIFIED IN APP because Archive is unavailable; desktop/performance acceptance remains FH27",
+  "scope": {
+    "implemented": [
+      "Seven complete native extrusion input editors, latest-cursor historical edits through later features with poisoned/evicted recovery.",
+      "Closed schema normalization, protected identities, selected-prefix continuation source rebinding and typed missing references.",
+      "Shared owned pattern/extrusion host with existing bounded capture, isolated worker, exact source/session/revision/policy admission and one failure-atomic publication/undo.",
+      "Source-bound client adoption of complete candidate geometry, no follow-up geometry GET or protected retry, refused drafts retained and resets retire editors.",
+      "Capability metadata distinguishes complete native desktop inputs from legacy/recovery editors; no molecular builders or numerical manifests changed."
+    ],
+    "limits": [
+      "Organization rollout remains disabled. Overhang edits after conversion cover overhangs authored before conversion; new post-conversion overhang authoring remains unsupported.",
+      "Five-second capture/proof/publication budget excludes HTTP response geometry formatting; representative latency/lock/heap qualification remains FH27.",
+      "Assemblies and machine-specific VR deferred; nanoparticle/assets parked.",
+      "FH18 movement/frame/generated integration remains open after thirteen checkpoints; this checkpoint does not alter its exit.",
+      "Compatibility path is not a sandbox against arbitrary privileged Python; registered strict automation remains a separate milestone."
+    ],
+    "main_js": {
+      "lines": 7349,
+      "delta": 0
+    }
+  },
+  "runs": {
+    "host_red": {
+      "failed": 8,
+      "passed": 2,
+      "errors": 32,
+      "seconds": 3.26,
+      "total": 42
+    },
+    "frontend_red": {
+      "failed_suites": 2,
+      "failed_tests": 6,
+      "passed_tests": 1,
+      "seconds": 1.78,
+      "files": 3
+    },
+    "inputs_red": {
+      "failed": 52,
+      "seconds": 3.06
+    },
+    "routes_red": {
+      "failed": 19,
+      "passed": 3,
+      "warnings": 10,
+      "seconds": 3.11
+    },
+    "frontend_first_green": {
+      "passed": 95,
+      "files": 9,
+      "seconds": 4.48
+    },
+    "backend_first_green": {
+      "failed": 8,
+      "passed": 148,
+      "warnings": 16,
+      "seconds": 6.35,
+      "files": 5,
+      "reason": "Private mismatched-context tests incorrectly expected failed; established CommandContractError status is unverified before native evaluation. Corrected expectations and asserted no candidate; production unchanged."
+    },
+    "lint": {
+      "exit_code": 1,
+      "errors": 5,
+      "delta": 0,
+      "reason": "Same five pre-existing F401 findings; changed Python files pass."
+    },
+    "memory_lint": {
+      "exit_code": 1,
+      "errors": 6,
+      "warnings": 59,
+      "delta": 0
+    },
+    "frontend_full_final": {
+      "command": "just test-frontend",
+      "passed": 8874,
+      "skipped": 1,
+      "files": 748,
+      "seconds": 322.47
+    },
+    "backend_related": {
+      "passed": 234,
+      "warnings": 58,
+      "files": 11,
+      "seconds": 11.7,
+      "scope": [
+        "test_part_recipe_edit.py",
+        "test_part_evaluation.py",
+        "test_part_evaluation_jobs.py",
+        "test_part_evaluation_admission.py",
+        "test_part_evaluation_session.py",
+        "test_part_publication_permit.py",
+        "test_organized_recipe_permit.py",
+        "test_group_organization_public_gate.py",
+        "test_native_bundle_proof.py",
+        "test_native_extrusion_proof.py",
+        "test_frame_extrusion.py"
+      ]
+    },
+    "backend_new_final": {
+      "passed": 167,
+      "warnings": 23,
+      "files": 6,
+      "seconds": 8.02,
+      "scope": [
+        "test_part_extrusion_edit_inputs.py",
+        "test_part_ordinary_recipe_recording.py",
+        "test_part_extrusion_edit_routes.py",
+        "test_part_extrusion_edit_sources.py",
+        "test_part_pattern_recording.py",
+        "test_part_pattern_routes.py"
+      ],
+      "real_extrusion_spawn_seconds": 1.18
+    },
+    "backend_unique_final": {
+      "passed": 401,
+      "warnings": 81,
+      "files": 17,
+      "qualification": "Disjoint final runs:167 new/host/pattern +234 related; intermediate/repeated passes not added."
+    },
+    "changed_python_lint": {
+      "passed": true,
+      "files": 17
+    },
+    "selector": {
+      "decision": "FAST",
+      "routed": "FULL",
+      "tests_executed": 0,
+      "dry_run": true,
+      "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\n  This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\n  Only request `just test-session` when a broad/full sweep is actually needed.",
+      "qualification": "Selector says ran, but dry-run executed zero tests; no pending-state write or broad suite qualification."
+    }
+  },
+  "numerical_manifest_check": {
+    "changed_members": {
+      "nadoc.cpd-native-engine.v1": [],
+      "nadoc.duplex-relax-native.v1": [],
+      "nadoc.streptavidin-native.v1": []
+    }
+  },
+  "cleanup": {
+    "status": "Complete for task-owned disposable pytest output; no browser/bulk/physical-simulation writer started. Archive unavailable.",
+    "paths": [
+      "/tmp/pytest-of-joshua/pytest-3",
+      "/tmp/pytest-of-joshua/pytest-4",
+      "/tmp/pytest-of-joshua/pytest-5",
+      "/tmp/pytest-of-joshua/pytest-current"
+    ],
+    "removed_files": 64,
+    "removed_bytes": 86029,
+    "removed_directories": 624,
+    "removed_symlinks": 4,
+    "remaining_task_paths": [],
+    "process_reference_check": "No readable same-user cwd/fd/maps references. Inspection denied for persistent systemd/PAM pids435/436; ps confirms neither is a validation process. Removed only exact current task-owned paths after inventory.",
+    "preserved": "Shared caches, active runtimes, workspace user designs/jobs and historical provenance."
+  },
+  "progress": {
+    "baseline": "B1:17/38 through 2c15e747",
+    "completed": 19,
+    "estimated_total": 38,
+    "remaining": 19,
+    "core_remaining": 10,
+    "parked_remaining": 9,
+    "delta_completed": 1,
+    "delta_total": 0,
+    "fh18_checkpoints": 13,
+    "fh21_checkpoints": 1,
+    "engineering_checkpoints_since_b1": 16,
+    "milestones_closed_since_b1": 2,
+    "task_growth_flagged": true
+  }
+}

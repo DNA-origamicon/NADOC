@@ -89,8 +89,11 @@ def _authoring_changes(source, candidate):
 
 
 def evaluate(source, operation, *, executor=None, dependency_resolver=None):
-    """The pattern host adds only a private report observer to shared evaluation."""
+    """Closed owned hosts add target guards or a native pattern report observer."""
     header = operation["header"]
+    if "extrusion_recording_version" in header:
+        return _evaluate_extrusion(source, operation, executor=executor,
+                                   dependency_resolver=dependency_resolver)
     if "pattern_recording_version" not in header:
         return _evaluate(source, operation, executor=executor, dependency_resolver=dependency_resolver)
     from backend.api.pattern_features import collect_pattern_report
@@ -130,7 +133,43 @@ def evaluate(source, operation, *, executor=None, dependency_resolver=None):
                 "native_editable": False}
 
 
-def _evaluate(source, operation, *, executor=None, dependency_resolver=None):
+def _evaluate_extrusion(source, operation, *, executor=None, dependency_resolver=None):
+    from backend.api.part_extrusion_edit_inputs import KINDS, bind_prefix
+
+    try:
+        header = operation["header"]
+        request = EvaluationRequest.model_validate(operation["request"])
+        if (type(header["extrusion_recording_version"]) is not int
+                or header["extrusion_recording_version"] != 1
+                or "pattern_recording_version" in header
+                or type(header.get("source_revision")) is not int
+                or header["source_revision"] != request.expected_revision
+                or header.get("source_design_id") != source.id):
+            raise CommandContractError("Extrusion edit lacks its exact captured context",
+                                       code="invalid_capture_context")
+        if (request.operation != "edit" or request.sub_index is not None
+                or request.index >= len(source.feature_log)):
+            raise CommandContractError("Unknown owned extrusion operation",
+                                       code="invalid_operation_admission")
+        entry = source.feature_log[request.index]
+        if (entry.feature_type != "snapshot" or entry.op_kind not in KINDS
+                or header.get("expected_kind") != entry.op_kind
+                or header.get("expected_feature_id") != entry.id
+                or type(entry.params.get("_proof_version")) is not int
+                or entry.params["_proof_version"] != 1
+                or "_generated_scope" in entry.params or "_generator" in entry.params):
+            raise CommandContractError("The selected native extrusion feature changed",
+                                       code="source_changed")
+        return _evaluate(source, operation, executor=executor,
+                         dependency_resolver=dependency_resolver, input_binder=bind_prefix)
+    except CommandContractError as error:
+        return {"status": error.status, "issues": [error.as_issue()], "native_editable": False}
+    except (ValueError, KeyError, TypeError) as error:
+        return {"status": "failed", "issues": [{"code": "invalid_command_inputs", "detail": str(error)[:2048]}],
+                "native_editable": False}
+
+
+def _evaluate(source, operation, *, executor=None, dependency_resolver=None, input_binder=None):
     """Return a result/candidate without touching a document or decoding recovery."""
     from backend.api.part_proof_commands import dependencies, execute, execute_long
     from backend.api.part_recipe_edit import prepare_change
@@ -190,6 +229,7 @@ def _evaluate(source, operation, *, executor=None, dependency_resolver=None):
                 source, source, request.index, lambda: None,
                 params=request.params, sub_index=request.sub_index, cascade=request.cascade,
                 executor=executor, dependency_resolver=dependency_resolver,
+                input_binder=input_binder,
             )
             if isinstance(result, dict):
                 return {"status": "preview", "issues": [], "preview": result}

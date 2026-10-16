@@ -891,3 +891,11 @@ strict empty-state digest after validating the new field. Three observed red
 canonical/stored/spawned recovery cases guard the fix; no relaxed decoder or
 rewritten source evidence is used. This was discovered by tracing the actual
 recovery equality check, beyond ordinary .nadoc roundtrip tests.
+
+
+2026-10-16 — U16 / ISSUE-119: output-identity preservation also retained a derived
+continuation source receipt after source input changes. Bind the edited receipt
+to the proved prefix after identity preservation; never infer it from the latest
+displayed geometry. Shared owned publication and typed reference failure keep
+rejected edits atomic. The seven-family editor is one FH-21 milestone, not extra
+credit for this fix or the shared-host extraction.

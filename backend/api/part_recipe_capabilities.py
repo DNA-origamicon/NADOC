@@ -10,15 +10,11 @@ def editing_capabilities(kinds):
     from backend.api.part_aptamer_commands import NATIVE_ROUTE_ENABLED
     from backend.api.part_evaluation_capture import COATING_APPEND_ENABLED
     from backend.api.part_batch_evaluation import REGISTERED_BATCH_ENABLED
+    from backend.api.part_extrusion_edit_inputs import KINDS as EXTRUSIONS
 
     # Existing history editors; other authoring tools edit current objects, not
     # their historical input commands, so must not be advertised as equivalents.
     specialized = {
-        "bundle-create",
-        "extrude-segment",
-        "extrude-continuation",
-        "extrude-deformed-continuation",
-        "overhang-extrude",
         "sweep",
         "circular-pattern",
         "linear-pattern",
@@ -39,10 +35,10 @@ def editing_capabilities(kinds):
                 "source history independently reproduces authoring state",
             ],
             "limits": [
-                "Existing desktop/VR editors expose only their existing fields; other historical parameters require the API.",
-                "Existing UI controls can still restrict earlier rows with later snapshots; API regeneration has broader coverage.",
+                "Native desktop extrusion editors expose complete saved inputs for seven families; other editors expose their existing fields. VR parity remains unqualified.",
+                "Native extrusion edits rebuild eligible earlier rows through later features without recovery snapshots; other UI editors may still restrict earlier rows.",
                 "Historical-preview edits and mixed/legacy recipes retain recovery editors and cannot gain native proof from snapshots.",
-                "Ordinary regeneration uses bounded capture and a five-second cooperative deadline; longer work requires an explicit evaluation job.",
+                "Owned extrusion/pattern edits use bounded capture and an isolated worker within a five-second capture/proof/publication budget; response geometry formatting is outside that budget. Other ordinary regeneration remains cooperative.",
                 "Generated native subpart scopes are immutable references; legacy compound branch/asset construction remains unverified.",
                 "Native Join requires preview-selected flexible orientation references; older Join receipts without them remain unverified.",
             ],
@@ -50,11 +46,18 @@ def editing_capabilities(kinds):
         "command_editors": {
             kind: {
                 "history_api": True,
-                "history_ui": "existing_specialized_fields"
-                if kind in specialized
-                else "not_available",
+                "history_ui": "complete_native_inputs" if kind in EXTRUSIONS else (
+                    "existing_specialized_fields" if kind in specialized else "not_available"),
             }
             for kind in sorted(kinds)
+        },
+        "extrusion_history_editor": {
+            "kinds": sorted(EXTRUSIONS),
+            "requires": ["native proof version 1", "stable history_seed", "ordinary non-generated feature",
+                         "expected_design_id", "expected_revision", "expected_feature_id"],
+            "limits": ["512 selected cells", "50000 base-pair-cell work", "existing capture/recovery limits"],
+            "references": "Resolved against the independently rebuilt pre-feature design; missing selections refuse without publication",
+            "organization": "Existing host rollout gate applies; this editor does not enable organization",
         },
         "evaluation_jobs": {
             "start": "POST /api/design/features/evaluation/jobs",

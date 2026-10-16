@@ -22,26 +22,25 @@ decrement completed if an exit reopens. Flag three major checkpoints spent on
 any still-open milestone (cumulative even across alternating work), or total
 growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
-Effort is separate: U1–U15 are 15 engineering checkpoints since B1, closing one
-additional milestone; thirteen went to still-open FH-18. The unchanged 38 is not an
-estimate of commits/messages. The post-U11 source/sequence audit earns no credit.
-Engineering update U2 closed **FH-19 after two checkpoints**. Current
-counts are **18 / 38 complete, 20 remaining (11 core, 9 parked)**, delta
-for latest update U15 **+0 completed, +0 total**. U15 is **FH-18 checkpoint 13**:
-ordinary authored PATCH, admitted identity-group dissolution and auxiliary
-recording are implemented; private separate organization/native replay and gated
-owned HTTP transactions now work. Named native deformation selection, qualified
-domain lineage and Fine Routing recovery now agree. U9 adds extrusion/crossover
-lineage; U10 adds passive resize/domain-shift tracking. U11 connects named
-preview/repair/comparison and owned publication. U12 integrates private
-Groups/Placements, typed scene display/selection and atomic placement Apply.
-U13 integrates ordinary owned Bend/Twist creation. U14 adds persisted group
-visibility and guarded save/export. U15 adds explicit-placement linear/circular
-patterns with declared named-group copies and owned input-based create/edit.
-U15 checks: 362 distinct backend and 8,826 frontend passes/one skip; app and
-HTTP latency remain unqualified while Archive is unavailable. Rollout stays off.
-Generated consumers, new-group movement and
-qualification keep FH-18 open.
+Effort is separate: U1–U16 are **16 engineering checkpoints** since B1, closing
+**two additional milestones**: FH-19 in two checkpoints and FH-21 in one.
+Thirteen checkpoints went to still-open FH-18. The unchanged 38 is not an
+estimate of commits/messages. Audits alone earn no credit.
+Current counts: **19 / 38 complete, 19 remaining (10 core, 9 parked)**.
+Latest U16 delta: **+1 completed, +0 total**. FH-21's complete ordinary extrusion
+history editor is implemented: seven native families, full inputs, earlier edits
+through downstream features, stable identities, source-prefix reference binding,
+independent rebuild with evicted recovery, atomic guarded publication and undo.
+U16 shares the owned pattern/extrusion host and source-bound client dispatcher;
+no second worker or publication system. Typed missing sources and downstream
+failures preserve the active part and undo/redo. Legacy recovery remains separate.
+See [the extrusion contract](../docs/audits/feature_history_20261014/extrusion_history_editor_plan.md)
+and [U16 evidence](../docs/audits/feature_history_20261014/validation_extrusion_history_editor.json).
+U16: **401 backend cases, 8,874 frontend passes / one skip**, main.js delta0.
+Desktop/performance remains FH-27/MV-50 while Archive is unavailable.
+FH-18 retains separate Groups/Placements, native lineage, named deformation
+preview/repair/creation, persistent visibility and organized pattern integration.
+Its original movement/generated/qualification exits remain open; rollout stays off.
 **Task growth is flagged.** The containment decision and five finite batches are
 in the [organization/placement migration plan](../docs/audits/feature_history_20261014/group_placement_migration_plan.md).
 Separate organizational membership from the existing ordered placement list;
@@ -49,7 +48,8 @@ preserve that list as the sole numerical authority and expose its owners as
 editable placement features. No hidden replacement group, per-residue expansion
 or coordinate baking. New-group move/frame/extension semantics remain a required
 integration exit. Recorded conversion → posed dissolve → regroup is implemented;
-finish its remaining ordinary consumer and movement adapters next. Do not
+retain remaining ordinary consumer/movement obligations while finishing core
+editors (FH-22 Sweep next, then FH-23 move/rotate and FH-24 Fine Routing). Do not
 inflate counts by splitting batches or accumulate more identity-only subsets.
 No total-growth trigger or estimate change; the full original FH-18 exit stands.
 
@@ -132,8 +132,8 @@ and ordinary controls must agree. Nanoparticle/protein/assets and their remainin
 benchmarks are parked; ordinary DNA connections are core. Assemblies and VR
 remain separately deferred. The persistent P3–P6 goal stays active.
 
-Next: new-group movement/frame semantics and generated compatibility within
-the existing B–E batches. U13 completes the
+U16 sequencing: finish the finite FH-22 Sweep editor next; new-group movement
+and generated compatibility retain the existing B–E exits. U13 completes the
 private ordinary Bend/Twist creation adapter: same owned prefix, controller,
 renderer and lease as history editing, no provisional canonical operation.
 Toolbar mixed selection and all four end-menu actions retain native planes and
@@ -154,7 +154,7 @@ placement editing remains gated until FH-23.
 The [caller audit](../docs/audits/feature_history_20261014/group_placement_migration_plan.md#post-u11-caller-audit-and-next-delivery)
 found no ordinary core caller needing a new generic scope compiler first.
 Generated compatibility remains FH-18, not silently transferred to FH-36.
-No fixed exit changed; U15 is checkpoint13. Full redraw for structural partial
+No fixed exit changed; FH-18 remains at checkpoint13 after U16. Full redraw for structural partial
 updates and full undo copying under lock remain performance debt. No per-frame
 history proof is introduced. Shared prefix admission and editor setup are reused;
 live legacy authoring cannot be pruned until qualified rollout.

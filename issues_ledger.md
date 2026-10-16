@@ -2707,3 +2707,17 @@ milestone because FH-18 remains open. App qualification remains MV-48/FH-27.
 - Independent coordinate checks pass for linear and circular copies of a Sweep
   with a preceding Bend. This correction is confined to the new organized path;
   legacy pattern behavior is unchanged. MV-48 retains visual qualification.
+
+
+## ISSUE-119 — Historical continuation keeps stale source receipts after input edits (2026-10-16, CORRECTED IN OWNED EXTRUSION EDITOR)
+
+- Changing continuation cells or its source frame can select different prefix
+  helices, while generic identity preservation retains `_source_helix_ids` from
+  the old definition. That receipt must describe the edited input dependencies.
+- The private extrusion evaluator refreshes only the selected continuation's
+  receipt from the independently rebuilt pre-feature design, after preserving
+  output identities. It rejects missing frame/helix selections with typed input
+  paths. Untouched rows, native builders and output identity rules are unchanged.
+- Source binding, full historical reconstruction, failed-edit atomicity and real
+  worker transport are covered by the U16 checks. Desktop acceptance remains
+  FH-27/MV-50; no additional milestone credit is assigned to this correction.

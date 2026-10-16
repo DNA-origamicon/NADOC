@@ -163,7 +163,7 @@ def regenerate(source, log, checkpoint, *, identify_failures=False, prefix=None,
 
 
 def prepare_change(source, captured, index, checkpoint, *, params=None, sub_index=None,
-                   cascade=False, executor=None, dependency_resolver=None):
+                   cascade=False, executor=None, dependency_resolver=None, input_binder=None):
     """Build an isolated candidate or cascade preview; never publish session state.
 
     The ordinary editor and bounded process jobs share exactly this evaluator.
@@ -221,6 +221,11 @@ def prepare_change(source, captured, index, checkpoint, *, params=None, sub_inde
                     )
                 }
             )
+            if input_binder is not None:
+                # Private owned-editor binding, after identity preservation and
+                # original input proof. Untouched rows keep their saved receipts.
+                bound = input_binder(entry.op_kind, log[index].params, prefix.design)
+                log[index] = log[index].model_copy(update={"params": bound})
         else:
             raise HTTPException(
                 400, detail="Use a child target to edit a routing command"

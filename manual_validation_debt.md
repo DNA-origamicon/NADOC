@@ -1223,3 +1223,22 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   Measure actual request/render responsiveness and larger admitted recipes;
   bounded unit tests and tiny HTTP reconstruction do not qualify interactive
   latency. Full desktop acceptance remains FH-27; this does not add a milestone.
+
+
+- **MV-50 — PENDING — Complete extrusion history editor (2026-10-16).**
+  **NOT VERIFIED IN APP.** With Archive mounted, exercise Bundle, Segment,
+  Continuation, Deformed Continuation, Frame, Circle and Overhang history edits
+  from the latest cursor, including earlier rows with later features and evicted
+  recovery. Change cells/lengths and each relevant ordinary option; check source
+  frame/helix selection against the historical prefix, derived versus stored
+  frames and explicit placement. Inspect the resulting geometry; undo/redo,
+  save/reload and independently verify the complete history. Check missing
+  sources and broken downstream references retain the current part and draft.
+  Switch/reset documents during an outstanding Save, exercise protected-loadout
+  refusal and a lost response, and ensure no stale result replaces newer work.
+  Check table scrolling, keyboard focus, source-ID usability and error messages.
+  Measure representative capture/proof/publication and complete HTTP/display
+  latency separately; the five-second worker budget excludes response geometry.
+  Legacy recovery editing remains available where its prior conditions hold.
+  Organized mode requires its existing disabled host gate; this task does not
+  qualify rollout. This is part of existing FH-27, not an added milestone.

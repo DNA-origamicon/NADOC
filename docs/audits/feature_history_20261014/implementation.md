@@ -1710,3 +1710,38 @@ Selector dry-run executed zero tests and retains broad backend debt.
 complete HTTP/geometry latency and retention qualification remain open.
 Cleanup removed 215 empty task directories and four symlinks (zero files/bytes);
 shared caches, runtimes, workspace state and historical evidence were preserved.
+
+
+## Complete ordinary extrusion history editor — U16, October 16
+
+FH-21 is complete at its defined implementation boundary. Seven ordinary native
+extrusion families expose their full saved inputs and regenerate eligible earlier
+features through subsequent history, retaining feature identity without recovery
+snapshots. Source-frame/cell edits rebind continuation dependencies to the proved
+prefix; missing sources and broken downstream references fail atomically.
+
+The [contract](extrusion_history_editor_plan.md) and
+[evidence](validation_extrusion_history_editor.json) record the finite scope.
+Patterns and extrusion edits now share one isolated evaluation/publication host;
+the frontend shares source-bound response adoption. Duplicate host/request logic
+is pruned; still-used legacy recovery editors remain. Molecular builders, pinned
+numerical manifests, schemas and constants are unchanged. `main.js` delta is 0.
+
+**19/38 milestones complete; 19 remaining (10 core, 9 parked).** This update is
+**+1 completed, +0 total**, engineering checkpoint 16 since B1. Two milestones
+have closed since B1; FH-18 remains open and growth-flagged after 13 checkpoints.
+The movement/generated audit earns no completion credit and changes no exit.
+Next is the existing finite FH-22 Sweep history editor.
+
+Final checks: **401 distinct backend passes** across 17 files (81 warnings), and
+**8,874 frontend passes / one existing skip** across 748 files. Changed-file Ruff
+passes; repository lint retains five existing F401 findings, memory lint six
+errors/59 warnings. Selector dry-run reports FAST with FULL deferred and executes
+zero tests; broad backend debt remains. **NOT VERIFIED IN APP:** Archive is not
+mounted, so browser/smoke/representative latency and memory acceptance remain
+FH-27/MV-50. Organization rollout stays disabled; no performance improvement is
+claimed from tiny native test timings.
+
+Cleanup removed 64 disposable test files (86,029 bytes), 624 empty directories
+and four symlinks after active-reference checks. No task output remains; shared
+caches, runtimes, workspace designs/jobs and historical provenance are preserved.
