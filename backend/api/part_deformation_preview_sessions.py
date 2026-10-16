@@ -13,6 +13,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from threading import BoundedSemaphore, Lock, Timer
 from time import monotonic
+from typing import Literal
 from uuid import UUID, uuid4
 from weakref import ref
 
@@ -23,9 +24,13 @@ from backend.api import doc_context, state
 from backend.api import part_group_organization_gate as group_gate
 from backend.api import part_publication_permit as permits
 from backend.api import part_publication_policy as construction_policy
-from backend.api.part_deformation_preview import evaluate as local_evaluate, prepare_from_capture
+from backend.api.part_deformation_preview import (
+    PreparedCreation, evaluate as local_evaluate, prepare_creation_append,
+    prepare_creation_from_capture, prepare_from_capture,
+)
 from backend.api.part_deformation_preview_dto import (
     evaluate_display,
+    prepare_creation_display,
     prepare_display,
 )
 from backend.api.part_recipe_edit import prepare_change
@@ -57,6 +62,18 @@ class Origin(BaseModel):
     @field_validator("preview_id")
     @classmethod
     def nonce(cls, value):
+        return str(UUID(value))
+
+
+class Creation(Origin):
+    mode: Literal["create"]
+    type: Literal["bend", "twist"]
+    targets: list[dict] | None  # Required null is explicit legacy whole/placement scope.
+    cluster_ids: list[str]
+
+    @field_validator("feature_id")
+    @classmethod
+    def future_feature(cls, value):
         return str(UUID(value))
 
 
@@ -274,7 +291,15 @@ def _claim(request, *, applying=False):
 
 def prepare(value):
     """Reserve a caller-known nonce, capture under lock, then prepare privately."""
-    request = _parse(Origin, value)
+    return _prepare(_parse(Origin, value))
+
+
+def prepare_create(value):
+    """Prepare fixed source controls without creating a temporary operation."""
+    return _prepare(_parse(Creation, value))
+
+
+def _prepare(request):
     if not _work_slot.acquire(blocking=False):
         raise HTTPException(429, detail={"code": "preview_busy", "detail": "A preview operation is already running"})
     entry = None
@@ -301,7 +326,8 @@ def prepare(value):
                         _remove(old)
                     elif len(_entries) >= MAX_SESSIONS:
                         raise HTTPException(429, detail={"code": "preview_capacity", "detail": "Close an existing preview first"})
-                    entry = _Entry(doc, request, str(uuid4()), ref(source), session.identity, policy.generation,
+                    origin = Origin.model_validate({name: getattr(request, name) for name in Origin.model_fields})
+                    entry = _Entry(doc, origin, str(uuid4()), ref(source), session.identity, policy.generation,
                                    monotonic() + TTL_SECONDS)
                     _entries[doc] = entry
                 captured = capture(source, preserve_entry_types=True)
@@ -313,11 +339,19 @@ def prepare(value):
                 _catalog_current(entry)
                 entry.timer = timer
             timer.start()
-            prepared = prepare_from_capture(captured, request.feature_id)
-            del captured
-            original = local_evaluate(prepared, {})
-            payload = prepare_display(prepared.copy_prefix(), original,
-                                      envelope=_envelope(entry, 0, prepared.deformation_id))
+            if type(request) is Creation:
+                prepared = prepare_creation_from_capture(captured, feature_id=request.feature_id,
+                    deformation_id=str(uuid4()), kind=request.type,
+                    targets=request.targets, cluster_ids=request.cluster_ids)
+                del captured
+                payload = prepare_creation_display(prepared.copy_prefix(), prepared,
+                    envelope=_envelope(entry, 0, prepared.deformation_id))
+            else:
+                prepared = prepare_from_capture(captured, request.feature_id)
+                del captured
+                original = local_evaluate(prepared, {})
+                payload = prepare_display(prepared.copy_prefix(), original,
+                                          envelope=_envelope(entry, 0, prepared.deformation_id))
             return _finish(entry, 0, payload, prepared=prepared)
     except BaseException:
         if entry is not None:
@@ -338,6 +372,7 @@ def evaluate(value):
             evaluated = local_evaluate(prepared, request.params)
             payload = evaluate_display(prepared.copy_prefix(), evaluated,
                                        include_geometry=request.include_geometry,
+                                       creation=type(prepared) is PreparedCreation,
                                        envelope=_envelope(entry, request.request_sequence, prepared.deformation_id))
             return _finish(entry, request.request_sequence, payload)
     finally:
@@ -429,10 +464,13 @@ def apply(value):
                     if session.design.group_organization is not None else None)
                 captured = capture(session.design, preserve_entry_types=True)
             del session
-            indices = [i for i, row in enumerate(captured.feature_log) if row.id == request.feature_id]
-            if len(indices) != 1:
-                _conflict("The original native feature identity is no longer unique")
-            candidate, _report = prepare_change(captured, captured, indices[0], check, params=request.params)
+            if type(prepared) is PreparedCreation:
+                candidate, _report = prepare_creation_append(captured, prepared, request.params, check)
+            else:
+                indices = [i for i, row in enumerate(captured.feature_log) if row.id == request.feature_id]
+                if len(indices) != 1:
+                    _conflict("The original native feature identity is no longer unique")
+                candidate, _report = prepare_change(captured, captured, indices[0], check, params=request.params)
             check()
             with state._lock:
                 session = _source_current(entry)

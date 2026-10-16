@@ -50,6 +50,7 @@ export function createDeformationPreviewEndpoints({ request }) {
   }
   return {
     prepare: (body, options) => json('POST', PATH, body, options),
+    prepareCreation: (body, options) => json('POST', `${PATH}/create`, body, options),
     evaluate: (body, options) => json('POST', `${PATH}/evaluate`, body, options),
     apply: (body, options) => json('POST', `${PATH}/apply`, body, options),
     cancel: (body, options) => json('POST', `${PATH}/cancel`, body, options),

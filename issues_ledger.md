@@ -2605,3 +2605,22 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   after success/failure/reset interleavings. U12 evidence records actual results.
   This was corrected during implementation, not a claimed released-app defect
   or a new milestone. Desktop/latency acceptance remains MV-48/FH-27.
+
+## ISSUE-112 — Held deformation Prepare blocks reopening after reset (2026-10-16, FIXED IN SOFTWARE CHECKS)
+
+- **Trigger:** reset the document while private Prepare is pending and its
+  transport ignores cancellation. The controller retired the lease immediately,
+  but the app owner kept its local `opening` flag until that request settled.
+  Opening another tool was refused despite the replacement document being ready.
+- **Cause/correction:** the render listener returned before observing closed
+  controller state while `ready` was false. Track the current opening's first
+  open emission, then retire its generation on a later closed emission. Ignore
+  the controller's initial invalidation; late packets/finalizers cannot affect
+  a replacement editor. Shared creation/history ownership uses the same fix.
+- **Evidence:** the held-Prepare reset/reopen regression failed at the immediate
+  `active() === false` assertion, then passed with a new tool opened before the
+  old response arrived. The 20-case app/editor focused pass includes this case.
+  Full checkpoint results are in
+  `docs/audits/feature_history_20261014/validation_deformation_creation.json`.
+  Other intermediate fixture failures are recorded separately, not counted as
+  behavioral reproductions. No live-app reproduction or rollout is claimed.

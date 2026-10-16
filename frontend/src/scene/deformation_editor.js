@@ -1,5 +1,5 @@
 import { deformationTargets, targetState } from './deformation_targets.js'
-import { createDeformationHistoryTool, deformationHistoryScope, disposeDeformationGuide, setDeformationGuideLayer } from './deformation_history_tool.js'
+import { createDeformationHistoryTool, createDeformationCreationTool, deformationHistoryScope, disposeDeformationGuide, setDeformationGuideLayer } from './deformation_history_tool.js'
 /**
  * Deformation Editor — Bend and Twist tool state machine.
  *
@@ -199,12 +199,40 @@ export function startToolForEdit(toolType, globalBpA, globalBpB, opId = null, or
 export function startToolForHistory(operation, adapter) {
   if (!_scene) return
   if (_state !== STATE.IDLE) throw new Error('Close the current deformation tool before editing history')
-  _historyTool = createDeformationHistoryTool(operation, adapter)
-  _historyRayMask = _raycaster.layers.mask
-  _historyHover = { bead: _hoverBead, mask: _hoverBead?.layers.mask }
-  _raycaster.layers.set(adapter.displayLayer ?? 0)
+  _installOwnedTool(createDeformationHistoryTool(operation, adapter))
   _sessionClusterIds = [...operation.cluster_ids]
   startToolForEdit(operation.type, operation.plane_a_bp, operation.plane_b_bp, null, null, operation)
+}
+
+function _installOwnedTool(tool) {
+  _historyTool = tool
+  _historyRayMask = _raycaster.layers.mask
+  _historyHover = { bead: _hoverBead, mask: _hoverBead?.layers.mask }
+  _raycaster.layers.set(tool.displayLayer ?? 0)
+}
+
+/** Begin picking only after the host has supplied an owned fixed prefix. */
+export function startToolForCreation(creation, adapter, placementHint = null) {
+  if (!_scene) return
+  if (_state !== STATE.IDLE) throw new Error('Close the current deformation tool before creating another')
+  _installOwnedTool(createDeformationCreationTool(creation, adapter))
+  _sessionTargets = creation.targets; _sessionClusterIds = [...creation.cluster_ids]
+  _scopeSourceOpId = null; _editMode = false
+  updateHistoryScope(adapter.selectedScope)
+  if (placementHint?.kind === 'selection') {
+    if (_sessionRanges) startToolForSelection(creation.type)
+    else {
+      const a = extremeVRDeformationPlane('a', creation.cluster_ids, adapter.selectedScope.affected_helix_ids),
+        b = extremeVRDeformationPlane('b', creation.cluster_ids, adapter.selectedScope.affected_helix_ids)
+      if (!a || !b || a.bp >= b.bp) throw new Error('Select a span of at least two base positions for Bend / Twist.')
+      startTool(creation.type); _placeA(a.bp, b.bp)
+    }
+  } else if (placementHint?.kind === 'end') {
+    if (!adapter.design.helices.some(h => h.id === placementHint.helixId)
+        || !Number.isSafeInteger(placementHint.bp) || ![-1, 1].includes(placementHint.openSide)) throw new Error('The selected end is no longer available')
+    startToolAtBp(creation.type, placementHint.helixId, placementHint.bp, placementHint.openSide)
+  } else if (placementHint == null) startTool(creation.type)
+  else throw new Error('Unknown creation plane placement')
 }
 
 /** Refresh only private guides from a successfully evaluated server scope. */
@@ -458,6 +486,8 @@ function _setState(newState) {
     store.setState({ deformToolActive: false })
     _removePlanes()
   }
+  // Owned creation watches every phase without entering the legacy popup path.
+  _historyTool?.onStateChange?.()
   // STATE.A_PLACED and STATE.BOTH — no additional scene changes here
 }
 

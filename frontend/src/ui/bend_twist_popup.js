@@ -34,7 +34,8 @@ const _historyDisabled = new Map()
 const _historyParamIds = new Set(['def-twist-value', 'def-twist-rh', 'def-twist-lh', 'def-twist-total-radio',
   'def-twist-pernm-radio', 'def-bend-dir', 'def-bend-angle', 'def-bend-radius', 'def-polymer-circle', 'def-polymer-count'])
 const _sourceDesign = () => _historySession?.design ?? store.getState().currentDesign
-const _sourceTargets = () => _historySession ? (_historySession.operation.targets ?? null) : getDeformSessionTargets()
+const _sourceDefinition = () => _historySession?.mode === 'create' ? _historySession.creation : _historySession?.operation
+const _sourceTargets = () => _historySession ? (_sourceDefinition().targets ?? null) : getDeformSessionTargets()
 
 let _selectionUI = null
 let _selectionSection = null
@@ -322,14 +323,14 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
                           skipInitialPreview = false, historySession = null) {
   if (!_popup) return
   _clearHistoryStatus()
-  if (historySession && (!historySession.design || !historySession.operation
+  if (historySession && (!historySession.design || !(historySession.mode === 'create' ? historySession.creation : historySession.operation)
       || ['onChange', 'onApply', 'onCancel'].some(key => typeof historySession[key] !== 'function'))) {
     throw new Error('Prepared history controls and private delegates are required')
   }
   _historyGroupControls?.dispose(); _historyGroupControls = null
   _historySession = historySession
-  if (historySession) setDeformationSelectionUI(null)
-  _historyInitial = { a: Math.min(bpA, bpB), b: Math.max(bpA, bpB), groups: [...(initialClusterIds ?? historySession?.operation.cluster_ids ?? [])] }
+  if (historySession && historySession.mode !== 'create') setDeformationSelectionUI(null)
+  _historyInitial = { a: Math.min(bpA, bpB), b: Math.max(bpA, bpB), groups: [...(initialClusterIds ?? _sourceDefinition()?.cluster_ids ?? [])] }
   _historyParamsDirty = false; _openingHistory = !!historySession; _historyChangeSequence++
   _historyPlanesTouched = false; _historyGroupsTouched = false
   _restorePickingControls()
@@ -347,7 +348,7 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
 
   // Build the cluster picker. Initial selection: explicit list (edit mode), else
   // the editor's default scope (active cluster / single cluster / none).
-  const initIds = initialClusterIds ?? (_historySession ? _historySession.operation.cluster_ids : getDeformDefaultClusterIds())
+  const initIds = initialClusterIds ?? (_historySession ? _sourceDefinition().cluster_ids : getDeformDefaultClusterIds())
   if (_sourceTargets() !== null) {
     _selectedClusterIds = _historySession ? [...initIds] : []
     if (_clusterSection) _clusterSection.style.display = 'none'
@@ -355,7 +356,7 @@ export function openPopup(toolType, bpA = 0, bpB = 0, params = null, initialClus
       _selectionSection.hidden = false
       _selectionSection.replaceChildren(el('div', { className: 'mr-section-label', text: 'Current selection' }))
       const labelsFor = targets => moveRotateSelectionLabels(targetState(_sourceDesign(), targets))
-      if (_historySession) _historyGroupControls = createHistoryGroupControls({ container: _selectionSection,
+      if (_historySession && _historySession.mode !== 'create') _historyGroupControls = createHistoryGroupControls({ container: _selectionSection,
         session: _historySession, primitiveLabels: labelsFor,
         onChange: () => { _renderHistoryStatus(); void _historyChange() } })
       if (!_historyGroupControls) for (const label of labelsFor(_sourceTargets()))
@@ -466,8 +467,9 @@ function _restorePickingControls() {
 }
 
 /** Keep the tool window present while its reference planes are being picked. */
-export function showPickingPopup(toolType, planeA = null) {
+export function showPickingPopup(toolType, planeA = null, ownedSession = null) {
   if (!_popup) return
+  if (ownedSession) { _historySession = ownedSession; _historyStatus = { awaitingParameters: true }; _historyChangeSequence++ }
   _restorePickingControls()
   _toolType = null
   clearTimeout(_validateTimer)
@@ -535,6 +537,8 @@ function _historyPatch() {
   const a = Math.round(Number(_planeABp.value)), b = Math.round(Number(_planeBBp.value))
   const lo = Math.min(a, b), hi = Math.max(a, b)
   const planesChanged = lo !== _historyInitial.a || hi !== _historyInitial.b
+  if (_historySession.mode === 'create') return { plane_a_bp: lo, plane_b_bp: hi,
+    params: _readParams(), cluster_ids: [..._selectedClusterIds] }
   const groupsChanged = _selectedClusterIds.length !== _historyInitial.groups.length
     || _selectedClusterIds.some((id, index) => id !== _historyInitial.groups[index])
   _historyPlanesTouched ||= planesChanged
@@ -559,7 +563,7 @@ async function _historyChange() {
 async function _historyAction(action) {
   const session = _historySession
   if (action === 'onApply' && _historyGroupControls && !_historyGroupControls.valid()) return
-  if (!session || (action === 'onApply' && (_historyApplying || _historyStatus.expired || _historyStatus.publicationUnknown || _historyStatus.refreshNeeded))) return
+  if (!session || (action === 'onApply' && (_historyApplying || _historyStatus.expired || _historyStatus.publicationUnknown || _historyStatus.refreshNeeded || _historyStatus.awaitingParameters))) return
   if (action === 'onApply') { clearTimeout(_validateTimer); _historyApplying = true; _renderHistoryStatus() }
   try {
     const result = await session[action]?.(...(action === 'onApply' ? [_historyPatch()] : []))
@@ -590,13 +594,14 @@ function _renderHistoryStatus() {
     for (const [control, disabled] of _historyDisabled) control.disabled = disabled
     _historyDisabled.clear()
   }
-  _applyBtn.disabled = !!locked || !!(_historyGroupControls && !_historyGroupControls.valid())
-  const message = status.expired ? 'Preview expired. Reopen the feature to continue.'
+  _applyBtn.disabled = !!locked || !!status.awaitingParameters || !!(_historyGroupControls && !_historyGroupControls.valid())
+  const message = status.expired ? 'Preview expired. Reopen the tool to continue.'
     : status.publicationUnknown ? 'Publication status is unknown. Check it before continuing.'
     : status.refreshNeeded ? 'The change is published. Refresh its display.'
     : (status.error?.message ?? status.error) || (busy ? `${busy === 'apply' ? 'Applying' : 'Evaluating'}…` : '')
   _historyMessage.hidden = false
-  _historyMessage.textContent = `Feature-stage preview; later features are hidden.${message ? ` ${message}` : ''}`
+  const label = _historySession.mode === 'create' ? 'New deformation preview; Apply adds it to the part.' : 'Feature-stage preview; later features are hidden.'
+  _historyMessage.textContent = `${label}${message ? ` ${message}` : ''}`
   _historyRecovery.hidden = !status.publicationUnknown && !status.refreshNeeded
   const resolve = document.getElementById('def-history-resolve'), refresh = document.getElementById('def-history-refresh')
   resolve.hidden = !status.publicationUnknown; refresh.hidden = !status.refreshNeeded || !!status.publicationUnknown

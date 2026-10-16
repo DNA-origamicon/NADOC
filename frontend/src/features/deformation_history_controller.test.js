@@ -293,3 +293,41 @@ describe('isolated deformation history controller', () => {
     expect(f.applyPublished).toHaveBeenCalledOnce()
   })
 })
+
+const creation = { type: 'bend', targets: [{ kind: 'strand', id: 'strand' }], clusterIds: [] }
+const completeCreation = { plane_a_bp: 4, plane_b_bp: 32, params: { kind: 'bend', curvature_deg_per_bp: .25, direction_deg: 0 }, cluster_ids: [] }
+const createPacket = (body, ready = false) => packet(body, { mode: 'create', awaiting_parameters: !ready,
+  candidate: ready ? { pane: 'candidate' } : null, feasibility: ready ? { status: 'ok' } : null,
+  control_context: { selected_operation: null, creation: { type: body.type, targets: body.targets, cluster_ids: body.cluster_ids } } })
+
+it('prepares a new identity without a candidate and cannot Apply before a complete evaluated draft', async () => {
+  const f = await fixture({ prepareCreation: vi.fn(async body => createPacket(body)), evaluate: vi.fn(async body => createPacket(body, true)) })
+  await f.controller.openCreation(creation)
+  expect(f.api.prepare).not.toHaveBeenCalled()
+  expect(f.api.prepareCreation.mock.lastCall[0]).toEqual({ mode: 'create', preview_id: PREVIEW, feature_id: PREVIEW,
+    expected_design_id: 'part', expected_revision: 7, type: 'bend', targets: creation.targets, cluster_ids: [] })
+  expect(f.controller.getState()).toMatchObject({ mode: 'create', awaitingParameters: true, projection: { candidate: null } })
+  await f.controller.apply(); expect(f.api.apply).not.toHaveBeenCalled()
+  await f.controller.update(completeCreation, { includeGeometry: false })
+  expect(f.api.evaluate.mock.lastCall[0]).toMatchObject({ params: completeCreation, include_geometry: false })
+  expect(f.controller.getState().awaitingParameters).toBe(false)
+  await f.controller.apply()
+  expect(f.api.apply).toHaveBeenCalledOnce(); expect(f.applyPublished).toHaveBeenCalledOnce()
+})
+
+it('cancels a create nonce before Prepare completes and discards its late owned result', async () => {
+  const held = deferred(), f = await fixture({ prepareCreation: vi.fn(() => held.promise) })
+  const opening = f.controller.openCreation(creation)
+  await f.controller.cancel()
+  held.resolve(createPacket(f.api.prepareCreation.mock.lastCall[0])); await opening
+  expect(f.controller.getState().open).toBe(false)
+  expect(f.api.cancel).toHaveBeenCalledWith(expect.objectContaining({ preview_id: PREVIEW, feature_id: PREVIEW }), expect.any(Object))
+  expect(f.api.apply).not.toHaveBeenCalled(); expect(f.applyPublished).not.toHaveBeenCalled()
+})
+
+it('keeps create mode separate from edit responses and leaves failed initial evaluation unapplied', async () => {
+  const f = await fixture({ prepareCreation: vi.fn(async body => createPacket(body)), evaluate: vi.fn(async body => packet(body)) })
+  await f.controller.openCreation(creation); await f.controller.update(completeCreation)
+  expect(f.controller.getState().error).toBeTruthy()
+  await f.controller.apply(); expect(f.api.apply).not.toHaveBeenCalled()
+})

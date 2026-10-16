@@ -863,3 +863,10 @@ save's dispatch revision and isolate pending counts/hydration by reset generatio
 Regression cases cover successful earlier save followed by latest rejection and
 same-ID reload while a prior save is held. No persisted schema or topology change.
 See U12 evidence; this correction predates release and adds no milestone credit.
+
+2026-10-16 — ISSUE-112 deformation opening lifecycle: reset during held Prepare
+now retires the local opening immediately. The observed-open transition excludes
+the controller's initial invalidation, and the generation rejects late old
+responses/finalizers after a new tool opens. Meaningful failing regression and
+passing focused correction are in [U13 evidence](docs/audits/feature_history_20261014/validation_deformation_creation.json).
+This changes no geometry formula and earns no separate milestone credit.

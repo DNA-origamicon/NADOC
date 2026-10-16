@@ -122,15 +122,15 @@ function operation(op, projected, strands, groups, organization, priorIds, strin
   parameters(op, projected.params, priorIds, string)
 }
 
-function controls(value, before, candidate, feedback, string) {
-  shape(value, ['helices', 'strands', 'cluster_transforms', 'group_organization', 'deformations', 'forced_ligations', 'selected_operation', 'capabilities'])
-  const prefix = before.display_topology, output = candidate.display_topology
+function controls(value, before, candidate, feedback, string, creating = false) {
+  shape(value, [...(creating ? ['creation'] : []), 'helices', 'strands', 'cluster_transforms', 'group_organization', 'deformations', 'forced_ligations', 'selected_operation', 'capabilities'])
+  const prefix = before.display_topology, output = candidate?.display_topology
   for (const key of ['helices', 'strands', 'cluster_transforms', 'deformations', 'forced_ligations']) {
     list(value[key], prefix[key].length)
     if (value[key].length !== prefix[key].length) fail('incomplete fixed-prefix controls')
     unique(value[key])
   }
-  for (const key of ['helices', 'strands', 'overhangs', 'cluster_transforms', 'group_organization', 'crossovers', 'forced_ligations']) same(output[key], prefix[key])
+  if (output) for (const key of ['helices', 'strands', 'overhangs', 'cluster_transforms', 'group_organization', 'crossovers', 'forced_ligations']) same(output[key], prefix[key])
   for (let i = 0; i < value.helices.length; i++) {
     shape(value.helices[i], HELIX); fields(value.helices[i], prefix.helices[i], HELIX)
   }
@@ -155,12 +155,23 @@ function controls(value, before, candidate, feedback, string) {
     }
   }
   same(value.forced_ligations, prefix.forced_ligations)
-  if (output.deformations.length !== prefix.deformations.length + 1) fail('incomplete feature-stage deformation provenance')
+  if (output && output.deformations.length !== prefix.deformations.length + 1) fail('incomplete feature-stage deformation provenance')
   const priorIds = new Set()
   for (let i = 0; i < value.deformations.length; i++) {
-    same(output.deformations[i], prefix.deformations[i])
+    if (output) same(output.deformations[i], prefix.deformations[i])
     operation(value.deformations[i], prefix.deformations[i], strands, groups, organization, priorIds, string, true)
     priorIds.add(value.deformations[i].id)
+  }
+  if (creating) {
+    if (value.selected_operation !== null) fail('creation has no authored operation before parameters')
+    shape(value.creation, ['type', 'targets', 'cluster_ids'])
+    if (!['bend', 'twist'].includes(value.creation.type)) fail('unsupported creation type')
+    targets(value.creation.targets, strands, groups, organization, false)
+    referenceIds(value.creation.cluster_ids, groups)
+    shape(value.capabilities, ['change_targets', 'change_clusters', 'native_feasibility', 'polymer_circle_inputs'])
+    if (value.capabilities.change_targets !== false || value.capabilities.change_clusters !== (value.creation.targets === null)
+        || value.capabilities.native_feasibility !== true || value.capabilities.polymer_circle_inputs !== true) fail('unsupported creation control capability')
+    return
   }
   const op = value.selected_operation
   operation(op, output.deformations.at(-1), strands, groups, organization, priorIds, string)
@@ -177,7 +188,8 @@ export function validateDeformationPreviewDisplay(value, { prepare, requireEnvel
   if (typeof prepare !== 'boolean' || typeof requireEnvelope !== 'boolean') fail('explicit deformation display stage required')
   const hasEnvelope = ENVELOPE.some(key => Object.hasOwn(value ?? {}, key))
   if (requireEnvelope && !hasEnvelope) fail('missing deformation host envelope')
-  shape(value, [...FLAGS, 'candidate', ...(prepare ? ['before', 'control_context'] : []), ...(hasEnvelope ? ENVELOPE : [])])
+  const creating = value?.mode === 'create'
+  shape(value, [...FLAGS, ...(creating ? ['mode', 'awaiting_parameters'] : []), 'candidate', ...(prepare ? ['before', 'control_context'] : []), ...(hasEnvelope ? ENVELOPE : [])])
   if (value.projection_version !== 2 || value.stage !== 'feature' || value.source_equivalence_checked !== false
       || value.downstream_evaluated !== false || value.physical_validity !== false) fail('unsupported deformation display claim')
   if (hasEnvelope) {
@@ -186,8 +198,11 @@ export function validateDeformationPreviewDisplay(value, { prepare, requireEnvel
     if (!integer(value.expected_revision) || !integer(value.request_sequence)
         || !finite(value.remaining_seconds) || value.remaining_seconds < 0) fail('invalid deformation host envelope')
   }
+  if (creating && value.awaiting_parameters !== prepare) fail('invalid creation display stage')
   const string = textBudget()
-  feasibility(value.feasibility, string)
+  if (creating && prepare) {
+    if (value.feasibility !== null || value.candidate !== null) fail('creation must await explicit parameters')
+  } else feasibility(value.feasibility, string)
   const scope = value.selected_scope
   shape(scope, ['id', 'affected_helix_ids', 'target_ranges']); text(scope.id)
   list(scope.affected_helix_ids, 512)
@@ -209,12 +224,12 @@ export function validateDeformationPreviewDisplay(value, { prepare, requireEnvel
     if (selected) fields(scope, selected, ['id', 'affected_helix_ids', 'target_ranges'])
     if (!selected || selected.type !== value.feasibility.op_type
         || (hasEnvelope && selected.id !== value.deformation_id)) fail('candidate does not identify the selected deformation')
-  } else if (prepare) fail('missing initial deformation display')
+  } else if (prepare && !creating) fail('missing initial deformation display')
   if (prepare) {
     const helices = new Set(value.before.display_topology.helices.map(h => h.id))
     referenceIds(scope.affected_helix_ids, helices)
     for (const range of scope.target_ranges ?? []) validateFrozenDeformationRange(range, helices)
   }
-  if (prepare) controls(value.control_context, value.before, value.candidate, value.feasibility, string)
+  if (prepare) controls(value.control_context, value.before, value.candidate, value.feasibility, string, creating)
   return value
 }

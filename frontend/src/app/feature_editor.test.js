@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-const f = vi.hoisted(() => ({ history: { open: vi.fn(), active: vi.fn(() => false), onToolExit: vi.fn(), dispose: vi.fn() },
+const f = vi.hoisted(() => ({ history: { open: vi.fn(), openCreation: vi.fn(), watchToolState: vi.fn(() => false), active: vi.fn(() => false), onToolExit: vi.fn(), dispose: vi.fn() },
   create: vi.fn(), deleteDeformation: vi.fn(), seekFeatures: vi.fn(), start: vi.fn(), scope: vi.fn(), listeners: new Set() }))
 vi.mock('./deformation_history_editor.js', () => ({ createDeformationHistoryEditor: (...args) => { f.create(...args); return f.history } }))
 vi.mock('../api/client.js', () => ({ deleteDeformation: f.deleteDeformation, seekFeatures: f.seekFeatures }))
@@ -8,11 +8,11 @@ vi.mock('../state/store.js', () => ({ store: { getState: () => ({ currentDesign:
 vi.mock('../scene/deformation_editor.js', () => ({ initDeformationEditor: vi.fn(), previewDeformation: vi.fn(), confirmDeformation: vi.fn(),
   waitForDeformationIdle: vi.fn(), discardDeformationPreview: vi.fn(), exitTool: vi.fn(), getPlanes: () => ({}), repositionPlane: vi.fn(),
   getState: () => 'IDLE', getToolType: () => null, startToolForEdit: f.start, markEditCommitted: vi.fn(),
-  startToolForHistory: vi.fn(), finishHistoryTool: vi.fn(), updateHistoryScope: f.scope, STATES: { IDLE: 'IDLE' } }))
+  startToolForHistory: vi.fn(), startToolForCreation: vi.fn(), finishHistoryTool: vi.fn(), updateHistoryScope: f.scope, STATES: { IDLE: 'IDLE' } }))
 vi.mock('../ui/bend_twist_popup.js', () => ({ showPickingPopup: vi.fn(), initBendTwistPopup: vi.fn(), openPopup: vi.fn(), closePopup: vi.fn(),
   setPlanePositions: vi.fn(), setHistoryPopupStatus: vi.fn() }))
-import { initFeatureEditor } from './feature_editor.js'
-afterEach(() => { f.design = null; vi.clearAllMocks() })
+import { initFeatureEditor, ISOLATED_DEFORMATION_HISTORY_ENABLED, ISOLATED_DEFORMATION_CREATION_ENABLED } from './feature_editor.js'
+afterEach(() => { f.design = null; document.body.innerHTML = ''; vi.clearAllMocks() })
 
 it('does not seek or open the old mutating placement history editor for separate groups', async () => {
   f.design = { id: 'part', group_organization: { version: 1, groups: [] }, feature_log: [] }
@@ -48,5 +48,24 @@ it('wires server-selected private guide scope without a canonical update path', 
   f.create.mock.lastCall[0].editor.updateHistoryScope(scope)
   expect(f.scope).toHaveBeenCalledWith(scope)
   expect(f.deleteDeformation).not.toHaveBeenCalled(); expect(f.seekFeatures).not.toHaveBeenCalled()
+  owner.dispose(); expect(f.listeners.size).toBe(0)
+})
+
+
+it('creation wiring remains independently gated and cannot enable history editing', async () => {
+  document.body.innerHTML = '<div id="mode-indicator"></div>'
+  expect(ISOLATED_DEFORMATION_CREATION_ENABLED).toBe(false)
+  expect(ISOLATED_DEFORMATION_HISTORY_ENABLED).toBe(false)
+  f.design = { id: 'part', group_organization: { version: 1, groups: [] }, feature_log: [] }
+  const owner = initFeatureEditor({ isolatedCreationEnabled: true, isolatedHistoryEnabled: false, showToast: vi.fn() })
+  expect(owner.creationEditor).toBe(f.history)
+  const wired = f.create.mock.lastCall[0]
+  expect(wired.editor.startToolForCreation).toBeTypeOf('function')
+  expect(wired.editor.getState()).toBe('IDLE')
+  expect(wired.popup.showPickingPopup).toBeTypeOf('function')
+  await owner.onEditFeature({ id: 'old', feature_type: 'deformation', op_snapshot: { id: 'bend', type: 'bend' } }, 0)
+  expect(f.history.open).not.toHaveBeenCalled()
+  f.history.watchToolState.mockClear()
+  owner.watchDeformState(); expect(f.history.watchToolState).toHaveBeenCalledOnce()
   owner.dispose(); expect(f.listeners.size).toBe(0)
 })

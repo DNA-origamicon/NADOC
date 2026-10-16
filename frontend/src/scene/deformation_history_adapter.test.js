@@ -209,3 +209,26 @@ it('keeps global legacy plane guides available when no helix crosses the current
   expect(editor.getPlanes()).toEqual({ a: { bp: 0 }, b: { bp: 21 } })
   canonicalUntouched(f)
 })
+
+it('creation starts with private prefix picking and no fabricated planes or canonical preview', async () => {
+  const f = setup(), creation = { id: 'new-op', type: 'twist', targets: null, cluster_ids: [] }
+  f.adapter.selectedScope = { id: 'new-op', affected_helix_ids: ['h'], target_ranges: null }
+  editor.startToolForCreation(creation, f.adapter)
+  expect(editor.getState()).toBe('AWAITING_A'); expect(editor.getPlanes()).toEqual({ a: null, b: null })
+  expect(editor.getDeformationPlaneFrame(7).center[0]).toBe(10)
+  await editor.previewDeformation({ kind: 'twist', total_degrees: 90 })
+  expect(f.adapter.onPreview).not.toHaveBeenCalled()
+  editor.handleEscape(); await Promise.resolve()
+  expect(f.adapter.onCancel).toHaveBeenCalledOnce(); canonicalUntouched(f)
+})
+it.each([{ kind: 'selection' }, { kind: 'end', helixId: 'h', bp: 14, openSide: 1 }])(
+  'creation places visible initial planes from the owned source (%s)', async hint => {
+    const f = setup(), creation = { id: 'new-op', type: 'bend', targets: null, cluster_ids: [] }
+    f.adapter.selectedScope = { id: 'new-op', affected_helix_ids: ['h'], target_ranges: null }
+    editor.startToolForCreation(creation, f.adapter, hint)
+    expect(editor.getState()).toBe('BOTH')
+    expect(editor.getPlanes()).toEqual({ a: { bp: 0 }, b: { bp: hint.kind === 'end' ? 14 : 21 } })
+    await editor.previewDeformation(params)
+    expect(f.adapter.onPreview.mock.lastCall[0]).toMatchObject({ plane_a_bp: 0, plane_b_bp: hint.kind === 'end' ? 14 : 21, params })
+    canonicalUntouched(f)
+  })

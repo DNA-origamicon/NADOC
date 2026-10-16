@@ -1,0 +1,210 @@
+{
+  "checkpoint": "U13 \u2014 FH-18 checkpoint 11; ordinary Bend/Twist creation through shared owned preview",
+  "source_checkpoint": "04ca5752",
+  "date": "2026-10-16",
+  "progress": {
+    "baseline": "B1:17/38 through 2c15e747",
+    "completed": 18,
+    "estimated_total": 38,
+    "remaining": 20,
+    "core_remaining": 11,
+    "parked_remaining": 9,
+    "delta_completed": 0,
+    "delta_total": 0,
+    "fh18_checkpoints": 11,
+    "engineering_checkpoints_since_b1": 13,
+    "milestones_closed_since_b1": 1,
+    "task_growth_flagged": true
+  },
+  "scope": {
+    "implemented": [
+      "One closed create Prepare variant on existing private lease/catalog/work slot; fixed latest native prefix, caller feature UUID and server operation UUID. Initial candidate/operation/feasibility null; complete evaluated planes and parameters required.",
+      "Native Bend/Twist creation and independent source-proof append with rebuilt recovery, typed row, unchanged guarded publication, one undo/revision, status recovery and exact reload/cold replay.",
+      "Toolbar canonical mixed selection and all four end-menu entrypoints use the shared owner/controller/popup/private renderer. Existing plane helpers and molecular math unchanged.",
+      "Full ordinary planes, angle/radius/direction, twist handedness/units, polymer-circle controls, preview toggle and selection Change/Clear. End clicks retain native placement/whole-part defaults; for toolbar typed selections, only explicit cluster selectors supply placement context.",
+      "Typed selection remains fixed per lease; null-target native placement picker changes remain supported on the fixed prefix. Missing/empty/invalid selectors never silently become whole-part scope.",
+      "Reset during held Prepare immediately retires local opening and rejects late old replies/finalizers after replacement (ISSUE-112). Unknown Apply retains receipt recovery instead of appending again.",
+      "Shared prefix admission and owner initialization replace duplication; existing legacy authoring retained while replacement gates remain disabled; main.js net 0."
+    ],
+    "remaining": [
+      "FH-18 persistent group-identity visibility, arbitrary new-group movement/frame/extension semantics, generated compatibility and qualification.",
+      "FH-20/FH-27 desktop/performance rollout and legacy mutating preview removal.",
+      "Earlier placement editing FH-23, other core history editors/repair/catalog acceptance remain in fixed ledger.",
+      "NP/assets parked; assemblies and machine-specific VR deferred. No milestone closed."
+    ]
+  },
+  "validation": {
+    "backend": {
+      "files": [
+        "tests/test_deformation_creation_preview.py",
+        "tests/test_part_deformation_creation_transport.py",
+        "tests/test_part_deformation_preview.py",
+        "tests/test_part_deformation_preview_dto.py",
+        "tests/test_part_deformation_preview_sessions.py",
+        "tests/test_part_deformation_preview_receipts.py",
+        "tests/test_part_deformation_preview_routes.py",
+        "tests/test_named_deformation_preview.py",
+        "tests/test_named_deformation_preview_sessions.py",
+        "tests/test_deformation_preview_native_display.py"
+      ],
+      "initial_red": {
+        "failed": 45,
+        "seconds": 3.26,
+        "reason": "New host API absent; admission-negative cases alone did not establish behavior until positive implementation passed."
+      },
+      "final": {
+        "passed": 294,
+        "warnings": 12,
+        "seconds": 14.8
+      },
+      "transport": "Six real family/scope HTTP create/evaluate/feedback/Apply/status cases cross the actual JavaScript validators via stdin, plus two create-route gate refusals. Existing native history-display crossings retained."
+    },
+    "frontend": {
+      "initial_red": {
+        "failed": 8,
+        "passed": 109,
+        "files": 4,
+        "seconds": 1.57
+      },
+      "workflow_red": {
+        "failed": 30,
+        "passed": 52,
+        "files": 5,
+        "seconds": 3.06,
+        "unhandled_errors": 1,
+        "reason": "Missing creation paths; unhandled rejection was missing owner.openCreation."
+      },
+      "focused": [
+        {
+          "passed": 236,
+          "failed": 2,
+          "files": 13,
+          "seconds": 6.04,
+          "reason": "Old feature-editor mock omitted startToolForCreation."
+        },
+        {
+          "passed": 18,
+          "failed": 2,
+          "files": 2,
+          "seconds": 1.59,
+          "reason": "Meaningful held-Prepare reset failure plus missing mode-indicator fixture."
+        },
+        {
+          "passed": 31,
+          "failed": 1,
+          "files": 3,
+          "seconds": 1.85,
+          "reason": "Reset fixed; new gate test counted an earlier watcher call. Cleared prior mock calls before explicit delegation assertion."
+        },
+        {
+          "passed": 20,
+          "failed": 0,
+          "files": 2,
+          "seconds": 1.56
+        }
+      ],
+      "note": "Focused sets overlap; do not add counts.",
+      "final_full": {
+        "status": "passed",
+        "command": "just test-frontend",
+        "files_passed": 742,
+        "tests_passed": 8767,
+        "tests_skipped": 1,
+        "seconds": 324.15,
+        "exit_code": 0,
+        "frozen_source_unchanged": true
+      }
+    },
+    "app": "NOT VERIFIED IN APP. Archive /media/jojo/Archive is unavailable; no browser/bulk scratch fallback. MV-48/FH-20/FH-27 remain open.",
+    "selector": {
+      "command": "just test-smart --dry-run",
+      "decision": "FAST (fast suite only)",
+      "executed_tests": 0,
+      "foundational_trigger": "FULL: backend/api/main.py matches foundational/shared 'backend/api/main.py'",
+      "message": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\nThis is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\nOnly request `just test-session` when a broad/full sweep is actually needed.",
+      "qualification": "Selector wording says fast ran, but --dry-run executed no pytest. Aggregate fast/FULL acceptance remains debt."
+    },
+    "frozen_source_sha256": {
+      "backend/api/part_deformation_preview.py": "2bef73f6667ea93ee60610e4bcf57bb150ccfb66c2a3db2c821f792fc7be8788",
+      "backend/api/part_deformation_preview_dto.py": "a514de78acb1be10987349d93ea2521ab8de9846d5f672a124218017bdb94dec",
+      "backend/api/part_deformation_preview_sessions.py": "f215c8f79d1cdd1520e05f39fd26d8e2ff4160324754ec56aad9d71c11b4b8c8",
+      "backend/api/routes_part_deformation_preview.py": "ce4f97dc67158db89af6bec8a9f82ecad84655920998b0a390122418fb578cf3",
+      "frontend/src/api/deformation_preview_endpoints.js": "5fabb11e9e6121b0b60336ad7136f6ab7ed56ca796f6bf43b9c97b9f4ead6ae9",
+      "frontend/src/api/deformation_preview_endpoints.test.js": "f369928bf488e7d4b49bca42c7d0497d85eab3590ce8b11af5b207f5860c1b03",
+      "frontend/src/app/deformation_creation_editor.test.js": "3a678af61018deae3aaca1cb7cf29e6752bce947d1d2dbc4b745e0c68a3d2682",
+      "frontend/src/app/deformation_history_editor.js": "e6fcfe8f8d36b68ca504b0b6625828bb5f7bbc76beba17dda11ce85ccf10a9b9",
+      "frontend/src/app/feature_editor.js": "540f634f4c4c81c27f5febb68ec9a0b4dec2ced6c9d3da7b2ba3b8d87bee2123",
+      "frontend/src/app/feature_editor.test.js": "f22f9a2b6e70be42ca62405a928bb9a770d10723a240ec93fe5f349ae5196410",
+      "frontend/src/features/deformation_history_controller.js": "ed59af225d1c80b6678b5bb21c88d7a9c390106d052c0da625f6ee0ac4080380",
+      "frontend/src/features/deformation_history_controller.test.js": "608b4ea13ef5dc5640f9c7fe79415030971ca77a43d7a532d5ba8aff62bc8430",
+      "frontend/src/features/deformation_preview_display.js": "e8165337ec63174b720bc2c429a63755f50a619f0430bbbf034a5168c195ad4f",
+      "frontend/src/features/deformation_preview_display.test.js": "fddd708075a8f70f4a96a73d537e7680c8ef6bff2eaf5d927cafae3853a276d8",
+      "frontend/src/main.js": "70ce777cc121979a76d087edbed827fe703aad8e6cbd2a3ef10223c7133b814f",
+      "frontend/src/scene/deformation_editor.js": "e50118a63933daf6aa13f224920b0917066244c23978e1972edbe7d35ae481a0",
+      "frontend/src/scene/deformation_history_adapter.test.js": "595aada449af5f96395dbcef0eb5fc00fcfbcef9ca90faeb8a602d470b1ce873",
+      "frontend/src/scene/deformation_history_preview.js": "26a61effd4835ba66d3aba644c56f3f45c1b7778ed8b9d16e9c5934d1cafdb32",
+      "frontend/src/scene/deformation_history_preview.test.js": "16f3170035773c4dd896aed99b6f76fead6e75b590983a2d891dd8582b37c047",
+      "frontend/src/scene/deformation_history_tool.js": "e2014d4394271bc8f95e939e1a490111308199ecd0876bae4d71fb4e5130a33d",
+      "frontend/src/ui/bend_twist_history_popup.test.js": "a323a2dc0b834fe87154afd134756889bf83b2d07f666c98338777e46146e4f1",
+      "frontend/src/ui/bend_twist_popup.js": "a89c8381a66a47f17fd3dbbab12968d63fccd078763398136427601f4badc6e5",
+      "frontend/src/ui/blunt_end_menus.js": "6f637a01792fbbf5d8cd28432b791d95a7310a167233d9beca1ad570eea72e74",
+      "frontend/src/ui/blunt_end_menus.test.js": "cbd42a6e4895da1d530f0697061ebfa83882f7684574bc22a37f302a3d9f42b8",
+      "frontend/src/ui/deformation_creation_launcher.test.js": "54e69993a4e09c2676c71d0a75e164096eac5b1763eaf928f84bed20fdb6bdf5",
+      "frontend/src/ui/deformation_tool_launcher.js": "32466aab42588079ee14584f8960477fc35d6a18e4ee4fa8d3ee4480bcc1107d",
+      "tests/test_deformation_creation_preview.py": "77a6edf3ed46964680174620823bf5b0fd8f4d286ac68951d67b8defe8d320b3",
+      "tests/test_part_deformation_creation_transport.py": "4a7a6fef7b165efa53f108f254fb41c8272650d78f6fdb4edacd91483321a63b"
+    },
+    "main_js_delta": 0,
+    "lint": {
+      "scoped_ruff": "Passed for all six changed Python files.",
+      "repository": "Existing five F401 findings: vr_prompts.parse_event and unused Path in four CPD test files.",
+      "memory": "Existing six errors and 59 warnings; no finding in changed memory heads.",
+      "diff_check": "Passed."
+    },
+    "post_validation_cleanup": {
+      "path": "tests/test_deformation_creation_preview.py",
+      "change": "Removed one extra blank line at EOF found by staged diff check; no code or assertions changed.",
+      "final_sha256": "f2d8ce92dec0bf2894a76adfb2ea3d2f8aeff857a9acb486b13e44d34cab35d3",
+      "tests_repeated": false
+    }
+  },
+  "performance": {
+    "qualified": false,
+    "preserved": "One bounded prefix replay per Prepare, no history proof/replay on sliders/drag frames, single nonqueued native work slot, same capture/output/session/site/time bounds; full source proof only at Apply.",
+    "remaining": [
+      "Actual desktop request/render tails and larger-design allocation/memory are unmeasured.",
+      "Full undo copying under state lock is not bounded by private authoring capture.",
+      "Existing active-organization structural partial updates use full redraw, still unqualified."
+    ]
+  },
+  "numerical_compatibility": {
+    "changed": false,
+    "model_or_golden_changes": false,
+    "manifest_verification": {
+      "unchanged": true,
+      "cpd": "c67da80884b973d6c5a5464aff030d55a51c0d055873380923f65c54944c8404",
+      "duplex": "b1205c2f9bdb9754bd646b18fb586e0e4719dbcda4a0644c6204dea2c7c318ce",
+      "coating": "67f3141feab0d5771926b7f532f7b40e3a13d31403fc1866e158b3a589406d9f"
+    }
+  },
+  "independent_review": "Backend and frontend authors plus independent lifecycle reviewer; root reviews protocol/native scope parity and alone runs serialized validation. Review found primitive-selector error mapping, explicit placement context, whole-part plane hint and held-Prepare reset issues; corrections included.",
+  "cleanup": {
+    "status": "complete",
+    "removed_roots": [
+      "/tmp/pytest-of-joshua/pytest-0",
+      "/tmp/pytest-of-joshua/pytest-1",
+      "/tmp/pytest-of-joshua/pytest-current"
+    ],
+    "removed": {
+      "directories": 341,
+      "symlinks": 3,
+      "files": 0,
+      "bytes": 0
+    },
+    "visible_process_references": 0,
+    "unreadable_proc_entries": 63,
+    "dependency_check": "Inspected visible /proc cwd/root/fd/maps; no reference to inventoried task roots. Only task-owned empty directories and internal symlinks removed.",
+    "all_task_roots_absent": true,
+    "preserved": "Parent temporary directory, workspace designs/jobs, runtimes, caches and historical evidence. No browser, simulation or native-build bulk artifacts produced."
+  }
+}

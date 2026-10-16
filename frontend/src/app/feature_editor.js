@@ -9,7 +9,7 @@ import {
   getState as getDeformState, getToolType as getDeformToolType,
   startToolForEdit as startDeformToolForEdit,
   markEditCommitted as markDeformEditCommitted,
-  startToolForHistory, finishHistoryTool, updateHistoryScope,
+  startToolForHistory, startToolForCreation, finishHistoryTool, updateHistoryScope,
   STATES as DEFORM_STATES,
 } from '../scene/deformation_editor.js'
 import {
@@ -20,19 +20,22 @@ import {
 
 // Enable only after desktop and request/geometry latency qualification (MV-48).
 export const ISOLATED_DEFORMATION_HISTORY_ENABLED = false
+export const ISOLATED_DEFORMATION_CREATION_ENABLED = false
 
 /** Owns deformation feature creation/editing and popup synchronization. */
 export function initFeatureEditor({
   scene, camera, canvas, controls, designRenderer,
   seekFeaturesWithDelta, showToast, getOrientPanel,
   activateTranslateRotateTool, isolatedHistoryEnabled = ISOLATED_DEFORMATION_HISTORY_ENABLED,
+  isolatedCreationEnabled = ISOLATED_DEFORMATION_CREATION_ENABLED,
 }) {
   // Context set while editing an existing feature; cleared on confirm or cancel.
   let _editContext = null  // { priorCursor, pendingParams }
-  const history = isolatedHistoryEnabled ? createDeformationHistoryEditor({
+  const history = (isolatedHistoryEnabled || isolatedCreationEnabled) ? createDeformationHistoryEditor({
     store, api, scene, camera, designRenderer, showToast,
-    editor: { startToolForHistory, finishHistoryTool, updateHistoryScope, repositionPlane: repositionDeformPlane },
-    popup: { openPopup: openDeformPopup, closePopup: closeDeformPopup, setHistoryPopupStatus },
+    editor: { startToolForHistory, startToolForCreation, finishHistoryTool, updateHistoryScope, repositionPlane: repositionDeformPlane,
+      getState: getDeformState, getPlanes: getDeformPlanes },
+    popup: { openPopup: openDeformPopup, showPickingPopup, closePopup: closeDeformPopup, setHistoryPopupStatus },
     setMode: value => { const node = document.getElementById('mode-indicator'); if (node) node.textContent = value ?? 'NADOC · WORKSPACE' },
   }) : null
 
@@ -121,7 +124,7 @@ export function initFeatureEditor({
   let _prevDeformState = DEFORM_STATES.IDLE
   let _prevDeformType = null
   function _watchDeformState() {
-    if (history?.active()) return
+    if (history?.watchToolState()) return
     const st = getDeformState()
     const type = getDeformToolType()
     if (st === _prevDeformState && type === _prevDeformType) return
@@ -162,7 +165,7 @@ export function initFeatureEditor({
 
   async function _onEditFeature(entry, featureIndex) {
     if (history?.active()) { showToast('Finish the current feature edit before opening another', 4000); return }
-    if (history && entry.feature_type === 'deformation') {
+    if (isolatedHistoryEnabled && history && entry.feature_type === 'deformation') {
       if (getDeformState() !== DEFORM_STATES.IDLE || _editContext) {
         showToast('Finish the current tool before editing feature history', 4000); return
       }
@@ -263,6 +266,7 @@ export function initFeatureEditor({
     _watchDeformState()
   }
   return {
+    creationEditor: isolatedCreationEnabled ? history : null,
     onEditFeature: _onEditFeature,
     watchDeformState: _watchDeformState,
     getEditContext: () => _editContext,

@@ -11,7 +11,7 @@ import json
 from math import isfinite
 from time import monotonic
 
-from backend.api.part_deformation_preview import EvaluatedPreview, _work
+from backend.api.part_deformation_preview import EvaluatedPreview, PreparedCreation, _work, creation_scope
 from backend.core.models import Design
 from backend.core.part_capture_graph import CaptureLimit, GraphBudget
 from backend.core.part_command_errors import CommandContractError
@@ -116,11 +116,8 @@ def _feasibility(prefix, op):
     return result
 
 
-def _controls(prefix, op):
-    from backend.core.part_deformation_edit import can_edit_groups, can_edit_named_groups
-
-    # _inputs has already charged the complete prefix and concrete operation
-    # under the ordinary 30k/2MB admission, before these model_dump allocations.
+def _control_inputs(prefix):
+    # The caller has charged the complete owned prefix before serialization.
     result = {name: [item.model_dump(mode="json", include=fields) for item in getattr(prefix, name)]
               for name, fields in _CONTROL_FIELDS.items()}
     result.update(
@@ -128,7 +125,15 @@ def _controls(prefix, op):
                             if prefix.group_organization is not None else None),
         deformations=[item.model_dump(mode="json") for item in prefix.deformations],
         forced_ligations=[item.model_dump(mode="json") for item in prefix.forced_ligations],
-        selected_operation=op.model_dump(mode="json"),
+    )
+    return result
+
+
+def _controls(prefix, op):
+    from backend.core.part_deformation_edit import can_edit_groups, can_edit_named_groups
+
+    result = _control_inputs(prefix)
+    result.update(selected_operation=op.model_dump(mode="json"),
         capabilities={"change_targets": can_edit_named_groups(op), "change_clusters": can_edit_groups(op),
                       "native_feasibility": True, "polymer_circle_inputs": True},
     )
@@ -198,14 +203,39 @@ def prepare_display(prefix, original, *, envelope=None):
     return _bounded({**result, **envelope})
 
 
-def evaluate_display(prefix, evaluated, *, include_geometry=True, envelope=None):
+def prepare_creation_display(prefix, prepared, *, envelope=None):
+    """Owned latest-stage controls before the user has authored two planes."""
+    from backend.core.part_dna_comparison import project_for_deformation_preview
+
+    if type(prepared) is not PreparedCreation or type(prefix) is not Design or prefix.id != prepared.design_id:
+        _reject("Creation controls require their owned prefix", "invalid_preview_definition")
+    _admit(prefix)
+    envelope = _envelope(envelope)
+    creation = prepared.creation_inputs()
+    identities, ranges = creation_scope(prefix, creation["targets"], creation["cluster_ids"])
+    controls = {**_control_inputs(prefix), "creation": creation, "selected_operation": None,
+                "capabilities": {"change_targets": False, "change_clusters": creation["targets"] is None,
+                                 "native_feasibility": True, "polymer_circle_inputs": True}}
+    result = {"projection_version": PROJECTION_VERSION, "mode": "create", "awaiting_parameters": True,
+              "stage": "feature", "source_equivalence_checked": False, "downstream_evaluated": False,
+              "physical_validity": False, "feasibility": None,
+              "selected_scope": {"id": prepared.deformation_id, "affected_helix_ids": identities,
+                                 "target_ranges": None if ranges is None else [r.model_dump(mode="json") for r in ranges]},
+              "control_context": controls, "before": _native(project_for_deformation_preview, prefix),
+              "candidate": None}
+    return _bounded({**result, **envelope})
+
+
+def evaluate_display(prefix, evaluated, *, include_geometry=True, envelope=None, creation=False):
     """One local candidate; feedback remains available with visual preview off."""
     from backend.core.part_dna_comparison import project_for_deformation_preview
 
-    if type(include_geometry) is not bool:
+    if type(include_geometry) is not bool or type(creation) is not bool:
         _reject("Preview geometry choice must be a boolean", "invalid_preview_definition")
     envelope = _envelope(envelope)
     op = _inputs(prefix, evaluated)
     result = {**_base(_feasibility(prefix, op), op),
               "candidate": _native(project_for_deformation_preview, evaluated.design) if include_geometry else None}
+    if creation:
+        result.update(mode="create", awaiting_parameters=False)
     return _bounded({**result, **envelope})

@@ -31,16 +31,17 @@ export function createDeformationHistoryPreview({ scene, getLiveRoot, camera }) 
       let nextBefore, nextCandidate
       try {
         nextBefore = buildDeformationPreviewLayer(packet.before, scene)
-        nextCandidate = buildDeformationPreviewLayer(packet.candidate, scene)
+        if (packet.candidate !== null) nextCandidate = buildDeformationPreviewLayer(packet.candidate, scene)
+        else if (packet.mode !== 'create' || packet.awaiting_parameters !== true) throw new Error('Missing initial deformation display')
       } catch (error) { nextBefore?.dispose(); nextCandidate?.dispose(); throw error }
       clear()
       try {
         if (camera) {
           viewport = createDeformationPreviewCamera({ scene, camera })
-          viewport.include(nextBefore.root); viewport.include(nextCandidate.root)
+          viewport.include(nextBefore.root); if (nextCandidate) viewport.include(nextCandidate.root)
         }
-      } catch (error) { nextBefore.dispose(); nextCandidate.dispose(); viewport?.dispose(); viewport = null; throw error }
-      before = nextBefore; candidate = nextCandidate; mode = 'candidate'
+      } catch (error) { nextBefore.dispose(); nextCandidate?.dispose(); viewport?.dispose(); viewport = null; throw error }
+      before = nextBefore; candidate = nextCandidate ?? null; mode = candidate ? 'candidate' : 'before'
       live = getLiveRoot?.(); wasVisible = live?.visible ?? false
       display()
     },

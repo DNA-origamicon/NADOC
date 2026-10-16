@@ -83,3 +83,11 @@ describe('private deformation preview transport', () => {
     expect(request).not.toHaveBeenCalled()
   })
 })
+
+it('prepares creation only through the dedicated source-bound endpoint', async () => {
+  const request = vi.fn(async () => ({})), api = await make(request)
+  const body = { ...origin, mode: 'create', type: 'twist', targets: null, cluster_ids: ['placement'] }
+  await api.prepareCreation(body, { context })
+  expect(request).toHaveBeenCalledWith('POST', '/design/features/deformation-preview/create', body,
+    expect.objectContaining({ docId: 'origin-doc', protectedRetry: false, skipSimulationPrepare: true }))
+})

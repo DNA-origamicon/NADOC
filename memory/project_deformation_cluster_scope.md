@@ -9,6 +9,19 @@ metadata:
 
 # Bend/twist cluster scoping — LIVE REFERENCE
 
+## Owned creation/history integration (2026-10-16, gated)
+
+The new private creation path shares the history editor's fixed native prefix,
+lease, display and publication lifecycle. Named `part_group`/placement/strand/domain
+selectors retain their typed meaning and separate numerical placement context. End-menu clicks retain native scope and supply plane
+hints. Explicit null-target placement choices may change during preview; typed
+selection Change/Clear cancels and reprepares. No canonical temporary operation,
+seek or delete occurs. Complete first evaluation precedes Apply; Apply freshly
+proves the source and appends one reproducible feature with one undo. Reset retires
+held preparation immediately. Gates remain false; desktop and latency acceptance
+are open. See [current delivery](project_feature_log_overhaul.md) and
+[evidence](../docs/audits/feature_history_20261014/validation_deformation_creation.json).
+
 > **Status (audited 2026-07-30, `/audit-plan`): SHIPPED and in production.** Every anchor probed;
 > the feature is live end-to-end (model → 4 routes → picker UI). This is **not** an unfinished
 > plan — it is the reference for how scoping actually works. **No rank.**

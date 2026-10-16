@@ -984,6 +984,21 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   display scope. The existing dedicated e2e isolation/output cleanup rules apply.
 
 - **MV-48 — PENDING — Ordinary grouping and geometry preview lifecycle (2026-10-15).**
+  **October 16 U13 ordinary Bend/Twist creation (FH-18 checkpoint 11):** after
+  qualified gate enablement, use both toolbar actions and all four end-menu
+  actions on named/mixed targets and explicit whole/placement scope. Preserve
+  auto-placed and picked planes, end semantics, angle/radius/direction, twist
+  units/handedness, polymer count, preview off/on and Change/Clear selection.
+  No provisional feature or autosave change may occur before Apply. A successful
+  Apply must add one editable feature with one undo, exact save/reopen and cold
+  regeneration. Confirmed prepublication Cancel and definitive Apply refusals
+  retain the saved design; uncertain/in-progress Apply must resolve status. Reset during
+  Prepare/evaluate, immediately open another tool, then deliver the old response;
+  no stuck busy state or replacement-tool change is allowed. Resolve lost Apply
+  through status without a duplicate append. Inspect guides and all representations
+  on larger parts; measure request/render tails and undo copying under lock.
+  **NOT VERIFIED IN APP:** Archive is unavailable; all gates stay false and
+  MV-48/FH-20/FH-27 remain open. Automated tests do not qualify these gestures.
   **October 16 U12 Groups/Placements continuation (FH-18 checkpoint 10):**
   after explicit qualification enables the gates, verify separate ordered
   Placements and Groups lists, scene/sidebar selection and framing (including

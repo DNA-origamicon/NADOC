@@ -7,6 +7,7 @@ Only the prefix is executed; source equivalence and the suffix remain unchecked.
 The time allowance is cooperative between native calls, not a hard wall limit.
 """
 
+from copy import deepcopy
 from dataclasses import dataclass
 from math import ceil, dist, isfinite
 from time import monotonic
@@ -370,50 +371,59 @@ class EvaluatedPreview:
     downstream_evaluated: bool = False
 
 
-def prepare_from_capture(captured, feature_id):
-    """Replay only the selected feature's prefix from an explicit empty root.
+@dataclass(frozen=True, slots=True)
+class PreparedCreation:
+    """One private latest-stage prefix; there is no candidate operation yet."""
 
-    Complete history coverage and identity uniqueness are checked cheaply, but
-    suffix command references/output and source equivalence are not evaluated.
-    Capture/resource admission is not schema validation or a proof certificate.
-    """
-    check = _checkpoint()
+    feature_id: str
+    deformation_id: str
+    design_id: str
+    _prefix: Design
+    kind: str
+    _targets: list | None
+    _cluster_ids: list[str]
+
+    def copy_prefix(self):
+        return self._prefix.model_copy(deep=True)
+
+    def creation_inputs(self):
+        return {"type": self.kind, "targets": deepcopy(self._targets),
+                "cluster_ids": list(self._cluster_ids)}
+
+
+def _prefix_rows(captured, check, *, reserved=0, future_feature=None, future_operation=None):
+    """Shared bounded history admission, before any native prefix execution."""
     check()
     if type(captured) is not Design or set(Design.model_fields) != set(FIELD_ROLES):
         _reject("Preview requires the reviewed standard-part schema")
     _admit(captured, check)
-    feature_id = _identity(feature_id)
     if captured.recipe_root is None:
         _reject("Preview requires an explicit recipe root", "missing_recipe_root")
     if captured.recipe_root.version != 1 or captured.recipe_root.kind != "empty":
         _reject("This private preview supports version-one empty native roots only")
     if captured.feature_log_cursor != -1 or captured.feature_log_sub_cursor is not None:
         _reject("Return to the latest history position before previewing an edit", "historical_cursor")
-    seen, selected, count = set(), None, 0
+    seen, by_id, count = set(), {}, 0
     for parent in captured.feature_log:
         entries = [parent, *parent.children] if parent.feature_type == "routing-cluster" else [parent]
         for entry in entries:
             check()
             count += 1
-            if count > MAX_COMMANDS:
+            if count + reserved > MAX_COMMANDS:
                 _reject("Preview exceeds its command-count allowance", "preview_limit")
             identity = _identity(entry.id)
             if identity in seen:
                 _reject(f"Duplicate feature identity {identity!r}", "ambiguous_feature")
             seen.add(identity)
-            if identity == feature_id:
-                selected = entry
-    if selected is None:
-        raise ReferenceResolutionError("The selected preview feature no longer exists", references=[
-            {"kind": "feature", "identity": feature_id, "parameter_path": ["feature_id"]},
-        ])
-    if type(selected) is not DeformationLogEntry:
-        _reject("Select a typed native deformation entry; capture must preserve entry types")
-    if selected.proof_version != 1:
-        _reject("Selected deformation lacks a native proof contract", "missing_proof_contract")
-    if selected.op_snapshot is None or selected.deformation_id != selected.op_snapshot.id:
-        _reject("Deformation feature and operation identities disagree", "invalid_preview_definition")
-    _identity(selected.deformation_id)
+            by_id[identity] = entry
+    if future_feature is not None and future_feature in seen:
+        _reject("The new feature identity already exists", "ambiguous_feature")
+    if future_operation is not None and (
+            future_operation == future_feature
+            or any(op.id == future_operation for op in captured.deformations)
+            or any(type(entry) is DeformationLogEntry and entry.deformation_id == future_operation
+                   for entry in by_id.values())):
+        _reject("The new deformation identity already exists", "ambiguous_feature")
     rows = []
     for identity, kind, params in command_rows(captured, MAX_COMMANDS):
         check()
@@ -425,16 +435,41 @@ def prepare_from_capture(captured, feature_id):
         if not known:
             _reject(f"Feature {identity!r} lacks a native proof contract", "missing_proof_contract")
         rows.append((identity, kind, params))
+    return rows, by_id
+
+
+def _replay_prefix(captured, rows, check, *, stop=None):
     try:
         current = root_design(captured.recipe_root).copy_with(id=captured.id)
     except (ValueError, TypeError) as error:
         _reject(str(error), "invalid_recipe_root")
     for identity, kind, params in rows:
-        if identity == feature_id:
+        if identity == stop:
             break
         current = _run(kind, current, params, check).copy_with(
             id=captured.id, recipe_root=captured.recipe_root,
         )
+    return current
+
+
+def prepare_from_capture(captured, feature_id):
+    """Replay only the selected prefix; neither suffix nor source is proved."""
+    check = _checkpoint()
+    feature_id = _identity(feature_id)
+    rows, entries = _prefix_rows(captured, check)
+    selected = entries.get(feature_id)
+    if selected is None:
+        raise ReferenceResolutionError("The selected preview feature no longer exists", references=[
+            {"kind": "feature", "identity": feature_id, "parameter_path": ["feature_id"]},
+        ])
+    if type(selected) is not DeformationLogEntry:
+        _reject("Select a typed native deformation entry; capture must preserve entry types")
+    if selected.proof_version != 1:
+        _reject("Selected deformation lacks a native proof contract", "missing_proof_contract")
+    if selected.op_snapshot is None or selected.deformation_id != selected.op_snapshot.id:
+        _reject("Deformation feature and operation identities disagree", "invalid_preview_definition")
+    _identity(selected.deformation_id)
+    current = _replay_prefix(captured, rows, check, stop=feature_id)
     _operation(selected.op_snapshot, current)
     _admit(current, check)
     # Builders derive a fresh graph from empty inputs. The sole remaining
@@ -444,10 +479,138 @@ def prepare_from_capture(captured, feature_id):
     return PreparedPreview(feature_id, entry.deformation_id, captured.id, current, entry)
 
 
+def creation_scope(prefix, targets, cluster_ids, *, planes=None):
+    """Resolve authored selection with existing native semantics, never []→all."""
+    from backend.core.deformation import helices_crossing_planes, resolve_cluster_scope
+    from backend.core.part_group_selection import resolve_deformation_targets, target_references
+
+    _json({"targets": targets, "cluster_ids": cluster_ids})
+    if (type(cluster_ids) is not list or any(type(identity) is not str or not 0 < len(identity) <= 256
+                                           for identity in cluster_ids)
+            or len(cluster_ids) != len(set(cluster_ids))):
+        _reject("Placement selection requires unique bounded identities", "invalid_preview_reference")
+    placements = {cluster.id for cluster in prefix.cluster_transforms}
+    if set(cluster_ids) - placements:
+        _reject("A selected numerical placement no longer exists", "invalid_preview_reference")
+    if targets is not None:
+        target_references(targets)  # Close legacy selector grammar before native parsing too.
+        try:
+            ranges = resolve_deformation_targets(prefix, targets)
+        except CommandContractError:
+            raise
+        except ValueError as error:
+            _reject(str(error), "invalid_preview_reference")
+        if not ranges or (planes is not None and not any(
+                item.start_bp < planes[1] and item.end_bp > planes[0] for item in ranges)):
+            _reject("Selection does not intersect the deformation window", "invalid_preview_reference")
+        return sorted({item.helix_id for item in ranges}), ranges
+    available = ([helix.id for helix in prefix.helices] if planes is None else
+                 helices_crossing_planes(prefix, *planes))
+    resolved = resolve_cluster_scope(prefix, cluster_ids, available)
+    if not resolved["helix_ids"]:
+        _reject("Selected placement or whole-part scope contains no deformable helices",
+                "invalid_preview_reference")
+    return resolved["helix_ids"], None
+
+
+def prepare_creation_from_capture(captured, *, feature_id, deformation_id, kind, targets, cluster_ids):
+    """Prepare the complete current stage, with no fabricated operation/planes."""
+    check = _checkpoint()
+    feature_id, deformation_id = _identity(feature_id), _identity(deformation_id)
+    if type(kind) is not str or kind not in {"bend", "twist"}:
+        _reject("Creation supports ordinary Bend and Twist", "invalid_preview_definition")
+    rows, _entries = _prefix_rows(captured, check, reserved=1,
+                                  future_feature=feature_id, future_operation=deformation_id)
+    current = _replay_prefix(captured, rows, check)
+    _work(current, check)
+    if len(current.deformations) + len(current.cluster_transforms) >= MAX_OPERATIONS:
+        _reject("Creation exceeds the private preview operation allowance", "preview_limit")
+    creation_scope(current, targets, cluster_ids)
+    _admit(current, check)
+    check()
+    return PreparedCreation(feature_id, deformation_id, captured.id, current, kind,
+                            deepcopy(targets), list(cluster_ids))
+
+
+def _evaluate_creation(prepared, prefix, patch, check):
+    import json
+
+    if type(patch) is not dict:
+        _reject("Creation requires complete plane and parameter inputs", "invalid_preview_definition")
+    _json(patch)
+    required = {"plane_a_bp", "plane_b_bp", "params"}
+    if not required <= set(patch) or set(patch) - (required | {"cluster_ids"}):
+        _reject("Creation requires complete planes/parameters and cannot replace its selection or identity",
+                "invalid_preview_definition")
+    if type(patch["plane_a_bp"]) is not int or type(patch["plane_b_bp"]) is not int:
+        _reject("Creation planes require integer base-pair addresses", "invalid_preview_definition")
+    a, b = _bp(patch["plane_a_bp"]), _bp(patch["plane_b_bp"])
+    if a >= b:
+        _reject("The first deformation plane must precede the second", "invalid_preview_definition")
+    cluster_ids = patch.get("cluster_ids", prepared._cluster_ids)
+    if prepared._targets is not None and cluster_ids != prepared._cluster_ids:
+        _reject("Typed selection cannot change its numerical placement context", "invalid_preview_definition")
+    values = patch["params"]
+    model = BendParams if prepared.kind == "bend" else TwistParams
+    if (type(values) is not dict or set(values) - set(model.model_fields)
+            or values.get("kind", prepared.kind) != prepared.kind):
+        _reject("Creation parameters do not match the deformation family", "invalid_preview_definition")
+    try:
+        native_params = model.model_validate_json(json.dumps(values, allow_nan=False), strict=True)
+    except ValueError as error:
+        _reject(str(error), "invalid_preview_definition")
+    ids, ranges = creation_scope(prefix, prepared._targets, cluster_ids, planes=(a, b))
+    op = DeformationOp(id=prepared.deformation_id, type=prepared.kind, plane_a_bp=a, plane_b_bp=b,
+                       targets=deepcopy(prepared._targets), target_ranges=ranges,
+                       affected_helix_ids=ids, cluster_ids=list(cluster_ids), params=native_params)
+    entry = DeformationLogEntry(id=prepared.feature_id, deformation_id=op.id, op_snapshot=op, proof_version=1)
+    kind, params = command_input(entry)
+    candidate = _run(kind, prefix, params, check)
+    report = validate_design(candidate)
+    check()
+    entry = entry.model_copy(update={"op_snapshot": candidate.deformations[-1].model_copy(deep=True)})
+    return EvaluatedPreview(candidate, entry, report)
+
+
+def prepare_creation_append(captured, prepared, patch, checkpoint):
+    """Prove the fresh source, rebuild its recovery, then append one native row."""
+    from fastapi import HTTPException
+    from backend.api.part_recipe_prefix import ReplayPrefix
+    from backend.core.part_history_contract import assess_part_history
+    from backend.core.part_structure_gate import require_valid_structure
+
+    if type(prepared) is not PreparedCreation or captured.id != prepared.design_id:
+        _reject("Creation belongs to a different owned source", "invalid_preview_definition")
+    _prefix_rows(captured, checkpoint, reserved=1, future_feature=prepared.feature_id,
+                 future_operation=prepared.deformation_id)
+    replay = ReplayPrefix(captured, len(captured.feature_log))
+    last = None
+
+    def prove(kind, current, params):
+        nonlocal last
+        last = replay.execute(lambda k, d, p: _run(k, d, p, checkpoint), kind, current, params)
+        return last
+
+    proof = assess_part_history(captured, execute=prove, dependencies=dependencies, checkpoint=checkpoint)
+    if proof["status"] != "verified":
+        raise HTTPException(409, detail={"code": "recipe_not_reproducible", "assessment": proof})
+    current = (last if last is not None else root_design(captured.recipe_root)).copy_with(id=captured.id)
+    evaluated = _evaluate_creation(prepared, current, patch, checkpoint)
+    candidate = evaluated.design.copy_with(recipe_root=captured.recipe_root,
+        input_sources=dict(captured.input_sources), feature_log=[*replay.log, evaluated.entry],
+        feature_log_cursor=-1, feature_log_sub_cursor=None)
+    require_valid_structure(candidate, checkpoint=checkpoint)
+    checkpoint()
+    return candidate, evaluated.validation
+
+
 def evaluate(prepared, patch):
     """Build one isolated edited overlay; never replay prefix/suffix or publish."""
     check = _checkpoint()
     check()
+    if type(prepared) is PreparedCreation:
+        _admit(prepared._prefix, check)
+        return _evaluate_creation(prepared, prepared.copy_prefix(), patch, check)
     if type(prepared) is not PreparedPreview or type(patch) is not dict:
         _reject("Preview requires prepared native inputs and an object patch", "invalid_preview_definition")
     _json(patch)

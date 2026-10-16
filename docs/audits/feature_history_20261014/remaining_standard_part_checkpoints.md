@@ -14,11 +14,11 @@ agreed; do not invent historical estimate deltas. This is a milestone estimate,
 not a count of messages/commits or a percentage of time or user-ready features.
 Core estimates have moderate confidence; parked work has lower confidence.
 
-Keep delivery and effort visible separately: **12 engineering checkpoints have
-been delivered since B1 (U1–U12), closing one additional milestone**. Ten of
+Keep delivery and effort visible separately: **13 engineering checkpoints have
+been delivered since B1 (U1–U13), closing one additional milestone**. Eleven of
 those checkpoints were spent on still-open FH-18. The 38 is an estimate of
 deliverable milestones, not a promise of 38 commits or assistant responses;
-the ten-checkpoint effort must not disappear behind the unchanged denominator.
+the eleven-checkpoint effort must not disappear behind the unchanged denominator.
 
 One counted update is a named, reviewable milestone with a fixed exit. Completed
 implementation foundations below have scoped tests/evidence; some remain gated.
@@ -59,7 +59,7 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 
 | ID | Status | Fixed remaining exit |
 |---|---|---|
-| FH-18 | In progress · 10 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Owned organization transactions, named deformation preview/repair/comparison, qualified final-topology lineage including extrusion/crossover and resize/domain-shift edits and matching Fine Routing recovery are implemented; Groups/Placements UI and explicit placement Apply are integrated privately; ordinary new deformation creation, generated consumers, new-group movement and qualification stay open. |
+| FH-18 | In progress · 11 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Owned organization transactions, named deformation preview/repair/comparison, qualified final-topology lineage including extrusion/crossover and resize/domain-shift edits and matching Fine Routing recovery are implemented; Groups/Placements UI, explicit placement Apply and ordinary owned Bend/Twist creation are integrated privately; persistent group visibility, generated consumers, new-group movement and qualification stay open. |
 | FH-20 | Remaining | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
 | FH-21 | Remaining | Extrusion history editor: eligible earlier edits through downstream features, stable identities, complete ordinary controls and validation. |
 | FH-22 | Remaining | Sweep history editor: input-based isolated preview, recovery-independent Apply/Cancel and downstream rebuild. |
@@ -137,8 +137,51 @@ bound their matrices before implementation rather than expanding them indefinite
 | U9 · 2026-10-16 | FH-18 checkpoint 7: five extrusion families and crossover placement/motion follow organizational ancestry through native replay; bounded atomic endpoint correspondence, exact parity and unused reconciliation-field cleanup; [evidence](validation_group_geometry_lineage.json) | None; resize/domain-shift, remaining consumer/repair/UI migration, rollout and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** seven checkpoints on unfinished FH-18. The nine added command kinds are coverage within B/C, not new milestones. Fixed exit and five batches unchanged. |
 | U10 · 2026-10-16 | FH-18 checkpoint 8: passive native resize/domain-shift contributor tracking, complete observed-material checks and private Fine Routing reconstruction; [evidence](validation_group_resize_lineage.json) | None; remaining consumer/repair/UI migration, rollout and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** eight checkpoints on unfinished FH-18. The bounded two-command batch is implemented; no new milestone, exit or estimate. |
 | U11 · 2026-10-16 | FH-18 checkpoint 9: named bend/twist preview, explicit reference repair, historical frozen-range display and guarded host Apply/repair commit; [evidence](validation_named_deformation_lifecycle.json) | None; generated consumers, visible Groups/Placements, new-group movement and rollout remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** nine checkpoints on unfinished FH-18. Completes the promised named-selection integration within B/C, with no new milestone or weakened exit. |
-
 | U12 · 2026-10-16 | FH-18 checkpoint 10: separate Groups/Placements sidebar, native context actions, typed scene selection/style/visibility and atomic explicit placement Apply; [evidence](validation_group_placement_ui.json) | None; ordinary new Bend/Twist creation, generated consumers, new-group movement and qualification remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** ten checkpoints on unfinished FH-18. D advances within the original five batches; guarded unavailable consumers do not count as implemented. |
+| U13 · 2026-10-16 | FH-18 checkpoint 11: ordinary Bend/Twist creation uses the shared isolated preview lifecycle, complete controls and one input-defined append; [evidence](validation_deformation_creation.json) | None; persistent group visibility, generated consumers, new-group movement and qualification remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** eleven checkpoints on unfinished FH-18. One complete creation workflow within D; fixed exits and five batches unchanged. |
+
+### FH-18 containment update — U13
+
+Ordinary Bend/Twist creation now prepares an owned latest-history prefix before
+plane picking. Toolbar mixed selection and all four end-menu actions share the
+existing editor/controller/renderer/lease. No provisional canonical operation or
+fabricated neutral feature is needed. Existing planes, angle/radius/direction,
+twist units/handedness, polymer-circle controls, selection Change/Clear and visual
+preview toggle remain. End-menu clicks position planes without narrowing the
+existing placement/whole-part scope. For toolbar typed selections, only explicit
+placement selectors supply numerical context; equal named-group text does not
+select a placement. End menus retain native active/single-placement defaults.
+
+Prepare has no candidate and Apply stays unavailable until a complete draft
+successfully evaluates. Named/mixed selection changes cancel and reprepare;
+explicit legacy null-target placement choices use native scope on the same
+prefix. Repeated previews never replay history or publish. Apply independently
+proves the fresh source, appends one typed native feature, and reuses the exact
+source/session/revision/policy publication transaction, undo and receipt recovery.
+Old edit packet validation remains closed. Shared prefix admission and editor
+setup replace duplicated logic; the live legacy path cannot be pruned before
+rollout. No model, numerical algorithm, source pin or golden changed.
+
+The new reset-during-Prepare regression exposed a stale local busy state
+(ISSUE-112); a retired opening must release immediately and its late reply must
+not disturb a replacement tool. Automated evidence, including real Python/JS
+packets, is recorded separately from desktop and performance qualification.
+Focused backend checks passed 294 tests; the full frontend suite passed 8,767
+tests with one existing skip. Source hashes stayed unchanged through validation.
+The Archive mount remains unavailable. All rollout gates remain false; this is
+implemented private integration, not public enablement or FH-20/FH-27 closure.
+
+**Containment:** finish the still-open persistent group visibility, new-group
+movement/frame/extension and generated compatibility exits within the original
+B–E batches. Research unresolved movement semantics before choosing them; a
+scientific placement change still needs demonstrated A/B authorization. Do not
+add a generic preview framework, transfer core compatibility to parked FH-36,
+or count this workflow as closing FH-18. Larger-model request/render/undo-lock
+latency and actual application checks remain required before rollout.
+
+**18/38 complete; 20 remaining (11 core, 9 parked); +0 completed, +0 total.**
+Thirteen engineering checkpoints since B1 have closed one milestone; eleven
+were spent on FH-18. The estimate and full original exits are unchanged.
 
 ### FH-18 containment update — U12
 

@@ -112,3 +112,13 @@ describe('owned native deformation history display', () => {
     expect(axes.find(node => node !== curve).visible).toBe(false)
   })
 })
+
+it('opens an owned creation prefix without any provisional candidate and disposes it cleanly', () => {
+  const { scene, live, preview } = setup()
+  preview.open({ mode: 'create', awaiting_parameters: true, before: component(), candidate: null })
+  expect(scene.children).toHaveLength(2); expect(live.visible).toBe(false)
+  expect(scene.children.find(node => node.name === 'privateDeformationPreview').visible).toBe(true)
+  preview.replaceCandidate(component()); preview.show('candidate')
+  expect(scene.children).toHaveLength(3)
+  preview.dispose(); expect(scene.children).toEqual([live]); expect(live.visible).toBe(true)
+})

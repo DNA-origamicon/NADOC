@@ -13,10 +13,19 @@ export function createDeformationHistoryTool(operation, adapter) {
     patch(planes, clusterIds, params) {
       const a = planes.a?.bp, b = planes.b?.bp
       if (!Number.isSafeInteger(a) || !Number.isSafeInteger(b)) throw new Error('Both deformation planes are required')
-      return { type: operation.type, plane_a_bp: Math.min(a, b), plane_b_bp: Math.max(a, b),
+      return { ...(adapter.mode === 'create' ? {} : { type: operation.type }), plane_a_bp: Math.min(a, b), plane_b_bp: Math.max(a, b),
         cluster_ids: [...clusterIds], ...(params === undefined ? {} : { params }) }
     },
   })
+}
+
+/** Creation owns selection and operation identity, but has no invented planes/params. */
+export function createDeformationCreationTool(creation, adapter) {
+  shape(creation, ['id', 'type', 'targets', 'cluster_ids']); text(creation.id)
+  if (!(creation.targets === null || (Array.isArray(creation.targets) && creation.targets.length > 0))
+      || !Array.isArray(creation.cluster_ids)) throw new Error('Explicit creation scope is required')
+  deformationHistoryScope(creation, adapter.design, adapter.selectedScope)
+  return createDeformationHistoryTool(creation, { ...adapter, mode: 'create' })
 }
 
 export function setDeformationGuideLayer(root, layer = 0) {

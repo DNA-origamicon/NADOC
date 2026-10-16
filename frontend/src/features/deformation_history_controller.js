@@ -5,7 +5,7 @@ const CONTEXT = ['docId', 'designId', 'revision', 'loadoutId', 'editable', 'curs
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const refused = error => [403, 404, 408, 409, 410, 413, 422, 429].includes(error?.status)
 const error = (message, status = 409) => new DeformationPreviewRequestError(status, message)
-const empty = () => ({ open: false, busy: null, featureId: null, deformationId: null,
+const empty = () => ({ mode: 'edit', awaitingParameters: false, open: false, busy: null, featureId: null, deformationId: null,
   draft: {}, projection: null, controls: null, error: null, expired: false,
   committed: null, refreshNeeded: false, publicationUnknown: false })
 const contextCopy = context => Object.fromEntries(CONTEXT.map(key => [key, context?.[key]]))
@@ -87,7 +87,7 @@ export function createDeformationHistoryController({ api, getContext, subscribeC
     return ++b.sequence
   }
 
-  async function open(featureId) {
+  async function open(featureId, creation = null) {
     if (disposed) return null
     invalidate()
     const context = contextCopy(getContext())
@@ -101,16 +101,20 @@ export function createDeformationHistoryController({ api, getContext, subscribeC
     if (!UUID.test(nonce)) { state = { ...state, error: error('A fresh preview identity is required', 422) }; emit(); return null }
     const b = { context, epoch, origin: { preview_id: nonce, expected_design_id: context.designId,
       expected_revision: context.revision, feature_id: featureId }, lease: null, deformationId: null, sequence: 0, deadline: Infinity }
-    binding = b; draftVersion = evaluatedVersion = 0
-    state = { ...empty(), open: true, featureId, busy: 'prepare' }; emit()
+    b.mode = creation ? 'create' : 'edit'
+    binding = b; draftVersion = 0; evaluatedVersion = creation ? -1 : 0
+    state = { ...empty(), mode: b.mode, awaitingParameters: !!creation, open: true, featureId, busy: 'prepare' }; emit()
     const abort = new AbortController(), started = now(); requests.add(abort)
     try {
-      const response = await api.prepare(body(b), options(b, abort))
+      const response = creation
+        ? await api.prepareCreation({ ...body(b), mode: 'create', ...creation }, options(b, abort))
+        : await api.prepare(body(b), options(b, abort))
       if (!current(b)) {
         try { envelope(b, response, 0, { opening: true }); cleanup(b, response.lease_id) } catch { /* original nonce cancellation remains authoritative */ }
         return null
       }
       envelope(b, response, 0, { opening: true })
+      displayMode(b, response, true)
       validateDisplay(response, { prepare: true })
       b.lease = response.lease_id; b.deformationId = response.deformation_id
       leaseDeadline(b, response, started)
@@ -118,6 +122,24 @@ export function createDeformationHistoryController({ api, getContext, subscribeC
       emit(); return response
     } catch (failure) { setError(b, failure); return null }
     finally { requests.delete(abort); if (current(b)) { state = { ...state, busy: null }; emit() } }
+  }
+
+  function openCreation({ type, targets, clusterIds } = {}) {
+    try {
+      const creation = cloneRepairInput({ type, targets, cluster_ids: clusterIds })
+      if (!['bend', 'twist'].includes(type) || !Array.isArray(clusterIds)
+          || !(targets === null || (Array.isArray(targets) && targets.length > 0))) throw error('Choose an explicit deformation scope', 422)
+      const featureId = uuid()
+      if (!UUID.test(featureId)) throw error('A fresh feature identity is required', 422)
+      return open(featureId, creation)
+    } catch (failure) { state = { ...state, error: failure }; emit(); return Promise.resolve(null) }
+  }
+  function displayMode(b, response, preparing) {
+    if (b.mode === 'create') {
+      if (response.mode !== 'create' || response.awaiting_parameters !== preparing) throw error('Invalid creation preview stage', 422)
+    } else if (Object.hasOwn(response, 'mode') || Object.hasOwn(response, 'awaiting_parameters')) {
+      throw error('Creation preview cannot replace a history edit', 422)
+    }
   }
 
   async function evaluate(entry) {
@@ -129,10 +151,11 @@ export function createDeformationHistoryController({ api, getContext, subscribeC
         params: entry.draft, include_geometry: entry.includeGeometry }, options(b, abort))
       if (!current(b) || state.expired || entry.version !== draftVersion) return null
       envelope(b, response, b.sequence)
+      displayMode(b, response, false)
       validateDisplay(response, { prepare: false })
       leaseDeadline(b, response, started)
       evaluatedVersion = entry.version
-      state = { ...state, projection: response, error: null }; emit(); return response
+      state = { ...state, awaitingParameters: false, projection: response, error: null }; emit(); return response
     } catch (failure) { if (entry.version === draftVersion) setError(b, failure); return null }
     finally { requests.delete(abort) }
   }
@@ -290,7 +313,7 @@ export function createDeformationHistoryController({ api, getContext, subscribeC
     invalidate(); return null
   }
   return {
-    open, update, apply, cancel, resolvePublication, refreshContext,
+    open, openCreation, update, apply, cancel, resolvePublication, refreshContext,
     refreshCommitted: () => publicationOperation('refresh', refreshPublication),
     getState: snapshot,
     subscribe(listener) { listeners.add(listener); listener(snapshot()); return () => listeners.delete(listener) },

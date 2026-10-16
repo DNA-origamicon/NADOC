@@ -2,7 +2,7 @@
 // the right-click context menu shown when a domain/blunt end is picked. Both
 // share the same three actions (Extrude continuation / Bend / Twist) over a
 // captured domain-end info object. Extracted verbatim from main.js (#88).
-import { startToolAtBp } from '../scene/deformation_editor.js'
+import { startToolAtBp, getDeformDefaultClusterIds } from '../scene/deformation_editor.js'
 import { showToast } from './toast.js'
 import { helixDisplayLabel } from './design_display_labels.js'
 
@@ -11,7 +11,20 @@ import { helixDisplayLabel } from './design_display_labels.js'
 // to keep the moved handler bodies byte-identical). `extrudePanel` opens the
 // right-sidebar Extrude panel (which hosts the slice-extrude controls) for the
 // blunt-end continuation / deformed-continuation flows.
-export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, deformView, clusterDeformGuard: _clusterDeformGuard, extrudePanel, sweepPanel }) {
+export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, deformView, clusterDeformGuard: _clusterDeformGuard, extrudePanel, sweepPanel, openDeformationCreation = null }) {
+  function beginDeformation(type, info) {
+    if (openDeformationCreation) {
+      // The clicked end selects planes, not a narrower domain scope.
+      Promise.resolve(openDeformationCreation({ type, targets: null,
+        clusterIds: getDeformDefaultClusterIds(),
+        placementHint: { kind: 'end', helixId: info.helixId, bp: info.bp, openSide: info.openSide } }))
+        .catch(error => showToast(error.message, { severity: 'error' }))
+      return
+    }
+    startToolAtBp(type, info.helixId, info.bp, info.openSide)
+    document.getElementById('mode-indicator').textContent =
+      `${type.toUpperCase()} — drag planes to adjust segment · apply in popup · Esc to cancel`
+  }
   // ── Blunt end sidebar panel ──────────────────────────────────────────────────
   const _bluntPanel        = document.getElementById('blunt-panel-actions')
   const _bluntPanelEmpty   = document.getElementById('blunt-panel-empty')
@@ -125,9 +138,7 @@ export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, def
       return
     }
     if (!_clusterDeformGuard()) return
-    startToolAtBp('bend', info.helixId, info.bp, info.openSide)
-    document.getElementById('mode-indicator').textContent =
-      'BEND — drag planes to adjust segment · apply in popup · Esc to cancel'
+    beginDeformation('bend', info)
   })
   document.getElementById('blunt-twist-btn')?.addEventListener('click', () => {
     const info = _domainEndInfo
@@ -138,9 +149,7 @@ export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, def
       return
     }
     if (!_clusterDeformGuard()) return
-    startToolAtBp('twist', info.helixId, info.bp, info.openSide)
-    document.getElementById('mode-indicator').textContent =
-      'TWIST — drag planes to adjust segment · apply in popup · Esc to cancel'
+    beginDeformation('twist', info)
   })
 
   // ── Context menu button wiring (right-click blunt end) ────────────────────
@@ -184,9 +193,7 @@ export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, def
       return
     }
     if (!_clusterDeformGuard()) return
-    startToolAtBp('bend', info.helixId, info.bp, info.openSide)
-    document.getElementById('mode-indicator').textContent =
-      'BEND — drag planes to adjust segment · apply in popup · Esc to cancel'
+    beginDeformation('bend', info)
   })
   document.getElementById('blunt-twist-btn-ctx')?.addEventListener('click', () => {
     const info = _domainEndCtxInfo
@@ -197,9 +204,7 @@ export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, def
       return
     }
     if (!_clusterDeformGuard()) return
-    startToolAtBp('twist', info.helixId, info.bp, info.openSide)
-    document.getElementById('mode-indicator').textContent =
-      'TWIST — drag planes to adjust segment · apply in popup · Esc to cancel'
+    beginDeformation('twist', info)
   })
 
   return {

@@ -2635,7 +2635,7 @@ async function main() {
   const _bluntMenus = initBluntEndMenus({
     store, api, slicePlane, expandedSpacing, deformView,
     clusterDeformGuard: _clusterDeformGuard,
-    extrudePanel: _extrudePanel,
+    extrudePanel: _extrudePanel, openDeformationCreation: featureEditor.creationEditor?.openCreation,
     sweepPanel,
   })
 
@@ -3860,7 +3860,7 @@ async function main() {
     _startEmptySpaceExtrude()
   })
 
-  const deformationToolLauncher = initDeformationToolLauncher({ store, selectionManager, showToast, deformView, watchDeformState: _watchDeformState })
+  const deformationToolLauncher = initDeformationToolLauncher({ store, selectionManager, showToast, deformView, watchDeformState: _watchDeformState, ownedEditor: featureEditor.creationEditor })
 
   // Tools → Add Primitive: reveal the right-sidebar Primitives library.
   document.getElementById('menu-tools-add-primitive')?.addEventListener('click', () => {

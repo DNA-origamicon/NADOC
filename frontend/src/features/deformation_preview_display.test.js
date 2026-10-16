@@ -228,3 +228,43 @@ it.each([
   const value = { ...packet(), ...host() }; mutate(value)
   expect(() => validateDeformationPreviewDisplay(value, { prepare: true, requireEnvelope: true })).toThrow()
 })
+
+function creationPacket() {
+  const value = packet()
+  value.mode = 'create'; value.awaiting_parameters = true; value.candidate = null; value.feasibility = null
+  value.control_context.selected_operation = null
+  value.control_context.creation = { type: 'bend', targets: [{ kind: 'strand', id: 's' }], cluster_ids: [] }
+  value.control_context.capabilities.change_targets = false
+  value.control_context.capabilities.change_clusters = false
+  return value
+}
+it('accepts an explicit creation prefix without inventing an operation or planes', () => {
+  const value = creationPacket(), prior = structuredClone(value)
+  expect(validateDeformationPreviewDisplay(value, { prepare: true })).toBe(value)
+  expect(value).toEqual(prior)
+})
+it.each([
+  ['missing creation mode', value => { delete value.mode }],
+  ['hidden operation', value => { value.control_context.selected_operation = bend() }],
+  ['ready without candidate', value => { value.awaiting_parameters = false }],
+  ['invented plane', value => { value.control_context.creation.plane_a_bp = 0 }],
+  ['missing target owner', value => { value.control_context.creation.targets[0].id = 'missing' }],
+  ['empty selectors', value => { value.control_context.creation.targets = [] }],
+  ['wrong scope owner', value => { value.selected_scope.affected_helix_ids = ['missing'] }],
+])('refuses malformed creation controls: %s', (_name, mutate) => {
+  const value = creationPacket(); mutate(value)
+  expect(() => validateDeformationPreviewDisplay(value, { prepare: true })).toThrow()
+})
+it('accepts deliberate unscoped creation with explicit placement selection but no hidden default', () => {
+  const value = creationPacket(); value.control_context.creation.targets = null
+  value.control_context.capabilities.change_clusters = true
+  expect(validateDeformationPreviewDisplay(value, { prepare: true })).toBe(value)
+  delete value.control_context.creation.cluster_ids
+  expect(() => validateDeformationPreviewDisplay(value, { prepare: true })).toThrow()
+})
+it('requires evaluated creation packets to be ready while preserving controls-only mode', () => {
+  const value = { ...packet({ prepare: false, geometry: false }), mode: 'create', awaiting_parameters: false }
+  expect(validateDeformationPreviewDisplay(value, { prepare: false })).toBe(value)
+  value.awaiting_parameters = true
+  expect(() => validateDeformationPreviewDisplay(value, { prepare: false })).toThrow()
+})

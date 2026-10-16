@@ -1,6 +1,6 @@
 # Group organization and placement: finite migration plan
 
-Architecture proposal, October 16, 2026; source baseline `3aa2529a`. The U6–U12 status
+Architecture proposal, October 16, 2026; source baseline `3aa2529a`. The U6–U13 status
 below records implementation after that proposal. FH-18 remains open. The
 overhaul count remains **18/38 complete**, with **11 core and 9 parked milestones
 remaining**. This plan and its implementation batches earn no separate milestone
@@ -624,3 +624,47 @@ request/render tails remain qualification debt, alongside desktop acceptance.
 [U12 evidence](validation_group_placement_ui.json) retains software outcomes,
 observed failures, scope limits and cleanup. **18/38 complete; +0/+0; FH-18
 checkpoint 10**, still flagged for task growth.
+
+
+## U13 ordinary Bend/Twist creation — FH-18 checkpoint 11
+
+The private ordinary creation workflow now shares the existing history preview
+host, fixed native prefix, DTO controls, scene layer, popup and publication
+receipt. The separate create Prepare request fixes future feature identity,
+server operation identity, family, source revision and typed selection; it
+returns before geometry without an invented operation or candidate. The first
+complete planes/parameters draft must evaluate before Apply. Evaluate reuses
+the owned prefix; Apply freshly proves the entire source recipe, rebuilds its
+recovery and appends one native typed row with the unchanged publication guard.
+
+Toolbar selections preserve mixed group/placement/strand/domain intent. End-menu
+clicks supply plane hints with the existing whole/placement scope, not a new
+single-domain interpretation. Only explicit toolbar placement selectors become
+numerical context; end menus retain native active/single-placement defaults. Named/mixed selection Change/Clear cancels and prepares anew; explicit
+null-target placement picker edits use native scope on the same prefix. Existing
+angle/radius/direction, twist units/handedness, polymer count, plane input/drag,
+preview toggle, failed Apply, Cancel and unknown-publication recovery are retained.
+
+The shared prefix admission and common owner initialization remove duplicate
+mechanics. No second preview framework, native formula or model schema was
+introduced. Existing mutating authoring is still live behind the disabled
+replacement gates, so it is not yet dead code eligible for removal. Historical
+edit Prepare remains a separate closed variant. Same-ID reset during held
+Prepare now retires the local opening immediately; late responses cannot replace
+or tear down a newer tool (ISSUE-112).
+
+This follows the observable create/edit preview and accept/cancel workflow in
+[Onshape feature dialogs](https://cad.onshape.com/help/Content/Home/dialogs.htm)
+and its [documented close action](https://onshape-public.github.io/docs/app-dev/messages/element-right-panel/#closefeaturedialog).
+The fixed-prefix lease and independent append proof are NADOC engineering
+choices, not claims about vendor internals. Named selection and numerical
+placement remain distinct, consistent with treating saved selections as references
+rather than new transforms; no scientific placement behavior is inferred.
+
+[U13 evidence](validation_deformation_creation.json) distinguishes software
+checks from unperformed desktop/latency checks. Public gates remain false.
+Persistent group-identity visibility, arbitrary new-group movement/frame/extension
+semantics, generated compatibility and qualification remain required in the same
+five batches. No unfinished core exit moves to parked assets. **18/38 complete;
+20 remaining (11 core, 9 parked); +0 completed, +0 total.** Eleven checkpoints on
+FH-18 keep the task-growth flag active; this workflow earns no separate milestone.

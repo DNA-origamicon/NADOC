@@ -68,6 +68,11 @@ async def prepare(request: Request):
     return await _dispatch(request, "prepare")
 
 
+@router.post(_PATH + "/create")
+async def create(request: Request):
+    return await _dispatch(request, "prepare_create")
+
+
 @router.post(_PATH + "/evaluate")
 async def evaluate(request: Request):
     return await _dispatch(request, "evaluate")

@@ -252,3 +252,31 @@ it('retired named controls cannot dispatch after Cancel or another session opens
   expect(f.session.onChange).not.toHaveBeenCalled()
   expect(f.creation.onPreview).not.toHaveBeenCalled()
 })
+
+it('creation keeps Change/Clear controls and sends complete visible defaults only to its owned delegate', async () => {
+  const f = setup(), onClear = vi.fn(), onChange = vi.fn()
+  popup.closePopup()
+  popup.setDeformationSelectionUI({ labels: ['Strand · prefix-strand'], phase: 'planes', onClear, onChange, onCancel: vi.fn() })
+  const session = { ...f.session, mode: 'create', operation: undefined,
+    creation: { id: 'new-op', type: 'twist', targets: [{ kind: 'strand', id: 'prefix-strand' }], cluster_ids: [] },
+    capabilities: { change_clusters: false, change_targets: false } }
+  popup.openPopup('twist', 0, 90, null, [], false, session)
+  await tick()
+  expect(session.onChange.mock.lastCall).toEqual([{ plane_a_bp: 0, plane_b_bp: 90,
+    cluster_ids: [], params: { kind: 'twist', total_degrees: 90 } }, { includeGeometry: true }])
+  expect(document.getElementById('def-change-selection')).not.toBeNull()
+  document.getElementById('def-change-selection').click(); expect(onChange).toHaveBeenCalledOnce()
+  document.getElementById('def-clear-selection').click(); expect(onClear).toHaveBeenCalledOnce()
+  expect(validateDeformation).not.toHaveBeenCalled(); expect(f.creation.onPreview).not.toHaveBeenCalled()
+  popup.setHistoryPopupStatus({ awaitingParameters: true }); expect(node('apply-btn').disabled).toBe(true)
+  popup.setHistoryPopupStatus({ awaitingParameters: false }); expect(node('apply-btn').disabled).toBe(false)
+})
+it('creation picking Cancel stays on the owned delegate before any operation exists', async () => {
+  const f = setup(); popup.closePopup()
+  const session = { ...f.session, mode: 'create', operation: undefined,
+    creation: { id: 'new-op', type: 'bend', targets: null, cluster_ids: [] } }
+  popup.showPickingPopup('bend', null, session)
+  node('cancel-btn').click(); await tick()
+  expect(session.onCancel).toHaveBeenCalledOnce(); expect(f.creation.onCancel).not.toHaveBeenCalled()
+  expect(session.onChange).not.toHaveBeenCalled(); expect(validateDeformation).not.toHaveBeenCalled()
+})

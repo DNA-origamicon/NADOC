@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 
-vi.mock('../scene/deformation_editor.js', () => ({ startToolAtBp: vi.fn() }))
+vi.mock('../scene/deformation_editor.js', () => ({ startToolAtBp: vi.fn(), getDeformDefaultClusterIds: () => ['placement'] }))
 vi.mock('./toast.js', () => ({ showToast: vi.fn() }))
 
 import { startToolAtBp } from '../scene/deformation_editor.js'
@@ -229,3 +229,16 @@ it('opens Sweep from the right-click end and dismisses both end menus', () => {
   expect(document.getElementById('blunt-end-ctx-menu').style.display).toBe('none')
   expect(document.getElementById('blunt-panel-actions').style.display).toBe('none')
 })
+
+
+it.each(['blunt-bend-btn', 'blunt-twist-btn', 'blunt-bend-btn-ctx', 'blunt-twist-btn-ctx'])(
+  'uses the owned opener for %s with unchanged placement scope and end-plane hint', async id => {
+    const deps = makeDeps({ currentDesign: { id: 'part' } }), openDeformationCreation = vi.fn(async () => true)
+    const menus = initBluntEndMenus({ ...deps, openDeformationCreation })
+    const info = { helixId: 'h', bp: 42, openSide: 1 }
+    if (id.endsWith('-ctx')) menus.showCtx(10, 20, info); else menus.showPanel(info)
+    click(id); await flush()
+    expect(openDeformationCreation).toHaveBeenCalledWith({ type: id.includes('twist') ? 'twist' : 'bend',
+      targets: null, clusterIds: ['placement'], placementHint: { kind: 'end', ...info } })
+    expect(startToolAtBp).not.toHaveBeenCalled()
+  })

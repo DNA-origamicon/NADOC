@@ -13,6 +13,26 @@ paths:
 
 # deformation
 
+## Current owned editor boundary (2026-10-16)
+
+The private feature-history editor and ordinary Bend/Twist creation now share
+`app/deformation_history_editor.js`, the preview controller, native display layer
+and backend lease. Creation prepares a fixed latest-history prefix with no
+candidate; complete planes/parameters must evaluate before Apply. Slider updates
+reuse that prefix. Apply independently proves the current source and appends one
+typed native feature; Cancel makes no canonical deformation/seek request.
+Toolbar mixed selectors and all four end-menu actions are wired behind the
+disabled creation gate. End clicks position planes without narrowing scope.
+Named `part_group` selection is distinct from numerical `cluster_ids`; explicit
+null targets retain native whole/placement scope and its picker. Typed selection
+Change/Clear cancels and prepares anew. Same-ID reset retires held openings.
+
+All rollout flags remain false pending desktop/performance qualification. The
+legacy flow described below remains live; do not delete it or treat its temporary
+canonical previews as the new architecture. No molecular formulas, constants,
+models or pins changed. See the [current milestone ledger](../../docs/audits/feature_history_20261014/remaining_standard_part_checkpoints.md)
+and [creation evidence](../../docs/audits/feature_history_20261014/validation_deformation_creation.json).
+
 **Audited against live code 2026-07-30.** Line anchors are dated; `main.js` and `crud.py` are
 under active carve-up, so **re-grep any `file:NNNN` before citing it**. The previous version of
 this rule was wrong in its two most-obeyed sections (the `CRITICAL` invariant and the
