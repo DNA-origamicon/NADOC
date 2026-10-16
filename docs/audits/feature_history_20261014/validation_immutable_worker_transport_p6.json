@@ -81,5 +81,28 @@
       "Equal bytes on a different sealed handle cannot substitute the admitted source"
     ],
     "removed_legacy_path": "Unused parent-only _capture_owned_revision helper; owned projection now tested through actual strict-byte transport"
+  },
+  "cold_dna_correction": {
+    "issue": "ISSUE-94",
+    "initial_benchmark": "benchmark_immutable_part_jobs_bytes_initial.json",
+    "failure": "Cold nested Helix serializer remained deferred; mixed DNA and work-boundary byte decode refused before native execution",
+    "minimal_fresh_process": "Reproduced MockValSer; explicit existing schema initialization resolves it",
+    "initial_focused": {
+      "passed": 114,
+      "failed": 1,
+      "seconds": 9.72,
+      "failure": "New test expected only the verdict instead of the full established proof report"
+    },
+    "corrected_single": {
+      "passed": 1,
+      "seconds": 1.12,
+      "oracle": "Exact independent ordinary native evaluation report"
+    },
+    "distinct_green": 115,
+    "additional_coverage": [
+      "Controlled cancellation while child is blocked at owned decode reaps within two seconds and unlinks both buffers",
+      "Bounded scoped RSS sampler20 cases including PID identity, missing reads, cap and cleanup"
+    ],
+    "pinned_model_or_engine_changed": false
   }
 }

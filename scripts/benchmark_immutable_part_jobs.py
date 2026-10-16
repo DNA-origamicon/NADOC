@@ -13,7 +13,7 @@ from contextlib import nullcontext
 from hashlib import shake_256
 import json
 import resource
-from threading import Event
+from threading import Event, local
 from time import perf_counter
 import tracemalloc
 from uuid import uuid4
@@ -27,10 +27,12 @@ from backend.api import part_publication_host as host, part_publication_policy a
 from backend.api.part_strict_http import StrictPartDispatch
 from backend.api.part_immutable_storage import MAX_RETAINED_REVISION_BYTES
 from backend.api.part_recovery_budget import MAX_RECOVERY_BYTES
+from backend.api.part_verification_worker import VerificationWorker
 from backend.core.part_history_proof import AUTHORING_FIELDS, digest
 from scripts import benchmark_registered_batch_jobs as baseline
 from scripts.benchmark_cadnano_route import LockProbe, _PHASE, phase_wrapper, stats
 from scripts.benchmark_runtime_probe import RuntimeProbe, overlap_ms
+from scripts.benchmark_process_rss import ProcessRSSSampler
 
 
 def retention_stress_fixture(case):
@@ -66,6 +68,8 @@ def main():
     parser.add_argument("--repeats", type=int, default=3, choices=range(1, 31))
     parser.add_argument("--diagnostics", action="store_true", help="Correlate parent GC without changing its policy")
     parser.add_argument("--memory", action="store_true", help="Separate allocation diagnostic; timings are not comparable")
+    parser.add_argument("--rss", action="store_true",
+        help="Sample parent plus explicitly owned worker RSS across each complete operation")
     parser.add_argument("--retention-stress", action="store_true",
         help="Run the separate in-memory recovery/undo/two-result stress instead of the default four cases")
     args = parser.parse_args()
@@ -76,10 +80,24 @@ def main():
     original = {"lock": state._lock, "capture": state.capture_design_for_evaluation,
         "commit": jobs.commit, "run": jobs._run, "decode": immutable.materialize_revision,
         "seal": immutable.prepare_revision, "gate": part_batch_evaluation.REGISTERED_BATCH_ENABLED,
-        "revision_path": baseline.REVISION_PATH}
+        "revision_path": baseline.REVISION_PATH, "worker_start": VerificationWorker.start}
     existing_jobs = set(jobs._jobs)
     probe, completion, decode_times, seal_times = LockProbe(original["lock"]), {}, [], []
     cases, failure, cleanup_errors = [], None, []
+    rss_thread, active_rss = local(), None
+
+    def start_worker(worker):
+        original["worker_start"](worker)
+        sampler = getattr(rss_thread, "sampler", None)
+        if sampler is not None:
+            sampler.register_child(worker._process.pid)
+
+    def finish_rss(report):
+        nonlocal active_rss
+        sampler, active_rss = active_rss, None
+        if sampler is not None:
+            sampler.__exit__(None, None, None)
+            report.setdefault("lifecycle_rss", []).append(sampler.report())
 
     def measured_request(client, callback):
         interval = []
@@ -123,9 +141,11 @@ def main():
 
     def run(job, *a):
         done = completion.setdefault(id(job), Event())
+        rss_thread.sampler = active_rss if job.doc == doc else None
         try:
             return original["run"](job, *a)
         finally:
+            rss_thread.sampler = None
             done.set()
 
     def await_job(client, identity):
@@ -167,6 +187,8 @@ def main():
         state.capture_design_for_evaluation = phase_wrapper(original["capture"], "capture")
         jobs.commit = phase_wrapper(original["commit"], "publication")
         jobs._run = run
+        if args.rss:
+            VerificationWorker.start = start_worker
         immutable.materialize_revision = measured(original["decode"], decode_times)
         immutable.prepare_revision = measured(original["seal"], seal_times)
         part_batch_evaluation.REGISTERED_BATCH_ENABLED = True
@@ -216,14 +238,20 @@ def main():
                         with state._lock:
                             state._sessions[doc] = state._DesignSession(design=source, revision=1)
                             state._sessions[doc].history.extend(history)
+                        if args.rss:
+                            active_rss = ProcessRSSSampler().__enter__()
                         if stress:
                             phase = "retained_ready_result_preparation"
+                            if active_rss is not None:
+                                active_rss.set_phase("retained_ready_result")
                             held = client.post(baseline.JOBS_PATH,
                                 json=baseline.request(fixture["design"], fixture["commands"], 1))
                             held.raise_for_status()
                             if await_job(client, held.json()["job_id"])["status"] != "ready":
                                 raise RuntimeError("Retained result preparation did not yield a native candidate")
                         phase = "http_capture"
+                        if active_rss is not None:
+                            active_rss.set_phase("start")
                         job_started = perf_counter()
                         response, capture = measured_request(client,
                             lambda: client.post(baseline.JOBS_PATH,
@@ -235,27 +263,35 @@ def main():
                         response.raise_for_status()
                         identity = response.json()["job_id"]
                         phase = "worker_evaluation"
+                        if active_rss is not None:
+                            active_rss.set_phase("worker")
                         result = await_job(client, identity)
                         sample["job_complete_ms"] = (perf_counter() - job_started) * 1000
                         if result["status"] != "ready":
                             raise RuntimeError(f"Evaluation refused: {result.get('issues')}")
+                        if active_rss is not None:
+                            active_rss.set_phase("ready")
                         if stress:
                             with jobs._lock:
                                 retained_results = [job.result for key, job in jobs._jobs.items()
                                     if key not in existing_jobs and job.result and "candidate" in job.result]
                             # Measurement only; there is no fabricated worker response or permit.
                             sample["ready_result_count"] = len(retained_results)
-                            sample["ready_result_json_bytes"] = [len(json.dumps(value,
-                                separators=(",", ":"), allow_nan=False).encode()) for value in retained_results]
+                            encoder = json.JSONEncoder(separators=(",", ":"), allow_nan=False)
+                            sample["ready_result_json_bytes"] = [sum(len(chunk.encode())
+                                for chunk in encoder.iterencode(value)) for value in retained_results]
                             del retained_results
                             if sample["ready_result_count"] != jobs.MAX_RESULTS:
                                 raise RuntimeError("Retention stress did not occupy both existing result slots")
                         phase = "http_publication"
+                        if active_rss is not None:
+                            active_rss.set_phase("commit")
                         response, publication = measured_request(client,
                             lambda: client.post(f"{baseline.JOBS_PATH}/{identity}/commit"))
                         sample.update(publication=publication, publication_status=response.status_code)
                         report["errors"].extend({"phase": phase, "detail": error} for error in publication["errors"])
                         response.raise_for_status()
+                        finish_rss(report)
                         with state._lock:
                             session = state._sessions[doc]
                             published = session.design
@@ -291,6 +327,7 @@ def main():
                 except Exception as error:
                     report["errors"].append({"phase": phase, "exception": type(error).__name__, "detail": str(error)})
                 finally:
+                    finish_rss(report)
                     for stage in ("capture", "publication"):
                         rows = [sample[stage] for sample in report["samples"] if stage in sample]
                         report[stage] = baseline.summarize(rows)
@@ -328,6 +365,7 @@ def main():
         host.configure(prior_policy)
         state._lock, state.capture_design_for_evaluation = original["lock"], original["capture"]
         jobs.commit, jobs._run = original["commit"], original["run"]
+        VerificationWorker.start = original["worker_start"]
         immutable.materialize_revision, immutable.prepare_revision = original["decode"], original["seal"]
         part_batch_evaluation.REGISTERED_BATCH_ENABLED = original["gate"]
         baseline.REVISION_PATH = original["revision_path"]
@@ -336,10 +374,12 @@ def main():
     print(json.dumps({"scope": "Staged immutable actual strict HTTP batch/verify/commit; persistence excluded",
         "repeats": args.repeats, "completed": passed, "failure": failure,
         "diagnostics": args.diagnostics, "allocation_tracing": args.memory,
+        "rss_sampling": args.rss,
         "retention_stress": args.retention_stress,
         "result_retention_scope": "Two occupied native result slots report actual sizes; this does not qualify two maximum-size 16 MB results.",
         "latency_qualified": False,
         "memory_scope": "Traced parent Python allocations exclude native/worker allocations. Linux RSS high-water includes fixture creation and all prior cases; not an incremental or hard memory bound.",
+        "lifecycle_rss_scope": "Optional Linux /proc sampling starts after retained source/undo installation and ends after commit, before cold proof. Stress includes preparation of a retained ready result and streaming result-size measurement. Only explicitly hooked direct worker PIDs with matching birth ticks count; unrelated descendants and multiprocessing resource trackers are excluded. The baseline includes all already retained benchmark fixtures. Sequential parent+child RSS reads double-count shared pages and may miss short peaks or GIL-blocked intervals; actual maximum gaps are reported. The +256 MiB allowance is an observed engineering target, not a heap guarantee.",
         "rss_high_water_kib": {"parent": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
             "children": resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss},
         "sample_retention": "All aggregate metrics plus refusals, incomplete publications, gen-2 GC samples and phase HTTP/lock/light maxima; other successful per-request arrays are omitted.",

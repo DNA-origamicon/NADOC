@@ -19,10 +19,17 @@ from pydantic import BaseModel
 from backend.api.part_batch_publication_scope import MAX_PUBLIC_HISTORY_ROWS, admit_batch_source
 from backend.api.part_evaluation_worker import MAX_CANDIDATE_BYTES
 from backend.api.part_recovery_budget import retained_recovery_bytes
-from backend.core.models import Design
+from backend.core.models import Design, Helix
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_history_proof import AUTHORING_FIELDS, digest
 from backend.core.part_verification_capture import CaptureLimit, admit
+
+
+# Helix refers forward to LoopSkip. Outer Design validation compiles its nested
+# schema without completing Helix's own serializer; exact duck-typed roundtrip
+# otherwise fails in a fresh worker until a direct Helix was constructed.
+# Resolve this once at the strict boundary, without changing the pinned model.
+Helix.model_rebuild()
 
 
 RECIPE_FIELDS = frozenset({"recipe_root", "feature_log", "input_sources",

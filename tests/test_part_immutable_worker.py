@@ -221,3 +221,59 @@ def test_host_observed_crash_retains_worker_exited_without_accepting_unbound_out
 def test_uninitialized_ticket_is_not_a_private_reservation():
     from backend.api import part_immutable_worker as transport
     assert transport.is_immutable_input(object.__new__(transport.ImmutableInput)) is False
+
+
+def test_real_spawned_native_dna_byte_worker_has_no_parent_serializer_warmup_dependency():
+    from backend.api import part_immutable_worker as transport
+    from tests.test_part_registered_batch import helix
+
+    design = prepare(body=request(helix()))["candidate"]
+    handle = revisions.prepare_revision(design)
+    worker = transport.ImmutableEvaluationWorker(transport.reserve_input(handle), operation(design))
+    try:
+        worker.start()
+        assert worker.wait(5)
+        result = worker.result()
+        expected = evaluate(capture(design, preserve_entry_types=True), operation(design))
+        assert result == expected
+        assert result["status"] == "verified" and result["checked_commands"] == 1
+    finally:
+        worker.close()
+    assert worker._closed and worker._process_closed
+
+
+def _block_owned_decode(input_name, input_size, output_name, entered):
+    from backend.api import part_immutable_worker as transport
+    from threading import Event
+
+    def blocked(*_args):
+        entered.set()
+        Event().wait()
+
+    transport._project = blocked
+    transport._evaluate(input_name, input_size, output_name)
+
+
+def test_byte_worker_cancellation_reaps_during_owned_decode_and_releases_buffers():
+    from time import perf_counter
+
+    transport, handle, parts, _binding = packed()
+    worker = transport.ImmutableEvaluationWorker(transport.reserve_input(handle), operation(revisions.materialize_revision(handle)))
+    names = [buffer.name for buffer in worker._buffers]
+    context = multiprocessing.get_context("spawn")
+    entered = context.Event()
+    worker._process.close()
+    worker._process = context.Process(target=_block_owned_decode,
+        args=(names[0], sum(map(len, parts)), names[1], entered), daemon=True)
+    try:
+        worker.start()
+        assert entered.wait(5), "Child did not reach its owned decode boundary"
+        began = perf_counter()
+        worker.close()
+        assert perf_counter() - began < 2
+        assert worker._closed and worker._process_closed
+        for name in names:
+            with pytest.raises(FileNotFoundError):
+                SharedMemory(name=name)
+    finally:
+        worker.close()

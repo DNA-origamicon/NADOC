@@ -2079,7 +2079,7 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   314.43 seconds. Live app/resource qualification remains separate; no geometry
   formula changed.
 
-## ISSUE-94 — Cold strict DNA decode depends on prior Helix construction (2026-10-15, CORRECTION AWAITING VALIDATION)
+## ISSUE-94 — Cold strict DNA decode depends on prior Helix construction (2026-10-15, FOCUSED CORRECTION VALIDATED; MEASUREMENT OPEN)
 
 - The first real strict-byte benchmark completed six gold publications and two
   independent proofs, but mixed DNA and the 50,000-residue source both refused
@@ -2095,4 +2095,7 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   is imported. No schema/geometry field, molecular formula or pinned model file
   changes; exact serialized roundtrip and admission remain mandatory. Add an
   independent subprocess with nested loop/skip data and a real spawned native
-  DNA worker regression. Focused validation and corrected benchmark are pending.
+  DNA worker regression. Focused validation passed 115 distinct cases after
+  correcting one new assertion to compare the complete independent proof report.
+  Controlled cancellation during owned decode also reaps within two seconds
+  and releases both buffers. Corrected actual HTTP measurement remains pending.

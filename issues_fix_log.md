@@ -760,5 +760,6 @@ that nested Design validation leaves Helix's forward-reference serializer deferr
 until direct construction. A fresh-process minimal diagnostic reproduced the
 MockValSer failure and confirmed schema initialization resolves it. The strict
 boundary now resolves the existing schema once; pinned model/engine files remain
-unchanged. Independent cold serialization and spawned DNA worker regressions
-are prepared, with validation and corrected measurements pending.
+unchanged. Independent cold serialization, spawned DNA proof and controlled decode
+cancellation pass within 115 distinct focused cases (one incomplete expected
+proof fixture corrected). Actual HTTP measurements remain pending.
