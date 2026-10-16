@@ -7,13 +7,8 @@ models. Their field/header/node/byte selection must remain identical.
 from copy import deepcopy
 from time import monotonic
 
-from pydantic import BaseModel
-
+from backend.core.part_capture_graph import CaptureLimit as CaptureLimit, GraphBudget
 from backend.core.part_history_contract import FIELD_ROLES
-
-
-class CaptureLimit(ValueError):
-    pass
 
 
 def visit_inputs(design, *, max_nodes, max_bytes, seconds, preserve_entry_types,
@@ -28,54 +23,15 @@ def visit_inputs(design, *, max_nodes, max_bytes, seconds, preserve_entry_types,
     it. It removes a second deep copy, not any accounting or history projection.
     """
     from backend.core.models import MinorMutationLogEntry, RoutingClusterLogEntry
-    from backend.core.part_capture_copy import scalar_atom_charge, seed_scalar_atom_copy
     if copy_inputs and retain_owned:
         raise TypeError("Input projection cannot both copy and transfer ownership")
     build_inputs = copy_inputs or retain_owned
     if build_inputs and seconds is None:
         raise TypeError("Source capture requires a cooperative time allowance")
-    deadline = monotonic() + seconds if seconds is not None else None
-    remaining = [max_nodes, max_bytes]
+    budget = GraphBudget(max_nodes=max_nodes, max_bytes=max_bytes, seconds=seconds, clock=monotonic)
 
     def charge(value, copy_memo=None, *, scalar_atoms=False):
-        pending = [value]
-        seen = set()
-        while pending:
-            item = pending.pop()
-            remaining[0] -= 1
-            if remaining[0] < 0 or remaining[1] < 0 or (deadline is not None and monotonic() > deadline):
-                raise CaptureLimit("Part verification capture budget exceeded")
-            if isinstance(item, str):
-                remaining[1] -= len(item) * 4  # conservative UTF-8 upper bound
-            elif isinstance(item, (BaseModel, dict, list, tuple)):
-                if id(item) in seen:
-                    continue
-                seen.add(id(item))
-                if isinstance(item, BaseModel):
-                    children = item.__dict__.values()
-                    if scalar_atoms:
-                        scalar_charge = (seed_scalar_atom_copy(item, copy_memo) if copy_inputs
-                                         else scalar_atom_charge(item))
-                        if scalar_charge is not None:
-                            nodes, size = scalar_charge
-                            if nodes + len(pending) > remaining[0]:
-                                raise CaptureLimit("Part verification capture node budget exceeded")
-                            remaining[0] -= nodes
-                            remaining[1] -= size
-                            if remaining[1] < 0 or (deadline is not None and monotonic() > deadline):
-                                raise CaptureLimit("Part verification capture budget exceeded")
-                            continue
-                elif isinstance(item, dict):
-                    if len(item) * 2 > remaining[0]:
-                        raise CaptureLimit("Part verification capture node budget exceeded")
-                    children = (*item.keys(), *item.values())
-                else:
-                    children = item
-                if len(children) + len(pending) > remaining[0]:
-                    raise CaptureLimit("Part verification capture node budget exceeded")
-                pending.extend(children)
-        if remaining[1] < 0:
-            raise CaptureLimit("Part verification capture byte budget exceeded")
+        budget.charge(value, copy_memo, scalar_atoms=scalar_atoms, copy_scalar_atoms=copy_inputs)
 
     def retain(value, memo=None):
         return deepcopy(value, memo) if copy_inputs else value
@@ -137,8 +93,7 @@ def visit_inputs(design, *, max_nodes, max_bytes, seconds, preserve_entry_types,
             copied = header(entry)
             if build_inputs:
                 log.append(copied)
-    if deadline is not None and monotonic() > deadline:
-        raise CaptureLimit("Part verification capture time budget exceeded")
+    budget.finish()
     if build_inputs:
         fields["feature_log"] = log
         return type(design).model_construct(**fields)

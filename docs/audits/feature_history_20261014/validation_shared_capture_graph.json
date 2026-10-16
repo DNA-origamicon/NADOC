@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-15",
+  "scope": "Extract existing proof graph accounting and encoded recovery storage accounting into core modules; retain caller-owned projection and copy policy",
+  "baseline": "5783b656",
+  "validation": {
+    "independent_count_oracles_before_extraction": 6,
+    "focused_after_extraction": {
+      "passed": 114,
+      "warnings": 4,
+      "seconds": 9.67,
+      "targets": [
+        "tests/test_capture_graph_parity.py",
+        "tests/test_part_capture_admission.py",
+        "tests/test_part_capture_copy.py",
+        "tests/test_part_owned_capture.py",
+        "tests/test_part_retained_recovery.py",
+        "tests/test_part_immutable_worker.py"
+      ]
+    },
+    "preserved": [
+      "Proof node and byte charges, scalar-atom copy memo, alias and cycle behavior",
+      "Caller clock and deepcopy seams, cooperative time allowance",
+      "Opaque retained recovery strings, actual length accounting, no decoding",
+      "API recovery helper exports and budget constant override behavior"
+    ]
+  },
+  "limitations": [
+    "The optional rejecting archive shape hook is a new private extension, not an enabled route",
+    "The separate oxDNA archive dossier has five expected review failures (53 passed); fixes and archive validation are not part of this extraction checkpoint",
+    "Broad backend rerun remains pending a frozen green snapshot of concurrent dossiers",
+    "No public gate, source pin, native geometry, or frontend change; main.js line delta is zero"
+  ]
+}
