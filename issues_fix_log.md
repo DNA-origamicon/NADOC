@@ -812,3 +812,9 @@ failures and corrected rerun remain in the
 [continuation evidence](docs/audits/feature_history_20261014/validation_geometry_integrity_continuation.json).
 No app, broad-suite or performance claim; MV-48 remains pending, `main.js` delta
 is zero, and nick/resize/auto-crossover follow-ups remain open.
+
+2026-10-16 — ISSUE-105 intake (open): historical bend/twist group controls do
+not reliably update affected-helix membership. The private preview retains
+native behavior and advertises group retargeting as unavailable. G2 must use
+the existing prefix plane/scope resolvers and align preview, publication and
+cold replay; this checkpoint does not change molecular calculations.

@@ -7,6 +7,7 @@ The existing comparison host and its v2 wire contract remain unchanged.
 """
 
 import json
+from math import isfinite
 from time import monotonic
 
 from backend.api.part_deformation_preview import EvaluatedPreview, _work
@@ -28,6 +29,12 @@ _CONTROL_FIELDS = {
     "cluster_transforms": {"id", "name", "is_default", "helix_ids", "domain_ids",
                            "parent_cluster_id", "translation", "rotation", "pivot"},
 }
+_ENVELOPE_STRINGS = {
+    "preview_id": 256, "expected_design_id": 256, "feature_id": 256,
+    "lease_id": 256, "doc_id": 1024, "deformation_id": 256,
+}
+_ENVELOPE_INTEGERS = frozenset({"expected_revision", "request_sequence"})
+_ENVELOPE_FIELDS = frozenset(_ENVELOPE_STRINGS) | _ENVELOPE_INTEGERS | {"remaining_seconds"}
 
 
 def _reject(detail, code="unsupported_preview_scope"):
@@ -146,24 +153,47 @@ def _base(feasibility):
             "physical_validity": False, "feasibility": feasibility}
 
 
-def prepare_display(prefix, original):
+def _envelope(value):
+    """Own a small host identity mapping; it cannot replace display/proof fields."""
+    if value is None:
+        return {}
+    if type(value) is not dict or len(value) > len(_ENVELOPE_FIELDS):
+        _reject("Preview host envelope must be a bounded scalar object", "invalid_preview_definition")
+    for key, item in value.items():
+        if type(key) is not str or key not in _ENVELOPE_FIELDS:
+            _reject("Preview host envelope contains an unsupported or colliding field", "invalid_preview_definition")
+        if key in _ENVELOPE_STRINGS:
+            valid = type(item) is str and 0 < len(item) <= _ENVELOPE_STRINGS[key]
+        elif key in _ENVELOPE_INTEGERS:
+            valid = type(item) is int and item >= 0 and item.bit_length() <= 64
+        else:
+            valid = ((type(item) is int and item >= 0 and item.bit_length() <= 64)
+                     or (type(item) is float and item >= 0 and isfinite(item)))
+        if not valid:
+            _reject(f"Invalid preview host envelope field: {key}", "invalid_preview_definition")
+    return dict(value)
+
+
+def prepare_display(prefix, original, *, envelope=None):
     """Before/original display plus controls from the fixed historical prefix."""
     from backend.core.part_dna_comparison import project_for_deformation_preview
 
+    envelope = _envelope(envelope)
     op = _inputs(prefix, original)
     result = {**_base(_feasibility(prefix, op)), "control_context": _controls(prefix, op),
               "before": _native(project_for_deformation_preview, prefix),
               "candidate": _native(project_for_deformation_preview, original.design)}
-    return _bounded(result)
+    return _bounded({**result, **envelope})
 
 
-def evaluate_display(prefix, evaluated, *, include_geometry=True):
+def evaluate_display(prefix, evaluated, *, include_geometry=True, envelope=None):
     """One local candidate; feedback remains available with visual preview off."""
     from backend.core.part_dna_comparison import project_for_deformation_preview
 
     if type(include_geometry) is not bool:
         _reject("Preview geometry choice must be a boolean", "invalid_preview_definition")
+    envelope = _envelope(envelope)
     op = _inputs(prefix, evaluated)
     result = {**_base(_feasibility(prefix, op)),
               "candidate": _native(project_for_deformation_preview, evaluated.design) if include_geometry else None}
-    return _bounded(result)
+    return _bounded({**result, **envelope})

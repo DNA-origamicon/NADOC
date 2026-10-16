@@ -1,6 +1,6 @@
 # Remaining standard-part checkpoints
 
-Closure map updated October 15, 2026. This is a finite delivery map, not a
+Closure map updated October 16, 2026. This is a finite delivery map, not a
 new claim that every registered kind or legacy receipt regenerates. Assemblies
 remain outside the agreed scope. Existing molecular builders and constants stay
 unchanged; each new adapter must preserve their complete admitted output.
@@ -73,16 +73,17 @@ Archive remains unavailable on this machine. Continue focused memory-only checks
 no bulk/app/native-scratch output may silently fall back to the system disk.
 Unperformed desktop and broad-suite checks remain completion debt, not passes.
 
-### G1 next: isolated bend/twist history preview — private backend implemented
+### G1 next: isolated bend/twist history preview — private integration in progress
 
-`part_deformation_preview.py` now provides bounded prefix preparation and repeat
-local evaluation on owned input. Its 34 focused cases and existing native
-controls pass. A private bounded host lifecycle and native render/control DTO
-are now implemented (27 host and 27 DTO cases pass). There is no public route
-or frontend preview wiring. ISSUE-100 remains open. This first slice
-admits empty native roots and bundle/group/pose/bend/twist prefixes only;
-cluster/target membership stays fixed. Prefix expansion, complete controls,
-host lifecycle and actual interaction measurements are required before rollout.
+`part_deformation_preview.py` provides bounded prefix preparation and repeat
+local evaluation on owned input. Prefix support now includes ordinary extrude,
+sweep and Fine Routing commands alongside bundle/group/pose/deformation.
+The private host, DTO, disabled HTTP adapter, transport/controller and owned
+native renderer are implemented. The router is not registered in the main app
+and the existing editor is not wired to it. ISSUE-100 remains open. Full control
+validation, cluster retargeting (ISSUE-105), popup/editor integration and actual
+interaction measurements are required before rollout. Existing admission
+limits remain; sweep has a separate bounded path-sampling allowance.
 
 The focused backend lifecycle tests reproduce the current desktop sequence:
 peel the committed deformation, add/update/discard its preview, then Apply.
@@ -146,7 +147,12 @@ every response. Cancellation tombstones are limited to 16 entries/60 seconds;
 stale-source entries are released on cancel/expiry. Native projection and proof
 run outside state/catalog locks. Apply reserves its commit before the existing
 undo/publication transaction; Cancel then reports `commit_in_progress` honestly.
-Failed Apply leaves an unchanged, unexpired editor lease usable. Full-source
+Failed Apply leaves an unchanged, unexpired editor lease usable. After Apply,
+the same bounded entry drops its prefix and retains only a scalar receipt and
+weak source identity until the original expiry. Status distinguishes an active
+Apply from a known refusal; a lost response can be resolved without recommitting.
+Canonical display refresh stays private between exact source/session status
+checks, followed by a final local document check before one adoption. Full-source
 undo cost and the lease policy still need actual interaction qualification.
 
 Open performs bounded native
@@ -155,23 +161,26 @@ equivalence proof; that remains Apply's guard. Return explicit
 `stage="feature"`, `downstream_evaluated=false` and
 `source_equivalence_checked=false`, never a certificate.
 
-Concrete next checkpoint: complete the standard-tool prefix/control contract and
-add the document-bound HTTP adapter, controller and private renderer below.
-Preserve the existing controls before enabling a complete ordinary history-edit
-flow; explicitly explain unsupported histories rather than falling back to
-canonical preview mutations. Require actual request/geometry latency and desktop
-Cancel/Apply evidence before calling ISSUE-100 fixed.
+Concrete next checkpoint: complete the closed display/control envelope validator
+and connect the private controller/renderer to the existing editor and popup.
+Supply fixed prefix context for planes, group selection, strand/domain labels,
+polymer-circle controls and feasibility even with visual preview off. Correct
+historical group retargeting using the existing native selectors; passing new
+cluster metadata alone does not change affected-helix membership. Preserve all
+existing controls before enabling an ordinary history-edit flow; explicitly
+explain unsupported histories rather than falling back to canonical mutations.
+Require actual request/geometry latency and desktop Cancel/Apply evidence before
+calling ISSUE-100 fixed.
 
-Before HTTP wiring, remove the known duplicate response walk: DTO methods
-currently bound their payload, then the host bounds it again with its envelope.
-Native geometry is computed once, but graph and finite-JSON accounting run twice.
-Let the DTO accept a collision-checked, host-owned scalar envelope and bound the
-merged result once; preserve bounded standalone calls and the final source/lease
-check. Pin one-final-bound, whole-envelope overflow, standalone refusal and exact
-payload parity before changing this seam. Do not introduce an unchecked path or
-infer actual latency from eliminating the duplicate walk.
+The duplicate response walk is removed: DTO methods accept a closed scalar host
+envelope, reject collisions before native work, and bound the merged response
+once. Standalone calls stay bounded and final source/lease checks remain. Tests
+pin one final bound, whole-envelope overflow, standalone refusal and exact
+payload parity. The HTTP adapter performs its final JSON serialization in the
+worker thread without FastAPI's generic coordinate walk. This is not a measured
+latency claim.
 
-Frontend integration boundaries after that contract freezes:
+Frontend modules implemented but not connected to the ordinary editor:
 
 - `api/deformation_preview_endpoints.js`: data-only requests, explicit document
   context/abort signal, no protected-loadout retry or simulation preparation;

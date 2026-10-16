@@ -1,4 +1,4 @@
-"""Private mutable-part editor leases; no public route or renderer admission.
+"""Private mutable-part editor leases; no ordinary editor or renderer admission.
 
 One prepared prefix per document, two globally; one nonqueued computation at a
 time. Native work and proof run without state/catalog locks. Apply reserves the
@@ -22,7 +22,6 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_
 from backend.api import doc_context, state
 from backend.api.part_deformation_preview import evaluate as local_evaluate, prepare_from_capture
 from backend.api.part_deformation_preview_dto import (
-    _bounded as bound_display,
     evaluate_display,
     prepare_display,
 )
@@ -82,6 +81,10 @@ class Evaluation(Change):
     include_geometry: StrictBool = True
 
 
+class Status(Cancel):
+    lease_id: str
+
+
 @dataclass
 class _Entry:
     doc: str
@@ -96,6 +99,9 @@ class _Entry:
     sequence: int = 0
     phase: str = "preparing"
     expired_during_commit: bool = False
+    deformation_id: str | None = None
+    publication: dict | None = None  # bounded scalar receipt; never a model/report
+    applying_sequence: int | None = None
 
 
 def _conflict(detail, code="preview_conflict"):
@@ -160,7 +166,8 @@ def _expire(entry):
                 entry.expired_during_commit = True
             else:
                 _remove(entry)
-        # A committing entry is removed on success or expired on rollback.
+        # Commit completion either retains a scalar receipt until the original
+        # expiry, or removes an already expired entry; rollback also prunes it.
 
 
 def _matches_request(entry, request):
@@ -183,8 +190,10 @@ def _source_current(entry):
     if policy.generation != entry.policy_generation:
         _conflict("Construction policy changed; open a new preview", "policy_changed")
     session = state._sessions.get(entry.doc)
+    expected_revision = (entry.publication["revision"] if entry.phase == "applied"
+                         else entry.request.expected_revision)
     if (session is None or session.identity != entry.session_identity
-            or session.revision != entry.request.expected_revision
+            or session.revision != expected_revision
             or session.design is not entry.source() or type(session.design) is not Design
             or session.design.id != entry.request.expected_design_id):
         _conflict("The preview's original part or session changed", "source_changed")
@@ -202,12 +211,12 @@ def _current(entry, sequence=None):
 
 
 def _envelope(entry, sequence, deformation_id):
+    # Measure before projection; the caller conservatively charges lease time
+    # from request start. The final origin check still refuses actual expiry.
     return {**entry.request.model_dump(), "lease_id": entry.lease_id,
             "doc_id": entry.doc, "deformation_id": deformation_id,
             "request_sequence": sequence,
-            "remaining_seconds": max(0, entry.expires - monotonic()),
-            "stage": "feature", "source_equivalence_checked": False,
-            "downstream_evaluated": False}
+            "remaining_seconds": max(0, entry.expires - monotonic())}
 
 
 def _finish(entry, sequence, payload, *, prepared=None):
@@ -218,18 +227,11 @@ def _finish(entry, sequence, payload, *, prepared=None):
             _catalog_current(entry, sequence)
             if prepared is not None:
                 entry.prepared, entry.phase = prepared, "ready"
+                entry.deformation_id = prepared.deformation_id
             return payload
 
 
-def _response(entry, sequence, prepared, payload):
-    # Bound the complete wire result, including identity/lease fields, outside
-    # both locks. The immutable envelope is then admitted by _finish. Remaining
-    # time is measured before that final check; consumers conservatively charge
-    # it from request start, so transit/validation cannot prolong the lease.
-    return bound_display({**payload, **_envelope(entry, sequence, prepared.deformation_id)})
-
-
-def _claim(request):
+def _claim(request, *, applying=False):
     with _lock:
         _prune()
         entry = _entries.get(doc_context.get_current_doc())
@@ -242,8 +244,14 @@ def _claim(request):
         # A newer request invalidates any older in-flight response even when
         # the work slot is busy. The caller retries with a new sequence number.
         entry.sequence = request.request_sequence
+        if applying:
+            entry.applying_sequence = request.request_sequence
         prepared = entry.prepared
     if not _work_slot.acquire(blocking=False):
+        if applying:
+            with _lock:
+                if entry.applying_sequence == request.request_sequence:
+                    entry.applying_sequence = None
         raise HTTPException(429, detail={"code": "preview_busy", "detail": "A preview operation is already running"})
     return entry, prepared
 
@@ -292,7 +300,8 @@ def prepare(value):
             prepared = prepare_from_capture(captured, request.feature_id)
             del captured
             original = local_evaluate(prepared, {})
-            payload = _response(entry, 0, prepared, prepare_display(prepared.copy_prefix(), original))
+            payload = prepare_display(prepared.copy_prefix(), original,
+                                      envelope=_envelope(entry, 0, prepared.deformation_id))
             return _finish(entry, 0, payload, prepared=prepared)
     except BaseException:
         if entry is not None:
@@ -311,9 +320,9 @@ def evaluate(value):
         with _mapped_errors():
             _current(entry, request.request_sequence)
             evaluated = local_evaluate(prepared, request.params)
-            projected = evaluate_display(prepared.copy_prefix(), evaluated,
-                                         include_geometry=request.include_geometry)
-            payload = _response(entry, request.request_sequence, prepared, projected)
+            payload = evaluate_display(prepared.copy_prefix(), evaluated,
+                                       include_geometry=request.include_geometry,
+                                       envelope=_envelope(entry, request.request_sequence, prepared.deformation_id))
             return _finish(entry, request.request_sequence, payload)
     finally:
         _work_slot.release()
@@ -336,10 +345,35 @@ def cancel(value):
             if entry.phase == "committing":
                 return {"status": "commit_in_progress", "preview_id": request.preview_id,
                         "lease_id": entry.lease_id}
+            if entry.phase == "applied":
+                # Cancellation cannot undo publication. This receipt describes
+                # the completed action; status separately checks its freshness.
+                return dict(entry.publication)
             _remove(entry)
         else:
             _remember_cancel(_Entry(doc, request, "", None, "", -1, 0))
         return {"status": "cancelled", "preview_id": request.preview_id}
+
+
+def status(value):
+    """Inspect a known lease; success binds the original or published revision."""
+    request = _parse(Status, value)
+    with _lock:
+        _prune()
+        entry = _entries.get(doc_context.get_current_doc())
+        if entry is None or not _matches_request(entry, request):
+            _conflict("The preview lease does not match this document/request")
+    with state._lock:
+        _source_current(entry)
+        with _lock:
+            _catalog_current(entry)
+            phase = entry.phase
+            if phase == "ready" and entry.applying_sequence == entry.sequence:
+                phase = "applying"
+            result = {**_envelope(entry, entry.sequence, entry.deformation_id), "status": phase}
+            if entry.publication is not None:
+                result.update(entry.publication)
+            return result
 
 
 def apply(value):
@@ -347,7 +381,7 @@ def apply(value):
     from backend.api.part_history_verification import _slot as proof_slot
 
     request = _parse(Change, value)
-    entry, prepared = _claim(request)
+    entry, prepared = _claim(request, applying=True)
     proof_admitted = False
     committing = False
     try:
@@ -377,9 +411,7 @@ def apply(value):
             indices = [i for i, row in enumerate(captured.feature_log) if row.id == request.feature_id]
             if len(indices) != 1:
                 _conflict("The original native feature identity is no longer unique")
-            candidate, report = prepare_change(captured, captured, indices[0], check, params=request.params)
-            validation = {"passed": report.passed, "results": [
-                {"ok": row.ok, "message": row.message} for row in report.results]}
+            candidate, _report = prepare_change(captured, captured, indices[0], check, params=request.params)
             check()
             with state._lock:
                 session = _source_current(entry)
@@ -395,12 +427,18 @@ def apply(value):
                 state._assert_active_loadout_editable(session.design, candidate)
                 state._assert_photoproduct_dependencies(candidate)
                 revision = publish_replacement(session, candidate)
-            with _lock:
-                _remove(entry)
-            return {"status": "applied", "preview_id": request.preview_id,
-                    "lease_id": entry.lease_id, "design_id": candidate.id,
-                    "revision": revision, "feature_id": request.feature_id,
-                    "validation": validation}
+                receipt = {**entry.request.model_dump(), "status": "applied",
+                           "lease_id": entry.lease_id, "design_id": candidate.id,
+                           "revision": revision, "deformation_id": prepared.deformation_id,
+                           "doc_id": entry.doc, "request_sequence": request.request_sequence}
+                with _lock:
+                    entry.source = ref(candidate)
+                    entry.publication = receipt
+                    entry.prepared = None
+                    entry.phase = "applied"
+                    if entry.expires <= monotonic() or entry.expired_during_commit:
+                        _remove(entry)
+            return dict(receipt)
     except BaseException:
         if committing:
             with state._lock:
@@ -416,6 +454,9 @@ def apply(value):
                             _remove(entry)
         raise
     finally:
+        with _lock:
+            if entry.applying_sequence == request.request_sequence:
+                entry.applying_sequence = None
         if proof_admitted:
             proof_slot.release()
         _work_slot.release()

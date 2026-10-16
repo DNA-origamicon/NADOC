@@ -8,6 +8,7 @@ The time allowance is cooperative between native calls, not a hard wall limit.
 """
 
 from dataclasses import dataclass
+from math import ceil, dist, isfinite
 from time import monotonic
 
 from backend.api.part_proof_commands import dependencies, execute
@@ -26,8 +27,24 @@ MAX_HELICES = 16
 MAX_SLOTS = 1024
 MAX_OPERATIONS = 64
 MAX_BP_SPAN = 1024
+# Native spline transport uses a much finer grid than one station per base.
+# Keep that additional one-time prefix work independently bounded; this is not
+# a claim that all sweeps fitting MAX_SLOTS also fit the preview path allowance.
+MAX_PATH_SAMPLES = 1024
 SECONDS = 1.0
-PREFIX_KINDS = frozenset({"bundle-create", "deformation", "cluster_create", "cluster_op"})
+EXTRUSIONS = frozenset({"extrude-segment", "extrude-continuation", "extrude-deformed-continuation",
+                       "circle-segment", "extrude-frame"})
+ROUTING = frozenset({
+    "nick", "nick-batch", "strand-end-resize", "domain-shift", "ligate",
+    "forced-ligation-create", "forced-ligation-delete", "forced-ligation-delete-batch",
+    "crossover-place", "crossover-place-batch", "crossover-move", "crossover-move-batch",
+    "crossover-delete", "crossover-delete-batch", "auto-crossover",
+    "loop-skip-insert", "loop-skip-twist", "loop-skip-bend", "loop-skip-clear",
+    "loop-skip-clear-all", "apply-loop-skips",
+})
+PREFIX_KINDS = EXTRUSIONS | ROUTING | frozenset({
+    "bundle-create", "sweep", "deformation", "cluster_create", "cluster_op",
+})
 PATCH_FIELDS = frozenset({"type", "plane_a_bp", "plane_b_bp", "params", "cluster_ids"})
 
 
@@ -73,19 +90,131 @@ def _bp(value):
     return value
 
 
-def _operation(op, design):
-    if op.type not in {"bend", "twist"} or op.type != op.params.kind:
+def _span(design, *addresses):
+    positions = list(addresses)
+    for helix in design.helices:
+        positions.extend((_bp(helix.bp_start), _bp(helix.bp_start + helix.length_bp - 1)))
+    for strand in design.strands:
+        for domain in strand.domains:
+            positions.extend((_bp(domain.start_bp), _bp(domain.end_bp)))
+    if positions and max(positions) - min(positions) + 1 > MAX_BP_SPAN:
+        _reject("Deformation preview exceeds its frame-span allowance", "preview_limit")
+
+
+def _path_work(points):
+    if type(points) is not list or not 2 <= len(points) <= MAX_PATH_SAMPLES:
+        _reject("Preview requires a bounded native sweep path", "preview_limit")
+    if any(type(point) not in {list, tuple} or len(point) != 3 for point in points):
+        _reject("Preview requires XYZ sweep controls", "invalid_preview_definition")
+    # Admission mirrors path_table's sample-count rule, never its spline or
+    # placement math. Its unchanged 0.05 nm spacing/64-sample floor must fit
+    # this private preview's smaller allowance before native arrays are built.
+    samples = 1
+    for first, second in zip(points, points[1:]):
+        distance = dist(first, second)
+        if not isfinite(distance) or distance > MAX_PATH_SAMPLES * .05:
+            _reject("Sweep exceeds the private preview path-work allowance", "preview_limit")
+        samples += max(64, ceil(distance / .05))
+        if samples > MAX_PATH_SAMPLES:
+            _reject("Sweep exceeds the private preview path-work allowance", "preview_limit")
+
+
+def _operation(op, design, *, retained=False):
+    if op.type == "sweep" and retained:
+        if op.params.bp_positions_nm is not None or op.params.bp_frames is not None:
+            _reject("Sampled generated paths need a separate preview contract")
+        _path_work(op.params.points_nm)
+        if not 1 <= op.params.steps <= MAX_SLOTS:
+            _reject("Sweep exceeds the private preview station allowance", "preview_limit")
+    elif op.type not in {"bend", "twist"} or op.type != op.params.kind:
         _reject("This private preview supports ordinary bend and twist definitions only")
     a, b = _bp(op.plane_a_bp), _bp(op.plane_b_bp)
-    if a >= b:
+    if a > b or (a == b and op.type != "sweep"):
         _reject("The first deformation plane must precede the second", "invalid_preview_definition")
     # Native endpoint-fit evaluation may construct frame tables across gaps;
     # bounded site counts alone would not bound an outlying control plane.
-    addresses = [a, b]
+    _span(design, a, b)
+
+
+def _slots(design):
+    return sum(2 * (helix.length_bp + sum(max(0, mark.delta) for mark in helix.loop_skips))
+               for helix in design.helices)
+
+
+def _growth(design, sites, helices=0):
+    if sites < 0 or _slots(design) + sites > MAX_SLOTS or len(design.helices) + helices > MAX_HELICES:
+        _reject("Prefix growth exceeds the private preview site allowance", "preview_limit")
+
+
+def _extent_allowance(design, extents):
+    """Charge each prospective native helix interval once, including inserts."""
+    sites = 0
+    positions = []
     for helix in design.helices:
-        addresses.extend((_bp(helix.bp_start), _bp(helix.bp_start + helix.length_bp - 1)))
-    if max(addresses) - min(addresses) + 1 > MAX_BP_SPAN:
-        _reject("Deformation preview exceeds its frame-span allowance", "preview_limit")
+        lo, hi = extents.get(helix.id, (helix.bp_start, helix.bp_start + helix.length_bp - 1))
+        _bp(lo), _bp(hi)
+        positions.extend((lo, hi))
+        sites += 2 * (hi - lo + 1 + sum(max(0, mark.delta) for mark in helix.loop_skips))
+    if sites > MAX_SLOTS:
+        _reject("Routing growth exceeds the private preview site allowance", "preview_limit")
+    _span(design, *positions)
+
+
+def _routing_extents(kind, design, params):
+    from backend.api.part_command_references import validate_command_references
+
+    validate_command_references(kind, design, params)
+    # Native resize adds delta to the selected global endpoint regardless of
+    # strand direction; native shift adds it to both endpoints. Only scalar
+    # coordinates are projected here, including repeated entries in order.
+    strands = {strand.id: strand for strand in design.strands}
+    domains = {(strand.id, index): [domain.helix_id, domain.start_bp, domain.end_bp]
+               for strand in design.strands for index, domain in enumerate(strand.domains)}
+    for entry in params["entries"]:
+        delta = _bp(entry["delta_bp"])
+        strand = strands[entry["strand_id"]]
+        if kind == "domain-shift":
+            domain = domains[(strand.id, entry["domain_index"])]
+            domain[1] += delta
+            domain[2] += delta
+        else:
+            index = 0 if entry["end"] == "5p" else len(strand.domains) - 1
+            domains[(strand.id, index)][1 if entry["end"] == "5p" else 2] += delta
+    extents = {}
+    for helix_id, first, last in domains.values():
+        lo, hi = sorted((first, last))
+        current = extents.get(helix_id, (lo, hi))
+        extents[helix_id] = (min(lo, current[0]), max(hi, current[1]))
+    _extent_allowance(design, extents)
+
+
+def _continuation_growth(design, params):
+    from backend.api.crud import BundleContinuationRequest
+    from backend.core.constants import BDNA_RISE_PER_BP
+    from backend.core.continuation_source import continuation_source_helices
+    from backend.core.lattice import _find_continuation_helix, _find_same_cell_helix
+
+    body = BundleContinuationRequest.model_validate(params)
+    source = continuation_source_helices(design, body.source_frame_id, body.plane)
+    component = {"XY": "z", "XZ": "y", "YZ": "x"}[body.plane]
+    sites, new_helices = 0, 0
+    for row, col in body.cells:
+        match = _find_continuation_helix(source, row, col, body.plane, body.offset_nm)
+        gap = None if match else _find_same_cell_helix(source, row, col, body.plane, body.offset_nm)
+        if gap is not None:
+            offset = body.offset_nm - getattr(gap.axis_start, component)
+            if abs(offset) > MAX_BP_SPAN * BDNA_RISE_PER_BP:
+                _reject("Continuation gap exceeds the preview frame-span allowance", "preview_limit")
+            # Same scalar extent used by make_bundle_continuation's gap branch;
+            # the empty interval is native geometry work even without strands.
+            count = round(offset / BDNA_RISE_PER_BP) + abs(body.length_bp)
+            sites += 2 * max(0, count - gap.length_bp)
+        else:
+            sites += 2 * abs(body.length_bp)
+            forward = match is not None and abs(getattr(match.axis_end, component) - body.offset_nm) < BDNA_RISE_PER_BP * .05
+            if match is None or (forward and not body.extend_inplace):
+                new_helices += 1
+    return sites, new_helices
 
 
 def _work(design, check):
@@ -105,32 +234,101 @@ def _work(design, check):
     if walk > MAX_SLOTS:
         _reject("Deformation preview exceeds its occupied-domain allowance", "preview_limit")
     for op in design.deformations:
-        _operation(op, design)
+        _operation(op, design, retained=True)
+    _span(design)
     check()
 
 
 def _before_command(kind, params, design):
     if kind not in PREFIX_KINDS or "_generated_scope" in params:
         _reject(f"Private deformation preview does not yet replay prefix command {kind!r}")
-    if kind == "bundle-create":
+    # Match the shared dispatcher: provenance annotation is not builder input.
+    params = {key: value for key, value in params.items() if key != "_generator"}
+    if kind == "bundle-create" or kind in EXTRUSIONS:
         # The shared executor still enforces its own 512-cell/50k-bp guard.
         # This lower private-preview allowance bounds its first allocation.
         cells, length = params.get("cells"), params.get("length_bp")
-        if (type(cells) is not list or type(length) is not int or length < 1
-                or len(cells) > MAX_HELICES or 2 * len(cells) * length > MAX_SLOTS):
+        if type(cells) is not list or len(cells) > MAX_HELICES:
             _reject("Bundle exceeds the private preview site allowance", "preview_limit")
+        if kind == "circle-segment":
+            lengths = params.get("cell_lengths")
+            if (type(lengths) is not list or len(lengths) != len(cells)
+                    or any(type(value) is not int for value in lengths)):
+                _reject("Circle requires one bounded length per cell", "invalid_preview_definition")
+            sites = 2 * sum(abs(value) for value in lengths)
+        else:
+            if type(length) is not int or (kind == "bundle-create" and length < 1):
+                _reject("Bundle requires an integer native span", "invalid_preview_definition")
+            sites = 2 * len(cells) * abs(length)
+        if kind == "extrude-continuation":
+            sites, new_helices = _continuation_growth(design, params)
+        else:
+            new_helices = len(cells)
+        _growth(design, sites, new_helices)
+        if params.get("source_bp") is not None:
+            _span(design, _bp(params["source_bp"]))
+    elif kind == "sweep":
+        from backend.core.sweep import SweepRequest, sweep_preview
+
+        # The source and path controls are already structurally admitted. Bound
+        # native path planning before it computes exact arc length/strand count.
+        body = SweepRequest.model_validate(params)
+        _growth(design, 0, len(body.cells))
+        _path_work(body.model_dump(mode="json")["points_nm"])
+        preview, _source = sweep_preview(design, body, include_geometry=False)
+        _growth(design, 2 * preview["total_new_bp"], len(body.cells))
+        # execute reuses the same unchanged native planner. This bounded extra
+        # preparation is paid once for the prefix, never per slider evaluation.
     elif kind == "deformation":
         try:
             op = DeformationOp.model_validate({k: v for k, v in params.items() if k != "_proof_version"})
         except ValueError as error:
             _reject(str(error), "invalid_preview_definition")
         _operation(op, design)
+    elif kind in {"strand-end-resize", "domain-shift"}:
+        entries = params.get("entries", [])
+        if type(entries) is not list or len(entries) > MAX_SLOTS:
+            _reject("Routing exceeds the private preview entry allowance", "preview_limit")
+        _routing_extents(kind, design, params)
+    elif kind in {"crossover-move", "crossover-move-batch"}:
+        entries = params["moves"] if kind.endswith("-batch") else [params]
+        if type(entries) is not list or len(entries) > MAX_SLOTS:
+            _reject("Routing exceeds the private preview entry allowance", "preview_limit")
+        endpoints = []
+        for entry in entries:
+            endpoints.append(_bp(entry["new_index"]))
+        _span(design, *endpoints)
+        # Moving a crossover can extend both of its helices to the new site.
+        by_id = {item.id: item for item in design.crossovers}
+        helices = {item.id: item for item in design.helices}
+        extents = {helix.id: (helix.bp_start, helix.bp_start + helix.length_bp - 1)
+                   for helix in design.helices}
+        for entry in entries:
+            crossover = by_id.get(entry["crossover_id"])
+            if crossover is None:
+                continue  # Shared reference admission supplies its typed error.
+            for half in (crossover.half_a, crossover.half_b):
+                helix = helices.get(half.helix_id)
+                if helix is not None:
+                    lo, hi = extents[helix.id]
+                    extents[helix.id] = (min(lo, entry["new_index"]), max(hi, entry["new_index"]))
+        _extent_allowance(design, extents)
+    elif kind in {"loop-skip-twist", "loop-skip-bend", "loop-skip-clear"}:
+        a, b = _bp(params["plane_a_bp"]), _bp(params["plane_b_bp"])
+        _span(design, a, b)
+        # Native per-cell density admission remains authoritative. This bounds
+        # its input interval walk before it allocates modification/cell lists.
+        if len(params["helix_ids"]) * abs(b - a) > MAX_SLOTS:
+            _reject("Loop/skip planning exceeds the private preview work allowance", "preview_limit")
+    elif kind == "loop-skip-insert" and params.get("delta") == 1:
+        _growth(design, 2)
 
 
 def _run(kind, design, params, check):
     check()
-    _before_command(kind, params, design)
     try:
+        _before_command(kind, params, design)
+        check()
         updated = execute(kind, design, params)
     except CommandContractError:
         raise
@@ -257,8 +455,17 @@ def evaluate(prepared, patch):
     original = prepared._entry.op_snapshot
     if patch.get("type", original.type) != original.type:
         _reject("A preview cannot change the recorded deformation family")
-    if patch.get("cluster_ids", original.cluster_ids) != original.cluster_ids:
+    if original.targets is not None and patch.get("cluster_ids", original.cluster_ids) != original.cluster_ids:
         _reject("Changing cluster scope requires a separately reviewed selection workflow")
+    if "cluster_ids" in patch:
+        ids = patch["cluster_ids"]
+        if type(ids) is not list or any(type(identity) is not str for identity in ids):
+            _reject("Cluster selection must contain native identities", "invalid_preview_definition")
+        if len(ids) != len(set(ids)) or set(ids) - {cluster.id for cluster in prepared._prefix.cluster_transforms}:
+            _reject("Cluster selection no longer exists in this feature prefix", "invalid_preview_reference")
+        # Preserve edit_entry's existing authored semantics. It does not derive
+        # new affected_helix_ids from cluster_ids: a complete cluster-retarget UI
+        # still needs a separately reviewed correction, not inferred geometry.
     if "params" in patch:
         values = patch["params"]
         model = BendParams if original.type == "bend" else TwistParams

@@ -6,7 +6,7 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 ---
 # Feature Log Overhaul + Tabbed Sidebar (commit 873f3e6, branch feature-log-update, 2026-05-02)
 
-## Current delivery status (2026-10-15)
+## Current delivery status (2026-10-16)
 
 **Active user priority:** standard geometry first—extrude, sweep, bend, twist,
 move/rotate and Fine Routing resize/ligate/nick/crossovers/loop-skips. Complete
@@ -48,19 +48,25 @@ guards before recording. Its 12 cases plus existing native routing checks pass;
 the extra copy's larger-design cost remains unqualified. Do not treat G1 as complete.
 
 **Private preview core:** bounded owned-input prefix preparation and local
-bend/twist evaluation are implemented, with 34 new/current private cases plus
-46 existing native/edit controls green. Prefixes currently admit empty roots
-and bundle/group/pose/deformation commands only; targets/cluster scope are fixed.
-The private host and render/control DTO are now implemented: 27 host and 27 DTO
-cases pass alongside native/publication controls. One prefix/document, two total,
+bend/twist evaluation now cover ordinary extrude, sweep and Fine Routing prefixes
+alongside empty roots and bundle/group/pose/deformation. The private host,
+render/control DTO, disabled/unregistered HTTP adapter, transport/controller and
+owned native renderer are implemented. One prefix/document, two total,
 60-second leases and one nonqueued work slot bound retention; source/session/
 revision/policy guards reject stale responses. Native projection and proof run
 outside both locks; Apply uses fresh input proof and one guarded publication.
 The DTO preserves scoped axis samples and orientation through a separately
-versioned schema; comparison v2 remains unchanged. No public route or preview
-editor wiring is enabled, and preview never proves source/downstream equivalence.
-ISSUE-100 remains open; expand core prefixes/controls, connect the editor and
-measure actual interactions next. The unused silent-reconciliation setter was pruned after
+versioned schema; comparison v2 remains unchanged. Its closed scalar envelope
+is included in one response bound, replacing duplicate host/DTO accounting.
+Applied leases release the prefix and retain a scalar receipt with weak source
+identity until original expiry; status resolves lost responses without a retry
+publication. No public route or preview editor wiring is enabled, and preview
+never proves source/downstream equivalence. ISSUE-100 remains open; finish the
+full control validator and editor/popup integration, then measure interactions.
+ISSUE-105 records a real historical group selector gap: changing `cluster_ids`
+alone leaves old affected helices. Preserve current native semantics and keep
+the retarget capability false until the existing prefix selectors are integrated.
+The unused silent-reconciliation setter was pruned after
 caller review; 38 remaining publication-state cases pass. Continuation evidence
 records 225 distinct cases across these scopes, with corrected fixture failures
 retained. No app or responsiveness qualification is implied.
@@ -73,6 +79,19 @@ retains red/green runs, overlapping counts, private limits, extra-copy and
 duplicate-response-walk debt, unchanged five-error lint baseline and cleanup.
 MV-48 app checks and broad backend/interaction timing remain open; no browser
 or shared-server mutation occurred. Core tools remain the active priority.
+
+**Latest private integration checkpoint:** 350 focused backend tests passed
+(91 warnings, 14.58 s), including real HTTP receipts checked by JavaScript and
+seven native Python-to-Three.js matrix/axis parity cases. Full frontend passed
+8,360 tests/one skip across 721 files in 342.59 s. Apply returns only a scalar
+receipt; its unused validation response walk is pruned. Input admission covers
+negative global endpoint growth, repeated-helix extents, in-place continuation,
+gaps and finite extreme sweep coordinates without raising limits. The isolated
+controller resolves Apply/Cancel races without duplicate publication/adoption.
+[Integration evidence](../docs/audits/feature_history_20261014/validation_deformation_preview_integration.json)
+records red/green evidence, unchanged lint baseline, cleanup and rollout debt.
+Next complete control validation/retargeting and actual popup wiring; do not
+claim the existing desktop preview is fixed. `main.js` delta remains zero.
 
 The sections below retain earlier implementation context; use the latest
 [implementation checkpoint](../docs/audits/feature_history_20261014/implementation.md)

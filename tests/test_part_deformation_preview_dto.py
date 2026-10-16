@@ -225,3 +225,77 @@ def test_comparison_v2_does_not_silently_accept_new_preview_axis_schema():
         project(evaluated.design)
     assert caught.value.code == "unsupported_comparison_scope"
     assert project(prefix)["component_version"] == 2
+
+
+def _host_envelope():
+    return {"preview_id": "opening", "expected_design_id": "part", "expected_revision": 4,
+            "feature_id": "feature", "lease_id": "lease", "doc_id": "document",
+            "deformation_id": "operation", "request_sequence": 2, "remaining_seconds": 30.5}
+
+
+@pytest.mark.parametrize("operation", ["prepare", "evaluate", "controls"])
+def test_optional_host_envelope_is_owned_and_preserves_standalone_payload(operation, monkeypatch):
+    service = _service()
+    prefix, evaluated = _owned()
+
+    def project(**kwargs):
+        if operation == "prepare":
+            return service.prepare_display(prefix, evaluated, **kwargs)
+        return service.evaluate_display(prefix, evaluated, include_geometry=operation != "controls", **kwargs)
+
+    expected = project()
+    original = service._bounded
+    bounded = []
+
+    def observe(value):
+        bounded.append(deepcopy(value))
+        return original(value)
+
+    monkeypatch.setattr(service, "_bounded", observe)
+    envelope = _host_envelope()
+    result = project(envelope=envelope)
+    assert result == {**expected, **envelope}
+    assert bounded == [result]
+    envelope["feature_id"] = "caller-modified"
+    assert result["feature_id"] == "feature"
+
+
+@pytest.mark.parametrize("envelope", [
+    {"candidate": None}, {"control_context": None}, {"before": None}, {"stage": "feature"},
+    {"source_equivalence_checked": False}, {"unexpected": "scalar"}, {"doc_id": ["document"]},
+    {"expected_revision": True}, {"request_sequence": -1}, {"remaining_seconds": float("nan")},
+    {"remaining_seconds": float("inf")}, {"remaining_seconds": -1}, {"feature_id": "x" * 257},
+    [("doc_id", "document")],
+])
+def test_invalid_or_colliding_host_envelope_refuses_before_native_projection(monkeypatch, envelope):
+    service = _service()
+    prefix, evaluated = _owned()
+    monkeypatch.setattr(service, "_inputs", lambda *_a: pytest.fail("Native admission before envelope refusal"))
+    with pytest.raises(CommandContractError) as caught:
+        service.prepare_display(prefix, evaluated, envelope=envelope)
+    assert caught.value.code == "invalid_preview_definition"
+
+
+def test_whole_host_envelope_counts_toward_the_same_output_allowance(monkeypatch):
+    from backend.core.part_capture_graph import GraphBudget
+
+    service = _service()
+    prefix, evaluated = _owned()
+    payload = service.evaluate_display(prefix, evaluated, include_geometry=False)
+    budget = GraphBudget(max_nodes=service.MAX_OUTPUT_NODES, max_bytes=service.MAX_OUTPUT_BYTES,
+                         seconds=None, clock=lambda: 0)
+    budget.charge(payload)
+    monkeypatch.setattr(service, "MAX_OUTPUT_NODES", service.MAX_OUTPUT_NODES - budget.remaining[0])
+    assert service.evaluate_display(prefix, evaluated, include_geometry=False) == payload
+    with pytest.raises(CommandContractError) as caught:
+        service.evaluate_display(prefix, evaluated, include_geometry=False, envelope=_host_envelope())
+    assert caught.value.code == "preview_limit"
+
+
+def test_standalone_nonfinite_output_still_refuses(monkeypatch):
+    service = _service()
+    prefix, evaluated = _owned()
+    monkeypatch.setattr(service, "_feasibility", lambda *_a: {"metric": float("nan")})
+    with pytest.raises(CommandContractError) as caught:
+        service.evaluate_display(prefix, evaluated, include_geometry=False)
+    assert caught.value.code == "invalid_preview_geometry"

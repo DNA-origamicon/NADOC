@@ -1036,3 +1036,16 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   Full frontend validation passed 8,300 cases with one skip across 717 files in
   345.21 s, including all 22 error formatter tests. This does not replace the
   pending app exercise or measured larger-design responsiveness.
+
+  **Private isolated-preview integration (October 16):** the new HTTP adapter
+  and transport/controller/renderer are still disabled and unwired. Automated
+  Python-to-Three.js checks establish exact native nucleotide matrices and
+  curved-axis display for ordinary, grouped and selected bend/twist, including
+  a single-helix twist. They do not validate screen appearance or interaction.
+  Before rollout, exercise the complete existing popup controls against the
+  fixed feature-stage prefix, visual preview off, repeated replacement/disposal,
+  expiry/busy feedback, lost Apply responses and source changes during refresh.
+  ISSUE-105 additionally needs real group retargeting, All/None, moved groups,
+  and matching preview/Apply/replay. Measure whole request/render tails and
+  cancellation with representative larger designs; do not infer speed from
+  one combined response bound or the finite private limits.

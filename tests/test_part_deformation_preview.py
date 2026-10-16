@@ -318,3 +318,316 @@ def test_native_failure_keeps_retained_prefix_usable(monkeypatch):
             service.evaluate(prepared, {})
     monkeypatch.setattr(service, "execute", original)
     assert service.evaluate(prepared, {}).design.strands
+
+
+def _append_command(source, kind, params):
+    """Author real native rows; recovery bytes are deliberately unusable."""
+    params = {**params, "_proof_version": 1}
+    if kind in part_proof_commands.PROOF_MINOR_KINDS:
+        child = MinorMutationLogEntry(
+            op_subtype=kind, label=kind, params=params,
+            diff_added_b64="poison", diff_removed_b64="poison", diff_modified_b64="poison",
+        )
+        updated = part_proof_commands.execute(kind, source, params)
+        row = RoutingClusterLogEntry(
+            children=[child], pre_state_gz_b64="poison", post_state_gz_b64="poison",
+        )
+        return updated.copy_with(id=source.id, recipe_root=source.recipe_root,
+                                 feature_log=[*source.feature_log, row])
+    return _append(source, SnapshotLogEntry(
+        op_kind=kind, label=kind, params=params,
+        design_snapshot_gz_b64="poison", post_state_gz_b64="poison",
+    ))
+
+
+PREFIX_CASES = [
+    "extrude-segment", "circle-segment", "extrude-continuation",
+    "extrude-deformed-continuation", "extrude-frame", "sweep",
+    "nick", "nick-batch", "strand-end-resize", "domain-shift", "ligate",
+    "forced-ligation-create", "forced-ligation-delete", "forced-ligation-delete-batch",
+    "crossover-place", "crossover-place-batch", "crossover-move", "crossover-move-batch",
+    "crossover-delete", "crossover-delete-batch", "auto-crossover",
+    "loop-skip-insert", "loop-skip-twist", "loop-skip-bend", "loop-skip-clear",
+    "loop-skip-clear-all", "apply-loop-skips",
+]
+
+
+def _prefix_case(kind):
+    from backend.api import crud
+    from backend.api.routes_frame_extrusion import FrameExtrusionRequest
+    from backend.core.sweep import SweepRequest
+
+    source = native_source()
+    entry = source.feature_log[-1]
+    source = source.copy_with(feature_log=source.feature_log[:-1], deformations=[])
+    helix = source.helices[0]
+    strand = source.strands[0]
+    domain = strand.domains[0]
+    nick = dict(helix_id=domain.helix_id, bp_index=12, direction=domain.direction.value)
+
+    def append(operation, values):
+        nonlocal source
+        source = _append_command(source, operation, values)
+
+    if kind in {"extrude-segment", "circle-segment", "extrude-continuation",
+                "extrude-deformed-continuation", "extrude-frame"}:
+        values = dict(cells=[[4, 4]], history_seed=uuid4())
+        if kind == "circle-segment":
+            request = crud.CircleSegmentRequest(**values, cell_lengths=[21])
+        elif kind == "extrude-deformed-continuation":
+            request = crud.BundleDeformedContinuationRequest(
+                **values, length_bp=21, grid_origin=[0, 0, 0], axis_dir=[0, 0, 1],
+                frame_right=[1, 0, 0], frame_up=[0, 1, 0],
+            )
+        elif kind == "extrude-frame":
+            request = FrameExtrusionRequest(
+                **values, length_bp=21, plane="XY", expected_design_id=source.id,
+                expected_revision=0,
+            )
+        else:
+            schema = crud.BundleSegmentRequest if kind == "extrude-segment" else crud.BundleContinuationRequest
+            request = schema(**values, length_bp=21)
+        append(kind, request.model_dump(mode="json"))
+    elif kind == "sweep":
+        append(kind, SweepRequest(cells=[(4, 4)], points_nm=[(0, 0, 0), (0, 0, 10)],
+                                  ligate_adjacent=False).model_dump(mode="json"))
+    elif kind in {"nick", "nick-batch", "ligate"}:
+        append("nick-batch" if kind == "nick-batch" else "nick",
+               {"nicks": [nick]} if kind == "nick-batch" else nick)
+        if kind == "ligate":
+            append(kind, nick)
+    elif kind in {"strand-end-resize", "domain-shift"}:
+        values = dict(strand_id=strand.id, delta_bp=-2 if kind == "strand-end-resize" else 2)
+        values.update(helix_id=domain.helix_id, end="3p") if kind == "strand-end-resize" else values.update(domain_index=0)
+        append(kind, {"entries": [values]})
+    elif kind.startswith("forced-ligation"):
+        staples = [item for item in source.strands if item.strand_type == "staple"]
+        append("forced-ligation-create", dict(three_prime_strand_id=staples[0].id,
+            five_prime_strand_id=staples[1].id, _fl_id="preview-prefix-ligation"))
+        if kind != "forced-ligation-create":
+            append(kind, {"forced_ligation_ids": ["preview-prefix-ligation"]}
+                   if kind.endswith("-batch") else {"fl_id": "preview-prefix-ligation"})
+    elif kind.startswith("crossover-") or kind == "apply-loop-skips":
+        first, second = source.helices
+        # Existing honeycomb staple bow-right fixture: reverse nick 7, forward 6.
+        request = crud.PlaceCrossoverRequest(
+            half_a=dict(helix_id=first.id, index=7, strand="REVERSE"),
+            half_b=dict(helix_id=second.id, index=7, strand="FORWARD"),
+            nick_bp_a=7, nick_bp_b=6,
+        ).model_dump(mode="json")
+        append("crossover-place-batch" if kind == "crossover-place-batch" else "crossover-place",
+               {"placements": [request]} if kind == "crossover-place-batch" else request)
+        if kind.startswith("crossover-move"):
+            values = dict(crossover_id=request["crossover_id"], new_index=28)
+            append(kind, {"moves": [values]} if kind.endswith("-batch") else values)
+        elif kind.startswith("crossover-delete"):
+            append(kind, {"crossover_ids": [request["crossover_id"]]}
+                   if kind.endswith("-batch") else {"crossover_id": request["crossover_id"]})
+        elif kind == "apply-loop-skips":
+            prior_op = entry.op_snapshot.model_copy(update={
+                "id": "earlier-operation", "params": entry.op_snapshot.params.model_copy(
+                    update={"curvature_deg_per_bp": 2}, deep=True),
+            }, deep=True)
+            prior = entry.model_copy(update={"id": "earlier-bend", "deformation_id": "earlier-operation",
+                "op_snapshot": prior_op})
+            source = _append(source, prior)
+            append(kind, {})
+    elif kind == "auto-crossover":
+        append(kind, {"history_seed": str(uuid4())})
+    else:
+        if kind in {"loop-skip-insert", "loop-skip-clear", "loop-skip-clear-all"}:
+            append("loop-skip-insert", dict(helix_id=helix.id, bp_index=10, delta=1))
+        if kind != "loop-skip-insert":
+            values = dict(helix_ids=[helix.id], plane_a_bp=0, plane_b_bp=35)
+            if kind == "loop-skip-twist":
+                values["target_twist_deg"] = 20
+            elif kind == "loop-skip-bend":
+                values.update(helix_ids=[item.id for item in source.helices], radius_nm=20)
+            append(kind, {} if kind == "loop-skip-clear-all" else values)
+    prefix = source
+    source = _append(source, entry)
+    source.feature_log[-1] = entry.model_copy(update={"op_snapshot": source.deformations[-1]})
+    return source, prefix
+
+
+@pytest.mark.parametrize("kind", PREFIX_CASES)
+def test_ordinary_prefix_fixture_is_native_and_preview_preserves_full_authoring(kind):
+    source, native_prefix = _prefix_case(kind)
+    # The independent full recipe is the fixture control, not a saved snapshot.
+    report = assess_part_history(source, execute=part_proof_commands.execute,
+                                 dependencies=part_proof_commands.dependencies)
+    assert report["status"] == "verified", report
+    before = source.model_dump(mode="json")
+    service = _service()
+    prepared = service.prepare_from_capture(owned_capture(source), "edited-feature")
+    assert authoring(prepared.copy_prefix()) == authoring(native_prefix)
+    expected = part_proof_commands.execute(*_execution_args(native_prefix, edit_entry(
+        source.feature_log[-1], patch("bend"),
+    )))
+    assert authoring(service.evaluate(prepared, patch("bend")).design) == authoring(expected)
+    assert source.model_dump(mode="json") == before
+
+
+@pytest.mark.parametrize("kind,change", [
+    ("extrude-segment", {"length_bp": 500}),  # aggregate source+new material exceeds 1024 sites
+    ("circle-segment", {"cell_lengths": [1_000_000]}),
+    ("extrude-continuation", {"length_bp": 1_000_000}),
+    ("extrude-continuation", {"cells": [[0, 0]], "offset_nm": 1_000_000}),
+    ("extrude-deformed-continuation", {"length_bp": 1_000_000}),
+    ("extrude-frame", {"length_bp": 1_000_000}),
+    ("sweep", {"points_nm": [[0, 0, 0], [0, 0, 10_000]]}),
+    ("loop-skip-twist", {"plane_b_bp": 1_000_000}),
+    ("loop-skip-bend", {"plane_b_bp": 1_000_000}),
+])
+def test_growing_prefix_refuses_prospective_work_before_shared_executor(monkeypatch, kind, change):
+    source, _ = _prefix_case(kind)
+    row = source.feature_log[-2]
+    target = row.children[-1] if row.feature_type == "routing-cluster" else row
+    target.params.update(change)
+    service, original = _service(), part_proof_commands.execute
+
+    def guarded(operation, design, params):
+        assert operation != kind, "Oversized prefix entered its native builder"
+        return original(operation, design, params)
+
+    monkeypatch.setattr(service, "execute", guarded)
+    with pytest.raises(CommandContractError) as caught:
+        service.prepare_from_capture(owned_capture(source), "edited-feature")
+    assert caught.value.code == "preview_limit"
+
+
+@pytest.mark.parametrize("kind", ["strand-end-resize", "domain-shift", "crossover-move", "crossover-move-batch"])
+def test_routing_growth_refuses_before_native_allocation(monkeypatch, kind):
+    source, _ = _prefix_case(kind)
+    params = source.feature_log[-2].children[0].params
+    if kind in {"strand-end-resize", "domain-shift"}:
+        params["entries"][0]["delta_bp"] = 1_000_000
+    elif kind == "crossover-move":
+        params["new_index"] = 1_000_000
+    else:
+        params["moves"][0]["new_index"] = 1_000_000
+    service, original = _service(), part_proof_commands.execute
+
+    def guarded(operation, design, values):
+        assert operation != kind, "Unbounded routing growth reached the native builder"
+        return original(operation, design, values)
+
+    monkeypatch.setattr(service, "execute", guarded)
+    with pytest.raises(CommandContractError) as caught:
+        service.prepare_from_capture(owned_capture(source), "edited-feature")
+    assert caught.value.code == "preview_limit"
+
+
+@pytest.mark.parametrize("clear", [False, True])
+def test_unscoped_cluster_input_matches_native_edit_semantics_without_invented_retarget(clear):
+    source = native_source(grouped=True)
+    service = _service()
+    prepared = service.prepare_from_capture(owned_capture(source), "edited-feature")
+    prefix = prepared.copy_prefix()
+    original = source.feature_log[-1]
+    other = next(cluster.id for cluster in prefix.cluster_transforms
+                 if cluster.id not in original.op_snapshot.cluster_ids)
+    change = {"cluster_ids": [] if clear else [other]}
+    expected = part_proof_commands.execute(*_execution_args(prefix, edit_entry(original, change)))
+    result = service.evaluate(prepared, change)
+    assert authoring(result.design) == authoring(expected)
+    assert result.entry.op_snapshot.cluster_ids == change["cluster_ids"]
+    # Characterize the existing native edit contract; this does NOT establish
+    # complete cluster-retarget UX. Geometry membership still uses these IDs.
+    assert result.entry.op_snapshot.affected_helix_ids == original.op_snapshot.affected_helix_ids
+    assert result.entry.deformation_id == original.deformation_id
+
+
+def test_explicit_target_membership_remains_protected_when_cluster_controls_expand():
+    source = native_source(scoped=True)
+    prepared = _service().prepare_from_capture(owned_capture(source), "edited-feature")
+    before = prepared._entry.model_dump(mode="json")
+    with pytest.raises(CommandContractError):
+        _service().evaluate(prepared, {"cluster_ids": [prepared.copy_prefix().cluster_transforms[0].id]})
+    assert prepared._entry.model_dump(mode="json") == before
+    assert _service().evaluate(prepared, {}).entry.op_snapshot.target_ranges
+
+
+def test_negative_global_resize_growth_refuses_before_native_work(monkeypatch):
+    source, _ = _prefix_case("strand-end-resize")
+    source.feature_log[-2].children[0].params["entries"][0].update(end="5p", delta_bp=-1_000_000)
+    service, original = _service(), part_proof_commands.execute
+
+    def guarded(operation, design, values):
+        assert operation != "strand-end-resize", "Negative global endpoint growth escaped admission"
+        return original(operation, design, values)
+
+    monkeypatch.setattr(service, "execute", guarded)
+    with pytest.raises(CommandContractError) as caught:
+        service.prepare_from_capture(owned_capture(source), "edited-feature")
+    assert caught.value.code == "preview_limit"
+
+
+def test_finite_extreme_retained_sweep_refuses_with_typed_path_limit():
+    import json
+    from math import isfinite
+
+    _, prefix = _prefix_case("sweep")
+    sweep = next(op for op in prefix.deformations if op.type == "sweep")
+    # Retained SweepParams accepts finite coordinates beyond the ordinary
+    # request range. Their distance can overflow despite valid JSON scalars.
+    sweep.params.points_nm = [(-1e308, 0.0, 0.0), (1e308, 0.0, 0.0)]
+    assert all(isfinite(value) for point in sweep.params.points_nm for value in point)
+    json.dumps(sweep.params.points_nm, allow_nan=False)
+    with pytest.raises(CommandContractError) as caught:
+        _service()._work(prefix, lambda: None)
+    assert caught.value.code == "preview_limit"
+
+
+def _bounded_bundle(cells, length):
+    source = create_empty_part("Bounded prefix control", "HONEYCOMB")
+    return _append_command(source, "bundle-create", BundleRequest(
+        cells=cells, length_bp=length, name=source.metadata.name, history_seed=uuid4(),
+    ).model_dump(mode="json"))
+
+
+def _append_selected_bend(prefix):
+    op = DeformationOp(id="preview-operation", type="bend", plane_a_bp=4, plane_b_bp=18,
+        affected_helix_ids=[prefix.helices[0].id],
+        params={"kind": "bend", "curvature_deg_per_bp": .25, "direction_deg": 0})
+    return _append(prefix, DeformationLogEntry(id="edited-feature", deformation_id=op.id,
+        op_snapshot=op, proof_version=1))
+
+
+def _assert_prefix_matches_native(prefix):
+    source = _append_selected_bend(prefix)
+    report = assess_part_history(source, execute=part_proof_commands.execute,
+                                 dependencies=part_proof_commands.dependencies)
+    assert report["status"] == "verified", report
+    prepared = _service().prepare_from_capture(owned_capture(source), "edited-feature")
+    assert authoring(prepared.copy_prefix()) == authoring(prefix)
+
+
+def test_native_in_place_continuation_at_helix_limit_remains_previewable():
+    from backend.api.crud import BundleContinuationRequest
+    from backend.core.constants import BDNA_RISE_PER_BP
+
+    before = _bounded_bundle([[0, col] for col in range(16)], 21)
+    prefix = _append_command(before, "extrude-continuation", BundleContinuationRequest(
+        cells=[[0, 0]], length_bp=7, offset_nm=21 * BDNA_RISE_PER_BP,
+        source_frame_id=before.lattice_frames[0].id, extend_inplace=True,
+        history_seed=uuid4(),
+    ).model_dump(mode="json"))
+    assert {h.id for h in prefix.helices} == {h.id for h in before.helices}
+    assert prefix.helices[0].length_bp == 28
+    assert sum(2 * h.length_bp for h in prefix.helices) == 686
+    _assert_prefix_matches_native(prefix)
+
+
+def test_complementary_resize_batch_charges_one_actual_helix_extent():
+    before = _bounded_bundle([[0, 0]], 492)
+    entries = []
+    for strand in before.strands:
+        domain = strand.domains[0]
+        entries.append(dict(strand_id=strand.id, helix_id=domain.helix_id,
+            end="3p" if domain.direction.value == "FORWARD" else "5p", delta_bp=20))
+    prefix = _append_command(before, "strand-end-resize", {"entries": entries})
+    assert len(entries) == 2 and len(prefix.helices) == 1
+    assert prefix.helices[0].length_bp == 512
+    assert sum(abs(d.end_bp - d.start_bp) + 1 for s in prefix.strands for d in s.domains) == 1024
+    _assert_prefix_matches_native(prefix)

@@ -500,27 +500,32 @@ def test_complete_envelope_budget_and_projection_are_outside_locks(document, mon
     from backend.api import part_deformation_preview_dto as dto
 
     host, _ = document
-    original = host.bound_display
+    original = dto.GraphBudget
     bounded = []
 
-    def observe(value):
-        assert not state._lock.locked() and not host._lock.locked()
-        assert {"preview_id", "lease_id", "feature_id", "expected_revision"} <= value.keys()
-        bounded.append(True)
-        return original(value)
+    class ObservedBudget(original):
+        def charge(self, value, *args, **kwargs):
+            assert not state._lock.locked() and not host._lock.locked()
+            assert {"preview_id", "lease_id", "feature_id", "expected_revision"} <= value.keys()
+            bounded.append(value)
+            return super().charge(value, *args, **kwargs)
 
-    monkeypatch.setattr(host, "bound_display", observe)
+    monkeypatch.setattr(dto, "GraphBudget", ObservedBudget)
     opened = host.prepare(opening())
+    assert bounded == [opened]
+    evaluated = host.evaluate(update(opened))
+    controls = host.evaluate({**update(opened, sequence=2), "include_geometry": False})
+    assert bounded == [opened, evaluated, controls]
+    assert controls["candidate"] is None
     before = checkpoint()
     with monkeypatch.context() as small:
-        small.setattr(host, "evaluate_display", lambda *_a, **_k: {"candidate": None})
         small.setattr(dto, "MAX_OUTPUT_BYTES", 50)
         with pytest.raises(HTTPException) as caught:
-            host.evaluate(update(opened))
+            host.evaluate(update(opened, sequence=3))
     assert caught.value.status_code == 413
-    assert len(bounded) == 2
+    assert len(bounded) == 4
     unchanged(before)
-    assert host.evaluate(update(opened, sequence=2))["candidate"]
+    assert host.evaluate(update(opened, sequence=4))["candidate"]
 
 
 def test_policy_generation_cannot_revive_old_lease_after_compatibility_roundtrip(document):

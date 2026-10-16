@@ -31,6 +31,18 @@ function referenceIds(values, owners) {
 export function validateDnaComparisonComponent(value) {
   shape(value, ['component_version', 'representation', 'units', 'nucleotides', 'helix_axes', 'display_topology', 'bounds_nm'])
   if (value.component_version !== 2 || value.representation !== 'native-full-v1' || value.units !== 'nm') fail('unsupported DNA display version')
+  return validateNativeComponent(value, false)
+}
+
+/** Separate closed wire contract; comparison v2 still refuses scoped samples. */
+export function validateDeformationPreviewComponent(value) {
+  shape(value, ['component_kind', 'component_version', 'representation', 'units', 'nucleotides', 'helix_axes', 'display_topology', 'bounds_nm'])
+  if (value.component_kind !== 'deformation-preview-dna' || value.component_version !== 1
+      || value.representation !== 'native-full-v1' || value.units !== 'nm') fail('unsupported deformation display version')
+  return validateNativeComponent(value, true)
+}
+
+function validateNativeComponent(value, scopedSamples) {
   const topology = value.display_topology
   shape(topology, ['helices', 'strands', 'overhangs', 'cluster_transforms', 'deformations', 'crossovers', 'forced_ligations'])
   list(topology.helices, 16); list(topology.strands, 128)
@@ -168,7 +180,7 @@ export function validateDnaComparisonComponent(value) {
     for (const end of ['three_prime', 'five_prime']) if (!expected.has(siteKey({ helix_id: ligation[`${end}_helix_id`], bp_index: ligation[`${end}_bp`], direction: ligation[`${end}_direction`], copy_k: 0 }))) fail('unresolved ligation endpoint')
   }
   validateRecords(decodeDnaComparisonRecords(value.nucleotides), expected)
-  validateAxes(value.helix_axes, helices, strands, overhangs, domains)
+  validateAxes(value.helix_axes, helices, strands, overhangs, domains, scopedSamples)
   bounds(value.bounds_nm, value.nucleotides.length || value.helix_axes.length)
   return value
 }
@@ -192,7 +204,7 @@ function validateRecords(records, expected) {
   if (seen.size !== expected.size) fail('omitted occupied DNA records')
 }
 
-function validateAxes(axes, helices, strands, overhangs, domains) {
+function validateAxes(axes, helices, strands, overhangs, domains, scopedSamples) {
   list(axes, 16)
   const seen = new Set(), seenOverhangs = new Set(), coverage = new Map()
   let points = 0, segments = 0
@@ -203,8 +215,15 @@ function validateAxes(axes, helices, strands, overhangs, domains) {
     points += 2 + axis.samples.length; segments += axis.segments.length
     for (const point of axis.samples) vector(point, 3)
     for (const segment of axis.segments) {
-      shape(segment, ['strand_id', 'domain_index', 'ovhg_id', 'bp_lo', 'bp_hi', 'start', 'end', ...(Object.hasOwn(segment, 'domain_ids') ? ['domain_ids'] : [])])
+      shape(segment, ['strand_id', 'domain_index', 'ovhg_id', 'bp_lo', 'bp_hi', 'start', 'end',
+        ...(Object.hasOwn(segment, 'domain_ids') ? ['domain_ids'] : []),
+        ...(scopedSamples && Object.hasOwn(segment, 'samples') ? ['samples'] : [])])
       vector(segment.start, 3); vector(segment.end, 3); points += 2
+      if (scopedSamples && Object.hasOwn(segment, 'samples')) {
+        list(segment.samples, 2048); points += segment.samples.length
+        for (const point of segment.samples) vector(point, 3)
+      }
+      if (points > 2048 || segments > MAX_SELECTORS) fail('DNA axis allowance exceeded')
       const refs = segment.domain_ids?.length ? segment.domain_ids : (segment.strand_id === null ? [] : [{ strand_id: segment.strand_id, domain_index: segment.domain_index }])
       list(refs, 256)
       for (const ref of refs) {

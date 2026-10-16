@@ -1569,3 +1569,68 @@ qualification. Assemblies, machine-specific VR and lower-priority assets remain
 deferred. `main.js` delta is zero; scientific algorithms, models and source pins
 are unchanged. MV-48 retains all unperformed app checks and the broad backend
 suite remains separate debt.
+
+## G1 private deformation integration checkpoint — October 16
+
+The isolated preview now accepts ordinary extrusion, sweep and Fine Routing
+prefixes through the unchanged shared native executors. Prospective admission
+counts actual helix extents for end edits and repeated routing targets, reuses
+native continuation lookup for existing helices, and bounds gaps before native
+allocation. Sweep path sampling has a separately named 1,024-sample allowance;
+it is an additional work restriction, not equivalent to the nucleotide limit.
+Its native feasibility preflight is performed once during prefix preparation.
+All original capture/site/operation/time limits remain unchanged.
+
+The DTO now validates its closed scalar host envelope before native work and
+charges the combined response once. Standalone projections remain bounded.
+The disabled HTTP adapter acquires bounded JSON, checks document/policy context
+before work, and performs projection plus explicit response serialization in a
+worker thread. It is deliberately not registered in the main app. After Apply,
+the existing bounded lease drops its prepared prefix and retains a scalar receipt
+with weak published-source identity until the original expiry. Status distinguishes
+active Apply, refusal and completed publication; unknown outcomes are resolved
+without another commit. Undo or any later source/session/policy change invalidates
+the receipt's refresh authority.
+
+The frontend transport and controller own a caller-known nonce, server lease,
+stable feature identity, one active evaluation and one latest pending input.
+Prepare, preview and Cancel do not synchronize canonical geometry. Apply drains
+the latest evaluated draft; known failure keeps the editor usable. Published
+data is read privately between two exact lease/status checks and adopted only
+after a final local document check. Apply/Cancel races preserve an already known
+receipt and permit only one display adoption. Full control-envelope validation
+remains a required injection; these factories are not wired into the editor.
+
+The private renderer shares native construction/disposal with the existing DNA
+comparison adapter. A separate closed preview v1 schema preserves scoped axis
+samples; comparison v2 remains strict and unchanged. Native shaft mode selects
+the existing curved display, while nucleotide placement stays native. Before
+and candidate layers own their buffers/materials and palette identity. Teardown
+restores visibility only on the same live renderer, preserves shared templates,
+and cannot change a replacement document's scene. Seven memory-only Python-to-
+JSON-to-Three.js checks compare real native matrices and axes, including grouped,
+selected and single-helix twist cases. No molecular calculations, models,
+constants, source pins or visual goldens were changed.
+
+ISSUE-100 remains open until the existing popup/editor uses this complete flow.
+ISSUE-105 records the newly identified group retargeting gap: current native
+`edit_entry` preserves old affected helices when only cluster IDs change. The
+private DTO keeps that capability false. Next finish the closed control validator,
+use the historical prefix for every control and plane, correct authored group
+membership with existing selectors, and connect the desktop lifecycle. Explicit
+target membership stays protected. Actual interaction/latency and larger-design
+qualification remain required; private tests are not a rollout certificate.
+Assemblies, VR-machine validation and lower-priority assets stay deferred.
+
+Final focused validation passed **350 backend tests (91 warnings, 14.58 s)**.
+Full frontend passed **8,360 tests / one skipped across 721 files (342.59 s)**.
+The [integration evidence](validation_deformation_preview_integration.json)
+retains red cases, corrected fixtures, cross-language checks and limitations.
+Apply now returns only its scalar receipt; the unused report traversal was
+removed after caller audit. Extreme retained sweep coordinates produce a typed
+limit refusal before integer conversion. Scoped Ruff and diff checks pass;
+repository lint retains the same five F401 errors. Selector dry-run reports FAST
+and accumulated FULL debt without executing a broad suite. `main.js` delta is
+**0**. Completed disposable output contained no files: 544 empty directories and
+four symlinks were removed after active-reference checks; historical evidence
+was preserved. No bulk/browser output or shared-server mutation occurred.

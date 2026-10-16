@@ -1,6 +1,6 @@
 /** Isolated static adapter for the existing native Full renderer. */
 import * as THREE from 'three'
-import { validateDnaComparisonComponent } from '../features/part_dna_comparison_model.js'
+import { validateDnaComparisonComponent, validateDeformationPreviewComponent } from '../features/part_dna_comparison_model.js'
 import { decodeDnaComparisonRecords } from '../features/part_dna_comparison_codec.js'
 import { fail } from '../features/part_comparison_validation.js'
 import { buildHelixObjects } from './helix_renderer.js'
@@ -33,7 +33,18 @@ function checkInventory(native, geometry, topology, connections) {
 
 export function buildPartDnaComparisonLayer(component, scene, paletteToken = Symbol('private DNA comparison palette')) {
   validateDnaComparisonComponent(component)
-  const root = new THREE.Group(); root.name = 'privateDnaComparison'
+  return buildLayer(component, scene, paletteToken, 'privateDnaComparison', 'comparison')
+}
+
+export function buildDeformationPreviewLayer(component, scene) {
+  validateDeformationPreviewComponent(component)
+  return buildLayer(component, scene, Symbol('private deformation palette'), 'privateDeformationPreview', 'deformationPreview')
+}
+
+// The closed adapters above share native construction and resource ownership.
+// Neither consults the live store, installs topology or re-evaluates geometry.
+function buildLayer(component, scene, paletteToken, name, arcType) {
+  const root = new THREE.Group(); root.name = name
   let disposed = false
   function dispose() {
     if (disposed) return
@@ -66,10 +77,11 @@ export function buildPartDnaComparisonLayer(component, scene, paletteToken = Sym
       { start: axis.start, end: axis.end, samples: axis.samples, segments: axis.segments,
         ovhgAxes: axis.ovhg_axes ?? null }]))
     const native = buildHelixObjects(geometry, { ...topology, id: paletteToken }, root, {}, [], axes, 'full')
+    if (arcType === 'deformationPreview') native.setAxisShaftMode('deformed')
     const connections = native.getCrossHelixConnections()
     checkInventory(native, geometry, topology, connections)
     root.traverse(node => { if (node.userData.setupOnly) node.visible = false })
-    const lines = buildNativeConnectionLines(connections, 'comparison')
+    const lines = buildNativeConnectionLines(connections, arcType)
     if (lines) {
       root.add(lines.line)
       for (const arc of connections) {

@@ -1,0 +1,154 @@
+{
+  "date": "2026-10-16",
+  "scope": "Geometry-first G1: ordinary prefix coverage, single-bound preview DTO, private HTTP/controller/native-render integration",
+  "goal": "active; core geometry and Fine Routing precede nanoparticle/assets; assemblies and machine-specific VR deferred",
+  "availability": "Private only: HTTP gate false, router unregistered, existing editor/popup unwired. ISSUE-100 and G1 remain open.",
+  "backend_red": [
+    {
+      "scope": "single response bound",
+      "failed": 19,
+      "passed": 54,
+      "seconds": 7.27,
+      "reason": "Missing envelope API and existing graph charge before host identity was merged"
+    },
+    {
+      "scope": "ordinary prefixes with DTO/host controls",
+      "failed": 41,
+      "passed": 108,
+      "seconds": 8.17,
+      "reason": "Unsupported native prefixes and cluster inputs; two domain-shift fixture failures corrected from invalid -2 below bp zero to native-valid +2"
+    },
+    {
+      "scope": "publication receipts and HTTP adapter",
+      "failed": 11,
+      "errors": 12,
+      "seconds": 4.04,
+      "reason": "Missing status/receipt retention and absent route module. Oversized request parameter IDs were subsequently shortened to avoid giant diagnostic output."
+    },
+    {
+      "scope": "prospective admission review",
+      "failed": 3,
+      "passed": 76,
+      "seconds": 3.69,
+      "reason": "Negative global resize growth escaped admission; in-place continuation and complementary endpoint batches were charged as duplicate growth"
+    },
+    {
+      "scope": "final overflow and unused response cleanup",
+      "failed": 4,
+      "warnings": 1,
+      "seconds": 3.06,
+      "reason": "Finite extreme retained sweep overflow plus unused Apply validation traversal/response fields"
+    }
+  ],
+  "backend_green": {
+    "passed": 350,
+    "warnings": 91,
+    "seconds": 14.58,
+    "targets": [
+      "tests/test_part_deformation_preview.py",
+      "tests/test_part_deformation_preview_dto.py",
+      "tests/test_part_deformation_preview_sessions.py",
+      "tests/test_part_deformation_preview_receipts.py",
+      "tests/test_part_deformation_preview_routes.py",
+      "tests/test_deformation_preview_native_display.py",
+      "tests/test_part_dna_comparison.py",
+      "tests/test_part_publication_state.py",
+      "tests/test_part_recipe_edit.py",
+      "tests/test_native_routing_proof.py",
+      "tests/test_native_auto_proof.py",
+      "tests/test_native_extrusion_proof.py",
+      "tests/test_native_overlay_proof.py"
+    ],
+    "counting": "One final combined run; do not add overlapping earlier runs or checkpoints.",
+    "native_display_cases": 7,
+    "native_display_evidence": "Actual Python DTOs pass JSON transport and the real Three.js native renderer; nucleotide matrices and curved axes equal the normal native path. Includes grouped/selected bend and twist and single-helix twist. No screenshots, GPU context or molecular formulas changed.",
+    "wire_evidence": "Actual HTTP Apply/status JSON passes the real JavaScript scalar receipt codec; Apply, undo and cold input replay use a tiny native fixture."
+  },
+  "frontend_red": [
+    {
+      "scope": "new component validator/owned renderer",
+      "failed": 2,
+      "passed": 11,
+      "suite_errors": 1,
+      "seconds": 0.811,
+      "reason": "Missing preview export and module. Negative cases were not meaningful until the positive cases existed."
+    },
+    {
+      "scope": "scoped curved-axis display",
+      "reason": "Renderer needed its existing deformed shaft mode. Initial tiny fixture assumed incorrect sample spacing; corrected to the existing 7-bp sampling rule, then verified against real native Python outputs."
+    },
+    {
+      "scope": "new transport/controller",
+      "failed": 36,
+      "seconds": 0.917,
+      "reason": "Missing modules before implementation"
+    },
+    {
+      "scope": "Apply/Cancel review races",
+      "failed": 3,
+      "passed": 28,
+      "seconds": 0.823,
+      "reason": "Identical confirmation replaced a receipt during refresh; repeated refresh adopted again; original lost response overrode an already confirmed publication"
+    }
+  ],
+  "frontend_green": {
+    "command": "just test-frontend",
+    "passed": 8360,
+    "skipped": 1,
+    "files_passed": 721,
+    "seconds": 342.59,
+    "new_controller_transport_cases": 41,
+    "new_component_renderer_cases": 19,
+    "warnings": "Existing jsdom/Three.js and injected-error diagnostics; no failed tests",
+    "app": "NOT VERIFIED IN APP; Archive remains unavailable and no shared live-server mutation was performed"
+  },
+  "architecture": {
+    "response_bounds": "Closed scalar envelope validated before native projection, whole DTO bounded once; standalone projections remain bounded. HTTP JSON encoded in worker thread without generic FastAPI coordinate traversal.",
+    "apply_response": "Owned scalar receipt only; unused validation-report traversal removed. Validation still runs during regeneration and is supplied by guarded canonical refresh.",
+    "retention": "Existing one-entry/document, two-global catalog and fixed 60-second TTL. Applied entry drops prefix and retains scalar receipt plus weak published-source identity. No new catalog or permanent readiness state.",
+    "status": "Reports applying during full proof, committing after reservation and applied after publication. Exact session/source/revision/policy guards prevent ABA refresh. Lost response never triggers automatic recommit.",
+    "renderer": "Shared native construction/disposal mechanics, separate closed preview-v1 schema, scoped samples preserved, exact live-root visibility ownership, private palette and shared-template safeguards. Comparison-v2 schema and rollout unchanged.",
+    "inputs": "Native shared executors for extrusion/sweep/routing; prospective extents counted once, continuation uses native source lookups. Poisoned recovery snapshots are not construction inputs.",
+    "limits": {
+      "helices": 16,
+      "prospective_sites": 1024,
+      "bp_span": 1024,
+      "operations": 64,
+      "commands": 128,
+      "path_samples": 1024,
+      "prefix_seconds_cooperative": 1,
+      "apply_seconds_cooperative": 5,
+      "combined_output_nodes": 200000,
+      "combined_output_bytes": 2000000
+    },
+    "no_full_proof_on_drag": true,
+    "performance_qualified": false,
+    "remaining": [
+      "Whole frontend display/control envelope validator; component validator alone is insufficient",
+      "ISSUE-105 authored group retargeting through existing prefix plane/scope helpers",
+      "Existing popup/editor integration, including fixed prefix context and visual-preview-off behavior",
+      "Actual request/render tails, cancellation, full-source undo cost and larger-design admission",
+      "Desktop Apply/Cancel/undo/reload exercise before enabling the new route/editor"
+    ]
+  },
+  "regression_and_cleanup": {
+    "main_js_line_delta": 0,
+    "molecular_algorithms_models_constants_pins_or_goldens_changed": false,
+    "scoped_ruff": "passed",
+    "repository_lint": "unchanged five pre-existing F401 imports",
+    "selector": "just test-smart --dry-run: 5418 accumulated changed files, FAST selected; no backend suite executed by this dry run",
+    "deferred_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\nThis is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\nOnly request `just test-session` when a broad/full sweep is actually needed.",
+    "selector_note": "The selector's boilerplate 'ran' is not execution evidence for a dry run. Broad backend debt remains.",
+    "cleanup": {
+      "roots": ["/tmp/pytest-of-joshua/pytest-276", "/tmp/pytest-of-joshua/pytest-277", "/tmp/pytest-of-joshua/pytest-278"],
+      "directories_removed": 544,
+      "symlinks_removed": 4,
+      "files_removed": 0,
+      "bytes_removed": 0,
+      "active_file_or_mapping_references": 0,
+      "remaining_owned_roots": [],
+      "remaining_e2e_cleanup_roots": [],
+      "preserved_historical_lock": "/tmp/pytest-of-joshua/pytest-268/.lock"
+    }
+  }
+}

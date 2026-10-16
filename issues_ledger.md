@@ -745,10 +745,12 @@ Grouping has 102 unique focused checks at its checkpoint; the ten deformation
 cases include explicit characterizations of unresolved defects. App, broad-suite
 and performance qualification are outstanding (MV-48); `main.js` delta is zero.
 Forced ligation (ISSUE-101), batch nick/resize (ISSUE-102) and stale auto-crossover
-publication (ISSUE-103) are focused-fixed. Private deformation host/DTO coverage
-now passes; there is no public preview route or editor integration yet. Follow
-the current delivery map for core-prefix, complete controls and response/desktop
-qualification. Do not treat private preparation as a live preview fix.
+publication (ISSUE-103) are focused-fixed. The private deformation prefix, host,
+DTO, disabled HTTP adapter, transport/controller and native renderer now have
+focused coverage. The router remains unregistered and the existing editor is
+not wired. Next finish complete control validation, correct group retargeting
+(ISSUE-105), connect the popup, then qualify response/desktop behavior. Do not
+treat private preparation as a live preview fix.
 Nanoparticle/asset expansion, assemblies and machine-specific VR work remain
 outside this next step.
 
@@ -2338,3 +2340,21 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   **8,300 cases / 1 skipped across 717 files in 345.21 s**, including all 22
   error-detail cases; see the [checkpoint evidence](docs/audits/feature_history_20261014/validation_core_geometry_lifecycle.json).
   App error-display checks remain MV-48; `main.js` delta is zero.
+
+## ISSUE-105 — Historical bend/twist group changes retain old affected helices (2026-10-16, SOURCE AUDIT; OPEN)
+
+- The ordinary popup offers group selection, but the historical commit sends
+  the saved context's cluster IDs. Even with new IDs passed directly,
+  `part_overlay_commands.edit_entry` retains `affected_helix_ids` from the
+  original operation. Native deformation evaluation and membership filtering
+  still use that list, so changing group metadata does not reliably retarget
+  the operation. This is a selector/recording gap, not a molecular formula gap.
+- The private preview preserves current native edit semantics. Its
+  `change_clusters` capability remains false; explicit strand/domain targets
+  stay fixed. Tests for legacy cluster-input parity do not close this issue.
+- G2 must derive the proposed affected membership from the owned feature-stage
+  prefix using existing plane/scope helpers, record those inputs explicitly,
+  and prove preview/Apply/cold replay agree. The popup must submit its actual
+  selected IDs. Preserve explicit frozen selections and reject missing groups.
+  Include two disjoint groups, All/None, moved groups, failed Apply, Cancel,
+  undo/redo and save/reopen before claiming complete controls (MV-48).
