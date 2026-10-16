@@ -1,9 +1,67 @@
 # Complete authored DNA comparison: next increment
 
-2026-10-15. Read-only follow-up to the implemented particle/free-protein display.
-No geometry, scientific algorithm, solver, limit or renderer change is authorized
-by this document. Assemblies and numerical-engine upgrade authorization remain
-separate. Parent serializes validation and admission measurements.
+2026-10-15. The first pure DNA projection/admission and version-two worker
+integration are implemented for qualification. `DNA_COMPARISON_ENABLED = False`
+keeps the public route unavailable before any source capture. Existing version
+one remains unchanged. No geometry kernel, scientific algorithm, solver,
+numerical pin or ordinary renderer changes are included. Assemblies and numerical
+engine upgrade authorization remain separate. Parent serializes validation and
+admission measurements.
+
+## Implemented qualification boundary
+
+`core/part_dna_comparison_contract.py` counts both directions of every helix,
+positive insertions, occupied domain walks, extended tails including empty gaps,
+and the global deformed arm span before native allocation. It bounds typed
+collections, selectors and path stations. The worker then checks typed reference
+closure, unique domain occupancy, exact nucleotide copy/owner coverage, native
+slab authority and complete axis/domain/overhang inventory. Missing records or
+unreviewed output fields refuse the whole comparison. The new
+`core/part_dna_comparison.py` calls the unchanged native pipeline and passes its
+records/axes through without coordinate changes.
+
+Version two uses scope `ordinary-dna-uncoated-particles-free-proteins-v2` and adds
+one closed `dna` component to each existing pane:
+`component_version: 1`, `representation: native-full-v1`, `units: nm`, full
+`nucleotides`, `helix_axes`, `display_topology`, and `bounds_nm`. Free assets use
+the unchanged version-one projection; combined bounds share nanometres. The
+coverage policy explicitly declares `all_authored_opaque_except_reference_strands`:
+cluster opacity and ordinary presentation/physical overlays are excluded.
+
+`display_topology` is not a Design. It carries only reviewed helix, domain,
+strand, overhang sequence, cluster/color ownership and direct connection fields.
+Native continuity/seam decisions also require helix lattice identity/direction
+and a small explicit deformation provenance projection: selected helix/range IDs,
+planes, sweep start/direction and bend circle/curvature values. These fields must
+not be reapplied to coordinates. In the later frontend adapter, assign a private
+palette namespace: the native staple-color helper keeps per-design pins. Dispose
+only that namespace with `_resetStapleColorPins(privateId)`; never clear the live
+part's palette or shared native geometry templates.
+
+The original job catalog/slot, source/session/revision/draft guards, worker
+cleanup, lease expiry and 2 MB combined transport/result remain authoritative.
+Strict HTTP still refuses this compatibility route. No new state/model fields,
+cache, job catalog or readiness receipt are added.
+
+Initial pure target: **58 passed in 2.89 s**, parent-run. Five warnings from
+partial tagged-union DTO serialization were corrected by directly serializing
+the selected concrete params model without changing output. The combined pure,
+version-two integration and version-one worker/owner/route regressions then
+passed **142 tests in 5.84 s**, including a real spawned DNA worker and registered
+recipe comparison followed by one commit. No frontend DNA implementation or app
+check has run. Public enablement, GPU ownership/parity and representative resource
+qualification remain explicit completion gates.
+
+`python -m scripts.benchmark_dna_comparison --repeats 9 --http-repeats 3` is prepared
+for the repository's serialized validation guard; it has not run. It creates no
+files or production app lifespan. Warm native derivation/capture/encoding cases
+include loop/skip, bend, sweep, rotated overhang, child-cluster, 1,024-slot and mixed
+free-asset inputs plus an early-refusal case. Real HTTP comparisons use fresh
+spawned workers and registered small/boundary/six-helix repair recipes, retaining
+all refusals and concurrent scalar-revision request/lock timings. Setup uses the
+real repair evaluator outside measured projection time. One isolated document
+and its jobs are removed in `finally`; host instrumentation/gate are restored.
+Only compact stdout JSON is emitted. Renderer/GPU costs remain unmeasured.
 
 ## Native derivation and completeness boundary
 

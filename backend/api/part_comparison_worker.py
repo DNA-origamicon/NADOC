@@ -25,7 +25,7 @@ def _project(input_name, input_size, output_name):
 
             try:
                 with threadpool_limits(limits=1):
-                    result = compare(value["source"], value["candidate"])
+                    result = compare(value["source"], value["candidate"], projection_version=value["projection_version"])
             except CommandContractError as error:
                 result = {"status": "unverified", "issues": [error.as_issue()]}
             encoded = _result_bytes(result)
@@ -42,8 +42,8 @@ def _project(input_name, input_size, output_name):
 class ComparisonWorker(VerificationWorker):
     """The unchanged 2 MB input/result transport applies to both panes together."""
 
-    def __init__(self, source, candidate):
-        super().__init__({"source": source, "candidate": candidate},
+    def __init__(self, source, candidate, *, projection_version=1):
+        super().__init__({"source": source, "candidate": candidate, "projection_version": projection_version},
                          _target=_project, _name="nadoc-part-comparison")
 
     def result(self):

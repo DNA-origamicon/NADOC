@@ -17,6 +17,7 @@ from backend.core.part_repair_inputs import RepairIdentity
 
 
 SCOPE = "uncoated-particles-free-proteins-v1"
+DNA_SCOPE = "ordinary-dna-uncoated-particles-free-proteins-v2"
 MAX_PLACEMENTS = 128
 MAX_PROJECTED_ATOMS = 4096
 RECIPE_FIELDS = frozenset({"recipe_root", "feature_log", "input_sources",
@@ -28,7 +29,7 @@ _ALLOWED_AUTHORING = frozenset({"dimensions", "lattice_type", "metadata", "tm_se
 class ComparisonRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    projection_version: StrictInt = Field(ge=1, le=1)
+    projection_version: StrictInt = Field(ge=1, le=2)
     expected_design_id: RepairIdentity
     expected_revision: StrictInt = Field(ge=0)
     expected_draft_id: RepairIdentity
@@ -82,16 +83,22 @@ def _unique(items, label, checkpoint):
     return found
 
 
-def check_scope(design, *, checkpoint=lambda: None):
+def check_scope(design, *, checkpoint=lambda: None, projection_version=1):
     """Cheap closure check on owned data, also used before live source capture."""
     from backend.core.models import Design
 
     if type(design) is not Design or set(type(design).model_fields) != set(FIELD_ROLES):
         _reject("Comparison requires the reviewed mutable standard-part schema")
-    for name, role in FIELD_ROLES.items():
-        checkpoint()
-        if role == "authoring" and name not in _ALLOWED_AUTHORING and getattr(design, name):
-            _reject(f"Comparison does not yet cover {name}")
+    if type(projection_version) is not int or projection_version not in {1, 2}:
+        _reject("Unsupported comparison projection version", "invalid_comparison_request")
+    if projection_version == 2:
+        from backend.core.part_dna_comparison_contract import check_scope as check_dna_scope
+        check_dna_scope(design, checkpoint=checkpoint)
+    else:
+        for name, role in FIELD_ROLES.items():
+            checkpoint()
+            if role == "authoring" and name not in _ALLOWED_AUTHORING and getattr(design, name):
+                _reject(f"Comparison does not yet cover {name}")
     if len(design.nanoparticles) + len(design.protein_attachments) > MAX_PLACEMENTS:
         _reject("Comparison placement count exceeds its display allowance", "comparison_limit")
     if len(design.protein_assets) > MAX_PLACEMENTS:
@@ -125,7 +132,7 @@ def _finite(values):
         _reject("Comparison placement contains nonfinite coordinates", "invalid_comparison_geometry")
 
 
-def project(design):
+def project(design, *, projection_version=1):
     """Return coarse authored display inputs using unchanged native helpers.
 
     All placements are retained, including authored hidden placements. Consumers
@@ -135,7 +142,7 @@ def project(design):
     import numpy as np
     from backend.core.protein import compose_protein_world_transform, protein_asset_to_atomistic
 
-    check_scope(design)
+    check_scope(design, projection_version=projection_version)
     particles, proteins = [], []
     lower, upper = [float("inf")] * 3, [float("-inf")] * 3
 
@@ -179,19 +186,29 @@ def project(design):
             "authored_visible": attachment.visible,
             "representation": "trace" if any(atom["name"] == "CA" for atom in atoms) else "ovoid",
             "atoms": atoms})
+    dna = None
+    if projection_version == 2:
+        from backend.core.part_dna_comparison import project as project_dna
+        dna = project_dna(design)
+        if dna["bounds_nm"] is not None:
+            include(dna["bounds_nm"]["minimum"])
+            include(dna["bounds_nm"]["maximum"])
     return {"units": "nm", "particles": particles, "proteins": proteins,
+            **({"dna": dna} if projection_version == 2 else {}),
             "bounds_nm": None if lower[0] == float("inf") else {"minimum": lower, "maximum": upper},
             "unplaced_asset_ids": [asset.id for asset in design.protein_assets if not any(
                 attachment.asset_id == asset.id for attachment in design.protein_attachments)]}
 
 
-def compare(source, candidate_data):
+def compare(source, candidate_data, *, projection_version=1):
     """Called only with independently owned inputs in the disposable worker."""
     candidate, expected = decode_candidate(candidate_data)
     if candidate.id != source.id:
         _reject("Candidate belongs to another part", "comparison_conflict")
-    return {"status": "projected", "issues": [], "projection_version": 1,
-        "scope": SCOPE, "comparison_basis": "published_materialized_authoring_vs_evaluated_recipe",
+    return {"status": "projected", "issues": [], "projection_version": projection_version,
+        "scope": DNA_SCOPE if projection_version == 2 else SCOPE, "comparison_basis": "published_materialized_authoring_vs_evaluated_recipe",
         "coverage": {"complete": True, "scientific_qualification": False,
-                     "visibility": "all_authored_placements", "excluded_layers": ["physical", "presentation"]},
-        "published": project(source), "proposed": project(candidate), "candidate_digests": expected}
+                     "visibility": "all_authored_placements", "excluded_layers": ["physical", "presentation"],
+                     **({"presentation_policy": "all_authored_opaque_except_reference_strands"} if projection_version == 2 else {})},
+        "published": project(source, projection_version=projection_version),
+        "proposed": project(candidate, projection_version=projection_version), "candidate_digests": expected}

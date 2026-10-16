@@ -187,7 +187,7 @@ def test_candidate_must_belong_to_captured_part():
         compare(source, candidate.model_dump(mode="json"))
 
 
-@pytest.mark.parametrize("field,value", [("projection_version", 2), ("expected_revision", True),
+@pytest.mark.parametrize("field,value", [("projection_version", 3), ("expected_revision", True),
     ("expected_generation", -1), ("candidate", {}), ("pose", [0] * 16), ("expected_source", "client")])
 def test_request_accepts_only_versioned_context_not_geometry_or_authority(field, value):
     body = {"projection_version": 1, "expected_design_id": "part", "expected_revision": 7,

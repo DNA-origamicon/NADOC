@@ -1,0 +1,18 @@
+{
+  "date": "2026-10-15",
+  "scope": "Provisional native Full DNA display projection and version-two isolated comparison transport",
+  "production_dna_gate_enabled": false,
+  "ordinary_geometry_or_numerical_pin_changed": false,
+  "executed_by": "root",
+  "runs": [
+    {"targets": ["tests/test_part_dna_comparison.py"], "passed": 58, "seconds": 2.89,
+     "warnings": "Five partial tagged-union DTO serialization warnings; subsequently corrected without changing DTO values."},
+    {"targets": ["tests/test_part_dna_comparison.py", "tests/test_part_dna_comparison_integration.py", "tests/test_part_comparison_projection.py", "tests/test_part_comparison_worker.py", "tests/test_part_evaluation_comparison.py", "tests/test_part_comparison_routes.py"],
+     "passed": 142, "seconds": 5.84,
+     "coverage": ["unchanged native record and axis parity", "pre-allocation refusal", "complete output inventory", "shared worker and source ownership", "real spawned DNA transport", "HTTP saved-recipe comparison followed by one commit", "default false public gate", "version-one regression"]}
+  ],
+  "benchmark": {"script": "scripts/benchmark_dna_comparison.py", "status": "prepared_not_run", "outputs": "compact stdout JSON only"},
+  "frontend_dna": "not implemented or tested at this checkpoint",
+  "app": "not run; Archive unavailable",
+  "remaining": ["native projection resource qualification", "closed frontend DTO validation", "shared native line extraction and isolated renderer ownership", "CPU/GPU lifetime and cost qualification", "app exercise"]
+}

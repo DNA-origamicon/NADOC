@@ -20,6 +20,9 @@ from backend.core.part_repair_capture import _Copier
 from backend.core.part_verification_capture import CaptureLimit, capture
 
 
+# Fixed host gate: native DNA projection remains a qualification-only path.
+# Client parameters and environment variables cannot enable it.
+DNA_COMPARISON_ENABLED = False
 TIME_BUDGET = 5.0
 CAPTURE_SECONDS = 0.025
 CAPTURE_BYTES = 2_000_000
@@ -51,7 +54,7 @@ def _capture_source(job, request):
                 or configuration.generation != job.policy_generation
                 or job.revision != request.expected_revision or not _draft_matches(source, request)):
             _conflict("The source, document session or saved proposal changed")
-        check_scope(source, checkpoint=copier.check)
+        check_scope(source, checkpoint=copier.check, projection_version=request.projection_version)
         # Loadouts are excluded from the geometry capture, but the existing
         # editability guard scans their IDs. Bound that scan before entering it.
         if len(source.loadouts) > 128:
@@ -125,6 +128,9 @@ def compare(identity, value):
     except ValueError as error:
         raise HTTPException(422, detail={"code": "invalid_comparison_request", "detail": str(error)}) from error
     policy.require_compatibility(doc_context.get_current_doc(), "repair_comparison")
+    if request.projection_version == 2 and not DNA_COMPARISON_ENABLED:
+        raise HTTPException(422, detail={"code": "comparison_not_qualified",
+            "detail": "Native DNA comparison has not completed resource qualification"})
     if not owner._slot.acquire(blocking=False):
         raise HTTPException(429, detail="A part history operation is already running")
     supervision_started = False
@@ -140,7 +146,9 @@ def compare(identity, value):
         read.session_identity, read.policy_generation = job.session_identity, job.policy_generation
         remaining = min(TIME_BUDGET, max(0, owner.RESULT_TTL - (owner.monotonic() - job.created)))
         supervision_started = True  # supervise releases admission only after reaping
-        result = supervise(read, source, lambda captured: ComparisonWorker(captured, candidate), remaining,
+        worker = (lambda captured: ComparisonWorker(captured, candidate)) if request.projection_version == 1 else (
+            lambda captured: ComparisonWorker(captured, candidate, projection_version=request.projection_version))
+        result = supervise(read, source, worker, remaining,
                            status_lock=owner._lock)
         if result.get("status") != "projected":
             issue = (result.get("issues") or [{"code": "comparison_error"}])[0]
