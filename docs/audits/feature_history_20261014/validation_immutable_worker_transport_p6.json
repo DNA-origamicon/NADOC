@@ -48,7 +48,7 @@
   "latency_qualified": false,
   "http_wired": true,
   "next": [
-    "Repeat ordinary four-case HTTP timings after preservation change",
+    "Qualify near-cap cold-recovery result retention; ordinary post-preservation four-case timings are complete",
     "Qualify remaining storage and public lifecycle scope before enabling gates"
   ],
   "app_status": "NOT VERIFIED IN APP",
@@ -143,6 +143,23 @@
       "concurrent_commit_read_p95_ms": 54.53,
       "latency_verdict": "Unqualified: commit concurrent-read p95 exceeds predeclared25ms target;3diagnostic repetitions do not satisfy30-cycle requirement",
       "maximum_candidate_result_retention_qualified": false
+    },
+    "preserved_default": {
+      "report": "benchmark_immutable_part_jobs_preservation_repeated.json",
+      "publications": 120,
+      "cold_proofs": 4,
+      "start_p95_max_ms": 8.09550499980105,
+      "start_max_ms": 8.734764000109863,
+      "commit_p95_max_ms": 23.489904997404665,
+      "commit_max_ms": 75.30252700234996,
+      "concurrent_commit_read_p95_max_ms": 18.229699999210425,
+      "concurrent_commit_read_max_ms": 66.43676999374293,
+      "state_lock_max_ms": 1.477491001423914,
+      "job_max_ms": 1827.4290800036397,
+      "full_source_materializations_at_commit": 0,
+      "rss_sampling": false,
+      "cleanup": true,
+      "public_availability_qualified": false
     },
     "preserved_retention": {
       "report": "benchmark_immutable_part_jobs_preservation_retention.json",

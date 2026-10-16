@@ -91,6 +91,16 @@ following [the remaining standard-part checkpoints](remaining_standard_part_chec
 Keep unsupported contracts unverified, retain the import/native distinction, and
 keep full proof off automatic edit, frame and scrub paths.
 
+The next P6 memory diagnostic retained two independent 15,899,997-byte cold-proved
+recovery results beside 31,995,904 bytes of background source/undo across three
+cycles. All six recoveries and cleanup passed. Sampled RSS increments stayed
+within the provisional 256 MiB allowance, but 116.4 ms sampling gaps prevent a
+hard memory-bound claim. Parent preparation took 167–191 ms and concurrent scalar
+reads reached 157.64 ms despite sub-millisecond state-lock holds. Exact phase
+attribution is the next diagnostic; do not advance to thirty-cycle qualification
+or enable public gates on these results. The read seam was memory-only, with
+disk access and durable publication tripwired. See [reviewed evidence](validation_immutable_recovery_memory.json).
+
 Recent completed checkpoints include pending NP motion (`a24b60b7`, 204 focused
 cases including 35 new), cold-qualified strict recovery (`d52a30a7`, 318 distinct
 cases), durable initial strict creation (`05707b38`, 283 distinct cases), and

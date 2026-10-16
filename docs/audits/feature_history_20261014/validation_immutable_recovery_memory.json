@@ -1,0 +1,90 @@
+{
+  "date": "2026-10-15",
+  "executor": "root, serialized diagnostic",
+  "report": "benchmark_immutable_recovery_initial.json",
+  "command": "scripts/benchmark_immutable_recovery.py --repeats 3",
+  "scope": "In-memory substituted persistence read; real strict HTTP admission, parent preparation, spawned native proof, two-result retention and cancellation",
+  "cycles": 3,
+  "cold_ready_results": 6,
+  "exit_code": 0,
+  "correctness_and_cleanup": true,
+  "failures": [],
+  "fixture": {
+    "native_history_rows": 1,
+    "recipe": "Explicit empty root followed by native gold creation",
+    "each_ready_payload_bytes": 15899997,
+    "simultaneous_ready_results": 2,
+    "simultaneous_ready_payload_bytes": 31799994,
+    "background_current_undo_bytes": 31995904,
+    "ignored_recovery_control_characters": 2649585,
+    "charged_recovery_bytes": 2649585,
+    "construction": "ASCII control characters expand sixfold in canonical JSON; saved recovery remains opaque and is never replay input",
+    "input_payload_sha256": "a936b461bfc7908d70f5f399285ff749bf9cabdcbe927e933547d427be4da5e6"
+  },
+  "observed": {
+    "parent_prepare_stored_ms": [177.89574999915203, 181.1872990001575, 167.11967100127367, 191.29978099954315, 184.1189420010778, 186.67485800688155],
+    "parent_prepare_median_ms": 182.65312050061766,
+    "job_complete_min_ms": 1447.0611580036348,
+    "job_complete_max_ms": 1502.3159560005297,
+    "start_http_max_ms": 5.312406996381469,
+    "concurrent_start_http_max_ms": 3.471543997875415,
+    "concurrent_preparation_worker_http_max_ms": 157.63548800168792,
+    "state_lock_hold_max_ms": 0.7916109971120022,
+    "completed_result_release_http_max_ms": 10.380790001363494,
+    "natural_gc_events": 66,
+    "dropped_gc_events": 0,
+    "preparation_worker_window_gc_overlap_max_ms": 3.94877099461155,
+    "rss_increment_max_bytes": 256552960,
+    "rss_increment_allowance_bytes": 268435456,
+    "all_sampled_rss_increments_within_allowance": true,
+    "rss_sampling_gap_max_ms": 116.40226799499942,
+    "rss_sample_duration_max_ms": 102.08702299860306,
+    "preparation_worker_light_sampler_caps": 6,
+    "light_requests_per_capped_window": 256
+  },
+  "classification": {
+    "public_availability_qualified": false,
+    "latency_qualified": false,
+    "hard_memory_bound_established": false,
+    "durable_lifecycle_qualified": false,
+    "correctness": "Six exact independent candidate payloads passed real native cold proof; both catalog slots were occupied and cancellation released candidates, workers, buffers and sessions",
+    "latency": "Parent preparation/worker-window scalar reads reached 157.64 ms despite short state-lock holds; investigate before a 30-cycle qualification run",
+    "measurement_limits": [
+      "The preparation_and_worker_wait.http field measures blocking completion wait, not a standalone HTTP response",
+      "All six completion-window light samplers reached their 256-request cap; later portions of each job are not continuously sampled",
+      "Existing aggregate timings do not align individual read stalls with specific preparation instructions",
+      "GC overlap is correlation only and is not subtracted from observed latency",
+      "RSS samples can miss short peaks or GIL-blocked intervals and sum shared pages across parent and child",
+      "Idle RSS includes four near-8 MB background handles and one shared near-16 MB in-memory input; this differs from a filesystem-backed recovery",
+      "No file lease, durable write or commit was exercised; the read seam returned lease=None and disk/publication entry points were tripwired"
+    ]
+  },
+  "unchanged_limits": {
+    "actual_recovery_deadline_seconds": 5.0,
+    "deadline_scope": "Shared across parent preparation and remaining child verification time; the generic evaluation 180-second budget does not apply to recovery",
+    "proof_capture_nodes": 30000,
+    "proof_capture_bytes": 2000000,
+    "proof_capture_cooperative_seconds": 0.025,
+    "recovery_storage_bytes": 8000000,
+    "full_candidate_bytes": 16000000,
+    "session_retained_bytes": 32000000,
+    "result_slots": 2,
+    "retries": 0
+  },
+  "next_diagnostic_proposal": {
+    "status": "Read-only proposal; no instrumentation or production changes in this checkpoint",
+    "workload": "Same memory-only fixture and three cycles; no 30-repeat run yet",
+    "phase_intervals": [
+      "prepare_stored total and input integrity/initial JSON decode",
+      "raw structure validation and initial model validation residual",
+      "prepare_revision total, batch scope and ordinary admission, structural/work admission",
+      "initial canonical encoding",
+      "exact model roundtrip with nested canonical re-encoding reported separately",
+      "recipe and authoring digest calls, including recipe JSON serialization",
+      "final ordinary proof capture and child worker interval"
+    ],
+    "mechanism": "Benchmark-owned bounded timing wrappers around existing functions and local module aliases; preserve every implementation, argument, checkpoint, digest and budget",
+    "correlation": "Retain bounded parent phase start/end intervals and actual concurrent-read intervals before compaction; report nested/exclusive timing, GC overlap and sampler-cap exhaustion without subtracting pauses",
+    "purpose": "Locate the unqualified tail before choosing an optimization; no new latency threshold, numerical change, global JSON/Pydantic monkeypatch, profiler or GC policy change"
+  }
+}
