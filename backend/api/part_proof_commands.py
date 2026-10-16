@@ -522,8 +522,8 @@ def _execute(kind, design, params, *, expensive):
         from backend.api.part_cell_commands import build
         updated = build(kind, design, params)
     elif kind in ANNOTATION_KINDS:
-        from backend.api.part_annotation_commands import build
-        updated = build(kind, design, params)
+        from backend.api.part_transform_references import build_annotation_with_reference_diagnostics
+        updated = build_annotation_with_reference_diagnostics(kind, design, params)
     elif kind == "apply-loop-skips":
         from backend.api.part_loop_commands import build
         updated = build(design)

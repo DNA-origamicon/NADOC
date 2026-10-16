@@ -25,6 +25,10 @@ _PROTECTED = {
 def preserve_proof_identity(previous, updated, *, kind=None):
     """Preserve only authored output/contract slots, never invent absent ones."""
     result = _preserve_base(previous, updated, kind=kind)
+    if kind == "nucleotide-transform" and "crossover_id" in updated:
+        # Here the junction is an authored residue target, not a newly created
+        # crossover identity. Keep the pinned factory's other families exact.
+        result["crossover_id"] = updated["crossover_id"]
     if (kind == "group-create" and type(previous.get("group")) is dict
             and "id" in previous["group"] and type(result.get("group")) is dict):
         # Preserve the nested output only. Membership/style remain authored

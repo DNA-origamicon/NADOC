@@ -908,3 +908,11 @@ authoring and prevents old cleanup from hiding a newer view; preparation can be
 cancelled before the panel opens. Existing molecular algorithms and legacy
 recovery contracts are retained. These corrections earn only the fixed FH-22
 milestone when its full software acceptance passes; desktop remains FH-27/MV-51.
+
+2026-10-16 — U18 / ISSUE-123–124: share strict placement/nucleotide/reset history
+binding, correct the consumer-reference identity role and stale reset receipt,
+and preserve exact typed failure attribution with atomic publication. Native
+replay reuses its occupancy predicate without an added successful-target scan.
+The standard regression command exposed an import-time randomized Sweep test ID;
+replace it with a deterministic value. Archive-backed collection and FULL debt
+remain explicit. FH-23 stays open; these fixes add no completed milestone.

@@ -44,7 +44,9 @@ ROUTING = frozenset({
     "loop-skip-insert", "loop-skip-twist", "loop-skip-bend", "loop-skip-clear",
     "loop-skip-clear-all", "apply-loop-skips",
 })
-PREFIX_KINDS = EXTRUSIONS | ROUTING | ORGANIZATION_KINDS | frozenset({
+TRANSFORMS = frozenset({"nucleotide-transform", "nucleotide-transform-batch", "nucleotide-transform-delete"})
+EXTRA_BASES = frozenset({"crossover-extra-bases", "crossover-extra-bases-batch", "forced-ligation-extra-bases"})
+PREFIX_KINDS = EXTRUSIONS | ROUTING | ORGANIZATION_KINDS | TRANSFORMS | EXTRA_BASES | frozenset({
     "bundle-create", "sweep", "deformation", "cluster_create", "cluster_op",
 })
 PATCH_FIELDS = frozenset({"type", "plane_a_bp", "plane_b_bp", "params", "cluster_ids", "targets"})
@@ -140,7 +142,35 @@ def _operation(op, design, *, retained=False):
 
 def _slots(design):
     return sum(2 * (helix.length_bp + sum(max(0, mark.delta) for mark in helix.loop_skips))
-               for helix in design.helices)
+               for helix in design.helices) + _extra_slots(design)
+
+
+def _extra_slots(design):
+    return sum(len(item.extra_bases or "") for items in (design.crossovers, design.forced_ligations)
+               for item in items)
+
+
+def _extra_growth(kind, design, params):
+    """Bound inserted material before its unchanged metadata builder runs."""
+    forced = kind == "forced-ligation-extra-bases"
+    field, identity_key = ("forced_ligations", "fl_id") if forced else ("crossovers", "crossover_id")
+    entries = params.get("entries") if kind.endswith("-batch") else [params]
+    if type(entries) is not list or len(entries) > MAX_SLOTS:
+        _reject("Inserted-base edits exceed the preview work allowance", "preview_limit")
+    replacements = {}
+    for item in entries:
+        if (type(item) is not dict or type(item.get(identity_key)) is not str
+                or type(item.get("sequence")) is not str):
+            _reject("Inserted-base edits require native junction identities and sequences", "invalid_preview_definition")
+        replacements[item[identity_key]] = len(item["sequence"])
+    existing = {item.id: len(item.extra_bases or "") for item in getattr(design, field)}
+    # Unknown identities remain native reference errors, but their proposed
+    # allocation is still charged before dispatch. Duplicate edits use the
+    # native last-by-identity semantics.
+    total = _slots(design) + sum(length - existing.get(identity, 0)
+                                 for identity, length in replacements.items())
+    if total > MAX_SLOTS:
+        _reject("Inserted material exceeds the preview site allowance", "preview_limit")
 
 
 def _growth(design, sites, helices=0):
@@ -150,7 +180,7 @@ def _growth(design, sites, helices=0):
 
 def _extent_allowance(design, extents):
     """Charge each prospective native helix interval once, including inserts."""
-    sites = 0
+    sites = _extra_slots(design)
     positions = []
     for helix in design.helices:
         lo, hi = extents.get(helix.id, (helix.bp_start, helix.bp_start + helix.length_bp - 1))
@@ -223,7 +253,9 @@ def _work(design, check):
     check()
     if len(design.helices) > MAX_HELICES or len(design.deformations) + len(design.cluster_transforms) > MAX_OPERATIONS:
         _reject("Deformation preview exceeds its object allowance", "preview_limit")
-    slots = 0
+    slots = _extra_slots(design)
+    if slots > MAX_SLOTS or len(design.nucleotide_transforms) > MAX_SLOTS:
+        _reject("Residue poses or inserted material exceed the preview site allowance", "preview_limit")
     for helix in design.helices:
         check()
         if type(helix.length_bp) is not int or helix.length_bp < 1:
@@ -246,7 +278,13 @@ def _before_command(kind, params, design):
         _reject(f"Private deformation preview does not yet replay prefix command {kind!r}")
     # Match the shared dispatcher: provenance annotation is not builder input.
     params = {key: value for key, value in params.items() if key != "_generator"}
-    if kind == "bundle-create" or kind in EXTRUSIONS:
+    if kind in EXTRA_BASES:
+        _extra_growth(kind, design, params)
+    elif kind == "nucleotide-transform-batch":
+        bodies = params.get("transforms")
+        if type(bodies) is not list or len(bodies) > MAX_SLOTS:
+            _reject("Transform batch exceeds the private preview work allowance", "preview_limit")
+    elif kind == "bundle-create" or kind in EXTRUSIONS:
         # The shared executor still enforces its own 512-cell/50k-bp guard.
         # This lower private-preview allowance bounds its first allocation.
         cells, length = params.get("cells"), params.get("length_bp")

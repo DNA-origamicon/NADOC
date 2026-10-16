@@ -161,7 +161,7 @@ def test_all_native_authoring_controls_normalize_without_mutating_prior_or_patch
 
 
 @pytest.mark.parametrize("field,value", [
-    ("sweep_id", str(uuid4())), ("_proof_version", 2),
+    ("sweep_id", "f3464727-1e6b-4678-8a50-1fa870ec8a50"), ("_proof_version", 2),
     ("expected_design_id", "other"), ("expected_revision", 8),
 ])
 def test_identity_and_saved_transport_cannot_be_edited(field, value):

@@ -2754,3 +2754,26 @@ milestone because FH-18 remains open. App qualification remains MV-48/FH-27.
   transitions. Held Prepare can be cancelled from Escape or another tool.
 - These are isolation corrections within FH-22, not new milestones. Actual
   controls and ownership regressions are included in U17; desktop remains MV-51.
+
+## ISSUE-123 — Native move history could discard requested inputs or retain stale reset targets (2026-10-16, CORRECTED IN NATIVE HISTORY API)
+
+- Placement edits ignored unknown fields and target changes; nucleotide edits
+  accepted coerced booleans and empty batches. A reset target change kept the
+  former nucleotide's target receipt. Generic output protection also incorrectly
+  treated an extra-base movement's crossover reference as an output identity.
+- The four ordinary movement roles now share strict selected-row inputs and
+  prefix binding. Preserve actual output/proof identities; resolve references
+  explicitly and refresh reset receipts from that prefix. Typed failures identify
+  the selected or downstream failing feature and leave source/revision/undo intact.
+- Initial red tests reproduced all of these API failures. Native placement math
+  and pinned identity factory are unchanged. This is FH-23 implementation progress,
+  not closure of the complete controls/display or new-group movement contract.
+
+## ISSUE-124 — Sweep test generated random collection IDs under xdist (2026-10-16, CORRECTED)
+
+- The U17 protected-identity test generated its parameter UUID at import time.
+  Separate pytest workers collected different node IDs, stopping the standard
+  fast suite before execution. Use a fixed distinct UUID for this test case.
+- The standard run also encountered the separately unavailable Archive-backed
+  CPD fixture during collection. Fixing the test ID does not clear that environment
+  failure or deferred FULL-suite debt; focused multiworker validation is separate.

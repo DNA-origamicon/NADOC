@@ -214,17 +214,31 @@ def prepare_change(source, captured, index, checkpoint, *, params=None, sub_inde
             log[index] = entry.model_copy(update={"children": children})
         elif entry.feature_type in OVERLAY_KINDS:
             try:
-                log[index] = edit_entry(entry, params, prefix=prefix.design)
+                if entry.feature_type == "cluster_op":
+                    from backend.api.part_transform_inputs import edit_transform_entry
+
+                    log[index] = edit_transform_entry(entry, params, prefix.design)
+                else:
+                    log[index] = edit_entry(entry, params, prefix=prefix.design)
             except CommandContractError as exc:
-                raise HTTPException(409, detail=exc.as_issue()) from exc
+                raise HTTPException(409, detail={**exc.as_issue(), "feature_id": entry.id}) from exc
         elif entry.feature_type == "snapshot":
-            log[index] = entry.model_copy(
-                update={
-                    "params": preserve_proof_identity(
-                        entry.params, {**entry.params, **params}, kind=entry.op_kind
-                    )
-                }
-            )
+            if entry.op_kind in {"nucleotide-transform", "nucleotide-transform-batch",
+                                  "nucleotide-transform-delete"}:
+                from backend.api.part_transform_inputs import edit_transform_entry
+
+                try:
+                    log[index] = edit_transform_entry(entry, params, prefix.design)
+                except CommandContractError as exc:
+                    raise HTTPException(409, detail={**exc.as_issue(), "feature_id": entry.id}) from exc
+            else:
+                log[index] = entry.model_copy(
+                    update={
+                        "params": preserve_proof_identity(
+                            entry.params, {**entry.params, **params}, kind=entry.op_kind
+                        )
+                    }
+                )
             if input_binder is not None:
                 # Private owned-editor binding, after identity preservation and
                 # original input proof. Untouched rows keep their saved receipts.

@@ -1783,3 +1783,49 @@ manifests/goldens unchanged.
 FH-27/MV-51. Both Sweep rollout gates stay false. Cleanup removed 194 empty task
 directories and 4 symlinks, zero files/bytes; exact paths are verified absent.
 Shared caches, active runtimes, workspace state and historical evidence remain.
+
+## U18 — native movement history primitives, FH-23 remains open
+
+The [full move/rotate audit and four batches](transform_history_editor_plan.md)
+retain placements, selected nucleotide moves, batches, resets, constraints,
+complete display and FH-18's required new-group movement integration. No exit
+was narrowed to make this first checkpoint complete the milestone.
+
+The four existing history roles now share strict input validation and owned
+prefix binding. The existing native history API uses that helper, independently
+proves the source and rebuilds downstream inputs with atomic undo/reload. Typed
+failures identify missing/ambiguous dependencies and the failing feature. Reset
+target metadata follows the exact selected prefix transform; contradictory
+explicit receipts refuse. Extra-base crossover targets are editable references,
+while genuine output IDs retain their existing protection. Native math is unchanged.
+
+Private feature-stage evaluation shares the bounded prefix executor. Inserted
+sites are charged before native allocation; evaluated objects cannot mutate the
+retained source. Full proof is not performed during selected-operation evaluation.
+Successful native replay uses one occupancy check per requested target; the exact
+missing-target failure triggers diagnostic enrichment. No new transform route,
+lease, DTO or frontend owner exists yet. Organization nucleotide admission and
+complete CPD/joint/duplex/tether coverage remain explicit work, with arbitrary
+group movement still behind its scientific authorization boundary.
+
+**20/38 complete;18 remaining (9 core,9 parked);+0 completed,+0 total.** Eighteen
+engineering checkpoints since B1 close three milestones. FH-23 has spent one;
+FH-18 remains growth-flagged after thirteen. Next: complete owned movement
+display/control data and lifecycle, followed by controls and Fine Routing.
+
+[Validation evidence](validation_transform_history_primitives.json): **649 distinct
+focused backend passes**,97 warnings,25 files. This includes actual native history
+edits, one undo/reload/cold proof, exact refused-source preservation, shared
+preview/permit regressions and a four-worker Sweep check. The actual standard
+`just test-smart` selected **FAST** but executed zero tests: collection failed on
+missing Archive-backed CPD data and a prior Sweep test's randomized import-time
+UUID. The latter is fixed; the unavailable fixture and **FULL deferred** debt remain.
+The complete selector message is retained in evidence, with no full-suite pass claim.
+
+All13 changed Python files pass Ruff; repository lint retains five existing F401
+findings and memory lint six errors/59 warnings. `main.js` delta0; no frontend
+behavior or numerical pins/goldens changed. No app, bulk capture or simulation
+started without Archive. Cleanup verified513 empty task directories and4 symlinks
+removed,0 files/bytes; active runtimes, user workspace and historical data preserved.
+ISSUE-123/124 record the input/receipt and test-collection corrections. Still-used
+legacy UI paths remain until their complete replacement is qualified.

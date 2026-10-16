@@ -22,23 +22,23 @@ decrement completed if an exit reopens. Flag three major checkpoints spent on
 any still-open milestone (cumulative even across alternating work), or total
 growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
-Effort is separate: U1–U17 are **17 engineering checkpoints** since B1, closing
+Effort is separate: U1–U18 are **18 engineering checkpoints** since B1, closing
 **three additional milestones**: FH-19 in two checkpoints; FH-21/FH-22 in one each.
 Thirteen checkpoints went to still-open FH-18. The unchanged 38 is not an
 estimate of commits/messages. Audits alone earn no credit.
 Current counts: **20 / 38 complete, 18 remaining (9 core, 9 parked)**.
-Latest U17 delta: **+1 completed, +0 total**. FH-22's complete owned Sweep
-history editor is implemented: full historical-prefix controls, private feature
-preview, recovery-independent Apply/Cancel and downstream native rebuild.
-It shares the existing lease/controller/display/publication lifecycle. Apply
-independently proves the source, keeps later recorded addresses and publishes
-once with undo/reload parity; missing nick dependencies identify the failing row.
-Private picker/gizmos reject hidden legacy commits and preserve newer views.
-See [the Sweep contract](../docs/audits/feature_history_20261014/sweep_history_editor_plan.md)
-and [U17 evidence](../docs/audits/feature_history_20261014/validation_sweep_history_editor.json).
-U17: **554 backend cases,8,918 frontend passes/one skip**, main.js delta0.
-Both rollout gates stay false; desktop/latency remains FH-27/MV-51 without Archive.
-FH-21 seven-family extrusion remains complete; see the retained U16 evidence.
+Latest U18 delta: **+0 completed, +0 total**. FH-23 has one checkpoint: four-role
+placement/nucleotide/batch/reset strict inputs, owned prefix evaluation, typed
+references and existing native history API integration. Reset receipts derive
+from exact prefix targets; requested contradictory receipts refuse. Successful
+native replay adds no duplicate occupancy scan. Source proof, suffix rebuild and
+undo/reload share existing machinery; no native placement/pin changes.
+See [the full movement contract](../docs/audits/feature_history_20261014/transform_history_editor_plan.md)
+and [U18 evidence](../docs/audits/feature_history_20261014/validation_transform_history_primitives.json).
+FH-23 remains open: complete DTO/host/controls and FH-18 new-group integration.
+FH-21/FH-22 remain implemented; U16/U17 retain their evidence and closed gates.
+U18 fixes U17's randomized Sweep test collection ID. Standard FAST collection
+still lacks Archive-backed CPD evidence; FULL debt remains. main.js delta0.
 FH-18 retains separate Groups/Placements, native lineage, named deformation
 preview/repair/creation, persistent visibility and organized pattern integration.
 Its original movement/generated/qualification exits remain open; rollout stays off.
@@ -50,7 +50,7 @@ editable placement features. No hidden replacement group, per-residue expansion
 or coordinate baking. New-group move/frame/extension semantics remain a required
 integration exit. Recorded conversion → posed dissolve → regroup is implemented;
 retain remaining ordinary consumer/movement obligations while finishing core
-editors (FH-23 move/rotate next, then FH-24 Fine Routing). Do not
+editors (FH-23 move/rotate active, then FH-24 Fine Routing). Do not
 inflate counts by splitting batches or accumulate more identity-only subsets.
 No total-growth trigger or estimate change; the full original FH-18 exit stands.
 
@@ -133,7 +133,7 @@ and ordinary controls must agree. Nanoparticle/protein/assets and their remainin
 benchmarks are parked; ordinary DNA connections are core. Assemblies and VR
 remain separately deferred. The persistent P3–P6 goal stays active.
 
-U17 sequencing: bound and complete FH-23 move/rotate next; new-group movement
+U18 sequencing: complete FH-23's owned display/host/controls next; new-group movement
 and generated compatibility retain the existing B–E exits. U13 completes the
 private ordinary Bend/Twist creation adapter: same owned prefix, controller,
 renderer and lease as history editing, no provisional canonical operation.

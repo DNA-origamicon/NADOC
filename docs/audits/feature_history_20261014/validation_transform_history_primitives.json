@@ -1,0 +1,77 @@
+{
+  "checkpoint": "U18 — FH-23 checkpoint 1; native movement history primitives",
+  "source_checkpoint": "52de8b12",
+  "date": "2026-10-16",
+  "status": "Focused software checks passed. FH-23 remains open; no new frontend, transform preview host or rollout. Archive-dependent app/performance acceptance remains deferred.",
+  "progress": {
+    "completed": 20, "estimated_total": 38, "remaining": 18,
+    "remaining_core": 9, "remaining_parked": 9,
+    "completed_delta": 0, "total_delta": 0,
+    "engineering_checkpoints_since_B1": 18,
+    "milestones_closed_since_B1": 3,
+    "FH18_checkpoints": 13, "FH18_growth_flag": true,
+    "FH23_checkpoints": 1, "milestone_exit_changed": false
+  },
+  "implemented": [
+    "Shared strict placement, individual nucleotide, nucleotide batch and reset input normalization/binding; existing native history API uses the same selected-row helper.",
+    "Owned fixed-prefix selected-command evaluation using existing native execution. Full source proof and suffix regeneration remain the existing Apply responsibilities.",
+    "Exact authored reference paths for missing/ambiguous owner/member/parent/driver, nucleotide address, repeated batch target and reset transform.",
+    "Reset receipts derive from the selected prefix; explicit contradictory receipts refuse. Extra-base crossover references remain editable without changing output identity rules of other families.",
+    "Successful native replay performs its occupancy check once per requested target. Only exact native missing-target failure is enriched; unrelated errors and CPD constraints retain native semantics.",
+    "Prospective inserted-site bounds and complete ordinary transform prefix roles reuse the shared preview evaluator; no new state registry, route or publication authority.",
+    "Deterministic Sweep test parameter fixes prior multiworker collection mismatch. Existing canonical-seek frontend remains used and is not pruned prematurely."
+  ],
+  "limits": [
+    "FH23 complete DTO/lease/control/gesture integration remains open; complete joint/tether/driver/CPD and ordinary selected-nucleotide matrices are retained.",
+    "Active-organization nucleotide authoring is still refused. Arbitrary newly regrouped-set motion remains the original FH18/FH23 integration and scientific authorization obligation.",
+    "128 commands,16 helices,1024 sites and existing bounded path/operation admission; direct edit input budget256000 bytes/10000 nodes. These bounds and cooperative deadlines are not latency/heap qualification.",
+    "Direct prefix binding still validates slots; the native per-target predicate itself still scans domains/connectors. No general large-batch performance claim.",
+    "Implicit CPD partner failures retain native errors when no authored reference explains them; complete expanded-partner diagnostics are not claimed.",
+    "No numerical builder, pinned identity factory, model, manifest or golden changed. No bulk artifact, browser, native build or scientific simulation started."
+  ],
+  "runs": {
+    "initial_inputs_preview_red": {"failed": 65, "passed": 4, "seconds": 3.25},
+    "initial_references_history_red": {"failed": 12, "passed": 10, "errors": 43, "seconds": 3.46,
+      "note": "Missing reference module plus real API gaps; four history fixtures initially used nonexistent get_revision. Corrected before independent API red rerun."},
+    "history_red_corrected_fixture": {"failed": 8, "passed": 3, "seconds": 2.95},
+    "initial_shared_preview_check": {"failed": 4, "passed": 190, "seconds": 4.73,
+      "note": "Extra-base fixture incorrectly used snapshot containers for minor routing commands. Corrected to actual routing-cluster children; production schemas unchanged."},
+    "occupancy_red": {"failed": 1, "passed": 58, "seconds": 2.97},
+    "reset_receipt_red": {"failed": 2, "passed": 54, "seconds": 2.81},
+    "focused_final": {"passed": 186, "warnings": 8, "seconds": 4.47, "files": [
+      "tests/test_part_transform_inputs.py", "tests/test_part_transform_preview.py",
+      "tests/test_part_transform_history.py", "tests/test_part_transform_references.py",
+      "tests/test_part_recipe_edit.py", "tests/test_part_command_references.py", "tests/test_part_edit_identity.py"]},
+    "shared_preview_host_final": {"passed": 283, "warnings": 6, "seconds": 8.92, "files": [
+      "tests/test_part_deformation_preview.py", "tests/test_part_deformation_preview_dto.py",
+      "tests/test_part_deformation_preview_sessions.py", "tests/test_part_deformation_preview_receipts.py",
+      "tests/test_part_deformation_preview_routes.py", "tests/test_organized_recipe_permit.py",
+      "tests/test_part_publication_permit.py", "tests/test_group_organization_public_gate.py"]},
+    "native_and_evaluation_final": {"passed": 140, "warnings": 83, "seconds": 8.59, "files": [
+      "tests/test_native_annotation_proof.py", "tests/test_native_overlay_proof.py",
+      "tests/test_native_routing_proof.py", "tests/test_group_placement_ui_host.py",
+      "tests/test_nucleotide_transforms.py", "tests/test_part_proof_engine.py",
+      "tests/test_part_evaluation.py", "tests/test_part_evaluation_jobs.py", "tests/test_part_evaluation_session.py"]},
+    "sweep_multiworker_final": {"passed": 40, "seconds": 5.82, "workers": 4,
+      "command": "just test-affected tests/test_part_sweep_preview.py -n auto --dist loadfile --tb=short"},
+    "distinct_final": {"passed": 649, "warnings": 97, "files": 25},
+    "test_smart": {
+      "command": "just test-smart", "decision": "FAST", "executed_tests": 0,
+      "collected_items": 17418, "collection_errors": 7, "warnings": 8, "seconds": 21.88,
+      "errors": ["Four workers cannot import Archive-backed cpd-anti-gpu-longbox-v3/assembly.json", "Three workers disagree on U17 Sweep random import-time UUID parameter ID; corrected and focused multiworker run passes"],
+      "deferred_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\n  This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\n  Only request `just test-session` when a broad/full sweep is actually needed.",
+      "note": "The selector's 'fast suite ran' text is not a pass claim: collection failed before test execution. No broad rerun bypassed unavailable evidence or session guards."
+    },
+    "lint": {"changed_python_files_clean": 13, "repository_existing_F401": 5,
+      "memory_existing_errors": 6, "memory_existing_warnings": 59, "project_memory_lines": 199},
+    "frontend": "Not rerun: no frontend files changed; no app exercise or rollout claim.",
+    "nonruns": ["One quoted -k expression was split by the just wrapper and collected zero tests; replaced with whole relevant file."]
+  },
+  "main_js": {"lines": 7349, "delta": 0},
+  "cleanup": {
+    "deleted_directories": 513, "deleted_symlinks": 4, "deleted_files": 0, "deleted_bytes": 0,
+    "verified_absent": ["/tmp/pytest-of-joshua/pytest-11", "/tmp/pytest-of-joshua/pytest-12", "/tmp/pytest-of-joshua/pytest-13", "/tmp/pytest-of-joshua/pytest-current"],
+    "active_reference_check": "No accessible /proc cwd/root/fd references. Permission-denied processes identified via ps as system/session services; all task trees contained only empty directories and symlinks. Removal refused any ordinary file.",
+    "retained": "Tracked source/tests/compact evidence only. Workspace designs, managed jobs, shared caches, active runtimes and historical artifacts preserved. Pytest retention/fixture cleanup removed earlier temporary output."
+  }
+}

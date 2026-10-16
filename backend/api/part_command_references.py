@@ -15,6 +15,14 @@ def _reference(kind: str, identity: str, path: list[str | int]) -> CommandRefere
 
 def validate_command_references(kind, design, params):
     """Reject missing targets before executing a permissive native builder."""
+    if kind in {"cluster_op", "nucleotide-transform", "nucleotide-transform-batch",
+                "nucleotide-transform-delete"}:
+        from backend.api.part_transform_references import validate_transform_references
+
+        # The native annotation builder already checks all occupied slots before
+        # applying poses. Its exact missing-slot error is enriched at dispatch.
+        validate_transform_references(kind, design, params, validate_slots=False)
+        return
     references = []
     if kind == "nick":
         references = [_reference("helix", params["helix_id"], ["helix_id"])]
