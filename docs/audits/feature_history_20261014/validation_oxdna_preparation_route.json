@@ -1,0 +1,102 @@
+{
+  "date": "2026-10-15",
+  "base_checkpoint": "74ab0827",
+  "scope": "Private disabled owned-input route wiring; no solver execution or complete physical receipt",
+  "initial_tests_first": {
+    "target": "tests/test_oxdna_preparation_route.py",
+    "passed": 10,
+    "failed": 16,
+    "seconds": 3.33,
+    "causes": [
+      "Supported route still obtains legacy live projection",
+      "Real writer thread observes deep live alias mutations",
+      "Missing pre-lineage source/revision/session guard",
+      "Absent request adapter and HTTP refusal translation",
+      "Capture cancellation is not reached"
+    ]
+  },
+  "rollout": {
+    "gate": "OWNED_DNA_PREPARATION_ENABLED",
+    "default": false,
+    "client_override": false,
+    "reason": "Actual capture lock and concurrent HTTP latency remain unqualified"
+  },
+  "baseline_lint": {
+    "errors": 5,
+    "codes": [
+      "F401"
+    ],
+    "files": [
+      "backend/api/vr_prompts.py",
+      "tests/test_cpd_cube_validation_v6.py",
+      "tests/test_cpd_isomer_formation_replay.py",
+      "tests/test_cpd_resume_anti3_v15.py",
+      "tests/test_cpd_resume_control2_v13.py"
+    ],
+    "new_findings": 0
+  },
+  "final_focused": {
+    "passed": 182,
+    "deselected_scientific": 1,
+    "warnings": 100,
+    "seconds": 106.68,
+    "targets": [
+      "tests/test_oxdna_preparation_route.py",
+      "tests/test_oxdna_preparation_capture.py",
+      "tests/test_oxdna_capture_shapes.py",
+      "tests/test_headless_oxdna_build.py",
+      "tests/test_oxdna_staleness.py"
+    ],
+    "new_route_cases": 28
+  },
+  "benchmark": {
+    "evidence": "validation_oxdna_preparation_performance.json",
+    "raw": "benchmark_oxdna_preparation_initial.json",
+    "attempts": 310,
+    "matched_success_pairs": 123,
+    "source_unchanged_checks": 310,
+    "expected_oversized_refusals": 31,
+    "deadline_refusals": 1,
+    "maximum_capture_lock_ms": 68.69254499906674,
+    "maximum_enabled_concurrent_revision_ms": 71.47792799514718,
+    "cleanup_verified": true,
+    "rollout_qualified": false
+  },
+  "broad": {
+    "evidence": "validation_backend_resume.json",
+    "decision": "FAST  (fast suite only)",
+    "passed": 14101,
+    "failed": 9,
+    "errors": 8,
+    "skipped": 11,
+    "seconds": 229.92,
+    "guard_seconds": 240,
+    "new_feature_failures_observed": 0,
+    "per_test_violators": 0,
+    "verdict": "Baseline failures and aggregate timing debt remain; not a broad-suite pass"
+  },
+  "desktop_app": "not exercised",
+  "vr": "explicitly deferred by user",
+  "main_js_loc_delta": 0,
+  "focused_artifact_scope_error": {
+    "cause": "Selecting the entire existing headless file also ran slow integration fixtures, including real oxpy steering, and generated bulk temporary output outside the unavailable Archive mount. This was broader than intended and violated Archive-first output policy.",
+    "root": "/tmp/pytest-of-joshua/pytest-489",
+    "regular_files_removed": 3094,
+    "logical_bytes_removed": 240130873,
+    "active_native_processes_found": false,
+    "current_user_fd_or_mapping_references_found": false,
+    "completed_run_lock_absent": true,
+    "cleanup_verified": true,
+    "user_files_touched": false,
+    "prevention": "Further validation on this machine excludes bulk/native integration fixtures; route-specific tests and new benchmarks use only bounded in-memory fakes. No rerun of that headless slow group without Archive."
+  },
+  "broad_artifact_cleanup": {
+    "root": "/tmp/pytest-of-joshua/pytest-490",
+    "regular_files_removed": 11595,
+    "logical_bytes_removed": 280799261,
+    "active_references_found": false,
+    "cleanup_verified": true,
+    "finding": "The existing FAST suite also writes large local copy/field fixtures (including two27MB trajectory-copy fixtures). This broad invocation also violated the Archive-first storage constraint, despite excluding native slow groups. No new broad run should launch here without mounted Archive scratch or a separately reviewed bounded selection.",
+    "user_files_touched": false
+  }
+}

@@ -98,6 +98,20 @@ def capture_current(options, *, expected_revision=None):
             "The owned model lacks complete packaged-file, solver and attempt input receipts")
 
 
+def capture_for_request(body):
+    """Adapt the reviewed raw request options, preserving explicit unknowns."""
+    options = {name: getattr(body, name) for name in _OPTION_FIELDS}
+    try:
+        captured = capture_current(options)
+    except inputs.CaptureShapeError as error:
+        raise HTTPException(422, detail=str(error)) from error
+    except CommandContractError as error:
+        if error.code != "oxdna_input_capture_limit":
+            raise
+        raise HTTPException(413, detail=error.as_issue()) from error
+    return captured if captured.supported else None
+
+
 def require_current(captured):
     """Guard once before lineage/package side effects, not after later edits."""
     if (type(captured) is not CapturedPreparation or captured._key is not _KEY

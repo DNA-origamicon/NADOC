@@ -1,0 +1,128 @@
+{
+  "kind": "reviewed_oxdna_owned_preparation_diagnostic",
+  "reviewed_date": "2026-10-15",
+  "evidence": {
+    "path": "docs/audits/feature_history_20261014/benchmark_oxdna_preparation_initial.json",
+    "sha256": "5a31fec9b82cdd649cb72eb77d8d874036df5ee2d01ebc8006e06849170d429f",
+    "script": "scripts/benchmark_oxdna_preparation.py",
+    "script_sha256": "497fbddde6049f175abafeffc7d48159ffbcb68d482aa56c67a208401c559867",
+    "execution": "Root ran the existing 31-pair diagnostic; reported exit0. Reviewer parsed existing evidence only, without rerun."
+  },
+  "scope": "Actual HTTP handler and thread handoff; geometry, scientific checks, lineage and writers replaced by bounded in-memory probes.",
+  "integrity": {
+    "internally_consistent": true,
+    "alternating_pairs_checked": 155,
+    "attempts": 310,
+    "http200": 278,
+    "http413": 32,
+    "expected_oversized_refusals": 31,
+    "within_size_history256_deadline_refusals": 1,
+    "unchanged_source_checks": 310,
+    "successful_owned_inputs": 123,
+    "runtime_reported_equal_response_pairs": 123,
+    "disabled_capture_and_guard_calls": 0,
+    "all_refusals_pre_side_effects": true,
+    "recomputed_distributions": [
+      "HTTP",
+      "capture duration",
+      "capture lock hold",
+      "concurrent light HTTP"
+    ],
+    "gc_capacity_per_case": 4096,
+    "gc_observed_events": 286,
+    "gc_dropped_events": 0,
+    "cleanup_verified": true,
+    "natural_gc": true,
+    "forced_collections": 0,
+    "retries": 0
+  },
+  "enabled_case_metrics_ms": [
+    {
+      "case": "tiny",
+      "successful": 31,
+      "refused": 0,
+      "capture_p95": 0.821855,
+      "capture_lock_p95": 0.814627,
+      "capture_lock_max": 1.166148,
+      "light_http_p95": 3.381562,
+      "light_http_max": 4.047217,
+      "matched_success_http_delta_median": 0.81588
+    },
+    {
+      "case": "history-64",
+      "successful": 31,
+      "refused": 0,
+      "capture_p95": 3.987088,
+      "capture_lock_p95": 3.980825,
+      "capture_lock_max": 5.218183,
+      "light_http_p95": 6.700489,
+      "light_http_max": 7.518971,
+      "matched_success_http_delta_median": 3.805642
+    },
+    {
+      "case": "history-256",
+      "successful": 30,
+      "refused": 1,
+      "capture_p95": 16.005879,
+      "capture_lock_p95": 15.994412,
+      "capture_lock_max": 68.692545,
+      "light_http_p95": 18.437235,
+      "light_http_max": 71.477928,
+      "matched_success_http_delta_median": 13.59977
+    },
+    {
+      "case": "opaque-recovery-near-8MB",
+      "successful": 31,
+      "refused": 0,
+      "capture_p95": 0.933922,
+      "capture_lock_p95": 0.928718,
+      "capture_lock_max": 0.996748,
+      "light_http_p95": 3.535738,
+      "light_http_max": 3.629111,
+      "matched_success_http_delta_median": 0.820699
+    },
+    {
+      "case": "opaque-recovery-over-8MB",
+      "successful": 0,
+      "refused": 31,
+      "capture_p95": 0.529691,
+      "capture_lock_p95": 0.524198,
+      "capture_lock_max": 0.552914,
+      "light_http_p95": 2.612609,
+      "light_http_max": 2.644407,
+      "matched_success_http_delta_median": null
+    }
+  ],
+  "history256_outlier": {
+    "pair": 7,
+    "http_status": 413,
+    "code": "oxdna_input_capture_limit",
+    "http_ms": 71.207541,
+    "capture_ms": 68.703434,
+    "capture_lock_hold_ms": 68.692545,
+    "source_revision_http_ms": 71.477928,
+    "capture_overlapping_requests": 1,
+    "gc_post_overlap_ms": 55.834843,
+    "gc_generations": [
+      1,
+      2
+    ],
+    "effects": {},
+    "source_unchanged": true
+  },
+  "decision": {
+    "private_gate_enabled": false,
+    "rollout_qualified": false,
+    "physical_receipts_complete": false,
+    "reason": "The bounded capture refuses safely, but cooperative timing does not cap wall-clock lock occupation; the observed history256 GC-correlated stall remains a responsiveness risk."
+  },
+  "limits_of_evidence": [
+    "No actual geometry, package serialization, solver, artifact I/O, simulation freshness or native feature proof is measured.",
+    "Near8MB recovery is one real ASCII string: deepcopy can share immutable string storage. This does not qualify arbitrary archival shapes or serialization cost.",
+    "GC overlap is recorded for the POST interval; the raw report does not retain exact GC/lock timestamps to establish per-lock causation.",
+    "Concurrent read submission includes ASGI/GIL delay; tiny measured lock wait does not imply low user-observed latency.",
+    "Response and input equality are runtime oracle results; full responses/models were intentionally not copied into the evidence artifact.",
+    "Successful-pair deltas exclude32 refused enabled attempts; refusal samples remain in per-arm latency distributions.",
+    "A diagnostic exit0 certifies harness checks/cleanup, not a latency ceiling or permission to enable the gate."
+  ]
+}

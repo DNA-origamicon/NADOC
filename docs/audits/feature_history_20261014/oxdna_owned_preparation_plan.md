@@ -1,9 +1,9 @@
 # Owned local DNA oxDNA preparation input
 
-Bounded core/host implementation, 2026-10-15; route integration remains pending.
-No solver execution, scientific formula change or complete input receipt is part
-of this slice. The live route remains unchanged until integration is reviewed
-and tested. VR/headset validation is deferred to a capable-machine session.
+Bounded core/host implementation, 2026-10-15; private route integration is now
+under tests-first validation. No solver execution, scientific formula change or
+complete input receipt is part of this slice. A server-owned rollout constant
+remains false pending route correctness and measured capture/HTTP qualification. VR/headset validation is deferred to a capable-machine session.
 
 ## Current validation state
 
@@ -176,6 +176,46 @@ settings/start coordination, restart-file identity and solver provenance remain
 the next independently testable checkpoints described in
 `physical_freshness_plan.md`.
 
-New route test work is held until the frozen backend regression run finishes;
-the integration assertions above remain the finite next step. No claim is made
-that this unused boundary has fixed threaded live-route source aliasing yet.
+The resumed non-VR backend runs are recorded in `validation_backend_resume.json`.
+Route tests first reproduced the live alias leak in an actual writer thread,
+missing stale/session guards and missing capture error handling: 16 failed,
+10 passed. Two additional checks cover the default-disabled gate and actual
+reference filtering while retaining full archival metadata.
+
+The private route constant `OWNED_DNA_PREPARATION_ENABLED` selects the new path
+only when enabled by the host. While false, no capture import, request-option
+construction, additional state lock or classification occurs. Enabled requests
+adapt the exact nine raw options through `capture_for_request` in the existing
+host module. Only explicit unsupported classification chooses the compatibility
+path. Header/identity errors remain 422; the known capture-limit code becomes
+structured 413; unknown errors and cancellation propagate without fallback.
+Unreviewed nested shapes retain their existing explicit unsupported contract.
+
+The retained capture, rather than a second rollout-flag read, controls the final
+source guard immediately before lineage. A flag change alone is not a new
+revocation protocol; a simultaneous revision change still must be rejected.
+After acceptance, later edits may leave a job tied to an older source revision.
+That lineage fact does not by itself prove stale consumed physical inputs.
+No complete physical receipt is emitted, and the unsupported compatibility path's
+aliasing risk remains outside this qualification. See
+`validation_oxdna_preparation_route.json` for actual focused and benchmark status.
+
+
+## Private integration result
+
+The 28 new route cases pass together with existing capture/headless/staleness
+regressions: 182 passed, one scientific campaign deselected. The initial 16 red
+cases became green without modifying numerical algorithms or physical evidence.
+Reference geometry is filtered on the owned copy; retained history, annotations
+and presentation remain independent. Both initial and final lifecycle guards
+leave ordinary live state untouched.
+
+The first HTTP diagnostic completed 31 alternating pairs per case with natural
+GC, 310 correct attempts, 123 equal successful A/B responses and verified cleanup.
+One 256-row capture refused at its unchanged time bound; its lock interval reached
+68.69 ms, concurrent revision HTTP 71.48 ms, and POST-overlapping GC 55.83 ms.
+The 31 intentionally oversized recovery inputs refused before side effects.
+This supports retaining the false rollout gate, not increasing capture budgets
+or silently retrying through compatibility after a capture failure. Actual
+geometry/package I/O, peak memory and larger model families remain unqualified.
+See `validation_oxdna_preparation_performance.json` for scope and raw evidence.

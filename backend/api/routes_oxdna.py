@@ -112,6 +112,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["oxdna"])
 
+# Private diagnostic gate; ordinary preparation retains its current path.
+OWNED_DNA_PREPARATION_ENABLED = False
+
 # Schema version for the cached simulation-surface payload. v2 added the per-vertex
 # identity tables (vertex_strand_index* / vertex_nuc_index*) that per-cluster colour and
 # opacity resolve against.
@@ -847,7 +850,12 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
             "oxDNA binary not found. Set $OXDNA_BIN or install to ~/oxDNA/build/bin/oxDNA.",
         )
 
-    design = design_state.get_or_404().without_reference_geometry()
+    captured_input = None
+    if OWNED_DNA_PREPARATION_ENABLED:
+        from backend.api import oxdna_preparation_capture
+        captured_input = oxdna_preparation_capture.capture_for_request(body)
+    design = (captured_input.design if captured_input is not None
+              else design_state.get_or_404().without_reference_geometry())
     from backend.core.streptavidin import require_coating_simulation_support
     try:
         from backend.physics.oxdna_mobile_gold import has_mobile_gold
@@ -1064,6 +1072,8 @@ async def create_oxdna_job(body: CreateOxdnaJobRequest) -> dict:
     )
     from backend.core.project_revisions import record_simulation_revision
 
+    if captured_input is not None:
+        oxdna_preparation_capture.require_current(captured_input)
     provenance = record_simulation_revision(_workspace(), design, "oxdna", job.job_id)
     job.project_id = provenance.project_id
     job.design_revision_id = provenance.revision_id

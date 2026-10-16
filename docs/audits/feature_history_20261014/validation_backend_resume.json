@@ -174,5 +174,23 @@
       },
       "independent_static_review": "Both cases perform real native pipelines, edits and two spawned proof lifecycles; no accidental sleep, retry or leak found."
     }
+  },
+  "final_after_route_integration": {
+    "base_checkpoint": "74ab0827",
+    "decision": "FAST  (fast suite only)",
+    "passed": 14101,
+    "failed": 9,
+    "errors": 8,
+    "skipped": 11,
+    "warnings": 2653,
+    "pytest_seconds": 229.92,
+    "guard_seconds": 240,
+    "exit_code": 1,
+    "same_baseline_failures": true,
+    "new_feature_failures_observed": 0,
+    "timing_evidence": "backend_resume_final_timing.json",
+    "per_test_violators": 0,
+    "aggregate_backstop_seconds": 90,
+    "aggregate_triage": "Costs remain distributed across over14,000cases, led by existing oxDNA mock orchestration, cluster-join APIs and headless workflows. No new common sleep/probe/stall identified; no arbitrary further reclassification or budget increase. Aggregate suite debt remains."
   }
 }

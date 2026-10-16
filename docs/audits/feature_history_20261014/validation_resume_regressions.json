@@ -94,9 +94,9 @@
         "namd"
       ]
     },
-    "broad_budget_recheck": "Two resumed non-VR FAST runs completed; all failures match retained baseline. Durable-creation and connectivity integration cases classified slow/headless, focused passed and collection verified; final zero-violator check pending. See validation_backend_resume.json."
+    "broad_budget_recheck": "Final non-VR FAST:14,101passes,9baseline failures,8baseline errors,zero per-test violators,229.92s pytest/240sguard. Aggregate existing suite-cost debt persists; no budget changes. See validation_backend_resume.json."
   },
-  "remaining_regression_debt": "Latest non-VR FAST:14,075passes,9baseline failures,8baseline errors. Full slow suite, app and environment/scientific baseline debt remain; VR explicitly deferred. See validation_backend_resume.json.",
+  "remaining_regression_debt": "Non-VR FAST baseline failures and aggregate timing remain; no new feature failures observed. Full slow suite, desktop app and environment/scientific baseline debt remain; VR explicitly deferred.",
   "repair_cleanup": {
     "change": "Remove the duplicate command_rows(source, 2000) traversal from private _definitions; sole production caller prepare_repair retains initial source admission and post-plan enumeration",
     "validation": {

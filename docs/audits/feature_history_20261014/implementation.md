@@ -17,7 +17,7 @@ regression debt are recorded in [the checkpoint evidence](validation_pause_check
 | P1 | Standard-part recording transactions, executable replay registry and evidenced cleanup | Foundation implemented below. Retain legacy callbacks and compatibility recovery; no claim of general isolated evaluation |
 | P2 | Explicit recipe roots/versions, authoritative-field classification, read-only verification and incremental dependencies | Implementation exit checks complete: independent nonempty replay, content-pinned roots, typed dependencies, fingerprints, bounded capture/jobs and stale/cancel handling. Supported-family expansion continues in P3/P4; validation debt below remains explicit |
 | P3 | Native DNA command families and generated construction | DNA implementation exit checks recorded below, including joined/connectivity input compilation and bounded native-source CPD conversion/relaxation. Registered kinds retain method/action restrictions; their count is not universal operation coverage. Generated asset/attachment histories remain in P4 |
-| P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol, pinned small protein/catalog/aptamer inputs, supported protein conjugation and duplex lifecycle/relaxation implemented. Pending NP and ordinary overhang connection contracts pass independent replay. Bounded applied NP lifecycle/rename and finite ordinary linker Apply/reapply are implemented; ordinary applied-route migration and performance qualification remain open. Private owned oxDNA preparation capture passes focused checks but is not wired to the live route. Full import/attachment coverage and complete physical-input receipts remain open |
+| P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol, pinned small protein/catalog/aptamer inputs, supported protein conjugation and duplex lifecycle/relaxation implemented. Pending NP and ordinary overhang connection contracts pass independent replay. Bounded applied NP lifecycle/rename and finite ordinary linker Apply/reapply are implemented; ordinary applied-route migration and performance qualification remain open. Owned oxDNA preparation is wired behind a default-disabled host gate; 182 focused cases pass, with live capture/HTTP responsiveness still under qualification. Full import/attachment coverage and complete physical-input receipts remain open |
 | P5 | Standard-part repair, drafts, desktop and part-mode VR | Saved draft evaluation/apply, reference selection, source staging/restoration and persistence pass. Desktop UI-1 and narrow invalid-gold repair pass. Private gold/QD/free-protein and complete DNA comparisons pass automated checks; broader invalid-family selectors and desktop app review remain open. VR/headset validation is explicitly deferred to a later capable-machine session |
 | P6 | Strict standard-part agent transactions and legacy retirement | Private policy/permits, closed strict HTTP dispatch, immutable internal ownership and outside-lock evaluation/publication pass. Atomic typed records and pending-safe autosave pass. Cold-qualified recovery and durable initial creation pass focused lifecycle checks. Private byte transport now moves source decode/projection into the admitted worker; public immutable creation/batch stay disabled pending responsiveness and memory qualification. Catalog expansion, explicit imports and later replay reuse remain open |
 
@@ -129,10 +129,32 @@ slow/headless, with its lightweight fault siblings kept fast. The timing recheck
 passed 14,075 cases with the same baseline failures/errors; a 5.04-second native
 connectivity pipeline identified its two-case module as genuine integration work
 (two cold workers per case). Both still pass focused checks (9.97 seconds), and
-slow collection retains them. The final zero-violator check remains pending. See
+slow collection retains them. The final non-VR FAST run passes 14,101 cases with the same nine baseline failures
+and eight errors, zero individual timing violators, and 229.92 seconds pytest /
+240 seconds guard time. Aggregate suite timing remains over its backstop; the
+existing distributed costs do not justify further arbitrary reclassification. See
 [backend evidence](validation_backend_resume.json) for timing triage and the
 verbatim FULL deferral. Archive, live app and browser validation remain unavailable;
 VR validation is explicitly deferred by the user.
+
+Private oxDNA routing now captures one owned reference-filtered archive for all
+preparation consumers and rechecks its source immediately before lineage. The
+new 28 route cases include actual writer-thread alias mutation, reference
+filtering, stale/session races, cancellation and compatible scientific guards;
+182 focused/regression cases pass. The default-disabled route benchmark passed
+310 correctness/isolation checks and 123 equal successful response pairs, but a
+256-row history captured during major-GC overlap refused after a 68.69 ms lock
+hold; a concurrent read reached 71.48 ms. Keep the rollout gate false. See
+[route validation](validation_oxdna_preparation_route.json) and
+[HTTP measurements](validation_oxdna_preparation_performance.json).
+
+The existing whole headless regression file and FAST sweep produced bulk test
+fixtures outside Archive, contrary to the storage constraint. All 14,689 regular
+files in those two completed pytest roots were inventoried, checked for active
+references and removed (520,930,134 logical bytes); no user designs/jobs were
+touched. Further bulk/native integration and broad sweeps here require mounted
+Archive scratch or a separately reviewed bounded selection. New route tests and
+diagnostic benchmarks use in-memory substitutes with no package files.
 
 The natural-GC shared-capture A/B diagnostic compared 186 alternating pairs on
 six in-memory sources. All 371 successful captures matched completely and all
