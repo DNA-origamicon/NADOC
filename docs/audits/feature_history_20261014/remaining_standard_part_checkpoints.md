@@ -14,6 +14,12 @@ agreed; do not invent historical estimate deltas. This is a milestone estimate,
 not a count of messages/commits or a percentage of time or user-ready features.
 Core estimates have moderate confidence; parked work has lower confidence.
 
+Keep delivery and effort visible separately: **11 engineering checkpoints have
+been delivered since B1 (U1–U11), closing one additional milestone**. Nine of
+those checkpoints were spent on still-open FH-18. The 38 is an estimate of
+deliverable milestones, not a promise of 38 commits or assistant responses;
+the nine-checkpoint effort must not disappear behind the unchanged denominator.
+
 One counted update is a named, reviewable milestone with a fixed exit. Completed
 implementation foundations below have scoped tests/evidence; some remain gated.
 Their outstanding desktop, performance and rollout exits are explicitly included
@@ -132,6 +138,45 @@ bound their matrices before implementation rather than expanding them indefinite
 | U10 · 2026-10-16 | FH-18 checkpoint 8: passive native resize/domain-shift contributor tracking, complete observed-material checks and private Fine Routing reconstruction; [evidence](validation_group_resize_lineage.json) | None; remaining consumer/repair/UI migration, rollout and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** eight checkpoints on unfinished FH-18. The bounded two-command batch is implemented; no new milestone, exit or estimate. |
 | U11 · 2026-10-16 | FH-18 checkpoint 9: named bend/twist preview, explicit reference repair, historical frozen-range display and guarded host Apply/repair commit; [evidence](validation_named_deformation_lifecycle.json) | None; generated consumers, visible Groups/Placements, new-group movement and rollout remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** nine checkpoints on unfinished FH-18. Completes the promised named-selection integration within B/C, with no new milestone or weakened exit. |
 
+### Sequencing review after U11 — no engineering credit
+
+The remaining consumer audit found a reason to change the **order**, not the
+scope or count. `GeneratedHistory` is constructed by `build_recorded`, which
+calls `two_np_build.materialize`; the public generator is the gold-nanoparticle
+workflow. Ordinary part batches/recipes do not emit `_generated_scope`.
+However, `part_branch_commands` and `part_section_commands` also use the shared
+scope merge helper. Thus neither deleting that helper nor calling all its users
+parked NP code is justified. Native branch/section and visible pattern behavior
+remain in the consumer inventory. See the [caller audit and next delivery](group_placement_migration_plan.md#post-u11-caller-audit-and-next-delivery).
+
+Next implement the actual Groups/Placements UI and its complete selection,
+style, visibility, deformation and commit adapters. Do not first build an unused
+v3 compiler without an invoking core workflow. Preserve existing generated
+recipes and the explicit refusal for unsupported active-organization composition.
+The generated-consumer exit remains open in FH-18; NP orchestration is addressed
+after the prioritized visible core path. No unfinished core work is silently
+reassigned to FH-36, and no milestone is closed by this sequencing review.
+
+The new-group movement/frame contract remains a separate required integration
+exit: an arbitrary group must not be mapped to a coincident placement ID or the
+first overlapping placement. Existing placement selection is explicit. The
+current sequential gizmo commit also needs refusal/partial-result handling
+before it can be used by the new UI. Scientific placement changes still require
+the demonstrated A/B authorization process; metadata changes do not waive it.
+
+**18/38 complete; 20 remaining (11 core, 9 parked); +0 completed, +0 total.**
+FH-18 still has **nine** engineering checkpoints and remains flagged for growth.
+This read-only audit/planning update is not U12. The original five batches and
+full exit stand; next engineering delivery must report its actual contribution,
+remaining exit and checkpoint spend against the same IDs.
+
+Documentation checks: 38 unique milestone IDs, 18 completed rows, 11 remaining
+core rows, nine parked rows and 11 engineering-update rows agree; local linked
+files exist and `git diff --check` passes. Independent scope review accepted the
+unchanged exits. No software tests/app checks were run for this documentation-only
+review. Memory lint retains its existing six errors and 59 warnings, none in the
+updated project head.
+
 ### FH-18 containment update — U11
 
 The named-selection adapter now spans private native preview, complete comparison
@@ -142,8 +187,9 @@ prefix. Numerical placement owners remain separate and unchanged.
 
 This is one integrated checkpoint, not separate credit for UI, worker, permit,
 test or DTO changes. The same five batches and original exit remain. The next
-bounded work is the remaining generated-consumer inventory, followed by visible
-Groups/Placements and new-group motion/frame semantics. Their desktop/latency and
+bounded work was the remaining generated-consumer inventory. The caller audit
+above puts visible Groups/Placements next, retaining generated consumers and
+new-group motion/frame semantics as open exits. Their desktop/latency and
 rollout acceptance stays open; both public gates remain false. ISSUE-108 remains
 open. No new scientific behavior or numerical compatibility transition is needed.
 

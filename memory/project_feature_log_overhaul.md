@@ -22,6 +22,9 @@ decrement completed if an exit reopens. Flag three major checkpoints spent on
 any still-open milestone (cumulative even across alternating work), or total
 growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
+Effort is separate: U1–U11 are 11 engineering checkpoints since B1, closing one
+additional milestone; nine went to still-open FH-18. The unchanged 38 is not an
+estimate of commits/messages. The post-U11 source/sequence audit earns no credit.
 Engineering update U2 closed **FH-19 after two checkpoints**. Current
 counts are **18 / 38 complete, 20 remaining (11 core, 9 parked)**, delta
 for latest update U11 **+0 completed, +0 total**. U11 is **FH-18 checkpoint 9**:
@@ -122,8 +125,13 @@ and ordinary controls must agree. Nanoparticle/protein/assets and their remainin
 benchmarks are parked; ordinary DNA connections are core. Assemblies and VR
 remain separately deferred. The persistent P3–P6 goal stays active.
 
-Next: remaining generated consumers, then visible Groups/Placements and new-group
-movement/frame semantics within the original five batches. Partial named scopes
+Next: visible Groups/Placements with complete selection/style/visibility,
+ordinary deformation and guarded placement-commit adapters, then remaining
+generated consumers and new-group movement/frame semantics. The [post-U11 caller audit](../docs/audits/feature_history_20261014/group_placement_migration_plan.md#post-u11-caller-audit-and-next-delivery)
+found no ordinary core caller needing a new generic scope compiler first.
+GeneratedHistory serves NP orchestration; shared merge also serves branch/section
+commands. Keep generated compatibility explicitly open in FH-18, not silently
+transferred to FH-36. No tenth engineering checkpoint or exit change. Partial named scopes
 cannot use the existing whole-helix loop/skip planner. U11 qualifies historical
 frozen range display; current axis/membership validation stays strict. Do not
 enable organization until B/C/D adapters and E's applicable checks pass.

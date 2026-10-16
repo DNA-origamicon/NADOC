@@ -92,7 +92,7 @@ occurrence, since several names also refer to compute clusters.
 | `backend/core/part_deformation_edit.py`, `backend/api/routes_deformation.py`, `routes_loop_skip.py`, preview evaluator/DTO | Group selection resolves through the new organizational collection into fixed native target membership. Keep numerical placement/frame context separate from group-picker provenance. In particular, `DeformationOp.cluster_ids` is also read during endpoint fitting; it cannot simply be replaced with new organization IDs. |
 | `backend/core/feature_history_clusters.py`, `cluster_join_history.py`, pattern recovery and `backend/api/crud.py` seek | Distinguish organization lifetime from placement lifetime. Dissolving organization must not remove, resurrect or reapply a placement. Cover ordinary/optimized/F0 seek and same-ID recreation; do not decode more history or run geometry merely to classify the regime. |
 | Proof/recipe/generated producers, repair metadata, capture/worker schemas and strict batch scope | Register explicit new versions/resources, transport all organization inputs, and preserve old versions. Unknown new roles fail closed. A document carrying new organization state must not receive a complete proof after that state was ignored. Generated authoring must not silently keep producing old group semantics in the new regime. |
-| `frontend/src/ui/cluster_panel.js`, group style/selection helpers, `scene/cluster_gizmo.js`, `move_rotate_panel.js`, Join/joint tools | Group lists/picking/style read organization; placement editing reads visible placement owners. Restore selection across response/undo/load without confusing equal string IDs in different namespaces. Preserve existing controls; no monolithic `main.js` implementation. |
+| `frontend/src/ui/cluster_panel.js`, group style/selection helpers, `scene/cluster_gizmo.js`, `scene/move_rotate_panel.js`, Join/joint tools | Group lists/picking/style read organization; placement editing reads visible placement owners. Restore selection across response/undo/load without confusing equal string IDs in different namespaces. Preserve existing controls; no monolithic `main.js` implementation. |
 | Bend/twist popup/editor, isolated preview controls and render input validation | Show organizational choices, retain explicit native scope/frame context and exact untouched inputs. Update closed DTO validators together. No canonical preview mutations or quiet enablement of currently gated preview/comparison features. |
 
 ### The nontrivial new-move boundary
@@ -111,6 +111,76 @@ the required group-move matrix before changing this boundary; a mismatch remains
 an explicit FH-18/FH-23 integration exit, not a reason to hide a carrier or claim
 full closure. Any necessary generalization of frame/extension consumption is a
 separately demonstrated scientific change, not a schema-only compatibility edge.
+
+### Post-U11 caller audit and next delivery
+
+Read-only source review at `2fbee2d7`, with independent architecture and UI
+reviews. No production behavior, numerical contract, gate or test changed.
+This is planning evidence, not a tenth FH-18 engineering checkpoint.
+
+`backend/api/generated_history.py::build_recorded` is the only production
+constructor of `GeneratedHistory` and invokes `two_np_build.materialize`.
+`routes_generate_design.py` exposes that gold-nanoparticle workflow. Branch,
+joined-section and connectivity generation feed it. Ordinary `part_batch*`
+and `part_recipe*` do not emit `_generated_scope`. The generic merge helper also
+serves `part_branch_commands.py` and `part_section_commands.py`, so its lifecycle
+cannot be classified as exclusively NP or pruned as unused. The audit found no
+ordinary extrude, sweep, bend/twist, move/rotate or Fine Routing caller requiring
+a new generated-scope compiler before the visible core work.
+
+**Sequence D next**, then the unresolved B/C consumer and movement obligations,
+then E qualification. Existing generated prefixes retain v1/v2 meaning; active
+organization composition keeps its explicit refusal until qualified. Generated
+compatibility stays an open FH-18 exit, not a silent transfer to parked FH-36.
+Ordinary linear/circular patterns are separate visible tools and remain in the
+core consumer inventory. Do not expand the NP planner or add an unused compiler
+ahead of a concrete standard-tool caller.
+
+The next visible delivery must cover the following connected paths, rather than
+only changing the sidebar label or array:
+
+| User action / caller | Required integration and fixed evidence |
+|---|---|
+| Explicit conversion and group edits: `ui/cluster_panel.js`, `api/client.js`, `routes_part_group_organization.py` | Use the existing revision-checked command host and shared response adoption. Conversion supplies the complete ordered placement-ID expectation. No load-time conversion or public gate change. |
+| Select Groups versus Placements: `scene/selection_ref.js`, `selection_model.js`, `selection_manager.js`, sidebar wiring in `main.js` | A typed `part_group` selection resolves organization only; `cluster` remains placement. Reconcile selection/highlights/labels after response, undo and load. Equal text IDs must not cross namespaces. Keep placements visible in numerical order, including empty frame owners. |
+| Create, regroup, rename, style and dissolve: sidebar and `selection_manager.js` context menu | Both entry points use organizational membership and the owned commands. Show dependency failures; retain canonical state on refusal. Preserve select/highlight, membership editing, color, opacity and hide controls. |
+| Scene style and visibility: `scene/cluster_entries.js`, `helix_renderer/palette.js`, `color_util.js`, `visibility_controller.js` | Share one organization membership adapter; domain selection must not inherit the legacy mixed-placement interpretation. Preserve color precedence, minimum overlapping opacity and visibility union. Define a separate hidden-group identity/persistence path; do not reinterpret `hidden_cluster_ids`. Legacy absent organization retains its existing behavior. |
+| Ordinary Bend/Twist: `scene/deformation_targets.js`, `deformation_tool_launcher.js` | Carry named organization selection through the ordinary launcher. Keep numerical placement/frame context separate. U11's private history support alone does not cover this entry point. |
+| Existing placement motion: `scene/translate_rotate_tool.js`, `cluster_gizmo.js`, `move_rotate_panel.js` and subscriptions | Explicit placement selection retains XYZ/Euler, local/global axes, snap, joints, duplex pivot and Apply/Cancel/Reset. A newly regrouped set must not fall through the first-overlapping-placement heuristic. |
+
+The commit path needs a pinned failure regression before adaptation:
+`cluster_gizmo.commitPendingTransforms` awaits sequential `patchCluster` calls,
+does not inspect null responses and then clears all pending transforms. The client
+can return null on a failed request. Qualify refused/stale and partially accepted
+results, retry/cancel behavior, source ownership and pending-state preservation;
+do not describe this existing sequence as one atomic multi-placement transaction.
+This is a source-audit finding, not an executed reproduction or completed fix.
+
+Acceptance covers explicit conversion → posed dissolve → regroup with unchanged
+native output; same-text group/placement IDs; empty, overlapping and domain-backed
+groups; scene style/visibility adoption; both sidebar and context-menu edits;
+ordinary named Bend/Twist; explicit placement motion; failure/stale/document-change
+paths; undo, reload and cold replay. New-group motion still needs the distinct
+ownership/frame matrix above. Editing an old placement cannot close that exit.
+No per-frame history walk, proof or new molecular calculation belongs in this UI.
+Full desktop/latency evidence remains FH-27; Archive availability and the public
+gates remain release constraints, not evidence that the UI works.
+
+For the later generated-consumer work, retain the audited hazards: untyped v1/v2
+input IDs may coincide across resource families; nested organization needs explicit
+extraction/merge; outside groups can retain a strand ID while domain ordinals
+change; frozen deformation addresses are historical provenance, not live primitive
+dependencies. A proposed v3 must preserve old-version meaning and establish
+explicit complete ownership or validated lineage before native topology work.
+No v3 format or ownership policy is approved by this planning review. The 25
+qualified core commands alone do not qualify all generated producers; the latter
+also contain branch/section routing, auto-scaffold, autostaple, constraints,
+curvature, budget fitting and numerical placement/Join operations.
+
+**18/38 complete; +0 completed, +0 total; FH-18 remains at nine checkpoints.**
+Its growth flag, original five batches and full exit remain. Each subsequent
+implementation must name the actual user action/caller it completes and the
+remaining exit, so supporting infrastructure does not obscure unfinished work.
 
 ## History, authority and numerical compatibility
 
