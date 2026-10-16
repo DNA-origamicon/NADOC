@@ -1,0 +1,64 @@
+{
+  "date": "2026-10-15",
+  "scope": "Private native Full DNA comparison renderer and explicit closed DTO response serialization",
+  "executor": "root, serialized focused validation",
+  "first_focused": {
+    "passed": 193,
+    "failed": 6,
+    "seconds": 3.79
+  },
+  "failures": {
+    "obsolete_constructor_regex": 5,
+    "shared_template_metadata_alias": 1
+  },
+  "correction": "ISSUE-93 detaches private clone userData; replaces obsolete constructor-text assertions with complete buffer behavior and ordinary-scene survival checks",
+  "focused": {
+    "files": 11,
+    "passed": 195,
+    "seconds": 3.97
+  },
+  "python_node_and_http": {
+    "passed": 3,
+    "seconds": 3.13,
+    "native_packets": 16,
+    "exact_native_matrix_packets": 14,
+    "explicit_unrepresented_ligation_refusals": 2,
+    "closed_serialization_versions": [
+      1,
+      2
+    ]
+  },
+  "full_frontend": {
+    "command": "just test-frontend",
+    "files_passed": 717,
+    "passed": 8291,
+    "skipped": 1,
+    "seconds": 314.43
+  },
+  "cpu_resource_benchmark": {
+    "report": "benchmark_dna_comparison_scene_memory_initial.json",
+    "cases": 9,
+    "repeats": 9,
+    "cleanup_and_source_preservation": true,
+    "node_max_rss_kib": 153428,
+    "limitation": "Explicit GC before/after iterations; memory diagnostic only. Natural-GC latency run pending."
+  },
+  "actual_http_latency_benchmark": {
+    "report": "benchmark_dna_comparison_serialized.json",
+    "http_200": 9,
+    "light_request_max_ms": 16.4635300025,
+    "previous_light_request_max_ms": 165.582809,
+    "capture_lock_max_ms": 2.7594659987,
+    "source_candidate_and_cleanup_verified": true,
+    "qualification": "Measured response stall corrected in these cases; not GPU/app or universal responsiveness qualification"
+  },
+  "public_dna_gate_enabled": false,
+  "main_js_delta": 0,
+  "app_status": "NOT VERIFIED IN APP",
+  "manual_validation_debt": "MV-47",
+  "limits": [
+    "No GPU/app/native VR qualification",
+    "No source coordinates or numerical placement formulas changed",
+    "Default comparison version remains one until explicit qualification"
+  ]
+}

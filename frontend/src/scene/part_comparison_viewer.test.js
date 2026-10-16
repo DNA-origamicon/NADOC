@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
 import { buildPartComparisonScene, initPartComparisonViewer } from './part_comparison_viewer.js'
 import { comparisonBinding, comparisonEnvelope } from '../test-helpers/part_comparison.js'
+import { dnaEnvelope } from '../test-helpers/part_dna_comparison.js'
 
 const owned = vi.hoisted(() => ({ renderers: [], controls: [], observers: [] }))
 vi.mock('three', async importOriginal => {
@@ -34,8 +35,8 @@ function host() {
   return element
 }
 function build(pane) { const result = buildPartComparisonScene(pane); scenes.push(result); return result }
-function open(element = host(), packet = comparisonEnvelope()) {
-  const result = initPartComparisonViewer(element, packet, comparisonBinding()); viewers.push(result); return result
+function open(element = host(), packet = comparisonEnvelope(), binding = comparisonBinding()) {
+  const result = initPartComparisonViewer(element, packet, binding); viewers.push(result); return result
 }
 
 beforeEach(() => {
@@ -94,6 +95,33 @@ describe('owned coarse authored geometry', () => {
 })
 
 describe('static comparison viewport ownership', () => {
+  it('composes native DNA and existing asset layers in both private panes without a second context', () => {
+    const packet = dnaEnvelope(), original = JSON.stringify(packet)
+    const viewer = open(host(), packet, { ...comparisonBinding(), projectionVersion: 2 })
+    const rendered = owned.renderers[0].render.mock.calls
+    expect(rendered).toHaveLength(2)
+    for (const [scene] of rendered) {
+      expect(scene.getObjectByName('privateDnaComparison')).toBeTruthy()
+      expect(geometries(scene).some(mesh => mesh.userData.nanoparticleId === 'gold')).toBe(true)
+    }
+    expect(owned.renderers).toHaveLength(1)
+    expect(JSON.stringify(packet)).toBe(original)
+    viewer.dispose()
+    for (const [scene] of rendered) expect(scene.children).toHaveLength(0)
+  })
+
+  it('cleans the first DNA pane if the second has an unrepresented native connection', () => {
+    const packet = dnaEnvelope()
+    packet.proposed.dna.display_topology.forced_ligations = [{ id: 'f', three_prime_helix_id: 'h', three_prime_bp: 0,
+      three_prime_direction: 'FORWARD', five_prime_helix_id: 'h', five_prime_bp: 0,
+      five_prime_direction: 'FORWARD', extra_bases: null, is_periodic_seam: false }]
+    const disposed = vi.spyOn(THREE.Material.prototype, 'dispose')
+    expect(() => open(host(), packet, { ...comparisonBinding(), projectionVersion: 2 })).toThrow(/authored ligation/)
+    expect(owned.renderers).toHaveLength(0)
+    expect(disposed).toHaveBeenCalled()
+    expect(document.querySelectorAll('canvas')).toHaveLength(0)
+  })
+
   it('uses one GPU context and two scenes with a shared camera and frame, rendering only on demand', () => {
     open()
     expect(owned.renderers).toHaveLength(1); expect(owned.controls).toHaveLength(1)

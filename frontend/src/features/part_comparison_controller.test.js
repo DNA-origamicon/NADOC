@@ -2,16 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPartComparisonController } from './part_comparison_controller.js'
 import { RepairRequestError } from '../api/part_repair_endpoints.js'
 import { comparisonEnvelope, deferredComparison, readyRepairState } from '../test-helpers/part_comparison.js'
+import { dnaEnvelope } from '../test-helpers/part_dna_comparison.js'
 
 const controllers = []
-function setup() {
+function setup(options = {}) {
   let current = readyRepairState(), elapsed = 0
   const listeners = new Set(), events = new EventTarget()
   const repair = { getState: () => current,
     subscribe: fn => { listeners.add(fn); fn(current); return () => listeners.delete(fn) },
     cancel: vi.fn(), apply: vi.fn(), evaluate: vi.fn(), poll: vi.fn() }
   const api = { compare: vi.fn(async () => comparisonEnvelope()), acknowledge: vi.fn(), apply: vi.fn(), cancel: vi.fn() }
-  const controller = createPartComparisonController({ api, repair, events, now: () => elapsed })
+  const controller = createPartComparisonController({ api, repair, events, now: () => elapsed, ...options })
   controllers.push(controller)
   const change = mutate => { current = mutate(current); for (const fn of listeners) fn(current) }
   return { api, repair, controller, events, listeners, change, advanceClock: ms => { elapsed += ms } }
@@ -21,6 +22,19 @@ beforeEach(() => vi.useFakeTimers())
 afterEach(() => { for (const controller of controllers.splice(0)) controller.dispose(); vi.useRealTimers() })
 
 describe('private comparison lifetime', () => {
+  it('requests v2 only from an explicit qualified host and rejects a downgraded response', async () => {
+    const h = setup({ projectionVersion: 2 })
+    await h.controller.open()
+    expect(h.api.compare.mock.calls[0][1].projection_version).toBe(2)
+    expect(h.controller.getState().projection).toBeNull()
+    h.api.compare.mockResolvedValueOnce(dnaEnvelope())
+    await h.controller.open()
+    expect(h.controller.getState().projection?.projection_version).toBe(2)
+    h.controller.close()
+    expect(h.controller.getState().projection).toBeNull()
+    expect(h.repair.cancel).not.toHaveBeenCalled()
+  })
+
   it('does no background request, then binds one explicit read to the saved evaluated job', async () => {
     const h = setup(), before = JSON.stringify(h.repair.getState())
     expect(h.api.compare).not.toHaveBeenCalled()

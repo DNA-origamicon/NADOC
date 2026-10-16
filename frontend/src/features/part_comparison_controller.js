@@ -3,7 +3,8 @@ import { validatePartComparisonEnvelope } from './part_comparison_model.js'
 
 /** One private read/view lifetime; the existing repair controller owns the job. */
 export function createPartComparisonController({ api, repair, events = globalThis.window,
-  now = () => performance.now() }) {
+  now = () => performance.now(), projectionVersion = 1 }) {
+  if (![1, 2].includes(projectionVersion)) throw new Error('Unsupported comparison projection version')
   let state = { open: false, busy: false, projection: null, binding: null, error: null, issues: [] }
   let epoch = 0, disposed = false, abort = null, expiry = null
   const listeners = new Set()
@@ -13,7 +14,8 @@ export function createPartComparisonController({ api, repair, events = globalThi
     const job = current?.job
     if (!job || current.busy || current.publication || current.refreshNeeded || current.requiresReview
         || !repairJobView(job, current.context, current.draft).ready) return null
-    return { context: { ...current.context }, jobId: job.id, draftId: job.draftId, generation: job.generation }
+    return { context: { ...current.context }, jobId: job.id, draftId: job.draftId, generation: job.generation,
+      projectionVersion }
   }
   const matches = binding => {
     const next = bindingFor(repair.getState())
@@ -51,7 +53,7 @@ export function createPartComparisonController({ api, repair, events = globalThi
       const current = () => !disposed && token === epoch && matches(binding)
       state = { open: true, busy: true, projection: null, binding, error: null, issues: [] }; emit()
       try {
-        const value = await api.compare(binding.jobId, { projection_version: 1,
+        const value = await api.compare(binding.jobId, { projection_version: projectionVersion,
           expected_design_id: binding.context.designId, expected_revision: binding.context.revision,
           expected_draft_id: binding.draftId, expected_generation: binding.generation },
         { context: binding.context, signal: request.signal })

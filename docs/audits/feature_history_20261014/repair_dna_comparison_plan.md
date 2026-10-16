@@ -74,7 +74,24 @@ recipe result sizes. Revision sampling now lasts until request completion, with
 retained. A non-successful boundary response or incomplete measurement makes the
 transport verdict false and script exit nonzero. Corrected backend tests passed
 **149 in 6.49 s**, including both real UUID boundary byte/parity regressions.
-The corrected benchmark rerun remains pending.
+The corrected parent-run benchmark is retained in
+`benchmark_dna_comparison_compact.json`: all nine HTTP requests returned 200;
+transport admission and cleanup passed. Real boundary/six-helix HTTP responses
+were 1,415,563 / 1,395,672 bytes. Their expanded native-object forms were
+2,062,002 / 2,031,994 bytes, confirming the short-ID fixture limitation. The
+full-request sampler exposed a separate responsiveness failure: boundary light
+requests reached 97–103 ms and six-helix requests 96–165.58 ms despite source
+capture lock holds no greater than 2.29 ms. These measurements do **not** qualify
+public enablement. The sync route's raw-dict return still incurs FastAPI's generic
+response walk after worker completion; a narrow explicit response serialization
+change and another measured run are required. No global encoder setting or
+worker byte ceiling changes are proposed.
+FastAPI's [direct response documentation](https://fastapi.tiangolo.com/advanced/response-directly/)
+confirms that an explicit Response bypasses its conversion pass and makes the
+application responsible for valid JSON data. Here the bounded worker already
+publishes JSON primitives after native output checks; the same route module
+already uses explicit `ORJSONResponse` for neighboring bounded operations.
+This is a route-local optimization proposal, not a replacement for DTO validation.
 `python -m scripts.benchmark_dna_comparison --repeats 9 --http-repeats 3`
 creates no
 files or production app lifespan. Warm native derivation/capture/encoding cases
@@ -86,7 +103,7 @@ real repair evaluator outside measured projection time. One isolated document
 and its jobs are removed in `finally`; host instrumentation/gate are restored.
 Only compact stdout JSON is emitted. Renderer/GPU costs remain unmeasured.
 
-## Frontend qualification implementation (not yet tested)
+## Frontend qualification implementation (focused checks pass)
 
 The private controller accepts an explicitly injected projection version; its
 production default remains version one and refuses a mismatched response version.
@@ -106,11 +123,31 @@ are excluded from this authored-geometry view.
 Each comparison owns its scenes and a private Symbol palette key, which cannot
 collide with an authored string Design ID. Cleanup skips shared native templates;
 the instance-alpha installer's exact private attribute identifies its cloned
-geometry even though Three copied the template's shared marker. Those proven
-private clones, owned instance resources, materials and lines are released. Tests
+geometry. Three's BufferGeometry clone **aliases** the source `userData` object,
+so cleanup detaches that metadata before marking a proven private clone. The
+first frontend run caught the initial in-place marker assignment disposing a
+shared template; a retained normal-scene/metadata regression now protects the
+detachment. Those proven private clones, owned instance resources, materials and lines are released. Tests
 prepare normal-scene parity, template/palette survival, failed-second-pane cleanup,
 and actual Python-to-Node packet consumption. `main.js` has no changes. Frontend,
 GPU, app and resource gates remain pending until their recorded runs complete.
+The first focused run had 193 passes and six failures: five superseded constructor
+source-text pins (migrated into actual buffer/attribute/material behavior tests)
+and the shared metadata alias bug above. The corrected 11-file run passed 195 tests in 3.97 seconds. Three Python/HTTP
+cases passed in 3.13 seconds, including 14 actual native matrix-parity packets,
+two explicit unrepresented-ligation refusals and exact v1/v2 serialized response
+equality. Full frontend and resource measurements remain pending.
+
+`scripts/benchmark_dna_comparison_scene.py --repeats 9` is prepared for parent-only
+serialized execution after correctness checks. It feeds actual native packets to
+the private two-pane JavaScript builder in a Node subprocess and measures CPU
+construction/disposal, owned instance/buffer/material counts, attribute bytes,
+heap/RSS and cleanup/input preservation across nine small/boundary cases. It uses
+memory/stdout only and claims no WebGL/GPU/app qualification. Ordinary live
+presentation toggles are excluded: comparison shows authored direct connection
+lines, including represented periodic seams, with the native line material at
+alpha one. Native reference nucleotide fading remains; live cluster/reference
+arc visibility settings are not replayed into the private viewer.
 
 ## Native derivation and completeness boundary
 
@@ -232,3 +269,20 @@ The product precedent remains explicit reference-versus-modified graphical
 comparison, not an implicit validity certificate: [Onshape Compare](https://cad.onshape.com/help/Content/Document/compare.htm)
 and [SOLIDWORKS Compare](https://help.solidworks.com/2023/English/SolidWorks/sldworks/t_running_the_compare_utility.htm).
 The exact closure, quotas, ownership and staging above are NADOC design choices.
+
+## Validated private adapter checkpoint
+
+Focused frontend checks passed 195 cases across 11 files; the full frontend
+suite passed 8,291 (one skipped) across 717 files in 314.43 seconds. Actual
+Python-to-Node native packet parity and exact v1/v2 HTTP serialization passed
+three cases. The route-local explicit response corrected the measured event-loop
+stall: all nine repeated HTTP comparisons returned 200, concurrent scalar reads
+peaked at 16.46 ms (previously 165.58 ms), and capture locks peaked at 2.76 ms.
+Source/candidate preservation and worker/catalog cleanup passed.
+
+The first CPU scene diagnostic completed nine iterations for each of nine cases
+with cleanup and input preservation. Its explicit pre/post-iteration GC makes
+it a retention diagnostic, not ordinary interaction latency evidence. It is
+retained as `benchmark_dna_comparison_scene_memory_initial.json`; natural-GC
+timing remains separate. Public version two remains disabled pending the
+remaining resource/app qualification. No browser/GPU/native VR result is claimed.

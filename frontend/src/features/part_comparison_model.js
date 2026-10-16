@@ -1,30 +1,9 @@
 /** Closed display-only transport. Never accepted as a Design or a repair input. */
 export const COMPARISON_SCOPE = 'uncoated-particles-free-proteins-v1'
 const MAX_PLACEMENTS = 128, MAX_ATOMS = 4096, MAX_LEASE_SECONDS = 900
-const fail = message => { throw new Error(`Comparison unavailable: ${message}`) }
-const finite = value => typeof value === 'number' && Number.isFinite(value)
-const integer = value => Number.isSafeInteger(value) && value >= 0
-function text(value, limit = 256, empty = false) {
-  if (typeof value !== 'string' || value.length > limit || (!empty && !value.length)) fail('invalid display identity or label')
-}
-function shape(value, keys) {
-  if (!value || Object.getPrototypeOf(value) !== Object.prototype || Object.keys(value).length !== keys.length
-      || keys.some(key => !Object.hasOwn(value, key))) fail('incomplete or unsupported display fields')
-}
-function vector(value, count) {
-  if (!Array.isArray(value) || value.length !== count || !value.every(finite)) fail('nonfinite display coordinates')
-}
-function list(value, maximum) {
-  if (!Array.isArray(value) || value.length > maximum) fail('display allowance exceeded')
-}
-function unique(items, key = value => value.id) {
-  const seen = new Set()
-  for (const item of items) {
-    const id = key(item); text(id)
-    if (seen.has(id)) fail('ambiguous resource identity')
-    seen.add(id)
-  }
-}
+import { fail, finite, integer, text, shape, vector, list, unique } from './part_comparison_validation.js'
+import { validateDnaComparisonComponent } from './part_dna_comparison_model.js'
+export const DNA_COMPARISON_SCOPE = 'ordinary-dna-uncoated-particles-free-proteins-v2'
 function rigidPose(values) {
   vector(values, 16)
   if (values.slice(12).some((value, index) => Math.abs(value - (index === 3 ? 1 : 0)) > 1e-9)) fail('nonrigid particle pose')
@@ -39,8 +18,10 @@ function rigidPose(values) {
   if (Math.abs(determinant - 1) > 1e-7) fail('nonrigid particle pose')
 }
 
-export function validatePartComparisonPane(pane) {
-  shape(pane, ['units', 'particles', 'proteins', 'bounds_nm', 'unplaced_asset_ids'])
+export function validatePartComparisonPane(pane, { projectionVersion = 1 } = {}) {
+  if (![1, 2].includes(projectionVersion)) fail('unsupported projection version')
+  shape(pane, ['units', 'particles', 'proteins', 'bounds_nm', 'unplaced_asset_ids', ...(projectionVersion === 2 ? ['dna'] : [])])
+  if (projectionVersion === 2) validateDnaComparisonComponent(pane.dna)
   if (pane.units !== 'nm') fail('unsupported coordinate units')
   list(pane.particles, MAX_PLACEMENTS); list(pane.proteins, MAX_PLACEMENTS)
   list(pane.unplaced_asset_ids, MAX_PLACEMENTS)
@@ -73,7 +54,7 @@ export function validatePartComparisonPane(pane) {
     if (protein.representation !== (hasCA ? 'trace' : 'ovoid')) fail('incomplete protein representation')
   }
   if (pane.bounds_nm === null) {
-    if (pane.particles.length || pane.proteins.length) fail('missing display bounds')
+    if (pane.particles.length || pane.proteins.length || pane.dna?.bounds_nm) fail('missing display bounds')
   } else {
     shape(pane.bounds_nm, ['minimum', 'maximum'])
     vector(pane.bounds_nm.minimum, 3); vector(pane.bounds_nm.maximum, 3)
@@ -85,7 +66,9 @@ export function validatePartComparisonPane(pane) {
 export function validatePartComparisonEnvelope(value, binding) {
   shape(value, ['status', 'issues', 'projection_version', 'scope', 'comparison_basis', 'coverage',
     'published', 'proposed', 'job_id', 'design_id', 'source_revision', 'repair_draft', 'expires_in_seconds'])
-  if (value.status !== 'projected' || value.projection_version !== 1 || value.scope !== COMPARISON_SCOPE
+  if (value.status !== 'projected' || ![1, 2].includes(value.projection_version)
+      || value.projection_version !== (binding?.projectionVersion ?? 1)
+      || value.scope !== (value.projection_version === 2 ? DNA_COMPARISON_SCOPE : COMPARISON_SCOPE)
       || value.comparison_basis !== 'published_materialized_authoring_vs_evaluated_recipe'
       || !Array.isArray(value.issues) || value.issues.length) fail('incomplete or unsupported projection')
   shape(value.repair_draft, ['draft_id', 'generation'])
@@ -95,11 +78,14 @@ export function validatePartComparisonEnvelope(value, binding) {
       || value.source_revision !== binding.context?.revision || value.repair_draft.draft_id !== binding.draftId
       || value.repair_draft.generation !== binding.generation) fail('response belongs to another evaluated proposal')
   if (!finite(value.expires_in_seconds) || value.expires_in_seconds <= 0 || value.expires_in_seconds > MAX_LEASE_SECONDS) fail('expired or invalid display lease')
-  shape(value.coverage, ['complete', 'scientific_qualification', 'visibility', 'excluded_layers'])
+  shape(value.coverage, ['complete', 'scientific_qualification', 'visibility', 'excluded_layers',
+    ...(value.projection_version === 2 ? ['presentation_policy'] : [])])
+  if (value.projection_version === 2 && value.coverage.presentation_policy !== 'all_authored_opaque_except_reference_strands') fail('unsupported DNA presentation policy')
   if (value.coverage.complete !== true || value.coverage.scientific_qualification !== false
       || value.coverage.visibility !== 'all_authored_placements'
       || !Array.isArray(value.coverage.excluded_layers) || value.coverage.excluded_layers.length !== 2
       || !['physical', 'presentation'].every(layer => value.coverage.excluded_layers.includes(layer))) fail('unsupported comparison basis')
-  validatePartComparisonPane(value.published); validatePartComparisonPane(value.proposed)
+  const options = { projectionVersion: value.projection_version }
+  validatePartComparisonPane(value.published, options); validatePartComparisonPane(value.proposed, options)
   return value
 }

@@ -154,7 +154,10 @@ def compare_part_evaluation(job_id: str, body: ComparisonRequest):
     disconnecting this read neither publishes nor cancels the evaluated repair.
     """
     from backend.api.part_evaluation_jobs import comparison
-    return comparison(job_id, body)
+    # The worker returns bounded JSON primitives after complete native-output
+    # checks. Encode here in the request thread rather than make FastAPI walk
+    # every coordinate again on the event loop after this handler returns.
+    return ORJSONResponse(comparison(job_id, body))
 
 
 @router.post("/design/features/verification/jobs", status_code=202)

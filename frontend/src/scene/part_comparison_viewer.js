@@ -4,14 +4,16 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { validatePartComparisonEnvelope, validatePartComparisonPane } from '../features/part_comparison_model.js'
 import { createNanoparticleMaterial, createNanoparticleMesh } from './nanoparticle_display.js'
 import { initProteinTraceRenderer } from './protein_trace_renderer.js'
+import { buildPartDnaComparisonLayer } from './part_dna_comparison_layer.js'
 
-export function buildPartComparisonScene(pane) {
-  validatePartComparisonPane(pane)
+export function buildPartComparisonScene(pane, { projectionVersion = 1, paletteToken } = {}) {
+  validatePartComparisonPane(pane, { projectionVersion })
   const scene = new THREE.Scene(), particles = [], materials = new Set(), proteinLayers = []
-  let disposed = false
+  let disposed = false, dna = null
   function dispose() {
     if (disposed) return
     disposed = true
+    dna?.dispose(); dna = null
     for (const layer of proteinLayers) layer.dispose()
     for (const mesh of particles) { mesh.geometry.dispose(); scene.remove(mesh) }
     for (const material of materials) material.dispose()
@@ -24,6 +26,7 @@ export function buildPartComparisonScene(pane) {
     key.position.set(5, 8, 10); scene.add(key)
     const fill = new THREE.DirectionalLight(0xa9c8ff, 1)
     fill.position.set(-6, -2, 4); scene.add(fill)
+    if (projectionVersion === 2) dna = buildPartDnaComparisonLayer(pane.dna, scene, paletteToken)
     for (const particle of pane.particles) {
       // Native renderer expects the model's Transform wrapper. A raw array has
       // its own .values() iterator and must not be mistaken for that field.
@@ -117,8 +120,9 @@ export function initPartComparisonViewer(host, projection, binding) {
     renderer?.dispose(); renderer?.forceContextLoss?.(); renderer?.domElement.remove()
   }
   try {
-    panes.push(buildPartComparisonScene(projection.published))
-    panes.push(buildPartComparisonScene(projection.proposed))
+    const options = { projectionVersion: projection.projection_version, paletteToken: Symbol('private comparison palette') }
+    panes.push(buildPartComparisonScene(projection.published, options))
+    panes.push(buildPartComparisonScene(projection.proposed, options))
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
     renderer.setPixelRatio(Math.min(globalThis.devicePixelRatio || 1, 2))
     renderer.setClearColor(0x171e28, 1)
