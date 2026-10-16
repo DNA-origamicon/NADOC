@@ -6,15 +6,10 @@ retained or cached. This module is not a file-restore or publication endpoint.
 """
 
 from dataclasses import dataclass, field
-from enum import Enum
 from io import BytesIO
-from itertools import chain
 import json
-from math import isfinite
 from types import SimpleNamespace
 from weakref import ref
-
-from pydantic import BaseModel
 
 from backend.api.part_batch_publication_scope import MAX_PUBLIC_HISTORY_ROWS, admit_batch_source
 from backend.api.part_evaluation_worker import MAX_CANDIDATE_BYTES
@@ -37,7 +32,6 @@ RECIPE_FIELDS = frozenset({"recipe_root", "feature_log", "input_sources",
                            "feature_log_cursor", "feature_log_sub_cursor"})
 _SCOPE = "registered_batch_v1"
 _TOKEN = object()
-_MAX_DEPTH = 64
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,58 +122,13 @@ def _check_structure(value, checkpoint):
     expanding the ordinary 30k-node/2 MB authoring profile. Encoding performs the
     exact escaped-JSON byte check before any model decode.
     """
-    pending = [(value, 0, False)]
-    active = set()
-    remaining = MAX_CANDIDATE_BYTES
-    while pending:
-        checkpoint()
-        item, depth, leaving = pending.pop()
-        if leaving:
-            active.remove(id(item))
-            continue
-        remaining -= 16
-        if remaining < 0:
-            raise CaptureLimit("Immutable revision exceeds its full transport allowance")
-        if depth > _MAX_DEPTH:
-            _reject("Immutable revision exceeds its JSON depth allowance")
-        if isinstance(item, Enum):
-            item = item.value
-        if type(item) is str:
-            remaining -= len(item) * (1 if item.isascii() else 4)
-        elif item is None or type(item) is bool:
-            continue
-        elif type(item) is int:
-            if item.bit_length() > 64:
-                _reject("Immutable revision integers must fit the existing JSON input range")
-        elif type(item) is float:
-            if not isfinite(item):
-                _reject("Immutable revision numbers must be finite")
-        elif isinstance(item, BaseModel) or type(item) in {dict, list, tuple}:
-            if id(item) in active:
-                _reject("Immutable revision cannot contain a cyclic model or JSON value")
-            if isinstance(item, BaseModel):
-                _model_schema(item)
-                children = item.__dict__.values()
-                child_count = len(children)
-            elif type(item) is dict:
-                child_count = len(item) * 2
-                if 16 * (child_count + len(pending)) > remaining:
-                    raise CaptureLimit("Immutable revision exceeds its full structural allowance")
-                if any(type(key) is not str for key in item):
-                    _reject("Immutable revision JSON object keys must be strings")
-                children = chain(item.keys(), item.values())
-            else:
-                children = item
-                child_count = len(children)
-            if 16 * (child_count + len(pending)) > remaining:
-                raise CaptureLimit("Immutable revision exceeds its full structural allowance")
-            active.add(id(item))
-            pending.append((item, depth, True))
-            pending.extend((child, depth + 1, False) for child in children)
-        else:
-            _reject("Immutable revision permits only model fields and JSON values")
-        if remaining < 0:
-            raise CaptureLimit("Immutable revision exceeds its full transport allowance")
+    from backend.api.part_model_serialization import admit_model_serialization, SerializationShapeError
+
+    try:
+        admit_model_serialization(value, max_bytes=MAX_CANDIDATE_BYTES,
+            checkpoint=checkpoint, label="Immutable revision")
+    except SerializationShapeError as error:
+        _reject(str(error))
 
 
 def _canonical_payload(data, checkpoint):

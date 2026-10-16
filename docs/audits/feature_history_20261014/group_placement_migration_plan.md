@@ -1,6 +1,6 @@
 # Group organization and placement: finite migration plan
 
-Architecture proposal, October 16, 2026; source baseline `3aa2529a`. The U6 status
+Architecture proposal, October 16, 2026; source baseline `3aa2529a`. The U6/U7 status
 below records implementation after that proposal. FH-18 remains open. The
 overhaul count remains **18/38 complete**, with **11 core and 9 parked milestones
 remaining**. This plan and its implementation batches earn no separate milestone
@@ -161,6 +161,33 @@ Existing persisted pins are never rewritten silently.
 
 ## Implementation batches and gates
 
+**U7 implementation status:** the owned group/explicit-placement recorder and
+bounded HTTP adapter now use the existing exact-candidate permit transaction.
+Source capture is lock-owned; native preparation, validation and recovery encoding
+are private and outside that lock. The final CAS preserves source-owned physical,
+presentation, repair and historical recovery fields, with one undo/revision.
+Explicit load/save/branch/undo/redo entry points support the staged mode; generic
+mutation and unrelated permit paths still refuse it. The one host rollout flag
+defaults false, has no request/environment/saved-document switch, and cannot
+downgrade registered-only construction policy.
+
+Organization-history recovery now admits all closed top-level inputs and requires
+both full, non-evicted bodies before decoding. Input proof is independent. Rootless
+organization loading preserves authored absence without inferring a recipe root.
+Shared operation-body and serialization admission remove duplicated mechanics;
+per-occurrence accounting prevents small shared object graphs from expanding past
+the new path's serialization allowance. Full-source undo and scientific validation
+costs remain unqualified, as do full-snapshot revert/edit preservation adapters.
+The serialization allowance measures expanded structural work, not exact escaped
+JSON bytes or peak process memory; encoded recovery retains its separate 8MB cap.
+The fingerprint change from the load guard has twelve direct historical edges
+under the unchanged policy bounds; previous policy bytes remain audited.
+
+B/C are still partial: typed native selection and domain lineage, ordinary repair,
+generated consumers and new-group movement remain. D and E are still open. See
+[U7 evidence](validation_group_organization_recording.json); **18/38 complete,
+20 remaining; +0 completed, +0 total; FH-18 checkpoint 5, task growth flagged**.
+
 **U6 implementation status:** A is implemented privately. The exact schema is
 `Design.group_organization: GroupOrganization | None`, with version 1 and typed
 `PartGroup`/`GroupDomainRef` records in a distinct `part_group` namespace. Native
@@ -203,6 +230,36 @@ That is task growth to report, not permission to add endless refusal subsets.
 The next substantive delivery should be the complete conversion → posed dissolve
 → regroup vertical path, followed by the remaining matrix—not another isolated
 identity-only admission expansion.
+
+### Finite B/C native-consumer adapter order
+
+The consumer audit distinguishes retaining the organization wrapper from retaining
+what its domain selectors mean. Most native builders use `copy_with`, but a sweep
+can prepend a domain while preserving the strand ID (`core/sweep.py::_join_sources`),
+and nick/ligation/crossover routing can split, merge or reorder domains. A saved
+ordinal may then select another domain while still passing structural validation.
+`cluster_reconcile` repairs placement membership only; its direction-independent,
+single-winner overlap rule is not suitable for overlapping organizational groups.
+`MutationReport.strand_id_renames` and `new_domain_origins` currently have no
+producers. Pending-ligation retry can change topology after that reconciliation.
+
+| Priority / consumer | Required adapter and finite exit |
+|---|---|
+| Typed selection boundary | Resolve `part_group` separately from numerical `cluster`, including equal string IDs across the namespaces. Share organization-to-native membership resolution across authoring, preview and replay. Never pass organization IDs into `resolve_cluster_scope`: unknown IDs are dropped and an all-missing selection becomes unscoped. Preserve `DeformationOp.cluster_ids` as placement/fitting context. |
+| Explicit placement pose; bend/twist | Pose-only `cluster_op` already preserves the organization wrapper. The native deformation overlay also carries it without changing placements; qualify explicit primitive targets and intentional placement selectors first. Organizational selection needs the resolver above, with unchanged frozen-target editing semantics and an explicit dependency policy. |
+| Loop/skip, sequence and whole-helix routing | Leaf builders retain existing member identities, but qualify the complete native executor, including reconciliation and retry. Whole-helix groups may remain unchanged while their helix IDs survive; deletion or unresolved ownership changes must refuse or use an explicit membership edit. |
+| Extrude/continuation/sweep | Keep native lattice-frame, source-helix and ordered-placement inheritance exactly. New numerical placement owners must not recreate dissolved organizational groups. State any new-group membership addition as explicit authoring input. Domain references need lineage handling even when only a sweep continuation prepends a domain. `bundle-create` remains a replacement/root operation, not an append after conversion. |
+| Domain-based FineRouting | Add a shared organization-only membership adapter after all native postprocessing, using command-specific split/merge/prepend/resize lineage. Preserve overlapping and opposite-direction selections independently. Refuse ambiguous lineage rather than infer nearest overlap; do not modify the existing placement reconciliation algorithm. Cover nick→ligation, resize inline-tail split/merge, sweep prepend and pending retry. |
+| Legacy grouping, generated producers, pattern and Join | Keep combined placement/group mutations blocked until each producer emits the separate roles deliberately. Do not mechanically replace `cluster_create` or placement membership writes with organizational commands. |
+
+Use bounded membership indexes once per command, not per-nucleotide scans or a
+full `Design` roundtrip on ordinary edits. Native parity, cold replay, upstream
+editing and exact response ownership remain the exits; this audit adds no
+milestone credit or performance qualification. Newly regrouped sets still need
+the explicit move interpretation above: the current frontend's first-matching
+placement lookup can move outsiders or only part of a group. Visible **Edit
+Placement** is valid; arbitrary **Move Group** is not established by conversion
+or dissolution parity.
 
 ## Finite acceptance matrix
 

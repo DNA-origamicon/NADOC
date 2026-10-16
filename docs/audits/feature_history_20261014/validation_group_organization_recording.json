@@ -1,0 +1,191 @@
+{
+  "date": "2026-10-16",
+  "checkpoint_before": "31a9a8d8847f1ccf2b81dd737dc281bceafd568f",
+  "scope": "U7 / FH-18 checkpoint 5: owned organization and explicit-placement transactions, bounded HTTP and recovery lifecycle",
+  "progress": {
+    "completed": 18,
+    "estimated_total": 38,
+    "remaining": 20,
+    "core_remaining": 11,
+    "parked_remaining": 9,
+    "completed_delta": 0,
+    "total_delta": 0,
+    "milestone": "FH-18",
+    "major_checkpoints_spent_since_B1": 5,
+    "milestone_closed": false,
+    "task_growth_flag": true,
+    "containment": "Same five finite migration batches and full FH-18 exit. B/C advance; typed consumer selection/domain lineage, repair/generated adapters, D/E and new-group movement remain. No new credit, denominator increase or moved core scope."
+  },
+  "delivered": [
+    "Owned recorder compiles four organizational commands and explicit pose-only placement updates, with host-created identities and versions, complete native rows and one publication/undo/revision.",
+    "Existing opaque permit registries bind exact source/session/revision/policy/request/candidate. Final liveness after undo preparation retains expiry, policy and rollout checks; generic/unrelated publications remain refused.",
+    "Bounded capture under lock; private native build, validation and authoring recovery encoding outside lock; exact CAS and minimal owned-field merge preserve live physical/presentation/draft fields and old recovery.",
+    "No-op publication retains exact source/history/redo/document revision and stamps accepted request revision, including a response interleave regression.",
+    "Default-off closed HTTP route, early feature/policy admission before bytes, one nonqueued bounded input slot, thread-owned host and exact-candidate response. Shared JSON reader replaces duplicated deformation preview transport.",
+    "Explicit load/restore/branch/save/undo/redo lifecycle. Rootless explicit organization skips legacy topology inference without inventing provenance.",
+    "Organization seek admission validates bounded closed top-level commands, IDs, metadata and retained storage, requiring complete non-evicted PRE/POST bodies before decoding. Native proof stays recovery-independent.",
+    "Shared per-occurrence serialization admission blocks alias expansion before model dumps and recovery encoding. Immutable wrapper retains its prior byte-only default semantics.",
+    "Four historical numerical-schema generations retain exact direct edges to the new current targets, with prior policy preserved byte-for-byte. No molecular algorithm, runtime/template pin, constant or stored authored pin changed."
+  ],
+  "remaining": [
+    "Typed organizational selection distinct from numerical placement context.",
+    "Whole-helix native lifecycle, followed by explicit domain split/merge/prepend/resize lineage after complete reconcile/retry; preserve overlapping directional groups without nearest-overlap guessing.",
+    "Full repair/generated/revert/edit consumer adapters; authoring-only recovery bodies are not yet admitted by full-snapshot replacement routes.",
+    "Visible Group and Placement controls, complete preview/cancel/Apply and selection integration.",
+    "New arbitrary regrouped-set movement/frame/extension contract; unchanged placement editing does not establish it.",
+    "Full-source undo-copy and scientific-validator latency/heap qualification, desktop acceptance and public rollout."
+  ],
+  "validation": {
+    "tests_first": [
+      {
+        "target": "tests/test_group_organization_permits.py",
+        "failed": 48,
+        "passed": 3,
+        "seconds": 3.34
+      },
+      {
+        "target": "tests/test_group_organization_recovery_admission.py",
+        "failed": 50,
+        "passed": 4,
+        "seconds": 8.28
+      },
+      {
+        "target": "tests/test_group_organization_recording.py",
+        "failed": 26,
+        "seconds": 2.96
+      },
+      {
+        "target": "tests/test_part_group_organization_routes.py",
+        "failed": 1,
+        "errors": 29,
+        "passed": 1,
+        "seconds": 3.21
+      },
+      {
+        "target": "tests/test_recipe_load_preservation.py::test_rootless_explicit_organization_json_load_preserves_authored_absence",
+        "failed": 2,
+        "seconds": 2.85
+      },
+      {
+        "target": "tests/test_part_model_serialization.py",
+        "failed": 22,
+        "passed": 3,
+        "seconds": 2.98
+      },
+      {
+        "target": "Recorder review regressions: new row budget, scientific dependency, no-op revision, alias expansion",
+        "failed": 4,
+        "note": "Separate red runs: 2 failures in 2.68s, 1 in 2.64s, 1 in 2.69s."
+      }
+    ],
+    "final_backend_related": {
+      "targets": [
+        "tests/test_group_organization_recording.py",
+        "tests/test_group_organization_permits.py",
+        "tests/test_group_organization_recovery_admission.py",
+        "tests/test_group_organization_public_gate.py",
+        "tests/test_group_organization_history.py",
+        "tests/test_group_organization_execution.py",
+        "tests/test_group_organization_commands.py",
+        "tests/test_group_organization_inventory.py",
+        "tests/test_group_organization_boundaries.py",
+        "tests/test_group_dissolve_seek_admission.py",
+        "tests/test_part_model_serialization.py",
+        "tests/test_part_immutable_revision.py",
+        "tests/test_part_immutable_state.py",
+        "tests/test_part_immutable_preservation.py",
+        "tests/test_part_publication_state.py",
+        "tests/test_part_publication_permit.py",
+        "tests/test_part_replacement_transaction.py",
+        "tests/test_part_batch_publication_scope.py",
+        "tests/test_workspace_save_revision.py",
+        "tests/test_loadout.py",
+        "tests/test_part_repair_document_boundaries.py",
+        "tests/test_part_repair_persistence.py",
+        "tests/test_recipe_load_preservation.py",
+        "tests/test_part_numerical_schema_compatibility.py",
+        "tests/test_part_group_organization_routes.py",
+        "tests/test_part_deformation_preview_routes.py"
+      ],
+      "passed": 743,
+      "warnings": 38,
+      "seconds": 11.68,
+      "new_test_files": 5,
+      "new_cases_in_those_files": 192
+    },
+    "native_compatibility": {
+      "target": "tests/test_native_schema_compatibility.py",
+      "passed": 3,
+      "seconds": 86.43,
+      "method": "Real spawned current-kernel authoring and independent verification; current plus four historical exact pins, unknown-pin refusal, exact authoring fingerprints, unchanged runtime/template settings and poisoned recovery.",
+      "limitation": "Same installed numerical kernels, not historical binaries or scientific convergence. Tiny existing fixtures/templates; no production simulation or new bulk downloads."
+    },
+    "additional_lifecycle": {
+      "passed": 86,
+      "warnings": 6,
+      "seconds": 3.84,
+      "note": "Includes recorder plus save/loadout/repair persistence and five selected part-only undo boundary nodes; overlapping cases are not added to final pass count."
+    },
+    "static": {
+      "ruff": "23 changed Python files passed",
+      "diff": "passed",
+      "main_js_delta": 0
+    },
+    "memory_lint": {
+      "passed": false,
+      "errors": 6,
+      "warnings": 59,
+      "note": "Same pre-existing unrelated errors: oversized CPD/VR heads, unindexed exp_predictor, three missing artifact links. Updated project head remains bounded and indexed."
+    },
+    "frontend": "No frontend production changes; no frontend suite rerun.",
+    "app": "NOT VERIFIED IN APP. Archive path absent/unmounted; no browser or bulk-output fallback. Desktop/latency acceptance remains FH-27/MV-48, VR separately deferred.",
+    "selector": {
+      "command": "just test-smart --dry-run",
+      "decision": "FAST (fast suite only)",
+      "routing": "FULL: backend/api/main.py matches foundational/shared 'backend/api/main.py'",
+      "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated session is open",
+      "tests_executed": 0,
+      "note": "Dry run only. Selector boilerplate says only fast suite ran; no suite actually ran. Aggregate fast/FULL debt remains; focused checks do not clear it."
+    }
+  },
+  "bounds": {
+    "capture": "Unchanged 30k-node/2MB authoring graph, cooperative 25ms capture deadline.",
+    "serialization": "Additional expanded-occurrence 30k-node/2MB structural-work admission, not exact escaped JSON bytes or process heap.",
+    "recovery": "2,000 total rows; 30k metadata nodes/2MB command graph; 8MB retained encoded recovery.",
+    "http": "256,000 bytes/10k operation nodes,5s read deadline,closed envelope and one nonqueued acquisition slot.",
+    "limitations": "Final full-source undo copy still includes physical/display data; scientific validation can scale with scalar domain spans. No measured user-experience guarantee."
+  },
+  "numerical_compatibility": {
+    "entries": 12,
+    "bytes": 12980,
+    "entry_limit": 16,
+    "byte_limit": 16384,
+    "changed_current_manifest_paths": [
+      "backend/core/models.py"
+    ],
+    "prior_policy": "group_organization_load_schema_compatibility_prior_policy.json",
+    "prior_manifests": "group_organization_load_schema_compatibility_before.json",
+    "current": {
+      "cpd": "57c8533168455febc6b2717f825c9571391b748272ae72739834d09197b1c3fa",
+      "duplex": "c9e922c333b5756e73775da00e7a3bfbd659d03e41c1d841196cda6f9d0e3996",
+      "coating": "67f3141feab0d5771926b7f532f7b40e3a13d31403fc1866e158b3a589406d9f"
+    }
+  },
+  "cleanup": {
+    "pytest_root": "/tmp/pytest-of-joshua",
+    "removed_files": 55,
+    "removed_bytes": 211395,
+    "removed_directories": 815,
+    "removed_symlinks": 20,
+    "paths": [
+      "pytest-12",
+      "pytest-13",
+      "pytest-14",
+      "pytest-current"
+    ],
+    "root_empty": true,
+    "nadoc_shared_memory_remaining": 0,
+    "process_reference_checks": "54 processes inspected where permitted for cwd/fd/maps; no visible references to fixture root. 31 protected/system PIDs denied some inspection, including435/436; complete process visibility is not claimed.",
+    "scope": "Only task-created small test fixtures removed. No browser/bulk output created; user designs/jobs/runtime/source pins untouched."
+  }
+}

@@ -3663,9 +3663,9 @@ class Design(BaseModel):
         This keeps old .nadoc files working correctly without a migration step.
         """
         design = cls.model_validate(json.loads(text))
-        # Recipe-backed documents preserve authored absence as well as presence.
-        # Legacy inference would silently add topology outside their feature log.
-        if design.recipe_root is not None:
+        # Recipes and explicit organization preserve authored absence as well
+        # as presence. A rootless organization is still not native provenance.
+        if design.recipe_root is not None or design.group_organization is not None:
             return design
         from backend.core.backbone_continuations import backbone_continuation_edges
 

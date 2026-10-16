@@ -53,7 +53,7 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 
 | ID | Status | Fixed remaining exit |
 |---|---|---|
-| FH-18 | In progress · 4 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Ordinary PATCH, admitted identity-group dissolution, auxiliary recording and private organization/native replay are implemented; live transactions, consumer/UI migration and new-group movement stay open. |
+| FH-18 | In progress · 5 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Ordinary PATCH, admitted identity-group dissolution, auxiliary recording, private organization/native replay and gated owned HTTP transactions are implemented; complete consumer/repair/UI migration and new-group movement stay open. |
 | FH-20 | Remaining | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
 | FH-21 | Remaining | Extrusion history editor: eligible earlier edits through downstream features, stable identities, complete ordinary controls and validation. |
 | FH-22 | Remaining | Sweep history editor: input-based isolated preview, recovery-independent Apply/Cancel and downstream rebuild. |
@@ -126,6 +126,40 @@ bound their matrices before implementation rather than expanding them indefinite
 | U4 · 2026-10-16 | FH-18 checkpoint 2: native identity-group dissolve, bounded incoming owners, atomic batch/undo, seek without resurrection and import/sidebar delivery; [evidence](validation_group_dissolve.json) | None; posed/regrouped membership and auxiliary paths remain | 18 | 38 | 11 | 9 | +0 total, +0 completed; second checkpoint on FH-18, existing scope. If still open after a third checkpoint, flag task growth and review the remaining exit before continuing. |
 | U5 · 2026-10-16 | FH-18 checkpoint 3: recorded unassigned-component grouping and duplex pivot rebase, private computation, stale/failure guards and authored-inference suppression; [evidence](validation_group_auxiliary_recording.json) | None; posed/regrouped placement and organization/placement migration remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth flagged:** three checkpoints on unfinished FH-18. Containment is the finite [migration plan](group_placement_migration_plan.md), preserving the fixed exit and estimate. |
 | U6 · 2026-10-16 | FH-18 checkpoint 4: separate typed organization, native conversion → posed dissolve → regroup, input editing/cold proof, recovery chronology, bounded metadata and legacy schema compatibility; [evidence](validation_group_organization_representation.json) | None; live transactions, remaining consumers, visible placement controls and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** four checkpoints on unfinished FH-18. Migration batch A is implemented privately; B/C have partial foundations, D/E remain. No exit or denominator change. |
+| U7 · 2026-10-16 | FH-18 checkpoint 5: owned group/explicit-placement transaction and bounded HTTP adapter, exact-candidate permits, undo/save/reload, complete organization-body recovery admission and rootless-load preservation; [evidence](validation_group_organization_recording.json) | None; complete consumer/repair migration, visible Groups/Placements and new-group movement remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** five checkpoints on unfinished FH-18. B/C advance within the same five finite batches; D/E remain. No exit or denominator change. |
+
+### FH-18 containment update — U7
+
+Conversion, creation, membership/style editing, dissolution and explicitly named
+placement edits now use an owned backend transaction and one bounded HTTP entry.
+The native edit and recovery encoding occur outside the shared document lock;
+the existing opaque-permit transaction checks the exact source/session/revision/
+policy and publishes once. No-op results preserve history and bind the accepted
+response revision. Ordinary callbacks and unrelated permits still cannot edit
+active organization. The host rollout flag remains false.
+
+Explicit load/save/branch/undo/redo lifecycle adapters support the staged mode.
+Rootless saved organization also suppresses legacy topology inference without
+inventing a recipe root. Organization recovery requires complete non-evicted
+PRE/POST bodies before decoding; native input proof remains independent of them.
+Shared bounded JSON acquisition and model-serialization admission replace
+duplicate transport/validation mechanics. Molecular algorithms remain unchanged;
+all four previous schema generations have exact direct compatibility edges.
+
+The finite consumer audit found domain identity to be the next substantive gap:
+sweep, nick, ligation and resize can reorder or replace strand/domain addresses.
+Preserving the wrapper alone is insufficient. Next, resolve typed organizational
+selections separately from placement context, qualify whole-helix lifecycle, then
+add explicit split/merge/prepend/resize lineage after native reconciliation and
+retry. Preserve overlaps and direction; do not guess membership from proximity.
+The existing five batches remain the containment plan, not new counted updates.
+
+Full snapshot revert/edit, generated consumers, visible Group/Placement controls
+and arbitrary new-group movement still require their own adapters. The existing
+full-source undo copy and scientific validator need measured latency/heap
+qualification; metadata admission does not prove responsiveness. FH-18 stays
+open after five checkpoints. **18/38; +0 completed, +0 total; 20 remaining
+(11 core, 9 parked).**
 
 ### FH-18 containment update — U6
 

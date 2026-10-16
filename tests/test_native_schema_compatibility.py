@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BEFORE = ROOT / "docs/audits/feature_history_20261014/grouping_schema_compatibility_before.json"
 DISSOLVE_BEFORE = ROOT / "docs/audits/feature_history_20261014/cluster_dissolve_schema_compatibility_before.json"
 ORGANIZATION_BEFORE = ROOT / "docs/audits/feature_history_20261014/group_organization_schema_compatibility_before.json"
+LOAD_BEFORE = ROOT / "docs/audits/feature_history_20261014/group_organization_load_schema_compatibility_before.json"
 
 
 def _fixture(family):
@@ -135,7 +136,8 @@ def test_spawned_numerical_schema_transition_preserves_exact_authored_outputs(fa
     assert not current.get("numerical_compatibility", {}).get("transitions")
 
     for generation, path in (("grouping-v1", BEFORE), ("grouping-v2", DISSOLVE_BEFORE),
-                             ("cluster-dissolve-v1", ORGANIZATION_BEFORE)):
+                             ("cluster-dissolve-v1", ORGANIZATION_BEFORE),
+                             ("group-organization-v1", LOAD_BEFORE)):
         historical = json.loads(path.read_text())["engines"][contract.ENGINE_ID]["implementation_sha256"]
         assert current_pin != historical
         entry.params = {**params, "engine": {**params["engine"], "implementation_sha256": historical}}
@@ -145,7 +147,7 @@ def test_spawned_numerical_schema_transition_preserves_exact_authored_outputs(fa
         assert approved["checked_commands"] == current["checked_commands"] == len(candidate.feature_log)
         assert approved["authoring_fingerprint"] == current["authoring_fingerprint"]
         assert approved["numerical_compatibility"] == {"transitions": [{
-            "transition_id": f"group-organization-v1.from-{generation}.{contract.ENGINE_ID}",
+            "transition_id": f"organization-load-v1.from-{generation}.{contract.ENGINE_ID}",
             "engine_id": contract.ENGINE_ID, "from_sha256": historical, "to_sha256": current_pin,
         }], "truncated": False}
         assert candidate.model_dump_json() == before_old

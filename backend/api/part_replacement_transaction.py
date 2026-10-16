@@ -11,20 +11,19 @@ from backend.api import doc_context
 def publish_replacement(session, candidate, *, publication_permit=None):
     from backend.api import state
     from backend.api import part_publication_permit as permits
-    from backend.api.part_group_organization_gate import require_live_design
+    from backend.api.part_group_organization_gate import require_group_publication
     from backend.api.part_immutable_storage import is_immutable, retained_history
 
     checked = None
     if publication_permit is None:
         state._require_compatibility_write("publish_replacement")
-    require_live_design(candidate)
-    require_live_design(session.design)
     if publication_permit is not None:
         if state._sessions.get(doc_context.get_current_doc()) is not session:
             from fastapi import HTTPException
             raise HTTPException(409, detail={"code": "source_changed", "detail": "The publication session is no longer current"})
         checked = permits.check_publication(publication_permit, doc_id=doc_context.get_current_doc(),
             session=session, candidate=candidate)
+    require_group_publication(session.design, candidate, checked)
 
     before = session.design
     immutable = is_immutable(before) or is_immutable(candidate)

@@ -131,7 +131,7 @@ def _require_compatibility_write(operation, *, doc_id=None):
     selected = get_current_doc() if doc_id is None else doc_id
     configuration = require_compatibility(selected, operation)
     session = _sessions.get(selected)
-    _require_live_design(None if session is None else session.design)
+    _require_live_design(None if session is None else session.design, lifecycle=operation)
     return configuration
 
 
@@ -240,7 +240,7 @@ def restore_doc_design(doc_id: str, design: Design) -> None:
     """
     with _lock:
         _require_compatibility_write("restore_doc_design", doc_id=doc_id)
-        _require_live_design(design)
+        _require_live_design(design, lifecycle="restore_doc_design")
         s = _sessions.get(doc_id)
         if s is None:
             s = _DesignSession()
@@ -479,7 +479,7 @@ def acknowledge_workspace_save(before: Design, saved: Design, revision: int, *, 
     """Advance save cursors without overwriting edits made during disk I/O."""
     with _lock:
         _require_compatibility_write("acknowledge_workspace_save")
-        _require_live_design(saved)
+        _require_live_design(saved, lifecycle="acknowledge_workspace_save")
         s = _session()
         for loadout in saved.loadouts:
             if loadout.head_revision_id:
@@ -567,13 +567,13 @@ def _assert_active_loadout_editable(
 def load_design(d: Design | None) -> None:
     """Establish a file/new-design baseline, or clear it, without an undo entry."""
     require_compatibility_write("load_design")
-    _require_live_design(d)
+    _require_live_design(d, lifecycle="load_design")
     if d is not None and any(p.biotin_dna for p in d.nanoparticles):
         from backend.core.biotin_atomistic import prepare_biotin_display
         prepare_biotin_display(d)
     with _lock:
         _require_compatibility_write("load_design")
-        _require_live_design(d)
+        _require_live_design(d, lifecycle="load_design")
         s = _session()
         s.history.clear()
         s.redo.clear()
@@ -616,7 +616,7 @@ def set_design_branch(d: Design, *, expected_revision: int | None = None) -> Non
     """Navigate to a branch without undoing back into a different branch."""
     with _lock:
         _require_compatibility_write("set_design_branch")
-        _require_live_design(d)
+        _require_live_design(d, lifecycle="set_design_branch")
         s = _session()
         if expected_revision is not None and s.revision != expected_revision:
             raise HTTPException(409, detail="Design changed during generation. Recalculate before generating.")
@@ -990,7 +990,7 @@ def undo() -> tuple[Design, ValidationReport]:
         _assert_active_loadout_editable(s.design)
         if not s.history:
             raise HTTPException(status_code=404, detail="Nothing to undo.")
-        _require_live_design(s.history[-1])
+        _require_live_design(s.history[-1], lifecycle="undo")
         restored = _restore_edit_snapshot(s.history[-1], s.design)
         s.redo.append(_snapshot_copy(s.design))
         s.history.pop()
@@ -1011,7 +1011,7 @@ def redo() -> tuple[Design, ValidationReport]:
         _assert_active_loadout_editable(s.design)
         if not s.redo:
             raise HTTPException(status_code=404, detail="Nothing to redo.")
-        _require_live_design(s.redo[-1])
+        _require_live_design(s.redo[-1], lifecycle="redo")
         restored = _restore_edit_snapshot(s.redo[-1], s.design)
         s.history.append(_snapshot_copy(s.design))
         s.redo.pop()

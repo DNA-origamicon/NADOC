@@ -17,8 +17,10 @@ BEFORE = ROOT / "docs/audits/feature_history_20261014/grouping_schema_compatibil
 DISSOLVE_BEFORE = ROOT / "docs/audits/feature_history_20261014/cluster_dissolve_schema_compatibility_before.json"
 ORGANIZATION_BEFORE = ROOT / "docs/audits/feature_history_20261014/group_organization_schema_compatibility_before.json"
 PRIOR_POLICY = ROOT / "docs/audits/feature_history_20261014/group_organization_schema_compatibility_prior_policy.json"
+LOAD_BEFORE = ROOT / "docs/audits/feature_history_20261014/group_organization_load_schema_compatibility_before.json"
+LOAD_PRIOR_POLICY = ROOT / "docs/audits/feature_history_20261014/group_organization_load_schema_compatibility_prior_policy.json"
 BASELINES = {"grouping-v1": BEFORE, "grouping-v2": DISSOLVE_BEFORE,
-             "cluster-dissolve-v1": ORGANIZATION_BEFORE}
+             "cluster-dissolve-v1": ORGANIZATION_BEFORE, "group-organization-v1": LOAD_BEFORE}
 FAMILIES = ("part_cpd_contract", "part_duplex_relax_contract", "part_streptavidin_contract")
 ENGINE = "nadoc.cpd-native-engine.v1"
 EVENT = "cluster-create-proof-v2"
@@ -168,10 +170,10 @@ def test_installed_policy_targets_only_current_engines_and_preserves_prior_audit
                digest(import_module(f"backend.core.{family}").implementation_manifest())
                for family in FAMILIES}
     entries = compatibility._policy()
-    assert len(entries) == 9
+    assert len(entries) == 12
     assert compatibility.POLICY_PATH.stat().st_size <= 16 * 1024
     assert all(entry["to_sha256"] == current[entry["engine_id"]] for entry in entries)
-    historical = json.loads(PRIOR_POLICY.read_text())["transitions"]
+    historical = json.loads(LOAD_PRIOR_POLICY.read_text())["transitions"]
     assert len(historical) == 9
     assert all(entry["to_sha256"] != current[entry["engine_id"]] for entry in historical)
 
@@ -208,19 +210,20 @@ def test_real_captured_old_manifest_has_one_exact_reviewed_transition(compatibil
                and entry["to_sha256"] == digest(current)]
     assert len(entries) == 1
     entry = entries[0]
-    assert entry["id"] == f"group-organization-v1.from-{generation}.{contract.ENGINE_ID}"
-    assert entry["event"] == "group-organization-v1"
+    assert entry["id"] == f"organization-load-v1.from-{generation}.{contract.ENGINE_ID}"
+    assert entry["event"] == "organization-load-v1"
     assert entry["source_checkpoint"] == capture["checkpoint"]
     old_files, new_files = before["manifest"]["files"], current["files"]
     changes = {path for path in old_files.keys() | new_files.keys() if old_files.get(path) != new_files.get(path)}
-    expected = {"backend/core/models.py", "backend/core/part_group_model.py",
-                f"backend/core/{family}.py"}
-    if family == "part_streptavidin_contract":
-        expected.add("backend/api/part_streptavidin_commands.py")
-    else:
-        expected.add("backend/core/part_history_contract.py")
-    if generation == "grouping-v1":
-        expected.add("backend/core/part_numerical_schema_compatibility.py")
+    expected = {"backend/core/models.py"}
+    if generation != "group-organization-v1":
+        expected.update({"backend/core/part_group_model.py", f"backend/core/{family}.py"})
+        if family == "part_streptavidin_contract":
+            expected.add("backend/api/part_streptavidin_commands.py")
+        else:
+            expected.add("backend/core/part_history_contract.py")
+        if generation == "grouping-v1":
+            expected.add("backend/core/part_numerical_schema_compatibility.py")
     assert changes == set(entry["changed_paths"]) == expected
     assert {key: value for key, value in before["manifest"].items() if key != "files"} == {
         key: value for key, value in current.items() if key != "files"}
@@ -264,6 +267,18 @@ def test_previous_dissolution_edges_remain_in_historical_audit(compatibility, mo
     monkeypatch.setattr(compatibility, "POLICY_PATH", PRIOR_POLICY)
     assert require(compatibility, old["implementation_sha256"], target["manifest"],
                    engine=contract.ENGINE_ID) == f"cluster-dissolve-v1.from-{generation}.{contract.ENGINE_ID}"
+
+
+@pytest.mark.parametrize("family", FAMILIES)
+@pytest.mark.parametrize("generation", ["grouping-v1", "grouping-v2", "cluster-dissolve-v1"])
+def test_previous_organization_edges_remain_in_historical_audit(compatibility, monkeypatch, family, generation):
+    contract = import_module(f"backend.core.{family}")
+    old = json.loads(BASELINES[generation].read_text())["engines"][contract.ENGINE_ID]
+    target = json.loads(LOAD_BEFORE.read_text())["engines"][contract.ENGINE_ID]
+    assert digest(target["manifest"]) == target["implementation_sha256"]
+    monkeypatch.setattr(compatibility, "POLICY_PATH", LOAD_PRIOR_POLICY)
+    assert require(compatibility, old["implementation_sha256"], target["manifest"],
+                   engine=contract.ENGINE_ID) == f"group-organization-v1.from-{generation}.{contract.ENGINE_ID}"
 
 
 @pytest.mark.parametrize("family", FAMILIES)

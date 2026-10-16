@@ -1766,16 +1766,16 @@ def load_design(body: FilePathRequest) -> dict:
 
 def _install_loaded_design(design: Design) -> dict:
     """Install saved recipes exactly; migrate only rootless legacy documents."""
-    design_state.require_compatibility_write("legacy_design_install")
+    design_state.require_compatibility_write("load_design")
     from backend.api.part_group_organization_gate import require_live_design
-    require_live_design(design)
+    require_live_design(design, lifecycle="load_design")
     from backend.core.lattice import (
         migrate_split_staple_domains,
         autodetect_all_overhangs,
     )
     from backend.core.validator import validate_design
 
-    if design.recipe_root is None:
+    if design.recipe_root is None and design.group_organization is None:
         from backend.core.lattice_frame_compatibility import repair_lattice_frame_membership
         design = repair_lattice_frame_membership(design)
         design = migrate_split_staple_domains(design)

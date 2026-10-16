@@ -97,6 +97,89 @@ def context_matches(context, doc_id, session, *, include_source=True):
         and (not include_source or (context.source() is session.design and context.source_revision == session.revision)))
 
 
+def _group_operation(operation):
+    from backend.core.part_group_organization import KINDS
+    return type(operation) is str and (operation in KINDS or operation == "cluster_op")
+
+
+def _group_source(source, operation):
+    from backend.core.models import Design
+    from backend.core.part_group_model import GroupOrganization
+
+    if type(source) is not Design:
+        return False
+    organization = source.group_organization
+    if operation == "group-organize":
+        return organization is None
+    return (type(organization) is GroupOrganization
+        and type(organization.version) is int and organization.version == 1)
+
+
+def _group_candidate(source, candidate):
+    from backend.core.models import Design
+    from backend.core.part_group_model import GroupOrganization
+
+    if type(source) is not Design or type(candidate) is not Design or candidate is source:
+        return False
+    organization = candidate.group_organization
+    return (candidate.id == source.id and type(organization) is GroupOrganization
+        and type(organization.version) is int and organization.version == 1)
+
+
+def _require_group_policy(context):
+    from backend.api.part_group_organization_gate import require_group_edit_enabled
+
+    if context.policy_generation != policy.resolve(context.doc_id).generation:
+        _refusal("Construction policy changed before the group edit", code="policy_changed")
+    policy.require_compatibility(context.doc_id, "owned_group_edit")
+    require_group_edit_enabled()
+
+
+def admit_group_edit(doc_id, session, *, operation, request_sha256):
+    """Lock-owned admission for an owned ordinary group or placement edit.
+
+    The group host owns command validation, source capture/CAS and the native
+    builder. This records their origin, not independent historical proof.
+    """
+    from backend.api.part_group_organization_gate import require_group_edit_enabled
+
+    effective = policy.require_compatibility(doc_id, "owned_group_edit")
+    require_group_edit_enabled()
+    if not _group_operation(operation):
+        _refusal("Unknown owned group operation", code="invalid_operation_admission")
+    if type(request_sha256) is not str or fullmatch(r"[0-9a-f]{64}", request_sha256) is None:
+        raise ValueError("Admission requires the canonical bounded request digest")
+    if (not _group_source(session.design, operation)
+            or type(session.revision) is not int or session.revision < 0):
+        _refusal("Group admission needs its current mutable source", code="invalid_evaluation_context")
+    context = AdmissionContext(doc_id, session.identity, ref(session.design), session.revision,
+        effective.generation, operation, request_sha256, "group_organization_v1")
+    return _register(_admissions, EvaluationAdmission(), context)
+
+
+def issue_group_edit_permit(admission, candidate, *, request_sha256, expires):
+    """Bind the exact candidate after the owned group host validates its result.
+
+    There is no client candidate, generic callback, native-proof claim or new
+    registry. The same permit transaction consumes this only after publication.
+    """
+    context = admission_context(admission)
+    if (context is None or context.scope_tag != "group_organization_v1"
+            or not _group_operation(context.operation)):
+        _refusal("A group publication requires its original host admission")
+    _require_group_policy(context)
+    if type(request_sha256) is not str or request_sha256 != context.request_sha256:
+        _refusal("The group command does not match its host admission")
+    now = monotonic()
+    if type(expires) not in {int, float} or not now < expires <= now + MAX_LIFETIME:
+        _refusal("The group candidate has expired", code="publication_expired")
+    source = context.source()
+    if not _group_source(source, context.operation) or not _group_candidate(source, candidate):
+        _refusal("Group publication needs its distinct owned candidate for the captured part")
+    return _register(_permits, PublicationPermit(), _PermitContext(context, ref(candidate),
+        None, None, "owned_group_edit", expires, None))
+
+
 def issue_batch_permit(admission, candidate, *, request_sha256, authoring_sha256, recipe_sha256, expires,
                        cancelled, source_status):
     """Trusted job host calls after its existing exact transport checks.
@@ -233,7 +316,13 @@ def check_publication(permit, *, doc_id, session, candidate):
     check_liveness(context)
     from backend.api.part_immutable_storage import immutable_pair, is_immutable, require_sealed, require_empty_session
 
-    if context.admission.scope_tag == "registered_batch_v1":
+    if context.admission.scope_tag == "group_organization_v1":
+        if (context.evidence_class != "owned_group_edit"
+                or not _group_operation(context.admission.operation)
+                or not _group_source(session.design, context.admission.operation)
+                or not _group_candidate(session.design, candidate)):
+            _refusal("Group publication lost its checked source or candidate binding")
+    elif context.admission.scope_tag == "registered_batch_v1":
         from backend.api.part_batch_publication_scope import admit_batch_source
         from backend.core.part_command_errors import CommandContractError
 
@@ -270,6 +359,8 @@ def check_publication(permit, *, doc_id, session, candidate):
 
 def check_liveness(context):
     """Repeat after undo preparation, immediately before assignment."""
+    if context.admission.scope_tag == "group_organization_v1":
+        _require_group_policy(context.admission)
     if monotonic() >= context.expires:
         _refusal("The publication permit expired", code="publication_expired")
     if context.cancelled is not None and context.cancelled.is_set():

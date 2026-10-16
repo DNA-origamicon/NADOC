@@ -273,7 +273,10 @@ def test_direct_publisher_checks_its_supplied_session_source(document, monkeypat
     monkeypatch.setattr(state, "_snapshot_copy", unexpected)
     monkeypatch.setattr(permits, "check_publication", unexpected)
     with state._lock:
-        denied(lambda: publish_replacement(other, source,
-            publication_permit=object() if permit else None))
+        with pytest.raises(HTTPException) as error:
+            publish_replacement(other, source, publication_permit=object() if permit else None)
+        assert error.value.status_code == 409
+        assert error.value.detail["code"] == ("source_changed" if permit
+            else "group_organization_not_enabled")
     unchanged(other, before)
     unchanged(current, current_before)

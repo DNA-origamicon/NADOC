@@ -22,6 +22,34 @@ def test_json_legacy_backfill_runs_only_for_rootless_documents(monkeypatch, root
     assert calls == ([] if rooted else ["reclassify", "backfill"])
 
 
+@pytest.mark.parametrize("empty", [False, True], ids=["populated-organization", "empty-organization"])
+def test_rootless_explicit_organization_json_load_preserves_authored_absence(monkeypatch, empty):
+    from backend.core import backbone_continuations, crossover_positions
+    from backend.core.part_group_organization import build
+    from tests.test_group_organization_commands import organize, source
+
+    design = source()
+    design = build("group-organize", design, organize(design))
+    if empty:
+        design.group_organization = design.group_organization.model_copy(update={"groups": []})
+    assert design.recipe_root is None and design.group_organization is not None
+    assert not design.crossovers and not design.forced_ligations
+    original = design.model_dump(mode="json")
+    payload = design.to_json()
+
+    def unexpected(*_args, **_kwargs):
+        pytest.fail("Explicit organization must load without legacy topology inference")
+
+    monkeypatch.setattr(backbone_continuations, "backbone_continuation_edges", unexpected)
+    monkeypatch.setattr(crossover_positions, "extract_crossovers_from_strands", unexpected)
+    monkeypatch.setattr(models, "_reclassify_invalid_crossovers", unexpected)
+    monkeypatch.setattr(models, "_backfill_dropped_junctions", unexpected)
+    restored = Design.from_json(payload)
+    assert restored.model_dump(mode="json") == original
+    assert restored.recipe_root is None  # Loading does not grant native provenance.
+    assert design.model_dump(mode="json") == original
+
+
 @pytest.mark.parametrize("via_file", [False, True])
 @pytest.mark.parametrize("rooted", [False, True])
 def test_open_preserves_recipe_state_and_retains_legacy_migrations(monkeypatch, tmp_path, via_file, rooted):

@@ -9,13 +9,44 @@ from backend.core.part_command_errors import CommandContractError
 from backend.core.part_group_organization import KINDS
 
 
-def require_live_design(design):
+# One trusted host switch. Saved documents, request bodies and environment
+# variables cannot enable authoring or its explicitly reviewed lifecycle paths.
+GROUP_ORGANIZATION_ENABLED = False
+_LIFECYCLES = frozenset({"load_design", "restore_doc_design", "set_design_branch",
+    "copy_for_workspace_save", "acknowledge_workspace_save", "undo", "redo"})
+
+
+def _refuse():
+    from fastapi import HTTPException
+    raise HTTPException(409, detail={
+        "code": "group_organization_not_enabled",
+        "message": "Separate groups and placements are not enabled for this live operation.",
+    })
+
+
+def require_group_edit_enabled():
+    if GROUP_ORGANIZATION_ENABLED is not True:
+        _refuse()
+
+
+def require_live_design(design, *, lifecycle=None):
+    """Generic writes stay closed; named host lifecycle adapters are separate."""
     if design is not None and getattr(design, "group_organization", None) is not None:
-        from fastapi import HTTPException
-        raise HTTPException(409, detail={
-            "code": "group_organization_not_enabled",
-            "message": "Separate groups and placements are not enabled for live editing yet.",
-        })
+        if type(lifecycle) is str and lifecycle in _LIFECYCLES:
+            require_group_edit_enabled()
+            return
+        _refuse()
+
+
+def require_group_publication(source, candidate, checked):
+    """Called only after the publisher validates its opaque registered permit."""
+    if checked is not None and checked.admission.scope_tag == "group_organization_v1":
+        if checked.evidence_class != "owned_group_edit":
+            _refuse()
+        require_group_edit_enabled()
+        return
+    require_live_design(source)
+    require_live_design(candidate)
 
 
 def require_native_command(kind, params):
