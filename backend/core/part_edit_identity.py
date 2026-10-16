@@ -11,9 +11,11 @@ from backend.core.feature_identity import preserve_proof_identity as _preserve_b
 
 
 _PROTECTED = {
-    "nanoparticle-connection-version-create": ("version_id", "nanoparticle_connection_version"),
-    "nanoparticle-connection-version-patch": ("nanoparticle_connection_version",),
-    "nanoparticle-connection-version-delete": ("nanoparticle_connection_version",),
+    "nanoparticle-connection-version-create": ("version_id", "nanoparticle_connection_version",
+        "nanoparticle_application_version", "duplex_id", "duplex_created_at"),
+    "nanoparticle-connection-version-patch": ("nanoparticle_connection_version",
+        "nanoparticle_application_version", "duplex_id", "duplex_created_at"),
+    "nanoparticle-connection-version-delete": ("nanoparticle_connection_version", "nanoparticle_application_version"),
 }
 
 

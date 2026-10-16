@@ -12,7 +12,6 @@ from backend.api.crud import _design_response
 from backend.core.models import (
     Design, Duplex, NanoparticleConnectionVersion, OverhangSpec,
 )
-from backend.core.duplex import connect_register, relocate_duplex, revert_duplex_relocation
 from backend.core.nanoparticle import (
     build_thiol_conjugation, create_gold_nanosphere, estimate_thiol_coverage,
     replace_gold_nanosphere,
@@ -469,81 +468,18 @@ def validate_conjugation(nanoparticle_id: str) -> dict:
 
 
 def _surface_owner(design: Design, nanoparticle_id: str, strand_id: str):
-    for conjugation in design.nanoparticle_conjugations:
-        if conjugation.nanoparticle_id == nanoparticle_id:
-            for record in conjugation.surface_strands:
-                if record.strand_id == strand_id:
-                    return conjugation, record
-    return None, None
+    from backend.core.nanoparticle_connections import surface_owner
+    return surface_owner(design, nanoparticle_id, strand_id)
 
 
 def _sync_np_applied_bindings(design: Design, affected: set[tuple[str, str]]) -> Design:
-    """Refresh only the handle ownership changed by this application transition.
-
-    A surface carrier follows its exact live strand/domain/auxiliary endpoint.
-    Ambiguous legacy ownership remains visible; this helper never guesses a
-    replacement or normalizes an unrelated direct binding.
-    """
-    applied = {
-        (version.nanoparticle_id, version.strand_id): version.overhang_id
-        for version in design.nanoparticle_connection_versions if version.applied
-    }
-    selected_strands = {strand_id for _, strand_id in affected}
-    strands, endpoints = {}, {}
-    for strand in design.strands:
-        if strand.id in selected_strands:
-            strands.setdefault(strand.id, []).append(strand)
-    for endpoint in design.overhangs:
-        if endpoint.strand_id in selected_strands:
-            endpoints.setdefault(endpoint.id, []).append(endpoint)
-    conjugations = []
-    for conjugation in design.nanoparticle_conjugations:
-        changed, records = False, []
-        for record in conjugation.surface_strands:
-            key = conjugation.nanoparticle_id, record.strand_id
-            if key not in affected:
-                records.append(record)
-                continue
-            values = {"bound_overhang_id": applied.get(key)}
-            owners = strands.get(record.strand_id, ())
-            specs = endpoints.get(record.overhang_id, ())
-            if len(owners) == 1 and len(specs) == 1 and specs[0].auxiliary_endpoint:
-                domains = [domain for domain in owners[0].domains if domain.overhang_id == record.overhang_id]
-                if len(domains) == 1 and domains[0].helix_id == specs[0].helix_id:
-                    values["helix_id"] = domains[0].helix_id
-            records.append(record.model_copy(update=values))
-            changed = True
-        conjugations.append(conjugation.model_copy(update={"surface_strands": records}) if changed else conjugation)
-    return design.model_copy(update={"nanoparticle_conjugations": conjugations})
+    from backend.core.nanoparticle_connections import sync_applied_bindings
+    return sync_applied_bindings(design, affected)
 
 
 def _ensure_np_duplex_endpoint(design: Design, nanoparticle_id: str, strand_id: str) -> tuple[Design, str]:
-    """Backfill the hidden overhang endpoint for old and newly-created handles."""
-    _, record = _surface_owner(design, nanoparticle_id, strand_id)
-    if record is None:
-        raise ValueError("Nanoparticle surface strand not found")
-    overhang_id = record.overhang_id or f"__np_oh__{strand_id}"
-    strand = next((s for s in design.strands if s.id == strand_id), None)
-    if strand is None or not strand.domains:
-        raise ValueError("Nanoparticle surface strand has no DNA domain")
-    domains = [domain.model_copy(update={"overhang_id": overhang_id})
-               if domain.helix_id == record.helix_id else domain for domain in strand.domains]
-    strands = [strand.model_copy(update={"domains": domains}) if strand.id == strand_id else strand
-               for strand in design.strands]
-    conjugations = []
-    for conjugation in design.nanoparticle_conjugations:
-        records = [item.model_copy(update={"overhang_id": overhang_id})
-                   if item.strand_id == strand_id else item for item in conjugation.surface_strands]
-        conjugations.append(conjugation.model_copy(update={"surface_strands": records}))
-    overhangs = list(design.overhangs)
-    if not any(overhang.id == overhang_id for overhang in overhangs):
-        overhangs.append(OverhangSpec(
-            id=overhang_id, helix_id=record.helix_id, strand_id=strand_id,
-            sequence=strand.sequence, label=strand.name, auxiliary_endpoint=True,
-        ))
-    return design.model_copy(update={
-        "strands": strands, "nanoparticle_conjugations": conjugations, "overhangs": overhangs,
-    }), overhang_id
+    from backend.core.nanoparticle_connections import ensure_duplex_endpoint
+    return ensure_duplex_endpoint(design, nanoparticle_id, strand_id)
 
 
 def _np_connection_attaches(owner, direct_variant: str) -> tuple[str, str]:
@@ -561,159 +497,27 @@ def _np_connection_attaches(owner, direct_variant: str) -> tuple[str, str]:
 def _validate_np_connection_polarity(
     design: Design, owner, target_overhang_id: str, direct_variant: str,
 ) -> None:
-    """Reject endpoint combinations that would require parallel DNA pairing."""
-    from backend.core.nanoparticle_connections import polarity_error
-    error = polarity_error(design, owner, target_overhang_id, direct_variant)
-    if error:
-        raise HTTPException(422, detail=error[0])
+    from backend.core.nanoparticle_connections import ConnectionApplicationError, validate_connection_polarity
+    try:
+        return validate_connection_polarity(design, owner, target_overhang_id, direct_variant)
+    except ConnectionApplicationError as error:
+        raise HTTPException(error.status_code, detail=error.detail) from error
 
 
 def _validate_np_direct_duplex(design: Design, duplex: Duplex) -> None:
-    """Apply the same Watson-Crick and direction gates as canonical duplex CRUD."""
-    from backend.core.duplex import duplex_wc_ok
-    from backend.core.models import _overhang_backing_domain
-
-    ok, reason = duplex_wc_ok(design, duplex)
-    if not ok:
-        raise HTTPException(
-            422, detail=f"nanoparticle duplex register is not complementary: {reason}.",
-        )
-    _left_strand, left_domain = _overhang_backing_domain(
-        design, duplex.left.overhang_id,
-    )
-    _right_strand, right_domain = _overhang_backing_domain(
-        design, duplex.right.overhang_id,
-    )
-    if left_domain is None or right_domain is None:
-        raise HTTPException(422, detail="Nanoparticle connection endpoints must have DNA domains.")
-    # Before relocation two independently placed helices can use the same
-    # Direction enum. The pairing register itself is always walked
-    # antiparallel; relocation must turn the driven domain onto the opposite
-    # direction of the target helix, checked again below.
+    from backend.core.nanoparticle_connections import ConnectionApplicationError, validate_direct_duplex
+    try:
+        return validate_direct_duplex(design, duplex)
+    except ConnectionApplicationError as error:
+        raise HTTPException(error.status_code, detail=error.detail) from error
 
 
 def _set_np_version_applied(design: Design, version_id: str, applied: bool) -> Design:
-    """Apply/unapply an NP candidate as a real canonical DNA duplex."""
-    target = next(v for v in design.nanoparticle_connection_versions if v.id == version_id)
-    conflict_ids = {
-        v.id for v in design.nanoparticle_connection_versions
-        if v.id != version_id and (v.strand_id == target.strand_id or v.overhang_id == target.overhang_id)
-    }
-    removed_duplex_ids = {
-        v.duplex_id for v in design.nanoparticle_connection_versions
-        if v.id == version_id or (applied and v.id in conflict_ids)
-    } - {None}
-    affected_handles = {(target.nanoparticle_id, target.strand_id)} | {
-        (version.nanoparticle_id, version.strand_id)
-        for version in design.nanoparticle_connection_versions
-        if applied and version.id in conflict_ids and (version.applied or version.duplex_id is not None)
-    }
-    versions = []
-    for version in design.nanoparticle_connection_versions:
-        if version.id == version_id:
-            versions.append(version.model_copy(update={
-                "applied": applied, "relaxed": False, "residual_nm": None, "duplex_id": None,
-                "constraint_root_nm": None, "constraint_radius_nm": None,
-            }))
-        elif applied and version.id in conflict_ids:
-            versions.append(version.model_copy(update={
-                "applied": False, "relaxed": False, "residual_nm": None, "duplex_id": None,
-                "constraint_root_nm": None, "constraint_radius_nm": None,
-            }))
-        else:
-            versions.append(version)
-    out = design
-    # Restore each driven NP handle before removing its canonical duplex.  This
-    # is the same reversible topology operation used by Direct OH↔OH Apply.
-    for duplex in list(out.duplexes):
-        if duplex.id in removed_duplex_ids:
-            out = revert_duplex_relocation(out, duplex)
-    out = out.model_copy(update={
-        "duplexes": [dx for dx in out.duplexes if dx.id not in removed_duplex_ids],
-        "nanoparticle_connection_versions": versions,
-    })
-    if applied:
-        out, np_overhang_id = _ensure_np_duplex_endpoint(out, target.nanoparticle_id, target.strand_id)
-        # Capture the exact unbound backbone joint before relocation.  A radial
-        # site estimate omits the DNA helix radius/phase and causes the live
-        # gizmo preview to disagree with the committed constrained move.
-        from backend.core.design_geometry import fitting_geometry
-        particle = next(p for p in out.nanoparticles if p.id == target.nanoparticle_id)
-        owner, record = _surface_owner(out, target.nanoparticle_id, target.strand_id)
-        _validate_np_connection_polarity(
-            out, owner, target.overhang_id, target.direct_variant,
-        )
-        terminal_flag = "is_three_prime" if owner.attach_end == "3p" else "is_five_prime"
-        terminal = next((n for n in fitting_geometry(out, strand_ids={target.strand_id})
-                         if n.get("strand_id") == target.strand_id and n.get(terminal_flag)), None)
-        if terminal is not None:
-            local = np.linalg.inv(particle.pose.to_array()) @ np.array(
-                [*terminal["backbone_position"], 1.0], dtype=float)
-            updated_record = record.model_copy(update={
-                "backbone_attachment_local_nm": tuple(float(v) for v in local[:3])
-            })
-            out = out.model_copy(update={"nanoparticle_conjugations": [
-                conjugation.model_copy(update={"surface_strands": [
-                    updated_record if item.strand_id == target.strand_id else item
-                    for item in conjugation.surface_strands
-                ]}) if conjugation.id == owner.id else conjugation
-                for conjugation in out.nanoparticle_conjugations
-            ]})
-        np_attach, target_attach = _np_connection_attaches(owner, target.direct_variant)
-        try:
-            left, right = connect_register(
-                out, np_overhang_id, np_attach, target.overhang_id, target_attach,
-            )
-        except ValueError as exc:
-            raise HTTPException(422, detail=str(exc)) from exc
-        duplex = Duplex(
-            name=target.name, left=left, right=right, driver="right", bound=True,
-            connection_type=f"nanoparticle-{target.direct_variant}",
-        )
-        _validate_np_direct_duplex(out, duplex)
-        versions = [v.model_copy(update={"duplex_id": duplex.id}) if v.id == version_id else v
-                    for v in out.nanoparticle_connection_versions]
-        out = out.model_copy(update={"duplexes": [*out.duplexes, duplex],
-                                     "nanoparticle_connection_versions": versions})
-        out = relocate_duplex(out, duplex)
-        # Relocation reverses the driven domain onto the target helix. Recompute
-        # the register from that live topology so DuplexEnd bp order continues
-        # to encode each strand's actual 5'→3' backbone walk.
-        live_left, live_right = connect_register(
-            out, np_overhang_id, np_attach, target.overhang_id, target_attach
-        )
-        out = out.model_copy(update={"duplexes": [
-            dx.model_copy(update={"left": live_left, "right": live_right})
-            if dx.id == duplex.id else dx for dx in out.duplexes
-        ]})
-        from backend.core.models import _overhang_backing_domain
-        _np_strand, np_domain = _overhang_backing_domain(out, np_overhang_id)
-        _target_strand, target_domain = _overhang_backing_domain(out, target.overhang_id)
-        if np_domain is None or target_domain is None or np_domain.direction == target_domain.direction:
-            raise HTTPException(
-                422,
-                detail="Nanoparticle connection could not be materialized as antiparallel DNA.",
-            )
-        applied_geometry = fitting_geometry(out, strand_ids={target.strand_id},
-                                            overhang_ids={target.overhang_id})
-        from backend.core.protein import resolve_overhang_anchor
-        constraint_root, _ = resolve_overhang_anchor(
-            applied_geometry, target.overhang_id, "root")
-        constraint_joint = next((
-            np.asarray(n["backbone_position"], dtype=float)
-            for n in applied_geometry
-            if n.get("strand_id") == target.strand_id and n.get(terminal_flag)
-        ), None)
-        if constraint_root is not None and constraint_joint is not None:
-            constraint_radius = float(np.linalg.norm(constraint_joint - constraint_root))
-            out = out.model_copy(update={"nanoparticle_connection_versions": [
-                version.model_copy(update={
-                    "constraint_root_nm": tuple(float(v) for v in constraint_root),
-                    "constraint_radius_nm": constraint_radius,
-                }) if version.id == version_id else version
-                for version in out.nanoparticle_connection_versions
-            ]})
-    return _sync_np_applied_bindings(out, affected_handles)
+    from backend.core.nanoparticle_connections import ConnectionApplicationError, set_version_applied
+    try:
+        return set_version_applied(design, version_id, applied)
+    except ConnectionApplicationError as error:
+        raise HTTPException(error.status_code, detail=error.detail) from error
 
 
 def _next_np_version_name(design: Design, nanoparticle_id: str, strand_id: str, overhang_id: str) -> str:

@@ -337,11 +337,72 @@ clear inactive derived constraints, refresh the carrier from its unique live
 strand/domain/OH, and explicitly exclude bound handles in the generator's free
 handle selector. These corrections preserve the existing geometry math and
 selection intent. Root recorded **eight failures in 2.85 seconds**, matching the
-eight targeted defects/transitions. The narrow metadata/planner correction now
-awaits root validation; no new application proof or expanded native schema is
-claimed. Only the selected handle and actually displaced applied/retained
-handles synchronize; a merely pending alternative cannot erase an unrelated
-legacy binding. Ambiguous legacy carriers remain visible rather than guessed.
+eight targeted defects/transitions. Checkpoint `91756139` records the narrow
+metadata/planner correction with **181 distinct passing cases**, including all
+eight dossier cases. An old auxiliary-target assertion was updated to the exact
+native `422 invalid_selection` diagnostic: the pending adapter and create-route
+AST were unchanged from `a24b60b7`, so this was not an application regression.
+Only the selected handle and actually displaced applied/retained handles
+synchronize; a merely pending alternative cannot erase an unrelated legacy
+binding. Ambiguous legacy carriers remain visible rather than guessed.
+
+The first application red run exercised two native-oracle cases plus the real
+cold lifecycle: three expected failures (missing adapter/unregistered contract)
+in a combined 4.04-second run. After extraction and the pure adapter, root ran
+both new targets: **42 passed / 6 failed in 4.36 seconds**. Every geometry oracle,
+real cold rebuild, upstream geometry edit and refusal case passed; the six
+remaining failures were the intentionally deferred three typed dependency and
+three output-identity integrations while the OH checkpoint owned those files.
+These results do not qualify the ordinary application route or latency.
+
+The current implementation reuses the existing pending parse/build dispatch
+through presence of `nanoparticle_application_version`. The shared kernel has a
+local domain exception translated by thin compatibility wrappers, without
+importing FastAPI. Pending-only schemas and OH pending integration remain
+separate. No model or numerical-manifest files change.
+
+The initial pure scope is at most **16 handles and 4,096 emitted bases**, plus
+the existing 10,000-reference-work and 128-version ceilings. These are
+conservative admission bounds pending measurement. It refuses residue assets,
+protein/coating attachments, extensions, deformations, flexible/Join state and
+other unqualified geometry families. Stored historical helices are charged
+before parsing/restoring; restoration may not replace a live helix or remove a
+child cluster with incoming consumers. Directional residue checks protect
+shared target helices, and the unchanged native topology planner checks the
+prospective interval before fitting. No sampled geometry is an authored input.
+
+A newly identified coverage limit is explicit: the legacy native planner can
+shorten a handle longer than its target to the paired window. The native recipe
+adapter refuses that case before geometry if the planned interval changes the
+handle nucleotide count. A shorter handle on a longer target retains the exact
+native oracle and restoration path. This is unresolved unequal-length
+application coverage, not a formula fix or P4 completion; compatibility math
+remains unchanged. The dependency/identity additions and two interval tests
+passed: all **50 new cases** were green in the root's broader **289 passed /
+1 failed in 247.99 seconds** run (35 deprecation warnings). The sole failure
+was the existing `generator_connections` platform/HONEYCOMB/3 fit-collision
+case. Root reproduced the same collision in 18.64 seconds using all seven
+pre-extraction route helpers from `acad1d51` in memory with the same current
+generator/core and retained random identity defaults. This is a targeted
+historical-helper comparison, not a whole-binary baseline; the evidence is
+`np_application_generator_baseline.json`. The generated multi-anchor coverage
+debt remains explicit; it does not justify changing the placement algorithm.
+
+Peer review then identified two admission gaps. Root's additional two-case
+red run failed as expected in 2.81 seconds: aggregate loop descriptors were
+traversed beyond the allowance, and an opposite-direction domain on the target
+strand could keep the selected radial carrier live after application. The
+narrow correction charges each loop-list length before traversing it, checks
+inserted-base work immediately, and requires exclusive strand ownership of
+each affected radial/restored carrier regardless of direction. These guards
+run before fitting. Root's corrected focused run passed **231 cases across
+12 files in 14.26 seconds** (35 deprecation warnings), including all 52 new
+cases, admission boundaries, native cold proof, shared edit and legacy NP
+attachment regressions. Together with unchanged passing targets from the
+earlier broad run, this is **291 distinct green cases**, plus the one retained
+historical platform collision failure above.
+Ordinary applied-route recording and bounded performance qualification remain
+subsequent work.
 
 Proposed cohesive files: new `api/part_np_application_commands.py`; extraction
 into existing unpinned `core/nanoparticle_connections.py` with optional explicit

@@ -93,7 +93,16 @@ def dependencies(kind, params):
         version = Resource("nanoparticle_connection_version", command.version_id)
         if kind != "nanoparticle-connection-version-create":
             reads.add(version)
-        return Dependencies(frozenset(reads), frozenset({PART_TOPOLOGY, version}), barrier=True)
+        writes = {PART_TOPOLOGY, version}
+        if "nanoparticle_application_version" in params:
+            reads.add(Resource("overhang", command.handle_overhang_id))
+            if command.prior_duplex_id is not None:
+                reads.add(Resource("duplex", command.prior_duplex_id))
+            reads.update(Resource("nanoparticle_connection_version", identity)
+                         for identity in command.conflict_version_ids)
+            if getattr(command, "duplex_id", None) is not None:
+                writes.add(Resource("duplex", command.duplex_id))
+        return Dependencies(frozenset(reads), frozenset(writes), barrier=True)
     if kind == "nanoparticle-patch" and "coating_version" in params:
         from backend.api.part_streptavidin_commands import resources
         try:

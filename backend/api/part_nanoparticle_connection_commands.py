@@ -69,6 +69,9 @@ class DeleteRequest(_Input):
 
 
 def parse_command(kind, params):
+    if "nanoparticle_application_version" in params:
+        from backend.api.part_np_application_commands import parse_command as parse_application
+        return parse_application(kind, params)
     model = {"nanoparticle-connection-version-create": CreateRequest,
              "nanoparticle-connection-version-patch": PatchRequest,
              "nanoparticle-connection-version-delete": DeleteRequest}.get(kind)
@@ -245,6 +248,9 @@ def validate_pending_selection(design, particle_id, identities, prepared, select
 
 
 def build(kind, design, params):
+    if "nanoparticle_application_version" in params:
+        from backend.api.part_np_application_commands import build as build_application
+        return build_application(kind, design, params)
     body = parse_command(kind, params)
     return _build_prepared(kind, design, body, _prepare_source(design))
 

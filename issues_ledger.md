@@ -2116,3 +2116,19 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   early-refusal cases intentionally remained red. No production simulation ran.
 - This repairs package propagation only. It does not certify source isolation,
   complete physical receipts or per-attempt solver/restart provenance.
+
+## ISSUE-96 — Three-anchor platform generator rejects its second fitted connection (2026-10-15, BASELINE REPRODUCED; OPEN)
+
+- The focused existing generator regression
+  `test_multiple_connections_close_without_moving_centers[platform-HONEYCOMB-3]`
+  fails at connection 2/3 for nanoparticle 1 with a fitted-duplex collision. The
+  other 289 cases in that run pass, including all 50 initial native application
+  contract cases. The two later admission regressions also pass after correction.
+- Exact seven pre-extraction nanoparticle route helpers from `acad1d51`, executed
+  in a private namespace with the same current generator/native algorithms,
+  reproduce the same failure (18.64 s). Evidence:
+  `docs/audits/feature_history_20261014/np_application_generator_baseline.json`.
+  This isolates the helper extraction; it is not a whole historical binary run.
+- Keep this as generated-asset coverage/placement debt. No collision threshold,
+  molecular placement, optimizer, test expectation or numerical pin was changed.
+  Diagnose the actual collision before any proposed scientific correction.
