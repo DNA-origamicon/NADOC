@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-15",
+  "executor": "root, serialized focused validation",
+  "scope": "Internal exclusive immutable session content; public storage switch remains false",
+  "tests": [
+    {"target": "tests/test_part_immutable_state.py", "passed": 32, "seconds": 2.93},
+    {"target": "tests/test_part_immutable_revision.py", "passed": 49, "seconds": 2.66},
+    {"target": "tests/test_part_publication_state.py", "passed": 39, "seconds": 2.76},
+    {"target": "tests/test_part_publication_permit.py", "passed": 34, "seconds": 2.75},
+    {"target": "tests/test_part_revision_status.py", "passed": 5, "seconds": 2.69},
+    {"target": "tests/test_session_cache_identity.py", "passed": 50, "seconds": 2.93},
+    {"target": "tests/test_part_strict_http.py", "passed": 61, "seconds": 3.22},
+    {"target": "tests/test_session_cache_prune.py", "passed": 6, "seconds": 2.70}
+  ],
+  "total_passed": 276,
+  "failed": 0,
+  "static": {"changed_python_ruff": "passed", "git_diff_check": "passed"},
+  "properties": [
+    "Actual empty-session reservation and source/session/policy CAS",
+    "Private sealed handle as the only active authoritative content",
+    "Outside-lock empty preparation; no hidden mutable mirror",
+    "Bounded handle retention and immediate source undo",
+    "Failure-atomic exact handle, stack and revision rollback",
+    "Mutable getter, old capture and old persistence refusal for internal handles",
+    "Scalar read compatibility and strict-to-compatibility transition refusal"
+  ],
+  "limitations": [
+    "No public immutable creation or immutable job capture/commit path yet",
+    "Typed durable record, cold restore and pending-recovery API remain prerequisites",
+    "32 MB retained-handle allowance is provisional, not a measured heap bound",
+    "No application or end-to-end responsiveness claim from this focused state checkpoint",
+    "Registered batch public gate remains false"
+  ]
+}

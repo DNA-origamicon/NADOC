@@ -1,0 +1,1946 @@
+{
+  "scope": "Pure registered coating construction, lifecycle and cold proof; no live UI/lock qualification",
+  "production_limits_unchanged": true,
+  "experimental_profile_not_production": {
+    "max_nodes": 100000,
+    "max_bytes": 4000000,
+    "seconds": 0.1
+  },
+  "existing_worker_input_bytes": 2000000,
+  "sources": {
+    "pdb_source": {
+      "raw_bytes": 329994,
+      "sha256": "892478b3fbec8bb38fe9a2c5de12ad2b923b42327a43b61d2884d6c3fc59f3f9",
+      "base64_characters": 439992
+    },
+    "coverage_source": {
+      "raw_bytes": 846,
+      "sha256": "c1f82e7a1b32049dbc66ccfec907a772e2df79b9ee2b3c1d27f48d1f982fb59a",
+      "base64_characters": 1128
+    }
+  },
+  "cases": [
+    {
+      "mode": "adsorption",
+      "requested_count": 1,
+      "cheap_admission_ms": 2.3101160004443955,
+      "two_source_declaration_complete": true,
+      "retained_portable_source_closure_complete": true,
+      "stages": [
+        {
+          "build_ms": 221.0985530000471,
+          "recovery_encode_ms": 28.525213998364052,
+          "new_recovery_encoded_bytes": 424172,
+          "stage": "set",
+          "requested_sites": 1,
+          "actual_sites": 1,
+          "protein_atoms": 3604,
+          "reload_authoring_equal": true,
+          "reload_ms": 28.01702199940337,
+          "history_rows": 2,
+          "candidate_json_bytes": 1697493,
+          "cumulative_recovery_encoded_bytes": 714488,
+          "default_capture": {
+            "median_ms": 11.639791000561672,
+            "max_ms": 13.415404999250313,
+            "samples_ms": [
+              13.415404999250313,
+              13.398015998973278,
+              12.170166000942118,
+              11.639791000561672,
+              11.355030999766313,
+              11.453868000899092,
+              11.470954001197242,
+              11.513568999362178,
+              12.023551998936455
+            ],
+            "refusals": [
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded"
+            ],
+            "pickle_bytes_max": null,
+            "fits_existing_2MB_worker": null
+          },
+          "experimental_capture": {
+            "median_ms": 48.54223700021976,
+            "max_ms": 50.32456600019941,
+            "samples_ms": [
+              50.32456600019941,
+              49.61650899895176,
+              49.04374599937,
+              48.373437000918784,
+              47.52462299984472,
+              47.763107999344356,
+              48.822569000549265,
+              48.18127200087474,
+              48.54223700021976
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 877817,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 209.16901800046617,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "059b0b9e-4e56-54c0-a4c1-419923b41759",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": []
+              }
+            ],
+            "spawn_and_proof_ms": 977.3368339992885
+          }
+        },
+        {
+          "build_ms": 148.34009200058063,
+          "recovery_encode_ms": 26.599898998028948,
+          "new_recovery_encoded_bytes": 557864,
+          "stage": "resize",
+          "requested_sites": 1,
+          "actual_sites": 1,
+          "protein_atoms": 3604,
+          "reload_authoring_equal": true,
+          "reload_ms": 21.511600998564973,
+          "history_rows": 3,
+          "candidate_json_bytes": 2256570,
+          "cumulative_recovery_encoded_bytes": 1272352,
+          "default_capture": {
+            "median_ms": 11.191416000656318,
+            "max_ms": 11.92986100068083,
+            "samples_ms": [
+              11.92986100068083,
+              11.623905000305967,
+              11.191416000656318,
+              11.119168999357498,
+              11.121154000647948,
+              11.127406000014162,
+              11.14725399929739,
+              11.212752000574255,
+              11.26346400087641
+            ],
+            "refusals": [
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded"
+            ],
+            "pickle_bytes_max": null,
+            "fits_existing_2MB_worker": null
+          },
+          "experimental_capture": {
+            "median_ms": 48.27400199974363,
+            "max_ms": 88.57524499944702,
+            "samples_ms": [
+              48.015579999628244,
+              48.27400199974363,
+              85.64210099939373,
+              48.16057000061846,
+              48.91638399931253,
+              48.73656000017945,
+              48.03463399912289,
+              47.87078799927258,
+              88.57524499944702
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 878787,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 365.84268100159534,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "059b0b9e-4e56-54c0-a4c1-419923b41759",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": [
+                  "3e8cc06e-7933-5375-af61-0e72e1eb2909"
+                ]
+              }
+            ],
+            "spawn_and_proof_ms": 966.0250150009233
+          }
+        },
+        {
+          "build_ms": 0.332491999870399,
+          "recovery_encode_ms": 26.687399998991168,
+          "new_recovery_encoded_bytes": 557852,
+          "stage": "move",
+          "requested_sites": 1,
+          "actual_sites": 1,
+          "protein_atoms": 3604,
+          "reload_authoring_equal": true,
+          "reload_ms": 20.900618999803555,
+          "history_rows": 4,
+          "candidate_json_bytes": 2815009,
+          "cumulative_recovery_encoded_bytes": 1830204,
+          "default_capture": {
+            "median_ms": 11.185027000465197,
+            "max_ms": 11.603618000663118,
+            "samples_ms": [
+              11.603618000663118,
+              11.19097799892188,
+              11.166676000357256,
+              11.147631999847363,
+              11.194647999218432,
+              11.137812000015401,
+              11.120949000542169,
+              11.216668999622925,
+              11.185027000465197
+            ],
+            "refusals": [
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded"
+            ],
+            "pickle_bytes_max": null,
+            "fits_existing_2MB_worker": null
+          },
+          "experimental_capture": {
+            "median_ms": 48.3106339997903,
+            "max_ms": 49.52395500004059,
+            "samples_ms": [
+              48.3106339997903,
+              49.52395500004059,
+              48.44107200005965,
+              47.88470200037409,
+              48.25826099840924,
+              48.487395000847755,
+              47.920016000716714,
+              48.06473700045899,
+              48.42282100071316
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 879173,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 357.1848920000775,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "059b0b9e-4e56-54c0-a4c1-419923b41759",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": [
+                  "3e8cc06e-7933-5375-af61-0e72e1eb2909",
+                  "a31949d9-a337-5b9e-990f-8dc95d58e3f8"
+                ]
+              }
+            ],
+            "spawn_and_proof_ms": 962.7847390001989
+          }
+        },
+        {
+          "build_ms": 0.17183700038003735,
+          "recovery_encode_ms": 18.294722000064212,
+          "new_recovery_encoded_bytes": 424172,
+          "stage": "remove",
+          "requested_sites": 0,
+          "actual_sites": 0,
+          "protein_atoms": 0,
+          "reload_authoring_equal": true,
+          "reload_ms": 4.559971999697154,
+          "history_rows": 5,
+          "candidate_json_bytes": 2701504,
+          "cumulative_recovery_encoded_bytes": 2254376,
+          "default_capture": {
+            "median_ms": 1.11024699981499,
+            "max_ms": 1.380644000164466,
+            "samples_ms": [
+              1.2939810003445018,
+              0.9782699999050237,
+              1.351492001049337,
+              1.2615579998964677,
+              1.11024699981499,
+              1.0842679985216819,
+              0.9646859998611035,
+              1.380644000164466,
+              1.0214030007773545
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 446575,
+            "fits_existing_2MB_worker": true
+          },
+          "experimental_capture": {
+            "median_ms": 0.9582409984432161,
+            "max_ms": 1.4724619995831745,
+            "samples_ms": [
+              0.9473329992033541,
+              0.9757909992913483,
+              0.9582409984432161,
+              1.4327000008051982,
+              0.9477299990976462,
+              0.933055000132299,
+              0.9506050009804312,
+              0.9927470000548055,
+              1.4724619995831745
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 446575,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 339.5373559997097,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "059b0b9e-4e56-54c0-a4c1-419923b41759",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": [
+                  "137cab58-240e-5c70-bcd6-5f55669071df",
+                  "3e8cc06e-7933-5375-af61-0e72e1eb2909",
+                  "a31949d9-a337-5b9e-990f-8dc95d58e3f8"
+                ]
+              }
+            ],
+            "spawn_and_proof_ms": 938.0338209994079
+          }
+        }
+      ]
+    },
+    {
+      "mode": "adsorption",
+      "requested_count": 16,
+      "cheap_admission_ms": 1.4741230006620754,
+      "two_source_declaration_complete": true,
+      "retained_portable_source_closure_complete": true,
+      "stages": [
+        {
+          "build_ms": 199.23698300044634,
+          "recovery_encode_ms": 18.541796000135946,
+          "new_recovery_encoded_bytes": 426992,
+          "stage": "set",
+          "requested_sites": 16,
+          "actual_sites": 16,
+          "protein_atoms": 3604,
+          "reload_authoring_equal": true,
+          "reload_ms": 15.777454000271973,
+          "history_rows": 2,
+          "candidate_json_bytes": 1704276,
+          "cumulative_recovery_encoded_bytes": 717312,
+          "default_capture": {
+            "median_ms": 11.497846999191097,
+            "max_ms": 11.87646499965922,
+            "samples_ms": [
+              11.85713199993188,
+              11.87646499965922,
+              11.442328001066926,
+              11.433801000748645,
+              11.51113200103282,
+              11.697813000864699,
+              11.497846999191097,
+              11.466617001133272,
+              11.407629001041641
+            ],
+            "refusals": [
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded"
+            ],
+            "pickle_bytes_max": null,
+            "fits_existing_2MB_worker": null
+          },
+          "experimental_capture": {
+            "median_ms": 48.41175899855443,
+            "max_ms": 87.10038499884831,
+            "samples_ms": [
+              49.896836000698386,
+              49.97476099924825,
+              47.7734629985207,
+              48.252956999931484,
+              48.41175899855443,
+              48.25493899988942,
+              87.10038499884831,
+              47.93574900031672,
+              48.445236001498415
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 880505,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 184.88673599858885,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "90e029e1-4335-5b6c-a48a-8466d498617e",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": []
+              }
+            ],
+            "spawn_and_proof_ms": 968.2460740004899
+          }
+        },
+        {
+          "build_ms": 198.08384699899761,
+          "recovery_encode_ms": 26.771001001179684,
+          "new_recovery_encoded_bytes": 563464,
+          "stage": "resize",
+          "requested_sites": 16,
+          "actual_sites": 16,
+          "protein_atoms": 3604,
+          "reload_authoring_equal": true,
+          "reload_ms": 22.295664999546716,
+          "history_rows": 3,
+          "candidate_json_bytes": 2268959,
+          "cumulative_recovery_encoded_bytes": 1280776,
+          "default_capture": {
+            "median_ms": 11.642535000646603,
+            "max_ms": 11.838968999654753,
+            "samples_ms": [
+              11.71521899959771,
+              11.604756999076926,
+              11.613582000791212,
+              11.838968999654753,
+              11.642535000646603,
+              11.829945999124902,
+              11.277135999989696,
+              11.777095000070403,
+              11.352297999110306
+            ],
+            "refusals": [
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded"
+            ],
+            "pickle_bytes_max": null,
+            "fits_existing_2MB_worker": null
+          },
+          "experimental_capture": {
+            "median_ms": 48.63090500111866,
+            "max_ms": 89.24899899830052,
+            "samples_ms": [
+              49.456106000434374,
+              48.612761000185856,
+              47.952627999620745,
+              89.24899899830052,
+              48.524320000069565,
+              48.9017790005164,
+              48.62108899942541,
+              48.63090500111866,
+              48.99973799911095
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 881475,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 388.3920600001147,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "90e029e1-4335-5b6c-a48a-8466d498617e",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": [
+                  "4fda6a0f-94bc-5003-8975-a2f008a963a0"
+                ]
+              }
+            ],
+            "spawn_and_proof_ms": 962.4767740006064
+          }
+        },
+        {
+          "build_ms": 0.41192699973180424,
+          "recovery_encode_ms": 27.24150200083386,
+          "new_recovery_encoded_bytes": 563412,
+          "stage": "move",
+          "requested_sites": 16,
+          "actual_sites": 16,
+          "protein_atoms": 3604,
+          "reload_authoring_equal": true,
+          "reload_ms": 23.29017599913641,
+          "history_rows": 4,
+          "candidate_json_bytes": 2832959,
+          "cumulative_recovery_encoded_bytes": 1844188,
+          "default_capture": {
+            "median_ms": 11.88202900084434,
+            "max_ms": 12.068207999618608,
+            "samples_ms": [
+              12.002785999357002,
+              11.846243000036338,
+              11.859428999741795,
+              11.88202900084434,
+              12.036707999868668,
+              11.752373999115662,
+              12.068207999618608,
+              11.908746999324649,
+              11.80240499888896
+            ],
+            "refusals": [
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded"
+            ],
+            "pickle_bytes_max": null,
+            "fits_existing_2MB_worker": null
+          },
+          "experimental_capture": {
+            "median_ms": 50.73156599974027,
+            "max_ms": 90.40512100000342,
+            "samples_ms": [
+              90.40512100000342,
+              51.14633099947241,
+              49.86539000128687,
+              50.310831000388134,
+              50.99283899835427,
+              50.6484889992862,
+              51.88948800059734,
+              50.53792799844814,
+              50.73156599974027
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 881861,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 407.6980670015473,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "90e029e1-4335-5b6c-a48a-8466d498617e",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": [
+                  "2acb3a03-4533-5d58-92a0-3a097f6c3172",
+                  "4fda6a0f-94bc-5003-8975-a2f008a963a0"
+                ]
+              }
+            ],
+            "spawn_and_proof_ms": 1012.2522870005923
+          }
+        },
+        {
+          "build_ms": 0.17326099987258203,
+          "recovery_encode_ms": 19.11305499743321,
+          "new_recovery_encoded_bytes": 426952,
+          "stage": "remove",
+          "requested_sites": 0,
+          "actual_sites": 0,
+          "protein_atoms": 0,
+          "reload_authoring_equal": true,
+          "reload_ms": 4.3945990000793245,
+          "history_rows": 5,
+          "candidate_json_bytes": 2718277,
+          "cumulative_recovery_encoded_bytes": 2271140,
+          "default_capture": {
+            "median_ms": 1.038753000102588,
+            "max_ms": 1.4444589996855939,
+            "samples_ms": [
+              1.2601769994944334,
+              1.0564059994067065,
+              1.3710929997614585,
+              1.0139579990209313,
+              1.038753000102588,
+              0.9721220012579579,
+              0.9739590004755883,
+              1.4444589996855939,
+              0.9745709994604113
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 446577,
+            "fits_existing_2MB_worker": true
+          },
+          "experimental_capture": {
+            "median_ms": 1.0168139997404069,
+            "max_ms": 1.82751099964662,
+            "samples_ms": [
+              0.9766109997144667,
+              0.9605909999663709,
+              1.035794000927126,
+              1.3901740003348095,
+              1.0202840003330493,
+              1.0168139997404069,
+              0.9404899992659921,
+              0.9379390012327349,
+              1.82751099964662
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 446577,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 383.75576100042963,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "90e029e1-4335-5b6c-a48a-8466d498617e",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": [
+                  "2acb3a03-4533-5d58-92a0-3a097f6c3172",
+                  "4fda6a0f-94bc-5003-8975-a2f008a963a0",
+                  "e2af1576-38b6-5c25-87ac-fce2aab7f7c4"
+                ]
+              }
+            ],
+            "spawn_and_proof_ms": 1002.1441539993248
+          }
+        }
+      ]
+    },
+    {
+      "mode": "adsorption",
+      "requested_count": 64,
+      "cheap_admission_ms": 1.4361710000230232,
+      "two_source_declaration_complete": true,
+      "retained_portable_source_closure_complete": true,
+      "stages": [
+        {
+          "build_ms": 574.0627989998757,
+          "recovery_encode_ms": 19.887671998731093,
+          "new_recovery_encoded_bytes": 430792,
+          "stage": "set",
+          "requested_sites": 64,
+          "actual_sites": 39,
+          "protein_atoms": 3604,
+          "reload_authoring_equal": true,
+          "reload_ms": 18.036548000964103,
+          "history_rows": 2,
+          "candidate_json_bytes": 1714165,
+          "cumulative_recovery_encoded_bytes": 721112,
+          "default_capture": {
+            "median_ms": 11.567199000637629,
+            "max_ms": 11.747085998649709,
+            "samples_ms": [
+              11.747085998649709,
+              11.553618000107235,
+              11.580473999856622,
+              11.479636999865761,
+              11.725905000275816,
+              11.694995000652852,
+              11.483285001304466,
+              11.540950999915367,
+              11.567199000637629
+            ],
+            "refusals": [
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded"
+            ],
+            "pickle_bytes_max": null,
+            "fits_existing_2MB_worker": null
+          },
+          "experimental_capture": {
+            "median_ms": 50.368841000818065,
+            "max_ms": 92.20193100009055,
+            "samples_ms": [
+              92.20193100009055,
+              50.41201399944839,
+              49.63043099996867,
+              49.20214099911391,
+              49.74718199991912,
+              51.567260999945574,
+              50.368841000818065,
+              90.94143999936932,
+              49.533139001141535
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 884622,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 612.8639380003733,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "270120f3-8876-516a-9212-bcda17bf7f54",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": []
+              }
+            ],
+            "spawn_and_proof_ms": 1014.1319609992934
+          }
+        },
+        {
+          "build_ms": 768.0892759999551,
+          "recovery_encode_ms": 27.97852199728368,
+          "new_recovery_encoded_bytes": 573256,
+          "stage": "resize",
+          "requested_sites": 64,
+          "actual_sites": 52,
+          "protein_atoms": 3604,
+          "reload_authoring_equal": true,
+          "reload_ms": 22.217043000637204,
+          "history_rows": 3,
+          "candidate_json_bytes": 2292078,
+          "cumulative_recovery_encoded_bytes": 1294368,
+          "default_capture": {
+            "median_ms": 11.430889000621391,
+            "max_ms": 11.770408000302268,
+            "samples_ms": [
+              11.770408000302268,
+              11.430889000621391,
+              11.406343000999186,
+              11.40926000152831,
+              11.494365999169531,
+              11.40573900011077,
+              11.414691998652415,
+              11.73218099938822,
+              11.586515000090003
+            ],
+            "refusals": [
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded"
+            ],
+            "pickle_bytes_max": null,
+            "fits_existing_2MB_worker": null
+          },
+          "experimental_capture": {
+            "median_ms": 50.23639600040042,
+            "max_ms": 91.09441100008553,
+            "samples_ms": [
+              50.743310999678215,
+              50.81332800000382,
+              50.23639600040042,
+              49.13092099923233,
+              91.09441100008553,
+              48.831338999661966,
+              51.1348399995768,
+              49.816892000308144,
+              48.71482199996535
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 887919,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 1382.3930239996116,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "270120f3-8876-516a-9212-bcda17bf7f54",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": [
+                  "22d2e33a-506c-5609-85ef-557c9db50eda"
+                ]
+              }
+            ],
+            "spawn_and_proof_ms": 985.8275120004691
+          }
+        },
+        {
+          "build_ms": 0.3497400011838181,
+          "recovery_encode_ms": 28.755729999829782,
+          "new_recovery_encoded_bytes": 575392,
+          "stage": "move",
+          "requested_sites": 64,
+          "actual_sites": 52,
+          "protein_atoms": 3604,
+          "reload_authoring_equal": true,
+          "reload_ms": 22.552903999894625,
+          "history_rows": 4,
+          "candidate_json_bytes": 2868058,
+          "cumulative_recovery_encoded_bytes": 1869760,
+          "default_capture": {
+            "median_ms": 11.474644999907468,
+            "max_ms": 11.696859999574372,
+            "samples_ms": [
+              11.496565999550512,
+              11.377150000043912,
+              11.34441799877095,
+              11.474644999907468,
+              11.390863999622525,
+              11.386959999072133,
+              11.55021799968381,
+              11.696859999574372,
+              11.529797999173752
+            ],
+            "refusals": [
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded"
+            ],
+            "pickle_bytes_max": null,
+            "fits_existing_2MB_worker": null
+          },
+          "experimental_capture": {
+            "median_ms": 50.11280500002613,
+            "max_ms": 89.84416099883674,
+            "samples_ms": [
+              51.42854900077509,
+              89.84416099883674,
+              49.875140999574796,
+              49.76183100006892,
+              52.502034001008724,
+              49.58026399981463,
+              49.91036499995971,
+              50.11280500002613,
+              50.89507000047888
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 888305,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 1341.1187599995174,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "270120f3-8876-516a-9212-bcda17bf7f54",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": [
+                  "22d2e33a-506c-5609-85ef-557c9db50eda",
+                  "aca2d7a0-ebff-5e6b-ac32-138730fcc469"
+                ]
+              }
+            ],
+            "spawn_and_proof_ms": 969.8693919999641
+          }
+        },
+        {
+          "build_ms": 0.1853200010373257,
+          "recovery_encode_ms": 19.538485001248773,
+          "new_recovery_encoded_bytes": 432940,
+          "stage": "remove",
+          "requested_sites": 0,
+          "actual_sites": 0,
+          "protein_atoms": 0,
+          "reload_authoring_equal": true,
+          "reload_ms": 3.4861860003729817,
+          "history_rows": 5,
+          "candidate_json_bytes": 2749837,
+          "cumulative_recovery_encoded_bytes": 2302700,
+          "default_capture": {
+            "median_ms": 1.107038000554894,
+            "max_ms": 1.458828000977519,
+            "samples_ms": [
+              1.2635330003831768,
+              1.0952680004265858,
+              1.3037299995630747,
+              0.9609159988031024,
+              0.9756780000316212,
+              1.1412490002840059,
+              1.0323309998057084,
+              1.458828000977519,
+              1.107038000554894
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 446577,
+            "fits_existing_2MB_worker": true
+          },
+          "experimental_capture": {
+            "median_ms": 1.0164720006287098,
+            "max_ms": 1.4026740009285277,
+            "samples_ms": [
+              1.001310998617555,
+              0.9496450002188794,
+              1.0298369998054113,
+              1.386416000968893,
+              1.0333280006307177,
+              0.9380739993503084,
+              1.0164720006287098,
+              0.97368299975642,
+              1.4026740009285277
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 446577,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 1364.5097670014366,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "270120f3-8876-516a-9212-bcda17bf7f54",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": [
+                  "1285e9ed-6277-5f11-8835-205fca1de7d0",
+                  "22d2e33a-506c-5609-85ef-557c9db50eda",
+                  "aca2d7a0-ebff-5e6b-ac32-138730fcc469"
+                ]
+              }
+            ],
+            "spawn_and_proof_ms": 953.5746209985518
+          }
+        }
+      ]
+    },
+    {
+      "mode": "biotin_tether",
+      "requested_count": 1,
+      "cheap_admission_ms": 1.454543998988811,
+      "two_source_declaration_complete": true,
+      "retained_portable_source_closure_complete": true,
+      "stages": [
+        {
+          "build_ms": 151.11293100017065,
+          "recovery_encode_ms": 18.857918001231155,
+          "new_recovery_encoded_bytes": 424776,
+          "stage": "set",
+          "requested_sites": 1,
+          "actual_sites": 1,
+          "protein_atoms": 3620,
+          "reload_authoring_equal": true,
+          "reload_ms": 18.978134999997565,
+          "history_rows": 2,
+          "candidate_json_bytes": 1700527,
+          "cumulative_recovery_encoded_bytes": 715100,
+          "default_capture": {
+            "median_ms": 11.348944999554078,
+            "max_ms": 11.677251999572036,
+            "samples_ms": [
+              11.302569999315892,
+              11.38576599987573,
+              11.236889000429073,
+              11.309934001474176,
+              11.308441000437597,
+              11.403380998672219,
+              11.48488499893574,
+              11.677251999572036,
+              11.348944999554078
+            ],
+            "refusals": [
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded"
+            ],
+            "pickle_bytes_max": null,
+            "fits_existing_2MB_worker": null
+          },
+          "experimental_capture": {
+            "median_ms": 49.19594400053029,
+            "max_ms": 91.55465600088064,
+            "samples_ms": [
+              48.74622600073053,
+              91.55465600088064,
+              49.076224999225815,
+              49.96332100017753,
+              50.33432199888921,
+              49.15603800145618,
+              48.72811300083413,
+              49.19594400053029,
+              91.03010000035283
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 879766,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 170.7282169991231,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "5ef4f59a-c20b-5133-baff-1c2a93dd7b81",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": []
+              }
+            ],
+            "spawn_and_proof_ms": 979.5868199998949
+          }
+        },
+        {
+          "build_ms": 188.5771620000014,
+          "recovery_encode_ms": 27.108974998554913,
+          "new_recovery_encoded_bytes": 559104,
+          "stage": "resize",
+          "requested_sites": 1,
+          "actual_sites": 1,
+          "protein_atoms": 3620,
+          "reload_authoring_equal": true,
+          "reload_ms": 20.19051899878832,
+          "history_rows": 3,
+          "candidate_json_bytes": 2260850,
+          "cumulative_recovery_encoded_bytes": 1274204,
+          "default_capture": {
+            "median_ms": 11.480889999802457,
+            "max_ms": 12.116915999285993,
+            "samples_ms": [
+              11.623145001067314,
+              11.480889999802457,
+              11.332568999932846,
+              11.403648000850808,
+              11.680207000608789,
+              11.299366000457667,
+              11.835088000225369,
+              11.284653999609873,
+              12.116915999285993
+            ],
+            "refusals": [
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded"
+            ],
+            "pickle_bytes_max": null,
+            "fits_existing_2MB_worker": null
+          },
+          "experimental_capture": {
+            "median_ms": 49.33561600046232,
+            "max_ms": 88.73626999957196,
+            "samples_ms": [
+              49.03390500112437,
+              48.64123399966047,
+              48.929226000836934,
+              50.45398099900922,
+              51.22063300041191,
+              88.73626999957196,
+              48.69203300040681,
+              49.33561600046232,
+              50.1084740008082
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 880739,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 365.51870699986466,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "5ef4f59a-c20b-5133-baff-1c2a93dd7b81",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": [
+                  "dfcbbc79-0a55-5149-8896-2404f3e66d2a"
+                ]
+              }
+            ],
+            "spawn_and_proof_ms": 971.5526109994244
+          }
+        },
+        {
+          "build_ms": 0.3300680000393186,
+          "recovery_encode_ms": 27.45221099939954,
+          "new_recovery_encoded_bytes": 559124,
+          "stage": "move",
+          "requested_sites": 1,
+          "actual_sites": 1,
+          "protein_atoms": 3620,
+          "reload_authoring_equal": true,
+          "reload_ms": 21.090277999974205,
+          "history_rows": 4,
+          "candidate_json_bytes": 2820564,
+          "cumulative_recovery_encoded_bytes": 1833328,
+          "default_capture": {
+            "median_ms": 11.608795999563881,
+            "max_ms": 12.199750999570824,
+            "samples_ms": [
+              11.624284999925294,
+              11.44398100041144,
+              11.44139899952279,
+              11.86118300029193,
+              11.47476000005554,
+              11.280058999545872,
+              12.199750999570824,
+              11.871509999764385,
+              11.608795999563881
+            ],
+            "refusals": [
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded"
+            ],
+            "pickle_bytes_max": null,
+            "fits_existing_2MB_worker": null
+          },
+          "experimental_capture": {
+            "median_ms": 49.384537000150885,
+            "max_ms": 94.04175899908296,
+            "samples_ms": [
+              50.46721899998374,
+              48.81300499982899,
+              94.04175899908296,
+              50.52460700062511,
+              49.77390000021842,
+              48.79771400010213,
+              48.89381099928869,
+              49.03427200042643,
+              49.384537000150885
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 881125,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 364.62877899975865,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "5ef4f59a-c20b-5133-baff-1c2a93dd7b81",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": [
+                  "dfcbbc79-0a55-5149-8896-2404f3e66d2a",
+                  "fc13237f-a640-5e3b-8899-a69066ff13c9"
+                ]
+              }
+            ],
+            "spawn_and_proof_ms": 980.6824979987141
+          }
+        },
+        {
+          "build_ms": 0.18296900088898838,
+          "recovery_encode_ms": 18.932826000309433,
+          "new_recovery_encoded_bytes": 424808,
+          "stage": "remove",
+          "requested_sites": 0,
+          "actual_sites": 0,
+          "protein_atoms": 0,
+          "reload_authoring_equal": true,
+          "reload_ms": 3.7584050005534664,
+          "history_rows": 5,
+          "candidate_json_bytes": 2705291,
+          "cumulative_recovery_encoded_bytes": 2258136,
+          "default_capture": {
+            "median_ms": 1.06229100128985,
+            "max_ms": 1.3749470017501153,
+            "samples_ms": [
+              1.24913000036031,
+              1.06229100128985,
+              1.3317840002855519,
+              0.9681280007498572,
+              0.9518560000287835,
+              1.0836250003194436,
+              1.0461190013302257,
+              1.3749470017501153,
+              0.9521539996057982
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 446587,
+            "fits_existing_2MB_worker": true
+          },
+          "experimental_capture": {
+            "median_ms": 0.9451080004510004,
+            "max_ms": 1.4273369997681584,
+            "samples_ms": [
+              1.0107950001838617,
+              0.9451080004510004,
+              1.3535149992094375,
+              0.9363770004711114,
+              0.9328050000476651,
+              0.9349869997095084,
+              0.9415360000275541,
+              1.4273369997681584,
+              0.9489780004514614
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 446587,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 457.0720120009355,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "5ef4f59a-c20b-5133-baff-1c2a93dd7b81",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": [
+                  "dfcbbc79-0a55-5149-8896-2404f3e66d2a",
+                  "e7fce43f-b40e-5b6e-937b-c3a47f058eec",
+                  "fc13237f-a640-5e3b-8899-a69066ff13c9"
+                ]
+              }
+            ],
+            "spawn_and_proof_ms": 1470.675807000589
+          }
+        }
+      ]
+    },
+    {
+      "mode": "biotin_tether",
+      "requested_count": 16,
+      "cheap_admission_ms": 1.4652250010840362,
+      "two_source_declaration_complete": true,
+      "retained_portable_source_closure_complete": true,
+      "stages": [
+        {
+          "build_ms": 169.4513399997959,
+          "recovery_encode_ms": 18.576946000393946,
+          "new_recovery_encoded_bytes": 427564,
+          "stage": "set",
+          "requested_sites": 16,
+          "actual_sites": 16,
+          "protein_atoms": 3620,
+          "reload_authoring_equal": true,
+          "reload_ms": 16.884308999578934,
+          "history_rows": 2,
+          "candidate_json_bytes": 1707300,
+          "cumulative_recovery_encoded_bytes": 717896,
+          "default_capture": {
+            "median_ms": 11.366060000000289,
+            "max_ms": 11.67172000168648,
+            "samples_ms": [
+              11.414061000323272,
+              11.262422000072547,
+              11.463946000731084,
+              11.67172000168648,
+              11.338489000991103,
+              11.219578000236652,
+              11.266190000242204,
+              11.366060000000289,
+              11.64533900009701
+            ],
+            "refusals": [
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded"
+            ],
+            "pickle_bytes_max": null,
+            "fits_existing_2MB_worker": null
+          },
+          "experimental_capture": {
+            "median_ms": 50.07653400025447,
+            "max_ms": 88.5202429999481,
+            "samples_ms": [
+              50.39041000054567,
+              50.60304300059215,
+              49.300647999189096,
+              88.5202429999481,
+              49.53692500021134,
+              49.478025999633246,
+              50.07653400025447,
+              48.644418000549194,
+              50.53185999895504
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 882454,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 228.92652500013355,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "04f063c1-5526-541c-9806-e4efcdce7365",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": []
+              }
+            ],
+            "spawn_and_proof_ms": 1018.6722339985863
+          }
+        },
+        {
+          "build_ms": 168.46980999980588,
+          "recovery_encode_ms": 27.634752999802004,
+          "new_recovery_encoded_bytes": 564756,
+          "stage": "resize",
+          "requested_sites": 16,
+          "actual_sites": 16,
+          "protein_atoms": 3620,
+          "reload_authoring_equal": true,
+          "reload_ms": 23.051152000334696,
+          "history_rows": 3,
+          "candidate_json_bytes": 2273281,
+          "cumulative_recovery_encoded_bytes": 1282652,
+          "default_capture": {
+            "median_ms": 12.185893001515069,
+            "max_ms": 15.025045000584214,
+            "samples_ms": [
+              11.77168800131767,
+              11.605829000473022,
+              11.35688999966078,
+              12.185893001515069,
+              12.023460001728381,
+              13.149319000149262,
+              13.356587000089348,
+              13.707983000131208,
+              15.025045000584214
+            ],
+            "refusals": [
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded"
+            ],
+            "pickle_bytes_max": null,
+            "fits_existing_2MB_worker": null
+          },
+          "experimental_capture": {
+            "median_ms": 49.433528000008664,
+            "max_ms": 110.22381200018572,
+            "samples_ms": [
+              110.22381200018572,
+              52.76955199951772,
+              49.08807900028478,
+              49.21585100055381,
+              49.23617099848343,
+              51.33294600091176,
+              49.433528000008664,
+              89.37730199977523,
+              49.20712800048932
+            ],
+            "refusals": [
+              "Part verification capture budget exceeded"
+            ],
+            "pickle_bytes_max": 883427,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 401.39762599937967,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "04f063c1-5526-541c-9806-e4efcdce7365",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": [
+                  "8cc276d4-1768-5e4c-9ab5-d6113f664e63"
+                ]
+              }
+            ],
+            "spawn_and_proof_ms": 1094.4897589997709
+          }
+        },
+        {
+          "build_ms": 0.3338690003147349,
+          "recovery_encode_ms": 27.744123000957188,
+          "new_recovery_encoded_bytes": 564860,
+          "stage": "move",
+          "requested_sites": 16,
+          "actual_sites": 16,
+          "protein_atoms": 3620,
+          "reload_authoring_equal": true,
+          "reload_ms": 23.689207999268547,
+          "history_rows": 4,
+          "candidate_json_bytes": 2838732,
+          "cumulative_recovery_encoded_bytes": 1847512,
+          "default_capture": {
+            "median_ms": 11.499381998874014,
+            "max_ms": 12.102765000236104,
+            "samples_ms": [
+              12.102765000236104,
+              11.851495999508188,
+              11.499381998874014,
+              11.41241900040768,
+              11.304335999739124,
+              11.304336001558113,
+              11.674298000798444,
+              11.830374998680782,
+              11.453173001427785
+            ],
+            "refusals": [
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded"
+            ],
+            "pickle_bytes_max": null,
+            "fits_existing_2MB_worker": null
+          },
+          "experimental_capture": {
+            "median_ms": 49.403840999730164,
+            "max_ms": 88.83654000055685,
+            "samples_ms": [
+              48.97368799902324,
+              49.403840999730164,
+              49.813567000455805,
+              49.391446000299766,
+              88.83654000055685,
+              49.4417190002423,
+              49.31786999986798,
+              50.26999600158888,
+              48.61423699912848
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 883813,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 399.4705939985579,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "04f063c1-5526-541c-9806-e4efcdce7365",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": [
+                  "8cc276d4-1768-5e4c-9ab5-d6113f664e63",
+                  "f21371a6-8d0f-543d-976e-924dd4a4ad86"
+                ]
+              }
+            ],
+            "spawn_and_proof_ms": 989.48454299898
+          }
+        },
+        {
+          "build_ms": 0.19719000010809395,
+          "recovery_encode_ms": 19.125145001453348,
+          "new_recovery_encoded_bytes": 427680,
+          "stage": "remove",
+          "requested_sites": 0,
+          "actual_sites": 0,
+          "protein_atoms": 0,
+          "reload_authoring_equal": true,
+          "reload_ms": 3.9793900014046812,
+          "history_rows": 5,
+          "candidate_json_bytes": 2722356,
+          "cumulative_recovery_encoded_bytes": 2275192,
+          "default_capture": {
+            "median_ms": 1.0375029996794183,
+            "max_ms": 1.5329069992731092,
+            "samples_ms": [
+              1.324116999967373,
+              1.060107000739663,
+              0.9507550003036158,
+              1.261757999600377,
+              0.9591809994162759,
+              1.0375029996794183,
+              0.9420299993507797,
+              0.9379660004924517,
+              1.5329069992731092
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 446589,
+            "fits_existing_2MB_worker": true
+          },
+          "experimental_capture": {
+            "median_ms": 0.9732599992275937,
+            "max_ms": 1.3549499999498948,
+            "samples_ms": [
+              0.9833719996095169,
+              0.9383630003867438,
+              0.9576949996699113,
+              1.0048860003735172,
+              1.3549499999498948,
+              0.9732599992275937,
+              1.0308609998901375,
+              0.9437169992452255,
+              0.9427239983779145
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 446589,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 370.8924880011182,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "04f063c1-5526-541c-9806-e4efcdce7365",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": [
+                  "48c51846-a1b6-521f-bb6b-c1e02d6d280b",
+                  "8cc276d4-1768-5e4c-9ab5-d6113f664e63",
+                  "f21371a6-8d0f-543d-976e-924dd4a4ad86"
+                ]
+              }
+            ],
+            "spawn_and_proof_ms": 998.6117410007864
+          }
+        }
+      ]
+    },
+    {
+      "mode": "biotin_tether",
+      "requested_count": 64,
+      "cheap_admission_ms": 1.819615999920643,
+      "two_source_declaration_complete": true,
+      "retained_portable_source_closure_complete": true,
+      "stages": [
+        {
+          "build_ms": 498.09006699979363,
+          "recovery_encode_ms": 19.961308000347344,
+          "new_recovery_encoded_bytes": 431112,
+          "stage": "set",
+          "requested_sites": 64,
+          "actual_sites": 37,
+          "protein_atoms": 3620,
+          "reload_authoring_equal": true,
+          "reload_ms": 18.99147800031642,
+          "history_rows": 2,
+          "candidate_json_bytes": 1716364,
+          "cumulative_recovery_encoded_bytes": 721444,
+          "default_capture": {
+            "median_ms": 11.819499000921496,
+            "max_ms": 12.485113000366255,
+            "samples_ms": [
+              12.485113000366255,
+              12.34721600121702,
+              11.819499000921496,
+              11.727908999091596,
+              11.764791001041885,
+              11.86928899915074,
+              11.764585999117116,
+              11.716128001353354,
+              12.258699998710654
+            ],
+            "refusals": [
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded"
+            ],
+            "pickle_bytes_max": null,
+            "fits_existing_2MB_worker": null
+          },
+          "experimental_capture": {
+            "median_ms": 50.98000900034094,
+            "max_ms": 52.29166999924928,
+            "samples_ms": [
+              51.66385899974557,
+              50.13316099939402,
+              50.93544400006067,
+              51.34196299877658,
+              50.98000900034094,
+              52.29166999924928,
+              51.89795699880051,
+              50.34369500026514,
+              50.326819999099826
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 886213,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 517.5375529997837,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "db961505-f448-5ad2-9bbb-3ea91b6789e3",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": []
+              }
+            ],
+            "spawn_and_proof_ms": 1006.6223310004716
+          }
+        },
+        {
+          "build_ms": 414.18978399997286,
+          "recovery_encode_ms": 28.261592999115237,
+          "new_recovery_encoded_bytes": 572216,
+          "stage": "resize",
+          "requested_sites": 64,
+          "actual_sites": 40,
+          "protein_atoms": 3620,
+          "reload_authoring_equal": true,
+          "reload_ms": 23.433948999809218,
+          "history_rows": 3,
+          "candidate_json_bytes": 2290586,
+          "cumulative_recovery_encoded_bytes": 1293660,
+          "default_capture": {
+            "median_ms": 11.48450799882994,
+            "max_ms": 11.669650000840193,
+            "samples_ms": [
+              11.669650000840193,
+              11.539127999640186,
+              11.478225000246312,
+              11.589898000238463,
+              11.427455001467024,
+              11.49038599942287,
+              11.48450799882994,
+              11.442756998803816,
+              11.361688000761205
+            ],
+            "refusals": [
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded"
+            ],
+            "pickle_bytes_max": null,
+            "fits_existing_2MB_worker": null
+          },
+          "experimental_capture": {
+            "median_ms": 51.32023499936622,
+            "max_ms": 92.85721699961869,
+            "samples_ms": [
+              51.537196999561274,
+              51.33746199862799,
+              51.13235600038024,
+              51.32023499936622,
+              51.36533299992152,
+              51.04915899937623,
+              50.6731959994795,
+              50.52848500054097,
+              92.85721699961869
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 887723,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 951.6928829998506,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "db961505-f448-5ad2-9bbb-3ea91b6789e3",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": [
+                  "f998aa6e-236c-50c9-a6bb-41f72124e572"
+                ]
+              }
+            ],
+            "spawn_and_proof_ms": 1026.7171879986563
+          }
+        },
+        {
+          "build_ms": 0.40061300023808144,
+          "recovery_encode_ms": 28.300707999733277,
+          "new_recovery_encoded_bytes": 572684,
+          "stage": "move",
+          "requested_sites": 64,
+          "actual_sites": 40,
+          "protein_atoms": 3620,
+          "reload_authoring_equal": true,
+          "reload_ms": 24.850431000231765,
+          "history_rows": 4,
+          "candidate_json_bytes": 2863861,
+          "cumulative_recovery_encoded_bytes": 1866344,
+          "default_capture": {
+            "median_ms": 11.492685000121128,
+            "max_ms": 12.079190999429557,
+            "samples_ms": [
+              12.079190999429557,
+              11.394094999559456,
+              11.492685000121128,
+              11.296512000626535,
+              11.402058999010478,
+              11.577163000765722,
+              11.496617000375409,
+              11.38028400055191,
+              11.493646999952034
+            ],
+            "refusals": [
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded",
+              "Part verification capture node budget exceeded"
+            ],
+            "pickle_bytes_max": null,
+            "fits_existing_2MB_worker": null
+          },
+          "experimental_capture": {
+            "median_ms": 51.19403400021838,
+            "max_ms": 91.1891050000122,
+            "samples_ms": [
+              51.19403400021838,
+              49.801935001596576,
+              51.359709999815095,
+              50.27451799833216,
+              50.5999349988997,
+              91.1891050000122,
+              50.154308999481145,
+              53.46651899890276,
+              51.40910000045551
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 888109,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 920.2191620006488,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "db961505-f448-5ad2-9bbb-3ea91b6789e3",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": [
+                  "e1adef84-a9c3-542e-8b6a-d097573df010",
+                  "f998aa6e-236c-50c9-a6bb-41f72124e572"
+                ]
+              }
+            ],
+            "spawn_and_proof_ms": 1001.5691460012022
+          }
+        },
+        {
+          "build_ms": 0.4069659989909269,
+          "recovery_encode_ms": 19.422801000473555,
+          "new_recovery_encoded_bytes": 431592,
+          "stage": "remove",
+          "requested_sites": 0,
+          "actual_sites": 0,
+          "protein_atoms": 0,
+          "reload_authoring_equal": true,
+          "reload_ms": 3.849837999950978,
+          "history_rows": 5,
+          "candidate_json_bytes": 2745100,
+          "cumulative_recovery_encoded_bytes": 2297936,
+          "default_capture": {
+            "median_ms": 1.0322500002075685,
+            "max_ms": 1.746746000208077,
+            "samples_ms": [
+              1.42197500099428,
+              1.014808998661465,
+              1.0322500002075685,
+              1.746746000208077,
+              1.0127040004590526,
+              0.9803270004340447,
+              1.1377999999240274,
+              0.9704040003271075,
+              1.4222760000848211
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 446589,
+            "fits_existing_2MB_worker": true
+          },
+          "experimental_capture": {
+            "median_ms": 0.9853390001808293,
+            "max_ms": 1.4732969993929146,
+            "samples_ms": [
+              1.053601001331117,
+              0.9541649997117929,
+              0.9853390001808293,
+              0.939730000027339,
+              1.4732969993929146,
+              0.9619829997973284,
+              1.0067900002468377,
+              1.036460000250372,
+              0.9536640009173425
+            ],
+            "refusals": [],
+            "pickle_bytes_max": 446589,
+            "fits_existing_2MB_worker": true
+          },
+          "same_process_proof_ms": 960.4699060000712,
+          "same_process_proof": {
+            "status": "reproduced_import",
+            "issues": []
+          },
+          "cold_worker": {
+            "status": "unverified",
+            "issues": [
+              {
+                "code": "runtime_mismatch",
+                "detail": "Native numerical execution requires one numerical thread in its worker",
+                "feature_id": "db961505-f448-5ad2-9bbb-3ea91b6789e3",
+                "kind": "nanoparticle-patch",
+                "possible_dependents": [
+                  "4db5bb46-8fc5-5978-8f8e-d2c02b0478ea",
+                  "e1adef84-a9c3-542e-8b6a-d097573df010",
+                  "f998aa6e-236c-50c9-a6bb-41f72124e572"
+                ]
+              }
+            ],
+            "spawn_and_proof_ms": 956.0136939999211
+          }
+        }
+      ]
+    }
+  ]
+}

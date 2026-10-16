@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-15",
+  "command": "PYTHONPATH=. just validate-safe uv run python scripts/benchmark_protein_free_import.py --repeats 30",
+  "exit_code": 1,
+  "completed_report": false,
+  "failure": "The second benchmark fixture constructed Vec3 without required x/y/z values. Pydantic rejected the fixture before its HTTP requests. The process exited through the session cleanup finally block, but no completed measurement report or cleanup result was emitted.",
+  "interpretation": "Harness fixture failure, not a production route failure. Do not infer timings or qualification from this aborted attempt. The corrected full rerun is separate evidence."
+}

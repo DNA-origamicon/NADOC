@@ -1,0 +1,1875 @@
+{
+  "scope": "Staged immutable actual strict HTTP batch/verify/commit; persistence excluded",
+  "repeats": 30,
+  "completed": true,
+  "failure": null,
+  "diagnostics": true,
+  "allocation_tracing": false,
+  "rss_sampling": true,
+  "retention_stress": true,
+  "result_retention_scope": "Two occupied native result slots report actual sizes; this does not qualify two maximum-size 16 MB results.",
+  "latency_qualified": false,
+  "memory_scope": "Traced parent Python allocations exclude native/worker allocations. Linux RSS high-water includes fixture creation and all prior cases; not an incremental or hard memory bound.",
+  "lifecycle_rss_scope": "Optional Linux /proc sampling starts after retained source/undo installation and ends after commit, before cold proof. Stress includes preparation of a retained ready result and streaming result-size measurement. Only explicitly hooked direct worker PIDs with matching birth ticks count; unrelated descendants and multiprocessing resource trackers are excluded. The baseline includes all already retained benchmark fixtures. Sequential parent+child RSS reads double-count shared pages and may miss short peaks or GIL-blocked intervals; actual maximum gaps are reported. The +256 MiB allowance is an observed engineering target, not a heap guarantee.",
+  "rss_high_water_kib": {
+    "parent": 194884,
+    "children": 194884
+  },
+  "sample_retention": "All aggregate metrics plus refusals, incomplete publications, gen-2 GC samples and phase HTTP/lock/light maxima; other successful per-request arrays are omitted.",
+  "session_cleanup_verified": true,
+  "cleanup_errors": [],
+  "cases": [
+    {
+      "name": "opaque-recovery-near-8MB-session-near-32MB-two-ready-results",
+      "completed": true,
+      "samples": [
+        {
+          "iteration": 0,
+          "capture": {
+            "http_ms": 5.62479899963364,
+            "baseline_revision_http_ms": 1.5214019949780777,
+            "revision_http_ms": [
+              5.642572999931872
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.02811699960147962,
+              0.0214890023926273
+            ],
+            "capture_lock_wait_ms": [
+              0.001505999534856528,
+              0.0004019966581836343
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.008736002200748771,
+              0.012652002624236047
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009040013537742198,
+              0.0010040021152235568
+            ],
+            "gc": {
+              "overlap_ms": 0.5662460025632754,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 0,
+                "1": 1,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1333.7277319951681,
+          "ready_result_count": 2,
+          "ready_result_json_bytes": [
+            322197,
+            322197
+          ],
+          "publication": {
+            "http_ms": 22.109782999905292,
+            "baseline_revision_http_ms": 1.6550549989915453,
+            "revision_http_ms": [
+              4.730594999273308,
+              17.382600999553688
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.003715998900588602,
+              0.6489880033768713
+            ],
+            "publication_lock_wait_ms": [
+              0.0010040021152235568,
+              0.001104999682866037
+            ],
+            "light_request_lock_hold_ms": [
+              0.0060250022215768695,
+              0.010744995961431414,
+              0.008937000529840589,
+              0.01375699503114447
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009040013537742198,
+              0.0010040021152235568,
+              0.033136995625682175,
+              0.4762720054714009
+            ],
+            "gc": {
+              "overlap_ms": 0.2016360012930818,
+              "events": 3,
+              "dropped_events": 0,
+              "generations": {
+                "0": 3,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 24309866,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 16,
+          "capture": {
+            "http_ms": 5.199079001613427,
+            "baseline_revision_http_ms": 1.586468999448698,
+            "revision_http_ms": [
+              3.8595719961449504,
+              1.9188079968444072
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.026247995265293866,
+              0.046054999984335154
+            ],
+            "capture_lock_wait_ms": [
+              0.0013660028344020247,
+              0.0003899986040778458
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.006050002411939204,
+              0.010928000847343355,
+              0.005952002538833767,
+              0.009660005162004381
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008779970812611282,
+              0.0008790011634118855,
+              0.0008779970812611282,
+              0.0006829941412433982
+            ],
+            "gc": {
+              "overlap_ms": 0.08176700066542253,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1351.3627909997012,
+          "ready_result_count": 2,
+          "ready_result_json_bytes": [
+            322197,
+            322197
+          ],
+          "publication": {
+            "http_ms": 65.04531599784968,
+            "baseline_revision_http_ms": 1.6471909984829836,
+            "revision_http_ms": [
+              4.844634000619408,
+              59.078955004224554,
+              1.9019250030396506
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.0037059944588690996,
+              0.05217500438448042
+            ],
+            "publication_lock_wait_ms": [
+              0.0010730000212788582,
+              0.012092998076695949
+            ],
+            "light_request_lock_hold_ms": [
+              0.006046000635251403,
+              0.010337003914173692,
+              0.01706700277281925,
+              0.014434001059271395,
+              0.005949004844296724,
+              0.009654999303165823
+            ],
+            "light_request_lock_wait_ms": [
+              0.0010730000212788582,
+              0.0008779970812611282,
+              0.002535001840442419,
+              0.0008779970812611282,
+              0.0008779970812611282,
+              0.0007799972081556916
+            ],
+            "gc": {
+              "overlap_ms": 45.27756300376495,
+              "events": 3,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 1,
+                "2": 1
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 24309866,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 20,
+          "capture": {
+            "http_ms": 6.124148996605072,
+            "baseline_revision_http_ms": 1.1494720019982196,
+            "revision_http_ms": [
+              5.192601995076984,
+              1.7471259998274036
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.027326997951604426,
+              0.02105800376739353
+            ],
+            "capture_lock_wait_ms": [
+              0.0012730015441775322,
+              0.0004889952833764255
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.015083998732734472,
+              0.013026001397520304,
+              0.0066599968704395,
+              0.012733005860354751
+            ],
+            "light_request_lock_wait_ms": [
+              0.0016650010365992785,
+              0.0009799987310543656,
+              0.0010780058801174164,
+              0.0006849950295872986
+            ],
+            "gc": {
+              "overlap_ms": 0.12546699872473255,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1343.7926289989264,
+          "ready_result_count": 2,
+          "ready_result_json_bytes": [
+            322197,
+            322197
+          ],
+          "publication": {
+            "http_ms": 18.65207700029714,
+            "baseline_revision_http_ms": 1.7308680035057478,
+            "revision_http_ms": [
+              4.900631996861193,
+              14.050272002350539
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.004016001184936613,
+              0.0503430055687204
+            ],
+            "publication_lock_wait_ms": [
+              0.0010769945220090449,
+              0.0007839989848434925
+            ],
+            "light_request_lock_hold_ms": [
+              0.006267997378017753,
+              0.011165000614710152,
+              0.008814997272565961,
+              0.010087998816743493
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009800060070119798,
+              0.0008820061339065433,
+              0.0011750016710720956,
+              0.0007839989848434925
+            ],
+            "gc": {
+              "overlap_ms": 0.17355700401822105,
+              "events": 2,
+              "dropped_events": 0,
+              "generations": {
+                "0": 2,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 24309866,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 21,
+          "capture": {
+            "http_ms": 4.933149000862613,
+            "baseline_revision_http_ms": 1.0735649993875995,
+            "revision_http_ms": [
+              4.877027000475209
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.02713000139920041,
+              0.0610189963481389
+            ],
+            "capture_lock_wait_ms": [
+              0.0012740056263282895,
+              0.00039199949242174625
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.005975001840852201,
+              0.010381998436059803
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009790019248612225,
+              0.0009790019248612225
+            ],
+            "gc": {
+              "overlap_ms": 0.18481999723007903,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 0,
+                "1": 1,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1319.6616599962,
+          "ready_result_count": 2,
+          "ready_result_json_bytes": [
+            322197,
+            322197
+          ],
+          "publication": {
+            "http_ms": 19.09282500128029,
+            "baseline_revision_http_ms": 1.798351004254073,
+            "revision_http_ms": [
+              4.6338319953065366,
+              14.803561003645882
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.0045050037442706525,
+              0.05102899740450084
+            ],
+            "publication_lock_wait_ms": [
+              0.0010769945220090449,
+              0.0011759984772652388
+            ],
+            "light_request_lock_hold_ms": [
+              0.006170004780869931,
+              0.010969000868499279,
+              0.006170004780869931,
+              0.00999000621959567
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009799987310543656,
+              0.0009799987310543656,
+              0.0008819988579489291,
+              0.0007839989848434925
+            ],
+            "gc": {
+              "overlap_ms": 0.19481100025586784,
+              "events": 2,
+              "dropped_events": 0,
+              "generations": {
+                "0": 2,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 24309866,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        }
+      ],
+      "errors": [],
+      "source_sealing_ms": 127.17769200389739,
+      "source_bytes": 7998976,
+      "source_rows": 32,
+      "source_recovery_bytes": 7971254,
+      "retained_source_and_undo_bytes": 31995904,
+      "retention_stress": {
+        "history_copies": 3,
+        "recovery_bytes": 7971254,
+        "target_source_bytes": 7998976,
+        "hold_ready_result": true,
+        "scope": "Storage-only opaque recovery; native geometry and recipe inputs unchanged"
+      },
+      "expected_candidate_rows": 64,
+      "lifecycle_rss": [
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 15.044817999296356,
+          "max_sample_duration_ms": 2.177219001168851,
+          "sample_count": 511,
+          "samples_with_children": 500,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 167841792,
+          "peak_parent_bytes": 176754688,
+          "peak_owned_children_bytes": 169160704,
+          "peak_combined_bytes": 345915392,
+          "increase_over_idle_bytes": 178073600,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 167841792
+            },
+            "retained_ready_result": {
+              "samples": 254,
+              "peak_combined_bytes": 342159360
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 168759296
+            },
+            "worker": {
+              "samples": 251,
+              "peak_combined_bytes": 345915392
+            },
+            "commit": {
+              "samples": 4,
+              "peak_combined_bytes": 170856448
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 11.99408599495655,
+          "max_sample_duration_ms": 1.1622910024016164,
+          "sample_count": 499,
+          "samples_with_children": 487,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 170856448,
+          "peak_parent_bytes": 178835456,
+          "peak_owned_children_bytes": 169689088,
+          "peak_combined_bytes": 348524544,
+          "increase_over_idle_bytes": 177668096,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 170856448
+            },
+            "retained_ready_result": {
+              "samples": 245,
+              "peak_combined_bytes": 348524544
+            },
+            "start": {
+              "samples": 2,
+              "peak_combined_bytes": 170856448
+            },
+            "worker": {
+              "samples": 247,
+              "peak_combined_bytes": 348475392
+            },
+            "commit": {
+              "samples": 4,
+              "peak_combined_bytes": 171249664
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 19.471314000838902,
+          "max_sample_duration_ms": 18.021182004304137,
+          "sample_count": 535,
+          "samples_with_children": 524,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 171249664,
+          "peak_parent_bytes": 179376128,
+          "peak_owned_children_bytes": 169893888,
+          "peak_combined_bytes": 349097984,
+          "increase_over_idle_bytes": 177848320,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 171249664
+            },
+            "retained_ready_result": {
+              "samples": 264,
+              "peak_combined_bytes": 348758016
+            },
+            "start": {
+              "samples": 2,
+              "peak_combined_bytes": 171249664
+            },
+            "worker": {
+              "samples": 265,
+              "peak_combined_bytes": 349097984
+            },
+            "ready": {
+              "samples": 1,
+              "peak_combined_bytes": 171249664
+            },
+            "commit": {
+              "samples": 2,
+              "peak_combined_bytes": 172953600
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 14.657346000603866,
+          "max_sample_duration_ms": 13.844463996065315,
+          "sample_count": 504,
+          "samples_with_children": 493,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 172953600,
+          "peak_parent_bytes": 181178368,
+          "peak_owned_children_bytes": 169795584,
+          "peak_combined_bytes": 350691328,
+          "increase_over_idle_bytes": 177737728,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 172953600
+            },
+            "retained_ready_result": {
+              "samples": 247,
+              "peak_combined_bytes": 350691328
+            },
+            "start": {
+              "samples": 2,
+              "peak_combined_bytes": 172953600
+            },
+            "worker": {
+              "samples": 251,
+              "peak_combined_bytes": 350461952
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 173346816
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 14.521559998684097,
+          "max_sample_duration_ms": 13.013313997362275,
+          "sample_count": 482,
+          "samples_with_children": 471,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 173346816,
+          "peak_parent_bytes": 181616640,
+          "peak_owned_children_bytes": 167006208,
+          "peak_combined_bytes": 348438528,
+          "increase_over_idle_bytes": 175091712,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 173346816
+            },
+            "retained_ready_result": {
+              "samples": 242,
+              "peak_combined_bytes": 348438528
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 173477888
+            },
+            "worker": {
+              "samples": 235,
+              "peak_combined_bytes": 348319744
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 173477888
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 14.065483999729622,
+          "max_sample_duration_ms": 13.019117002841085,
+          "sample_count": 483,
+          "samples_with_children": 474,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 173477888,
+          "peak_parent_bytes": 181432320,
+          "peak_owned_children_bytes": 169791488,
+          "peak_combined_bytes": 351211520,
+          "increase_over_idle_bytes": 177733632,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 173477888
+            },
+            "retained_ready_result": {
+              "samples": 242,
+              "peak_combined_bytes": 349339648
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 173477888
+            },
+            "worker": {
+              "samples": 236,
+              "peak_combined_bytes": 351211520
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 173608960
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 13.840597996022552,
+          "max_sample_duration_ms": 12.221148994285613,
+          "sample_count": 515,
+          "samples_with_children": 504,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 173608960,
+          "peak_parent_bytes": 181538816,
+          "peak_owned_children_bytes": 169787392,
+          "peak_combined_bytes": 351326208,
+          "increase_over_idle_bytes": 177717248,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 173608960
+            },
+            "retained_ready_result": {
+              "samples": 257,
+              "peak_combined_bytes": 351326208
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 173608960
+            },
+            "worker": {
+              "samples": 253,
+              "peak_combined_bytes": 351195136
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 173740032
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 15.507674994296394,
+          "max_sample_duration_ms": 14.588496997021139,
+          "sample_count": 498,
+          "samples_with_children": 487,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 173740032,
+          "peak_parent_bytes": 181723136,
+          "peak_owned_children_bytes": 169664512,
+          "peak_combined_bytes": 351203328,
+          "increase_over_idle_bytes": 177463296,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 173740032
+            },
+            "retained_ready_result": {
+              "samples": 247,
+              "peak_combined_bytes": 351133696
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 173740032
+            },
+            "worker": {
+              "samples": 246,
+              "peak_combined_bytes": 351203328
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 174133248
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 12.742431004880928,
+          "max_sample_duration_ms": 7.357722002780065,
+          "sample_count": 499,
+          "samples_with_children": 487,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 174133248,
+          "peak_parent_bytes": 181919744,
+          "peak_owned_children_bytes": 167784448,
+          "peak_combined_bytes": 349691904,
+          "increase_over_idle_bytes": 175558656,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 174133248
+            },
+            "retained_ready_result": {
+              "samples": 246,
+              "peak_combined_bytes": 349442048
+            },
+            "start": {
+              "samples": 2,
+              "peak_combined_bytes": 174133248
+            },
+            "worker": {
+              "samples": 246,
+              "peak_combined_bytes": 349691904
+            },
+            "commit": {
+              "samples": 4,
+              "peak_combined_bytes": 174526464
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 12.79336600418901,
+          "max_sample_duration_ms": 1.860506999946665,
+          "sample_count": 499,
+          "samples_with_children": 487,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 174526464,
+          "peak_parent_bytes": 182538240,
+          "peak_owned_children_bytes": 169627648,
+          "peak_combined_bytes": 351993856,
+          "increase_over_idle_bytes": 177467392,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 174526464
+            },
+            "retained_ready_result": {
+              "samples": 248,
+              "peak_combined_bytes": 347262976
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 174526464
+            },
+            "worker": {
+              "samples": 245,
+              "peak_combined_bytes": 351993856
+            },
+            "commit": {
+              "samples": 4,
+              "peak_combined_bytes": 174526464
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 13.897452998207882,
+          "max_sample_duration_ms": 12.464626001019496,
+          "sample_count": 505,
+          "samples_with_children": 495,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 174526464,
+          "peak_parent_bytes": 182689792,
+          "peak_owned_children_bytes": 169697280,
+          "peak_combined_bytes": 352063488,
+          "increase_over_idle_bytes": 177537024,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 174526464
+            },
+            "retained_ready_result": {
+              "samples": 249,
+              "peak_combined_bytes": 350420992
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 174526464
+            },
+            "worker": {
+              "samples": 251,
+              "peak_combined_bytes": 352063488
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 174657536
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 14.38234399392968,
+          "max_sample_duration_ms": 13.24875599675579,
+          "sample_count": 513,
+          "samples_with_children": 502,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 174657536,
+          "peak_parent_bytes": 182484992,
+          "peak_owned_children_bytes": 169897984,
+          "peak_combined_bytes": 352382976,
+          "increase_over_idle_bytes": 177725440,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 174657536
+            },
+            "retained_ready_result": {
+              "samples": 252,
+              "peak_combined_bytes": 352382976
+            },
+            "start": {
+              "samples": 2,
+              "peak_combined_bytes": 174657536
+            },
+            "worker": {
+              "samples": 255,
+              "peak_combined_bytes": 348975104
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 174788608
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 14.477939002972562,
+          "max_sample_duration_ms": 13.863150001270697,
+          "sample_count": 518,
+          "samples_with_children": 507,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 174788608,
+          "peak_parent_bytes": 182628352,
+          "peak_owned_children_bytes": 169807872,
+          "peak_combined_bytes": 352436224,
+          "increase_over_idle_bytes": 177647616,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 174788608
+            },
+            "retained_ready_result": {
+              "samples": 253,
+              "peak_combined_bytes": 352436224
+            },
+            "start": {
+              "samples": 2,
+              "peak_combined_bytes": 174788608
+            },
+            "worker": {
+              "samples": 259,
+              "peak_combined_bytes": 349876224
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 174788608
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 16.454793003504165,
+          "max_sample_duration_ms": 2.292790995852556,
+          "sample_count": 493,
+          "samples_with_children": 483,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 174788608,
+          "peak_parent_bytes": 182603776,
+          "peak_owned_children_bytes": 169771008,
+          "peak_combined_bytes": 352374784,
+          "increase_over_idle_bytes": 177586176,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 174788608
+            },
+            "retained_ready_result": {
+              "samples": 255,
+              "peak_combined_bytes": 352374784
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 174788608
+            },
+            "worker": {
+              "samples": 233,
+              "peak_combined_bytes": 352161792
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 174919680
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 11.26773799478542,
+          "max_sample_duration_ms": 2.277569998113904,
+          "sample_count": 478,
+          "samples_with_children": 466,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 174919680,
+          "peak_parent_bytes": 183083008,
+          "peak_owned_children_bytes": 168448000,
+          "peak_combined_bytes": 351207424,
+          "increase_over_idle_bytes": 176287744,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 174919680
+            },
+            "retained_ready_result": {
+              "samples": 237,
+              "peak_combined_bytes": 351047680
+            },
+            "start": {
+              "samples": 2,
+              "peak_combined_bytes": 174919680
+            },
+            "worker": {
+              "samples": 234,
+              "peak_combined_bytes": 351207424
+            },
+            "commit": {
+              "samples": 4,
+              "peak_combined_bytes": 174919680
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 14.29100299719721,
+          "max_sample_duration_ms": 12.867386001744308,
+          "sample_count": 491,
+          "samples_with_children": 481,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 174919680,
+          "peak_parent_bytes": 182865920,
+          "peak_owned_children_bytes": 169734144,
+          "peak_combined_bytes": 352600064,
+          "increase_over_idle_bytes": 177680384,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 174919680
+            },
+            "retained_ready_result": {
+              "samples": 234,
+              "peak_combined_bytes": 345821184
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 174919680
+            },
+            "worker": {
+              "samples": 252,
+              "peak_combined_bytes": 352600064
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 174919680
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 52.35570500371978,
+          "max_sample_duration_ms": 7.649440995010082,
+          "sample_count": 513,
+          "samples_with_children": 501,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 174919680,
+          "peak_parent_bytes": 183123968,
+          "peak_owned_children_bytes": 166772736,
+          "peak_combined_bytes": 349626368,
+          "increase_over_idle_bytes": 174706688,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 174919680
+            },
+            "retained_ready_result": {
+              "samples": 253,
+              "peak_combined_bytes": 349626368
+            },
+            "start": {
+              "samples": 2,
+              "peak_combined_bytes": 174919680
+            },
+            "worker": {
+              "samples": 253,
+              "peak_combined_bytes": 349564928
+            },
+            "commit": {
+              "samples": 4,
+              "peak_combined_bytes": 175050752
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 14.537800001562573,
+          "max_sample_duration_ms": 12.766168001689948,
+          "sample_count": 510,
+          "samples_with_children": 499,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 175050752,
+          "peak_parent_bytes": 182996992,
+          "peak_owned_children_bytes": 169353216,
+          "peak_combined_bytes": 352350208,
+          "increase_over_idle_bytes": 177299456,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 175050752
+            },
+            "retained_ready_result": {
+              "samples": 251,
+              "peak_combined_bytes": 348344320
+            },
+            "start": {
+              "samples": 2,
+              "peak_combined_bytes": 175050752
+            },
+            "worker": {
+              "samples": 253,
+              "peak_combined_bytes": 352350208
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 175181824
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 13.52091100125108,
+          "max_sample_duration_ms": 11.792188997787889,
+          "sample_count": 524,
+          "samples_with_children": 513,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 175181824,
+          "peak_parent_bytes": 183373824,
+          "peak_owned_children_bytes": 169713664,
+          "peak_combined_bytes": 352829440,
+          "increase_over_idle_bytes": 177647616,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 175181824
+            },
+            "retained_ready_result": {
+              "samples": 253,
+              "peak_combined_bytes": 352829440
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 175181824
+            },
+            "worker": {
+              "samples": 266,
+              "peak_combined_bytes": 348086272
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 175181824
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 14.608652003516909,
+          "max_sample_duration_ms": 13.553794000472408,
+          "sample_count": 511,
+          "samples_with_children": 500,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 175181824,
+          "peak_parent_bytes": 183103488,
+          "peak_owned_children_bytes": 169771008,
+          "peak_combined_bytes": 352874496,
+          "increase_over_idle_bytes": 177692672,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 175181824
+            },
+            "retained_ready_result": {
+              "samples": 250,
+              "peak_combined_bytes": 352874496
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 175181824
+            },
+            "worker": {
+              "samples": 256,
+              "peak_combined_bytes": 352813056
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 175312896
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 14.17906900314847,
+          "max_sample_duration_ms": 13.127247999364045,
+          "sample_count": 514,
+          "samples_with_children": 504,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 175312896,
+          "peak_parent_bytes": 183222272,
+          "peak_owned_children_bytes": 167043072,
+          "peak_combined_bytes": 350265344,
+          "increase_over_idle_bytes": 174952448,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 175312896
+            },
+            "retained_ready_result": {
+              "samples": 256,
+              "peak_combined_bytes": 350265344
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 175312896
+            },
+            "worker": {
+              "samples": 253,
+              "peak_combined_bytes": 349958144
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 175312896
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 14.880055001412984,
+          "max_sample_duration_ms": 12.777588002791163,
+          "sample_count": 510,
+          "samples_with_children": 500,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 175312896,
+          "peak_parent_bytes": 183246848,
+          "peak_owned_children_bytes": 169623552,
+          "peak_combined_bytes": 352862208,
+          "increase_over_idle_bytes": 177549312,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 175312896
+            },
+            "retained_ready_result": {
+              "samples": 256,
+              "peak_combined_bytes": 352845824
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 175312896
+            },
+            "worker": {
+              "samples": 249,
+              "peak_combined_bytes": 352862208
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 175312896
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 14.390603006177116,
+          "max_sample_duration_ms": 12.015507003525272,
+          "sample_count": 510,
+          "samples_with_children": 499,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 175312896,
+          "peak_parent_bytes": 183570432,
+          "peak_owned_children_bytes": 168501248,
+          "peak_combined_bytes": 351735808,
+          "increase_over_idle_bytes": 176422912,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 175312896
+            },
+            "retained_ready_result": {
+              "samples": 252,
+              "peak_combined_bytes": 348372992
+            },
+            "start": {
+              "samples": 2,
+              "peak_combined_bytes": 175312896
+            },
+            "worker": {
+              "samples": 252,
+              "peak_combined_bytes": 351735808
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 175443968
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 35.17211799771758,
+          "max_sample_duration_ms": 32.76418099994771,
+          "sample_count": 577,
+          "samples_with_children": 565,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 175443968,
+          "peak_parent_bytes": 183701504,
+          "peak_owned_children_bytes": 169795584,
+          "peak_combined_bytes": 353173504,
+          "increase_over_idle_bytes": 177729536,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 175443968
+            },
+            "retained_ready_result": {
+              "samples": 256,
+              "peak_combined_bytes": 352686080
+            },
+            "start": {
+              "samples": 2,
+              "peak_combined_bytes": 175443968
+            },
+            "worker": {
+              "samples": 315,
+              "peak_combined_bytes": 353173504
+            },
+            "ready": {
+              "samples": 1,
+              "peak_combined_bytes": 175443968
+            },
+            "commit": {
+              "samples": 2,
+              "peak_combined_bytes": 175575040
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 15.047501001390629,
+          "max_sample_duration_ms": 14.153130003251135,
+          "sample_count": 559,
+          "samples_with_children": 548,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 175575040,
+          "peak_parent_bytes": 183496704,
+          "peak_owned_children_bytes": 169918464,
+          "peak_combined_bytes": 353402880,
+          "increase_over_idle_bytes": 177827840,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 175575040
+            },
+            "retained_ready_result": {
+              "samples": 303,
+              "peak_combined_bytes": 353013760
+            },
+            "start": {
+              "samples": 2,
+              "peak_combined_bytes": 175575040
+            },
+            "worker": {
+              "samples": 250,
+              "peak_combined_bytes": 353402880
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 175706112
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 11.715509004716296,
+          "max_sample_duration_ms": 2.4122210015775636,
+          "sample_count": 506,
+          "samples_with_children": 495,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 175706112,
+          "peak_parent_bytes": 183615488,
+          "peak_owned_children_bytes": 168415232,
+          "peak_combined_bytes": 352030720,
+          "increase_over_idle_bytes": 176324608,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 175706112
+            },
+            "retained_ready_result": {
+              "samples": 249,
+              "peak_combined_bytes": 352030720
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 175706112
+            },
+            "worker": {
+              "samples": 251,
+              "peak_combined_bytes": 348340224
+            },
+            "commit": {
+              "samples": 4,
+              "peak_combined_bytes": 175706112
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 11.619429998972919,
+          "max_sample_duration_ms": 3.51216100534657,
+          "sample_count": 505,
+          "samples_with_children": 493,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 175706112,
+          "peak_parent_bytes": 183615488,
+          "peak_owned_children_bytes": 170102784,
+          "peak_combined_bytes": 353705984,
+          "increase_over_idle_bytes": 177999872,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 175706112
+            },
+            "retained_ready_result": {
+              "samples": 248,
+              "peak_combined_bytes": 353705984
+            },
+            "start": {
+              "samples": 2,
+              "peak_combined_bytes": 175706112
+            },
+            "worker": {
+              "samples": 250,
+              "peak_combined_bytes": 353345536
+            },
+            "commit": {
+              "samples": 4,
+              "peak_combined_bytes": 175706112
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 13.159886999346782,
+          "max_sample_duration_ms": 7.460494001861662,
+          "sample_count": 497,
+          "samples_with_children": 486,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 175706112,
+          "peak_parent_bytes": 183627776,
+          "peak_owned_children_bytes": 169807872,
+          "peak_combined_bytes": 353423360,
+          "increase_over_idle_bytes": 177717248,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 175706112
+            },
+            "retained_ready_result": {
+              "samples": 245,
+              "peak_combined_bytes": 351645696
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 175706112
+            },
+            "worker": {
+              "samples": 246,
+              "peak_combined_bytes": 353423360
+            },
+            "commit": {
+              "samples": 4,
+              "peak_combined_bytes": 175706112
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 15.501036003115587,
+          "max_sample_duration_ms": 13.323121005669236,
+          "sample_count": 515,
+          "samples_with_children": 505,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 175706112,
+          "peak_parent_bytes": 183836672,
+          "peak_owned_children_bytes": 168009728,
+          "peak_combined_bytes": 351625216,
+          "increase_over_idle_bytes": 175919104,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 175706112
+            },
+            "retained_ready_result": {
+              "samples": 239,
+              "peak_combined_bytes": 351625216
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 175706112
+            },
+            "worker": {
+              "samples": 271,
+              "peak_combined_bytes": 350240768
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 175837184
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 10.970725001243409,
+          "max_sample_duration_ms": 3.0653110006824136,
+          "sample_count": 484,
+          "samples_with_children": 473,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 175837184,
+          "peak_parent_bytes": 183783424,
+          "peak_owned_children_bytes": 166137856,
+          "peak_combined_bytes": 349921280,
+          "increase_over_idle_bytes": 174084096,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 175837184
+            },
+            "retained_ready_result": {
+              "samples": 239,
+              "peak_combined_bytes": 348635136
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 175837184
+            },
+            "worker": {
+              "samples": 239,
+              "peak_combined_bytes": 349921280
+            },
+            "commit": {
+              "samples": 4,
+              "peak_combined_bytes": 175968256
+            }
+          }
+        }
+      ],
+      "candidate_bytes": 312938,
+      "candidate_rows": 64,
+      "cold_verification": {
+        "status": "verified",
+        "native_editable": true,
+        "issues": []
+      },
+      "capture": {
+        "http": {
+          "count": 30,
+          "p50_ms": 5.2492449976853095,
+          "p95_ms": 6.090207003580872,
+          "max_ms": 6.124148996605072
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 1.2386764974507969,
+          "p95_ms": 1.8380890032858588,
+          "max_ms": 2.0570380002027377
+        },
+        "revision_http": {
+          "count": 52,
+          "p50_ms": 3.884921497956384,
+          "p95_ms": 5.195436999201775,
+          "max_ms": 5.642572999931872
+        },
+        "capture_lock_hold": {
+          "count": 60,
+          "p50_ms": 0.025460001779720187,
+          "p95_ms": 0.03560800541890785,
+          "max_ms": 0.0610189963481389
+        },
+        "capture_lock_wait": {
+          "count": 60,
+          "p50_ms": 0.0011369993444532156,
+          "p95_ms": 0.0014760007616132498,
+          "max_ms": 0.0015929981600493193
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 104,
+          "p50_ms": 0.009757004590937868,
+          "p95_ms": 0.01571000029798597,
+          "max_ms": 0.02761399809969589
+        },
+        "light_request_lock_wait": {
+          "count": 104,
+          "p50_ms": 0.0009754985512699932,
+          "p95_ms": 0.0013840035535395145,
+          "max_ms": 0.0021220039343461394
+        },
+        "overlapping_revision_requests": 30,
+        "gc_overlap": {
+          "count": 30,
+          "p50_ms": 0.08187400089809671,
+          "p95_ms": 0.2701089979382232,
+          "max_ms": 0.5662460025632754
+        },
+        "dropped_gc_events": 0
+      },
+      "publication": {
+        "http": {
+          "count": 30,
+          "p50_ms": 18.68306349933846,
+          "p95_ms": 36.53711600054521,
+          "max_ms": 65.04531599784968
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 1.6609519989287946,
+          "p95_ms": 2.2153989993967116,
+          "max_ms": 2.3728800006210804
+        },
+        "revision_http": {
+          "count": 61,
+          "p50_ms": 13.013023999519646,
+          "p95_ms": 17.382600999553688,
+          "max_ms": 59.078955004224554
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 60,
+          "p50_ms": 0.02915699951699935,
+          "p95_ms": 0.07054900197545066,
+          "max_ms": 0.6489880033768713
+        },
+        "publication_lock_wait": {
+          "count": 60,
+          "p50_ms": 0.0009780014806892723,
+          "p95_ms": 0.0016810008673928678,
+          "max_ms": 0.012092998076695949
+        },
+        "light_request_lock_hold": {
+          "count": 122,
+          "p50_ms": 0.00998700488707982,
+          "p95_ms": 0.02578899875516072,
+          "max_ms": 0.03825699968729168
+        },
+        "light_request_lock_wait": {
+          "count": 122,
+          "p50_ms": 0.0009705036063678563,
+          "p95_ms": 0.002767999831121415,
+          "max_ms": 0.4762720054714009
+        },
+        "overlapping_revision_requests": 60,
+        "gc_overlap": {
+          "count": 30,
+          "p50_ms": 0.19300000349176116,
+          "p95_ms": 1.0286350006936118,
+          "max_ms": 45.27756300376495
+        },
+        "dropped_gc_events": 0
+      },
+      "private_materialization": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "private_sealing": {
+        "count": 30,
+        "p50_ms": 11.882041999342619,
+        "p95_ms": 23.21151200158056,
+        "max_ms": 57.46550700132502
+      },
+      "job_completion": {
+        "count": 30,
+        "p50_ms": 1331.868648496311,
+        "p95_ms": 1485.6727629958186,
+        "max_ms": 1718.4255930042127
+      },
+      "sample_count": 30,
+      "successful_publications": 30
+    }
+  ]
+}

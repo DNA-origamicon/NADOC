@@ -1,0 +1,186 @@
+{
+  "date": "2026-10-15",
+  "checkpoint_base": "8a4a9dec",
+  "scope": "P4 native conjugation and thiol, pinned catalog particles, bounded document transport and explicit inactive-source audits; assemblies deferred",
+  "focused": [
+    {
+      "target": "tests/test_part_protein_conjugation_commands.py",
+      "passed": 44
+    },
+    {
+      "target": "tests/test_part_protein_conjugation_routes.py",
+      "passed": 13
+    },
+    {
+      "target": "tests/test_native_protein_conjugation_proof.py",
+      "passed": 6
+    },
+    {
+      "target": "tests/test_part_thiol_commands.py",
+      "passed": 37
+    },
+    {
+      "target": "tests/test_native_thiol_proof.py",
+      "passed": 6
+    },
+    {
+      "target": "tests/test_thiol_legacy_admission.py",
+      "passed": 2
+    },
+    {
+      "target": "tests/test_native_quantum_dot_proof.py",
+      "passed": 22
+    },
+    {
+      "target": "tests/test_quantum_dots.py",
+      "passed": 16
+    },
+    {
+      "target": "tests/test_part_document_io.py",
+      "passed": 22
+    },
+    {
+      "target": "tests/test_part_source_audit.py",
+      "passed": 13
+    },
+    {
+      "target": "tests/test_native_part_package.py",
+      "passed": 7
+    },
+    {
+      "target": "tests/test_project_revisions.py",
+      "passed": 22
+    },
+    {
+      "target": "tests/test_loadout.py",
+      "passed": 6
+    },
+    {
+      "target": "tests/test_recipe_load_preservation.py",
+      "passed": 7
+    },
+    {
+      "target": "tests/test_collaboration_peers.py",
+      "passed": 9
+    },
+    {
+      "target": "tests/test_project_collaboration_api.py",
+      "passed": 11
+    },
+    {
+      "target": "tests/test_workspace_save_revision.py",
+      "passed": 4
+    },
+    {
+      "target": "tests/test_native_nanoparticle_proof.py",
+      "passed": 29
+    },
+    {
+      "target": "tests/test_native_placement_nanoparticle.py",
+      "passed": 5
+    },
+    {
+      "target": "tests/test_nanoparticles.py",
+      "passed": 18
+    },
+    {
+      "target": "tests/test_protein.py",
+      "passed": 72
+    },
+    {
+      "target": "tests/test_part_input_sources.py",
+      "passed": 30
+    },
+    {
+      "target": "tests/test_native_protein_input_proof.py",
+      "passed": 16
+    },
+    {
+      "target": "tests/test_part_protein_placements.py",
+      "passed": 43
+    },
+    {
+      "target": "tests/test_part_protein_route_commands.py",
+      "passed": 13
+    },
+    {
+      "target": "tests/test_part_history_verification.py",
+      "passed": 26
+    },
+    {
+      "target": "tests/test_part_recipe_edit.py",
+      "passed": 8
+    },
+    {
+      "target": "tests/test_part_feature_registry.py",
+      "passed": 24
+    },
+    {
+      "target": "tests/test_part_verification_worker.py",
+      "passed": 12
+    },
+    {
+      "target": "tests/test_part_verification_jobs.py",
+      "passed": 14
+    },
+    {
+      "target": "tests/test_feature_log_snapshot.py",
+      "passed": 35
+    },
+    {
+      "target": "tests/test_feature_seek_preview.py",
+      "passed": 10
+    },
+    {
+      "target": "tests/test_part_duplex_relax_contract.py",
+      "passed": 34
+    },
+    {
+      "target": "tests/test_native_duplex_relax_proof.py",
+      "passed": 3
+    },
+    {
+      "target": "tests/test_part_protein_conjugate_lifecycle.py",
+      "passed": 52
+    },
+    {
+      "target": "tests/test_part_protein_conjugate_lifecycle_routes.py",
+      "passed": 17
+    }
+  ],
+  "focused_total_passed": 708,
+  "corrected_findings": [
+    "Preserved existing HTTP 409 for converting an already conjugated source attachment; existing regression was not relaxed.",
+    "Catalog numeric overflow and coerced nonfinite metadata are rejected before publication; ambiguous live IDs return structured errors.",
+    "Native deletion preserves unrelated empty groups; opaque unsupported ownership retains explicit compatibility before native evaluation.",
+    "Legacy protein cleanup gives current explicit binder ownership precedence over historical guesses.",
+    "Corrected new audit fixture lattice literals and a benchmark fixture that had appended into a shared input history list; final measurements use isolated histories."
+  ],
+  "broad": {
+    "executed": false,
+    "reason": "Required Archive mount is unavailable; focused checks do not certify the FULL suite.",
+    "selector_dry_run": "FULL  (FULL suite)  [test-dedicated session OPEN]"
+  },
+  "performance": "thiol_capture_benchmark_p4.json; warm native construction/capture/replay, no HTTP or rendering qualification; budgets unchanged",
+  "frontend_changes": false,
+  "main_js_loc_delta": 0,
+  "visual_check": false,
+  "molecular_algorithms_changed": false,
+  "physical_simulation": false,
+  "limits": [
+    "P4 coverage is bounded; unsupported assets, coupled attachments, topology imports and physical provenance remain open.",
+    "Protein absolute/site/free-conjugate edits and opaque ownership remain legacy/unverified.",
+    "Catalog imports remain reproduced_import; optional vendor plots are presentation data.",
+    "Document byte bounds are separate from heap limits and do not bound framework JSON body parsing or simulation disk usage.",
+    "Shared feature_identity.py changes intentionally invalidate old duplex numerical pins; no automatic pin refresh.",
+    "P5 repair UI/drafts and P6 strict automation remain pending."
+  ],
+  "lint": {
+    "changed_python": "Ruff passed",
+    "diff_check": "passed",
+    "memory_baseline_errors": 6,
+    "memory_baseline_warnings": 60,
+    "global_baseline_errors": 5
+  },
+  "review": "Independent source/ownership reviews corrected nonfinite catalog input, ambiguous IDs, unrelated group preservation and opaque compatibility. Final affected checks pass after live recorder extraction."
+}

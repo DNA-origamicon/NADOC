@@ -347,7 +347,13 @@ def _seed_split_toehold():
             )
         ],
     )
-    design_state.set_design(Design(strands=[sa, sb], overhangs=[ohA, ohB]))
+    # This graph-only fixture intentionally has no spatial helices. Its existing
+    # binding owns placement; native Connect must not hide a relocation failure.
+    binding = OverhangBinding(id="split-binding", created_at=1.0, name="B1",
+        sub_domain_a_id="sdA1", sub_domain_b_id="sdB",
+        overhang_a_id="ohA", overhang_b_id="ohB")
+    design_state.set_design(Design(strands=[sa, sb], overhangs=[ohA, ohB],
+                                  overhang_bindings=[binding]))
 
 
 def test_connect_produces_duplex_min_length_with_toehold():

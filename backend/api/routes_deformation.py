@@ -173,7 +173,7 @@ def add_deformation(body: AddDeformationBody) -> dict:
             log = []
         elif design.feature_log_cursor >= 0:
             log = log[: design.feature_log_cursor + 1]
-        log_entry = DeformationLogEntry(deformation_id=op.id, op_snapshot=op)
+        log_entry = DeformationLogEntry(deformation_id=op.id, op_snapshot=op, proof_version=1)
         updated = design.copy_with(
             deformations=new_deformations,
             feature_log=log + [log_entry],

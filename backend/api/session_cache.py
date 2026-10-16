@@ -23,8 +23,8 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import logging
 import os
-import re
 import shutil
 import threading
 import time
@@ -34,6 +34,7 @@ from pathlib import Path
 from backend.api import assembly_state, server_info
 from backend.api import state as design_state
 from backend.api.doc_context import DEFAULT_DOC_ID
+from backend.api.document_identity import UnsafeDocumentIdentity, require_document_identity
 from backend.core.models import Assembly, Design
 
 # Write at most this long after the most recent change in a burst.
@@ -64,19 +65,26 @@ _stop = threading.Event()
 _last_flushed: dict[str, tuple[int, int]] = {}
 _seen: dict[str, tuple[int, int]] = {}
 _stable_since: float | None = None
+_strict_persistence = None
 
-_SAFE_DOC_RE = re.compile(r"[^A-Za-z0-9_.-]")
+_log = logging.getLogger(__name__)
 
 
 def _doc_dir(doc_id: str) -> Path:
-    """Per-doc cache directory, with a filesystem-safe name.
+    """Per-document cache path without lossy identity rewriting."""
+    return _session_dir / require_document_identity(doc_id)
 
-    doc_ids are minted as uuid hex or the ``__default__`` sentinel (both safe),
-    but the id ultimately comes from a client header, so sanitize defensively
-    to keep writes inside the session dir.
-    """
-    safe = _SAFE_DOC_RE.sub("_", doc_id)[:80] or "_"
-    return _session_dir / safe
+
+def _autosave_identity_supported(doc_id: str) -> bool:
+    try:
+        require_document_identity(doc_id)
+    except UnsafeDocumentIdentity as error:
+        # Bound and escape the client-controlled diagnostic. Unsupported IDs
+        # must not abort autosaving unrelated supported documents.
+        hint = repr(doc_id[:80]) if type(doc_id) is str else type(doc_id).__name__
+        _log.warning("Session autosave skipped %s: %s; %s", hint, error.code, error)
+        return False
+    return True
 
 
 # ── Public lifecycle ─────────────────────────────────────────────────────────
@@ -95,13 +103,24 @@ def start(workspace_dir: Path) -> None:
     """
     if os.environ.get("NADOC_DISABLE_SESSION_CACHE"):
         return
-    global _session_dir, _thread, _last_flushed, _seen, _stable_since
+    global _session_dir, _thread, _last_flushed, _seen, _stable_since, _strict_persistence
     _session_dir = Path(workspace_dir) / ".session"
     try:
         _session_dir.mkdir(parents=True, exist_ok=True)
     except OSError:
         traceback.print_exc()
         return
+
+    from backend.api.part_immutable_persistence import StrictPersistence
+    from backend.core.part_command_errors import CommandContractError
+    _strict_persistence = StrictPersistence(workspace_dir)
+    try:
+        pending = _strict_persistence.discover()
+        if pending.manifests or pending.issues:
+            _log.warning("Strict part recovery pending: %s records, %s unsupported entries; files preserved",
+                         len(pending.manifests), len(pending.issues))
+    except CommandContractError as error:
+        _log.warning("Strict part recovery unavailable: %s; files preserved", error.code)
 
     _prune()
     restore()
@@ -141,6 +160,19 @@ def _doc_mtime(sub: Path) -> float:
     return max(mtimes) if mtimes else 0.0
 
 
+def _strict_shadowed(doc_id: str) -> bool:
+    """Unknown typed storage never means permission to restore/delete old bytes."""
+    if _strict_persistence is None:
+        return False
+    from backend.core.part_command_errors import CommandContractError
+    try:
+        return _strict_persistence.shadows_legacy(doc_id)
+    except (CommandContractError, OSError) as error:
+        _log.warning("Strict recovery status unavailable for %r: %s; legacy part preserved",
+                     doc_id[:80], getattr(error, "code", type(error).__name__))
+        return True
+
+
 def _prune(now: float | None = None) -> int:
     """Delete stale/excess cached docs before restore.  Returns the count removed.
 
@@ -159,6 +191,8 @@ def _prune(now: float | None = None) -> int:
     dated: list[tuple[float, Path]] = []
     for sub in _session_dir.iterdir():
         if sub.is_dir():
+            if _strict_shadowed(sub.name):
+                continue
             try:
                 dated.append((_doc_mtime(sub), sub))
             except OSError:
@@ -200,7 +234,9 @@ def restore() -> int:
         doc_id = sub.name
         d_path = sub / _DESIGN_FILE
         a_path = sub / _ASSEMBLY_FILE
-        if d_path.is_file():
+        if d_path.is_file() and _strict_shadowed(doc_id):
+            _log.warning("Legacy part %r is shadowed by pending strict recovery; both records preserved", doc_id[:80])
+        elif d_path.is_file():
             try:
                 design_state.restore_doc_design(
                     doc_id, Design.from_json(d_path.read_text(encoding="utf-8"))
@@ -268,25 +304,65 @@ def _flush(force: bool) -> None:
 
     # Docs that vanished (closed) → remove their cache dirs.
     for doc_id in set(_last_flushed) - set(current):
-        _remove_doc_dir(doc_id)
+        if _autosave_identity_supported(doc_id):
+            _remove_doc_dir(doc_id)
 
     # Docs whose combined revision changed → rewrite.
+    supported = {}
+    completed = {doc: rev for doc, rev in _last_flushed.items() if doc in current}
     for doc_id, rev in current.items():
+        if not _autosave_identity_supported(doc_id):
+            completed[doc_id] = rev  # Preserve the existing one-warning-per-revision policy.
+            continue
+        supported[doc_id] = rev
         if _last_flushed.get(doc_id) == rev:
             continue
-        _write_doc(doc_id)
+        written = _write_doc(doc_id)
+        if written is not False:
+            completed[doc_id] = rev if written is None else written
 
-    _write_registry(current)
-    _last_flushed = current
+    _write_registry(supported)
+    # A transient strict file refusal stays pending. Never mark sampled/newer
+    # revisions as durable when the captured source or write did not succeed.
+    _last_flushed = completed
 
 
-def _write_doc(doc_id: str) -> None:
-    design, _ = design_state.copy_doc_for_persist(doc_id)
-    assembly, _ = assembly_state.copy_doc_for_persist(doc_id)
-    if design is None and assembly is None:
-        _remove_doc_dir(doc_id)
-        return
+def _write_doc(doc_id: str) -> tuple[int, int] | bool:
     d = _doc_dir(doc_id)
+    owner = _strict_persistence
+    from backend.core.part_command_errors import CommandContractError
+    if owner is not None:
+        try:
+            revision = owner.write_if_immutable(doc_id)
+        except CommandContractError as error:
+            _log.warning("Strict part autosave pending for %r: %s; durable records preserved", doc_id[:80], error.code)
+            _write_assembly_cache(doc_id, d)
+            return False
+        if revision is not None:
+            return revision, _write_assembly_cache(doc_id, d)
+    try:
+        if owner is None:
+            return _write_legacy_doc(doc_id, d)
+        # Keep the typed absence decision through the snapshot and file write.
+        # First strict creation cannot overtake an admitted compatibility save.
+        with owner.legacy_write(doc_id):
+            return _write_legacy_doc(doc_id, d)
+    except CommandContractError as error:
+        explanation = ("strict recovery must finish before legacy part writes"
+                       if error.code == "strict_cache_pending" else str(error))
+        _log.warning("Part autosave pending for %r: %s; %s; legacy bytes preserved",
+                     doc_id[:80], error.code, explanation)
+        _write_assembly_cache(doc_id, d)
+        return False
+
+
+def _write_legacy_doc(doc_id: str, d: Path) -> tuple[int, int]:
+    """Caller holds the typed owner's legacy lease when one is configured."""
+    design, design_revision = design_state.copy_doc_for_persist(doc_id)
+    assembly, assembly_revision = assembly_state.copy_doc_for_persist(doc_id)
+    if design is None and assembly is None:
+        _remove_known_files(d, (_DESIGN_FILE, _ASSEMBLY_FILE, _WORKSPACE_HEADS_FILE))
+        return design_revision, assembly_revision
     d.mkdir(parents=True, exist_ok=True)
     _write_or_unlink(d / _DESIGN_FILE, design.to_json() if design is not None else None)
     _write_or_unlink(
@@ -296,11 +372,36 @@ def _write_doc(doc_id: str) -> None:
     _write_or_unlink(
         d / _ASSEMBLY_FILE, assembly.to_json() if assembly is not None else None
     )
+    return design_revision, assembly_revision
+
+
+def _write_assembly_cache(doc_id: str, directory: Path) -> int:
+    """Preserve assembly autosave independently of a refused part write."""
+    assembly, revision = assembly_state.copy_doc_for_persist(doc_id)
+    if assembly is not None:
+        directory.mkdir(parents=True, exist_ok=True)
+    _write_or_unlink(directory / _ASSEMBLY_FILE, assembly.to_json() if assembly is not None else None)
+    return revision
 
 
 def _remove_doc_dir(doc_id: str) -> None:
     d = _doc_dir(doc_id)
-    for name in (_DESIGN_FILE, _ASSEMBLY_FILE, _WORKSPACE_HEADS_FILE):
+    owner = _strict_persistence
+    if owner is None:
+        _remove_known_files(d, (_DESIGN_FILE, _ASSEMBLY_FILE, _WORKSPACE_HEADS_FILE))
+        return
+    from backend.core.part_command_errors import CommandContractError
+    try:
+        with owner.legacy_write(doc_id):
+            _remove_known_files(d, (_DESIGN_FILE, _ASSEMBLY_FILE, _WORKSPACE_HEADS_FILE))
+    except CommandContractError as error:
+        _log.warning("Part close cleanup refused for %r: %s; legacy bytes preserved", doc_id[:80], error.code)
+        _remove_known_files(d, (_ASSEMBLY_FILE,))
+
+
+def _remove_known_files(d: Path, names: tuple[str, ...]) -> None:
+    """Unlink only the caller's already admitted legacy names; no nested lease."""
+    for name in names:
         (d / name).unlink(missing_ok=True)
     try:
         if d.is_dir() and not any(d.iterdir()):
@@ -312,7 +413,7 @@ def _remove_doc_dir(doc_id: str) -> None:
 def _write_registry(current: dict[str, tuple[int, int]]) -> None:
     docs = []
     for doc_id in sorted(current):
-        design = design_state.peek_design(doc_id)
+        design = design_state.design_metadata_for_doc(doc_id)
         assembly = assembly_state.peek_assembly(doc_id)
         if design is None and assembly is None:
             continue
@@ -320,7 +421,7 @@ def _write_registry(current: dict[str, tuple[int, int]]) -> None:
             {
                 "doc_id": doc_id,
                 "is_default": doc_id == DEFAULT_DOC_ID,
-                "design": _meta(design),
+                "design": design,
                 "assembly": _meta(assembly),
             }
         )

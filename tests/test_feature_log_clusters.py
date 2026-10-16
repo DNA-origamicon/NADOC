@@ -251,16 +251,15 @@ def test_undo_pops_one_minor_op_at_a_time():
     assert _strand_endpoints(design_state.get_or_404()) == pre_sig
 
 
-# ── Test 8: revert on an evicted cluster returns 410 ─────────────────────────
+# ── Test 8: revert retains an older cluster ─────────────────────────
 
 
-def test_old_cluster_revert_survives_former_tiny_budget(monkeypatch):
-    monkeypatch.setattr(design_state, "MAX_SNAPSHOT_BUDGET_BYTES", 100)
+def test_old_cluster_retains_revert_payload():
 
     d0 = design_state.get_or_404()
     h0 = d0.helices[0].id
 
-    _nick(h0, 7, "FORWARD")  # cluster 0 (will be evicted)
+    _nick(h0, 7, "FORWARD")  # cluster 0 (retained)
     _post("/api/design/auto-break")  # snapshot — closes cluster 0
     _nick(h0, 21, "FORWARD")  # cluster 2 (newest)
 

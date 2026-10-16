@@ -1,0 +1,4635 @@
+{
+  "scope": "Actual HTTP capture; independent prepared publication with full-source undo; real spawned lifecycle",
+  "public_gate_before_and_after": false,
+  "harness_only_gate_override": true,
+  "ordinary_capture_profile_unchanged": {
+    "max_nodes": 30000,
+    "max_bytes": 2000000,
+    "seconds": 0.025
+  },
+  "session_cleanup_verified": true,
+  "retained_history_boundary": null,
+  "intermediate_history_only": true,
+  "intermediate_history_native_preparation": [
+    {
+      "source_rows": 32,
+      "commands": 32,
+      "candidate_rows": 64,
+      "candidate_recovery_bytes": 267376,
+      "evaluation_ms": 23.143866001191782
+    },
+    {
+      "source_rows": 64,
+      "commands": 32,
+      "candidate_rows": 96,
+      "candidate_recovery_bytes": 420880,
+      "evaluation_ms": 32.11503300190088
+    },
+    {
+      "source_rows": 96,
+      "commands": 32,
+      "candidate_rows": 128,
+      "candidate_recovery_bytes": 574208,
+      "evaluation_ms": 41.72785599803319
+    },
+    {
+      "source_rows": 128,
+      "commands": 32,
+      "candidate_rows": 160,
+      "candidate_recovery_bytes": 727536,
+      "evaluation_ms": 53.75291400196147
+    },
+    {
+      "source_rows": 160,
+      "commands": 32,
+      "candidate_rows": 192,
+      "candidate_recovery_bytes": 880864,
+      "evaluation_ms": 63.662308999482775
+    },
+    {
+      "source_rows": 192,
+      "commands": 32,
+      "candidate_rows": 224,
+      "candidate_recovery_bytes": 1034184,
+      "evaluation_ms": 74.69373999992968
+    },
+    {
+      "source_rows": 224,
+      "commands": 32,
+      "candidate_rows": 256,
+      "candidate_recovery_bytes": 1187688,
+      "evaluation_ms": 84.72259200061671
+    }
+  ],
+  "provenance_diagnostics": {
+    "rootless": {
+      "status": "unverified",
+      "issues": [
+        {
+          "code": "missing_recipe_root"
+        }
+      ],
+      "source_assessment": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "unverified",
+        "issues": [
+          {
+            "code": "missing_recipe_root"
+          }
+        ],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 0,
+        "proof_coverage": "versioned_commands",
+        "native_editable": false,
+        "dependencies": {
+          "complete": true,
+          "parents": {}
+        },
+        "recipe_fingerprint": "36adb2d287331e68315cfddd182c488e57160cb6ef929b6f14af2d04fff82591",
+        "authoring_fingerprint": "06ec0baa1fdb6821a5ba1381cd8fee7b751a5252ea6b7036e9804101ef327b46"
+      },
+      "candidate_returned": false
+    },
+    "explicit_import_basis": {
+      "status": "ready",
+      "issues": [],
+      "source_assessment": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "reproduced_import",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 0,
+        "proof_coverage": "versioned_commands",
+        "native_editable": false,
+        "dependencies": {
+          "complete": true,
+          "parents": {}
+        },
+        "recipe_fingerprint": "deaeae3c1cb84213c138f8b216f92b68b22b045c0e5a28b3c0b1d8896df54fb4",
+        "authoring_fingerprint": "06ec0baa1fdb6821a5ba1381cd8fee7b751a5252ea6b7036e9804101ef327b46",
+        "imported_sources": []
+      },
+      "candidate_returned": true
+    }
+  },
+  "empty_root_worker_startup_baseline": {
+    "mode": "complete",
+    "start_http_status": 202,
+    "poll": {
+      "job_id": "2dee81a0-3554-4319-bf96-d6a6b7e178ff",
+      "status": "complete",
+      "stale": false,
+      "source_busy": false,
+      "result": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "verified",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 0,
+        "proof_coverage": "versioned_commands",
+        "native_editable": true,
+        "dependencies": {
+          "complete": true,
+          "parents": {}
+        },
+        "recipe_fingerprint": "af59bfe1b4b1d9d0f031d18c71ee53d059a26ef5f3c1bf5ecaf29a4009ff893f",
+        "authoring_fingerprint": "8542143cf47cd3394a0346305d59f8a9c6c15a322b61c19d0dd9cc3ac14625c0",
+        "imported_sources": [],
+        "source_revision": 1,
+        "design_id": "a444bc9c-451a-46fd-9e68-b2dcbf1127e0"
+      }
+    },
+    "commit_http_status": 409,
+    "commit": {
+      "detail": "Verification is a nonpublishing assessment"
+    },
+    "source_guard_correct": true,
+    "cold_replay": null,
+    "shared_admission_released_after_reaping": true,
+    "start_http_ms": 4.596085000230232,
+    "parent_worker_constructor_ms": 1.5014589989732485,
+    "process_start_call_ms": 0.7968290010467172,
+    "start_to_supervisor_reaped_ms": 1161.4839389985718,
+    "commit_http_ms": 0.9763080015545711
+  },
+  "cases": [
+    {
+      "name": "native-history-64-source-rows",
+      "qualification_scope": true,
+      "commands": 32,
+      "history_rows": 64,
+      "history_entries_including_children": 64,
+      "source_json_bytes": 313296,
+      "candidate_json_bytes": 490081,
+      "retained_recovery_encoded_bytes": 267376,
+      "retained_input_sources": 0,
+      "separate_native_evaluation_ms": 33.675236998533364,
+      "repeats": 30,
+      "independent_candidate_edit": {
+        "status": "ready",
+        "candidate_rows": 96,
+        "evaluation_ms": 32.282309999573044,
+        "issues": []
+      },
+      "capture_refusals": 1,
+      "correct_publications": 30,
+      "publication_snapshot": {
+        "count": 30,
+        "p50_ms": 0.5465534995892085,
+        "p95_ms": 0.6749140011379495,
+        "max_ms": 0.8664950000820681
+      },
+      "capture_without_worker": {
+        "http": {
+          "count": 30,
+          "p50_ms": 13.7356124996586,
+          "p95_ms": 15.437411002494628,
+          "max_ms": 47.84537699742941
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 0.993969999399269,
+          "p95_ms": 1.1921930017706472,
+          "max_ms": 1.2227959996380378
+        },
+        "revision_http": {
+          "count": 49,
+          "p50_ms": 12.994378001167206,
+          "p95_ms": 14.298746002168627,
+          "max_ms": 47.29710099854856
+        },
+        "capture_lock_hold": {
+          "count": 30,
+          "p50_ms": 11.040631499781739,
+          "p95_ms": 12.647327999729896,
+          "max_ms": 45.29577799985418
+        },
+        "capture_lock_wait": {
+          "count": 30,
+          "p50_ms": 0.0006890004442539066,
+          "p95_ms": 0.0007880007615312934,
+          "max_ms": 0.001082000380847603
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 49,
+          "p50_ms": 0.003345998266013339,
+          "p95_ms": 0.010528001439524814,
+          "max_ms": 0.024206001398852095
+        },
+        "light_request_lock_wait": {
+          "count": 49,
+          "p50_ms": 0.001081996742868796,
+          "p95_ms": 6.238745998416562,
+          "max_ms": 6.826183998782653
+        },
+        "overlapping_revision_requests": 33,
+        "sample_summary": {
+          "samples": 30,
+          "http_status_counts": {
+            "202": 29,
+            "413": 1
+          },
+          "retention": "All refusals/errors and maximal HTTP/capture/publication/light samples retained; aggregate distributions include every original sample."
+        },
+        "retained_samples": [
+          {
+            "sample_index": 0,
+            "http_ms": 14.073020000068936,
+            "baseline_revision_http_ms": 1.1872739996761084,
+            "revision_http_ms": [
+              14.12330200037104
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              11.659998999675736
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0055109994718804955
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009840005077421665
+            ],
+            "http_status": 202,
+            "response": {
+              "job_id": "46bc7a59-1411-4215-b414-880fdeb488f3",
+              "status": "running",
+              "source_revision": 2,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "sample_index": 7,
+            "http_ms": 47.84537699742941,
+            "baseline_revision_http_ms": 1.0225549995084293,
+            "revision_http_ms": [
+              47.29710099854856,
+              1.162084001407493
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              45.29577799985418
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0032470015867147595,
+              0.0037390018405858427
+            ],
+            "light_request_lock_wait_ms": [
+              0.0010829971870407462,
+              0.001082000380847603
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 18,
+            "http_ms": 14.376579001691425,
+            "baseline_revision_http_ms": 1.0030720004579052,
+            "revision_http_ms": [
+              14.298746002168627
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              11.535820001881802
+            ],
+            "capture_lock_wait_ms": [
+              0.0007870003173593432
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.024206001398852095
+            ],
+            "light_request_lock_wait_ms": [
+              6.826183998782653
+            ],
+            "http_status": 202,
+            "response": {
+              "job_id": "6165c43d-ce4b-4173-8e80-93f20c7ee0f2",
+              "status": "running",
+              "source_revision": 56,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          }
+        ]
+      },
+      "commit_prepared_candidate": {
+        "http": {
+          "count": 30,
+          "p50_ms": 7.128709499738761,
+          "p95_ms": 8.234755998273613,
+          "max_ms": 8.449066001048777
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 0.8687089994054986,
+          "p95_ms": 0.9859500023594592,
+          "max_ms": 1.018224997096695
+        },
+        "revision_http": {
+          "count": 60,
+          "p50_ms": 3.778788499403163,
+          "p95_ms": 5.405215000791941,
+          "max_ms": 6.530103000841336
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 30,
+          "p50_ms": 0.5694800001947442,
+          "p95_ms": 0.9025090002978686,
+          "max_ms": 1.2595970001711976
+        },
+        "publication_lock_wait": {
+          "count": 30,
+          "p50_ms": 0.0006890004442539066,
+          "p95_ms": 0.0009840005077421665,
+          "max_ms": 0.0016730009519960731
+        },
+        "light_request_lock_hold": {
+          "count": 60,
+          "p50_ms": 0.002755001332843676,
+          "p95_ms": 0.0037389982026070356,
+          "max_ms": 0.006789003236917779
+        },
+        "light_request_lock_wait": {
+          "count": 60,
+          "p50_ms": 0.00088600063463673,
+          "p95_ms": 0.0014760007616132498,
+          "max_ms": 0.8967030007624999
+        },
+        "overlapping_revision_requests": 30,
+        "sample_summary": {
+          "samples": 30,
+          "http_status_counts": {
+            "200": 30
+          },
+          "retention": "All refusals/errors and maximal HTTP/capture/publication/light samples retained; aggregate distributions include every original sample."
+        },
+        "retained_samples": [
+          {
+            "sample_index": 0,
+            "http_ms": 8.449066001048777,
+            "baseline_revision_http_ms": 0.9707979988888837,
+            "revision_http_ms": [
+              3.185446999850683,
+              5.260470999928657
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              1.2595970001711976
+            ],
+            "publication_lock_wait_ms": [
+              0.0005899964889977127
+            ],
+            "light_request_lock_hold_ms": [
+              0.002558001142460853,
+              0.004329998773755506
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008850001904647797,
+              0.8967030007624999
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "f445ed64-b5f8-49d0-b98b-f6ebaa250ca0",
+              "status": "committed",
+              "revision": 4,
+              "design_id": "6f8e2d2c-1d04-4a68-b7d2-ac4eabcf1e47"
+            },
+            "snapshot_ms": [
+              0.5637239992211107
+            ],
+            "correct_publication": true
+          },
+          {
+            "sample_index": 27,
+            "http_ms": 8.234755998273613,
+            "baseline_revision_http_ms": 0.922778999665752,
+            "revision_http_ms": [
+              6.530103000841336,
+              1.9811510028375778
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.5773019984189887
+            ],
+            "publication_lock_wait_ms": [
+              0.00059100057114847
+            ],
+            "light_request_lock_hold_ms": [
+              0.003444001777097583,
+              0.0026569978217594326
+            ],
+            "light_request_lock_wait_ms": [
+              0.0011810006981249899,
+              0.0009840005077421665
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "c76f5e02-eda3-464c-9073-51ad3e358087",
+              "status": "committed",
+              "revision": 85,
+              "design_id": "6f8e2d2c-1d04-4a68-b7d2-ac4eabcf1e47"
+            },
+            "snapshot_ms": [
+              0.554672002181178
+            ],
+            "correct_publication": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "native-history-128-source-rows",
+      "qualification_scope": true,
+      "commands": 32,
+      "history_rows": 128,
+      "history_entries_including_children": 128,
+      "source_json_bytes": 656480,
+      "candidate_json_bytes": 835713,
+      "retained_recovery_encoded_bytes": 574208,
+      "retained_input_sources": 0,
+      "separate_native_evaluation_ms": 52.35113100206945,
+      "repeats": 30,
+      "independent_candidate_edit": {
+        "status": "ready",
+        "candidate_rows": 160,
+        "evaluation_ms": 53.36827500286745,
+        "issues": []
+      },
+      "capture_refusals": 1,
+      "correct_publications": 30,
+      "publication_snapshot": {
+        "count": 30,
+        "p50_ms": 0.8601485005783616,
+        "p95_ms": 1.2738639998133294,
+        "max_ms": 1.35189399952651
+      },
+      "capture_without_worker": {
+        "http": {
+          "count": 30,
+          "p50_ms": 23.78945650161768,
+          "p95_ms": 28.64570699966862,
+          "max_ms": 50.28338999909465
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 1.0650629992596805,
+          "p95_ms": 1.8710439981077798,
+          "max_ms": 1.925062999362126
+        },
+        "revision_http": {
+          "count": 53,
+          "p50_ms": 13.56951700290665,
+          "p95_ms": 23.686630000156583,
+          "max_ms": 49.37310800232808
+        },
+        "capture_lock_hold": {
+          "count": 30,
+          "p50_ms": 21.09373750136001,
+          "p95_ms": 24.76202599791577,
+          "max_ms": 47.58885199771612
+        },
+        "capture_lock_wait": {
+          "count": 30,
+          "p50_ms": 0.0006890004442539066,
+          "p95_ms": 0.0009839968697633594,
+          "max_ms": 0.0023610009520780295
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 53,
+          "p50_ms": 0.003345001459820196,
+          "p95_ms": 0.009053001122083515,
+          "max_ms": 0.017318001482635736
+        },
+        "light_request_lock_wait": {
+          "count": 53,
+          "p50_ms": 0.0009840005077421665,
+          "p95_ms": 15.582646999973804,
+          "max_ms": 17.258959996979684
+        },
+        "overlapping_revision_requests": 46,
+        "sample_summary": {
+          "samples": 30,
+          "http_status_counts": {
+            "202": 29,
+            "413": 1
+          },
+          "retention": "All refusals/errors and maximal HTTP/capture/publication/light samples retained; aggregate distributions include every original sample."
+        },
+        "retained_samples": [
+          {
+            "sample_index": 0,
+            "http_ms": 24.59366499897442,
+            "baseline_revision_http_ms": 1.034461001836462,
+            "revision_http_ms": [
+              17.397406001691706,
+              7.680280999920797
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              22.022616998583544
+            ],
+            "capture_lock_wait_ms": [
+              0.0005900001269765198
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.003049997758353129,
+              0.003345001459820196
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009840005077421665,
+              0.0009839968697633594
+            ],
+            "http_status": 202,
+            "response": {
+              "job_id": "ca9d90eb-abd4-4423-b293-7e2870d39e93",
+              "status": "running",
+              "source_revision": 92,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "sample_index": 13,
+            "http_ms": 50.28338999909465,
+            "baseline_revision_http_ms": 0.9914609981933609,
+            "revision_http_ms": [
+              49.37310800232808,
+              1.3273930017021485
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              47.58885199771612
+            ],
+            "capture_lock_wait_ms": [
+              0.0006880000000819564
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0032479983929079026,
+              0.0038379985198844224
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009840005077421665,
+              0.001082000380847603
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 17,
+            "http_ms": 25.34080400073435,
+            "baseline_revision_http_ms": 1.662537000811426,
+            "revision_http_ms": [
+              25.213574997906107
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              21.994672002620064
+            ],
+            "capture_lock_wait_ms": [
+              0.0007870003173593432
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.017318001482635736
+            ],
+            "light_request_lock_wait_ms": [
+              17.258959996979684
+            ],
+            "http_status": 202,
+            "response": {
+              "job_id": "b4fbcbd8-09e0-4eb1-8591-fab499a699c1",
+              "status": "running",
+              "source_revision": 143,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          }
+        ]
+      },
+      "commit_prepared_candidate": {
+        "http": {
+          "count": 30,
+          "p50_ms": 9.82467500034545,
+          "p95_ms": 11.767056999815395,
+          "max_ms": 12.645655002415879
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 0.9255345012206817,
+          "p95_ms": 1.1079639989475254,
+          "max_ms": 1.247001997398911
+        },
+        "revision_http": {
+          "count": 61,
+          "p50_ms": 4.101929000171367,
+          "p95_ms": 7.435957999405218,
+          "max_ms": 8.86401199750253
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 30,
+          "p50_ms": 0.8836659981170669,
+          "p95_ms": 1.3126330013619736,
+          "max_ms": 1.3906629974371754
+        },
+        "publication_lock_wait": {
+          "count": 30,
+          "p50_ms": 0.0007870003173593432,
+          "p95_ms": 0.0017710008251015097,
+          "max_ms": 0.0017710008251015097
+        },
+        "light_request_lock_hold": {
+          "count": 61,
+          "p50_ms": 0.0029520015232264996,
+          "p95_ms": 0.004427998646860942,
+          "max_ms": 0.008167000487446785
+        },
+        "light_request_lock_wait": {
+          "count": 61,
+          "p50_ms": 0.0009840005077421665,
+          "p95_ms": 0.0014760007616132498,
+          "max_ms": 0.0029519978852476925
+        },
+        "overlapping_revision_requests": 30,
+        "sample_summary": {
+          "samples": 30,
+          "http_status_counts": {
+            "200": 30
+          },
+          "retention": "All refusals/errors and maximal HTTP/capture/publication/light samples retained; aggregate distributions include every original sample."
+        },
+        "retained_samples": [
+          {
+            "sample_index": 0,
+            "http_ms": 10.280751001118915,
+            "baseline_revision_http_ms": 0.9540700011712033,
+            "revision_http_ms": [
+              3.8950960006332025,
+              6.393428000592394
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.9333069974672981
+            ],
+            "publication_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "light_request_lock_hold_ms": [
+              0.0028530012059491128,
+              0.0035429984563961625
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009840005077421665,
+              0.0011800002539530396
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "b14454b2-081f-41f8-b99c-d1cf30de622a",
+              "status": "committed",
+              "revision": 94,
+              "design_id": "6f8e2d2c-1d04-4a68-b7d2-ac4eabcf1e47"
+            },
+            "snapshot_ms": [
+              0.9099870003410615
+            ],
+            "correct_publication": true
+          },
+          {
+            "sample_index": 10,
+            "http_ms": 9.813161999773001,
+            "baseline_revision_http_ms": 0.7783309993101284,
+            "revision_http_ms": [
+              3.5295470006531104,
+              6.456008999521146
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.979062999249436
+            ],
+            "publication_lock_wait_ms": [
+              0.0007870003173593432
+            ],
+            "light_request_lock_hold_ms": [
+              0.0029520015232264996,
+              0.008167000487446785
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009839968697633594,
+              0.0029519978852476925
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "365b2489-eca7-4601-8b97-9531e89953b7",
+              "status": "committed",
+              "revision": 124,
+              "design_id": "6f8e2d2c-1d04-4a68-b7d2-ac4eabcf1e47"
+            },
+            "snapshot_ms": [
+              0.9551520015520509
+            ],
+            "correct_publication": true
+          },
+          {
+            "sample_index": 16,
+            "http_ms": 12.645655002415879,
+            "baseline_revision_http_ms": 1.1079639989475254,
+            "revision_http_ms": [
+              3.9439020001736935,
+              8.86401199750253
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              1.0706719986046664
+            ],
+            "publication_lock_wait_ms": [
+              0.001672000507824123
+            ],
+            "light_request_lock_hold_ms": [
+              0.003640998329501599,
+              0.006198999471962452
+            ],
+            "light_request_lock_wait_ms": [
+              0.0012790005712304264,
+              0.0017710008251015097
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "83f3fff1-1617-439d-b41d-a57836cd8be5",
+              "status": "committed",
+              "revision": 142,
+              "design_id": "6f8e2d2c-1d04-4a68-b7d2-ac4eabcf1e47"
+            },
+            "snapshot_ms": [
+              1.0336740015191026
+            ],
+            "correct_publication": true
+          },
+          {
+            "sample_index": 17,
+            "http_ms": 11.767056999815395,
+            "baseline_revision_http_ms": 0.9011309994093608,
+            "revision_http_ms": [
+              4.101929000171367,
+              7.911025000794325
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              1.3906629974371754
+            ],
+            "publication_lock_wait_ms": [
+              0.0017710008251015097
+            ],
+            "light_request_lock_hold_ms": [
+              0.003148998075630516,
+              0.004427998646860942
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008850001904647797,
+              0.0014760007616132498
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "82501e58-e7a9-488f-80c9-43d70c7a6c45",
+              "status": "committed",
+              "revision": 145,
+              "design_id": "6f8e2d2c-1d04-4a68-b7d2-ac4eabcf1e47"
+            },
+            "snapshot_ms": [
+              1.35189399952651
+            ],
+            "correct_publication": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "native-history-256-source-rows",
+      "qualification_scope": true,
+      "commands": 32,
+      "history_rows": 256,
+      "history_entries_including_children": 256,
+      "source_json_bytes": 1342664,
+      "candidate_json_bytes": 1525625,
+      "retained_recovery_encoded_bytes": 1187688,
+      "retained_input_sources": 0,
+      "separate_native_evaluation_ms": 94.17876400038949,
+      "repeats": 30,
+      "independent_candidate_edit": {
+        "status": "ready",
+        "candidate_rows": 288,
+        "evaluation_ms": 97.84360799676506,
+        "issues": []
+      },
+      "capture_refusals": 30,
+      "correct_publications": 30,
+      "publication_snapshot": {
+        "count": 30,
+        "p50_ms": 1.652894499784452,
+        "p95_ms": 2.6053900000988506,
+        "max_ms": 2.649570000357926
+      },
+      "capture_without_worker": {
+        "http": {
+          "count": 30,
+          "p50_ms": 27.53070649850997,
+          "p95_ms": 28.1036310007039,
+          "max_ms": 28.14741800102638
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 1.2446894997992786,
+          "p95_ms": 1.40561900116154,
+          "max_ms": 1.6324270000040997
+        },
+        "revision_http": {
+          "count": 52,
+          "p50_ms": 15.664317501432379,
+          "p95_ms": 27.8163080001832,
+          "max_ms": 27.977975998510374
+        },
+        "capture_lock_hold": {
+          "count": 30,
+          "p50_ms": 25.059582001631497,
+          "p95_ms": 25.133576997177443,
+          "max_ms": 25.139481000223896
+        },
+        "capture_lock_wait": {
+          "count": 30,
+          "p50_ms": 0.0006890004442539066,
+          "p95_ms": 0.0007880007615312934,
+          "max_ms": 0.0010830008250195533
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 52,
+          "p50_ms": 0.0038870002754265442,
+          "p95_ms": 0.010824001947185025,
+          "max_ms": 0.02528899858589284
+        },
+        "light_request_lock_wait": {
+          "count": 52,
+          "p50_ms": 0.0010819985618581995,
+          "p95_ms": 20.07167500050855,
+          "max_ms": 20.12923700021929
+        },
+        "overlapping_revision_requests": 51,
+        "sample_summary": {
+          "samples": 30,
+          "http_status_counts": {
+            "413": 30
+          },
+          "retention": "All refusals/errors and maximal HTTP/capture/publication/light samples retained; aggregate distributions include every original sample."
+        },
+        "retained_samples": [
+          {
+            "sample_index": 0,
+            "http_ms": 27.539513997908216,
+            "baseline_revision_http_ms": 1.2072479985363316,
+            "revision_http_ms": [
+              27.45272600077442
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.060271000256762
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.007674996595596895
+            ],
+            "light_request_lock_wait_ms": [
+              20.06193300258019
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 1,
+            "http_ms": 27.321561999997357,
+            "baseline_revision_http_ms": 1.1708420024660882,
+            "revision_http_ms": [
+              22.27933899848722,
+              5.487574002472684
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.021599998581223
+            ],
+            "capture_lock_wait_ms": [
+              0.0006880000000819564
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.003050001396331936,
+              0.004525998519966379
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009839968697633594,
+              0.00088600063463673
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 2,
+            "http_ms": 28.14741800102638,
+            "baseline_revision_http_ms": 1.2116760008211713,
+            "revision_http_ms": [
+              17.126319002272794,
+              11.105623001640197
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.022879002790432
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0029519978852476925,
+              0.004625002475222573
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009840005077421665,
+              0.001081996742868796
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 3,
+            "http_ms": 27.37646700188634,
+            "baseline_revision_http_ms": 1.3663579993590247,
+            "revision_http_ms": [
+              7.076606998452917,
+              20.47491099801846
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.022386998898583
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.003049997758353129,
+              0.005017998773837462
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009840005077421665,
+              0.0010830008250195533
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 4,
+            "http_ms": 27.352557000995148,
+            "baseline_revision_http_ms": 1.2462140002753586,
+            "revision_http_ms": [
+              17.20129800014547,
+              10.356319999118568
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.046003000170458
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0029519978852476925,
+              0.003936002030968666
+            ],
+            "light_request_lock_wait_ms": [
+              0.001082000380847603,
+              0.0010830008250195533
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 5,
+            "http_ms": 28.03317800135119,
+            "baseline_revision_http_ms": 1.2441479993867688,
+            "revision_http_ms": [
+              12.473162001697347,
+              15.677798000979237
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.139481000223896
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.003050001396331936,
+              0.004624998837243766
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009840005077421665,
+              0.0007870003173593432
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 6,
+            "http_ms": 27.370169998903293,
+            "baseline_revision_http_ms": 1.311551000981126,
+            "revision_http_ms": [
+              22.180251999088796,
+              5.614212001091801
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.033801997778937
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0029520015232264996,
+              0.0038380021578632295
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009840005077421665,
+              0.0009830000635702163
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 7,
+            "http_ms": 28.044492999470094,
+            "baseline_revision_http_ms": 1.2139400023443159,
+            "revision_http_ms": [
+              27.8163080001832
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.12216300237924
+            ],
+            "capture_lock_wait_ms": [
+              0.0007869966793805361
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.006395999662345275
+            ],
+            "light_request_lock_wait_ms": [
+              20.07167500050855
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 8,
+            "http_ms": 27.504976002092008,
+            "baseline_revision_http_ms": 1.2764230013999622,
+            "revision_http_ms": [
+              22.298230996966595,
+              5.239905000053113
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.030947999766795
+            ],
+            "capture_lock_wait_ms": [
+              0.0007870003173593432
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.003050001396331936,
+              0.0037390018405858427
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009840005077421665,
+              0.00088600063463673
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 9,
+            "http_ms": 27.580152000155067,
+            "baseline_revision_http_ms": 1.1898320008185692,
+            "revision_http_ms": [
+              17.073871997126844,
+              10.623964000842534
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.065878999157576
+            ],
+            "capture_lock_wait_ms": [
+              0.0005900001269765198
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0031480012694373727,
+              0.004034998710267246
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009840005077421665,
+              0.001082000380847603
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 10,
+            "http_ms": 27.474276001157705,
+            "baseline_revision_http_ms": 1.2170879999757744,
+            "revision_http_ms": [
+              11.914753002201905,
+              15.97683100044378
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.095891000091797
+            ],
+            "capture_lock_wait_ms": [
+              0.0006880000000819564
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.003050001396331936,
+              0.004034001904074103
+            ],
+            "light_request_lock_wait_ms": [
+              0.001082000380847603,
+              0.00088600063463673
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 11,
+            "http_ms": 27.84287499889615,
+            "baseline_revision_http_ms": 1.1896359974343795,
+            "revision_http_ms": [
+              26.937414000713034,
+              1.3977479975437745
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.053186000150163
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0033460019039921463,
+              0.0038380021578632295
+            ],
+            "light_request_lock_wait_ms": [
+              0.001082000380847603,
+              0.0011810006981249899
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 12,
+            "http_ms": 28.1036310007039,
+            "baseline_revision_http_ms": 1.2337180014583282,
+            "revision_http_ms": [
+              17.48684999984107,
+              10.657025002728915
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.101990999246482
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.004624998837243766,
+              0.004132998583372682
+            ],
+            "light_request_lock_wait_ms": [
+              0.001082000380847603,
+              0.0011810006981249899
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 13,
+            "http_ms": 27.54167799866991,
+            "baseline_revision_http_ms": 1.1396480003895704,
+            "revision_http_ms": [
+              17.433519002224784,
+              10.563350999291288
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.058893003006233
+            ],
+            "capture_lock_wait_ms": [
+              0.0007870003173593432
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0037390018405858427,
+              0.003149001713609323
+            ],
+            "light_request_lock_wait_ms": [
+              0.001082000380847603,
+              0.00088600063463673
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 14,
+            "http_ms": 27.280136000626953,
+            "baseline_revision_http_ms": 1.1697590016410686,
+            "revision_http_ms": [
+              27.200827000342542
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.043443998583825
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.006198999471962452
+            ],
+            "light_request_lock_wait_ms": [
+              20.01765399836586
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 15,
+            "http_ms": 27.514126999449218,
+            "baseline_revision_http_ms": 1.2452310002117883,
+            "revision_http_ms": [
+              27.455677998659667
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.082804000703618
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.013185999705456197
+            ],
+            "light_request_lock_wait_ms": [
+              20.12923700021929
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 16,
+            "http_ms": 27.761401997850044,
+            "baseline_revision_http_ms": 1.2038040003972128,
+            "revision_http_ms": [
+              12.021514998195926,
+              15.847732000111137
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.043738998647314
+            ],
+            "capture_lock_wait_ms": [
+              0.00059100057114847
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0029520015232264996,
+              0.004133002221351489
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009830000635702163,
+              0.001081996742868796
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 17,
+            "http_ms": 27.275116997770965,
+            "baseline_revision_http_ms": 1.2506419989222195,
+            "revision_http_ms": [
+              22.15004300160217,
+              5.673545998433838
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.046888000360923
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0029520015232264996,
+              0.003935998392989859
+            ],
+            "light_request_lock_wait_ms": [
+              0.001082000380847603,
+              0.0012790005712304264
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 18,
+            "http_ms": 27.52209699974628,
+            "baseline_revision_http_ms": 1.1677910006255843,
+            "revision_http_ms": [
+              17.256500002986286,
+              10.660567997547332
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.111338996794075
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0029520015232264996,
+              0.003936002030968666
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009840005077421665,
+              0.001081996742868796
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 19,
+            "http_ms": 27.566081000259146,
+            "baseline_revision_http_ms": 1.346482000371907,
+            "revision_http_ms": [
+              12.176393000117969,
+              15.65083700188552
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.04983999824617
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0029519978852476925,
+              0.004230998456478119
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009840005077421665,
+              0.0011810006981249899
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 20,
+            "http_ms": 27.47831000306178,
+            "baseline_revision_http_ms": 1.2413929980539251,
+            "revision_http_ms": [
+              12.172457998531172,
+              15.525673999945866
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.045313999726204
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0030509982025250793,
+              0.0037389982026070356
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009840005077421665,
+              0.00088600063463673
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 21,
+            "http_ms": 27.961150000919588,
+            "baseline_revision_http_ms": 1.3897780008846894,
+            "revision_http_ms": [
+              27.977975998510374
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.02661900143721
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.02528899858589284
+            ],
+            "light_request_lock_wait_ms": [
+              19.98656000068877
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 22,
+            "http_ms": 27.512650998687604,
+            "baseline_revision_http_ms": 1.2454269999579992,
+            "revision_http_ms": [
+              27.41592600068543
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.0239609995333
+            ],
+            "capture_lock_wait_ms": [
+              0.0007880007615312934
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.010824001947185025
+            ],
+            "light_request_lock_wait_ms": [
+              19.99935200001346
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 23,
+            "http_ms": 27.451841000583954,
+            "baseline_revision_http_ms": 1.264810998691246,
+            "revision_http_ms": [
+              22.301280998362927,
+              5.628381000860827
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.11645599952317
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.003739998646778986,
+              0.003935998392989859
+            ],
+            "light_request_lock_wait_ms": [
+              0.001377000444335863,
+              0.00088600063463673
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 24,
+            "http_ms": 27.584579998801928,
+            "baseline_revision_http_ms": 1.1973099972237833,
+            "revision_http_ms": [
+              12.142544997914229,
+              15.554898000118556
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.06607599934796
+            ],
+            "capture_lock_wait_ms": [
+              0.0010830008250195533
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0029520015232264996,
+              0.004723999154521152
+            ],
+            "light_request_lock_wait_ms": [
+              0.0010829971870407462,
+              0.0011800002539530396
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 25,
+            "http_ms": 28.019106001011096,
+            "baseline_revision_http_ms": 1.6324270000040997,
+            "revision_http_ms": [
+              27.909293999982765
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.06784700017306
+            ],
+            "capture_lock_wait_ms": [
+              0.00059100057114847
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.010331998055335134
+            ],
+            "light_request_lock_wait_ms": [
+              15.052673999889521
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 26,
+            "http_ms": 27.46965100232046,
+            "baseline_revision_http_ms": 1.3106650003464893,
+            "revision_http_ms": [
+              12.597832999745151,
+              15.193678002106026
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.133576997177443
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.003050001396331936,
+              0.004329998773755506
+            ],
+            "light_request_lock_wait_ms": [
+              0.001082000380847603,
+              0.00088600063463673
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 27,
+            "http_ms": 27.426945998740848,
+            "baseline_revision_http_ms": 1.40561900116154,
+            "revision_http_ms": [
+              17.417578001186484,
+              10.515332000068156
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.113109997619176
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0034439981391187757,
+              0.0046240020310506225
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009840005077421665,
+              0.0012799973774235696
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 28,
+            "http_ms": 27.651194999634754,
+            "baseline_revision_http_ms": 1.3724589989578817,
+            "revision_http_ms": [
+              27.57877499971073
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.06233700114535
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.008068996976362541
+            ],
+            "light_request_lock_wait_ms": [
+              20.094404000701616
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          },
+          {
+            "sample_index": 29,
+            "http_ms": 27.53931599727366,
+            "baseline_revision_http_ms": 1.3161759998183697,
+            "revision_http_ms": [
+              17.25925500068115,
+              10.651809996488737
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              25.080244999116985
+            ],
+            "capture_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.003345001459820196,
+              0.0052150026021990925
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009840005077421665,
+              0.00088600063463673
+            ],
+            "http_status": 413,
+            "response": {
+              "detail": "Part verification capture budget exceeded"
+            }
+          }
+        ]
+      },
+      "commit_prepared_candidate": {
+        "http": {
+          "count": 30,
+          "p50_ms": 15.537826000581845,
+          "p95_ms": 17.292808002821403,
+          "max_ms": 64.45904000065639
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 0.9663695000199368,
+          "p95_ms": 1.095663999876706,
+          "max_ms": 1.3260150008136407
+        },
+        "revision_http": {
+          "count": 91,
+          "p50_ms": 5.1656150026246905,
+          "p95_ms": 8.418465000431752,
+          "max_ms": 56.46722999881604
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 30,
+          "p50_ms": 1.6794619987194892,
+          "p95_ms": 2.632448999065673,
+          "max_ms": 2.676334002899239
+        },
+        "publication_lock_wait": {
+          "count": 30,
+          "p50_ms": 0.0006890004442539066,
+          "p95_ms": 0.001082000380847603,
+          "max_ms": 0.01633400097489357
+        },
+        "light_request_lock_hold": {
+          "count": 91,
+          "p50_ms": 0.0035430020943749696,
+          "p95_ms": 0.006690999725833535,
+          "max_ms": 0.01426699964213185
+        },
+        "light_request_lock_wait": {
+          "count": 91,
+          "p50_ms": 0.001082000380847603,
+          "p95_ms": 0.001967997377505526,
+          "max_ms": 0.010528998245717958
+        },
+        "overlapping_revision_requests": 30,
+        "sample_summary": {
+          "samples": 30,
+          "http_status_counts": {
+            "200": 30
+          },
+          "retention": "All refusals/errors and maximal HTTP/capture/publication/light samples retained; aggregate distributions include every original sample."
+        },
+        "retained_samples": [
+          {
+            "sample_index": 0,
+            "http_ms": 15.855701996770222,
+            "baseline_revision_http_ms": 1.033281001582509,
+            "revision_http_ms": [
+              6.293849000940099,
+              6.880302000354277,
+              3.2993929999065585
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              1.753062999341637
+            ],
+            "publication_lock_wait_ms": [
+              0.0006890004442539066
+            ],
+            "light_request_lock_hold_ms": [
+              0.004526002157945186,
+              0.0033460019039921463,
+              0.011020001693395898
+            ],
+            "light_request_lock_wait_ms": [
+              0.010528998245717958,
+              0.0009840005077421665,
+              0.002754997694864869
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "833748f0-d2aa-4f1e-bc57-b06a906b78af",
+              "status": "committed",
+              "revision": 184,
+              "design_id": "6f8e2d2c-1d04-4a68-b7d2-ac4eabcf1e47"
+            },
+            "snapshot_ms": [
+              1.729644998704316
+            ],
+            "correct_publication": true
+          },
+          {
+            "sample_index": 9,
+            "http_ms": 64.45904000065639,
+            "baseline_revision_http_ms": 0.9018199998536147,
+            "revision_http_ms": [
+              4.988695000065491,
+              56.46722999881604,
+              3.1346739997388795
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              1.5623679973941762
+            ],
+            "publication_lock_wait_ms": [
+              0.0006880000000819564
+            ],
+            "light_request_lock_hold_ms": [
+              0.003148998075630516,
+              0.005608999344985932,
+              0.0033460019039921463
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009840005077421665,
+              0.0017710008251015097,
+              0.001081996742868796
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "1429ca96-dd7a-4722-84bf-e92eaf5591fd",
+              "status": "committed",
+              "revision": 211,
+              "design_id": "6f8e2d2c-1d04-4a68-b7d2-ac4eabcf1e47"
+            },
+            "snapshot_ms": [
+              1.5370789988082834
+            ],
+            "correct_publication": true
+          },
+          {
+            "sample_index": 21,
+            "http_ms": 16.792847000033362,
+            "baseline_revision_http_ms": 1.013601002341602,
+            "revision_http_ms": [
+              5.883330999495229,
+              7.1447000009357,
+              4.224533997330582
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              2.676334002899239
+            ],
+            "publication_lock_wait_ms": [
+              0.0007879971235524863
+            ],
+            "light_request_lock_hold_ms": [
+              0.004034998710267246,
+              0.004231002094456926,
+              0.002754997694864869
+            ],
+            "light_request_lock_wait_ms": [
+              0.001082000380847603,
+              0.0011810006981249899,
+              0.00088600063463673
+            ],
+            "http_status": 200,
+            "response": {
+              "job_id": "5457e1b6-d928-4213-a538-7b0ac8481654",
+              "status": "committed",
+              "revision": 247,
+              "design_id": "6f8e2d2c-1d04-4a68-b7d2-ac4eabcf1e47"
+            },
+            "snapshot_ms": [
+              2.649570000357926
+            ],
+            "correct_publication": true
+          }
+        ]
+      }
+    }
+  ],
+  "real_spawned_jobs": [
+    {
+      "case": "native-history-64-source-rows",
+      "mode": "complete",
+      "start_http_status": 202,
+      "poll": {
+        "job_id": "17c80353-4b2d-416f-95df-35bf2cbac412",
+        "status": "complete",
+        "stale": false,
+        "source_busy": false,
+        "result": {
+          "status": "ready",
+          "issues": [],
+          "validation": {
+            "passed": false,
+            "results": [
+              {
+                "ok": true,
+                "message": "Helix IDs are unique."
+              },
+              {
+                "ok": true,
+                "message": "Strand IDs are unique."
+              },
+              {
+                "ok": true,
+                "message": "All domain helix references are valid."
+              },
+              {
+                "ok": false,
+                "message": "No scaffold strand defined."
+              }
+            ]
+          },
+          "batch": {
+            "phase": "complete",
+            "source_design_id": "6f8e2d2c-1d04-4a68-b7d2-ac4eabcf1e47",
+            "source_revision": 272,
+            "commands": [
+              {
+                "command_index": 0,
+                "kind": "nanoparticle-patch",
+                "feature_id": "1732626e-86bc-54bc-9ede-4866dd0f8e46",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 1,
+                "kind": "nanoparticle-patch",
+                "feature_id": "9ab878bb-b0d2-5fa4-9c52-9cce77e3f472",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 2,
+                "kind": "nanoparticle-patch",
+                "feature_id": "0dd31b9f-5234-50aa-9721-8f375d1d0b55",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 3,
+                "kind": "nanoparticle-patch",
+                "feature_id": "ce5af8fa-7fd5-5d32-bc1f-d3307aeec7c4",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 4,
+                "kind": "nanoparticle-patch",
+                "feature_id": "80c40907-5f22-5685-823e-a2df0e110471",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 5,
+                "kind": "nanoparticle-patch",
+                "feature_id": "5064849f-f2c2-5cdd-b53f-f309267f2301",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 6,
+                "kind": "nanoparticle-patch",
+                "feature_id": "bf193358-390f-58cf-afb8-0f8dec480def",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 7,
+                "kind": "nanoparticle-patch",
+                "feature_id": "4f8572df-3c3d-5410-ba69-d7cdf4c9692f",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 8,
+                "kind": "nanoparticle-patch",
+                "feature_id": "308e8f07-2f51-56d3-9a55-95928daf14d1",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 9,
+                "kind": "nanoparticle-patch",
+                "feature_id": "a838f064-6fa5-5f55-8e52-0b5c436d2258",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 10,
+                "kind": "nanoparticle-patch",
+                "feature_id": "30851bb8-a965-5b50-acf5-19aa74a0a901",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 11,
+                "kind": "nanoparticle-patch",
+                "feature_id": "998e52dc-0650-5f64-81f9-c05f3b2ec7b8",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 12,
+                "kind": "nanoparticle-patch",
+                "feature_id": "4992eaeb-a09e-51e0-93d3-c7a4027a5aed",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 13,
+                "kind": "nanoparticle-patch",
+                "feature_id": "c5bfef86-db67-51b9-a6ae-39db69a1fc50",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 14,
+                "kind": "nanoparticle-patch",
+                "feature_id": "c767f9d5-a33b-57d0-b396-5f48f499500a",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 15,
+                "kind": "nanoparticle-patch",
+                "feature_id": "fd60fd29-ebaf-50eb-8636-a238fa93934a",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 16,
+                "kind": "nanoparticle-patch",
+                "feature_id": "3ce986e8-5ff8-5a8a-80a3-307424c41714",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 17,
+                "kind": "nanoparticle-patch",
+                "feature_id": "a02a2514-0d08-5020-96d6-614895a34919",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 18,
+                "kind": "nanoparticle-patch",
+                "feature_id": "4ae6d1cb-a5c3-5d6b-b69b-3fa1117893d1",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 19,
+                "kind": "nanoparticle-patch",
+                "feature_id": "e1b7916c-2f0f-5a43-b6c9-47f9fdb19ffd",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 20,
+                "kind": "nanoparticle-patch",
+                "feature_id": "750589e2-84c9-568d-84b7-9583ea5fa0ec",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 21,
+                "kind": "nanoparticle-patch",
+                "feature_id": "9850edd0-fa96-51b5-b83e-e22f16326a64",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 22,
+                "kind": "nanoparticle-patch",
+                "feature_id": "734a92ce-3c9c-5e31-92a5-ee544d0f1cc1",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 23,
+                "kind": "nanoparticle-patch",
+                "feature_id": "28134014-b2df-5771-9577-5ee8a8781be7",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 24,
+                "kind": "nanoparticle-patch",
+                "feature_id": "c629cd45-98b1-5b82-adfc-1acc5be6ea01",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 25,
+                "kind": "nanoparticle-patch",
+                "feature_id": "67a03ac9-2760-5656-b409-483b9abe899f",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 26,
+                "kind": "nanoparticle-patch",
+                "feature_id": "3560a212-8ccf-5c20-a190-e42dd5536713",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 27,
+                "kind": "nanoparticle-patch",
+                "feature_id": "0289fdd4-970d-52a8-9855-50fe6f5738ea",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 28,
+                "kind": "nanoparticle-patch",
+                "feature_id": "41a408c0-65a2-5a96-baf4-beba63c51f5d",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 29,
+                "kind": "nanoparticle-patch",
+                "feature_id": "5b734497-716d-5035-8740-8c6c1c238568",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 30,
+                "kind": "nanoparticle-patch",
+                "feature_id": "34bcbc6a-cb18-5127-95b2-c316cecb43b3",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 31,
+                "kind": "nanoparticle-patch",
+                "feature_id": "c3344e6f-3c37-5065-afa9-5bd6d972cc61",
+                "child_id": null,
+                "outputs": []
+              }
+            ],
+            "completed": [
+              "1732626e-86bc-54bc-9ede-4866dd0f8e46",
+              "9ab878bb-b0d2-5fa4-9c52-9cce77e3f472",
+              "0dd31b9f-5234-50aa-9721-8f375d1d0b55",
+              "ce5af8fa-7fd5-5d32-bc1f-d3307aeec7c4",
+              "80c40907-5f22-5685-823e-a2df0e110471",
+              "5064849f-f2c2-5cdd-b53f-f309267f2301",
+              "bf193358-390f-58cf-afb8-0f8dec480def",
+              "4f8572df-3c3d-5410-ba69-d7cdf4c9692f",
+              "308e8f07-2f51-56d3-9a55-95928daf14d1",
+              "a838f064-6fa5-5f55-8e52-0b5c436d2258",
+              "30851bb8-a965-5b50-acf5-19aa74a0a901",
+              "998e52dc-0650-5f64-81f9-c05f3b2ec7b8",
+              "4992eaeb-a09e-51e0-93d3-c7a4027a5aed",
+              "c5bfef86-db67-51b9-a6ae-39db69a1fc50",
+              "c767f9d5-a33b-57d0-b396-5f48f499500a",
+              "fd60fd29-ebaf-50eb-8636-a238fa93934a",
+              "3ce986e8-5ff8-5a8a-80a3-307424c41714",
+              "a02a2514-0d08-5020-96d6-614895a34919",
+              "4ae6d1cb-a5c3-5d6b-b69b-3fa1117893d1",
+              "e1b7916c-2f0f-5a43-b6c9-47f9fdb19ffd",
+              "750589e2-84c9-568d-84b7-9583ea5fa0ec",
+              "9850edd0-fa96-51b5-b83e-e22f16326a64",
+              "734a92ce-3c9c-5e31-92a5-ee544d0f1cc1",
+              "28134014-b2df-5771-9577-5ee8a8781be7",
+              "c629cd45-98b1-5b82-adfc-1acc5be6ea01",
+              "67a03ac9-2760-5656-b409-483b9abe899f",
+              "3560a212-8ccf-5c20-a190-e42dd5536713",
+              "0289fdd4-970d-52a8-9855-50fe6f5738ea",
+              "41a408c0-65a2-5a96-baf4-beba63c51f5d",
+              "5b734497-716d-5035-8740-8c6c1c238568",
+              "34bcbc6a-cb18-5127-95b2-c316cecb43b3",
+              "c3344e6f-3c37-5065-afa9-5bd6d972cc61"
+            ],
+            "not_evaluated": [],
+            "candidate_replay_verified": false,
+            "authoring_changes": {
+              "basis": "captured_materialized_state",
+              "changed_fields": [
+                "nanoparticles"
+              ],
+              "record_counts": {
+                "nanoparticles": {
+                  "before": 32,
+                  "after": 32
+                }
+              },
+              "visual_comparison": false,
+              "scientific_qualification": false
+            }
+          },
+          "source_assessment": {
+            "scope": "part",
+            "contract_version": 1,
+            "status": "verified",
+            "issues": [],
+            "verification_scope": "authoring_reproducibility",
+            "integrity_checked": false,
+            "excluded_roles": [
+              "presentation",
+              "physical",
+              "document_identity",
+              "repair_draft"
+            ],
+            "checked_commands": 64,
+            "proof_coverage": "versioned_commands",
+            "native_editable": true,
+            "dependencies": {
+              "complete": true,
+              "parents": {
+                "77353504-13ab-50fa-a84b-ec80480331bf": [],
+                "2e713eed-f339-5a84-a0ec-1191b71a46a2": [
+                  "77353504-13ab-50fa-a84b-ec80480331bf"
+                ],
+                "6f97e979-b936-5800-8b47-8b0b9833c9a0": [
+                  "2e713eed-f339-5a84-a0ec-1191b71a46a2"
+                ],
+                "811077dc-8626-5502-b918-750e8ead58e0": [
+                  "6f97e979-b936-5800-8b47-8b0b9833c9a0"
+                ],
+                "c5cd6b8f-f431-5e95-a948-159da47cd401": [
+                  "811077dc-8626-5502-b918-750e8ead58e0"
+                ],
+                "d632189e-1590-5165-84ae-98ef57518a04": [
+                  "c5cd6b8f-f431-5e95-a948-159da47cd401"
+                ],
+                "b620f017-a6a0-5971-9434-06915af57947": [
+                  "d632189e-1590-5165-84ae-98ef57518a04"
+                ],
+                "8a3001af-d02a-54cc-8def-d965b1b3a0ec": [
+                  "b620f017-a6a0-5971-9434-06915af57947"
+                ],
+                "cab9cb6f-c4dc-5e2f-9637-29b03699a2ad": [
+                  "8a3001af-d02a-54cc-8def-d965b1b3a0ec"
+                ],
+                "8398005e-6974-5c8d-a4e3-ef8b227e31cb": [
+                  "cab9cb6f-c4dc-5e2f-9637-29b03699a2ad"
+                ],
+                "a1fc5344-2ac7-5abf-ad01-50d51b55a1f2": [
+                  "8398005e-6974-5c8d-a4e3-ef8b227e31cb"
+                ],
+                "d415b8f3-53c0-5f61-9fec-7ea33cc42a7f": [
+                  "a1fc5344-2ac7-5abf-ad01-50d51b55a1f2"
+                ],
+                "0a605f65-a6e5-5f3d-b39f-bfad049190e6": [
+                  "d415b8f3-53c0-5f61-9fec-7ea33cc42a7f"
+                ],
+                "df214d4e-199e-5889-9c4b-c060cca204a5": [
+                  "0a605f65-a6e5-5f3d-b39f-bfad049190e6"
+                ],
+                "7adf6c2e-bb00-55f0-b20b-ea8f4078e9d9": [
+                  "df214d4e-199e-5889-9c4b-c060cca204a5"
+                ],
+                "f919fa69-9ed9-5677-8535-ce3579ef8be7": [
+                  "7adf6c2e-bb00-55f0-b20b-ea8f4078e9d9"
+                ],
+                "8648641c-d46d-5889-9277-e9aea10cac3e": [
+                  "f919fa69-9ed9-5677-8535-ce3579ef8be7"
+                ],
+                "81a15376-4d0a-564f-be1f-ed0eab8ee0e1": [
+                  "8648641c-d46d-5889-9277-e9aea10cac3e"
+                ],
+                "4929053b-5e54-5c47-890f-9c1cf218e0a0": [
+                  "81a15376-4d0a-564f-be1f-ed0eab8ee0e1"
+                ],
+                "dd2a71b9-5eb0-57db-bac9-29aae02d3e7c": [
+                  "4929053b-5e54-5c47-890f-9c1cf218e0a0"
+                ],
+                "4bc225ab-b1e5-596d-bc77-52feeda2c59f": [
+                  "dd2a71b9-5eb0-57db-bac9-29aae02d3e7c"
+                ],
+                "850037fc-6af2-5624-a8a8-48ce6c1cdd08": [
+                  "4bc225ab-b1e5-596d-bc77-52feeda2c59f"
+                ],
+                "00e30d3d-1acb-5da7-bf67-5501038dddf1": [
+                  "850037fc-6af2-5624-a8a8-48ce6c1cdd08"
+                ],
+                "39278044-cead-555d-b263-2a13182515c8": [
+                  "00e30d3d-1acb-5da7-bf67-5501038dddf1"
+                ],
+                "63ec62a6-d2ec-50c9-adb1-1dfa0d387ab9": [
+                  "39278044-cead-555d-b263-2a13182515c8"
+                ],
+                "20ac79db-69f0-55d6-b003-afc410fe0b37": [
+                  "63ec62a6-d2ec-50c9-adb1-1dfa0d387ab9"
+                ],
+                "5ac912b3-eead-5d44-bcf0-64db150bf549": [
+                  "20ac79db-69f0-55d6-b003-afc410fe0b37"
+                ],
+                "ce9b0963-5e20-5cf9-a988-e58e71335a57": [
+                  "5ac912b3-eead-5d44-bcf0-64db150bf549"
+                ],
+                "6ffe832d-8cf4-57d4-b2c4-c8888cead54e": [
+                  "ce9b0963-5e20-5cf9-a988-e58e71335a57"
+                ],
+                "cbe11201-77c0-5697-a6b8-9826ba56cbe1": [
+                  "6ffe832d-8cf4-57d4-b2c4-c8888cead54e"
+                ],
+                "f32b56a5-e04d-5b2f-8f4c-ef51be372b4c": [
+                  "cbe11201-77c0-5697-a6b8-9826ba56cbe1"
+                ],
+                "615fe5ed-479a-597b-af21-cba473cf874e": [
+                  "f32b56a5-e04d-5b2f-8f4c-ef51be372b4c"
+                ],
+                "a1922877-66ab-5327-bc9c-7b499f2c527f": [
+                  "615fe5ed-479a-597b-af21-cba473cf874e",
+                  "77353504-13ab-50fa-a84b-ec80480331bf"
+                ],
+                "0df85c2b-46f4-5b67-a0b8-19c857705a58": [
+                  "2e713eed-f339-5a84-a0ec-1191b71a46a2",
+                  "a1922877-66ab-5327-bc9c-7b499f2c527f"
+                ],
+                "69b13fc2-99fe-5160-8f6b-f8e608bc7e80": [
+                  "0df85c2b-46f4-5b67-a0b8-19c857705a58",
+                  "6f97e979-b936-5800-8b47-8b0b9833c9a0"
+                ],
+                "0e45f4b7-7b9c-5570-97d8-ed10b2ced135": [
+                  "69b13fc2-99fe-5160-8f6b-f8e608bc7e80",
+                  "811077dc-8626-5502-b918-750e8ead58e0"
+                ],
+                "e6735ff4-c4ae-5fbc-94c9-d87357294cff": [
+                  "0e45f4b7-7b9c-5570-97d8-ed10b2ced135",
+                  "c5cd6b8f-f431-5e95-a948-159da47cd401"
+                ],
+                "8270081d-2d6a-5f78-bf5f-46187eec3360": [
+                  "d632189e-1590-5165-84ae-98ef57518a04",
+                  "e6735ff4-c4ae-5fbc-94c9-d87357294cff"
+                ],
+                "ea09ffb8-ee82-5496-8945-308248d84b48": [
+                  "8270081d-2d6a-5f78-bf5f-46187eec3360",
+                  "b620f017-a6a0-5971-9434-06915af57947"
+                ],
+                "7683ffef-7029-586e-a968-2d872e521291": [
+                  "8a3001af-d02a-54cc-8def-d965b1b3a0ec",
+                  "ea09ffb8-ee82-5496-8945-308248d84b48"
+                ],
+                "33b396c0-7bcd-5f18-9fde-1f8cd3572955": [
+                  "7683ffef-7029-586e-a968-2d872e521291",
+                  "cab9cb6f-c4dc-5e2f-9637-29b03699a2ad"
+                ],
+                "92361d37-f3a1-5b3a-8a8e-49591fda4fdc": [
+                  "33b396c0-7bcd-5f18-9fde-1f8cd3572955",
+                  "8398005e-6974-5c8d-a4e3-ef8b227e31cb"
+                ],
+                "bb82286d-9fa0-59ac-80e3-d381a40d8cce": [
+                  "92361d37-f3a1-5b3a-8a8e-49591fda4fdc",
+                  "a1fc5344-2ac7-5abf-ad01-50d51b55a1f2"
+                ],
+                "1d7e138d-cb41-5d55-88aa-fe7a49d3566d": [
+                  "bb82286d-9fa0-59ac-80e3-d381a40d8cce",
+                  "d415b8f3-53c0-5f61-9fec-7ea33cc42a7f"
+                ],
+                "49c7d0bd-a426-5c7b-a6c6-6ed144c2b067": [
+                  "0a605f65-a6e5-5f3d-b39f-bfad049190e6",
+                  "1d7e138d-cb41-5d55-88aa-fe7a49d3566d"
+                ],
+                "9062e6d4-d784-538d-bfdf-b368eb4466ce": [
+                  "49c7d0bd-a426-5c7b-a6c6-6ed144c2b067",
+                  "df214d4e-199e-5889-9c4b-c060cca204a5"
+                ],
+                "06a2d518-d822-5356-96e1-98c0953e9dd2": [
+                  "7adf6c2e-bb00-55f0-b20b-ea8f4078e9d9",
+                  "9062e6d4-d784-538d-bfdf-b368eb4466ce"
+                ],
+                "c8087c0c-f8f5-566b-8e8f-cc8b8af656ef": [
+                  "06a2d518-d822-5356-96e1-98c0953e9dd2",
+                  "f919fa69-9ed9-5677-8535-ce3579ef8be7"
+                ],
+                "a83db256-5213-599b-aebe-98deb37e5efd": [
+                  "8648641c-d46d-5889-9277-e9aea10cac3e",
+                  "c8087c0c-f8f5-566b-8e8f-cc8b8af656ef"
+                ],
+                "aacc6c54-4fd7-5740-bef4-cadb3a971dfe": [
+                  "81a15376-4d0a-564f-be1f-ed0eab8ee0e1",
+                  "a83db256-5213-599b-aebe-98deb37e5efd"
+                ],
+                "2279a2f3-f2b3-508e-819c-edb17389a92a": [
+                  "4929053b-5e54-5c47-890f-9c1cf218e0a0",
+                  "aacc6c54-4fd7-5740-bef4-cadb3a971dfe"
+                ],
+                "8025d1a5-824c-5295-a005-92ef042d77b2": [
+                  "2279a2f3-f2b3-508e-819c-edb17389a92a",
+                  "dd2a71b9-5eb0-57db-bac9-29aae02d3e7c"
+                ],
+                "5c1b577d-c27f-5145-bd75-198dd5ca91ab": [
+                  "4bc225ab-b1e5-596d-bc77-52feeda2c59f",
+                  "8025d1a5-824c-5295-a005-92ef042d77b2"
+                ],
+                "ada2d33b-62a3-538b-8b86-abf1738c7110": [
+                  "5c1b577d-c27f-5145-bd75-198dd5ca91ab",
+                  "850037fc-6af2-5624-a8a8-48ce6c1cdd08"
+                ],
+                "9b96bf61-faa4-59c3-b600-ee731c8802e8": [
+                  "00e30d3d-1acb-5da7-bf67-5501038dddf1",
+                  "ada2d33b-62a3-538b-8b86-abf1738c7110"
+                ],
+                "5d09227a-adb3-5b01-ab96-b86e39538bf3": [
+                  "39278044-cead-555d-b263-2a13182515c8",
+                  "9b96bf61-faa4-59c3-b600-ee731c8802e8"
+                ],
+                "048b2d38-081e-565d-8e5d-0f51106c2354": [
+                  "5d09227a-adb3-5b01-ab96-b86e39538bf3",
+                  "63ec62a6-d2ec-50c9-adb1-1dfa0d387ab9"
+                ],
+                "528cd2e2-4d96-5c5f-95c4-90d6401814f5": [
+                  "048b2d38-081e-565d-8e5d-0f51106c2354",
+                  "20ac79db-69f0-55d6-b003-afc410fe0b37"
+                ],
+                "6b4b2144-3948-50bc-9766-3ca83d52cee2": [
+                  "528cd2e2-4d96-5c5f-95c4-90d6401814f5",
+                  "5ac912b3-eead-5d44-bcf0-64db150bf549"
+                ],
+                "d382a9e6-0cb3-545c-b64f-a1f4ede2eba3": [
+                  "6b4b2144-3948-50bc-9766-3ca83d52cee2",
+                  "ce9b0963-5e20-5cf9-a988-e58e71335a57"
+                ],
+                "d39680e9-b5cb-50c9-bb4d-9defb5e5f69d": [
+                  "6ffe832d-8cf4-57d4-b2c4-c8888cead54e",
+                  "d382a9e6-0cb3-545c-b64f-a1f4ede2eba3"
+                ],
+                "f545105f-b496-5553-a2e3-d771944c10e2": [
+                  "cbe11201-77c0-5697-a6b8-9826ba56cbe1",
+                  "d39680e9-b5cb-50c9-bb4d-9defb5e5f69d"
+                ],
+                "c4a111f4-e4e1-5efa-b28d-647c2865571f": [
+                  "f32b56a5-e04d-5b2f-8f4c-ef51be372b4c",
+                  "f545105f-b496-5553-a2e3-d771944c10e2"
+                ],
+                "1a35c01a-6215-5f68-ae59-f253e29de5cd": [
+                  "615fe5ed-479a-597b-af21-cba473cf874e",
+                  "c4a111f4-e4e1-5efa-b28d-647c2865571f"
+                ]
+              }
+            },
+            "recipe_fingerprint": "989d65cfd9e6f097cf3d1d5a19aa062649beb1f8e48d17954e494104e3a31c47",
+            "authoring_fingerprint": "a2955bc6c991737fe63ea868d1c668147740e84321427c4436e5783e6212bde2",
+            "imported_sources": []
+          },
+          "source_revision": 272,
+          "design_id": "6f8e2d2c-1d04-4a68-b7d2-ac4eabcf1e47"
+        }
+      },
+      "commit_http_status": 200,
+      "commit": {
+        "job_id": "17c80353-4b2d-416f-95df-35bf2cbac412",
+        "status": "committed",
+        "revision": 273,
+        "design_id": "6f8e2d2c-1d04-4a68-b7d2-ac4eabcf1e47"
+      },
+      "source_guard_correct": true,
+      "cold_replay": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "verified",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 96,
+        "proof_coverage": "versioned_commands",
+        "native_editable": true,
+        "dependencies": {
+          "complete": true,
+          "parents": {
+            "77353504-13ab-50fa-a84b-ec80480331bf": [],
+            "2e713eed-f339-5a84-a0ec-1191b71a46a2": [
+              "77353504-13ab-50fa-a84b-ec80480331bf"
+            ],
+            "6f97e979-b936-5800-8b47-8b0b9833c9a0": [
+              "2e713eed-f339-5a84-a0ec-1191b71a46a2"
+            ],
+            "811077dc-8626-5502-b918-750e8ead58e0": [
+              "6f97e979-b936-5800-8b47-8b0b9833c9a0"
+            ],
+            "c5cd6b8f-f431-5e95-a948-159da47cd401": [
+              "811077dc-8626-5502-b918-750e8ead58e0"
+            ],
+            "d632189e-1590-5165-84ae-98ef57518a04": [
+              "c5cd6b8f-f431-5e95-a948-159da47cd401"
+            ],
+            "b620f017-a6a0-5971-9434-06915af57947": [
+              "d632189e-1590-5165-84ae-98ef57518a04"
+            ],
+            "8a3001af-d02a-54cc-8def-d965b1b3a0ec": [
+              "b620f017-a6a0-5971-9434-06915af57947"
+            ],
+            "cab9cb6f-c4dc-5e2f-9637-29b03699a2ad": [
+              "8a3001af-d02a-54cc-8def-d965b1b3a0ec"
+            ],
+            "8398005e-6974-5c8d-a4e3-ef8b227e31cb": [
+              "cab9cb6f-c4dc-5e2f-9637-29b03699a2ad"
+            ],
+            "a1fc5344-2ac7-5abf-ad01-50d51b55a1f2": [
+              "8398005e-6974-5c8d-a4e3-ef8b227e31cb"
+            ],
+            "d415b8f3-53c0-5f61-9fec-7ea33cc42a7f": [
+              "a1fc5344-2ac7-5abf-ad01-50d51b55a1f2"
+            ],
+            "0a605f65-a6e5-5f3d-b39f-bfad049190e6": [
+              "d415b8f3-53c0-5f61-9fec-7ea33cc42a7f"
+            ],
+            "df214d4e-199e-5889-9c4b-c060cca204a5": [
+              "0a605f65-a6e5-5f3d-b39f-bfad049190e6"
+            ],
+            "7adf6c2e-bb00-55f0-b20b-ea8f4078e9d9": [
+              "df214d4e-199e-5889-9c4b-c060cca204a5"
+            ],
+            "f919fa69-9ed9-5677-8535-ce3579ef8be7": [
+              "7adf6c2e-bb00-55f0-b20b-ea8f4078e9d9"
+            ],
+            "8648641c-d46d-5889-9277-e9aea10cac3e": [
+              "f919fa69-9ed9-5677-8535-ce3579ef8be7"
+            ],
+            "81a15376-4d0a-564f-be1f-ed0eab8ee0e1": [
+              "8648641c-d46d-5889-9277-e9aea10cac3e"
+            ],
+            "4929053b-5e54-5c47-890f-9c1cf218e0a0": [
+              "81a15376-4d0a-564f-be1f-ed0eab8ee0e1"
+            ],
+            "dd2a71b9-5eb0-57db-bac9-29aae02d3e7c": [
+              "4929053b-5e54-5c47-890f-9c1cf218e0a0"
+            ],
+            "4bc225ab-b1e5-596d-bc77-52feeda2c59f": [
+              "dd2a71b9-5eb0-57db-bac9-29aae02d3e7c"
+            ],
+            "850037fc-6af2-5624-a8a8-48ce6c1cdd08": [
+              "4bc225ab-b1e5-596d-bc77-52feeda2c59f"
+            ],
+            "00e30d3d-1acb-5da7-bf67-5501038dddf1": [
+              "850037fc-6af2-5624-a8a8-48ce6c1cdd08"
+            ],
+            "39278044-cead-555d-b263-2a13182515c8": [
+              "00e30d3d-1acb-5da7-bf67-5501038dddf1"
+            ],
+            "63ec62a6-d2ec-50c9-adb1-1dfa0d387ab9": [
+              "39278044-cead-555d-b263-2a13182515c8"
+            ],
+            "20ac79db-69f0-55d6-b003-afc410fe0b37": [
+              "63ec62a6-d2ec-50c9-adb1-1dfa0d387ab9"
+            ],
+            "5ac912b3-eead-5d44-bcf0-64db150bf549": [
+              "20ac79db-69f0-55d6-b003-afc410fe0b37"
+            ],
+            "ce9b0963-5e20-5cf9-a988-e58e71335a57": [
+              "5ac912b3-eead-5d44-bcf0-64db150bf549"
+            ],
+            "6ffe832d-8cf4-57d4-b2c4-c8888cead54e": [
+              "ce9b0963-5e20-5cf9-a988-e58e71335a57"
+            ],
+            "cbe11201-77c0-5697-a6b8-9826ba56cbe1": [
+              "6ffe832d-8cf4-57d4-b2c4-c8888cead54e"
+            ],
+            "f32b56a5-e04d-5b2f-8f4c-ef51be372b4c": [
+              "cbe11201-77c0-5697-a6b8-9826ba56cbe1"
+            ],
+            "615fe5ed-479a-597b-af21-cba473cf874e": [
+              "f32b56a5-e04d-5b2f-8f4c-ef51be372b4c"
+            ],
+            "a1922877-66ab-5327-bc9c-7b499f2c527f": [
+              "615fe5ed-479a-597b-af21-cba473cf874e",
+              "77353504-13ab-50fa-a84b-ec80480331bf"
+            ],
+            "0df85c2b-46f4-5b67-a0b8-19c857705a58": [
+              "2e713eed-f339-5a84-a0ec-1191b71a46a2",
+              "a1922877-66ab-5327-bc9c-7b499f2c527f"
+            ],
+            "69b13fc2-99fe-5160-8f6b-f8e608bc7e80": [
+              "0df85c2b-46f4-5b67-a0b8-19c857705a58",
+              "6f97e979-b936-5800-8b47-8b0b9833c9a0"
+            ],
+            "0e45f4b7-7b9c-5570-97d8-ed10b2ced135": [
+              "69b13fc2-99fe-5160-8f6b-f8e608bc7e80",
+              "811077dc-8626-5502-b918-750e8ead58e0"
+            ],
+            "e6735ff4-c4ae-5fbc-94c9-d87357294cff": [
+              "0e45f4b7-7b9c-5570-97d8-ed10b2ced135",
+              "c5cd6b8f-f431-5e95-a948-159da47cd401"
+            ],
+            "8270081d-2d6a-5f78-bf5f-46187eec3360": [
+              "d632189e-1590-5165-84ae-98ef57518a04",
+              "e6735ff4-c4ae-5fbc-94c9-d87357294cff"
+            ],
+            "ea09ffb8-ee82-5496-8945-308248d84b48": [
+              "8270081d-2d6a-5f78-bf5f-46187eec3360",
+              "b620f017-a6a0-5971-9434-06915af57947"
+            ],
+            "7683ffef-7029-586e-a968-2d872e521291": [
+              "8a3001af-d02a-54cc-8def-d965b1b3a0ec",
+              "ea09ffb8-ee82-5496-8945-308248d84b48"
+            ],
+            "33b396c0-7bcd-5f18-9fde-1f8cd3572955": [
+              "7683ffef-7029-586e-a968-2d872e521291",
+              "cab9cb6f-c4dc-5e2f-9637-29b03699a2ad"
+            ],
+            "92361d37-f3a1-5b3a-8a8e-49591fda4fdc": [
+              "33b396c0-7bcd-5f18-9fde-1f8cd3572955",
+              "8398005e-6974-5c8d-a4e3-ef8b227e31cb"
+            ],
+            "bb82286d-9fa0-59ac-80e3-d381a40d8cce": [
+              "92361d37-f3a1-5b3a-8a8e-49591fda4fdc",
+              "a1fc5344-2ac7-5abf-ad01-50d51b55a1f2"
+            ],
+            "1d7e138d-cb41-5d55-88aa-fe7a49d3566d": [
+              "bb82286d-9fa0-59ac-80e3-d381a40d8cce",
+              "d415b8f3-53c0-5f61-9fec-7ea33cc42a7f"
+            ],
+            "49c7d0bd-a426-5c7b-a6c6-6ed144c2b067": [
+              "0a605f65-a6e5-5f3d-b39f-bfad049190e6",
+              "1d7e138d-cb41-5d55-88aa-fe7a49d3566d"
+            ],
+            "9062e6d4-d784-538d-bfdf-b368eb4466ce": [
+              "49c7d0bd-a426-5c7b-a6c6-6ed144c2b067",
+              "df214d4e-199e-5889-9c4b-c060cca204a5"
+            ],
+            "06a2d518-d822-5356-96e1-98c0953e9dd2": [
+              "7adf6c2e-bb00-55f0-b20b-ea8f4078e9d9",
+              "9062e6d4-d784-538d-bfdf-b368eb4466ce"
+            ],
+            "c8087c0c-f8f5-566b-8e8f-cc8b8af656ef": [
+              "06a2d518-d822-5356-96e1-98c0953e9dd2",
+              "f919fa69-9ed9-5677-8535-ce3579ef8be7"
+            ],
+            "a83db256-5213-599b-aebe-98deb37e5efd": [
+              "8648641c-d46d-5889-9277-e9aea10cac3e",
+              "c8087c0c-f8f5-566b-8e8f-cc8b8af656ef"
+            ],
+            "aacc6c54-4fd7-5740-bef4-cadb3a971dfe": [
+              "81a15376-4d0a-564f-be1f-ed0eab8ee0e1",
+              "a83db256-5213-599b-aebe-98deb37e5efd"
+            ],
+            "2279a2f3-f2b3-508e-819c-edb17389a92a": [
+              "4929053b-5e54-5c47-890f-9c1cf218e0a0",
+              "aacc6c54-4fd7-5740-bef4-cadb3a971dfe"
+            ],
+            "8025d1a5-824c-5295-a005-92ef042d77b2": [
+              "2279a2f3-f2b3-508e-819c-edb17389a92a",
+              "dd2a71b9-5eb0-57db-bac9-29aae02d3e7c"
+            ],
+            "5c1b577d-c27f-5145-bd75-198dd5ca91ab": [
+              "4bc225ab-b1e5-596d-bc77-52feeda2c59f",
+              "8025d1a5-824c-5295-a005-92ef042d77b2"
+            ],
+            "ada2d33b-62a3-538b-8b86-abf1738c7110": [
+              "5c1b577d-c27f-5145-bd75-198dd5ca91ab",
+              "850037fc-6af2-5624-a8a8-48ce6c1cdd08"
+            ],
+            "9b96bf61-faa4-59c3-b600-ee731c8802e8": [
+              "00e30d3d-1acb-5da7-bf67-5501038dddf1",
+              "ada2d33b-62a3-538b-8b86-abf1738c7110"
+            ],
+            "5d09227a-adb3-5b01-ab96-b86e39538bf3": [
+              "39278044-cead-555d-b263-2a13182515c8",
+              "9b96bf61-faa4-59c3-b600-ee731c8802e8"
+            ],
+            "048b2d38-081e-565d-8e5d-0f51106c2354": [
+              "5d09227a-adb3-5b01-ab96-b86e39538bf3",
+              "63ec62a6-d2ec-50c9-adb1-1dfa0d387ab9"
+            ],
+            "528cd2e2-4d96-5c5f-95c4-90d6401814f5": [
+              "048b2d38-081e-565d-8e5d-0f51106c2354",
+              "20ac79db-69f0-55d6-b003-afc410fe0b37"
+            ],
+            "6b4b2144-3948-50bc-9766-3ca83d52cee2": [
+              "528cd2e2-4d96-5c5f-95c4-90d6401814f5",
+              "5ac912b3-eead-5d44-bcf0-64db150bf549"
+            ],
+            "d382a9e6-0cb3-545c-b64f-a1f4ede2eba3": [
+              "6b4b2144-3948-50bc-9766-3ca83d52cee2",
+              "ce9b0963-5e20-5cf9-a988-e58e71335a57"
+            ],
+            "d39680e9-b5cb-50c9-bb4d-9defb5e5f69d": [
+              "6ffe832d-8cf4-57d4-b2c4-c8888cead54e",
+              "d382a9e6-0cb3-545c-b64f-a1f4ede2eba3"
+            ],
+            "f545105f-b496-5553-a2e3-d771944c10e2": [
+              "cbe11201-77c0-5697-a6b8-9826ba56cbe1",
+              "d39680e9-b5cb-50c9-bb4d-9defb5e5f69d"
+            ],
+            "c4a111f4-e4e1-5efa-b28d-647c2865571f": [
+              "f32b56a5-e04d-5b2f-8f4c-ef51be372b4c",
+              "f545105f-b496-5553-a2e3-d771944c10e2"
+            ],
+            "1a35c01a-6215-5f68-ae59-f253e29de5cd": [
+              "615fe5ed-479a-597b-af21-cba473cf874e",
+              "c4a111f4-e4e1-5efa-b28d-647c2865571f"
+            ],
+            "1732626e-86bc-54bc-9ede-4866dd0f8e46": [
+              "1a35c01a-6215-5f68-ae59-f253e29de5cd",
+              "a1922877-66ab-5327-bc9c-7b499f2c527f"
+            ],
+            "9ab878bb-b0d2-5fa4-9c52-9cce77e3f472": [
+              "0df85c2b-46f4-5b67-a0b8-19c857705a58",
+              "1732626e-86bc-54bc-9ede-4866dd0f8e46"
+            ],
+            "0dd31b9f-5234-50aa-9721-8f375d1d0b55": [
+              "69b13fc2-99fe-5160-8f6b-f8e608bc7e80",
+              "9ab878bb-b0d2-5fa4-9c52-9cce77e3f472"
+            ],
+            "ce5af8fa-7fd5-5d32-bc1f-d3307aeec7c4": [
+              "0dd31b9f-5234-50aa-9721-8f375d1d0b55",
+              "0e45f4b7-7b9c-5570-97d8-ed10b2ced135"
+            ],
+            "80c40907-5f22-5685-823e-a2df0e110471": [
+              "ce5af8fa-7fd5-5d32-bc1f-d3307aeec7c4",
+              "e6735ff4-c4ae-5fbc-94c9-d87357294cff"
+            ],
+            "5064849f-f2c2-5cdd-b53f-f309267f2301": [
+              "80c40907-5f22-5685-823e-a2df0e110471",
+              "8270081d-2d6a-5f78-bf5f-46187eec3360"
+            ],
+            "bf193358-390f-58cf-afb8-0f8dec480def": [
+              "5064849f-f2c2-5cdd-b53f-f309267f2301",
+              "ea09ffb8-ee82-5496-8945-308248d84b48"
+            ],
+            "4f8572df-3c3d-5410-ba69-d7cdf4c9692f": [
+              "7683ffef-7029-586e-a968-2d872e521291",
+              "bf193358-390f-58cf-afb8-0f8dec480def"
+            ],
+            "308e8f07-2f51-56d3-9a55-95928daf14d1": [
+              "33b396c0-7bcd-5f18-9fde-1f8cd3572955",
+              "4f8572df-3c3d-5410-ba69-d7cdf4c9692f"
+            ],
+            "a838f064-6fa5-5f55-8e52-0b5c436d2258": [
+              "308e8f07-2f51-56d3-9a55-95928daf14d1",
+              "92361d37-f3a1-5b3a-8a8e-49591fda4fdc"
+            ],
+            "30851bb8-a965-5b50-acf5-19aa74a0a901": [
+              "a838f064-6fa5-5f55-8e52-0b5c436d2258",
+              "bb82286d-9fa0-59ac-80e3-d381a40d8cce"
+            ],
+            "998e52dc-0650-5f64-81f9-c05f3b2ec7b8": [
+              "1d7e138d-cb41-5d55-88aa-fe7a49d3566d",
+              "30851bb8-a965-5b50-acf5-19aa74a0a901"
+            ],
+            "4992eaeb-a09e-51e0-93d3-c7a4027a5aed": [
+              "49c7d0bd-a426-5c7b-a6c6-6ed144c2b067",
+              "998e52dc-0650-5f64-81f9-c05f3b2ec7b8"
+            ],
+            "c5bfef86-db67-51b9-a6ae-39db69a1fc50": [
+              "4992eaeb-a09e-51e0-93d3-c7a4027a5aed",
+              "9062e6d4-d784-538d-bfdf-b368eb4466ce"
+            ],
+            "c767f9d5-a33b-57d0-b396-5f48f499500a": [
+              "06a2d518-d822-5356-96e1-98c0953e9dd2",
+              "c5bfef86-db67-51b9-a6ae-39db69a1fc50"
+            ],
+            "fd60fd29-ebaf-50eb-8636-a238fa93934a": [
+              "c767f9d5-a33b-57d0-b396-5f48f499500a",
+              "c8087c0c-f8f5-566b-8e8f-cc8b8af656ef"
+            ],
+            "3ce986e8-5ff8-5a8a-80a3-307424c41714": [
+              "a83db256-5213-599b-aebe-98deb37e5efd",
+              "fd60fd29-ebaf-50eb-8636-a238fa93934a"
+            ],
+            "a02a2514-0d08-5020-96d6-614895a34919": [
+              "3ce986e8-5ff8-5a8a-80a3-307424c41714",
+              "aacc6c54-4fd7-5740-bef4-cadb3a971dfe"
+            ],
+            "4ae6d1cb-a5c3-5d6b-b69b-3fa1117893d1": [
+              "2279a2f3-f2b3-508e-819c-edb17389a92a",
+              "a02a2514-0d08-5020-96d6-614895a34919"
+            ],
+            "e1b7916c-2f0f-5a43-b6c9-47f9fdb19ffd": [
+              "4ae6d1cb-a5c3-5d6b-b69b-3fa1117893d1",
+              "8025d1a5-824c-5295-a005-92ef042d77b2"
+            ],
+            "750589e2-84c9-568d-84b7-9583ea5fa0ec": [
+              "5c1b577d-c27f-5145-bd75-198dd5ca91ab",
+              "e1b7916c-2f0f-5a43-b6c9-47f9fdb19ffd"
+            ],
+            "9850edd0-fa96-51b5-b83e-e22f16326a64": [
+              "750589e2-84c9-568d-84b7-9583ea5fa0ec",
+              "ada2d33b-62a3-538b-8b86-abf1738c7110"
+            ],
+            "734a92ce-3c9c-5e31-92a5-ee544d0f1cc1": [
+              "9850edd0-fa96-51b5-b83e-e22f16326a64",
+              "9b96bf61-faa4-59c3-b600-ee731c8802e8"
+            ],
+            "28134014-b2df-5771-9577-5ee8a8781be7": [
+              "5d09227a-adb3-5b01-ab96-b86e39538bf3",
+              "734a92ce-3c9c-5e31-92a5-ee544d0f1cc1"
+            ],
+            "c629cd45-98b1-5b82-adfc-1acc5be6ea01": [
+              "048b2d38-081e-565d-8e5d-0f51106c2354",
+              "28134014-b2df-5771-9577-5ee8a8781be7"
+            ],
+            "67a03ac9-2760-5656-b409-483b9abe899f": [
+              "528cd2e2-4d96-5c5f-95c4-90d6401814f5",
+              "c629cd45-98b1-5b82-adfc-1acc5be6ea01"
+            ],
+            "3560a212-8ccf-5c20-a190-e42dd5536713": [
+              "67a03ac9-2760-5656-b409-483b9abe899f",
+              "6b4b2144-3948-50bc-9766-3ca83d52cee2"
+            ],
+            "0289fdd4-970d-52a8-9855-50fe6f5738ea": [
+              "3560a212-8ccf-5c20-a190-e42dd5536713",
+              "d382a9e6-0cb3-545c-b64f-a1f4ede2eba3"
+            ],
+            "41a408c0-65a2-5a96-baf4-beba63c51f5d": [
+              "0289fdd4-970d-52a8-9855-50fe6f5738ea",
+              "d39680e9-b5cb-50c9-bb4d-9defb5e5f69d"
+            ],
+            "5b734497-716d-5035-8740-8c6c1c238568": [
+              "41a408c0-65a2-5a96-baf4-beba63c51f5d",
+              "f545105f-b496-5553-a2e3-d771944c10e2"
+            ],
+            "34bcbc6a-cb18-5127-95b2-c316cecb43b3": [
+              "5b734497-716d-5035-8740-8c6c1c238568",
+              "c4a111f4-e4e1-5efa-b28d-647c2865571f"
+            ],
+            "c3344e6f-3c37-5065-afa9-5bd6d972cc61": [
+              "1a35c01a-6215-5f68-ae59-f253e29de5cd",
+              "34bcbc6a-cb18-5127-95b2-c316cecb43b3"
+            ]
+          }
+        },
+        "recipe_fingerprint": "5e5157bb30111693b4893c0a5c038a200f1209b6ab8b9262b15431439c6bb3f8",
+        "authoring_fingerprint": "f8f5c1124f5d114768b43d75b3cbbf57ab061e1e84f95478e2f38c931ce4b13c",
+        "imported_sources": [],
+        "elapsed_ms": 1233.194383999944
+      },
+      "shared_admission_released_after_reaping": true,
+      "start_http_ms": 14.285855999332853,
+      "parent_worker_constructor_ms": 1.4153609990898985,
+      "process_start_call_ms": 0.45322200094233267,
+      "start_to_supervisor_reaped_ms": 1201.5404020021379,
+      "commit_http_ms": 5.799496000690851
+    },
+    {
+      "case": "native-history-128-source-rows",
+      "mode": "complete",
+      "start_http_status": 202,
+      "poll": {
+        "job_id": "529d48f6-1482-4d92-a399-30ef99b2c68f",
+        "status": "complete",
+        "stale": false,
+        "source_busy": false,
+        "result": {
+          "status": "ready",
+          "issues": [],
+          "validation": {
+            "passed": false,
+            "results": [
+              {
+                "ok": true,
+                "message": "Helix IDs are unique."
+              },
+              {
+                "ok": true,
+                "message": "Strand IDs are unique."
+              },
+              {
+                "ok": true,
+                "message": "All domain helix references are valid."
+              },
+              {
+                "ok": false,
+                "message": "No scaffold strand defined."
+              }
+            ]
+          },
+          "batch": {
+            "phase": "complete",
+            "source_design_id": "6f8e2d2c-1d04-4a68-b7d2-ac4eabcf1e47",
+            "source_revision": 274,
+            "commands": [
+              {
+                "command_index": 0,
+                "kind": "nanoparticle-patch",
+                "feature_id": "a21c2775-00d6-5da0-bd83-5bf9b13e6d0c",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 1,
+                "kind": "nanoparticle-patch",
+                "feature_id": "92e5d17a-c6f0-5d9b-aa50-d93ee90ac7b0",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 2,
+                "kind": "nanoparticle-patch",
+                "feature_id": "e2b8be79-3846-5eb6-9b19-ff0fb145b36a",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 3,
+                "kind": "nanoparticle-patch",
+                "feature_id": "ea2c38a4-5e28-5abd-ae6d-c8ffc8e02329",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 4,
+                "kind": "nanoparticle-patch",
+                "feature_id": "903311ab-6e4e-5091-abe2-d67ec41c5897",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 5,
+                "kind": "nanoparticle-patch",
+                "feature_id": "e984dc13-6457-56c8-9403-9c2738aed377",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 6,
+                "kind": "nanoparticle-patch",
+                "feature_id": "9be83779-2d34-5219-8fc5-269548873fd1",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 7,
+                "kind": "nanoparticle-patch",
+                "feature_id": "5e10b97d-2033-57e1-81df-8a61e87589da",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 8,
+                "kind": "nanoparticle-patch",
+                "feature_id": "16a7ef10-d1c1-5409-9d23-a2293f04fb6f",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 9,
+                "kind": "nanoparticle-patch",
+                "feature_id": "8c1af094-561f-5e0c-a175-8a2afd4a261f",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 10,
+                "kind": "nanoparticle-patch",
+                "feature_id": "4ecb3f3c-9b1d-547d-87c0-9108ed9392b4",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 11,
+                "kind": "nanoparticle-patch",
+                "feature_id": "7ff00dce-e4af-5d19-b0c6-25dfe065156d",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 12,
+                "kind": "nanoparticle-patch",
+                "feature_id": "5a04aa6c-da52-56e7-b719-39063be002b1",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 13,
+                "kind": "nanoparticle-patch",
+                "feature_id": "a91ca02d-0122-5561-9d30-9421953fd10c",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 14,
+                "kind": "nanoparticle-patch",
+                "feature_id": "ccac4a58-f3a5-5b35-88e2-ea7c4a2a64b1",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 15,
+                "kind": "nanoparticle-patch",
+                "feature_id": "26cdbc08-57d8-5d7d-9ace-153f5e9bc9c5",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 16,
+                "kind": "nanoparticle-patch",
+                "feature_id": "2d11454f-faef-5d10-9cce-df8177c1ef93",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 17,
+                "kind": "nanoparticle-patch",
+                "feature_id": "bb1cf3d6-c714-55e4-80b3-da0f1043db87",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 18,
+                "kind": "nanoparticle-patch",
+                "feature_id": "476fa599-946e-51a3-b869-3b6f22669742",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 19,
+                "kind": "nanoparticle-patch",
+                "feature_id": "edfa8e29-8fc9-5394-9ade-13e174d318a2",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 20,
+                "kind": "nanoparticle-patch",
+                "feature_id": "54c6d3bf-3e88-58fa-81ca-3b7a5bffefda",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 21,
+                "kind": "nanoparticle-patch",
+                "feature_id": "1029eb24-8b32-52ab-8285-ddf2c72cdbbc",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 22,
+                "kind": "nanoparticle-patch",
+                "feature_id": "80a02c1d-664d-51a5-8298-745bf75cd73b",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 23,
+                "kind": "nanoparticle-patch",
+                "feature_id": "da1dc6d0-8885-5e09-a458-f55748e2a995",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 24,
+                "kind": "nanoparticle-patch",
+                "feature_id": "19b0786b-bd52-5eb1-9f2b-a26596896f97",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 25,
+                "kind": "nanoparticle-patch",
+                "feature_id": "ba0e9209-4885-5e91-ac17-802a48f286f9",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 26,
+                "kind": "nanoparticle-patch",
+                "feature_id": "cf759c1c-bbc8-5ec9-8851-2c6b3a525cdc",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 27,
+                "kind": "nanoparticle-patch",
+                "feature_id": "6c8e2f48-4881-53b3-a4e1-3efaf18a33d8",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 28,
+                "kind": "nanoparticle-patch",
+                "feature_id": "7cdb84b9-7685-59a1-baa4-41bfa6bb9ed4",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 29,
+                "kind": "nanoparticle-patch",
+                "feature_id": "e5670f77-893f-5a8f-9281-169004b5ed55",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 30,
+                "kind": "nanoparticle-patch",
+                "feature_id": "f9fe557d-c12c-503f-995a-3b58f3c3410b",
+                "child_id": null,
+                "outputs": []
+              },
+              {
+                "command_index": 31,
+                "kind": "nanoparticle-patch",
+                "feature_id": "4ce63a7a-8feb-5341-a891-8fa61934a68b",
+                "child_id": null,
+                "outputs": []
+              }
+            ],
+            "completed": [
+              "a21c2775-00d6-5da0-bd83-5bf9b13e6d0c",
+              "92e5d17a-c6f0-5d9b-aa50-d93ee90ac7b0",
+              "e2b8be79-3846-5eb6-9b19-ff0fb145b36a",
+              "ea2c38a4-5e28-5abd-ae6d-c8ffc8e02329",
+              "903311ab-6e4e-5091-abe2-d67ec41c5897",
+              "e984dc13-6457-56c8-9403-9c2738aed377",
+              "9be83779-2d34-5219-8fc5-269548873fd1",
+              "5e10b97d-2033-57e1-81df-8a61e87589da",
+              "16a7ef10-d1c1-5409-9d23-a2293f04fb6f",
+              "8c1af094-561f-5e0c-a175-8a2afd4a261f",
+              "4ecb3f3c-9b1d-547d-87c0-9108ed9392b4",
+              "7ff00dce-e4af-5d19-b0c6-25dfe065156d",
+              "5a04aa6c-da52-56e7-b719-39063be002b1",
+              "a91ca02d-0122-5561-9d30-9421953fd10c",
+              "ccac4a58-f3a5-5b35-88e2-ea7c4a2a64b1",
+              "26cdbc08-57d8-5d7d-9ace-153f5e9bc9c5",
+              "2d11454f-faef-5d10-9cce-df8177c1ef93",
+              "bb1cf3d6-c714-55e4-80b3-da0f1043db87",
+              "476fa599-946e-51a3-b869-3b6f22669742",
+              "edfa8e29-8fc9-5394-9ade-13e174d318a2",
+              "54c6d3bf-3e88-58fa-81ca-3b7a5bffefda",
+              "1029eb24-8b32-52ab-8285-ddf2c72cdbbc",
+              "80a02c1d-664d-51a5-8298-745bf75cd73b",
+              "da1dc6d0-8885-5e09-a458-f55748e2a995",
+              "19b0786b-bd52-5eb1-9f2b-a26596896f97",
+              "ba0e9209-4885-5e91-ac17-802a48f286f9",
+              "cf759c1c-bbc8-5ec9-8851-2c6b3a525cdc",
+              "6c8e2f48-4881-53b3-a4e1-3efaf18a33d8",
+              "7cdb84b9-7685-59a1-baa4-41bfa6bb9ed4",
+              "e5670f77-893f-5a8f-9281-169004b5ed55",
+              "f9fe557d-c12c-503f-995a-3b58f3c3410b",
+              "4ce63a7a-8feb-5341-a891-8fa61934a68b"
+            ],
+            "not_evaluated": [],
+            "candidate_replay_verified": false,
+            "authoring_changes": {
+              "basis": "captured_materialized_state",
+              "changed_fields": [
+                "nanoparticles"
+              ],
+              "record_counts": {
+                "nanoparticles": {
+                  "before": 32,
+                  "after": 32
+                }
+              },
+              "visual_comparison": false,
+              "scientific_qualification": false
+            }
+          },
+          "source_assessment": {
+            "scope": "part",
+            "contract_version": 1,
+            "status": "verified",
+            "issues": [],
+            "verification_scope": "authoring_reproducibility",
+            "integrity_checked": false,
+            "excluded_roles": [
+              "presentation",
+              "physical",
+              "document_identity",
+              "repair_draft"
+            ],
+            "checked_commands": 128,
+            "proof_coverage": "versioned_commands",
+            "native_editable": true,
+            "dependencies": {
+              "complete": true,
+              "parents": {
+                "77353504-13ab-50fa-a84b-ec80480331bf": [],
+                "2e713eed-f339-5a84-a0ec-1191b71a46a2": [
+                  "77353504-13ab-50fa-a84b-ec80480331bf"
+                ],
+                "6f97e979-b936-5800-8b47-8b0b9833c9a0": [
+                  "2e713eed-f339-5a84-a0ec-1191b71a46a2"
+                ],
+                "811077dc-8626-5502-b918-750e8ead58e0": [
+                  "6f97e979-b936-5800-8b47-8b0b9833c9a0"
+                ],
+                "c5cd6b8f-f431-5e95-a948-159da47cd401": [
+                  "811077dc-8626-5502-b918-750e8ead58e0"
+                ],
+                "d632189e-1590-5165-84ae-98ef57518a04": [
+                  "c5cd6b8f-f431-5e95-a948-159da47cd401"
+                ],
+                "b620f017-a6a0-5971-9434-06915af57947": [
+                  "d632189e-1590-5165-84ae-98ef57518a04"
+                ],
+                "8a3001af-d02a-54cc-8def-d965b1b3a0ec": [
+                  "b620f017-a6a0-5971-9434-06915af57947"
+                ],
+                "cab9cb6f-c4dc-5e2f-9637-29b03699a2ad": [
+                  "8a3001af-d02a-54cc-8def-d965b1b3a0ec"
+                ],
+                "8398005e-6974-5c8d-a4e3-ef8b227e31cb": [
+                  "cab9cb6f-c4dc-5e2f-9637-29b03699a2ad"
+                ],
+                "a1fc5344-2ac7-5abf-ad01-50d51b55a1f2": [
+                  "8398005e-6974-5c8d-a4e3-ef8b227e31cb"
+                ],
+                "d415b8f3-53c0-5f61-9fec-7ea33cc42a7f": [
+                  "a1fc5344-2ac7-5abf-ad01-50d51b55a1f2"
+                ],
+                "0a605f65-a6e5-5f3d-b39f-bfad049190e6": [
+                  "d415b8f3-53c0-5f61-9fec-7ea33cc42a7f"
+                ],
+                "df214d4e-199e-5889-9c4b-c060cca204a5": [
+                  "0a605f65-a6e5-5f3d-b39f-bfad049190e6"
+                ],
+                "7adf6c2e-bb00-55f0-b20b-ea8f4078e9d9": [
+                  "df214d4e-199e-5889-9c4b-c060cca204a5"
+                ],
+                "f919fa69-9ed9-5677-8535-ce3579ef8be7": [
+                  "7adf6c2e-bb00-55f0-b20b-ea8f4078e9d9"
+                ],
+                "8648641c-d46d-5889-9277-e9aea10cac3e": [
+                  "f919fa69-9ed9-5677-8535-ce3579ef8be7"
+                ],
+                "81a15376-4d0a-564f-be1f-ed0eab8ee0e1": [
+                  "8648641c-d46d-5889-9277-e9aea10cac3e"
+                ],
+                "4929053b-5e54-5c47-890f-9c1cf218e0a0": [
+                  "81a15376-4d0a-564f-be1f-ed0eab8ee0e1"
+                ],
+                "dd2a71b9-5eb0-57db-bac9-29aae02d3e7c": [
+                  "4929053b-5e54-5c47-890f-9c1cf218e0a0"
+                ],
+                "4bc225ab-b1e5-596d-bc77-52feeda2c59f": [
+                  "dd2a71b9-5eb0-57db-bac9-29aae02d3e7c"
+                ],
+                "850037fc-6af2-5624-a8a8-48ce6c1cdd08": [
+                  "4bc225ab-b1e5-596d-bc77-52feeda2c59f"
+                ],
+                "00e30d3d-1acb-5da7-bf67-5501038dddf1": [
+                  "850037fc-6af2-5624-a8a8-48ce6c1cdd08"
+                ],
+                "39278044-cead-555d-b263-2a13182515c8": [
+                  "00e30d3d-1acb-5da7-bf67-5501038dddf1"
+                ],
+                "63ec62a6-d2ec-50c9-adb1-1dfa0d387ab9": [
+                  "39278044-cead-555d-b263-2a13182515c8"
+                ],
+                "20ac79db-69f0-55d6-b003-afc410fe0b37": [
+                  "63ec62a6-d2ec-50c9-adb1-1dfa0d387ab9"
+                ],
+                "5ac912b3-eead-5d44-bcf0-64db150bf549": [
+                  "20ac79db-69f0-55d6-b003-afc410fe0b37"
+                ],
+                "ce9b0963-5e20-5cf9-a988-e58e71335a57": [
+                  "5ac912b3-eead-5d44-bcf0-64db150bf549"
+                ],
+                "6ffe832d-8cf4-57d4-b2c4-c8888cead54e": [
+                  "ce9b0963-5e20-5cf9-a988-e58e71335a57"
+                ],
+                "cbe11201-77c0-5697-a6b8-9826ba56cbe1": [
+                  "6ffe832d-8cf4-57d4-b2c4-c8888cead54e"
+                ],
+                "f32b56a5-e04d-5b2f-8f4c-ef51be372b4c": [
+                  "cbe11201-77c0-5697-a6b8-9826ba56cbe1"
+                ],
+                "615fe5ed-479a-597b-af21-cba473cf874e": [
+                  "f32b56a5-e04d-5b2f-8f4c-ef51be372b4c"
+                ],
+                "a1922877-66ab-5327-bc9c-7b499f2c527f": [
+                  "615fe5ed-479a-597b-af21-cba473cf874e",
+                  "77353504-13ab-50fa-a84b-ec80480331bf"
+                ],
+                "0df85c2b-46f4-5b67-a0b8-19c857705a58": [
+                  "2e713eed-f339-5a84-a0ec-1191b71a46a2",
+                  "a1922877-66ab-5327-bc9c-7b499f2c527f"
+                ],
+                "69b13fc2-99fe-5160-8f6b-f8e608bc7e80": [
+                  "0df85c2b-46f4-5b67-a0b8-19c857705a58",
+                  "6f97e979-b936-5800-8b47-8b0b9833c9a0"
+                ],
+                "0e45f4b7-7b9c-5570-97d8-ed10b2ced135": [
+                  "69b13fc2-99fe-5160-8f6b-f8e608bc7e80",
+                  "811077dc-8626-5502-b918-750e8ead58e0"
+                ],
+                "e6735ff4-c4ae-5fbc-94c9-d87357294cff": [
+                  "0e45f4b7-7b9c-5570-97d8-ed10b2ced135",
+                  "c5cd6b8f-f431-5e95-a948-159da47cd401"
+                ],
+                "8270081d-2d6a-5f78-bf5f-46187eec3360": [
+                  "d632189e-1590-5165-84ae-98ef57518a04",
+                  "e6735ff4-c4ae-5fbc-94c9-d87357294cff"
+                ],
+                "ea09ffb8-ee82-5496-8945-308248d84b48": [
+                  "8270081d-2d6a-5f78-bf5f-46187eec3360",
+                  "b620f017-a6a0-5971-9434-06915af57947"
+                ],
+                "7683ffef-7029-586e-a968-2d872e521291": [
+                  "8a3001af-d02a-54cc-8def-d965b1b3a0ec",
+                  "ea09ffb8-ee82-5496-8945-308248d84b48"
+                ],
+                "33b396c0-7bcd-5f18-9fde-1f8cd3572955": [
+                  "7683ffef-7029-586e-a968-2d872e521291",
+                  "cab9cb6f-c4dc-5e2f-9637-29b03699a2ad"
+                ],
+                "92361d37-f3a1-5b3a-8a8e-49591fda4fdc": [
+                  "33b396c0-7bcd-5f18-9fde-1f8cd3572955",
+                  "8398005e-6974-5c8d-a4e3-ef8b227e31cb"
+                ],
+                "bb82286d-9fa0-59ac-80e3-d381a40d8cce": [
+                  "92361d37-f3a1-5b3a-8a8e-49591fda4fdc",
+                  "a1fc5344-2ac7-5abf-ad01-50d51b55a1f2"
+                ],
+                "1d7e138d-cb41-5d55-88aa-fe7a49d3566d": [
+                  "bb82286d-9fa0-59ac-80e3-d381a40d8cce",
+                  "d415b8f3-53c0-5f61-9fec-7ea33cc42a7f"
+                ],
+                "49c7d0bd-a426-5c7b-a6c6-6ed144c2b067": [
+                  "0a605f65-a6e5-5f3d-b39f-bfad049190e6",
+                  "1d7e138d-cb41-5d55-88aa-fe7a49d3566d"
+                ],
+                "9062e6d4-d784-538d-bfdf-b368eb4466ce": [
+                  "49c7d0bd-a426-5c7b-a6c6-6ed144c2b067",
+                  "df214d4e-199e-5889-9c4b-c060cca204a5"
+                ],
+                "06a2d518-d822-5356-96e1-98c0953e9dd2": [
+                  "7adf6c2e-bb00-55f0-b20b-ea8f4078e9d9",
+                  "9062e6d4-d784-538d-bfdf-b368eb4466ce"
+                ],
+                "c8087c0c-f8f5-566b-8e8f-cc8b8af656ef": [
+                  "06a2d518-d822-5356-96e1-98c0953e9dd2",
+                  "f919fa69-9ed9-5677-8535-ce3579ef8be7"
+                ],
+                "a83db256-5213-599b-aebe-98deb37e5efd": [
+                  "8648641c-d46d-5889-9277-e9aea10cac3e",
+                  "c8087c0c-f8f5-566b-8e8f-cc8b8af656ef"
+                ],
+                "aacc6c54-4fd7-5740-bef4-cadb3a971dfe": [
+                  "81a15376-4d0a-564f-be1f-ed0eab8ee0e1",
+                  "a83db256-5213-599b-aebe-98deb37e5efd"
+                ],
+                "2279a2f3-f2b3-508e-819c-edb17389a92a": [
+                  "4929053b-5e54-5c47-890f-9c1cf218e0a0",
+                  "aacc6c54-4fd7-5740-bef4-cadb3a971dfe"
+                ],
+                "8025d1a5-824c-5295-a005-92ef042d77b2": [
+                  "2279a2f3-f2b3-508e-819c-edb17389a92a",
+                  "dd2a71b9-5eb0-57db-bac9-29aae02d3e7c"
+                ],
+                "5c1b577d-c27f-5145-bd75-198dd5ca91ab": [
+                  "4bc225ab-b1e5-596d-bc77-52feeda2c59f",
+                  "8025d1a5-824c-5295-a005-92ef042d77b2"
+                ],
+                "ada2d33b-62a3-538b-8b86-abf1738c7110": [
+                  "5c1b577d-c27f-5145-bd75-198dd5ca91ab",
+                  "850037fc-6af2-5624-a8a8-48ce6c1cdd08"
+                ],
+                "9b96bf61-faa4-59c3-b600-ee731c8802e8": [
+                  "00e30d3d-1acb-5da7-bf67-5501038dddf1",
+                  "ada2d33b-62a3-538b-8b86-abf1738c7110"
+                ],
+                "5d09227a-adb3-5b01-ab96-b86e39538bf3": [
+                  "39278044-cead-555d-b263-2a13182515c8",
+                  "9b96bf61-faa4-59c3-b600-ee731c8802e8"
+                ],
+                "048b2d38-081e-565d-8e5d-0f51106c2354": [
+                  "5d09227a-adb3-5b01-ab96-b86e39538bf3",
+                  "63ec62a6-d2ec-50c9-adb1-1dfa0d387ab9"
+                ],
+                "528cd2e2-4d96-5c5f-95c4-90d6401814f5": [
+                  "048b2d38-081e-565d-8e5d-0f51106c2354",
+                  "20ac79db-69f0-55d6-b003-afc410fe0b37"
+                ],
+                "6b4b2144-3948-50bc-9766-3ca83d52cee2": [
+                  "528cd2e2-4d96-5c5f-95c4-90d6401814f5",
+                  "5ac912b3-eead-5d44-bcf0-64db150bf549"
+                ],
+                "d382a9e6-0cb3-545c-b64f-a1f4ede2eba3": [
+                  "6b4b2144-3948-50bc-9766-3ca83d52cee2",
+                  "ce9b0963-5e20-5cf9-a988-e58e71335a57"
+                ],
+                "d39680e9-b5cb-50c9-bb4d-9defb5e5f69d": [
+                  "6ffe832d-8cf4-57d4-b2c4-c8888cead54e",
+                  "d382a9e6-0cb3-545c-b64f-a1f4ede2eba3"
+                ],
+                "f545105f-b496-5553-a2e3-d771944c10e2": [
+                  "cbe11201-77c0-5697-a6b8-9826ba56cbe1",
+                  "d39680e9-b5cb-50c9-bb4d-9defb5e5f69d"
+                ],
+                "c4a111f4-e4e1-5efa-b28d-647c2865571f": [
+                  "f32b56a5-e04d-5b2f-8f4c-ef51be372b4c",
+                  "f545105f-b496-5553-a2e3-d771944c10e2"
+                ],
+                "1a35c01a-6215-5f68-ae59-f253e29de5cd": [
+                  "615fe5ed-479a-597b-af21-cba473cf874e",
+                  "c4a111f4-e4e1-5efa-b28d-647c2865571f"
+                ],
+                "e0020e28-8795-51ef-9d4e-dbb904df7b78": [
+                  "1a35c01a-6215-5f68-ae59-f253e29de5cd",
+                  "a1922877-66ab-5327-bc9c-7b499f2c527f"
+                ],
+                "55042a73-e077-53dc-8dc6-65b665790417": [
+                  "0df85c2b-46f4-5b67-a0b8-19c857705a58",
+                  "e0020e28-8795-51ef-9d4e-dbb904df7b78"
+                ],
+                "834321fe-5d53-5310-8a7d-baf2d7941c0b": [
+                  "55042a73-e077-53dc-8dc6-65b665790417",
+                  "69b13fc2-99fe-5160-8f6b-f8e608bc7e80"
+                ],
+                "3dce2c13-94ac-59ee-a114-280fdd458dfe": [
+                  "0e45f4b7-7b9c-5570-97d8-ed10b2ced135",
+                  "834321fe-5d53-5310-8a7d-baf2d7941c0b"
+                ],
+                "b6ead281-8c80-5485-8505-47e95536d20d": [
+                  "3dce2c13-94ac-59ee-a114-280fdd458dfe",
+                  "e6735ff4-c4ae-5fbc-94c9-d87357294cff"
+                ],
+                "c021bf2f-cf9a-5c42-a58d-75f426726803": [
+                  "8270081d-2d6a-5f78-bf5f-46187eec3360",
+                  "b6ead281-8c80-5485-8505-47e95536d20d"
+                ],
+                "bdecf442-4fa9-5694-a936-5c43c1bc2623": [
+                  "c021bf2f-cf9a-5c42-a58d-75f426726803",
+                  "ea09ffb8-ee82-5496-8945-308248d84b48"
+                ],
+                "c5f067ea-9909-5151-984a-47681381b2da": [
+                  "7683ffef-7029-586e-a968-2d872e521291",
+                  "bdecf442-4fa9-5694-a936-5c43c1bc2623"
+                ],
+                "979e10d8-620f-5f18-93a9-973f58491dff": [
+                  "33b396c0-7bcd-5f18-9fde-1f8cd3572955",
+                  "c5f067ea-9909-5151-984a-47681381b2da"
+                ],
+                "6e39aa48-2387-5e2b-84a9-0574c124f881": [
+                  "92361d37-f3a1-5b3a-8a8e-49591fda4fdc",
+                  "979e10d8-620f-5f18-93a9-973f58491dff"
+                ],
+                "27dfd044-9295-525f-a354-587029cfea28": [
+                  "6e39aa48-2387-5e2b-84a9-0574c124f881",
+                  "bb82286d-9fa0-59ac-80e3-d381a40d8cce"
+                ],
+                "108fdff2-2592-5ef6-bc73-b52288222e19": [
+                  "1d7e138d-cb41-5d55-88aa-fe7a49d3566d",
+                  "27dfd044-9295-525f-a354-587029cfea28"
+                ],
+                "b9889c31-1eed-5a8d-8491-ef0fbf832aff": [
+                  "108fdff2-2592-5ef6-bc73-b52288222e19",
+                  "49c7d0bd-a426-5c7b-a6c6-6ed144c2b067"
+                ],
+                "bd644c8c-1f66-5494-ad77-bd55b57d52f1": [
+                  "9062e6d4-d784-538d-bfdf-b368eb4466ce",
+                  "b9889c31-1eed-5a8d-8491-ef0fbf832aff"
+                ],
+                "83ce65c3-4dac-535e-a33d-8a2f27f22026": [
+                  "06a2d518-d822-5356-96e1-98c0953e9dd2",
+                  "bd644c8c-1f66-5494-ad77-bd55b57d52f1"
+                ],
+                "8843df25-18b9-5894-a3d0-b2680506c68d": [
+                  "83ce65c3-4dac-535e-a33d-8a2f27f22026",
+                  "c8087c0c-f8f5-566b-8e8f-cc8b8af656ef"
+                ],
+                "7e2aaea4-d7ff-58fd-9a48-dd7b2dfa203b": [
+                  "8843df25-18b9-5894-a3d0-b2680506c68d",
+                  "a83db256-5213-599b-aebe-98deb37e5efd"
+                ],
+                "be1b5e68-903a-5384-b148-5e319de22acd": [
+                  "7e2aaea4-d7ff-58fd-9a48-dd7b2dfa203b",
+                  "aacc6c54-4fd7-5740-bef4-cadb3a971dfe"
+                ],
+                "1e2946b0-84b2-563d-b484-76145303e0c5": [
+                  "2279a2f3-f2b3-508e-819c-edb17389a92a",
+                  "be1b5e68-903a-5384-b148-5e319de22acd"
+                ],
+                "62d5c029-bfed-5dca-b483-df5f0afa3630": [
+                  "1e2946b0-84b2-563d-b484-76145303e0c5",
+                  "8025d1a5-824c-5295-a005-92ef042d77b2"
+                ],
+                "2a778630-b36a-595b-8eae-38ae1fb23329": [
+                  "5c1b577d-c27f-5145-bd75-198dd5ca91ab",
+                  "62d5c029-bfed-5dca-b483-df5f0afa3630"
+                ],
+                "8954159f-980f-52fc-b2c4-cc93603c19fc": [
+                  "2a778630-b36a-595b-8eae-38ae1fb23329",
+                  "ada2d33b-62a3-538b-8b86-abf1738c7110"
+                ],
+                "08d649ef-6568-5833-86ed-8afd46a4e608": [
+                  "8954159f-980f-52fc-b2c4-cc93603c19fc",
+                  "9b96bf61-faa4-59c3-b600-ee731c8802e8"
+                ],
+                "b9a217e5-1226-5360-adbc-6b948e815d28": [
+                  "08d649ef-6568-5833-86ed-8afd46a4e608",
+                  "5d09227a-adb3-5b01-ab96-b86e39538bf3"
+                ],
+                "45a26bc9-0314-50fc-83ef-ec5748ac019d": [
+                  "048b2d38-081e-565d-8e5d-0f51106c2354",
+                  "b9a217e5-1226-5360-adbc-6b948e815d28"
+                ],
+                "3af39f3d-82aa-5b8c-bd08-1f7d85f79ff2": [
+                  "45a26bc9-0314-50fc-83ef-ec5748ac019d",
+                  "528cd2e2-4d96-5c5f-95c4-90d6401814f5"
+                ],
+                "68fcfb3a-63a1-5fe0-836a-b0227f76125e": [
+                  "3af39f3d-82aa-5b8c-bd08-1f7d85f79ff2",
+                  "6b4b2144-3948-50bc-9766-3ca83d52cee2"
+                ],
+                "9bacc964-ad04-50c7-85e6-0e29dbb4d3c2": [
+                  "68fcfb3a-63a1-5fe0-836a-b0227f76125e",
+                  "d382a9e6-0cb3-545c-b64f-a1f4ede2eba3"
+                ],
+                "2601b8ad-2dee-5c41-9538-5ec02a5829a3": [
+                  "9bacc964-ad04-50c7-85e6-0e29dbb4d3c2",
+                  "d39680e9-b5cb-50c9-bb4d-9defb5e5f69d"
+                ],
+                "405e3f54-8df1-5faa-aa5a-88cd968acd0a": [
+                  "2601b8ad-2dee-5c41-9538-5ec02a5829a3",
+                  "f545105f-b496-5553-a2e3-d771944c10e2"
+                ],
+                "187aedb5-4d9f-579b-9a0a-79cad0bca1da": [
+                  "405e3f54-8df1-5faa-aa5a-88cd968acd0a",
+                  "c4a111f4-e4e1-5efa-b28d-647c2865571f"
+                ],
+                "e717e39f-1a11-5f3d-9d8d-ff347940b1b1": [
+                  "187aedb5-4d9f-579b-9a0a-79cad0bca1da",
+                  "1a35c01a-6215-5f68-ae59-f253e29de5cd"
+                ],
+                "9ac6a17e-b43f-5138-a67e-036becf5f6a7": [
+                  "e0020e28-8795-51ef-9d4e-dbb904df7b78",
+                  "e717e39f-1a11-5f3d-9d8d-ff347940b1b1"
+                ],
+                "fac23bce-bb92-5ab9-b5d4-ee31a35404b9": [
+                  "55042a73-e077-53dc-8dc6-65b665790417",
+                  "9ac6a17e-b43f-5138-a67e-036becf5f6a7"
+                ],
+                "b9fd0c6d-b475-5aac-bb10-80bd20cbad87": [
+                  "834321fe-5d53-5310-8a7d-baf2d7941c0b",
+                  "fac23bce-bb92-5ab9-b5d4-ee31a35404b9"
+                ],
+                "65c32b91-baaa-57ae-916d-0f1e411c2a28": [
+                  "3dce2c13-94ac-59ee-a114-280fdd458dfe",
+                  "b9fd0c6d-b475-5aac-bb10-80bd20cbad87"
+                ],
+                "9262898c-51db-5e4f-ace6-3b76dc3e1758": [
+                  "65c32b91-baaa-57ae-916d-0f1e411c2a28",
+                  "b6ead281-8c80-5485-8505-47e95536d20d"
+                ],
+                "c389f9b4-e397-5cd0-b966-56cf8d235f93": [
+                  "9262898c-51db-5e4f-ace6-3b76dc3e1758",
+                  "c021bf2f-cf9a-5c42-a58d-75f426726803"
+                ],
+                "f53786f6-a3fb-5324-b999-a0bf3eaa2212": [
+                  "bdecf442-4fa9-5694-a936-5c43c1bc2623",
+                  "c389f9b4-e397-5cd0-b966-56cf8d235f93"
+                ],
+                "033c789b-564b-5cd4-8ea2-376002f2f12d": [
+                  "c5f067ea-9909-5151-984a-47681381b2da",
+                  "f53786f6-a3fb-5324-b999-a0bf3eaa2212"
+                ],
+                "287aa686-878c-558b-89ca-75ae7d756404": [
+                  "033c789b-564b-5cd4-8ea2-376002f2f12d",
+                  "979e10d8-620f-5f18-93a9-973f58491dff"
+                ],
+                "83d1bbcc-d72c-5632-98d2-036e4f6fe169": [
+                  "287aa686-878c-558b-89ca-75ae7d756404",
+                  "6e39aa48-2387-5e2b-84a9-0574c124f881"
+                ],
+                "df73b05c-07a3-56ac-a10f-d9abfcbcc01f": [
+                  "27dfd044-9295-525f-a354-587029cfea28",
+                  "83d1bbcc-d72c-5632-98d2-036e4f6fe169"
+                ],
+                "050b2b83-f52d-50ef-9304-4ebf3713a9ba": [
+                  "108fdff2-2592-5ef6-bc73-b52288222e19",
+                  "df73b05c-07a3-56ac-a10f-d9abfcbcc01f"
+                ],
+                "d13218d0-580d-5566-bca4-23880562ed7a": [
+                  "050b2b83-f52d-50ef-9304-4ebf3713a9ba",
+                  "b9889c31-1eed-5a8d-8491-ef0fbf832aff"
+                ],
+                "3d03c3c3-d9a9-5efd-9c32-1059a84a8968": [
+                  "bd644c8c-1f66-5494-ad77-bd55b57d52f1",
+                  "d13218d0-580d-5566-bca4-23880562ed7a"
+                ],
+                "af751ef6-e855-57de-9cd1-b3a98cc2989c": [
+                  "3d03c3c3-d9a9-5efd-9c32-1059a84a8968",
+                  "83ce65c3-4dac-535e-a33d-8a2f27f22026"
+                ],
+                "54f3acaf-d163-50b6-a37a-2763dacbc70a": [
+                  "8843df25-18b9-5894-a3d0-b2680506c68d",
+                  "af751ef6-e855-57de-9cd1-b3a98cc2989c"
+                ],
+                "2afcfd5c-e727-5e4c-9ad2-bf3eaf4f44d3": [
+                  "54f3acaf-d163-50b6-a37a-2763dacbc70a",
+                  "7e2aaea4-d7ff-58fd-9a48-dd7b2dfa203b"
+                ],
+                "c4cde5f8-a8c6-5606-b584-44d69d6c83f0": [
+                  "2afcfd5c-e727-5e4c-9ad2-bf3eaf4f44d3",
+                  "be1b5e68-903a-5384-b148-5e319de22acd"
+                ],
+                "8fed3587-b183-55fc-b1bd-3555573ba0a0": [
+                  "1e2946b0-84b2-563d-b484-76145303e0c5",
+                  "c4cde5f8-a8c6-5606-b584-44d69d6c83f0"
+                ],
+                "9c23be51-6b7c-5b70-b0a3-20ecbba4e8da": [
+                  "62d5c029-bfed-5dca-b483-df5f0afa3630",
+                  "8fed3587-b183-55fc-b1bd-3555573ba0a0"
+                ],
+                "b4443c2f-9ddb-5708-b9b4-4486bd9efbd2": [
+                  "2a778630-b36a-595b-8eae-38ae1fb23329",
+                  "9c23be51-6b7c-5b70-b0a3-20ecbba4e8da"
+                ],
+                "6a4769b5-ad0d-5917-8d3c-c2e2bd2ffbc5": [
+                  "8954159f-980f-52fc-b2c4-cc93603c19fc",
+                  "b4443c2f-9ddb-5708-b9b4-4486bd9efbd2"
+                ],
+                "7522c8e4-4a13-5c4b-a1f8-972d9ba95a5d": [
+                  "08d649ef-6568-5833-86ed-8afd46a4e608",
+                  "6a4769b5-ad0d-5917-8d3c-c2e2bd2ffbc5"
+                ],
+                "43aaac88-6bae-5d1d-80d1-88d21c7d84e4": [
+                  "7522c8e4-4a13-5c4b-a1f8-972d9ba95a5d",
+                  "b9a217e5-1226-5360-adbc-6b948e815d28"
+                ],
+                "ff5789cf-c981-5e1b-bd5e-7ae4331965bd": [
+                  "43aaac88-6bae-5d1d-80d1-88d21c7d84e4",
+                  "45a26bc9-0314-50fc-83ef-ec5748ac019d"
+                ],
+                "f2530e9a-8259-5aa1-8138-c8d11527fdd0": [
+                  "3af39f3d-82aa-5b8c-bd08-1f7d85f79ff2",
+                  "ff5789cf-c981-5e1b-bd5e-7ae4331965bd"
+                ],
+                "bdf134d2-4415-5f32-9fb3-902a1b663fb9": [
+                  "68fcfb3a-63a1-5fe0-836a-b0227f76125e",
+                  "f2530e9a-8259-5aa1-8138-c8d11527fdd0"
+                ],
+                "5dc747cb-53ce-519e-81c3-b3eff92035da": [
+                  "9bacc964-ad04-50c7-85e6-0e29dbb4d3c2",
+                  "bdf134d2-4415-5f32-9fb3-902a1b663fb9"
+                ],
+                "0a9123ec-1106-5922-b32b-faeec4e15dfc": [
+                  "2601b8ad-2dee-5c41-9538-5ec02a5829a3",
+                  "5dc747cb-53ce-519e-81c3-b3eff92035da"
+                ],
+                "dca5aa56-b0b9-50d5-b9ed-4561c1fb5199": [
+                  "0a9123ec-1106-5922-b32b-faeec4e15dfc",
+                  "405e3f54-8df1-5faa-aa5a-88cd968acd0a"
+                ],
+                "f61d5984-7ade-541e-8162-67cef8a0f4a9": [
+                  "187aedb5-4d9f-579b-9a0a-79cad0bca1da",
+                  "dca5aa56-b0b9-50d5-b9ed-4561c1fb5199"
+                ],
+                "24efa1e1-e415-50d7-bd88-ae55af3fc79c": [
+                  "e717e39f-1a11-5f3d-9d8d-ff347940b1b1",
+                  "f61d5984-7ade-541e-8162-67cef8a0f4a9"
+                ]
+              }
+            },
+            "recipe_fingerprint": "e12686e22fe8c1046691960e99be4257c2baf4b1005e1bcc03bfc20e9ace441c",
+            "authoring_fingerprint": "15ab711e88ed23a50909158dba4ae1262f52c72e9139b57edcd579612df65894",
+            "imported_sources": []
+          },
+          "source_revision": 274,
+          "design_id": "6f8e2d2c-1d04-4a68-b7d2-ac4eabcf1e47"
+        }
+      },
+      "commit_http_status": 200,
+      "commit": {
+        "job_id": "529d48f6-1482-4d92-a399-30ef99b2c68f",
+        "status": "committed",
+        "revision": 275,
+        "design_id": "6f8e2d2c-1d04-4a68-b7d2-ac4eabcf1e47"
+      },
+      "source_guard_correct": true,
+      "cold_replay": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "verified",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 160,
+        "proof_coverage": "versioned_commands",
+        "native_editable": true,
+        "dependencies": {
+          "complete": true,
+          "parents": {
+            "77353504-13ab-50fa-a84b-ec80480331bf": [],
+            "2e713eed-f339-5a84-a0ec-1191b71a46a2": [
+              "77353504-13ab-50fa-a84b-ec80480331bf"
+            ],
+            "6f97e979-b936-5800-8b47-8b0b9833c9a0": [
+              "2e713eed-f339-5a84-a0ec-1191b71a46a2"
+            ],
+            "811077dc-8626-5502-b918-750e8ead58e0": [
+              "6f97e979-b936-5800-8b47-8b0b9833c9a0"
+            ],
+            "c5cd6b8f-f431-5e95-a948-159da47cd401": [
+              "811077dc-8626-5502-b918-750e8ead58e0"
+            ],
+            "d632189e-1590-5165-84ae-98ef57518a04": [
+              "c5cd6b8f-f431-5e95-a948-159da47cd401"
+            ],
+            "b620f017-a6a0-5971-9434-06915af57947": [
+              "d632189e-1590-5165-84ae-98ef57518a04"
+            ],
+            "8a3001af-d02a-54cc-8def-d965b1b3a0ec": [
+              "b620f017-a6a0-5971-9434-06915af57947"
+            ],
+            "cab9cb6f-c4dc-5e2f-9637-29b03699a2ad": [
+              "8a3001af-d02a-54cc-8def-d965b1b3a0ec"
+            ],
+            "8398005e-6974-5c8d-a4e3-ef8b227e31cb": [
+              "cab9cb6f-c4dc-5e2f-9637-29b03699a2ad"
+            ],
+            "a1fc5344-2ac7-5abf-ad01-50d51b55a1f2": [
+              "8398005e-6974-5c8d-a4e3-ef8b227e31cb"
+            ],
+            "d415b8f3-53c0-5f61-9fec-7ea33cc42a7f": [
+              "a1fc5344-2ac7-5abf-ad01-50d51b55a1f2"
+            ],
+            "0a605f65-a6e5-5f3d-b39f-bfad049190e6": [
+              "d415b8f3-53c0-5f61-9fec-7ea33cc42a7f"
+            ],
+            "df214d4e-199e-5889-9c4b-c060cca204a5": [
+              "0a605f65-a6e5-5f3d-b39f-bfad049190e6"
+            ],
+            "7adf6c2e-bb00-55f0-b20b-ea8f4078e9d9": [
+              "df214d4e-199e-5889-9c4b-c060cca204a5"
+            ],
+            "f919fa69-9ed9-5677-8535-ce3579ef8be7": [
+              "7adf6c2e-bb00-55f0-b20b-ea8f4078e9d9"
+            ],
+            "8648641c-d46d-5889-9277-e9aea10cac3e": [
+              "f919fa69-9ed9-5677-8535-ce3579ef8be7"
+            ],
+            "81a15376-4d0a-564f-be1f-ed0eab8ee0e1": [
+              "8648641c-d46d-5889-9277-e9aea10cac3e"
+            ],
+            "4929053b-5e54-5c47-890f-9c1cf218e0a0": [
+              "81a15376-4d0a-564f-be1f-ed0eab8ee0e1"
+            ],
+            "dd2a71b9-5eb0-57db-bac9-29aae02d3e7c": [
+              "4929053b-5e54-5c47-890f-9c1cf218e0a0"
+            ],
+            "4bc225ab-b1e5-596d-bc77-52feeda2c59f": [
+              "dd2a71b9-5eb0-57db-bac9-29aae02d3e7c"
+            ],
+            "850037fc-6af2-5624-a8a8-48ce6c1cdd08": [
+              "4bc225ab-b1e5-596d-bc77-52feeda2c59f"
+            ],
+            "00e30d3d-1acb-5da7-bf67-5501038dddf1": [
+              "850037fc-6af2-5624-a8a8-48ce6c1cdd08"
+            ],
+            "39278044-cead-555d-b263-2a13182515c8": [
+              "00e30d3d-1acb-5da7-bf67-5501038dddf1"
+            ],
+            "63ec62a6-d2ec-50c9-adb1-1dfa0d387ab9": [
+              "39278044-cead-555d-b263-2a13182515c8"
+            ],
+            "20ac79db-69f0-55d6-b003-afc410fe0b37": [
+              "63ec62a6-d2ec-50c9-adb1-1dfa0d387ab9"
+            ],
+            "5ac912b3-eead-5d44-bcf0-64db150bf549": [
+              "20ac79db-69f0-55d6-b003-afc410fe0b37"
+            ],
+            "ce9b0963-5e20-5cf9-a988-e58e71335a57": [
+              "5ac912b3-eead-5d44-bcf0-64db150bf549"
+            ],
+            "6ffe832d-8cf4-57d4-b2c4-c8888cead54e": [
+              "ce9b0963-5e20-5cf9-a988-e58e71335a57"
+            ],
+            "cbe11201-77c0-5697-a6b8-9826ba56cbe1": [
+              "6ffe832d-8cf4-57d4-b2c4-c8888cead54e"
+            ],
+            "f32b56a5-e04d-5b2f-8f4c-ef51be372b4c": [
+              "cbe11201-77c0-5697-a6b8-9826ba56cbe1"
+            ],
+            "615fe5ed-479a-597b-af21-cba473cf874e": [
+              "f32b56a5-e04d-5b2f-8f4c-ef51be372b4c"
+            ],
+            "a1922877-66ab-5327-bc9c-7b499f2c527f": [
+              "615fe5ed-479a-597b-af21-cba473cf874e",
+              "77353504-13ab-50fa-a84b-ec80480331bf"
+            ],
+            "0df85c2b-46f4-5b67-a0b8-19c857705a58": [
+              "2e713eed-f339-5a84-a0ec-1191b71a46a2",
+              "a1922877-66ab-5327-bc9c-7b499f2c527f"
+            ],
+            "69b13fc2-99fe-5160-8f6b-f8e608bc7e80": [
+              "0df85c2b-46f4-5b67-a0b8-19c857705a58",
+              "6f97e979-b936-5800-8b47-8b0b9833c9a0"
+            ],
+            "0e45f4b7-7b9c-5570-97d8-ed10b2ced135": [
+              "69b13fc2-99fe-5160-8f6b-f8e608bc7e80",
+              "811077dc-8626-5502-b918-750e8ead58e0"
+            ],
+            "e6735ff4-c4ae-5fbc-94c9-d87357294cff": [
+              "0e45f4b7-7b9c-5570-97d8-ed10b2ced135",
+              "c5cd6b8f-f431-5e95-a948-159da47cd401"
+            ],
+            "8270081d-2d6a-5f78-bf5f-46187eec3360": [
+              "d632189e-1590-5165-84ae-98ef57518a04",
+              "e6735ff4-c4ae-5fbc-94c9-d87357294cff"
+            ],
+            "ea09ffb8-ee82-5496-8945-308248d84b48": [
+              "8270081d-2d6a-5f78-bf5f-46187eec3360",
+              "b620f017-a6a0-5971-9434-06915af57947"
+            ],
+            "7683ffef-7029-586e-a968-2d872e521291": [
+              "8a3001af-d02a-54cc-8def-d965b1b3a0ec",
+              "ea09ffb8-ee82-5496-8945-308248d84b48"
+            ],
+            "33b396c0-7bcd-5f18-9fde-1f8cd3572955": [
+              "7683ffef-7029-586e-a968-2d872e521291",
+              "cab9cb6f-c4dc-5e2f-9637-29b03699a2ad"
+            ],
+            "92361d37-f3a1-5b3a-8a8e-49591fda4fdc": [
+              "33b396c0-7bcd-5f18-9fde-1f8cd3572955",
+              "8398005e-6974-5c8d-a4e3-ef8b227e31cb"
+            ],
+            "bb82286d-9fa0-59ac-80e3-d381a40d8cce": [
+              "92361d37-f3a1-5b3a-8a8e-49591fda4fdc",
+              "a1fc5344-2ac7-5abf-ad01-50d51b55a1f2"
+            ],
+            "1d7e138d-cb41-5d55-88aa-fe7a49d3566d": [
+              "bb82286d-9fa0-59ac-80e3-d381a40d8cce",
+              "d415b8f3-53c0-5f61-9fec-7ea33cc42a7f"
+            ],
+            "49c7d0bd-a426-5c7b-a6c6-6ed144c2b067": [
+              "0a605f65-a6e5-5f3d-b39f-bfad049190e6",
+              "1d7e138d-cb41-5d55-88aa-fe7a49d3566d"
+            ],
+            "9062e6d4-d784-538d-bfdf-b368eb4466ce": [
+              "49c7d0bd-a426-5c7b-a6c6-6ed144c2b067",
+              "df214d4e-199e-5889-9c4b-c060cca204a5"
+            ],
+            "06a2d518-d822-5356-96e1-98c0953e9dd2": [
+              "7adf6c2e-bb00-55f0-b20b-ea8f4078e9d9",
+              "9062e6d4-d784-538d-bfdf-b368eb4466ce"
+            ],
+            "c8087c0c-f8f5-566b-8e8f-cc8b8af656ef": [
+              "06a2d518-d822-5356-96e1-98c0953e9dd2",
+              "f919fa69-9ed9-5677-8535-ce3579ef8be7"
+            ],
+            "a83db256-5213-599b-aebe-98deb37e5efd": [
+              "8648641c-d46d-5889-9277-e9aea10cac3e",
+              "c8087c0c-f8f5-566b-8e8f-cc8b8af656ef"
+            ],
+            "aacc6c54-4fd7-5740-bef4-cadb3a971dfe": [
+              "81a15376-4d0a-564f-be1f-ed0eab8ee0e1",
+              "a83db256-5213-599b-aebe-98deb37e5efd"
+            ],
+            "2279a2f3-f2b3-508e-819c-edb17389a92a": [
+              "4929053b-5e54-5c47-890f-9c1cf218e0a0",
+              "aacc6c54-4fd7-5740-bef4-cadb3a971dfe"
+            ],
+            "8025d1a5-824c-5295-a005-92ef042d77b2": [
+              "2279a2f3-f2b3-508e-819c-edb17389a92a",
+              "dd2a71b9-5eb0-57db-bac9-29aae02d3e7c"
+            ],
+            "5c1b577d-c27f-5145-bd75-198dd5ca91ab": [
+              "4bc225ab-b1e5-596d-bc77-52feeda2c59f",
+              "8025d1a5-824c-5295-a005-92ef042d77b2"
+            ],
+            "ada2d33b-62a3-538b-8b86-abf1738c7110": [
+              "5c1b577d-c27f-5145-bd75-198dd5ca91ab",
+              "850037fc-6af2-5624-a8a8-48ce6c1cdd08"
+            ],
+            "9b96bf61-faa4-59c3-b600-ee731c8802e8": [
+              "00e30d3d-1acb-5da7-bf67-5501038dddf1",
+              "ada2d33b-62a3-538b-8b86-abf1738c7110"
+            ],
+            "5d09227a-adb3-5b01-ab96-b86e39538bf3": [
+              "39278044-cead-555d-b263-2a13182515c8",
+              "9b96bf61-faa4-59c3-b600-ee731c8802e8"
+            ],
+            "048b2d38-081e-565d-8e5d-0f51106c2354": [
+              "5d09227a-adb3-5b01-ab96-b86e39538bf3",
+              "63ec62a6-d2ec-50c9-adb1-1dfa0d387ab9"
+            ],
+            "528cd2e2-4d96-5c5f-95c4-90d6401814f5": [
+              "048b2d38-081e-565d-8e5d-0f51106c2354",
+              "20ac79db-69f0-55d6-b003-afc410fe0b37"
+            ],
+            "6b4b2144-3948-50bc-9766-3ca83d52cee2": [
+              "528cd2e2-4d96-5c5f-95c4-90d6401814f5",
+              "5ac912b3-eead-5d44-bcf0-64db150bf549"
+            ],
+            "d382a9e6-0cb3-545c-b64f-a1f4ede2eba3": [
+              "6b4b2144-3948-50bc-9766-3ca83d52cee2",
+              "ce9b0963-5e20-5cf9-a988-e58e71335a57"
+            ],
+            "d39680e9-b5cb-50c9-bb4d-9defb5e5f69d": [
+              "6ffe832d-8cf4-57d4-b2c4-c8888cead54e",
+              "d382a9e6-0cb3-545c-b64f-a1f4ede2eba3"
+            ],
+            "f545105f-b496-5553-a2e3-d771944c10e2": [
+              "cbe11201-77c0-5697-a6b8-9826ba56cbe1",
+              "d39680e9-b5cb-50c9-bb4d-9defb5e5f69d"
+            ],
+            "c4a111f4-e4e1-5efa-b28d-647c2865571f": [
+              "f32b56a5-e04d-5b2f-8f4c-ef51be372b4c",
+              "f545105f-b496-5553-a2e3-d771944c10e2"
+            ],
+            "1a35c01a-6215-5f68-ae59-f253e29de5cd": [
+              "615fe5ed-479a-597b-af21-cba473cf874e",
+              "c4a111f4-e4e1-5efa-b28d-647c2865571f"
+            ],
+            "e0020e28-8795-51ef-9d4e-dbb904df7b78": [
+              "1a35c01a-6215-5f68-ae59-f253e29de5cd",
+              "a1922877-66ab-5327-bc9c-7b499f2c527f"
+            ],
+            "55042a73-e077-53dc-8dc6-65b665790417": [
+              "0df85c2b-46f4-5b67-a0b8-19c857705a58",
+              "e0020e28-8795-51ef-9d4e-dbb904df7b78"
+            ],
+            "834321fe-5d53-5310-8a7d-baf2d7941c0b": [
+              "55042a73-e077-53dc-8dc6-65b665790417",
+              "69b13fc2-99fe-5160-8f6b-f8e608bc7e80"
+            ],
+            "3dce2c13-94ac-59ee-a114-280fdd458dfe": [
+              "0e45f4b7-7b9c-5570-97d8-ed10b2ced135",
+              "834321fe-5d53-5310-8a7d-baf2d7941c0b"
+            ],
+            "b6ead281-8c80-5485-8505-47e95536d20d": [
+              "3dce2c13-94ac-59ee-a114-280fdd458dfe",
+              "e6735ff4-c4ae-5fbc-94c9-d87357294cff"
+            ],
+            "c021bf2f-cf9a-5c42-a58d-75f426726803": [
+              "8270081d-2d6a-5f78-bf5f-46187eec3360",
+              "b6ead281-8c80-5485-8505-47e95536d20d"
+            ],
+            "bdecf442-4fa9-5694-a936-5c43c1bc2623": [
+              "c021bf2f-cf9a-5c42-a58d-75f426726803",
+              "ea09ffb8-ee82-5496-8945-308248d84b48"
+            ],
+            "c5f067ea-9909-5151-984a-47681381b2da": [
+              "7683ffef-7029-586e-a968-2d872e521291",
+              "bdecf442-4fa9-5694-a936-5c43c1bc2623"
+            ],
+            "979e10d8-620f-5f18-93a9-973f58491dff": [
+              "33b396c0-7bcd-5f18-9fde-1f8cd3572955",
+              "c5f067ea-9909-5151-984a-47681381b2da"
+            ],
+            "6e39aa48-2387-5e2b-84a9-0574c124f881": [
+              "92361d37-f3a1-5b3a-8a8e-49591fda4fdc",
+              "979e10d8-620f-5f18-93a9-973f58491dff"
+            ],
+            "27dfd044-9295-525f-a354-587029cfea28": [
+              "6e39aa48-2387-5e2b-84a9-0574c124f881",
+              "bb82286d-9fa0-59ac-80e3-d381a40d8cce"
+            ],
+            "108fdff2-2592-5ef6-bc73-b52288222e19": [
+              "1d7e138d-cb41-5d55-88aa-fe7a49d3566d",
+              "27dfd044-9295-525f-a354-587029cfea28"
+            ],
+            "b9889c31-1eed-5a8d-8491-ef0fbf832aff": [
+              "108fdff2-2592-5ef6-bc73-b52288222e19",
+              "49c7d0bd-a426-5c7b-a6c6-6ed144c2b067"
+            ],
+            "bd644c8c-1f66-5494-ad77-bd55b57d52f1": [
+              "9062e6d4-d784-538d-bfdf-b368eb4466ce",
+              "b9889c31-1eed-5a8d-8491-ef0fbf832aff"
+            ],
+            "83ce65c3-4dac-535e-a33d-8a2f27f22026": [
+              "06a2d518-d822-5356-96e1-98c0953e9dd2",
+              "bd644c8c-1f66-5494-ad77-bd55b57d52f1"
+            ],
+            "8843df25-18b9-5894-a3d0-b2680506c68d": [
+              "83ce65c3-4dac-535e-a33d-8a2f27f22026",
+              "c8087c0c-f8f5-566b-8e8f-cc8b8af656ef"
+            ],
+            "7e2aaea4-d7ff-58fd-9a48-dd7b2dfa203b": [
+              "8843df25-18b9-5894-a3d0-b2680506c68d",
+              "a83db256-5213-599b-aebe-98deb37e5efd"
+            ],
+            "be1b5e68-903a-5384-b148-5e319de22acd": [
+              "7e2aaea4-d7ff-58fd-9a48-dd7b2dfa203b",
+              "aacc6c54-4fd7-5740-bef4-cadb3a971dfe"
+            ],
+            "1e2946b0-84b2-563d-b484-76145303e0c5": [
+              "2279a2f3-f2b3-508e-819c-edb17389a92a",
+              "be1b5e68-903a-5384-b148-5e319de22acd"
+            ],
+            "62d5c029-bfed-5dca-b483-df5f0afa3630": [
+              "1e2946b0-84b2-563d-b484-76145303e0c5",
+              "8025d1a5-824c-5295-a005-92ef042d77b2"
+            ],
+            "2a778630-b36a-595b-8eae-38ae1fb23329": [
+              "5c1b577d-c27f-5145-bd75-198dd5ca91ab",
+              "62d5c029-bfed-5dca-b483-df5f0afa3630"
+            ],
+            "8954159f-980f-52fc-b2c4-cc93603c19fc": [
+              "2a778630-b36a-595b-8eae-38ae1fb23329",
+              "ada2d33b-62a3-538b-8b86-abf1738c7110"
+            ],
+            "08d649ef-6568-5833-86ed-8afd46a4e608": [
+              "8954159f-980f-52fc-b2c4-cc93603c19fc",
+              "9b96bf61-faa4-59c3-b600-ee731c8802e8"
+            ],
+            "b9a217e5-1226-5360-adbc-6b948e815d28": [
+              "08d649ef-6568-5833-86ed-8afd46a4e608",
+              "5d09227a-adb3-5b01-ab96-b86e39538bf3"
+            ],
+            "45a26bc9-0314-50fc-83ef-ec5748ac019d": [
+              "048b2d38-081e-565d-8e5d-0f51106c2354",
+              "b9a217e5-1226-5360-adbc-6b948e815d28"
+            ],
+            "3af39f3d-82aa-5b8c-bd08-1f7d85f79ff2": [
+              "45a26bc9-0314-50fc-83ef-ec5748ac019d",
+              "528cd2e2-4d96-5c5f-95c4-90d6401814f5"
+            ],
+            "68fcfb3a-63a1-5fe0-836a-b0227f76125e": [
+              "3af39f3d-82aa-5b8c-bd08-1f7d85f79ff2",
+              "6b4b2144-3948-50bc-9766-3ca83d52cee2"
+            ],
+            "9bacc964-ad04-50c7-85e6-0e29dbb4d3c2": [
+              "68fcfb3a-63a1-5fe0-836a-b0227f76125e",
+              "d382a9e6-0cb3-545c-b64f-a1f4ede2eba3"
+            ],
+            "2601b8ad-2dee-5c41-9538-5ec02a5829a3": [
+              "9bacc964-ad04-50c7-85e6-0e29dbb4d3c2",
+              "d39680e9-b5cb-50c9-bb4d-9defb5e5f69d"
+            ],
+            "405e3f54-8df1-5faa-aa5a-88cd968acd0a": [
+              "2601b8ad-2dee-5c41-9538-5ec02a5829a3",
+              "f545105f-b496-5553-a2e3-d771944c10e2"
+            ],
+            "187aedb5-4d9f-579b-9a0a-79cad0bca1da": [
+              "405e3f54-8df1-5faa-aa5a-88cd968acd0a",
+              "c4a111f4-e4e1-5efa-b28d-647c2865571f"
+            ],
+            "e717e39f-1a11-5f3d-9d8d-ff347940b1b1": [
+              "187aedb5-4d9f-579b-9a0a-79cad0bca1da",
+              "1a35c01a-6215-5f68-ae59-f253e29de5cd"
+            ],
+            "9ac6a17e-b43f-5138-a67e-036becf5f6a7": [
+              "e0020e28-8795-51ef-9d4e-dbb904df7b78",
+              "e717e39f-1a11-5f3d-9d8d-ff347940b1b1"
+            ],
+            "fac23bce-bb92-5ab9-b5d4-ee31a35404b9": [
+              "55042a73-e077-53dc-8dc6-65b665790417",
+              "9ac6a17e-b43f-5138-a67e-036becf5f6a7"
+            ],
+            "b9fd0c6d-b475-5aac-bb10-80bd20cbad87": [
+              "834321fe-5d53-5310-8a7d-baf2d7941c0b",
+              "fac23bce-bb92-5ab9-b5d4-ee31a35404b9"
+            ],
+            "65c32b91-baaa-57ae-916d-0f1e411c2a28": [
+              "3dce2c13-94ac-59ee-a114-280fdd458dfe",
+              "b9fd0c6d-b475-5aac-bb10-80bd20cbad87"
+            ],
+            "9262898c-51db-5e4f-ace6-3b76dc3e1758": [
+              "65c32b91-baaa-57ae-916d-0f1e411c2a28",
+              "b6ead281-8c80-5485-8505-47e95536d20d"
+            ],
+            "c389f9b4-e397-5cd0-b966-56cf8d235f93": [
+              "9262898c-51db-5e4f-ace6-3b76dc3e1758",
+              "c021bf2f-cf9a-5c42-a58d-75f426726803"
+            ],
+            "f53786f6-a3fb-5324-b999-a0bf3eaa2212": [
+              "bdecf442-4fa9-5694-a936-5c43c1bc2623",
+              "c389f9b4-e397-5cd0-b966-56cf8d235f93"
+            ],
+            "033c789b-564b-5cd4-8ea2-376002f2f12d": [
+              "c5f067ea-9909-5151-984a-47681381b2da",
+              "f53786f6-a3fb-5324-b999-a0bf3eaa2212"
+            ],
+            "287aa686-878c-558b-89ca-75ae7d756404": [
+              "033c789b-564b-5cd4-8ea2-376002f2f12d",
+              "979e10d8-620f-5f18-93a9-973f58491dff"
+            ],
+            "83d1bbcc-d72c-5632-98d2-036e4f6fe169": [
+              "287aa686-878c-558b-89ca-75ae7d756404",
+              "6e39aa48-2387-5e2b-84a9-0574c124f881"
+            ],
+            "df73b05c-07a3-56ac-a10f-d9abfcbcc01f": [
+              "27dfd044-9295-525f-a354-587029cfea28",
+              "83d1bbcc-d72c-5632-98d2-036e4f6fe169"
+            ],
+            "050b2b83-f52d-50ef-9304-4ebf3713a9ba": [
+              "108fdff2-2592-5ef6-bc73-b52288222e19",
+              "df73b05c-07a3-56ac-a10f-d9abfcbcc01f"
+            ],
+            "d13218d0-580d-5566-bca4-23880562ed7a": [
+              "050b2b83-f52d-50ef-9304-4ebf3713a9ba",
+              "b9889c31-1eed-5a8d-8491-ef0fbf832aff"
+            ],
+            "3d03c3c3-d9a9-5efd-9c32-1059a84a8968": [
+              "bd644c8c-1f66-5494-ad77-bd55b57d52f1",
+              "d13218d0-580d-5566-bca4-23880562ed7a"
+            ],
+            "af751ef6-e855-57de-9cd1-b3a98cc2989c": [
+              "3d03c3c3-d9a9-5efd-9c32-1059a84a8968",
+              "83ce65c3-4dac-535e-a33d-8a2f27f22026"
+            ],
+            "54f3acaf-d163-50b6-a37a-2763dacbc70a": [
+              "8843df25-18b9-5894-a3d0-b2680506c68d",
+              "af751ef6-e855-57de-9cd1-b3a98cc2989c"
+            ],
+            "2afcfd5c-e727-5e4c-9ad2-bf3eaf4f44d3": [
+              "54f3acaf-d163-50b6-a37a-2763dacbc70a",
+              "7e2aaea4-d7ff-58fd-9a48-dd7b2dfa203b"
+            ],
+            "c4cde5f8-a8c6-5606-b584-44d69d6c83f0": [
+              "2afcfd5c-e727-5e4c-9ad2-bf3eaf4f44d3",
+              "be1b5e68-903a-5384-b148-5e319de22acd"
+            ],
+            "8fed3587-b183-55fc-b1bd-3555573ba0a0": [
+              "1e2946b0-84b2-563d-b484-76145303e0c5",
+              "c4cde5f8-a8c6-5606-b584-44d69d6c83f0"
+            ],
+            "9c23be51-6b7c-5b70-b0a3-20ecbba4e8da": [
+              "62d5c029-bfed-5dca-b483-df5f0afa3630",
+              "8fed3587-b183-55fc-b1bd-3555573ba0a0"
+            ],
+            "b4443c2f-9ddb-5708-b9b4-4486bd9efbd2": [
+              "2a778630-b36a-595b-8eae-38ae1fb23329",
+              "9c23be51-6b7c-5b70-b0a3-20ecbba4e8da"
+            ],
+            "6a4769b5-ad0d-5917-8d3c-c2e2bd2ffbc5": [
+              "8954159f-980f-52fc-b2c4-cc93603c19fc",
+              "b4443c2f-9ddb-5708-b9b4-4486bd9efbd2"
+            ],
+            "7522c8e4-4a13-5c4b-a1f8-972d9ba95a5d": [
+              "08d649ef-6568-5833-86ed-8afd46a4e608",
+              "6a4769b5-ad0d-5917-8d3c-c2e2bd2ffbc5"
+            ],
+            "43aaac88-6bae-5d1d-80d1-88d21c7d84e4": [
+              "7522c8e4-4a13-5c4b-a1f8-972d9ba95a5d",
+              "b9a217e5-1226-5360-adbc-6b948e815d28"
+            ],
+            "ff5789cf-c981-5e1b-bd5e-7ae4331965bd": [
+              "43aaac88-6bae-5d1d-80d1-88d21c7d84e4",
+              "45a26bc9-0314-50fc-83ef-ec5748ac019d"
+            ],
+            "f2530e9a-8259-5aa1-8138-c8d11527fdd0": [
+              "3af39f3d-82aa-5b8c-bd08-1f7d85f79ff2",
+              "ff5789cf-c981-5e1b-bd5e-7ae4331965bd"
+            ],
+            "bdf134d2-4415-5f32-9fb3-902a1b663fb9": [
+              "68fcfb3a-63a1-5fe0-836a-b0227f76125e",
+              "f2530e9a-8259-5aa1-8138-c8d11527fdd0"
+            ],
+            "5dc747cb-53ce-519e-81c3-b3eff92035da": [
+              "9bacc964-ad04-50c7-85e6-0e29dbb4d3c2",
+              "bdf134d2-4415-5f32-9fb3-902a1b663fb9"
+            ],
+            "0a9123ec-1106-5922-b32b-faeec4e15dfc": [
+              "2601b8ad-2dee-5c41-9538-5ec02a5829a3",
+              "5dc747cb-53ce-519e-81c3-b3eff92035da"
+            ],
+            "dca5aa56-b0b9-50d5-b9ed-4561c1fb5199": [
+              "0a9123ec-1106-5922-b32b-faeec4e15dfc",
+              "405e3f54-8df1-5faa-aa5a-88cd968acd0a"
+            ],
+            "f61d5984-7ade-541e-8162-67cef8a0f4a9": [
+              "187aedb5-4d9f-579b-9a0a-79cad0bca1da",
+              "dca5aa56-b0b9-50d5-b9ed-4561c1fb5199"
+            ],
+            "24efa1e1-e415-50d7-bd88-ae55af3fc79c": [
+              "e717e39f-1a11-5f3d-9d8d-ff347940b1b1",
+              "f61d5984-7ade-541e-8162-67cef8a0f4a9"
+            ],
+            "a21c2775-00d6-5da0-bd83-5bf9b13e6d0c": [
+              "24efa1e1-e415-50d7-bd88-ae55af3fc79c",
+              "9ac6a17e-b43f-5138-a67e-036becf5f6a7"
+            ],
+            "92e5d17a-c6f0-5d9b-aa50-d93ee90ac7b0": [
+              "a21c2775-00d6-5da0-bd83-5bf9b13e6d0c",
+              "fac23bce-bb92-5ab9-b5d4-ee31a35404b9"
+            ],
+            "e2b8be79-3846-5eb6-9b19-ff0fb145b36a": [
+              "92e5d17a-c6f0-5d9b-aa50-d93ee90ac7b0",
+              "b9fd0c6d-b475-5aac-bb10-80bd20cbad87"
+            ],
+            "ea2c38a4-5e28-5abd-ae6d-c8ffc8e02329": [
+              "65c32b91-baaa-57ae-916d-0f1e411c2a28",
+              "e2b8be79-3846-5eb6-9b19-ff0fb145b36a"
+            ],
+            "903311ab-6e4e-5091-abe2-d67ec41c5897": [
+              "9262898c-51db-5e4f-ace6-3b76dc3e1758",
+              "ea2c38a4-5e28-5abd-ae6d-c8ffc8e02329"
+            ],
+            "e984dc13-6457-56c8-9403-9c2738aed377": [
+              "903311ab-6e4e-5091-abe2-d67ec41c5897",
+              "c389f9b4-e397-5cd0-b966-56cf8d235f93"
+            ],
+            "9be83779-2d34-5219-8fc5-269548873fd1": [
+              "e984dc13-6457-56c8-9403-9c2738aed377",
+              "f53786f6-a3fb-5324-b999-a0bf3eaa2212"
+            ],
+            "5e10b97d-2033-57e1-81df-8a61e87589da": [
+              "033c789b-564b-5cd4-8ea2-376002f2f12d",
+              "9be83779-2d34-5219-8fc5-269548873fd1"
+            ],
+            "16a7ef10-d1c1-5409-9d23-a2293f04fb6f": [
+              "287aa686-878c-558b-89ca-75ae7d756404",
+              "5e10b97d-2033-57e1-81df-8a61e87589da"
+            ],
+            "8c1af094-561f-5e0c-a175-8a2afd4a261f": [
+              "16a7ef10-d1c1-5409-9d23-a2293f04fb6f",
+              "83d1bbcc-d72c-5632-98d2-036e4f6fe169"
+            ],
+            "4ecb3f3c-9b1d-547d-87c0-9108ed9392b4": [
+              "8c1af094-561f-5e0c-a175-8a2afd4a261f",
+              "df73b05c-07a3-56ac-a10f-d9abfcbcc01f"
+            ],
+            "7ff00dce-e4af-5d19-b0c6-25dfe065156d": [
+              "050b2b83-f52d-50ef-9304-4ebf3713a9ba",
+              "4ecb3f3c-9b1d-547d-87c0-9108ed9392b4"
+            ],
+            "5a04aa6c-da52-56e7-b719-39063be002b1": [
+              "7ff00dce-e4af-5d19-b0c6-25dfe065156d",
+              "d13218d0-580d-5566-bca4-23880562ed7a"
+            ],
+            "a91ca02d-0122-5561-9d30-9421953fd10c": [
+              "3d03c3c3-d9a9-5efd-9c32-1059a84a8968",
+              "5a04aa6c-da52-56e7-b719-39063be002b1"
+            ],
+            "ccac4a58-f3a5-5b35-88e2-ea7c4a2a64b1": [
+              "a91ca02d-0122-5561-9d30-9421953fd10c",
+              "af751ef6-e855-57de-9cd1-b3a98cc2989c"
+            ],
+            "26cdbc08-57d8-5d7d-9ace-153f5e9bc9c5": [
+              "54f3acaf-d163-50b6-a37a-2763dacbc70a",
+              "ccac4a58-f3a5-5b35-88e2-ea7c4a2a64b1"
+            ],
+            "2d11454f-faef-5d10-9cce-df8177c1ef93": [
+              "26cdbc08-57d8-5d7d-9ace-153f5e9bc9c5",
+              "2afcfd5c-e727-5e4c-9ad2-bf3eaf4f44d3"
+            ],
+            "bb1cf3d6-c714-55e4-80b3-da0f1043db87": [
+              "2d11454f-faef-5d10-9cce-df8177c1ef93",
+              "c4cde5f8-a8c6-5606-b584-44d69d6c83f0"
+            ],
+            "476fa599-946e-51a3-b869-3b6f22669742": [
+              "8fed3587-b183-55fc-b1bd-3555573ba0a0",
+              "bb1cf3d6-c714-55e4-80b3-da0f1043db87"
+            ],
+            "edfa8e29-8fc9-5394-9ade-13e174d318a2": [
+              "476fa599-946e-51a3-b869-3b6f22669742",
+              "9c23be51-6b7c-5b70-b0a3-20ecbba4e8da"
+            ],
+            "54c6d3bf-3e88-58fa-81ca-3b7a5bffefda": [
+              "b4443c2f-9ddb-5708-b9b4-4486bd9efbd2",
+              "edfa8e29-8fc9-5394-9ade-13e174d318a2"
+            ],
+            "1029eb24-8b32-52ab-8285-ddf2c72cdbbc": [
+              "54c6d3bf-3e88-58fa-81ca-3b7a5bffefda",
+              "6a4769b5-ad0d-5917-8d3c-c2e2bd2ffbc5"
+            ],
+            "80a02c1d-664d-51a5-8298-745bf75cd73b": [
+              "1029eb24-8b32-52ab-8285-ddf2c72cdbbc",
+              "7522c8e4-4a13-5c4b-a1f8-972d9ba95a5d"
+            ],
+            "da1dc6d0-8885-5e09-a458-f55748e2a995": [
+              "43aaac88-6bae-5d1d-80d1-88d21c7d84e4",
+              "80a02c1d-664d-51a5-8298-745bf75cd73b"
+            ],
+            "19b0786b-bd52-5eb1-9f2b-a26596896f97": [
+              "da1dc6d0-8885-5e09-a458-f55748e2a995",
+              "ff5789cf-c981-5e1b-bd5e-7ae4331965bd"
+            ],
+            "ba0e9209-4885-5e91-ac17-802a48f286f9": [
+              "19b0786b-bd52-5eb1-9f2b-a26596896f97",
+              "f2530e9a-8259-5aa1-8138-c8d11527fdd0"
+            ],
+            "cf759c1c-bbc8-5ec9-8851-2c6b3a525cdc": [
+              "ba0e9209-4885-5e91-ac17-802a48f286f9",
+              "bdf134d2-4415-5f32-9fb3-902a1b663fb9"
+            ],
+            "6c8e2f48-4881-53b3-a4e1-3efaf18a33d8": [
+              "5dc747cb-53ce-519e-81c3-b3eff92035da",
+              "cf759c1c-bbc8-5ec9-8851-2c6b3a525cdc"
+            ],
+            "7cdb84b9-7685-59a1-baa4-41bfa6bb9ed4": [
+              "0a9123ec-1106-5922-b32b-faeec4e15dfc",
+              "6c8e2f48-4881-53b3-a4e1-3efaf18a33d8"
+            ],
+            "e5670f77-893f-5a8f-9281-169004b5ed55": [
+              "7cdb84b9-7685-59a1-baa4-41bfa6bb9ed4",
+              "dca5aa56-b0b9-50d5-b9ed-4561c1fb5199"
+            ],
+            "f9fe557d-c12c-503f-995a-3b58f3c3410b": [
+              "e5670f77-893f-5a8f-9281-169004b5ed55",
+              "f61d5984-7ade-541e-8162-67cef8a0f4a9"
+            ],
+            "4ce63a7a-8feb-5341-a891-8fa61934a68b": [
+              "24efa1e1-e415-50d7-bd88-ae55af3fc79c",
+              "f9fe557d-c12c-503f-995a-3b58f3c3410b"
+            ]
+          }
+        },
+        "recipe_fingerprint": "8e03d4375a402a4e1ae5da378465cdb58fce32c371e07dc95d113a5e4aa45beb",
+        "authoring_fingerprint": "f8f5c1124f5d114768b43d75b3cbbf57ab061e1e84f95478e2f38c931ce4b13c",
+        "imported_sources": [],
+        "elapsed_ms": 1158.2782400000724
+      },
+      "shared_admission_released_after_reaping": true,
+      "start_http_ms": 24.6197550004581,
+      "parent_worker_constructor_ms": 1.8798849996528588,
+      "process_start_call_ms": 0.4813609994016588,
+      "start_to_supervisor_reaped_ms": 1237.8606000020227,
+      "commit_http_ms": 8.320495999214472
+    },
+    {
+      "case": "native-history-256-source-rows",
+      "mode": "complete",
+      "start_http_status": 413,
+      "response": {
+        "detail": "Part verification capture budget exceeded"
+      },
+      "start_http_ms": 27.294397001242032
+    }
+  ],
+  "real_worker_races": [
+    {
+      "mode": "cancel",
+      "start_http_status": 202,
+      "poll": {
+        "job_id": "c14d08bf-e6af-4877-a641-c5d707811294",
+        "status": "complete",
+        "stale": false,
+        "source_busy": false,
+        "result": {
+          "status": "unverified",
+          "native_editable": false,
+          "issues": [
+            {
+              "code": "cancelled"
+            },
+            {
+              "code": "cancelled"
+            }
+          ],
+          "source_revision": 277,
+          "design_id": "6f8e2d2c-1d04-4a68-b7d2-ac4eabcf1e47"
+        }
+      },
+      "commit_http_status": 409,
+      "commit": {
+        "detail": "Part evaluation has no publishable candidate"
+      },
+      "source_guard_correct": true,
+      "cold_replay": null,
+      "shared_admission_released_after_reaping": true,
+      "start_http_ms": 29.501846998755354,
+      "parent_worker_constructor_ms": 2.70603100216249,
+      "process_start_call_ms": 0.6187239996506833,
+      "stop_to_supervisor_reaped_ms": 52.155027999106096,
+      "start_to_supervisor_reaped_ms": 82.71858499938389,
+      "commit_http_ms": 1.452053002140019
+    },
+    {
+      "mode": "source_changed",
+      "start_http_status": 202,
+      "poll": {
+        "job_id": "6e0e4f08-726e-4434-9d6c-ed5aad5d5fc2",
+        "status": "complete",
+        "stale": true,
+        "source_busy": false,
+        "result": {
+          "status": "unverified",
+          "native_editable": false,
+          "issues": [
+            {
+              "code": "source_changed"
+            },
+            {
+              "code": "source_changed"
+            }
+          ],
+          "source_revision": 278,
+          "design_id": "6f8e2d2c-1d04-4a68-b7d2-ac4eabcf1e47"
+        }
+      },
+      "commit_http_status": 409,
+      "commit": {
+        "detail": "Part evaluation has no publishable candidate"
+      },
+      "source_guard_correct": true,
+      "cold_replay": null,
+      "shared_admission_released_after_reaping": true,
+      "start_http_ms": 25.59428400127217,
+      "parent_worker_constructor_ms": 2.475386998412432,
+      "process_start_call_ms": 0.5578159980359487,
+      "stop_to_supervisor_reaped_ms": 51.80640599792241,
+      "start_to_supervisor_reaped_ms": 78.55695900070714,
+      "commit_http_ms": 1.374810999550391
+    }
+  ],
+  "notes": [
+    "No production lifespan, workspace writes or scientific calculations; artificial excluded-state records measure storage costs only.",
+    "Capture samples intercept submission after actual locked capture and do not measure worker computation or native cancellation.",
+    "Prepared commits run independently of capture refusals and are not evidence of successful end-to-end admission.",
+    "Undo equality checks cover the complete retained source, including history, physical/presentation state and repair draft.",
+    "Intermediate boundaries have exactly 64/128/256 native source rows; each appends 32 commands and its complete candidate is independently editable.",
+    "When the maximum-history search runs, its final native history is independently editable and the next single command must fail atomically at unchanged budgets.",
+    "A source may fit ordinary capture while excluded physical/presentation/draft data makes undo publication expensive.",
+    "Empty-root verification measures spawn/import/trivial-proof overhead without a native build; parent process-start call timings are separate.",
+    "Cold proof uses its unchanged ordinary capture and deadline; no successful cold assessment is inferred from a ready batch.",
+    "Lock probes add overhead; zero observed overlap is not evidence of zero contention. Refusals are retained without retry.",
+    "Exit status checks harness correctness only. Qualification requires reviewing capture refusals, p95 lock/HTTP costs and full-source scope."
+  ],
+  "sample_retention": "Repetitive successful sample rows pruned after aggregate inspection. Refusals, failures and maxima retained; no outcomes or percentiles recomputed."
+}

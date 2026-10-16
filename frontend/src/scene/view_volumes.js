@@ -1,4 +1,4 @@
-import { assemblyVolumePoints } from './assembly_visualization.js'
+import { createAssemblyVolumePointCache } from './assembly_volume_points.js'
 import { COLORING_LABELS, supportedColoringSet, coloringFallbackMode } from './coloring_modes.js'
 import { withSkippedColumnPoints } from './view_volume_points.js'
 import * as THREE from 'three'
@@ -184,16 +184,21 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
 
   const documentKey = () => store.getState().assemblyActive ? 'currentAssembly' : 'currentDesign'
   const volumes = () => draftVolumes ?? store.getState()[documentKey()]?.view_volumes ?? []
+  const assemblyPoints = createAssemblyVolumePointCache(assemblyRenderer)
   const entries = () => store.getState().assemblyActive
-    ? assemblyVolumePoints(store.getState().currentAssembly, assemblyRenderer).map(p => { const i = p.key.lastIndexOf(':'); return { pos: new THREE.Vector3(...p.position), nuc: { helix_id: p.key.slice(0, i), bp_index: Number(p.key.slice(i + 1)) } } })
+    ? assemblyPoints.get(store.getState().currentAssembly).map(p => { const i = p.key.lastIndexOf(':'); return { pos: new THREE.Vector3(...p.position), nuc: { helix_id: p.key.slice(0, i), bp_index: Number(p.key.slice(i + 1)) } } })
     : volumeBackboneEntries(designRenderer.getBackboneEntries(), store.getState().currentGeometry ?? [])
   function points() {
-    if (store.getState().assemblyActive) return assemblyVolumePoints(store.getState().currentAssembly, assemblyRenderer)
+    if (store.getState().assemblyActive) return assemblyPoints.get(store.getState().currentAssembly)
     return withSkippedColumnPoints(entries().map(entry => ({ key: `${entry.nuc.helix_id}:${entry.nuc.bp_index}`, position: entry.pos.toArray() })), store.getState().currentDesign?.helices)
   }
   function computeLayers(sourceVolumes = volumes()) {
-    const started = performance.now(), sourcePoints = points()
-    const layers = resolveViewVolumeLayers(activeViewVolumes(sourceVolumes), sourcePoints).map(layer => ({
+    const started = performance.now(), active = activeViewVolumes(sourceVolumes)
+    // An empty/disabled volume list needs no molecular membership at all. In a
+    // repeated assembly this otherwise expands millions of unused world points.
+    if (!active.length) assemblyPoints.clear()
+    const sourcePoints = active.length ? points() : []
+    const layers = resolveViewVolumeLayers(active, sourcePoints).map(layer => ({
       id: layer.volume.id, name: layer.volume.name, representation: layer.volume.representation,
       opacity: layer.volume.opacity, coloring: layer.volume.coloring ?? 'strand', volume: layer.volume, keys: [...layer.keys], segments: segmentsForKeys(layer.keys),
     }))
@@ -527,7 +532,7 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
   let previousGeometry = store.getState().currentGeometry
   const unsubscribe = store.subscribe(state => {
     const designChanged = state[documentKey()] !== previousDesign || previousMode !== state.assemblyActive
-    if (previousMode !== state.assemblyActive || previousDesign?.id !== state[documentKey()]?.id) { draftVolumes = null; selectedId = null; saveGeneration++; previewScheduler.abort('document changed'); clearTimeout(representationTimer) }
+    if (previousMode !== state.assemblyActive || previousDesign?.id !== state[documentKey()]?.id) { assemblyPoints.clear(); draftVolumes = null; selectedId = null; saveGeneration++; previewScheduler.abort('document changed'); clearTimeout(representationTimer) }
     previousMode = state.assemblyActive
     const geometryChanged = state.currentGeometry !== previousGeometry
     if (!designChanged && !geometryChanged) return
@@ -541,7 +546,7 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
   render()
   const apiDebug = {
     add: (shape = 'box') => section.querySelector(shape === 'hexagonal' ? '#view-volume-add-hexagonal' : '#view-volume-add-box').click(),
-    layers: () => resolveViewVolumeLayers(activeViewVolumes(volumes()), points()),
+    layers: () => { const active = activeViewVolumes(volumes()); return active.length ? resolveViewVolumeLayers(active, points()) : [] },
     select: id => { selectedId = id; render() },
     handles: () => {
       const rect = canvas.getBoundingClientRect()
@@ -573,7 +578,8 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
       position: entry.pos.toArray(),
     })),
     selectedMembership: (targetKey = null) => {
-      const layer = resolveViewVolumeLayers(volumes(), points()).find(item => item.volume.id === selectedId)
+      const layer = selectedId == null ? null
+        : resolveViewVolumeLayers(volumes(), points()).find(item => item.volume.id === selectedId)
       return {
         id: selectedId,
         count: layer?.keys.size ?? 0,
@@ -632,5 +638,5 @@ export function initViewVolumes({ document, scene, camera, canvas, controls, sto
     timing: () => structuredClone(timing),
     abort: () => previewScheduler.abort('debug-abort'),
   }
-  return { render, debug: apiDebug, dispose: () => { disposed = true; clearInterval(volumePoll); unsubscribe?.(); window.removeEventListener('nadoc:view-volume-stage', onStage); window.removeEventListener('keydown', onWindowKeyDown); canvas.removeEventListener('pointermove', onCanvasPointerMove); canvas.removeEventListener('pointerdown', onCanvasPointerDown, { capture: true }); canvas.removeEventListener('pointerup', onCanvasPointerUp, { capture: true }); canvas.removeEventListener('pointercancel', onCanvasPointerCancel, { capture: true }); previewScheduler.abort('dispose'); if (representationTimer !== null) clearTimeout(representationTimer); transform.dispose(); transform.getHelper().removeFromParent(); root.removeFromParent() } }
+  return { render, debug: apiDebug, dispose: () => { disposed = true; assemblyPoints.clear(); clearInterval(volumePoll); unsubscribe?.(); window.removeEventListener('nadoc:view-volume-stage', onStage); window.removeEventListener('keydown', onWindowKeyDown); canvas.removeEventListener('pointermove', onCanvasPointerMove); canvas.removeEventListener('pointerdown', onCanvasPointerDown, { capture: true }); canvas.removeEventListener('pointerup', onCanvasPointerUp, { capture: true }); canvas.removeEventListener('pointercancel', onCanvasPointerCancel, { capture: true }); previewScheduler.abort('dispose'); if (representationTimer !== null) clearTimeout(representationTimer); transform.dispose(); transform.getHelper().removeFromParent(); root.removeFromParent() } }
 }

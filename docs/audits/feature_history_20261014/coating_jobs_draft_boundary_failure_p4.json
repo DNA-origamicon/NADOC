@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-15",
+  "command": "PYTHONPATH=. just validate-safe uv run python scripts/benchmark_coating_jobs.py --long-history-only --pending-drafts",
+  "exit_code": 1,
+  "completed_benchmark_report": false,
+  "failure": "pydantic_core.ValidationError: Design.repair_draft: Part operation input exceeds the byte budget",
+  "stack": [
+    "repeated_case -> POST evaluation/jobs/{id}/commit",
+    "part_evaluation_jobs.commit -> state.set_design",
+    "part_replacement_transaction.publish_replacement -> state._snapshot_copy(before)",
+    "Design.model_validate(design.model_dump()) -> RepairDraft.bounded_json"
+  ],
+  "finding": "The raw portable RepairDraft envelope omitted optional action defaults. It was admitted near the unchanged operation byte limit, but model_dump materialized child_id:null fields and made subsequent undo/load validation exceed that same limit.",
+  "effect": "Publication refused before source/undo mutation; no user documents or jobs were used. Benchmark finally cleanup dropped its isolated session and restored instrumentation. No latency or complete-run pass is claimed from this aborted attempt.",
+  "followup": "ISSUE-84: enforce the canonical serialized proposal budget at admission, retain maximum-node/byte default-expansion regressions, then rerun the unchanged benchmark policy. No limit increase or snapshot-validation bypass."
+}

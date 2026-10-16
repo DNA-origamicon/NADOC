@@ -1,0 +1,208 @@
+{
+  "scope": "warm copy, atomic in-memory recording and bounded capture; excludes HTTP, rendering, proof and scientific validity",
+  "repeats": 5,
+  "capture_limits_unchanged": true,
+  "candidate_admission_provisional": true,
+  "max_atom_work": 4000,
+  "cases": [
+    {
+      "name": "small_mixed",
+      "fixture": {},
+      "selected_elements": 3,
+      "protein_atoms_transformed": 12,
+      "complete_authoring_equal": true,
+      "legacy_copy": {
+        "median_ms": 0.2674089992069639,
+        "max_ms": 0.299545001325896
+      },
+      "native_copy": {
+        "median_ms": 0.22986499971011654,
+        "max_ms": 0.3640200011432171
+      },
+      "atomic_native_recording": {
+        "median_ms": 0.7376499997917563,
+        "max_ms": 47.34977400039497
+      },
+      "capture": {
+        "median_ms": 1.5182499992079102,
+        "max_ms": 1.6907489989534952
+      },
+      "capture_results": [
+        "captured",
+        "captured",
+        "captured",
+        "captured",
+        "captured"
+      ]
+    },
+    {
+      "name": "small_mixed_large_unrelated",
+      "fixture": {
+        "unrelated_helices": 64,
+        "history_entries": 100
+      },
+      "selected_elements": 3,
+      "protein_atoms_transformed": 12,
+      "complete_authoring_equal": true,
+      "legacy_copy": {
+        "median_ms": 0.26310399880458135,
+        "max_ms": 0.2709119999053655
+      },
+      "native_copy": {
+        "median_ms": 0.2317669986950932,
+        "max_ms": 0.2598000010038959
+      },
+      "atomic_native_recording": {
+        "median_ms": 3.5033379990636604,
+        "max_ms": 4.090915001143003
+      },
+      "capture": {
+        "median_ms": 6.470457999967039,
+        "max_ms": 8.07490700026392
+      },
+      "capture_results": [
+        "captured",
+        "captured",
+        "captured",
+        "captured",
+        "captured"
+      ]
+    },
+    {
+      "name": "particle_batch_boundary",
+      "fixture": {
+        "protein_count": 0,
+        "particle_count": 16
+      },
+      "selected_elements": 16,
+      "protein_atoms_transformed": 0,
+      "complete_authoring_equal": true,
+      "legacy_copy": {
+        "median_ms": 0.5581429995800136,
+        "max_ms": 42.9447970000183
+      },
+      "native_copy": {
+        "median_ms": 0.643842000499717,
+        "max_ms": 0.6751790006092051
+      },
+      "atomic_native_recording": {
+        "median_ms": 1.2444350013538497,
+        "max_ms": 1.308808001340367
+      },
+      "capture": {
+        "median_ms": 2.0012059994769515,
+        "max_ms": 2.627529000164941
+      },
+      "capture_results": [
+        "captured",
+        "captured",
+        "captured",
+        "captured",
+        "captured"
+      ]
+    },
+    {
+      "name": "shared_asset_boundary",
+      "fixture": {
+        "protein_count": 4,
+        "atom_count": 1000,
+        "particle_count": 0
+      },
+      "selected_elements": 4,
+      "protein_atoms_transformed": 4000,
+      "complete_authoring_equal": true,
+      "legacy_copy": {
+        "median_ms": 10.06009499906213,
+        "max_ms": 10.281676000886364
+      },
+      "native_copy": {
+        "median_ms": 10.46336000035808,
+        "max_ms": 11.88810199892032
+      },
+      "atomic_native_recording": {
+        "median_ms": 16.668184000081965,
+        "max_ms": 17.669865999778267
+      },
+      "capture": {
+        "median_ms": 16.46547800010012,
+        "max_ms": 19.107723001070553
+      },
+      "capture_results": [
+        "captured",
+        "captured",
+        "captured",
+        "captured",
+        "captured"
+      ]
+    },
+    {
+      "name": "distinct_asset_boundary",
+      "fixture": {
+        "protein_count": 4,
+        "atom_count": 1000,
+        "particle_count": 0,
+        "unique_assets": true
+      },
+      "selected_elements": 4,
+      "protein_atoms_transformed": 4000,
+      "complete_authoring_equal": true,
+      "legacy_copy": {
+        "median_ms": 9.512905999145005,
+        "max_ms": 10.034724999059108
+      },
+      "native_copy": {
+        "median_ms": 11.217383998882724,
+        "max_ms": 11.541260000740294
+      },
+      "atomic_native_recording": {
+        "median_ms": 30.228100000385894,
+        "max_ms": 34.46722099943145
+      },
+      "capture": {
+        "median_ms": 11.488606000057189,
+        "max_ms": 11.731853999663144
+      },
+      "capture_results": [
+        "Part verification capture node budget exceeded",
+        "Part verification capture node budget exceeded",
+        "Part verification capture node budget exceeded",
+        "Part verification capture node budget exceeded",
+        "Part verification capture node budget exceeded"
+      ]
+    },
+    {
+      "name": "many_small_shared_placements",
+      "fixture": {
+        "protein_count": 16,
+        "atom_count": 250,
+        "particle_count": 0
+      },
+      "selected_elements": 16,
+      "protein_atoms_transformed": 4000,
+      "complete_authoring_equal": true,
+      "legacy_copy": {
+        "median_ms": 9.761958999661147,
+        "max_ms": 10.842756000783993
+      },
+      "native_copy": {
+        "median_ms": 10.135589000128675,
+        "max_ms": 10.910042999967118
+      },
+      "atomic_native_recording": {
+        "median_ms": 11.916753001059988,
+        "max_ms": 12.74409700090473
+      },
+      "capture": {
+        "median_ms": 5.748315999881015,
+        "max_ms": 5.879091000679182
+      },
+      "capture_results": [
+        "captured",
+        "captured",
+        "captured",
+        "captured",
+        "captured"
+      ]
+    }
+  ]
+}

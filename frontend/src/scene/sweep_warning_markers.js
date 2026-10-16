@@ -23,9 +23,12 @@ export function createSweepWarningMarkers(scene, {canvas,getCamera,addFrameCallb
   const tooltip=document.createElement('div'); tooltip.role='tooltip';tooltip.textContent=SWEEP_LIMIT_TEXT
   tooltip.style.cssText='position:fixed;display:none;pointer-events:none;z-index:10000;background:#171b22;color:#fff;border:1px solid #f5a623;border-radius:4px;padding:7px 10px;font:13px sans-serif'
   if(canvas)document.body.append(tooltip)
-  let anchors=[]
+  let anchors=[], disposed=false
   function hide(){tooltip.style.display='none'}
   function sync() {
+    // Reading the canvas bounds can force layout. Empty overlays have no
+    // camera-facing work, even while a large assembly is changing panels.
+    if(disposed || !anchors.length || !group.visible)return
     const camera=getCamera?.(); if(!camera)return
     const height=canvas?.getBoundingClientRect().height || 600, ctrl=getHelixCtrl?.()
     group.children.forEach((icon,i)=>{
@@ -48,23 +51,26 @@ export function createSweepWarningMarkers(scene, {canvas,getCamera,addFrameCallb
   window.addEventListener('pointermove',hover,true);window.addEventListener('blur',hide)
   canvas?.addEventListener('pointerleave',hide);addFrameCallback?.(sync)
   return {
-    set(values){anchors=values.map(v=>Array.isArray(v)?{position:v}:v);group.clear();hide()
+    set(values){if(disposed)return;anchors=values.map(v=>Array.isArray(v)?{position:v}:v);group.clear();hide()
       anchors.forEach(anchor=>{const icon=new THREE.Mesh(triangle,amber);icon.renderOrder=1100;icon.userData.helixIds=anchor.keys?.map(key=>key.split(':')[0]) ?? []
         const bar=new THREE.Mesh(stem,ink),point=new THREE.Mesh(dot,ink);bar.position.set(0,.15,.01);point.position.set(0,-.43,.01)
         bar.renderOrder=point.renderOrder=1101;icon.add(bar,point);group.add(icon)
       });sync()
     },
-    dispose(){group.removeFromParent();triangle.dispose();stem.dispose();dot.dispose();amber.dispose();ink.dispose();tooltip.remove();window.removeEventListener('pointermove',hover,true);window.removeEventListener('blur',hide);canvas?.removeEventListener('pointerleave',hide);removeFrameCallback?.(sync)},
+    dispose(){disposed=true;group.removeFromParent();triangle.dispose();stem.dispose();dot.dispose();amber.dispose();ink.dispose();tooltip.remove();window.removeEventListener('pointermove',hover,true);window.removeEventListener('blur',hide);canvas?.removeEventListener('pointerleave',hide);removeFrameCallback?.(sync)},
   }
 }
 
 export function initSavedSweepWarnings(scene,store,options) {
   const markers=createSweepWarningMarkers(scene,{...options,name:'saved'})
   function rebuild(state) {
+    const sweeps=(state.currentDesign?.deformations ?? []).filter(op=>op.type==='sweep' && op.params?.warning_bps?.length)
+    if(!sweeps.length){markers.set([]);return}
     const geometry=state.currentGeometry ?? [], anchors=[]
+    const affected=new Set(sweeps.flatMap(op=>op.affected_helix_ids ?? []))
     const byHelix=new Map()
-    for(const n of geometry){if(!byHelix.has(n.helix_id))byHelix.set(n.helix_id,[]);byHelix.get(n.helix_id).push(n)}
-    for(const op of state.currentDesign?.deformations ?? [])if(op.type==='sweep')for(const bp of op.params.warning_bps ?? []) {
+    for(const n of geometry){if(!affected.has(n.helix_id))continue;if(!byHelix.has(n.helix_id))byHelix.set(n.helix_id,[]);byHelix.get(n.helix_id).push(n)}
+    for(const op of sweeps)for(const bp of op.params.warning_bps) {
       let distance=Infinity, found=[]
       for(const hid of op.affected_helix_ids ?? [])for(const n of byHelix.get(hid) ?? []) {
         const d=Math.abs(n.bp_index-bp)

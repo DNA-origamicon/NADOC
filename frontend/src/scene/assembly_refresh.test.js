@@ -29,6 +29,7 @@ function makeDeps(overrides = {}) {
       getInstanceDesign: vi.fn().mockResolvedValue({ design: { foo: 1 } }),
     },
     assemblyRenderer: {
+      invalidateInstance: vi.fn(),
       rebuild: vi.fn().mockResolvedValue(undefined),
       rebuildLinkers: vi.fn(),
     },
@@ -93,6 +94,9 @@ describe('initAssemblyRefresh', () => {
     expect(deps.api.getAssembly).toHaveBeenCalledTimes(1)
     expect(deps.assemblyRenderer.rebuild).toHaveBeenCalledTimes(1)
     expect(deps.assemblyRenderer.rebuildLinkers).toHaveBeenCalledTimes(1)
+    expect(deps.assemblyRenderer.invalidateInstance.mock.calls).toEqual([['i1'], ['i2']])
+    expect(deps.assemblyRenderer.invalidateInstance.mock.invocationCallOrder[1])
+      .toBeLessThan(deps.api.getAssembly.mock.invocationCallOrder[0])
     expect(deps.syncAssemblyBluntEnds).toHaveBeenCalledTimes(1)
     expect(deps.assemblyJointRenderer.rebuild).toHaveBeenCalledTimes(1)
     // i1 and i2 share path p.nadoc → both synced; 'other' (q.nadoc) is not.

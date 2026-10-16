@@ -42,9 +42,13 @@ def validate_moving(design, moving):
 
 
 def join_precursors(
-    design, result, body, pairs, candidate_count, clearance, rot, translation
+    design, result, body, pairs, candidate_count, clearance, rot, translation,
+    *, identity_seed=None,
 ):
     token = join_preview_token(design, body)
+    # The preview token still guards live publication. Replay supplies the
+    # recorded identity independently of its private document/revision values.
+    bridge_identity = identity_seed or token[:14]
     bridges = []
     new_constraints = set()
     for i, (p, q, *_) in enumerate(pairs):
@@ -56,7 +60,7 @@ def join_precursors(
                 target=JoinEndpoint(**port["to"]),
             )
 
-        constraint_id = f"join_plan_{token[:14]}_{i}"
+        constraint_id = f"join_plan_{bridge_identity}_{i}"
         new_constraints.add(constraint_id)
         bridges.extend(
             {**bridge, "helix_id": f"{constraint_id}_ss_{leg}"}
@@ -64,7 +68,7 @@ def join_precursors(
         )
         result.cluster_join_constraints.append(
             ClusterJoinConstraint(
-                id=f"join_plan_{token[:14]}_{i}",
+                id=constraint_id,
                 first=attachment(p),
                 second=attachment(q),
                 reach_nm=body.reach_nm,

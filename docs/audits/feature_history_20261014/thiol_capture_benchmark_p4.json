@@ -1,0 +1,67 @@
+{
+  "scope": "warm explicit native graft/capture/replay; excludes HTTP, rendering and scientific validity",
+  "repeats": 9,
+  "capture_limits_unchanged": true,
+  "cases": [
+    {
+      "handles": 1,
+      "bases": 8,
+      "build_median_ms": 0.2310939999006223,
+      "build_max_ms": 2.0877470014966093,
+      "capture_median_ms": 1.1904689999937546,
+      "capture_max_ms": 1.4835620004305383,
+      "proof_median_ms": 0.5838849992869655,
+      "statuses": [
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified"
+      ]
+    },
+    {
+      "handles": 128,
+      "bases": 1024,
+      "build_median_ms": 8.124893000058364,
+      "build_max_ms": 41.8891290009924,
+      "capture_median_ms": 14.508128999295877,
+      "capture_max_ms": 20.277182000427274,
+      "proof_median_ms": 14.503428999887547,
+      "statuses": [
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified"
+      ]
+    },
+    {
+      "handles": 100,
+      "bases": 50000,
+      "build_median_ms": 5.834351000885363,
+      "build_max_ms": 37.70883600009256,
+      "capture_median_ms": 11.511505999806104,
+      "capture_max_ms": 12.17358800022339,
+      "proof_median_ms": 10.783323999930872,
+      "statuses": [
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified"
+      ]
+    }
+  ]
+}

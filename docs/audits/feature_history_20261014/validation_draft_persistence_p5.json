@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-15",
+  "focused_passed": 187,
+  "focused_files": {
+    "tests/test_part_repair_document_boundaries.py": 23,
+    "tests/test_part_repair_persistence.py": 16,
+    "tests/test_part_repair_drafts_api.py": 18,
+    "tests/test_part_proof_engine.py": 14,
+    "tests/test_feature_log_snapshot.py": 35,
+    "tests/test_part_recipe_edit.py": 8,
+    "tests/test_undo_boundaries.py": 18,
+    "tests/test_loadout.py": 6,
+    "tests/test_native_part_package.py": 7,
+    "tests/test_project_revisions.py": 22,
+    "tests/test_part_capture_copy.py": 14,
+    "tests/test_native_cpd_proof.py": 3,
+    "tests/test_native_duplex_relax_proof.py": 3
+  },
+  "execution": "Each target ran serially through just test-focused. Boundary file initially had 22 passes and one fixture TypeError from forwarding geometry-only kwargs to a slim response helper. The fixture was fixed, then all 23 passed. Metadata API first passed 17 cases, then all 18 passed after adding protected-loadout admission.",
+  "static": "Ruff passed all checkpoint Python files; git diff --check passed.",
+  "selection": "just test-smart --dry-run: decision: FAST  (fast suite only)",
+  "deferred_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+  "selection_note": "This was a dry-run: the canned deferred wording does not mean any FAST suite ran. Neither FAST nor FULL was executed. Archive mount remains unavailable (findmnt --target returned no mount). Broad-suite debt and previous unrelated lint findings remain.",
+  "scope": "Saved branch metadata, proof/recovery exclusion, persistence, branch-aware undo/source retention, compact responses and explicit draft metadata API. No geometry execution during metadata edits. No scientific formula, phase constant or numerical algorithm changed; model/ownership source changes deliberately change conservative numerical implementation pins, with no automatic migration.",
+  "remaining": "Source staging/restoration, draft-bound evaluate/apply, broader reference selectors, comparison and desktop/VR UI remain open. Coating gate and batch integration are separate pending checkpoints. No frontend changes (main.js LOC delta 0), app/visual/headset checks or production physical simulation. Assemblies deferred."
+}

@@ -1,0 +1,139 @@
+{
+  "date": "2026-10-15",
+  "checkpoint_base": "a000e1c7",
+  "scope": "P4 pinned single-chain aptamer imports, atomic first-document recording and exact-ownership unbound thiol particle motion; assemblies deferred",
+  "focused": [
+    {
+      "target": "tests/test_feature_recording_transactions.py",
+      "passed": 41
+    },
+    {
+      "target": "tests/test_part_thiol_patch_commands.py",
+      "passed": 37
+    },
+    {
+      "target": "tests/test_native_thiol_patch_proof.py",
+      "passed": 8
+    },
+    {
+      "target": "tests/test_part_thiol_commands.py",
+      "passed": 37
+    },
+    {
+      "target": "tests/test_native_thiol_proof.py",
+      "passed": 6
+    },
+    {
+      "target": "tests/test_native_nanoparticle_proof.py",
+      "passed": 29
+    },
+    {
+      "target": "tests/test_nanoparticles.py",
+      "passed": 18
+    },
+    {
+      "target": "tests/test_native_quantum_dot_proof.py",
+      "passed": 22
+    },
+    {
+      "target": "tests/test_part_aptamer_commands.py",
+      "passed": 37
+    },
+    {
+      "target": "tests/test_part_aptamer_routes.py",
+      "passed": 9
+    },
+    {
+      "target": "tests/test_native_aptamer_proof.py",
+      "passed": 9
+    },
+    {
+      "target": "tests/test_aptamer_import.py",
+      "passed": 10
+    },
+    {
+      "target": "tests/test_aptamer_history.py",
+      "passed": 4
+    },
+    {
+      "target": "tests/test_aptamer_connections.py",
+      "passed": 5
+    },
+    {
+      "target": "tests/test_part_input_sources.py",
+      "passed": 31
+    },
+    {
+      "target": "tests/test_part_source_audit.py",
+      "passed": 13
+    },
+    {
+      "target": "tests/test_part_feature_registry.py",
+      "passed": 24
+    },
+    {
+      "target": "tests/test_part_recipe_edit.py",
+      "passed": 8
+    },
+    {
+      "target": "tests/test_part_history_verification.py",
+      "passed": 26
+    },
+    {
+      "target": "tests/test_feature_log_snapshot.py",
+      "passed": 35
+    },
+    {
+      "target": "tests/test_feature_seek_preview.py",
+      "passed": 10
+    },
+    {
+      "target": "tests/test_part_verification_worker.py",
+      "passed": 12
+    },
+    {
+      "target": "tests/test_part_verification_jobs.py",
+      "passed": 14
+    },
+    {
+      "target": "tests/test_native_protein_input_proof.py",
+      "passed": 16
+    }
+  ],
+  "focused_total_passed": 461,
+  "corrected_findings": [
+    "New RNA rejection fixture initially selected a header mentioning C1' rather than an ATOM record; corrected the fixture, not native importer behavior.",
+    "Legacy initial imports now use the same atomic initialization boundary rather than installing a document before mutation."
+  ],
+  "performance": {
+    "aptamer": "aptamer_capture_benchmark_p4.json: 85/90 warm attempts reproduced_import; five cooperative capture refusals; all ten cold workers reproduced_import",
+    "thiol_motion": "thiol_motion_benchmark_p4.json: 26/27 warm attempts verified; one cooperative capture refusal",
+    "limits_changed": false,
+    "qualification": "Warm in-memory input/recording/capture and separate cold workers; excludes full HTTP/render latency and scientific validity"
+  },
+  "broad": {
+    "executed": false,
+    "reason": "Archive mount unavailable; focused checks do not certify FULL suite.",
+    "selector_dry_run": "FULL  (FULL suite)  [test-dedicated session OPEN]",
+    "changed_files_at_selector": 4987,
+    "deferred_groups_emitted": false
+  },
+  "lint": {
+    "changed_python": "Ruff passed",
+    "diff_check": "passed",
+    "memory_errors": 6,
+    "memory_warnings": 60,
+    "global_baseline_errors_not_rechecked": 5
+  },
+  "frontend_changes": false,
+  "main_js_loc_delta": 0,
+  "visual_check": false,
+  "molecular_algorithms_changed": false,
+  "physical_simulation": false,
+  "limits": [
+    "Whole-document capture still independently enforces nodes, bytes and cooperative elapsed time; admitted commands do not guarantee every large document can be captured.",
+    "Aptamer imports remain reproduced_import, never native-only construction.",
+    "Native sulfur-local resize behavior is unchanged; chemical validity is not claimed.",
+    "P4 remaining coverage, P5 repair and P6 strict automation remain open."
+  ]
+}

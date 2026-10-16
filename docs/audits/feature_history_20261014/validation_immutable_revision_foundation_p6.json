@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-15",
+  "scope": "Pure immutable revision preparation/materialization; not session integration",
+  "focused": {
+    "file": "tests/test_part_immutable_revision.py",
+    "passed": 49,
+    "seconds": 2.65
+  },
+  "initial": {
+    "passed": 46,
+    "failed": 2,
+    "seconds": 2.87,
+    "diagnosis": "Fixture retained raw Mat4x4 default integer scalars; full decode correctly rejected int-to-float representation drift. Fixture now uses actual native builder plus existing ordinary worker transport boundary. Added explicit raw representation drift rejection; production exact comparison unchanged."
+  },
+  "guarantees": [
+    "Canonical complete bytes are the only retained content; no mutable Design cache.",
+    "Private identity-bound scope seal grants neither proof nor publication authority.",
+    "Full roundtrip equality includes fields omitted from authoring/recipe projections.",
+    "Existing ordinary authoring, aggregate work, history, recovery and candidate transport limits retained."
+  ],
+  "limits": [
+    "No state/job/persistence integration or public gate change.",
+    "No end-to-end responsiveness, memory or retained-history qualification yet.",
+    "No app/browser/native/scientific run; broad-suite debt unchanged."
+  ],
+  "checks": {
+    "ruff": "passed",
+    "diff_check": "passed"
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "date": "2026-10-15",
+  "backend": {
+    "receipt_and_related": {
+      "test_part_repair_expectations.py": 43,
+      "test_part_repair_expectation_transport.py": 8,
+      "test_part_repair_input_metadata.py": 27,
+      "test_part_repair_planning.py": 22,
+      "test_part_repair_draft.py": 35,
+      "test_part_repair_drafts_api.py": 18,
+      "test_part_repair_draft_jobs.py": 17,
+      "test_part_repair_sources.py": 36,
+      "test_part_repair_persistence.py": 16,
+      "test_part_recipe_repair.py": 58
+    },
+    "strict_and_related": {
+      "test_part_strict_http.py": 61,
+      "test_part_revision_status.py": 5,
+      "test_part_publication_state.py": 39,
+      "test_part_publication_jobs.py": 24,
+      "test_part_evaluation_jobs.py": 10,
+      "test_part_evaluation_session.py": 21,
+      "test_part_evaluation_admission.py": 24,
+      "test_part_publication_routes.py": 14
+    },
+    "total_passed": 478,
+    "files": 18,
+    "execution": "Root-run serial focused targets through validation guard; all passed"
+  },
+  "frontend_checkpoint_modules": {
+    "fields": 5,
+    "model": 7,
+    "passed": 12,
+    "duration_seconds": 0.787
+  },
+  "red_baseline": {
+    "browser_expected_old_float": {
+      "failed": 2,
+      "duration_seconds": 2.71
+    }
+  },
+  "benchmark": {
+    "path": "strict_http_benchmark_p6.json",
+    "completed": true,
+    "requests": 500,
+    "cleanup_ok": true,
+    "scope": "In-memory TestClient dispatch/scalar read only; no production lifespan or model work"
+  },
+  "selector": {
+    "command": "just test-smart --dry-run",
+    "decision": "FAST  (fast suite only)",
+    "actual_suite_execution": false,
+    "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+    "note": "The canned dry-run text says ran; neither FAST nor FULL executed in this checkpoint."
+  },
+  "limitations": [
+    "Public registered batch gate remains false; immutable storage and larger-model responsiveness pending.",
+    "Strict route policy is not authentication or an OS/Python sandbox; dedicated strict-default host is required for an agent-only surface.",
+    "UI integration is separate: initial full Vitest had 8155 pass/1 skip/6 fail; corrected UI rerun pending.",
+    "Archive unavailable; no browser, app, headset, native build or scientific simulation.",
+    "No user designs, cache migration, bulk outputs, global budget or GC changes. main.js delta 0."
+  ]
+}

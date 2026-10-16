@@ -20,6 +20,10 @@ regress anything).
 
 | # | Date | Issue / phase | What changed (module) | Repro pinned by | Wall-clock | main.js LOC Δ | tests added | edits-to-green | app-validated | regression caught |
 |---|------|---------------|------------------------|-----------------|-----------|---------------|-------------|----------------|---------------|-------------------|
+| 33 | 2026-10-15 | ISSUE-84 — repair proposal roundtrip budget | Canonical persisted-form admission in `part_repair_draft.py` | Three red maximum-node/byte save/reload cases, plus one control | P5 continuation | 0 | 4 boundary cases | 69 focused schema/API/persistence cases pass | backend only | Raw sparse input fit while serialized optional defaults exceeded the same limit |
+| 32 | 2026-10-14 | ISSUE-82 — producer/consumer regeneration, PARTIAL | Root-based recipe edit module, refreshed snapshots/diffs, revision/source guard | Native bundle→joint edit/delete and failure regressions | P3 continuation | 0 | 31 focused native/regeneration cases | compatibility regressions corrected; audit records checks | backend only | rootless recovery, sweep version parsing and persisted detachment |
+| 31 | 2026-10-14 | ISSUE-81 — long pose history overhead | Type-gated Join/Pattern scans; skip no-op cluster copy | Existing 1,000-pose A/B gates and independent replay oracle | P2 prerequisite audit | 0 | existing behavioral suites retained | all 14 A/B gates pass | backend only | yes — missing-attribute lookups dominated nominally linear scans |
+| 30 | 2026-10-13 | ISSUE-80 — assembly loading / Full GPU limits, PARTIAL | Compact/NDGB transport, readiness/source reuse, prepared CG primitives, semantic/lazy UI work and ordered saves | Exact seven-source parity, final 8,075 frontend/23 smoke, real-frame release benchmarks, frozen source/cleanup proof | completed implementation; limits retained | −2; thin wiring only | focused batches overlap; audit records counts | final frontend/smoke pass; backend retains identical baseline 22/4 failures, zero individual timing violations | Benchy 29.669 s import/33 ms Full; hinge 6.119 s/485 ms Full; load/GPU targets unmet | unique-source CPU, repeated-instance GPU, background readiness and screenshot timing are measured separately |
 | 29 | 2026-10-11 | ISSUE-68 — shared headless/UI simulation ownership | `simulation_runtime.py` and seven native engine adapters | Separate-process native CanDo + HTTP poll/stop/resume/death; detached-worker and generation races | one headless parity follow-up | 0 | 25 lifecycle regressions | final 26 focused runtime/planning checks passed | native API and actual CanDo/SNUPI launches; readiness browser exercise also passed | yes — read-only legacy completed NAMD planning initially created a lock file; fixed and pinned |
 | 28 | 2026-10-08 | ISSUE-66 — obsolete loop/skip marks survived recomputation | `crud.py` clears active marks inside the revision-checked commit; new sweep strain synthesis uses stored spline intent | HC/SQ API tests seed obsolete end marks, recompute twice, undo/redo and revert | one sweep follow-up | 0 | 14 backend + 1 browser for sweep support and regression | focused suites green; browser reload fixture corrected to use complete export | yes — real Add Loops/Skips menu, undo/redo, full export/reload, screenshot inspected | yes — clearing only the calculation copy left old marks in the committed design |
 | 27 | 2026-10-08 | ISSUE-65 — native cluster history ownership | Optional creation snapshot and extracted replay helper; restore original v2 snapshot cluster baseline | Cluster replay regressions and all 98 saved-design history boundaries | focused generator refactor | 0 | 2 backend | boundary audit caught both ownership loss and missing original group | covered by generator app exercise | root cause: creation entries stored membership without parent/duplex ownership; restoring only generated groups also lost original snapshot membership |
@@ -74,6 +78,7 @@ multi-factor (CLAUDE.md's own warning). If the bug is a *class*, add a `LESSONS.
 
 | Issue | Root cause (5-Whys, one line) | Failed hypothesis (the "obvious fix" that was wrong, if any) | → LESSONS.md |
 |-------|-------------------------------|-------------------------------------------------------------|--------------|
+| ISSUE-80 (partial) | Cold display repeated work across native record expansion, JSON/gzip, hidden source readers, readiness assessment, primitive construction and eager maps → caches/scheduling were scoped to individual consumers instead of one versioned source lifecycle → first Full and representation saves still blocked after selection was fixed | A sub-millisecond CPU representation update was insufficient evidence: retained Full buffers do not prove Full drawing, backend save/readiness can still delay the gesture, and the initial runner omitted curved-cylinder slots; preserve the invalid run and require actual frame/triangle proof | `docs/audits/assembly_loading_performance_20261013.md` |
 | ISSUE-68 | Process-local thread maps were treated as global ownership → UI polling orphaned live headless runners; child PIDs also missed preparation/inter-stage work, and stale status writes could overwrite a restart → shared kernel lease, workspace scope and generation checks now cover those boundaries | A private workspace hid the original polling symptom; it was not the lifecycle fix | `memory/project_simulation_runtime.md` |
 | ISSUE-66 | Recomputed marks were merged into the original design → its obsolete marks had never been cleared → clearing happened only on the temporary calculation copy; commit now replaces active marks atomically and rejects stale revisions | None; integration assertions exposed the calculation/commit mismatch | — |
 | ISSUE-61 | Gate test depended on the host platform → WSL returned plain-string 503 before the intended review check → structured-detail assertion failed → marked parent failure correctly latched the durable journal; isolate only the test's platform prerequisite and explicitly review the retained incident | Temporary incident-store leakage was considered, but source inspection showed intentional recording of the outer test failure in the runner's durable ledger | n/a; bounded test precondition fix, no placement change |
@@ -474,6 +479,72 @@ background rows in hit testing. All ten numeric keys have real-ray regression
 coverage. The initial live loop check exposed this while seeking the selected
 range end; its failed evidence is retained under `vr-trajectory-loop-20261012/initial`.
 
+2026-10-13 — ISSUE-79 fixed: selecting an assembly part no longer seeds an
+animation or PATCHes its source. Shared versioned Design reads, stable selection
+rows, queued source-aware renderer refreshes and direct color-buffer repainting
+remove redundant work. Backend indexed-sweep axis sampling is batched with exact
+coordinate parity; compact geometry and unrelated cache entries are retained.
+A review caught a stale authoring callback during forced refresh; a loading guard
+and three regressions close that race. `main.js` delta 0 (two wiring substitutions).
+
+Full Benchy app validation retained 462,002 nucleotides and 91.75 million triangles:
+selection 64–449 ms, color change 290 ms versus 10.39 s, 32 fps during idle, no
+basic-action/idle rebuild or busy overlay. Cold opening and explicit representation
+builds remain slow; their measured limits are recorded rather than hidden.
+Frontend: 7,917 passed, 1 skipped, followed by 33 affected tests passing after the
+refresh guard. Focused backend: 48 passed. `test-smart` FAST: 10,542 passed,
+22 failed, 21 skipped, 4 collection errors; missing prerequisites and four
+HEAD-reproduced failures are documented, with the deferred FULL notice, in
+`docs/audits/benchy_full_performance_20261013.md`. Reopen count: 0.
+App smoke: 23 passed; native placement gate clear; changed-file Ruff clean,
+repository lint delta zero. Original Benchy hashes and test cleanup verified.
+
+2026-10-13 — ISSUE-80 **PARTIAL: implementation and validation complete; cold-load/GPU targets unmet**.
+Lossless native compact/NDGB transport, versioned source/readiness reuse, exact
+hull-work reuse, prepared CG primitives/lazy indexes, ordered optimistic saves,
+inactive UI gates and lazy connectors remove repeated work. Base authoring stays
+separate from overridden display Designs. Source failure/retry and accepted API
+snapshot provenance are regression-pinned; independent reviews are clean.
+
+Final release Benchy (seven sources, 462,002 nucleotides): 34.203 s navigation /
+29.669 s import→paint, 33.0 ms first Full, 93.8 ms Beads, 76.4 ms Cylinders,
+35.4 ms restored Full. All seven close, 91,752,688 triangles/35 calls, steady Full
+21.075/21.597 FPS; Cylinders 59.460. Final hinge500 (one repeated source):
+10.481 s navigation / 6.119 s import→paint, 485.2 ms first Full, 1,058.8 ms Beads,
+689 ms Cylinders, 205.8 ms restored Full. All 500 close, unchanged camera/LOD,
+1,517,472,000 triangles/five calls, Full 2.363/1.855 FPS; Cylinders 59.210.
+Both have no errors, Design PATCHes or context loss; only Benchy startup geometry
+has a busy overlay. Hashes and cleanup pass. These are single document/browser/
+source-cold runs, with actual option click→rendered frame excluding menu travel;
+they are not compositor/input-to-photon or repeated-median measurements.
+
+The release hinge first-Full screenshot shows Cylinders selectors despite Full
+store/renderer evidence. This cause was not reproduced: the separate controls
+run checks all 500 row selectors after every phase with zero mismatches and a
+Full screenshot. Its 5.964 s import / 233.8 ms Full remains diagnostic; primary
+release values above are retained. One hinge readiness GET is pending at close;
+backend cancellation is absent. The intermediate readiness profile is still
+39.604 s after map/flatten reuse, before lifetime cleanup. No claim that cold
+readiness, GPU scale, or screenshot presentation is solved is made.
+
+Final frontend: 8,075 passed, one skipped across 697 files / 314.18 s.
+Post-fix smoke: 23 passed / 2.6 minutes. Final FAST: 10,603 passed, 22 failed,
+21 skipped, four collection errors / 191.09 s pytest / 203 s guard. Failure/error
+IDs are identical to baseline; zero individual timing violators remain, but the
+203 s aggregate exceeds 90 s. FULL deferred notice is retained verbatim in
+`docs/audits/assembly_loading_performance_20261013.md`; budgets/markers unchanged.
+Scoped Ruff passes 23 changed backend/test files. Native gate and diff clean;
+`main.js` net −2. Aggregate lint retains two pre-existing unused imports; memory
+lint retains four unchanged-file errors/60 warnings. Focused counts, overlap,
+exact transport/hull parity and commands are in the audit.
+
+Final cleanup preserves exact 205 project-store paths, five document IDs and
+nine original source hashes; all test prefixes and bridge credentials are empty.
+All 109 frozen app/test hashes match, with no added/removed scoped files. Final
+measurements, controls diagnostic and smoke are complete; earlier runs remain
+checkpoints. Reopen count: 0. PARTIAL reflects remaining performance limits and
+the unresolved screenshot observation, not unfinished acceptance work.
+
 
 2026-10-13 — ISSUE-76 fixed for normal-launch integration. Root cause: the optimized
 viewer and final recorder were validated through a private diagnostic launch, while
@@ -572,3 +643,130 @@ this native event order; physical playback exposed it. Added a failing regressio
 then reused the valid result for an identical current pose. Full frontend suite:
 7,906 passed, one skipped. Broader validation and frame-rate limits are retained
 in `.development-artifacts/vr-join-20261013/verification-summary.json`.
+
+
+2026-10-14 — ISSUE-81 root cause: variant-blind `getattr` in two full-history scans repeatedly invoked Pydantic missing-field handling; the cluster-restoration helper additionally copied an unchanged object. No speculative algorithm replacement was attempted. The pre-existing benchmark first required a response-contract adapter repair; its frozen reconstruction functions remain unchanged. The unchanged timing gate and all 14 full-output comparisons pass after type discrimination. Evidence is in the feature-history audit directory.
+
+
+2026-10-15 — ISSUE-82: broad regression exposed five refinement failures because an extracted helper still read/changed the active session; scaffold selection now sequences its input design only. Native lifecycle tests exposed missing linker-patch/loop-clear log variants and framed-copy frame references; those are recorded/preserved. Generated recovery exposed an earlier absolute membership setter overwriting a newer extrusion snapshot; payload-aware membership restoration fixes both recovery modes. A small CPD conversion took ~70 s; its method is explicitly unverified and blocked before the solver on proof paths, rather than weakening deadlines or claiming snapshot replay is proof. See feature-history implementation audit for remaining scope and measured validation.
+
+2026-10-15 — ISSUE-83: extracted `part_replacement_transaction.publish_replacement`
+under the existing state lock. Failed prepared-model commits now restore the exact
+source object, bounded stacks, revision and request context, including cancellation
+after revision publication. A ready repair remains available for a successful retry.
+Eight transaction and fifteen repair-job tests pass. One undo copy remains; no
+geometry computation or additional proof was added to ordinary publication.
+
+2026-10-15 — ISSUE-84: raw-envelope budget checks omitted optional fields that
+Pydantic adds on serialization. A load-admitted draft therefore could not
+survive the unchanged snapshot/load validator. Admission now also checks the
+canonical stored form; no size limit or snapshot validator was weakened. The
+repro preceded the fix (three red / one control), then all 35 schema, 18 API
+and 16 persistence cases passed. Retained-draft performance is measured in a
+separate rerun; the aborted benchmark is preserved rather than called a pass.
+
+2026-10-15 — ISSUE-85: bind every publishing evaluation to the actual host
+session captured alongside source/revision. A new session cannot reuse the old
+handle even if its public revision and source object match. Trusted guards use
+a noncreating session lookup so stale publication cannot reopen a closed tab.
+All 21 session cases and the affected ordinary lifecycle files pass. This closes
+the evaluation lifetime gap; it is not the broader strict automation policy.
+
+2026-10-15 — ISSUE-86: the actual JavaScript action/JSON transport collapsed
+authored integer-valued floats, contradicting the planner's exact old-value
+comparison. The two HTTP regressions failed before the fix (2.71 seconds,
+HTTP 409 for diameter and pose). A bounded canonical JSON encoding now travels
+with the displayed old value and restores it before action construction; it
+persists through draft reloads. This encoding grants no authority: unchanged
+strict conflict/identity checks and native regeneration still decide acceptance.
+Malformed, duplicate-key, nonfinite, over-depth, boolean/number and aggregate
+budget cases are covered. All 280 focused codec/transport and related repair
+regressions pass; full desktop integration remains separately tracked in ISSUE-87.
+
+2026-10-15 — ISSUE-87: desktop repair integration assumed the commit API returned
+a full model, but the actual contract returns only a publication receipt. Retain
+that receipt separately from display refresh and bind all refresh reads to the
+original document/revision/session before syncing geometry. First full Vitest
+also exposed a null prior-summary dereference in the new metadata adapter (six
+failures; 8,155 passed and one skipped). Corrections and focused regressions are
+in progress; no green integration result is claimed yet.
+
+2026-10-15 — ISSUE-88: replaced lossy document-cache filename sanitization with
+exact bounded identity admission. Unsupported IDs cannot alias valid files or
+address the cache root/parent; strict HTTP refuses them before body acquisition.
+Autosave reports unsupported IDs and continues valid documents. Baseline29failed/
+9passed; final122 focused cases pass. Existing files and pruning are unchanged.
+
+2026-10-15 — ISSUE-89 identified an admission/execution mismatch: dependency and
+scoped replay exclude inert generator annotations, but ordinary strict native
+builders still receive them. The isolated valid-gold cold-proof dossier failed
+five cases with 11 controls passing in 3.68 seconds, including a real spawned
+worker. The shared execution boundary now excludes only `_generator` after the
+existing scope handoff, retaining recorded metadata and all input/identity
+guards. Corrective validation passed all 16 annotation cases and 377 related
+invalid-input, draft, source, scope and native-particle regressions (393 total).
+
+2026-10-15 — ISSUE-87 fixed: committed and uncertain publication survive failed
+display/transport, exact original-document revision/session checks guard refresh,
+and default-document null maps only to the explicit server `__default__` sentinel.
+Final86 focused tests and full8,181 passed/one skipped (708 files,309.16s).
+No app/smoke/headset validation; MV-45 remains pending because Archive is absent.
+
+2026-10-15 — ISSUE-91 API correction: physical input freshness is now explicit
+in oxDNA/NAMD list/detail responses. A matching legacy partial fingerprint stays
+unknown; known comparable differences are stale. No extra model/file work or job
+mutation. 59 focused cases pass; obsolete legacy MD fixture repaired with paired
+legacy/native assertions. Shared frontend labels subsequently passed 39 focused
+and 8,192 full cases with one skipped (`6abb5dde`; API `764b413b`). Full receipts,
+projection qualification and MV-46 app validation remain open; no app check is claimed.
+
+2026-10-15 — ISSUE-90 pending NP deletion: the original global applied-version
+sync erased an unrelated legacy direct-binding marker. The parent recorded the
+49-case pending-native dossier red (31 failed/18 passed, 3.29 seconds), including
+the actual deletion defect. Pending deletion now removes only its selected
+version in native and compatibility paths. Native metadata inputs, owner checks,
+atomic recording, nested ownership budgets and context/failure regressions passed
+the parent's final 66-case run (4.20 seconds). Editing regressions passed 95 cases
+(3.58 seconds), including seven identity-policy cases: 161 distinct green cases.
+Thirty-repeat measurement passed all ten cells/five native cold proofs, with
+cleanup; latency remains unqualified (native request/lock/light maxima
+88.57/82.35/86.30 ms). Initial larger-fixture cold capture refusal remains in the
+evidence. No app validation is claimed. Applied geometry is unchanged.
+
+2026-10-15 — ISSUE-92 tests-first application ownership correction: root recorded
+eight failures in 2.85 seconds across stale active constraints, unrelated legacy
+binding preservation, surface-carrier identity and bound-handle selection. The
+root cause is duplicated lifecycle state maintained separately from native
+relocation: the geometry/domain moved, while the surface carrier and inactive
+constraint fields did not; a global version-only sync also overwrote unrelated
+owners. The narrow correction updates only affected ownership, clears inactive
+constraints and explicitly excludes bound handles from free selection. Existing
+register/relocation/restoration formulas and numerical pins are unchanged. Root
+validation passed 181 distinct cases, after strengthening one stale status-only
+assertion to the existing complete typed 422 diagnostic. No new native applied
+contract or app check is claimed. No alternative geometry fix was attempted.
+
+2026-10-15 — ISSUE-93 private DNA comparison cleanup: a shared-template disposal
+regression exposed Three BufferGeometry's aliased userData on a geometry clone.
+Detaching the private clone's metadata preserves the shared native template.
+Added concurrent ordinary-scene identity/matrix/metadata survival assertions;
+migrated obsolete constructor regex checks into actual buffer behavior. The
+corrected 11-file run passed 195 cases in 3.97 seconds; real Python→Node packets
+also passed. Full frontend passed 8,291 cases (one skipped) in 314.43 seconds; resource and
+app qualification remain pending.
+
+2026-10-15 — ISSUE-94 strict cold DNA decoding: the actual-byte benchmark found
+that nested Design validation leaves Helix's forward-reference serializer deferred
+until direct construction. A fresh-process minimal diagnostic reproduced the
+MockValSer failure and confirmed schema initialization resolves it. The strict
+boundary now resolves the existing schema once; pinned model/engine files remain
+unchanged. Independent cold serialization, spawned DNA proof and controlled decode
+cancellation pass within 115 distinct focused cases (one incomplete expected
+proof fixture corrected). Actual HTTP measurements remain pending.
+
+2026-10-15 — ISSUE-95 oxDNA copy input preservation: add the existing packaged
+sequence-parameter filename to Copy Job's file set. Tests verify exact independent
+bytes, stage rendering and honest legacy absence alongside the existing seed,
+protocol and lineage contract. Initial present-file test failed as expected; both
+copy cases plus 42 related physics/freshness cases now pass. Complete physical
+input receipts and immutable preparation remain separate work.

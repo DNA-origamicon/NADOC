@@ -341,6 +341,71 @@ def _quat_to_R(quat: np.ndarray) -> np.ndarray:
     )  # ── Public entry point ───────────────────────────────────────────────────────
 
 
+def _relax_joint_selection(design, driver_oh_id, tip_helix, root_helix, joint_ids=None):
+    """Existing ownership/ordered-joint rule, without placement or optimization."""
+    from backend.core.bond_relax import cluster_pair_for_bond_relax
+
+    # Cluster ownership of the two root anchors.
+    cb_id, cr_id = cluster_pair_for_bond_relax(design, tip_helix, root_helix)
+    cluster_a = _overhang_owning_cluster_id(design, driver_oh_id) or cb_id
+    cluster_b = cr_id
+    same_body = cluster_a is not None and cluster_a == cluster_b
+
+    # Joints connecting the two clusters (skip when same body).
+    candidate_joints: list = []
+    if not same_body:
+        candidate_joints = [
+            j
+            for j in design.cluster_joints
+            if j.cluster_id == cluster_a or j.cluster_id == cluster_b
+        ]
+        if joint_ids is not None:
+            wanted = set(joint_ids)
+            candidate_joints = [j for j in candidate_joints if j.id in wanted]
+
+    cts_by_id = {c.id: c for c in design.cluster_transforms}
+    selected: list[tuple] = []  # (joint, origin, axis, cluster_id, tmin, tmax)
+    for j in candidate_joints:
+        ct = cts_by_id.get(j.cluster_id)
+        wo, wd = _local_to_world_joint(j.local_axis_origin, j.local_axis_direction, ct)
+        axis = np.asarray(wd, dtype=float)
+        nrm = float(np.linalg.norm(axis))
+        if nrm < 1e-9:
+            continue
+        selected.append(
+            (
+                j,
+                np.asarray(wo, dtype=float),
+                axis / nrm,
+                j.cluster_id,
+                float(j.min_angle_deg) * np.pi / 180.0,
+                float(j.max_angle_deg) * np.pi / 180.0,
+            )
+        )
+
+    return cluster_a, cluster_b, same_body, cts_by_id, selected
+
+
+def direct_relax_selection(design, driver_oh_id, driven_oh_id):
+    """Capture exact references selected after removal of the duplex child.
+
+    Dematerialization only changes the driver's overhang pose and removes that
+    child. Neither pose participates in this ownership/axis selection, so the
+    structural view avoids generating geometry just to capture references.
+    """
+    from backend.core.duplex_cluster import duplex_cluster_for
+
+    child = duplex_cluster_for(design, driver_oh_id)
+    context = design.copy_with(cluster_transforms=[cluster for cluster in design.cluster_transforms
+        if cluster.id != child.id]) if child is not None else design
+    _strand, _index, tip, root, _cb, _cr = _find_driven_tip_and_root(context, driven_oh_id)
+    driver_cluster, driven_cluster, _same, _clusters, selected = _relax_joint_selection(
+        context, driver_oh_id, tip.helix_id, root.helix_id)
+    return {"driver_cluster_id": driver_cluster, "driven_cluster_id": driven_cluster,
+            "duplex_cluster_id": child.id if child is not None else None,
+            "joint_ids": [joint.id for joint, *_rest in selected]}
+
+
 def relax_direct_binding(
     design: Design,
     driver_oh_id: str,
@@ -373,7 +438,6 @@ def relax_direct_binding(
     Returns ``(updated_design, info)``. ``info["mode"]`` ∈
     ``"same_body"`` / ``"joints"`` / ``"translate"``.
     """
-    from backend.core.bond_relax import cluster_pair_for_bond_relax
     from backend.core.design_geometry import fitting_geometry as _geometry_for_design
     from backend.core.duplex_cluster import (
         dematerialize_duplex_cluster,
@@ -423,43 +487,8 @@ def relax_direct_binding(
     span = float(np.linalg.norm(c_a - c_b))  # duplex length (rigid-invariant)
     target_chord = span + n_bonds * target_nm
 
-    # Cluster ownership of the two root anchors.
-    cb_id, cr_id = cluster_pair_for_bond_relax(design, tip_helix, root_helix)
-    cluster_a = _overhang_owning_cluster_id(design, driver_oh_id) or cb_id
-    cluster_b = cr_id
-    same_body = cluster_a is not None and cluster_a == cluster_b
-
-    # Joints connecting the two clusters (skip when same body).
-    candidate_joints: list = []
-    if not same_body:
-        candidate_joints = [
-            j
-            for j in design.cluster_joints
-            if j.cluster_id == cluster_a or j.cluster_id == cluster_b
-        ]
-        if joint_ids is not None:
-            wanted = set(joint_ids)
-            candidate_joints = [j for j in candidate_joints if j.id in wanted]
-
-    cts_by_id = {c.id: c for c in design.cluster_transforms}
-    selected: list[tuple] = []  # (joint, origin, axis, cluster_id, tmin, tmax)
-    for j in candidate_joints:
-        ct = cts_by_id.get(j.cluster_id)
-        wo, wd = _local_to_world_joint(j.local_axis_origin, j.local_axis_direction, ct)
-        axis = np.asarray(wd, dtype=float)
-        nrm = float(np.linalg.norm(axis))
-        if nrm < 1e-9:
-            continue
-        selected.append(
-            (
-                j,
-                np.asarray(wo, dtype=float),
-                axis / nrm,
-                j.cluster_id,
-                float(j.min_angle_deg) * np.pi / 180.0,
-                float(j.max_angle_deg) * np.pi / 180.0,
-            )
-        )
+    cluster_a, cluster_b, same_body, cts_by_id, selected = _relax_joint_selection(
+        design, driver_oh_id, tip_helix, root_helix, joint_ids)
 
     # ── 1) Arc minimization: bring |P_A − P_B| → target_chord ──────────────────
     def _place(thetas: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

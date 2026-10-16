@@ -86,12 +86,16 @@ def test_md_out_of_date_flag_and_roll_clears_it(monkeypatch, tmp_path):
     assert c.get(f"/api/md/jobs/{job.job_id}").json()["out_of_date"] is True
 
 
-def test_md_roll_migrates_old_snapshot_before_protecting_it(monkeypatch, tmp_path):
-    """Old NAMD snapshots with no cluster must still become a visible protected loadout."""
+@pytest.mark.parametrize("has_recipe", [False, True])
+def test_md_roll_migrates_only_legacy_snapshot_before_protecting_it(monkeypatch, tmp_path, has_recipe):
+    """Legacy placement migrates; an authored recipe never gains unlogged topology."""
     monkeypatch.setattr(routes_md, "_WORKSPACE_DIR", tmp_path)
     prepared = make_6hb_design()
-    # This fixture represents an old file predating both clusters and frames.
-    prepared = prepared.copy_with(cluster_transforms=[], lattice_frames=[],
+    # A legacy file predates both the placements and the explicit recipe root.
+    # The same absent placement with a native recipe is an unrepaired document,
+    # not authority for response formatting to create new authoring.
+    prepared = prepared.copy_with(recipe_root=prepared.recipe_root if has_recipe else None,
+        cluster_transforms=[], lattice_frames=[],
         helices=[h.model_copy(update={'lattice_frame_id':None}) for h in prepared.helices])
     job = _make_md_job(
         tmp_path, prepared, fingerprint=design_build_fingerprint(prepared)
@@ -103,7 +107,8 @@ def test_md_roll_migrates_old_snapshot_before_protecting_it(monkeypatch, tmp_pat
     body = r.json()
     assert body["matches_job"] is True
     assert body["design"]["active_loadout_id"] == body["simulation_loadout_id"]
-    assert body["design"]["cluster_transforms"]
+    assert bool(body["design"]["cluster_transforms"]) is not has_recipe
+    assert body["design"]["recipe_root"] == (prepared.recipe_root.model_dump(mode="json") if has_recipe else None)
     assert body.get("nucleotides_compact")
 
 

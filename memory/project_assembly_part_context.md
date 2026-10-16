@@ -17,7 +17,30 @@ panel was later solved a different way and its part-context code can no longer e
 Sibling doc: **[[project_assembly_configurations]]** — the *assembly*-context tier (poses +
 configurations on the `Assembly` itself), the third of the three panel contexts
 (part > assembly > design). Read it alongside this one.
-Not related: `project_path_to_thousands` is the render/scale refactor — no overlap.
+Rendering and source reuse are covered in `project_path_to_thousands`; the
+2026-10-13 selection correction spans both subsystems.
+
+## Selection performance correction — 2026-10-13
+
+Selecting a part is read-only. `animation_defaults.ensure()` must not seed an
+embedded part: that previously PATCHed the entire source and triggered a full
+assembly rebuild from a simple selection, including with the animation panel
+hidden. Explicit New animation still creates the first animation.
+
+`api/assembly_instance_design_cache.js` shares base Design requests by document,
+assembly and live file source version. It never borrows overridden renderer
+Designs for authoring. `ui/assembly_part_context.js` owns selection generations,
+optimistic explicit patches and stale-response rejection. Forced refreshes block
+retained authoring callbacks until fresh data arrives, and repeated selection
+shares the pending read. Selection-only panel
+updates repaint existing rows through `assembly_panel_selection.js`; they do not
+rebuild controls or refetch unchanged source data. Runtime `geometrySourceKey`
+comes from the v2 response and is non-enumerable, so saves retain the file format.
+
+The earlier single-entry `_partCache*` implementation and its line anchors below
+are historical. Regression coverage includes the real animation-panel selection
+and explicit New action, API cache freshness, stale selection responses and DOM
+retention. Evidence: `docs/audits/benchy_full_performance_20261013.md`.
 
 ## The mechanism (camera + animation)
 

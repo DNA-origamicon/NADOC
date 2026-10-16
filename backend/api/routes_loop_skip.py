@@ -326,8 +326,9 @@ def clear_loop_skip_range(
     """Remove all loop/skip modifications in [plane_a_bp, plane_b_bp) from the given helices."""
     from backend.core.loop_skip_calculator import clear_loop_skips
 
-    design = design_state.get_or_404()
     ids = [s.strip() for s in helix_ids.split(",") if s.strip()]
-    updated = clear_loop_skips(design, ids, plane_a_bp, plane_b_bp)
-    updated, report = design_state.replace_with_reconcile(updated)
+    updated, report, _entry = design_state.mutate_with_minor_log(
+        op_subtype="loop-skip-clear", label="Clear loop/skip range",
+        params={"helix_ids": ids, "plane_a_bp": plane_a_bp, "plane_b_bp": plane_b_bp},
+        fn=lambda d: clear_loop_skips(d, ids, plane_a_bp, plane_b_bp))
     return _design_response(updated, report)

@@ -140,6 +140,25 @@ def test_key_file_mtime_changes_invalidate(tmp_path):
     assert k1 != k2
 
 
+def test_source_invalidation_preserves_other_files_and_removes_all_pose_variants(tmp_path):
+    for name in ("part.nadoc", "part.nadoc-other"):
+        (tmp_path / name).write_text("{}")
+    source = PartSourceFile(path="part.nadoc")
+    variants = [_inst(source), _inst(source, [ClusterRigidTransform(id="moved")])]
+    keys = [ageo.display_geo_cache_key(ageo.geo_cache_key(inst, tmp_path)) for inst in variants]
+    other = ageo.display_geo_cache_key(ageo.geo_cache_key(_inst(PartSourceFile(path="part.nadoc-other")), tmp_path))
+    for key in [*keys, other]:
+        ageo.geo_cache_set(key, {"value": key})
+    ageo.invalidate_geo_cache_source(variants[0], tmp_path)
+    assert all(ageo.geo_cache_get(key) is None for key in keys)
+    assert ageo.geo_cache_get(other) == {"value": other}
+
+
+def test_display_key_keeps_native_placement_namespace_and_uncacheable_inputs():
+    assert ageo.display_geo_cache_key("i:example:") == "i:example::measured=1"
+    assert ageo.display_geo_cache_key(None) is None
+
+
 # ── override merge ────────────────────────────────────────────────────────────
 
 

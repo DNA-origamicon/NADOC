@@ -45,7 +45,7 @@ def test_frame_scoped_guarded_extrude_matches_native_geometry_and_roundtrip():
                           strand_filter="both", extend_inplace=True, ligate_adjacent=True,
                           source_frame_id=seed.lattice_frames[0].id, separate_fresh_extrusions=False,
                           expected_design_id=seed.id, expected_revision=state.revision())
-            assert set(params) == set(BundleContinuationRequest.model_fields)
+            assert set(params) == set(BundleContinuationRequest.model_fields) - {"history_seed"}
             if headless:
                 hb.extrude(**params)
             else:
@@ -54,7 +54,11 @@ def test_frame_scoped_guarded_extrude_matches_native_geometry_and_roundtrip():
             assert [h.length_bp for h in result.helices] == [63, 84]
             assert result.helices[1] == seed.helices[1]
             assert result.cluster_transforms == seed.cluster_transforms
-            assert result.feature_log[-1].params == BundleContinuationRequest(**params).model_dump(mode="json")
+            recorded = result.feature_log[-1].params
+            assert recorded["_source_helix_ids"] == [seed.helices[0].id]
+            assert recorded["_proof_version"] == 1
+            assert recorded["history_seed"]
+            assert {k: v for k, v in recorded.items() if k not in {"history_seed", "_proof_version", "_source_helix_ids"}} == BundleContinuationRequest(**params).model_dump(mode="json", exclude={"history_seed"})
             np.testing.assert_allclose(np.asarray(deformed_helix_axes(result)[0]["end"])
                                        - deformed_helix_axes(seed)[0]["end"], [0, 0, 21 * RISE])
             assert_geometry_and_ownership(roundtrip_nadoc(result), result)

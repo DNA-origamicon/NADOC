@@ -1,0 +1,106 @@
+{
+  "date": "2026-10-15",
+  "scope": "Provisional native Full DNA display projection and version-two isolated comparison transport",
+  "production_dna_gate_enabled": false,
+  "ordinary_geometry_or_numerical_pin_changed": false,
+  "executed_by": "root",
+  "runs": [
+    {
+      "targets": [
+        "tests/test_part_dna_comparison.py"
+      ],
+      "passed": 58,
+      "seconds": 2.89,
+      "warnings": "Five partial tagged-union DTO serialization warnings; subsequently corrected without changing DTO values."
+    },
+    {
+      "targets": [
+        "tests/test_part_dna_comparison.py",
+        "tests/test_part_dna_comparison_integration.py",
+        "tests/test_part_comparison_projection.py",
+        "tests/test_part_comparison_worker.py",
+        "tests/test_part_evaluation_comparison.py",
+        "tests/test_part_comparison_routes.py"
+      ],
+      "passed": 142,
+      "seconds": 5.84,
+      "coverage": [
+        "unchanged native record and axis parity",
+        "pre-allocation refusal",
+        "complete output inventory",
+        "shared worker and source ownership",
+        "real spawned DNA transport",
+        "HTTP saved-recipe comparison followed by one commit",
+        "default false public gate",
+        "version-one regression"
+      ]
+    },
+    {
+      "targets": [
+        "tests/test_part_dna_comparison.py",
+        "tests/test_part_dna_comparison_integration.py",
+        "tests/test_part_comparison_projection.py",
+        "tests/test_part_comparison_worker.py",
+        "tests/test_part_evaluation_comparison.py",
+        "tests/test_part_comparison_routes.py"
+      ],
+      "passed": 149,
+      "seconds": 6.49,
+      "coverage": [
+        "lossless fixed-row component v2",
+        "exact native JSON roundtrip",
+        "real UUID boundary output within unchanged 2000000-byte limit",
+        "version-one and owner lifecycle regressions"
+      ]
+    }
+  ],
+  "benchmark": {
+    "script": "scripts/benchmark_dna_comparison.py",
+    "status": "initial_transport_admission_failed",
+    "report": "benchmark_dna_comparison_initial.json",
+    "warm_projected": 72,
+    "early_refusals": 9,
+    "http": {
+      "tiny_200": 3,
+      "boundary_413_result_limit": 3,
+      "six_helix_413_result_limit": 3
+    },
+    "cleanup_and_source_preservation": true,
+    "capture_lock_max_ms": 2.76,
+    "process_children_max_rss_kib": 176588,
+    "measurement_limitation": "256-request sampler ended before response encoding; 8.06ms light maximum is not full-request evidence. Original zero exit meant cleanup only, not qualification."
+  },
+  "compact_benchmark": {
+    "report": "benchmark_dna_comparison_compact.json",
+    "http_200": 9,
+    "transport_admission_passed": true,
+    "cleanup_and_source_preservation": true,
+    "boundary_http_bytes": 1415563,
+    "six_helix_http_bytes": 1395672,
+    "expanded_object_bytes": [
+      2062002,
+      2031994
+    ],
+    "capture_lock_max_ms": 2.29,
+    "light_request_max_ms": 165.582809,
+    "process_children_max_rss_kib": 175608,
+    "qualification": "Transport fits, but full-request measurement exposed unacceptable parent-response latency; public gate remains false."
+  },
+  "pending_correction": "Explicit route serialization validated; resource and app qualification remain separate.",
+  "frontend_dna": "195 focused and8291 full frontend cases pass, one skip;3 actual PythonNode/HTTP cases pass. Publichost andcontrollerdefault remain v1.",
+  "app": "not run; Archive unavailable",
+  "remaining": [
+    "native projection resource qualification",
+    "closed frontend DTO validation",
+    "shared native line extraction and isolated renderer ownership",
+    "CPU/GPU lifetime and cost qualification",
+    "app exercise"
+  ],
+  "serialized_benchmark": {
+    "report": "benchmark_dna_comparison_serialized.json",
+    "http_200": 9,
+    "light_request_max_ms": 16.4635300025,
+    "capture_lock_max_ms": 2.7594659987,
+    "source_candidate_and_cleanup_verified": true
+  }
+}

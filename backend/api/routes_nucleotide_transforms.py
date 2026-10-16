@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Literal, Optional
+from uuid import UUID, uuid4, uuid5
 
 import numpy as np
 
@@ -85,9 +86,11 @@ def _target_exists(design, transform: NucleotideTransform) -> bool:
 
 
 def _apply_transform_body(
-    transforms: list[NucleotideTransform], body: NucleotideTransformBody
+    transforms: list[NucleotideTransform], body: NucleotideTransformBody, *, identity_seed=None
 ) -> NucleotideTransform:
     transform = NucleotideTransform(**body.model_dump(exclude={"compose"}))
+    if identity_seed is not None:
+        transform.id = str(uuid5(UUID(identity_seed), repr(transform.target_key())))
     idx = next(
         (
             i
@@ -145,17 +148,17 @@ def put_nucleotide_transform(body: NucleotideTransformBody) -> dict:
     if not _target_exists(design, transform):
         raise HTTPException(404, detail="The nucleotide transform target does not exist in this design.")
 
+    from backend.api.part_annotation_commands import build
+    params = {**body.model_dump(mode="json"), "history_seed": str(uuid4())}
+
     def apply(current):
-        nonlocal transform
-        transforms = list(current.nucleotide_transforms)
-        transform = _apply_transform_body(transforms, body)
-        return current.copy_with(nucleotide_transforms=transforms)
+        return build("nucleotide-transform", current, params)
 
     target = transform.target_key()
     updated, report, _entry = design_state.mutate_with_feature_log(
         "nucleotide-transform",
         f"Move/rotate nucleotide: {target}",
-        {"target": list(target), "compose": body.compose},
+        params,
         apply,
     )
     if transform.kind == "base":
@@ -193,18 +196,17 @@ def put_nucleotide_transforms(body: NucleotideTransformBatchBody) -> dict:
             404, detail="A nucleotide transform target does not exist in this design."
         )
 
-    def apply(current):
-        transforms = list(current.nucleotide_transforms)
-        for item in body.transforms:
-            _apply_transform_body(transforms, item)
-        return current.copy_with(nucleotide_transforms=transforms)
+    from backend.api.part_annotation_commands import build
+    params = {**body.model_dump(mode="json"), "history_seed": str(uuid4())}
 
-    sample = [list(key) for key in target_keys[:16]]
+    def apply(current):
+        return build("nucleotide-transform-batch", current, params)
+
     updated, report, entry = design_state.mutate_with_feature_log(
         "nucleotide-transform-batch",
         f"Move/rotate {len(target_keys)} nucleotide"
         f"{'s' if len(target_keys) != 1 else ''}",
-        {"count": len(target_keys), "target_sample": sample},
+        params,
         apply,
     )
     changed_helix_ids = sorted(

@@ -2044,3 +2044,11 @@ neighbor intersections, inspect production renders, and measure title/help/actio
 ink independently at default panel scale with an offscreen negative control.
 Preserve framebuffer bindings across first allocation and real resizing.
 [Evidence and failed attempts](../docs/audits/vr_menu_formatting_20261005.md).
+
+
+<a id="j7"></a>
+### J7 — Missing-attribute handling can dominate linear history scans
+
+Join/Pattern recovery inspected `op_kind` with `getattr(..., None)` on every pose entry. Pydantic variants without that field repeatedly entered missing-attribute handling, making 1,000-pose histories take about 3.6 ms instead of the frozen evaluator's 0.64–0.68 ms. Type discrimination and skipping an unchanged cluster copy reduced the cases to about 0.30–0.32 ms without changing reconstruction semantics.
+
+How to avoid: check the feature discriminator before accessing variant-specific fields in large scans. Retain independent output equivalence and paired latency gates; do not raise thresholds to accommodate avoidable dispatch overhead. See ISSUE-81 and `docs/audits/feature_history_20261014/evaluation_benchmark_p2_completion.json`.

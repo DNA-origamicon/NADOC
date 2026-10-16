@@ -70,7 +70,7 @@ def current_request_revision():
     return _request_revision.get()
 
 
-def set_request_revision(value: int) -> None:
+def set_request_revision(value: int | None) -> None:
     """Record the revision assigned to the current request's mutation."""
     _request_revision.set(value)
 
@@ -98,7 +98,7 @@ def current_request_feature_log_entry_id():
     return _last_feature_log_entry_id.get()
 
 
-def set_request_feature_log_entry_id(value: str) -> None:
+def set_request_feature_log_entry_id(value: str | None) -> None:
     """Record the id of the feature-log entry just created by the current
     request's mutation."""
     _last_feature_log_entry_id.set(value)

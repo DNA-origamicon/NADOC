@@ -1,0 +1,82 @@
+{
+  "date": "2026-10-15",
+  "scope": "Native pending ordinary overhang version CRUD; materialization stays separate",
+  "initial_red": {
+    "passed_fixture": 1,
+    "failed": 2,
+    "combined_run_seconds": 4.04,
+    "failures": [
+      "Ordinary route bypassed feature log",
+      "Closed native action lacked registered contract"
+    ]
+  },
+  "focused": {
+    "passed": 147,
+    "seconds": 6.56,
+    "warnings": 43,
+    "warning_type": "Existing FastAPI ORJSONResponse deprecation",
+    "targets": [
+      "test_part_pending_connection_versions",
+      "test_feature_recording_transactions",
+      "test_connection_versions_core",
+      "test_connection_versions",
+      "test_part_repair_document_boundaries",
+      "test_native_overhang_proof",
+      "test_part_recipe_edit"
+    ]
+  },
+  "properties": [
+    "Closed versioned overhang-bulk actions, stable identities/time and exact endpoints",
+    "Unchanged naming/sequence/bridge semantics and unrelated authoring",
+    "One row/undo/revision and failure rollback",
+    "Independent poisoned-recovery cold proof and upstream edit/cascade",
+    "Shared exact metadata policy preserves old no-reconcile/no-ligation-retry behavior; full validation/draft/CPD guards remain"
+  ],
+  "numerical_pins_changed": false,
+  "performance": "Route delta benchmark pending; no latency qualification",
+  "app_status": "NOT VERIFIED IN APP",
+  "remaining": [
+    "Bounded route overhead measurement",
+    "Separate applied-overhang lifecycle contract"
+  ],
+  "early_refusal": {
+    "initial_red": {
+      "failed": 7,
+      "controls_passed": 2,
+      "combined_run_seconds": 4.95,
+      "reason": "Missing/self endpoints reached undo copy and encoding"
+    },
+    "corrected_regression": {
+      "passed": 119,
+      "seconds": 5.1,
+      "warnings": 14,
+      "targets": [
+        "pending_connection_early_refusal",
+        "part_pending_connection_versions",
+        "feature_recording_transactions",
+        "connection_versions",
+        "connection_versions_core"
+      ]
+    },
+    "added_cases": 11,
+    "successful_path_single_undo_and_two_recovery_encodes_retained": true,
+    "remeasurement_pending": false,
+    "measurement": {
+      "report": "benchmark_pending_overhang_connections_prepared.json",
+      "cases": 5,
+      "repetitions_per_case": 9,
+      "all_lifecycle_and_atomic_refusal_checks_passed": true,
+      "cleanup": true,
+      "missing_endpoint_http_max_ms": 3.701,
+      "missing_endpoint_lock_max_ms": 0.22,
+      "missing_endpoint_snapshot_work": false,
+      "successful_edit_added_median_ms_range": [
+        0.36,
+        1.15
+      ],
+      "successful_patch_gc_tail_max_ms": 70.361,
+      "latency_qualified": false,
+      "qualification_reason": "Cheap refusal corrected; successful mutable-host history recording retains extra encodes and GC latency, with unchanged budgets"
+    }
+  }
+}

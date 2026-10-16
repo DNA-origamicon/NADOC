@@ -55,7 +55,7 @@ def test_fingerprint_changes_on_topology_edit():
 
 
 def test_fingerprint_ignores_display_only_fields():
-    """Display-only edits must NOT mark a job stale."""
+    """Preserve the legacy v4 digest; new complete receipts are a separate version."""
     d = make_6hb_design()
     fp = oxdna_design_fingerprint(d)
     recolored = d.copy_with(
@@ -65,6 +65,8 @@ def test_fingerprint_ignores_display_only_fields():
         ]
     )
     assert oxdna_design_fingerprint(recolored) == fp
+    # Known v4 coverage gap: cluster poses are consumed by current preparation.
+    # This compatibility assertion does not qualify them as display-only.
     moved_cluster = d.copy_with(
         cluster_transforms=[ClusterRigidTransform(translation=[10.0, 0.0, 0.0])]
     )

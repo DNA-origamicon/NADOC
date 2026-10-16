@@ -39,22 +39,8 @@ def _select_scaffold(design, scaffold) -> str:
     undefined base (the seamless scaffold path of a large bundle can exceed M13's 7249
     nt); an explicit name is used verbatim.  Raises if no library scaffold is long
     enough (the design needs a custom/tiled scaffold — out of scope here)."""
-    from backend.api import headless_build as hb
-    from backend.api import state as design_state
-    from backend.core.sequences import SCAFFOLD_LIBRARY
-    from backend.physics.oxdna_interface import count_undefined_bases
-
-    if scaffold is not None:
-        return scaffold
-    for name, _length, _seq in sorted(SCAFFOLD_LIBRARY, key=lambda t: t[1]):
-        hb.full_sequence(scaffold_name=name)
-        if count_undefined_bases(design_state.get_or_404())[0] == 0:
-            return name
-    longest = max(SCAFFOLD_LIBRARY, key=lambda t: t[1])
-    raise ValueError(
-        f"no library scaffold covers this design (longest is {longest[0]} at "
-        f"{longest[1]} nt) — it needs a custom/tiled scaffold"
-    )
+    from backend.api.part_refinement_commands import select_scaffold
+    return select_scaffold(design, scaffold)
 
 
 def build_sq_skip_design(
@@ -226,20 +212,8 @@ def build_sq_skip_from_design(base_design, skip_period, *, scaffold: str | None 
     applies the period-``skip_period`` pattern (``None`` => no skips), and re-sequences
     so the assigned bases match the new nucleotide count.  Topology only — display/
     physical state untouched."""
-    from backend.api import headless_build as hb
-    from backend.api import state as design_state
-    from backend.core.loop_skip_calculator import clear_all_loop_skips
-
-    with hb.scratch_session(LatticeType.SQUARE):
-        design_state.set_design(base_design.model_copy(deep=True))
-        d = clear_all_loop_skips(design_state.get_or_404())
-        if skip_period is not None:
-            d = apply_loop_skips(d, sq_lattice_periodic_skips(d, int(skip_period)))
-        design_state.set_design(d)
-        hb.full_sequence(
-            scaffold_name=_select_scaffold(design_state.get_or_404(), scaffold)
-        )
-        return design_state.get_or_404().model_copy(deep=True)
+    from backend.api.part_refinement_commands import build
+    return build("autorefine-skips", base_design, {"skip_period": skip_period, "scaffold": scaffold})
 
 
 def build_regional_skip_design(
@@ -297,26 +271,8 @@ def build_explicit_skip_from_design(
     and re-sequence — the apply path for a converged REGIONAL pattern (which is non-uniform
     and so cannot be re-derived from a single period).  ``skips_by_helix`` is
     ``{helix_id: [bp_index, ...]}``.  Clears existing loop/skip marks first."""
-    from backend.api import headless_build as hb
-    from backend.api import state as design_state
-    from backend.core.loop_skip_calculator import apply_loop_skips, clear_all_loop_skips
-    from backend.core.models import LoopSkip
-
-    with hb.scratch_session(LatticeType.SQUARE):
-        design_state.set_design(base_design.model_copy(deep=True))
-        d = clear_all_loop_skips(design_state.get_or_404())
-        mods = {
-            hid: [LoopSkip(bp_index=int(bp), delta=-1) for bp in bps]
-            for hid, bps in (skips_by_helix or {}).items()
-            if bps
-        }
-        if mods:
-            d = apply_loop_skips(d, mods)
-        design_state.set_design(d)
-        hb.full_sequence(
-            scaffold_name=_select_scaffold(design_state.get_or_404(), scaffold)
-        )
-        return design_state.get_or_404().model_copy(deep=True)
+    from backend.api.part_refinement_commands import build
+    return build("autorefine-skips", base_design, {"skips": skips_by_helix or {}, "scaffold": scaffold})
 
 
 def measure_skip_fields(job, workspace, design, reference):

@@ -6,7 +6,7 @@ from backend.core.cluster_reconcile import MutationReport
 from backend.core.models import ClusterRigidTransform
 
 
-def extrusion_clusters(before, after, origins, *, placement_helix_id=None):
+def extrusion_clusters(before, after, origins, *, placement_helix_id=None, identity_seed=None):
     """Fresh cells form one cluster; a mixed extrusion follows its continuation.
 
     Origins match lattice addresses, not neighboring cells. In-place growth also
@@ -44,7 +44,7 @@ def extrusion_clusters(before, after, origins, *, placement_helix_id=None):
     while f'Cluster {number}' in names:
         number += 1
     cluster = ClusterRigidTransform(
-        id=str(uuid5(NAMESPACE_URL, 'nadoc:extrusion:' + json.dumps([before.id, added]))),
+        id=str(uuid5(NAMESPACE_URL, 'nadoc:extrusion:' + json.dumps([str(identity_seed) if identity_seed else before.id, added]))),
         name=f'Cluster {number}', helix_ids=added, auto_created=False,
         is_default=False, **pose)
     clusters = [c.model_copy(update={'helix_ids': [h for h in c.helix_ids if h not in added]})

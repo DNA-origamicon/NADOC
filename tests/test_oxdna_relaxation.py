@@ -62,8 +62,10 @@ def test_stage_input_records_the_assigned_rng_seed():
     assert "seed = 314160\n" in text
 
 
-def test_copy_job_preserves_frozen_inputs_but_draws_a_new_seed(tmp_path, monkeypatch):
+@pytest.mark.parametrize("packaged_sequence_parameters", [False, True])
+def test_copy_job_preserves_frozen_inputs_but_draws_a_new_seed(tmp_path, monkeypatch, packaged_sequence_parameters):
     import backend.api.routes_oxdna as routes
+    from backend.core.oxdna_protocol import AVERAGE_SEQUENCE_FILE
 
     monkeypatch.setattr(routes, "_workspace", lambda: tmp_path)
     monkeypatch.setattr(routes, "random_oxdna_seed", lambda _exclude=(): 222222)
@@ -105,6 +107,9 @@ def test_copy_job_preserves_frozen_inputs_but_draws_a_new_seed(tmp_path, monkeyp
     (source_dir / "stages_spec.json").write_text(
         json.dumps([asdict(spec) for spec in specs])
     )
+    parameters = b"# Frozen historical package, deliberately distinct from installed defaults\nHYDR_A_A = 0.999\n"
+    if packaged_sequence_parameters:
+        (source_dir / AVERAGE_SEQUENCE_FILE).write_bytes(parameters)
 
     result = asyncio.run(routes.copy_oxdna_job(source.job_id))
     copied = OxdnaJob.load(result["job"]["job_id"], tmp_path)
@@ -169,6 +174,17 @@ def test_copy_job_preserves_frozen_inputs_but_draws_a_new_seed(tmp_path, monkeyp
     assert (copied.job_dir(tmp_path) / "topology.top").read_text() == "topology"
     assert (copied.job_dir(tmp_path) / "forces.txt").read_text() == "forces"
     assert not (copied.job_dir(tmp_path) / "1_mc_relax").exists()
+    copied_parameters = copied.job_dir(tmp_path) / AVERAGE_SEQUENCE_FILE
+    if packaged_sequence_parameters:
+        assert copied_parameters.read_bytes() == parameters
+        (source_dir / AVERAGE_SEQUENCE_FILE).write_bytes(b"later source replacement")
+        assert copied_parameters.read_bytes() == parameters
+        rendered = render_stage_input(copied_specs[1], "topology.top", "conf.dat",
+                                      sequence_parameters_name=str(copied_parameters))
+        assert f"seq_dep_file = {copied_parameters}\n" in rendered
+    else:
+        # Old jobs have no such evidence; copying must not invent historical bytes.
+        assert not copied_parameters.exists()
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────

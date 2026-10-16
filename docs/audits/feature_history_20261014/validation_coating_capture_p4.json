@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-15",
+  "scope": "Coating append compiler/evaluator behind closed public qualification gate; scalar atom copy isolation",
+  "focused_passed": 230,
+  "focused_files": {
+    "tests/test_part_coating_append.py": 65,
+    "tests/test_part_coating_evaluation.py": 23,
+    "tests/test_part_capture_copy.py": 12,
+    "tests/test_part_proof_engine.py": 14,
+    "tests/test_part_evaluation.py": 14,
+    "tests/test_part_evaluation_jobs.py": 10,
+    "tests/test_native_cpd_proof.py": 3,
+    "tests/test_native_duplex_relax_proof.py": 3,
+    "tests/test_part_evaluation_capture.py": 63,
+    "tests/test_part_evaluation_capture_jobs.py": 23
+  },
+  "qualification": {
+    "public_coating_append_enabled": false,
+    "copy_experiment_active_capture_refusals": "13/120",
+    "prepared_publications_correct": "150/150, independent of capture successes",
+    "real_complete_jobs": "5/5",
+    "real_cancel_case": "capture refused before worker start; no new cancellation evidence",
+    "source_change_case": "reaped and commit refused",
+    "session_cleanup_verified": true,
+    "latency_gate": "FAILED; same limits, GC enabled, failed evidence retained"
+  },
+  "review": "Independent review found atom field-dictionary alias gap; fixed and covered before final 12-test copy check. Nonempty hidden Pydantic state charging remains an inherited generic-capture limitation.",
+  "lint": "Changed Python Ruff and git diff --check passed. Prior global lint debt remains five unrelated F401 findings.",
+  "broad_validation": "No broad run with Archive unavailable. Latest selector dry run reported FAST and deferred FULL without an open dedicated session; dry run did not execute FAST.",
+  "harness_corrections": [
+    "Initial native test path guess did not exist; corrected to existing test_native_cpd_proof.py and test_native_duplex_relax_proof.py, both passed.",
+    "First direct benchmark invocation omitted PYTHONPATH and stopped before measurements; rerun with PYTHONPATH=. completed. The retained JSON is the completed run."
+  ],
+  "boundaries": "No molecular algorithm/constants, ordinary budgets, GC policy, frontend or assembly change. main.js LOC delta 0; no physical simulation or visual/headset check. P4/P5/P6 remain incomplete."
+}

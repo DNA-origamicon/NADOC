@@ -17,9 +17,13 @@ PDB_PATH = Path(__file__).resolve().parents[1] / 'data/proteins/1STP-assembly1.p
 
 @lru_cache(maxsize=2)
 def streptavidin_asset(mode='adsorption'):
+    return streptavidin_asset_from_text(PDB_PATH.read_text(), mode, source_filename=PDB_PATH.name)
+
+
+def streptavidin_asset_from_text(text, mode='adsorption', *, source_filename='1STP-assembly1.pdb'):
+    """Prepare the same biological assembly from an explicitly supplied source."""
     # In this biological-assembly file, four MODEL records are assembly copies,
     # not an NMR ensemble. Flatten explicitly before the normal first-model parser.
-    text = PDB_PATH.read_text()
     records, model = [], 0
     for line in text.splitlines():
         if line.startswith('MODEL'):
@@ -28,7 +32,7 @@ def streptavidin_asset(mode='adsorption'):
             if not 1 <= model <= 4:
                 raise ValueError('Unexpected 1STP biological assembly layout')
             records.append(line[:21] + 'ABCD'[model - 1] + line[22:])
-    asset = parse_protein_pdb('\n'.join(records), name='Streptavidin tetramer (1STP assembly 1)', source_filename=PDB_PATH.name)
+    asset = parse_protein_pdb('\n'.join(records), name='Streptavidin tetramer (1STP assembly 1)', source_filename=source_filename)
     if len({a.chain_id for a in asset.atoms if a.name == 'CA'}) != 4:
         raise ValueError('Streptavidin requires the complete biological tetramer')
     center = np.mean([[a.x, a.y, a.z] for a in asset.atoms if a.res_name != 'BTN'], axis=0)
@@ -53,6 +57,34 @@ def estimate_streptavidin(diameter_nm, footprint_nm2=40.0):
 
 
 def build_streptavidin_coating(diameter_nm, mode='adsorption', footprint_nm2=40., spacer_nm=None, seed=1, coverage_reference=None, count_override=None):
+    """Compatibility wrapper; source reads retain their original evaluation order."""
+    spacer, count, source = _coating_parameters(
+        diameter_nm, mode, footprint_nm2, spacer_nm, coverage_reference, count_override,
+        coverage_reader=lambda: json.loads((PDB_PATH.parent / 'streptavidin_coverage.json').read_text()))
+    return _pack_streptavidin_coating(diameter_nm, mode, footprint_nm2, spacer, seed,
+        coverage_reference, count_override, count, source, streptavidin_asset(mode))
+
+
+def coating_parameters_from_inputs(diameter_nm, mode='adsorption', footprint_nm2=40., spacer_nm=None,
+                                  coverage_reference=None, count_override=None, *, coverage_data=None):
+    """Resolve native request size before any atom parsing or placement work."""
+    return _coating_parameters(diameter_nm, mode, footprint_nm2, spacer_nm, coverage_reference,
+                              count_override, coverage_reader=lambda: coverage_data)
+
+
+def build_streptavidin_coating_from_inputs(diameter_nm, mode='adsorption', footprint_nm2=40., spacer_nm=None,
+                                         seed=1, coverage_reference=None, count_override=None, *,
+                                         asset, coverage_data=None):
+    """Run native packing from an admitted asset and optional publication data."""
+    spacer, count, source = coating_parameters_from_inputs(
+        diameter_nm, mode, footprint_nm2, spacer_nm, coverage_reference, count_override,
+        coverage_data=coverage_data)
+    return _pack_streptavidin_coating(diameter_nm, mode, footprint_nm2, spacer, seed,
+        coverage_reference, count_override, count, source, asset)
+
+
+def _coating_parameters(diameter_nm, mode, footprint_nm2, spacer_nm, coverage_reference, count_override,
+                        *, coverage_reader):
     if mode not in ('adsorption', 'biotin_tether'):
         raise ValueError('Unsupported streptavidin conjugation mode')
     spacer = (0.3 if mode == 'adsorption' else 4.0) if spacer_nm is None else spacer_nm
@@ -61,7 +93,7 @@ def build_streptavidin_coating(diameter_nm, mode='adsorption', footprint_nm2=40.
     count = estimate_streptavidin(diameter_nm, footprint_nm2)
     source = 'https://doi.org/10.1016/j.mee.2007.01.247'
     if coverage_reference is not None:
-        presets = json.loads((PDB_PATH.parent / 'streptavidin_coverage.json').read_text())['presets']
+        presets = coverage_reader()['presets']
         preset = next((p for p in presets if p['id'] == coverage_reference), None)
         if preset is None:
             raise ValueError('Unknown streptavidin coverage publication')
@@ -71,7 +103,12 @@ def build_streptavidin_coating(diameter_nm, mode='adsorption', footprint_nm2=40.
         if isinstance(count_override, bool) or not isinstance(count_override, int) or not 1 <= count_override <= 1500:
             raise ValueError('Tetramer count must be an integer from 1 to 1500')
         count = count_override
-    asset = streptavidin_asset(mode).model_copy(deep=True)
+    return spacer, count, source
+
+
+def _pack_streptavidin_coating(diameter_nm, mode, footprint_nm2, spacer, seed,
+                             coverage_reference, count_override, count, source, asset):
+    asset = asset.model_copy(deep=True)
     xyz = np.array([[a.x, a.y, a.z] for a in asset.atoms])
     anchor = next((np.array([a.x, a.y, a.z]) for a in asset.atoms if a.res_name == 'BTN' and a.name == 'C11'), None)
     tail = next((np.array([a.x, a.y, a.z]) for a in asset.atoms if a.res_name == 'BTN' and a.name == 'C10'), None)

@@ -19,14 +19,14 @@ export function bakePreparedAssemblyInstances(mesh) {
   const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
   const spec = preparedAssemblyMaterial(materials[0])
   if (!spec) return mesh
-  const { xform, visibility, local, positions, color, baseCount = 1, offset, radius } = spec
+  const { xform, visibility, local, positions, color, baseCount = 1, offset, radius, visibilityChannel } = spec
   const outer = xform.value.image.data, visible = visibility.value.image.data
   const inner = local?.value?.image.data, points = positions?.value?.image.data, colors = color?.value?.image.data
   const start = offset?.value ?? 0
   const rows = []
   for (let i = 0; i < mesh.count; i++) {
     const row = Math.floor(i / baseCount) + start
-    if (visible[row * 16] >= .5) rows.push(i)
+    if (visible[row * 16] >= .5 && (visibilityChannel == null || visible[row * 16 + visibilityChannel] >= .5)) rows.push(i)
   }
   const matrices = new Float32Array(rows.length * 16), rgb = colors ? new Float32Array(rows.length * 3) : null
   const a = new THREE.Matrix4(), b = new THREE.Matrix4()

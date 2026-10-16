@@ -89,6 +89,54 @@ def _curve(start, end, initial, final, outer_radius, max_strain):
     return sampled, tangent, strain
 
 
+def crossbar_path(a, b, junction, tail, central_bp, outer_radius, max_outer_strain):
+    """Evaluate the existing five-piece crossbar from its authored stations."""
+    a, b, junction = np.asarray(a), np.asarray(b), np.asarray(junction)
+    tangent = _unit(b - a)
+    outward_a, outward_b = _unit(a - junction), _unit(b - junction)
+    shoulder_a = junction - tangent * (central_bp / 2) * RISE
+    shoulder_b = junction + tangent * (central_bp / 2) * RISE
+    left, left_tangent, strain_a = _curve(
+        a, shoulder_a, -outward_a, tangent, outer_radius, max_outer_strain
+    )
+    right, right_tangent, strain_b = _curve(
+        shoulder_b, b, tangent, outward_b, outer_radius, max_outer_strain
+    )
+    initial_steps = 2 * tail + len(left) - 1 + central_bp + len(right) - 1
+    length_bp = initial_steps + 1
+    parts = [
+        _line(a + outward_a * tail * RISE, a, tail),
+        (left, left_tangent),
+        _line(shoulder_a, shoulder_b, central_bp),
+        (right, right_tangent),
+        _line(b, b + outward_b * tail * RISE, tail),
+    ]
+    points = np.concatenate(
+        [p if j == 0 else p[1:] for j, (p, _) in enumerate(parts)]
+    )
+    tangents = np.concatenate(
+        [t if j == 0 else t[1:] for j, (_, t) in enumerate(parts)]
+    )
+    if length_bp > 2016:
+        raise ValueError("A continuous crossbar exceeds the supported base-pair span.")
+    bp_a = tail
+    join_bp = tail + len(left) - 1 + central_bp // 2
+    bp_b = tail + len(left) - 1 + central_bp + len(right) - 1
+    path = dict(start=0, positions=points.tolist(),
+                frames=_frames(tangents).reshape(-1, 9).tolist())
+    return path, length_bp, bp_a, bp_b, join_bp, max(strain_a, strain_b)
+
+
+def extend_crossbar_path(path, left, right):
+    """Add the established terminal samples without moving existing stations."""
+    points, frames = np.array(path["positions"]), np.array(path["frames"]).reshape(-1, 3, 3)
+    before = points[0] - np.arange(left, 0, -1)[:, None] * RISE * frames[0, :, 2]
+    after = points[-1] + np.arange(1, right + 1)[:, None] * RISE * frames[-1, :, 2]
+    return {**path, "positions": np.concatenate([before, points, after]).tolist(),
+            "frames": np.concatenate([np.repeat(frames[:1], left, axis=0), frames,
+                                      np.repeat(frames[-1:], right, axis=0)]).reshape(-1, 9).tolist()}
+
+
 def crossbar_summary(
     source,
     centers,
@@ -211,43 +259,9 @@ def crossbar_summary(
             if np.linalg.norm(junction - start) < np.linalg.norm(junction - end)
             else "end"
         ] = (outer_radius + 1.0) / transverse + gap_nm
-        outward_a, outward_b = _unit(a - junction), _unit(b - junction)
-        shoulder_a = junction - tangent * (central_bp / 2) * RISE
-        shoulder_b = junction + tangent * (central_bp / 2) * RISE
-        left, left_tangent, strain_a = _curve(
-            a, shoulder_a, -outward_a, tangent, outer_radius, max_outer_strain
-        )
-        right, right_tangent, strain_b = _curve(
-            shoulder_b, b, tangent, outward_b, outer_radius, max_outer_strain
-        )
-        initial_steps = 2 * tail + len(left) - 1 + central_bp + len(right) - 1
-        length_bp = initial_steps + 1
-        parts = [
-            _line(a + outward_a * tail * RISE, a, tail),
-            (left, left_tangent),
-            _line(shoulder_a, shoulder_b, central_bp),
-            (right, right_tangent),
-            _line(b, b + outward_b * tail * RISE, tail),
-        ]
-        points = np.concatenate(
-            [p if j == 0 else p[1:] for j, (p, _) in enumerate(parts)]
-        )
-        tangents = np.concatenate(
-            [t if j == 0 else t[1:] for j, (_, t) in enumerate(parts)]
-        )
-        if length_bp > 2016:
-            raise ValueError(
-                "A continuous crossbar exceeds the supported base-pair span."
-            )
-        bp_a = tail
-        join_bp = tail + len(left) - 1 + central_bp // 2
-        bp_b = tail + len(left) - 1 + central_bp + len(right) - 1
+        path, length_bp, bp_a, bp_b, join_bp, strain = crossbar_path(
+            a, b, junction, tail, central_bp, outer_radius, max_outer_strain)
         identifier = f"branch_cluster_{index}"
-        path = dict(
-            start=0,
-            positions=points.tolist(),
-            frames=_frames(tangents).reshape(-1, 9).tolist(),
-        )
         sections.append(
             dict(
                 id=identifier,
@@ -256,6 +270,9 @@ def crossbar_summary(
                 position=[*arm_center, 0.0],
                 rotation=[0.0, 0.0, 0.0, 1.0],
                 path=path,
+                path_recipe=dict(endpoint_a_nm=a.tolist(), endpoint_b_nm=b.tolist(),
+                    junction_nm=junction.tolist(), tail_bp=tail, central_bp=central_bp,
+                    max_outer_strain=max_outer_strain, extra_left_bp=0, extra_right_bp=0),
             )
         )
         crossbars.append(
@@ -265,7 +282,7 @@ def crossbar_summary(
                 particle_indices=indices,
                 join_bp=join_bp,
                 join_interval=[join_bp - central_bp // 2, join_bp + central_bp // 2],
-                outer_strain=max(strain_a, strain_b),
+                outer_strain=strain,
             )
         )
         for particle_index, bp in zip(indices, (bp_a, bp_b)):

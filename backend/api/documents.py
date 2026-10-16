@@ -36,14 +36,12 @@ def _name_of(obj) -> str | None:
 
 
 def _doc_meta(doc_id: str) -> dict:
-    design = design_state.peek_design(doc_id)
+    design = design_state.design_metadata_for_doc(doc_id)
     assembly = assembly_state.peek_assembly(doc_id)
     return {
         "doc_id": doc_id,
         "is_default": doc_id == DEFAULT_DOC_ID,
-        "design": (
-            {"id": design.id, "name": _name_of(design)} if design is not None else None
-        ),
+        "design": design,
         "assembly": (
             {"id": getattr(assembly, "id", None), "name": _name_of(assembly)}
             if assembly is not None

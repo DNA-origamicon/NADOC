@@ -271,6 +271,9 @@ def compile_connectivity(
     # Grow groups in root-to-leaf order. The new daughter copies the parent's
     # complete shared interval before departing, including the exact frames.
     groups = {0: dict(start=0, p=[positions[root]], r=[frames[root]])}
+    # Retain the selected construction inputs separately from sampled geometry.
+    # Native feature replay evaluates these same segments; it never imports p/r.
+    recipes = {0: dict(start_bp=0, parent=None, shared_interval=None, segments=[])}
     stations = {root: 0}
     junctions = []
     terminal = []
@@ -297,12 +300,23 @@ def compile_connectivity(
                     interval=[stations[prev] - count, stations[prev] - 1],
                 )
             )
+            recipes[gid] = dict(
+                start_bp=stations[prev] - count,
+                parent=owners[prev],
+                shared_interval=[stations[prev] - count, stations[prev] - 1],
+                segments=[],
+            )
         group = groups[gid]
         a = (
             positions[prev] + (diffs[prev] if gid != owners[prev] else 0)
             if prev in diffs
             else positions[prev]
         )
+        recipes[gid]["segments"].append(dict(
+            start_nm=np.asarray(a).tolist(), end_nm=positions[nid].tolist(),
+            start_rotation=frames[prev].tolist(), end_rotation=frames[nid].tolist(),
+            straight_bp=junction_bp if children[nid] else 0,
+        ))
         p, r = segment(
             a,
             positions[nid],
@@ -363,6 +377,7 @@ def compile_connectivity(
         ],
         connectivity_faces=faces,
         connectivity_paths=paths,
+        connectivity_path_recipes=[recipes[gid] for gid in range(len(faces))],
         connectivity_junctions=junctions,
         connectivity_terminals=terminal,
         uniform_hb=request.uniform_hb,

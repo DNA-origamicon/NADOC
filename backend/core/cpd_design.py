@@ -459,7 +459,7 @@ def minimize_attachment_bonds(model, endpoints, placed):
     return dict(zip(keys, moved(solution))), report
 
 
-def _store_product_pose(design, endpoints, placed, source_positions=None):
+def _store_product_pose(design, endpoints, placed, source_positions=None, *, identity_seed=None):
     """Project the same unposed residue geometry for fresh and saved CPDs."""
     poses = list(design.nucleotide_transforms)
     stored = {}
@@ -492,7 +492,7 @@ def _store_product_pose(design, endpoints, placed, source_positions=None):
         desired = np.array([placed[f"{i}:{name}"] for name in names])
         r, t, _ = _proper_kabsch(original, desired)
         pose = NucleotideTransform(
-            id=existing.id if existing else str(uuid.uuid4()),
+            id=existing.id if existing else (str(uuid.uuid5(uuid.UUID(identity_seed), endpoint.key)) if identity_seed else str(uuid.uuid4())),
             kind="extra_base",
             crossover_id=endpoint.parsed.crossover_id,
             extra_base_k=endpoint.parsed.k,
@@ -509,7 +509,7 @@ def _store_product_pose(design, endpoints, placed, source_positions=None):
     return poses, stored
 
 
-def convert_extra_pair(design, base_keys, stereochemistry="cis-syn"):
+def convert_extra_pair(design, base_keys, stereochemistry="cis-syn", *, identity_seed=None):
     """Place the complete template by a proper rigid fit; commit both poses together."""
     if len(base_keys) != 2 or len(set(base_keys)) != 2:
         raise ValueError("Select exactly two distinct extra thymine bases.")
@@ -544,8 +544,9 @@ def convert_extra_pair(design, base_keys, stereochemistry="cis-syn"):
         for display, template in (("OP1", "O1P"), ("OP2", "O2P")):
             placed[f"{i}:{display}"] = placed[f"{i}:{template}"]
     placed, relaxation = minimize_attachment_bonds(model, endpoints, placed)
-    poses, stored = _store_product_pose(design, endpoints, placed)
+    poses, stored = _store_product_pose(design, endpoints, placed, identity_seed=identity_seed)
     lesion = PhotoproductJunction(
+        id=identity_seed or str(uuid.uuid4()),
         base_key_1=endpoints[0].key,
         base_key_2=endpoints[1].key,
         stereochemistry=stereochemistry,

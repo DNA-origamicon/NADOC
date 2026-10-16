@@ -8,7 +8,12 @@ import { recordPanelRequest } from '../ui/panel_loading.js'
 import { recordRequestDiagnostic } from '../perf/process_log.js'
 import { withGenerationProgress } from './generation_progress.js'
 import { createDocumentRequestScope } from './document_request_scope.js'
+import { initAssemblyInstanceDesignCache } from './assembly_instance_design_cache.js'
+import { recordAssemblyResponse } from './assembly_response_authority.js'
+import { readGeometryResponse } from '../viewer/native_geometry_binary.js'
 import { welcomeVisible } from '../shared/welcome_visibility.js'
+import { createPartRepairEndpoints } from './part_repair_endpoints.js'
+import { createPartRepairResponse } from './part_repair_response.js'
 
 const _documentRequests = createDocumentRequestScope()
 const _seekHistory = createSeekHistoryAcknowledgement()
@@ -53,7 +58,7 @@ function _signalDesignChanged({
 import { showToast } from '../ui/toast.js'
 import { showOpProgress, hideOpProgress, setOpProgressLabel } from '../ui/op_progress.js'
 import { notifyRequestFailure, notifyRequestSuccess, pokeProbe } from '../shared/connection_monitor.js'
-import { docHeaders, docHeadersFor, docKey, docKeyFor } from '../shared/doc_id.js'
+import { docHeaders, docHeadersFor, docKey, docKeyFor, getDocId } from '../shared/doc_id.js'
 import { createAssemblySimulationContext } from './simulation_context.js'
 import { activeOperationTiming, beginOperationTiming, finishOperationAfterRender, finishOperationTiming, withOperationTiming, markOperationTiming, whenOperationIdle } from '../perf/operation_timing.js'
 import { buildVRJobSnapshot, VR_JOB_SNAPSHOT_LIMIT } from '../scene/vr_job_snapshot.js'
@@ -70,6 +75,9 @@ const LS_MODE_KEY     = 'nadoc:mode'  // 'assembly' | 'part-edit:{id}' | null (s
 import { createDesignRevisionTracker } from './design_revisions.js'
 
 const _designRevisions = createDesignRevisionTracker()
+const _partRepairResponse = createPartRepairResponse({ store, revisions: _designRevisions, getDocId, syncDesign: _syncFromDesignResponse })
+export const partRepairAPI = createPartRepairEndpoints({ request: _request, headersFor: docHeadersFor,
+  acknowledge: _partRepairResponse.acknowledge, apply: _partRepairResponse.apply })
 const _assemblyRevisions = createDesignRevisionTracker()
 let _assemblyRevisionId = null
 
@@ -112,6 +120,7 @@ export function resetRevisionWatermark() {
   _designRevisions.reset()
   _assemblyRevisions.reset()
   _assemblyRevisionId = null
+  store.setState({ repairMetadata: null })
 }
 
 /** Latest observed server revision, including metadata, for optimistic concurrency. */
@@ -392,7 +401,7 @@ async function _ensureAssemblySimulation(path, { method = 'GET', timeoutMs = _RE
   })
 }
 
-export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true, skipSimulationPrepare = false, excludeFromTiming = false, deferGeometry = false } = {}) {
+export async function _request(method, path, body, { signal, suppressBusy = false, docId, timeoutMs = _REQUEST_TIMEOUT_MS, protectedRetry = true, skipSimulationPrepare = false, excludeFromTiming = false, deferGeometry = false, onError } = {}) {
   if (store.getState().featureSeekPending && method !== 'GET'
       && /^\/(design|assembly)(?:\/|$)/.test(path)
       && path !== '/design/loadouts/activate-editable'
@@ -507,7 +516,7 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
       status: r.status,
     }, operationTrace)
     notifyRequestSuccess()   // any HTTP response means the backend is reachable
-    json = await r.json().catch(() => null)
+    json = await readGeometryResponse(r)
     // Transport cancellation can race a completed response/body parse.
     if (retired()) { retireDisplay(); return null }
     markOperationTiming('response-parsed', undefined, operationTrace)
@@ -578,11 +587,12 @@ export async function _request(method, path, body, { signal, suppressBusy = fals
         const retryBody = path === '/design/features/seek'
           ? { ...body, preview_token: null, known_revision: null } : body
         return _request(method, path, retryBody, {
-          signal, suppressBusy, docId, timeoutMs, protectedRetry: false, deferGeometry,
+          signal, suppressBusy, docId, timeoutMs, protectedRetry: false, deferGeometry, onError,
         })
       }
     }
     store.setState({ lastError: { status: r.status, message: errorDetailToMessage(json?.detail, r.statusText) } })
+    onError?.(r.status, json?.detail ?? r.statusText)
     return null
   }
   store.setState({ lastError: null })
@@ -706,7 +716,7 @@ async function _applyDesignResponse(json, {
     json.design = _mergeFeatureLogPayloads(json.design, store.getState().currentDesign)
   }
   _designSyncTransient = transient
-  const updates = {}
+  const updates = _partRepairResponse.summaryPatch(json)
   if (json.design)     updates.currentDesign     = json.design
   if (json.validation) {
     updates.validationReport = json.validation
@@ -951,6 +961,8 @@ function _expandV2Instance(entry, sources) {
   for (const k of Object.keys(_PART_INSTANCE_DEFAULTS)) {
     if (k in entry) out[k] = entry[k]
   }
+  // Runtime freshness evidence, not an authored/persisted PartInstance field.
+  if (entry.src_key != null) Object.defineProperty(out, 'geometrySourceKey', { value: entry.src_key })
   return out
 }
 
@@ -996,6 +1008,7 @@ export function _syncFromAssemblyResponse(json) {
       }
       const snapshot = { design: _expandV2Assembly(json.assembly), revision: json.revision }
       if (!_assemblyRevisions.acceptDesign(snapshot)) return json
+      recordAssemblyResponse(snapshot.design, json)
       _setTimedState({ currentAssembly: snapshot.design }, json)
       persistAssembly()
     }
@@ -4460,8 +4473,8 @@ export async function patchInstance(id, body) {
   return _syncFromAssemblyResponse(json)
 }
 
-export async function batchPatchInstances(patches, { skipSync = false } = {}) {
-  const json = await _request('PATCH', '/assembly/instances/batch', { patches })
+export async function batchPatchInstances(patches, { skipSync = false, suppressBusy = false } = {}) {
+  const json = await _request('PATCH', '/assembly/instances/batch', { patches }, { suppressBusy })
   // skipSync: persist server-side without re-syncing the store (used when the
   // caller has already updated the store, to avoid a redundant renderer rebuild).
   if (skipSync) return json
@@ -4774,7 +4787,7 @@ export async function getJointConnectorFrames(jointId) {
 }
 
 export async function getAllConnectorFrames() {
-  return _request('GET', '/assembly/connector-frames')
+  return _request('GET', '/assembly/connector-frames', undefined, { suppressBusy: true })
 }
 
 export async function getJointDebugFrames(jointId) {
@@ -4826,15 +4839,18 @@ export async function redoAssembly() {
 }
 
 
-export async function getInstanceDesign(id) {
-  return _request('GET', `/assembly/instances/${id}/design`)
-}
+const _instanceDesigns = initAssemblyInstanceDesignCache({
+  getContext: () => ({ docId: docHeaders()['X-NADOC-Doc'], assembly: store.getState().currentAssembly }),
+  fetchDesign: (id, context) => _request('GET', `/assembly/instances/${id}/design`, undefined, context),
+})
+
+export function getInstanceDesign(id) { return _instanceDesigns.get(id) }
 
 // Compatibility export; the decoder is shared with prepared viewer packages.
 export { expandCompactNucleotides as _expandCompactNucleotides } from '../viewer/geometry_codec.js'
 
 export async function getInstanceGeometry(id) {
-  const json = await _request('GET', `/assembly/instances/${id}/geometry`)
+  const json = await _request('GET', `/assembly/instances/${id}/geometry?format=ndgb1`)
   // Decode compact wire format → flat nuc list (legacy shape the renderer
   // expects). Server always ships compact for this endpoint now.
   if (json && !json.nucleotides && json.nucleotides_compact) {
@@ -4888,7 +4904,7 @@ export async function getInstancePeriodicClosure(id, count = 4) {
  * so V8 doesn't carry N copies of identical nucleotide lists.
  */
 export async function getAssemblyGeometry() {
-  const json = await _request('GET', `/assembly/geometry`)
+  const json = await _request('GET', `/assembly/geometry?format=ndgb1`)
   if (!json) return json
   if (!json.sources) return json  // pre-Phase-3 shape passthrough (legacy)
 
@@ -4932,8 +4948,8 @@ export async function saveDesignAs(path, overwrite = true) {
 }
 
 /** Save current in-memory assembly to an explicit workspace path. */
-export async function saveAssemblyAs(path, overwrite = true) {
-  const json = await _request('POST', '/assembly/save', { path, overwrite })
+export async function saveAssemblyAs(path, overwrite = true, { suppressBusy = false } = {}) {
+  const json = await _request('POST', '/assembly/save', { path, overwrite }, { suppressBusy })
   return _syncFromAssemblyResponse(json)
 }
 

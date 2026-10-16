@@ -796,9 +796,14 @@ async def put_snapshot(
     length = int(request.headers.get("content-length", "0") or 0)
     if length > MAX_SNAPSHOT_BYTES:
         raise HTTPException(413, "Project snapshot exceeds the transfer limit.")
-    content = await request.body()
-    if len(content) > MAX_SNAPSHOT_BYTES:
-        raise HTTPException(413, "Project snapshot exceeds the transfer limit.")
+    # A missing/false Content-Length must not allocate an unbounded request.
+    from io import BytesIO
+    output = BytesIO()
+    async for chunk in request.stream():
+        if output.tell() + len(chunk) > MAX_SNAPSHOT_BYTES:
+            raise HTTPException(413, "Project snapshot exceeds the transfer limit.")
+        output.write(chunk)
+    content = output.getvalue()
     try:
         ProjectRevisionStore(_workspace()).ingest_snapshot(
             project_id, snapshot_sha256, content

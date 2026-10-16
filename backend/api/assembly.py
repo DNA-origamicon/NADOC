@@ -52,7 +52,7 @@ from typing import Optional
 
 import numpy as np
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import ORJSONResponse, Response
 from pydantic import BaseModel
 
 from backend.api import assembly_state
@@ -1423,7 +1423,7 @@ def _replace_instance_design(
     assembly_state.snapshot()
     updated = assembly.model_copy(update={"instances": new_instances})
     assembly_state.set_assembly_silent(updated)
-    _ageo.clear_geo_cache()
+    _ageo.invalidate_geo_cache_source(inst, _WORKSPACE_DIR)
     return assembly_state.get_or_404(), new_inst
 
 
@@ -1842,7 +1842,7 @@ def _part_geometry_signature(design) -> tuple:
 
 
 @router.post("/assembly/instances/{instance_id}/features/seek", status_code=200)
-def seek_instance_features(instance_id: str, body: InstanceSeekFeaturesRequest) -> dict:
+def seek_instance_features(instance_id: str, body: InstanceSeekFeaturesRequest) -> Response:
     """Replay one part instance's feature log and persist the resulting part design.
 
     Response includes the post-seek geometry inline (``nucleotides_compact``
@@ -1863,7 +1863,6 @@ def seek_instance_features(instance_id: str, body: InstanceSeekFeaturesRequest) 
     from backend.api import crud as crud_api
     from backend.api.crud import (
         _geometry_for_design,
-        _compact_geometry_from_nucleotides,
     )
     from backend.core.deformation import (
         deformed_helix_axes,
@@ -1910,17 +1909,14 @@ def seek_instance_features(instance_id: str, body: InstanceSeekFeaturesRequest) 
     crud_api._inject_joint_world_axes(
         design_dict
     )  # world cluster-joint axes (see get_instance_geometry)
-    key = _geo_cache_key(new_inst)
-    if key:
-        _geo_cache_set(
-            key, {"nucleotides": nucleotides, "helix_axes": axes, "design": design_dict}
-        )
+    key = _ageo.display_geo_cache_key(_geo_cache_key(new_inst))
+    geometry = _ageo.cache_display_geometry(key, nucleotides, axes, design_dict)
 
-    return {
+    return ORJSONResponse({
         **_assembly_response(updated_assembly),
         "design": design_dict,
         "geometry": {
-            "nucleotides_compact": _compact_geometry_from_nucleotides(nucleotides),
+            "nucleotides_compact": geometry["nucleotides_compact"],
             "helix_axes": axes,
         },
         # Path the frontend should mark as "self-saved" so the watchdog
@@ -1931,7 +1927,7 @@ def seek_instance_features(instance_id: str, body: InstanceSeekFeaturesRequest) 
         # manual Resolve click.
         "solve_status": solve_status,
         "auto_resolved": solve_status is not None,
-    }
+    })
 
 
 # ── Assembly feature-log seek / replay ───────────────────────────────────────
