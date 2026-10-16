@@ -101,7 +101,34 @@ class StrictPersistence:
             return True
 
     def reserve_empty(self, doc_id):
-        return self.cache.acquire_absent(doc_id)
+        # Serialize namespace creation itself with an already-admitted legacy
+        # writer, including when no typed directory exists yet on this host.
+        with self._writer():
+            return self.cache.acquire_absent(doc_id)
+
+    @contextmanager
+    def legacy_write(self, doc_id):
+        """Keep same-host legacy snapshots/writes before first typed creation.
+
+        No directory is introduced on compatibility-only hosts. If the typed
+        namespace exists, also exclude cooperating typed file writers. This is
+        not a cross-process lock for legacy writers or arbitrary external I/O.
+        """
+        name = _record_name(doc_id)
+        with self._writer():
+            try:
+                os.lstat(self.cache.directory)
+            except FileNotFoundError:
+                yield
+                return
+            with self.cache._directory() as directory:
+                try:
+                    os.stat(name, dir_fd=directory, follow_symlinks=False)
+                except FileNotFoundError:
+                    yield
+                    return
+                _refuse("This document has pending durable content; legacy bytes are preserved",
+                        "strict_cache_pending")
 
     def read_pending(self, doc_id):
         return self.cache.read(doc_id)

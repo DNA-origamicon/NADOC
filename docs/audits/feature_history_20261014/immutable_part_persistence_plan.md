@@ -42,6 +42,31 @@ cooperating-writer exclusion precede and span the short state publication. There
 is no persisted proof shortcut. Durable first creation and its compatibility
 autosave serialization remain the next prerequisite; public gates remain false.
 
+The durable-creation implementation now passes **19 parent-run cases in 7.14
+seconds**, including an actual spawned create/batch/flush/restart/restore/edit/
+flush/cold-verification lifecycle. The related sweep passed 260 cases and found
+four warning-text regressions; preserved data and independent assembly behavior
+were already correct. Restoring the actionable pending-recovery explanation
+yielded **27/27 persistence cases in 2.94 seconds**. The combined distinct coverage
+is **283 green cases**; see [creation validation](validation_immutable_creation_p6.json). It
+reserves the actual empty session, checks the absent-record lease before building,
+prepares outside the state lock, writes complete bytes, and holds a checked file
+lease through the exact session/revision/policy publication. Storage-owner changes
+also refuse. Failed publication leaves the file pending; it never deletes the
+record or recreates a closed reservation. The existing ephemeral internal test
+helper remains separate from this durable public-switch branch.
+
+Compatibility autosave now takes the configured persistence owner's nonblocking
+lease from snapshot admission through write/unlink. First typed namespace creation
+takes that same lease, so it cannot overtake an already-admitted legacy save or
+close cleanup. When the typed directory already exists, its advisory directory
+lock also excludes cooperating typed writers. When it is absent, ordinary legacy
+autosave introduces no new directory. This guarantee is scoped to the current
+single host owner; cross-process legacy writers and live workspace reconfiguration
+are not supported by this lease. Existing files are never migrated or discarded.
+Lifecycle correctness does not establish latency or process-memory qualification;
+the public switches remain false.
+
 ## Durable record
 
 Use a versioned sibling of the existing `.session` directory, never a child of

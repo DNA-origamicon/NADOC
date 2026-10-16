@@ -62,7 +62,9 @@ def create_empty_part(name="Untitled", lattice_type="HONEYCOMB"):
     from backend.api.doc_context import get_current_doc
 
     if IMMUTABLE_STRICT_STORAGE_ENABLED and policy.resolve(get_current_doc()).strict:
-        return create_immutable_empty(name, lattice_type)[0]
+        from backend.api.part_immutable_creation import create_durable_empty
+
+        return create_durable_empty(name, lattice_type)[0]
     with state._lock:
         return _create_empty_part_locked(name, lattice_type)
 

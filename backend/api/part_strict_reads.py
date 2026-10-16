@@ -60,11 +60,24 @@ class EmptyPartRequest(BaseModel):
 
 def create_registered_empty(body: EmptyPartRequest, request: Request):
     """Publish a host-built empty root and return only owned scalar metadata."""
-    from backend.api.part_publication_host import _create_empty_part_locked
+    from backend.api import part_publication_host as host
+
+    if host.IMMUTABLE_STRICT_STORAGE_ENABLED:
+        from backend.api.part_immutable_creation import create_durable_empty
+        from backend.api.part_immutable_revision import revision_metadata as sealed_metadata
+
+        context, current = require_context(request)
+        created, revision = create_durable_empty(body.name, body.lattice_type,
+            expected_policy_generation=context.policy_generation)
+        metadata = sealed_metadata(created)
+        return {"status": "created", "doc_id": context.doc_id, "design_id": metadata.design_id,
+            "revision": revision, "recipe_root": {"kind": "empty", "version": 1},
+            "name": metadata.name, "lattice_type": metadata.lattice_type,
+            "policy_generation": current.generation}
 
     with state._lock:
         context, current = _require_context_locked(request)
-        created = _create_empty_part_locked(body.name, body.lattice_type)
+        created = host._create_empty_part_locked(body.name, body.lattice_type)
         return {"status": "created", "doc_id": context.doc_id, "design_id": created.id,
             "revision": state._sessions[context.doc_id].revision,
             "recipe_root": {"kind": created.recipe_root.kind, "version": created.recipe_root.version},

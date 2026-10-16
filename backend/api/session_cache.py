@@ -329,25 +329,39 @@ def _flush(force: bool) -> None:
 
 def _write_doc(doc_id: str) -> tuple[int, int] | bool:
     d = _doc_dir(doc_id)
-    if _strict_persistence is not None:
-        from backend.core.part_command_errors import CommandContractError
+    owner = _strict_persistence
+    from backend.core.part_command_errors import CommandContractError
+    if owner is not None:
         try:
-            revision = _strict_persistence.write_if_immutable(doc_id)
+            revision = owner.write_if_immutable(doc_id)
         except CommandContractError as error:
             _log.warning("Strict part autosave pending for %r: %s; durable records preserved", doc_id[:80], error.code)
             _write_assembly_cache(doc_id, d)
             return False
         if revision is not None:
             return revision, _write_assembly_cache(doc_id, d)
-    if _strict_shadowed(doc_id):
-        _log.warning("Part autosave pending for %r: strict recovery must finish before legacy part writes; "
-                     "both records preserved", doc_id[:80])
+    try:
+        if owner is None:
+            return _write_legacy_doc(doc_id, d)
+        # Keep the typed absence decision through the snapshot and file write.
+        # First strict creation cannot overtake an admitted compatibility save.
+        with owner.legacy_write(doc_id):
+            return _write_legacy_doc(doc_id, d)
+    except CommandContractError as error:
+        explanation = ("strict recovery must finish before legacy part writes"
+                       if error.code == "strict_cache_pending" else str(error))
+        _log.warning("Part autosave pending for %r: %s; %s; legacy bytes preserved",
+                     doc_id[:80], error.code, explanation)
         _write_assembly_cache(doc_id, d)
         return False
+
+
+def _write_legacy_doc(doc_id: str, d: Path) -> tuple[int, int]:
+    """Caller holds the typed owner's legacy lease when one is configured."""
     design, design_revision = design_state.copy_doc_for_persist(doc_id)
     assembly, assembly_revision = assembly_state.copy_doc_for_persist(doc_id)
     if design is None and assembly is None:
-        _remove_doc_dir(doc_id)
+        _remove_known_files(d, (_DESIGN_FILE, _ASSEMBLY_FILE, _WORKSPACE_HEADS_FILE))
         return design_revision, assembly_revision
     d.mkdir(parents=True, exist_ok=True)
     _write_or_unlink(d / _DESIGN_FILE, design.to_json() if design is not None else None)
@@ -372,8 +386,21 @@ def _write_assembly_cache(doc_id: str, directory: Path) -> int:
 
 def _remove_doc_dir(doc_id: str) -> None:
     d = _doc_dir(doc_id)
-    names = ((_ASSEMBLY_FILE,) if _strict_shadowed(doc_id)
-             else (_DESIGN_FILE, _ASSEMBLY_FILE, _WORKSPACE_HEADS_FILE))
+    owner = _strict_persistence
+    if owner is None:
+        _remove_known_files(d, (_DESIGN_FILE, _ASSEMBLY_FILE, _WORKSPACE_HEADS_FILE))
+        return
+    from backend.core.part_command_errors import CommandContractError
+    try:
+        with owner.legacy_write(doc_id):
+            _remove_known_files(d, (_DESIGN_FILE, _ASSEMBLY_FILE, _WORKSPACE_HEADS_FILE))
+    except CommandContractError as error:
+        _log.warning("Part close cleanup refused for %r: %s; legacy bytes preserved", doc_id[:80], error.code)
+        _remove_known_files(d, (_ASSEMBLY_FILE,))
+
+
+def _remove_known_files(d: Path, names: tuple[str, ...]) -> None:
+    """Unlink only the caller's already admitted legacy names; no nested lease."""
     for name in names:
         (d / name).unlink(missing_ok=True)
     try:

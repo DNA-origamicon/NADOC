@@ -1,0 +1,47 @@
+{
+  "date": "2026-10-15",
+  "executor": "root, serialized focused validation",
+  "runs": [
+    {
+      "target": "tests/test_part_immutable_creation.py",
+      "passed": 19,
+      "failed": 0,
+      "seconds": 7.14,
+      "includes": "Actual spawned create, native batch, durable flush, restart, independent cold restore, native patch, second flush and cold verification"
+    },
+    {
+      "scope": "Related eight-file persistence, recovery, state, strict HTTP and cache sweep",
+      "passed": 260,
+      "failed": 4,
+      "seconds": 7.14,
+      "cause": "Four pending-record compatibility tests expected the prior actionable warning explaining that strict recovery must finish before legacy part writes",
+      "correction": "Retain that pending-recovery explanation alongside the structured code; data and independent-assembly assertions were already passing"
+    },
+    {
+      "target": "tests/test_part_immutable_persistence.py",
+      "passed": 27,
+      "failed": 0,
+      "seconds": 2.94
+    }
+  ],
+  "distinct_cases_green": 283,
+  "static": {"changed_python_ruff": "passed", "git_diff_check": "passed"},
+  "scope": "Durable first creation and same-host serialization with compatibility autosave/close cleanup; public immutable storage and registered batch gates remain false",
+  "properties": [
+    "Actual empty session is reserved before private preparation; close or replacement is never recreated at publication",
+    "File absence is admitted before preparation; existing pending records are preserved without building a replacement",
+    "Full durable bytes precede one exact sealed publication and remain pending after subsequent failures",
+    "Session object, revision, policy generation and persistence-owner identity are checked before write and publication",
+    "The checked file lease spans final publication; failed publication restores live session state and preserves pending durable bytes",
+    "Same-host nonblocking legacy lease spans snapshot and actual write/unlink, and first namespace creation uses the same owner lease",
+    "Ordinary compatibility autosave introduces no typed directory when none exists",
+    "The gated strict HTTP branch returns scalar metadata and exposes no mutable Design alias"
+  ],
+  "limits": [
+    "No cross-process guarantee for legacy writers or arbitrary external filesystem changes",
+    "Live workspace reconfiguration is not implemented; exact owner changes refuse creation or recovery",
+    "Durable lifecycle correctness is distinct from latency and total process-memory qualification",
+    "Existing private ephemeral creation helper remains for internal storage tests, separate from durable public creation"
+  ],
+  "artifacts": "Only pytest-owned temporary storage and small sentinel files; no application lifespan, production cache thread or user workspace"
+}
