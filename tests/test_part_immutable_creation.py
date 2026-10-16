@@ -1,5 +1,6 @@
 """Durable first creation is separate from ephemeral internal storage tests."""
 
+from contextlib import ExitStack
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -17,19 +18,18 @@ from backend.core.part_command_errors import CommandContractError
 @pytest.fixture
 def document(tmp_path, monkeypatch):
     doc = "__durable_create__" + uuid4().hex
-    token = doc_context.set_current_doc(doc)
     previous = policy.current_configuration()
-    host.configure(policy.HostPolicyConfiguration(default_mode=previous.default_mode,
-        document_modes={**previous.document_modes, doc: "registered_only"}))
     owner = StrictPersistence(tmp_path)
-    monkeypatch.setattr(session_cache, "_strict_persistence", owner)
-    monkeypatch.setattr(session_cache, "_session_dir", tmp_path / ".session")
-    try:
+    with ExitStack() as cleanup:
+        token = doc_context.set_current_doc(doc)
+        cleanup.callback(doc_context.reset_current_doc, token)
+        cleanup.callback(host.configure, previous)
+        cleanup.callback(state.drop_doc, doc)
+        host.configure(policy.HostPolicyConfiguration(default_mode=previous.default_mode,
+            document_modes={**previous.document_modes, doc: "registered_only"}))
+        monkeypatch.setattr(session_cache, "_strict_persistence", owner)
+        monkeypatch.setattr(session_cache, "_session_dir", tmp_path / ".session")
         yield doc, owner
-    finally:
-        state.drop_doc(doc)
-        host.configure(previous)
-        doc_context.reset_current_doc(token)
 
 
 def test_first_create_is_durable_before_one_sealed_publication(document, monkeypatch):

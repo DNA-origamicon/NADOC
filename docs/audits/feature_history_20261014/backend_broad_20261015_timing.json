@@ -1,0 +1,244 @@
+{
+  "per_test_budget_sec": 5.0,
+  "total_test_seconds": 814.7,
+  "n_tests": 14674,
+  "sim_running": false,
+  "sim_reason": "",
+  "slowest_files_15": [
+    {
+      "file": "tests/test_oxdna_relaxation.py",
+      "seconds": 56.9,
+      "n_tests": 248,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_cluster_join_api.py",
+      "seconds": 36.5,
+      "n_tests": 17,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_headless_oxdna_build.py",
+      "seconds": 30.7,
+      "n_tests": 45,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_vr_representation_loading.py",
+      "seconds": 23.7,
+      "n_tests": 14,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_part_coating_evaluation.py",
+      "seconds": 18.0,
+      "n_tests": 27,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_native_streptavidin_proof.py",
+      "seconds": 13.0,
+      "n_tests": 20,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_cluster_join_constraints.py",
+      "seconds": 12.5,
+      "n_tests": 14,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_headless_spec_build.py",
+      "seconds": 11.1,
+      "n_tests": 81,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_native_join_proof.py",
+      "seconds": 10.3,
+      "n_tests": 2,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_oxdna_surface.py",
+      "seconds": 10.0,
+      "n_tests": 33,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_atomistic_validation.py",
+      "seconds": 10.0,
+      "n_tests": 16,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_automation_harness.py",
+      "seconds": 9.9,
+      "n_tests": 136,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_streptavidin.py",
+      "seconds": 9.0,
+      "n_tests": 10,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_native_connectivity_proof.py",
+      "seconds": 8.3,
+      "n_tests": 2,
+      "n_slow_marked": 0
+    },
+    {
+      "file": "tests/test_native_placement_review_gate.py",
+      "seconds": 8.1,
+      "n_tests": 22,
+      "n_slow_marked": 0
+    }
+  ],
+  "violators": [
+    {
+      "nodeid": "tests/test_part_coating_evaluation.py::test_real_native_lifecycle_defaults_sources_and_input_replay",
+      "seconds": 6.37
+    },
+    {
+      "nodeid": "tests/test_part_coating_evaluation.py::test_real_spawned_creation_then_cold_repack_uses_only_pinned_sources",
+      "seconds": 5.9
+    },
+    {
+      "nodeid": "tests/test_native_join_proof.py::test_join_from_native_root_and_parameter_regeneration[False]",
+      "seconds": 5.41
+    },
+    {
+      "nodeid": "tests/test_part_repair_evaluation.py::test_spawned_explicit_duplex_engine_upgrade_preserves_old_revision_then_commits_and_cold_replays",
+      "seconds": 5.36
+    }
+  ],
+  "slowest_25": [
+    {
+      "nodeid": "tests/test_part_coating_evaluation.py::test_real_native_lifecycle_defaults_sources_and_input_replay",
+      "seconds": 6.37,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_part_coating_evaluation.py::test_real_spawned_creation_then_cold_repack_uses_only_pinned_sources",
+      "seconds": 5.9,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_native_join_proof.py::test_join_from_native_root_and_parameter_regeneration[False]",
+      "seconds": 5.41,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_part_repair_evaluation.py::test_spawned_explicit_duplex_engine_upgrade_preserves_old_revision_then_commits_and_cold_replays",
+      "seconds": 5.36,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_native_join_proof.py::test_join_from_native_root_and_parameter_regeneration[True]",
+      "seconds": 4.88,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_part_immutable_creation.py::test_real_durable_create_batch_flush_restart_restore_and_edit",
+      "seconds": 4.86,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_native_connectivity_proof.py::test_two_face_cold_replay_endpoint_edit_and_changed_shared_junction_repair",
+      "seconds": 4.25,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_native_connectivity_proof.py::test_registered_connectivity_pipeline_cold_replay_and_endpoint_edit",
+      "seconds": 4.06,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_generated_joined_proof.py::test_generated_joined_path_edit_regenerates_without_samples_or_recovery",
+      "seconds": 4.01,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_streptavidin.py::test_packing_is_deterministic_and_clash_checked[adsorption]",
+      "seconds": 3.96,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_native_streptavidin_proof.py::test_explicit_coating_upgrade_rebuilds_old_pin_even_after_coating_removal",
+      "seconds": 3.58,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_native_branch_proof.py::test_generated_branch_cold_replay_edit_and_undo",
+      "seconds": 3.37,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_cluster_join_api.py::test_native_save_reload_and_history_seek_restore_pose_with_route",
+      "seconds": 3.36,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_part_coating_evaluation.py::test_public_coating_submission_uses_real_worker_then_one_commit_and_cold_replay",
+      "seconds": 3.34,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_streptavidin.py::test_packing_is_deterministic_and_clash_checked[biotin_tether]",
+      "seconds": 3.24,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[hull-prism]",
+      "seconds": 3.17,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_part_batch_evaluation.py::test_spawned_mixed_batch_then_independent_cold_replay_survive_json_and_poisoned_recovery",
+      "seconds": 3.06,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_native_path_proof.py::test_cold_path_replay_and_radius_edit_rebuild_outputs_with_stable_identity",
+      "seconds": 2.98,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_cluster_join_constraints.py::test_api_preview_is_readonly_apply_realizes_every_bridge_and_undo_redo",
+      "seconds": 2.86,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[mrdna-fine]",
+      "seconds": 2.86,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[stick]",
+      "seconds": 2.77,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_native_recipe_determinism.py::test_routing_recipe_is_identical_across_python_hash_seeds",
+      "seconds": 2.72,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_native_duplex_relax_proof.py::test_spawned_relax_append_and_cold_proof_ignore_recovery_and_physical_output",
+      "seconds": 2.7,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[full]",
+      "seconds": 2.66,
+      "slow_marked": false
+    },
+    {
+      "nodeid": "tests/test_cluster_join_api.py::test_removing_join_restores_original_native_pose_and_routes[revert]",
+      "seconds": 2.66,
+      "slow_marked": false
+    }
+  ]
+}

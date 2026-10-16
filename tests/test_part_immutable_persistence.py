@@ -1,5 +1,6 @@
 """Typed autosave ownership; temporary files only, no lifespan/cache thread."""
 
+from contextlib import ExitStack
 from dataclasses import replace
 from types import SimpleNamespace
 from uuid import uuid4
@@ -17,22 +18,21 @@ from backend.core.part_history_contract import create_empty_part
 @pytest.fixture
 def document(tmp_path, monkeypatch):
     doc = "__persist__" + uuid4().hex
-    token = doc_context.set_current_doc(doc)
     previous = policy.current_configuration()
-    state.configure_part_publication_policy(policy.HostPolicyConfiguration(default_mode=previous.default_mode,
-        document_modes={**previous.document_modes, doc: "registered_only"}))
     owner = persistence.StrictPersistence(tmp_path)
-    monkeypatch.setattr(session_cache, "_session_dir", tmp_path / ".session")
-    monkeypatch.setattr(session_cache, "_strict_persistence", owner)
-    monkeypatch.setattr(session_cache, "_last_flushed", {})
-    monkeypatch.setattr(session_cache, "_seen", {})
-    monkeypatch.setattr(session_cache, "_stable_since", None)
-    try:
+    with ExitStack() as cleanup:
+        token = doc_context.set_current_doc(doc)
+        cleanup.callback(doc_context.reset_current_doc, token)
+        cleanup.callback(state.configure_part_publication_policy, previous)
+        cleanup.callback(state.drop_doc, doc)
+        state.configure_part_publication_policy(policy.HostPolicyConfiguration(default_mode=previous.default_mode,
+            document_modes={**previous.document_modes, doc: "registered_only"}))
+        monkeypatch.setattr(session_cache, "_session_dir", tmp_path / ".session")
+        monkeypatch.setattr(session_cache, "_strict_persistence", owner)
+        monkeypatch.setattr(session_cache, "_last_flushed", {})
+        monkeypatch.setattr(session_cache, "_seen", {})
+        monkeypatch.setattr(session_cache, "_stable_since", None)
         yield doc, owner
-    finally:
-        state.drop_doc(doc)
-        state.configure_part_publication_policy(previous)
-        doc_context.reset_current_doc(token)
 
 
 def initialize(doc, owner):

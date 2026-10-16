@@ -1,5 +1,6 @@
 """Strict jobs retain sealed sources while private work stays outside state lock."""
 
+from contextlib import ExitStack
 from time import monotonic
 from uuid import uuid4
 
@@ -21,22 +22,25 @@ from tests.test_part_registered_batch import gold, request as batch_request
 @pytest.fixture
 def document(monkeypatch):
     doc = f"__immutable_jobs__{uuid4()}"
-    token = doc_context.set_current_doc(doc)
     previous = policy.current_configuration()
-    host.configure(policy.HostPolicyConfiguration(default_mode=previous.default_mode,
-        document_modes={**previous.document_modes, doc: "registered_only"}))
-    source, _revision = host.create_immutable_empty("Strict evaluation")
     existing = set(jobs._jobs)
-    monkeypatch.setattr(part_batch_evaluation, "REGISTERED_BATCH_ENABLED", True)
-    try:
-        yield doc, source
-    finally:
+
+    def remove_owned_jobs():
         with jobs._lock:
             for identity in set(jobs._jobs) - existing:
                 jobs._jobs.pop(identity)
-        state.drop_doc(doc)
-        host.configure(previous)
-        doc_context.reset_current_doc(token)
+
+    with ExitStack() as cleanup:
+        token = doc_context.set_current_doc(doc)
+        cleanup.callback(doc_context.reset_current_doc, token)
+        cleanup.callback(host.configure, previous)
+        cleanup.callback(state.drop_doc, doc)
+        cleanup.callback(remove_owned_jobs)
+        host.configure(policy.HostPolicyConfiguration(default_mode=previous.default_mode,
+            document_modes={**previous.document_modes, doc: "registered_only"}))
+        source, _revision = host.create_immutable_empty("Strict evaluation")
+        monkeypatch.setattr(part_batch_evaluation, "REGISTERED_BATCH_ENABLED", True)
+        yield doc, source
 
 
 def body(source):

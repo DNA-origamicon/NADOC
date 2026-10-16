@@ -1,6 +1,7 @@
 """Exclusive immutable session content without copying or an alternate truth."""
 
 from collections import deque
+from contextlib import ExitStack
 from threading import Event
 from time import monotonic
 from uuid import uuid4
@@ -18,16 +19,15 @@ from backend.core.part_verification_capture import CaptureLimit
 @pytest.fixture
 def document():
     doc = f"__immutable__{uuid4()}"
-    token = doc_context.set_current_doc(doc)
     previous = policy.current_configuration()
-    state.configure_part_publication_policy(policy.HostPolicyConfiguration(
-        document_modes={**previous.document_modes, doc: "registered_only"}, default_mode=previous.default_mode))
-    try:
+    with ExitStack() as cleanup:
+        token = doc_context.set_current_doc(doc)
+        cleanup.callback(doc_context.reset_current_doc, token)
+        cleanup.callback(state.configure_part_publication_policy, previous)
+        cleanup.callback(state.drop_doc, doc)
+        state.configure_part_publication_policy(policy.HostPolicyConfiguration(
+            document_modes={**previous.document_modes, doc: "registered_only"}, default_mode=previous.default_mode))
         yield doc
-    finally:
-        state.drop_doc(doc)
-        state.configure_part_publication_policy(previous)
-        doc_context.reset_current_doc(token)
 
 
 def create():

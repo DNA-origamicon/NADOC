@@ -1,5 +1,6 @@
 """Strict embedding policy refuses generic writes before callbacks or copies."""
 
+from contextlib import ExitStack
 from threading import Event
 from time import monotonic
 from uuid import uuid4
@@ -15,19 +16,18 @@ from backend.core.part_history_contract import create_empty_part
 @pytest.fixture
 def document():
     doc = f"__strict_publication__{uuid4()}"
-    token = doc_context.set_current_doc(doc)
     previous = policy.current_configuration()
     source = create_empty_part("Strict source", "HONEYCOMB")
-    state.load_design(source)
-    state.configure_part_publication_policy(policy.HostPolicyConfiguration(
-        default_mode=previous.default_mode, document_modes={**previous.document_modes, doc: "registered_only"}))
-    session = state._sessions[doc]
-    try:
+    with ExitStack() as cleanup:
+        token = doc_context.set_current_doc(doc)
+        cleanup.callback(doc_context.reset_current_doc, token)
+        cleanup.callback(state.drop_doc, doc)
+        cleanup.callback(state.configure_part_publication_policy, previous)
+        state.load_design(source)
+        state.configure_part_publication_policy(policy.HostPolicyConfiguration(
+            default_mode=previous.default_mode, document_modes={**previous.document_modes, doc: "registered_only"}))
+        session = state._sessions[doc]
         yield doc, session, source
-    finally:
-        state.configure_part_publication_policy(previous)
-        state.drop_doc(doc)
-        doc_context.reset_current_doc(token)
 
 
 def denied(call):

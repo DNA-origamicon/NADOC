@@ -1,0 +1,130 @@
+{
+  "date": "2026-10-15",
+  "purpose": "Stopping point requested by user. No additional phase implementation or gate activation.",
+  "production_checkpoint": "8366ac42",
+  "production_checkpoint_pushed": true,
+  "work_in_progress_branch": "checkpoint/feature-history-pause-20261015",
+  "work_in_progress_is_release_qualified": false,
+  "goal_status": "paused; not complete",
+  "scope": "Standard parts only; assemblies deferred.",
+  "phase_status": {
+    "P0-P3": "Recorded implementation exit evidence for the scoped foundation/native DNA work; not universal feature coverage.",
+    "P4": "Partial: bounded native/import/attachment/connection families implemented; remaining applied connection contracts, imports and physical provenance remain open.",
+    "P5": "Partial: typed repair drafts and selected repair/comparison paths implemented; broader families and app/VR validation remain open.",
+    "P6": "Partial: registered transactions and immutable worker/storage foundation implemented; public rollout, full route coverage and performance/storage qualification remain open."
+  },
+  "checkpoint_contents": [
+    "Six existing fixture cleanup boundaries hardened with ExitStack; independently checked below.",
+    "44-case oxDNA owned-preparation dossier: three fixture-isolation tests checked; proposed production boundary absent.",
+    "36-case finite linker Apply dossier: implementation absent; no runtime qualification.",
+    "24-case nanoparticle application rename dossier: implementation pending; no runtime qualification.",
+    "Nanoparticle application benchmark script: static review and Ruff only; not executed.",
+    "Previously completed default immutable HTTP benchmark output and broad backend timing evidence."
+  ],
+  "focused_checkpoint_validation": {
+    "scope": "Six changed existing fixture test modules plus three new fixture-isolation tests.",
+    "passed": 182,
+    "failed": 0,
+    "duration_seconds": 12.63,
+    "command": "just validate-safe scripts/test_guard.sh test-focused 0 focused -- uv run pytest [six changed immutable/publication modules] [three oxDNA fixture-isolation nodes] -q --tb=short --durations=5",
+    "ruff": "All ten changed/new Python files passed.",
+    "does_not_qualify": "Remaining test-first dossiers, new benchmark script, broad backend regression suite, live application."
+  },
+  "previous_broad_backend_run": {
+    "command": "just test-smart",
+    "decision": "FAST (fast suite only)",
+    "passed": 14486,
+    "failed": 127,
+    "errors": 44,
+    "skipped": 21,
+    "duration_seconds": 233.98,
+    "status": "NOT GREEN; not release qualification.",
+    "interpretation": "Test-first oxDNA fixture was edited while the run was collecting/executing; a failing constructor could leak document context. Corrected fixture isolation is now focused-tested, but the extent of cascading failures is not yet established. Do not label remaining failures baseline without evidence.",
+    "other_debt": "Missing CPD artifacts and other environment/baseline failures require individual attribution. Four unmarked slow integration cases await classification through the existing slow-test workflow; thresholds remain unchanged.",
+    "deferred_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+    "timing_evidence": "backend_broad_20261015_timing.json"
+  },
+  "completed_default_immutable_benchmark_review": {
+    "source": "benchmark_immutable_part_jobs_preservation_repeated.json",
+    "new_execution_at_stop": false,
+    "successful_publications": 120,
+    "case_reviews": [
+      {
+        "name": "32-gold-commands",
+        "checks": {
+          "completed_30_publications": true,
+          "cold_proof": true,
+          "start_http": true,
+          "concurrent_start_read": true,
+          "commit_http": true,
+          "concurrent_commit_read": true,
+          "job_completion": true,
+          "no_source_materialization": true,
+          "natural_gc_events_not_dropped": true,
+          "lock_holds": true
+        },
+        "all_declared_fixture_checks_pass": true
+      },
+      {
+        "name": "mixed-prefix-37-rows-plus-27-commands",
+        "checks": {
+          "completed_30_publications": true,
+          "cold_proof": true,
+          "start_http": true,
+          "concurrent_start_read": true,
+          "commit_http": true,
+          "concurrent_commit_read": true,
+          "job_completion": true,
+          "no_source_materialization": true,
+          "natural_gc_events_not_dropped": true,
+          "lock_holds": true
+        },
+        "all_declared_fixture_checks_pass": true
+      },
+      {
+        "name": "public-50000-authored-residues",
+        "checks": {
+          "completed_30_publications": true,
+          "cold_proof": true,
+          "start_http": true,
+          "concurrent_start_read": true,
+          "commit_http": true,
+          "concurrent_commit_read": true,
+          "job_completion": true,
+          "no_source_materialization": true,
+          "natural_gc_events_not_dropped": true,
+          "lock_holds": true
+        },
+        "all_declared_fixture_checks_pass": true
+      },
+      {
+        "name": "public-63-source-rows-plus-one",
+        "checks": {
+          "completed_30_publications": true,
+          "cold_proof": true,
+          "start_http": true,
+          "concurrent_start_read": true,
+          "commit_http": true,
+          "concurrent_commit_read": true,
+          "job_completion": true,
+          "no_source_materialization": true,
+          "natural_gc_events_not_dropped": true,
+          "lock_holds": true
+        },
+        "all_declared_fixture_checks_pass": true
+      }
+    ],
+    "cleanup_verified": true,
+    "overall_public_latency_qualified": false,
+    "limits": "Four finite fixtures, 30 samples each; persistence excluded, RSS sampling off, maximum result-slot occupancy unqualified. Natural GC tails retained; no broad responsiveness or app certification."
+  },
+  "next_work_in_order": [
+    "Keep source/test snapshots frozen during validation; establish expected red results for the three prepared dossiers before implementation.",
+    "Implement and validate remaining finite connection, applied NP rename, and bounded physical preparation ownership slices with checkpointed contracts.",
+    "Classify the four intentional slow integration cases through the existing workflow; do not raise budgets.",
+    "Rerun affected failure groups and broad permitted regressions after source/test files are stable; attribute each residual failure.",
+    "Complete remaining P4-P6 coverage and public/live performance, persistence and desktop/VR gates before enabling release switches."
+  ],
+  "application_status": "NOT VERIFIED IN APP; desktop/VR manual validation remains pending.",
+  "stopping_boundary": "No new production changes, public gate activation, simulation or assembly work. No task-owned validation processes remained after the final focused check."
+}

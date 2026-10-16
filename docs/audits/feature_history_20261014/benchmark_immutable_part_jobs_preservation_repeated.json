@@ -1,0 +1,2541 @@
+{
+  "scope": "Staged immutable actual strict HTTP batch/verify/commit; persistence excluded",
+  "repeats": 30,
+  "completed": true,
+  "failure": null,
+  "diagnostics": true,
+  "allocation_tracing": false,
+  "rss_sampling": false,
+  "retention_stress": false,
+  "result_retention_scope": "Two occupied native result slots report actual sizes; this does not qualify two maximum-size 16 MB results.",
+  "latency_qualified": false,
+  "memory_scope": "Traced parent Python allocations exclude native/worker allocations. Linux RSS high-water includes fixture creation and all prior cases; not an incremental or hard memory bound.",
+  "lifecycle_rss_scope": "Optional Linux /proc sampling starts after retained source/undo installation and ends after commit, before cold proof. Stress includes preparation of a retained ready result and streaming result-size measurement. Only explicitly hooked direct worker PIDs with matching birth ticks count; unrelated descendants and multiprocessing resource trackers are excluded. The baseline includes all already retained benchmark fixtures. Sequential parent+child RSS reads double-count shared pages and may miss short peaks or GIL-blocked intervals; actual maximum gaps are reported. The +256 MiB allowance is an observed engineering target, not a heap guarantee.",
+  "rss_high_water_kib": {
+    "parent": 138560,
+    "children": 138500
+  },
+  "sample_retention": "All aggregate metrics plus refusals, incomplete publications, gen-2 GC samples and phase HTTP/lock/light maxima; other successful per-request arrays are omitted.",
+  "session_cleanup_verified": true,
+  "cleanup_errors": [],
+  "cases": [
+    {
+      "name": "32-gold-commands",
+      "completed": true,
+      "samples": [
+        {
+          "iteration": 0,
+          "capture": {
+            "http_ms": 8.09550499980105,
+            "baseline_revision_http_ms": 2.87010600004578,
+            "revision_http_ms": [
+              3.7401129957288504,
+              5.379657995945308
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.029233997338451445,
+              0.07893200381658971
+            ],
+            "capture_lock_wait_ms": [
+              0.0012669988791458309,
+              0.0007799972081556916
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.006529000529553741,
+              0.01637200330151245,
+              0.006237001798581332,
+              0.009647003025747836
+            ],
+            "light_request_lock_wait_ms": [
+              0.0013639946701005101,
+              0.0010709991329349577,
+              0.0009740033419802785,
+              0.0007799972081556916
+            ],
+            "gc": {
+              "overlap_ms": 0.10124700202140957,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1356.4442399947438,
+          "publication": {
+            "http_ms": 23.3000579974032,
+            "baseline_revision_http_ms": 1.0944270034087822,
+            "revision_http_ms": [
+              5.25414600269869,
+              16.243338999629486,
+              2.5169580039801076
+            ],
+            "overlapping_revision_requests": 3,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.004385001375339925,
+              1.477491001423914
+            ],
+            "publication_lock_wait_ms": [
+              0.001072003215085715,
+              0.0005850015440955758
+            ],
+            "light_request_lock_hold_ms": [
+              0.006139001925475895,
+              0.011889002053067088,
+              0.007795002602506429,
+              0.014520002878271043,
+              0.008868002623785287,
+              0.013252996723167598
+            ],
+            "light_request_lock_wait_ms": [
+              0.001072003215085715,
+              0.0008770002750679851,
+              0.0016569974832236767,
+              0.0009739960660226643,
+              0.0010719959391281009,
+              0.0012660020729526877
+            ],
+            "gc": {
+              "overlap_ms": 0.2153570021619089,
+              "events": 3,
+              "dropped_events": 0,
+              "generations": {
+                "0": 3,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 453420,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 17,
+          "capture": {
+            "http_ms": 8.734764000109863,
+            "baseline_revision_http_ms": 1.6170580056495965,
+            "revision_http_ms": [
+              7.521165993239265,
+              3.1395109981531277
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.03945900243707001,
+              0.02932599454652518
+            ],
+            "capture_lock_wait_ms": [
+              0.0017540005501359701,
+              0.0006820046110078692
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.009937997674569488,
+              0.026793000870384276,
+              0.008087001333478838,
+              0.018512000679038465
+            ],
+            "light_request_lock_wait_ms": [
+              0.0015590048860758543,
+              0.003897999704349786,
+              0.0013639946701005101,
+              0.0010719959391281009
+            ],
+            "gc": {
+              "overlap_ms": 0.21571200340986252,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1337.916643002245,
+          "publication": {
+            "http_ms": 20.716113998787478,
+            "baseline_revision_http_ms": 1.374650004436262,
+            "revision_http_ms": [
+              6.100724000134505,
+              15.098939999006689
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.003701999958138913,
+              0.051736002205871046
+            ],
+            "publication_lock_wait_ms": [
+              0.001072003215085715,
+              0.0011689990060403943
+            ],
+            "light_request_lock_hold_ms": [
+              0.006431000656448305,
+              0.01110800076276064,
+              0.007307004125323147,
+              0.010327996278647333
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009739960660226643,
+              0.0008760034688748419,
+              0.0012669988791458309,
+              0.0006820046110078692
+            ],
+            "gc": {
+              "overlap_ms": 0.3185989990015514,
+              "events": 3,
+              "dropped_events": 0,
+              "generations": {
+                "0": 3,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 453420,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 21,
+          "capture": {
+            "http_ms": 5.945021002844442,
+            "baseline_revision_http_ms": 1.3640350007335655,
+            "revision_http_ms": [
+              4.961801001627464,
+              2.4303760001203045
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.02864899579435587,
+              0.022510001144837588
+            ],
+            "capture_lock_wait_ms": [
+              0.0013640019460581243,
+              0.00048700167099013925
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.009841998689807951,
+              0.014908997400198132,
+              0.011401003575883806,
+              0.014908997400198132
+            ],
+            "light_request_lock_wait_ms": [
+              0.01734500256134197,
+              0.001072003215085715,
+              0.0015589976101182401,
+              0.0011689990060403943
+            ],
+            "gc": {
+              "overlap_ms": 0.10007600212702528,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1363.618752999173,
+          "publication": {
+            "http_ms": 22.853091002616566,
+            "baseline_revision_http_ms": 1.0655610021785833,
+            "revision_http_ms": [
+              4.798289002792444,
+              18.66890100063756
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.0038000071072019637,
+              0.08848000288708135
+            ],
+            "publication_lock_wait_ms": [
+              0.0011689990060403943,
+              0.002143999154213816
+            ],
+            "light_request_lock_hold_ms": [
+              0.006333997589536011,
+              0.010718998964875937,
+              0.021924999600742012,
+              0.020756000594701618
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008770002750679851,
+              0.0008770002750679851,
+              0.002631000825203955,
+              0.001072003215085715
+            ],
+            "gc": {
+              "overlap_ms": 0.3466120033408515,
+              "events": 3,
+              "dropped_events": 0,
+              "generations": {
+                "0": 3,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 453420,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        }
+      ],
+      "errors": [],
+      "source_sealing_ms": 7.698604000324849,
+      "source_bytes": 141158,
+      "source_rows": 32,
+      "source_recovery_bytes": 113436,
+      "retained_source_and_undo_bytes": 141158,
+      "retention_stress": null,
+      "expected_candidate_rows": 64,
+      "candidate_bytes": 312262,
+      "candidate_rows": 64,
+      "cold_verification": {
+        "status": "verified",
+        "native_editable": true,
+        "issues": []
+      },
+      "capture": {
+        "http": {
+          "count": 30,
+          "p50_ms": 5.399843001214322,
+          "p95_ms": 8.09550499980105,
+          "max_ms": 8.734764000109863
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 1.1886860011145473,
+          "p95_ms": 1.83800800004974,
+          "max_ms": 2.87010600004578
+        },
+        "revision_http": {
+          "count": 56,
+          "p50_ms": 4.033992998301983,
+          "p95_ms": 5.665762000717223,
+          "max_ms": 7.521165993239265
+        },
+        "capture_lock_hold": {
+          "count": 60,
+          "p50_ms": 0.02241100446553901,
+          "p95_ms": 0.037899000744801015,
+          "max_ms": 0.07893200381658971
+        },
+        "capture_lock_wait": {
+          "count": 60,
+          "p50_ms": 0.001071999577106908,
+          "p95_ms": 0.0016569974832236767,
+          "max_ms": 0.001948996214196086
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 112,
+          "p50_ms": 0.01052200241247192,
+          "p95_ms": 0.01978199725272134,
+          "max_ms": 0.03196300531271845
+        },
+        "light_request_lock_wait": {
+          "count": 112,
+          "p50_ms": 0.0009740033419802785,
+          "p95_ms": 0.002143002348020673,
+          "max_ms": 0.01734500256134197
+        },
+        "overlapping_revision_requests": 30,
+        "gc_overlap": {
+          "count": 30,
+          "p50_ms": 0.09578000026522204,
+          "p95_ms": 0.28146700060460716,
+          "max_ms": 0.9066470011021011
+        },
+        "dropped_gc_events": 0
+      },
+      "publication": {
+        "http": {
+          "count": 30,
+          "p50_ms": 17.89300599921262,
+          "p95_ms": 22.853091002616566,
+          "max_ms": 23.3000579974032
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 1.1292224990029354,
+          "p95_ms": 1.4253139961510897,
+          "max_ms": 1.6614229971310124
+        },
+        "revision_http": {
+          "count": 61,
+          "p50_ms": 6.100724000134505,
+          "p95_ms": 15.884110995102674,
+          "max_ms": 18.66890100063756
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 60,
+          "p50_ms": 0.02518600012990646,
+          "p95_ms": 0.07940499926917255,
+          "max_ms": 1.477491001423914
+        },
+        "publication_lock_wait": {
+          "count": 60,
+          "p50_ms": 0.0011689990060403943,
+          "p95_ms": 0.0015590048860758543,
+          "max_ms": 0.0025330009520985186
+        },
+        "light_request_lock_hold": {
+          "count": 122,
+          "p50_ms": 0.009450501238461584,
+          "p95_ms": 0.021043997548986226,
+          "max_ms": 0.03292999463155866
+        },
+        "light_request_lock_wait": {
+          "count": 122,
+          "p50_ms": 0.0009739960660226643,
+          "p95_ms": 0.0016569974832236767,
+          "max_ms": 0.002631000825203955
+        },
+        "overlapping_revision_requests": 61,
+        "gc_overlap": {
+          "count": 30,
+          "p50_ms": 0.2606464986456558,
+          "p95_ms": 0.35772200499195606,
+          "max_ms": 0.42429200402693823
+        },
+        "dropped_gc_events": 0
+      },
+      "private_materialization": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "private_sealing": {
+        "count": 30,
+        "p50_ms": 11.762113503209548,
+        "p95_ms": 15.0013590027811,
+        "max_ms": 15.929234999930486
+      },
+      "job_completion": {
+        "count": 30,
+        "p50_ms": 1305.241609999939,
+        "p95_ms": 1532.992173997627,
+        "max_ms": 1617.9476069955854
+      },
+      "sample_count": 30,
+      "successful_publications": 30
+    },
+    {
+      "name": "mixed-prefix-37-rows-plus-27-commands",
+      "completed": true,
+      "samples": [
+        {
+          "iteration": 0,
+          "capture": {
+            "http_ms": 6.048301002010703,
+            "baseline_revision_http_ms": 1.7101179983001202,
+            "revision_http_ms": [
+              4.652674004319124,
+              2.9854230015189387
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.025719993573147804,
+              0.019972001609858125
+            ],
+            "capture_lock_wait_ms": [
+              0.0013640019460581243,
+              0.0003899986040778458
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.006429996574297547,
+              0.01188599708257243,
+              0.006235997716430575,
+              0.01666000025579706
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009740033419802785,
+              0.001072003215085715,
+              0.0008770002750679851,
+              0.0009739960660226643
+            ],
+            "gc": {
+              "overlap_ms": 0.09109399979934096,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1313.448567998421,
+          "publication": {
+            "http_ms": 18.696530001761857,
+            "baseline_revision_http_ms": 1.5934990005916916,
+            "revision_http_ms": [
+              5.193680997763295,
+              13.914083996496629
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.0046770001063123345,
+              0.09343199781142175
+            ],
+            "publication_lock_wait_ms": [
+              0.0011689990060403943,
+              0.0014610050129704177
+            ],
+            "light_request_lock_hold_ms": [
+              0.018024002201855183,
+              0.01519899524282664,
+              0.01042399526340887,
+              0.014905999705661088
+            ],
+            "light_request_lock_wait_ms": [
+              0.0021429950720630586,
+              0.0009740033419802785,
+              0.0016560006770305336,
+              0.0008770002750679851
+            ],
+            "gc": {
+              "overlap_ms": 0.2934479925897904,
+              "events": 3,
+              "dropped_events": 0,
+              "generations": {
+                "0": 3,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 358954,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 1,
+          "capture": {
+            "http_ms": 5.5521440008305945,
+            "baseline_revision_http_ms": 1.160858002549503,
+            "revision_http_ms": [
+              4.870050004683435,
+              2.0654799955082126
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.0272799952654168,
+              0.018316997739020735
+            ],
+            "capture_lock_wait_ms": [
+              0.001267006155103445,
+              0.00039000588003546
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.02416200004518032,
+              0.011010000889655203,
+              0.006137997843325138,
+              0.01032699947245419
+            ],
+            "light_request_lock_wait_ms": [
+              0.003701999958138913,
+              0.0008759961929172277,
+              0.0008770002750679851,
+              0.0008770002750679851
+            ],
+            "gc": {
+              "overlap_ms": 0.2041120023932308,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 0,
+                "1": 1,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1362.4361309994129,
+          "publication": {
+            "http_ms": 22.22075699683046,
+            "baseline_revision_http_ms": 1.7718300005071796,
+            "revision_http_ms": [
+              10.887804004596546,
+              11.979779999819584
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.004676003300119191,
+              0.05835900083184242
+            ],
+            "publication_lock_wait_ms": [
+              0.0011699958122335374,
+              0.0017540005501359701
+            ],
+            "light_request_lock_hold_ms": [
+              0.008087001333478838,
+              0.0166609970619902,
+              0.01607600279385224,
+              0.017829996068030596
+            ],
+            "light_request_lock_wait_ms": [
+              0.0021429950720630586,
+              0.0008760034688748419,
+              0.0018509963410906494,
+              0.0008760034688748419
+            ],
+            "gc": {
+              "overlap_ms": 0.3673040046123788,
+              "events": 3,
+              "dropped_events": 0,
+              "generations": {
+                "0": 3,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 358954,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 6,
+          "capture": {
+            "http_ms": 6.96651099860901,
+            "baseline_revision_http_ms": 1.2038240020046942,
+            "revision_http_ms": [
+              2.919729995483067,
+              4.9467259959783405
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.02552599471528083,
+              0.01802399492589757
+            ],
+            "capture_lock_wait_ms": [
+              0.0012660020729526877,
+              0.00039000588003546
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.007695998647250235,
+              0.011106996680609882,
+              0.01032699947245419,
+              0.02348099951632321
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009750001481734216,
+              0.001072003215085715,
+              0.0012669988791458309,
+              0.0019479994080029428
+            ],
+            "gc": {
+              "overlap_ms": 0,
+              "events": 0,
+              "dropped_events": 0,
+              "generations": {
+                "0": 0,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1323.81370299845,
+          "publication": {
+            "http_ms": 17.323143998510204,
+            "baseline_revision_http_ms": 1.0931580036412925,
+            "revision_http_ms": [
+              4.287380994355772,
+              13.218246996984817
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.0037999998312443495,
+              0.04150500171817839
+            ],
+            "publication_lock_wait_ms": [
+              0.0011689990060403943,
+              0.0007799972081556916
+            ],
+            "light_request_lock_hold_ms": [
+              0.006236004992388189,
+              0.011203999747522175,
+              0.00691799505148083,
+              0.011593998351600021
+            ],
+            "light_request_lock_wait_ms": [
+              0.0010709991329349577,
+              0.0008770002750679851,
+              0.0008770002750679851,
+              0.0009740033419802785
+            ],
+            "gc": {
+              "overlap_ms": 0.17362000653520226,
+              "events": 2,
+              "dropped_events": 0,
+              "generations": {
+                "0": 2,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 358954,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 11,
+          "capture": {
+            "http_ms": 4.764006000186782,
+            "baseline_revision_http_ms": 1.1318379984004423,
+            "revision_http_ms": [
+              3.855962997477036,
+              2.608673006761819
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.022115993488114327,
+              0.016270998457912356
+            ],
+            "capture_lock_wait_ms": [
+              0.001267006155103445,
+              0.0003890017978847027
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.054950003686826676,
+              0.010815005225595087,
+              0.009450996003579348,
+              0.012470998626668006
+            ],
+            "light_request_lock_wait_ms": [
+              0.002240994945168495,
+              0.0009739960660226643,
+              0.0017540005501359701,
+              0.001072003215085715
+            ],
+            "gc": {
+              "overlap_ms": 0.0922659964999184,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1264.0232220001053,
+          "publication": {
+            "http_ms": 17.422716002329253,
+            "baseline_revision_http_ms": 1.060811999195721,
+            "revision_http_ms": [
+              15.904863998002838,
+              2.044750995992217
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.0037999998312443495,
+              0.044428001274354756
+            ],
+            "publication_lock_wait_ms": [
+              0.0010709991329349577,
+              0.0008770002750679851
+            ],
+            "light_request_lock_hold_ms": [
+              0.02552599471528083,
+              0.011301999620627612,
+              0.006431000656448305,
+              0.010912001016549766
+            ],
+            "light_request_lock_wait_ms": [
+              0.0037030040402896702,
+              0.0009740033419802785,
+              0.0008770002750679851,
+              0.0008770002750679851
+            ],
+            "gc": {
+              "overlap_ms": 0.27192599372938275,
+              "events": 3,
+              "dropped_events": 0,
+              "generations": {
+                "0": 3,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 358954,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 25,
+          "capture": {
+            "http_ms": 5.151061006472446,
+            "baseline_revision_http_ms": 1.1858810030389577,
+            "revision_http_ms": [
+              4.3250739981886,
+              2.5339780040667392
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.06810099876020104,
+              0.020751998818013817
+            ],
+            "capture_lock_wait_ms": [
+              0.0012669988791458309,
+              0.0011689990060403943
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.006333000783342868,
+              0.011106996680609882,
+              0.006235997716430575,
+              0.009937000868376344
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009740033419802785,
+              0.0009740033419802785,
+              0.0008770002750679851,
+              0.0006819973350502551
+            ],
+            "gc": {
+              "overlap_ms": 0.09216600301442668,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1324.5689710020088,
+          "publication": {
+            "http_ms": 17.485898002632894,
+            "baseline_revision_http_ms": 1.1640570010058582,
+            "revision_http_ms": [
+              4.901940003037453,
+              13.563877997512463
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.004383997293189168,
+              0.04199099930701777
+            ],
+            "publication_lock_wait_ms": [
+              0.0015590048860758543,
+              0.0005840047379024327
+            ],
+            "light_request_lock_hold_ms": [
+              0.006333000783342868,
+              0.011593998351600021,
+              0.006624999514315277,
+              0.009741997928358614
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009740033419802785,
+              0.0009740033419802785,
+              0.0008770002750679851,
+              0.0006820046110078692
+            ],
+            "gc": {
+              "overlap_ms": 0.37226799031486735,
+              "events": 3,
+              "dropped_events": 0,
+              "generations": {
+                "0": 2,
+                "1": 1,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 358954,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 28,
+          "capture": {
+            "http_ms": 5.479487001139205,
+            "baseline_revision_http_ms": 1.25047499750508,
+            "revision_http_ms": [
+              5.303630998241715
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.02776699693640694,
+              0.01841400080593303
+            ],
+            "capture_lock_wait_ms": [
+              0.001267006155103445,
+              0.0003890017978847027
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.007112001185305417,
+              0.023284999770112336
+            ],
+            "light_request_lock_wait_ms": [
+              0.0014609977370128036,
+              0.0013640019460581243
+            ],
+            "gc": {
+              "overlap_ms": 0.12295199849177152,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1288.3815800014418,
+          "publication": {
+            "http_ms": 17.70812900213059,
+            "baseline_revision_http_ms": 1.030387997161597,
+            "revision_http_ms": [
+              4.7696340043330565,
+              13.315341995621566
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.0036050041671842337,
+              0.04540100053418428
+            ],
+            "publication_lock_wait_ms": [
+              0.0010719959391281009,
+              0.0008770002750679851
+            ],
+            "light_request_lock_hold_ms": [
+              0.006526999641209841,
+              0.010815005225595087,
+              0.007208996976260096,
+              0.009644994861446321
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009750001481734216,
+              0.0008770002750679851,
+              0.0009750001481734216,
+              0.0006820046110078692
+            ],
+            "gc": {
+              "overlap_ms": 0.3639859933173284,
+              "events": 3,
+              "dropped_events": 0,
+              "generations": {
+                "0": 2,
+                "1": 1,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 358954,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        }
+      ],
+      "errors": [],
+      "source_sealing_ms": 9.637668998038862,
+      "source_bytes": 102766,
+      "source_rows": 37,
+      "source_recovery_bytes": 77304,
+      "retained_source_and_undo_bytes": 102766,
+      "retention_stress": null,
+      "expected_candidate_rows": 64,
+      "candidate_bytes": 256188,
+      "candidate_rows": 64,
+      "cold_verification": {
+        "status": "verified",
+        "native_editable": true,
+        "issues": []
+      },
+      "capture": {
+        "http": {
+          "count": 30,
+          "p50_ms": 5.044865498348372,
+          "p95_ms": 6.052049997379072,
+          "max_ms": 6.96651099860901
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 1.15828250272898,
+          "p95_ms": 1.6515069946763106,
+          "max_ms": 1.7101179983001202
+        },
+        "revision_http": {
+          "count": 54,
+          "p50_ms": 3.8950804992055055,
+          "p95_ms": 4.9323429993819445,
+          "max_ms": 5.303630998241715
+        },
+        "capture_lock_hold": {
+          "count": 60,
+          "p50_ms": 0.021043997548986226,
+          "p95_ms": 0.0272799952654168,
+          "max_ms": 0.06810099876020104
+        },
+        "capture_lock_wait": {
+          "count": 60,
+          "p50_ms": 0.0011689990060403943,
+          "p95_ms": 0.0013640019460581243,
+          "max_ms": 0.0015589976101182401
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 108,
+          "p50_ms": 0.009986499208025634,
+          "p95_ms": 0.019098995835520327,
+          "max_ms": 0.054950003686826676
+        },
+        "light_request_lock_wait": {
+          "count": 108,
+          "p50_ms": 0.0008770002750679851,
+          "p95_ms": 0.0014620018191635609,
+          "max_ms": 0.003701999958138913
+        },
+        "overlapping_revision_requests": 30,
+        "gc_overlap": {
+          "count": 30,
+          "p50_ms": 0.09397699614055455,
+          "p95_ms": 0.14565500168828294,
+          "max_ms": 0.2041120023932308
+        },
+        "dropped_gc_events": 0
+      },
+      "publication": {
+        "http": {
+          "count": 30,
+          "p50_ms": 17.37210850114934,
+          "p95_ms": 19.983799000328872,
+          "max_ms": 22.22075699683046
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 1.1191650010005105,
+          "p95_ms": 1.5934990005916916,
+          "max_ms": 1.7718300005071796
+        },
+        "revision_http": {
+          "count": 60,
+          "p50_ms": 11.433792002208065,
+          "p95_ms": 14.4435979964328,
+          "max_ms": 15.904863998002838
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 60,
+          "p50_ms": 0.022992498998064548,
+          "p95_ms": 0.05835900083184242,
+          "max_ms": 0.09343199781142175
+        },
+        "publication_lock_wait": {
+          "count": 60,
+          "p50_ms": 0.001071999577106908,
+          "p95_ms": 0.001753993274178356,
+          "max_ms": 0.011593998351600021
+        },
+        "light_request_lock_hold": {
+          "count": 120,
+          "p50_ms": 0.009790997864911333,
+          "p95_ms": 0.017539998225402087,
+          "max_ms": 0.026699999580159783
+        },
+        "light_request_lock_wait": {
+          "count": 120,
+          "p50_ms": 0.0008770002750679851,
+          "p95_ms": 0.0018509963410906494,
+          "max_ms": 0.0037030040402896702
+        },
+        "overlapping_revision_requests": 60,
+        "gc_overlap": {
+          "count": 30,
+          "p50_ms": 0.2934454969363287,
+          "p95_ms": 0.3842230071313679,
+          "max_ms": 0.4262420043232851
+        },
+        "dropped_gc_events": 0
+      },
+      "private_materialization": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "private_sealing": {
+        "count": 30,
+        "p50_ms": 11.142641003971221,
+        "p95_ms": 12.370857999485452,
+        "max_ms": 14.30987400090089
+      },
+      "job_completion": {
+        "count": 30,
+        "p50_ms": 1292.4174355030118,
+        "p95_ms": 1365.2096220030217,
+        "max_ms": 1372.910234000301
+      },
+      "sample_count": 30,
+      "successful_publications": 30
+    },
+    {
+      "name": "public-50000-authored-residues",
+      "completed": true,
+      "samples": [
+        {
+          "iteration": 7,
+          "capture": {
+            "http_ms": 6.367206005961634,
+            "baseline_revision_http_ms": 1.1306289961794391,
+            "revision_http_ms": [
+              5.728469004679937,
+              2.184277997002937
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.06538399611599743,
+              0.021437997929751873
+            ],
+            "capture_lock_wait_ms": [
+              0.001267006155103445,
+              0.0009740033419802785
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.006431000656448305,
+              0.012959004379808903,
+              0.006235997716430575,
+              0.01052400330081582
+            ],
+            "light_request_lock_wait_ms": [
+              0.0010719959391281009,
+              0.0008770002750679851,
+              0.0008770002750679851,
+              0.0008770002750679851
+            ],
+            "gc": {
+              "overlap_ms": 0.1184900029329583,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1248.5332790020038,
+          "publication": {
+            "http_ms": 20.048761994985398,
+            "baseline_revision_http_ms": 1.1121150018880144,
+            "revision_http_ms": [
+              3.881049997289665,
+              16.656681000313256
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.0036049968912266195,
+              0.044921005610376596
+            ],
+            "publication_lock_wait_ms": [
+              0.001072003215085715,
+              0.0008770002750679851
+            ],
+            "light_request_lock_hold_ms": [
+              0.006333997589536011,
+              0.01110800076276064,
+              0.0066259963205084205,
+              0.009841998689807951
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009740033419802785,
+              0.0008770002750679851,
+              0.0008770002750679851,
+              0.0006819973350502551
+            ],
+            "gc": {
+              "overlap_ms": 0.28881998878205195,
+              "events": 4,
+              "dropped_events": 0,
+              "generations": {
+                "0": 4,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 128724,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 10,
+          "capture": {
+            "http_ms": 8.49535800080048,
+            "baseline_revision_http_ms": 1.4209109940566123,
+            "revision_http_ms": [
+              7.658324000658467,
+              3.35008399997605
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.03605399979278445,
+              0.02572400262579322
+            ],
+            "capture_lock_wait_ms": [
+              0.0020459992811083794,
+              0.0004879984771832824
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.011107993486803025,
+              0.01890400017146021,
+              0.009354000212624669,
+              0.026211993827018887
+            ],
+            "light_request_lock_wait_ms": [
+              0.0015590048860758543,
+              0.0009739960660226643,
+              0.0018520004232414067,
+              0.0017540005501359701
+            ],
+            "gc": {
+              "overlap_ms": 0.21876000391785055,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1471.049703999597,
+          "publication": {
+            "http_ms": 20.42781499767443,
+            "baseline_revision_http_ms": 1.0775230039143935,
+            "revision_http_ms": [
+              3.773375996388495,
+              16.98876600130461
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.003897999704349786,
+              0.043167005060240626
+            ],
+            "publication_lock_wait_ms": [
+              0.0009739960660226643,
+              0.0007799972081556916
+            ],
+            "light_request_lock_hold_ms": [
+              0.006527996447402984,
+              0.011010997695848346,
+              0.006333000783342868,
+              0.009745002898853272
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009750001481734216,
+              0.0008770002750679851,
+              0.0007799972081556916,
+              0.0006819973350502551
+            ],
+            "gc": {
+              "overlap_ms": 0.4937429985147901,
+              "events": 4,
+              "dropped_events": 0,
+              "generations": {
+                "0": 3,
+                "1": 1,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 128724,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 12,
+          "capture": {
+            "http_ms": 5.473170000186656,
+            "baseline_revision_http_ms": 1.0428239984321408,
+            "revision_http_ms": [
+              5.8584799990057945
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.02289500116603449,
+              0.015880003047641367
+            ],
+            "capture_lock_wait_ms": [
+              0.0014609977370128036,
+              0.0003899986040778458
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.006527996447402984,
+              0.010910996934399009
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008760034688748419,
+              0.0009750001481734216
+            ],
+            "gc": {
+              "overlap_ms": 0.09976199362426996,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1289.6698309996282,
+          "publication": {
+            "http_ms": 75.30252700234996,
+            "baseline_revision_http_ms": 1.2823889992432669,
+            "revision_http_ms": [
+              66.43676999374293,
+              9.408407997398172
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.003897002898156643,
+              0.07579600060125813
+            ],
+            "publication_lock_wait_ms": [
+              0.0010719959391281009,
+              0.0022410022211261094
+            ],
+            "light_request_lock_hold_ms": [
+              0.006332003977149725,
+              0.011301002814434469,
+              0.010230003681499511,
+              0.011788004485424608
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009750001481734216,
+              0.0009739960660226643,
+              0.0011689990060403943,
+              0.0007799972081556916
+            ],
+            "gc": {
+              "overlap_ms": 53.680686993175186,
+              "events": 5,
+              "dropped_events": 0,
+              "generations": {
+                "0": 3,
+                "1": 1,
+                "2": 1
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 128724,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 20,
+          "capture": {
+            "http_ms": 5.475524005305488,
+            "baseline_revision_http_ms": 1.4036139982636087,
+            "revision_http_ms": [
+              5.447173003631178
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.023089996830094606,
+              0.016075005987659097
+            ],
+            "capture_lock_wait_ms": [
+              0.0013640019460581243,
+              0.0004879984771832824
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.006137001037131995,
+              0.011203999747522175
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008770002750679851,
+              0.0009740033419802785
+            ],
+            "gc": {
+              "overlap_ms": 0.09294399933423847,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1273.7601740009268,
+          "publication": {
+            "http_ms": 22.308558000077028,
+            "baseline_revision_http_ms": 1.1217599967494607,
+            "revision_http_ms": [
+              14.310386999568436,
+              8.522125994204544
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.0036049968912266195,
+              0.1416569939465262
+            ],
+            "publication_lock_wait_ms": [
+              0.0010709991329349577,
+              0.0013640019460581243
+            ],
+            "light_request_lock_hold_ms": [
+              0.007696005923207849,
+              0.011008996807504445,
+              0.006429996574297547,
+              0.011301999620627612
+            ],
+            "light_request_lock_wait_ms": [
+              0.0012669988791458309,
+              0.0009739960660226643,
+              0.0009740033419802785,
+              0.0007790004019625485
+            ],
+            "gc": {
+              "overlap_ms": 0.9760120010469109,
+              "events": 4,
+              "dropped_events": 0,
+              "generations": {
+                "0": 3,
+                "1": 1,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 128724,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        }
+      ],
+      "errors": [],
+      "source_sealing_ms": 8.155221003107727,
+      "source_bytes": 41566,
+      "source_rows": 32,
+      "source_recovery_bytes": 14300,
+      "retained_source_and_undo_bytes": 41566,
+      "retention_stress": null,
+      "expected_candidate_rows": 64,
+      "candidate_bytes": 87158,
+      "candidate_rows": 64,
+      "cold_verification": {
+        "status": "verified",
+        "native_editable": true,
+        "issues": []
+      },
+      "capture": {
+        "http": {
+          "count": 30,
+          "p50_ms": 6.473666500824038,
+          "p95_ms": 7.315973998629488,
+          "max_ms": 8.49535800080048
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 1.1994585001957603,
+          "p95_ms": 1.5838510007597506,
+          "max_ms": 1.6927969991229475
+        },
+        "revision_http": {
+          "count": 53,
+          "p50_ms": 5.171528995560948,
+          "p95_ms": 6.30413099861471,
+          "max_ms": 7.658324000658467
+        },
+        "capture_lock_hold": {
+          "count": 60,
+          "p50_ms": 0.02289449912495911,
+          "p95_ms": 0.03487899812171236,
+          "max_ms": 0.06538399611599743
+        },
+        "capture_lock_wait": {
+          "count": 60,
+          "p50_ms": 0.0011200027074664831,
+          "p95_ms": 0.0016560006770305336,
+          "max_ms": 0.0020459992811083794
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 106,
+          "p50_ms": 0.01027850157697685,
+          "p95_ms": 0.02045899600489065,
+          "max_ms": 0.03283299884060398
+        },
+        "light_request_lock_wait": {
+          "count": 106,
+          "p50_ms": 0.0009740033419802785,
+          "p95_ms": 0.0017540005501359701,
+          "max_ms": 0.002338005288038403
+        },
+        "overlapping_revision_requests": 30,
+        "gc_overlap": {
+          "count": 30,
+          "p50_ms": 0.10473349902895279,
+          "p95_ms": 0.21876000391785055,
+          "max_ms": 0.24453300284221768
+        },
+        "dropped_gc_events": 0
+      },
+      "publication": {
+        "http": {
+          "count": 30,
+          "p50_ms": 20.972949998395052,
+          "p95_ms": 23.489904997404665,
+          "max_ms": 75.30252700234996
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 1.1291160008113366,
+          "p95_ms": 1.6033030042308383,
+          "max_ms": 1.6147010028362274
+        },
+        "revision_http": {
+          "count": 60,
+          "p50_ms": 11.487371997645823,
+          "p95_ms": 18.229699999210425,
+          "max_ms": 66.43676999374293
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 60,
+          "p50_ms": 0.03780449696932919,
+          "p95_ms": 0.060111997299827635,
+          "max_ms": 0.1416569939465262
+        },
+        "publication_lock_wait": {
+          "count": 60,
+          "p50_ms": 0.0010719959391281009,
+          "p95_ms": 0.0014609977370128036,
+          "max_ms": 0.0025339977582916617
+        },
+        "light_request_lock_hold": {
+          "count": 120,
+          "p50_ms": 0.009645002137403935,
+          "p95_ms": 0.01977799547603354,
+          "max_ms": 0.09957099973689765
+        },
+        "light_request_lock_wait": {
+          "count": 120,
+          "p50_ms": 0.0009739960660226643,
+          "p95_ms": 0.0015590048860758543,
+          "max_ms": 0.0034100012271665037
+        },
+        "overlapping_revision_requests": 60,
+        "gc_overlap": {
+          "count": 30,
+          "p50_ms": 0.42199100062134676,
+          "p95_ms": 1.075800995749887,
+          "max_ms": 53.680686993175186
+        },
+        "dropped_gc_events": 0
+      },
+      "private_materialization": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "private_sealing": {
+        "count": 30,
+        "p50_ms": 14.974865000112914,
+        "p95_ms": 15.896265002083965,
+        "max_ms": 69.32129300548695
+      },
+      "job_completion": {
+        "count": 30,
+        "p50_ms": 1287.7208684985817,
+        "p95_ms": 1471.049703999597,
+        "max_ms": 1827.4290800036397
+      },
+      "sample_count": 30,
+      "successful_publications": 30
+    },
+    {
+      "name": "public-63-source-rows-plus-one",
+      "completed": true,
+      "samples": [
+        {
+          "iteration": 2,
+          "capture": {
+            "http_ms": 3.834139999526087,
+            "baseline_revision_http_ms": 1.2617739994311705,
+            "revision_http_ms": [
+              2.6306369982194155,
+              2.736848000495229
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.015494006220251322,
+              0.015590994735248387
+            ],
+            "capture_lock_wait_ms": [
+              0.0006819973350502551,
+              0.00029199873097240925
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.006527996447402984,
+              0.010427000233903527,
+              0.006236004992388189,
+              0.010522999218665063
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009750001481734216,
+              0.0008770002750679851,
+              0.0008770002750679851,
+              0.0007799972081556916
+            ],
+            "gc": {
+              "overlap_ms": 0,
+              "events": 0,
+              "dropped_events": 0,
+              "generations": {
+                "0": 0,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1276.8746329966234,
+          "publication": {
+            "http_ms": 18.568508996395394,
+            "baseline_revision_http_ms": 1.1392890010029078,
+            "revision_http_ms": [
+              4.517693996604066,
+              14.673858000605833
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.02406799467280507,
+              0.07425100193358958
+            ],
+            "publication_lock_wait_ms": [
+              0.001072003215085715,
+              0.0013640019460581243
+            ],
+            "light_request_lock_hold_ms": [
+              0.006431000656448305,
+              0.011497999366838485,
+              0.01071900624083355,
+              0.015102996258065104
+            ],
+            "light_request_lock_wait_ms": [
+              0.001072003215085715,
+              0.0009750001481734216,
+              0.0013639946701005101,
+              0.002826003765221685
+            ],
+            "gc": {
+              "overlap_ms": 0.1747130008880049,
+              "events": 2,
+              "dropped_events": 0,
+              "generations": {
+                "0": 2,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 618480,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 3,
+          "capture": {
+            "http_ms": 3.237796001485549,
+            "baseline_revision_http_ms": 1.16628099931404,
+            "revision_http_ms": [
+              3.1300249975174665
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.01773399708326906,
+              0.016760001017246395
+            ],
+            "capture_lock_wait_ms": [
+              0.0007800044841133058,
+              0.0003890017978847027
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.006627000402659178,
+              0.010718002158682793
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009740033419802785,
+              0.0008770002750679851
+            ],
+            "gc": {
+              "overlap_ms": 0,
+              "events": 0,
+              "dropped_events": 0,
+              "generations": {
+                "0": 0,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1347.1695370026282,
+          "publication": {
+            "http_ms": 20.23515399923781,
+            "baseline_revision_http_ms": 1.6492029972141609,
+            "revision_http_ms": [
+              5.6686769967200235,
+              15.47180900524836
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.005164001777302474,
+              0.05904900172026828
+            ],
+            "publication_lock_wait_ms": [
+              0.0012669988791458309,
+              0.0012669988791458309
+            ],
+            "light_request_lock_hold_ms": [
+              0.013155004126019776,
+              0.01744199835229665,
+              0.006626003596466035,
+              0.011595002433750778
+            ],
+            "light_request_lock_wait_ms": [
+              0.0018509963410906494,
+              0.001072003215085715,
+              0.0008770002750679851,
+              0.0009750001481734216
+            ],
+            "gc": {
+              "overlap_ms": 0.23639300343347713,
+              "events": 2,
+              "dropped_events": 0,
+              "generations": {
+                "0": 2,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 618480,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 11,
+          "capture": {
+            "http_ms": 4.137149000598583,
+            "baseline_revision_http_ms": 1.0877490058192052,
+            "revision_http_ms": [
+              3.0681049975100905,
+              2.6531729963608086
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.030397000955417752,
+              0.017634003597777337
+            ],
+            "capture_lock_wait_ms": [
+              0.0008770002750679851,
+              0.0008770002750679851
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.007501999789383262,
+              0.010912001016549766,
+              0.006137997843325138,
+              0.00993699359241873
+            ],
+            "light_request_lock_wait_ms": [
+              0.001072003215085715,
+              0.0008770002750679851,
+              0.0008760034688748419,
+              0.0007790004019625485
+            ],
+            "gc": {
+              "overlap_ms": 0,
+              "events": 0,
+              "dropped_events": 0,
+              "generations": {
+                "0": 0,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1295.7853800035082,
+          "publication": {
+            "http_ms": 18.147242000850383,
+            "baseline_revision_http_ms": 1.0779099975479767,
+            "revision_http_ms": [
+              17.155456000182312,
+              1.6117979976115748
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.004481000360101461,
+              0.04744600300909951
+            ],
+            "publication_lock_wait_ms": [
+              0.0013640019460581243,
+              0.0009750001481734216
+            ],
+            "light_request_lock_hold_ms": [
+              0.0053580006351694465,
+              0.013249002222437412,
+              0.006526999641209841,
+              0.01013199653243646
+            ],
+            "light_request_lock_wait_ms": [
+              0.0006819973350502551,
+              0.0008770002750679851,
+              0.0008770002750679851,
+              0.0007790004019625485
+            ],
+            "gc": {
+              "overlap_ms": 0.1907580008264631,
+              "events": 2,
+              "dropped_events": 0,
+              "generations": {
+                "0": 2,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 618480,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 19,
+          "capture": {
+            "http_ms": 5.513142001291271,
+            "baseline_revision_http_ms": 1.1104619989055209,
+            "revision_http_ms": [
+              2.734066001721658,
+              2.90748399856966
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.016270998457912356,
+              0.015003002772573382
+            ],
+            "capture_lock_wait_ms": [
+              0.0006819973350502551,
+              0.0003899986040778458
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0062350009102374315,
+              0.011203999747522175,
+              0.006332003977149725,
+              0.01081400114344433
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009739960660226643,
+              0.0011689990060403943,
+              0.0008770002750679851,
+              0.0008770002750679851
+            ],
+            "gc": {
+              "overlap_ms": 0,
+              "events": 0,
+              "dropped_events": 0,
+              "generations": {
+                "0": 0,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1290.24177500105,
+          "publication": {
+            "http_ms": 17.458055997849442,
+            "baseline_revision_http_ms": 1.0564869953668676,
+            "revision_http_ms": [
+              4.59948099887697,
+              13.424425000266638
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.0055530035751871765,
+              0.04491299478104338
+            ],
+            "publication_lock_wait_ms": [
+              0.0016559934010729194,
+              0.0008770002750679851
+            ],
+            "light_request_lock_hold_ms": [
+              0.006431000656448305,
+              0.010133000614587218,
+              0.0064300038502551615,
+              0.010132993338629603
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009740033419802785,
+              0.0006820046110078692,
+              0.0009750001481734216,
+              0.0007790004019625485
+            ],
+            "gc": {
+              "overlap_ms": 0.1691330035100691,
+              "events": 2,
+              "dropped_events": 0,
+              "generations": {
+                "0": 2,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 618480,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 22,
+          "capture": {
+            "http_ms": 3.877262002788484,
+            "baseline_revision_http_ms": 1.0740240031736903,
+            "revision_http_ms": [
+              2.819508001266513,
+              2.371056005358696
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.01636800152482465,
+              0.03088400262640789
+            ],
+            "capture_lock_wait_ms": [
+              0.0006819973350502551,
+              0.00048699439503252506
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.006235997716430575,
+              0.010229996405541897,
+              0.0064300038502551615,
+              0.011788994015660137
+            ],
+            "light_request_lock_wait_ms": [
+              0.0010709991329349577,
+              0.0008770002750679851,
+              0.001072003215085715,
+              0.0009740033419802785
+            ],
+            "gc": {
+              "overlap_ms": 0,
+              "events": 0,
+              "dropped_events": 0,
+              "generations": {
+                "0": 0,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1308.451992998016,
+          "publication": {
+            "http_ms": 17.765731005056296,
+            "baseline_revision_http_ms": 1.0767229978227988,
+            "revision_http_ms": [
+              4.666837994591333,
+              13.458158005960286
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.0037030040402896702,
+              0.04823399649467319
+            ],
+            "publication_lock_wait_ms": [
+              0.0009750001481734216,
+              0.0009740033419802785
+            ],
+            "light_request_lock_hold_ms": [
+              0.006333997589536011,
+              0.0106209990917705,
+              0.005846006388310343,
+              0.00906200148165226
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009740033419802785,
+              0.0008770002750679851,
+              0.0007799972081556916,
+              0.0006819973350502551
+            ],
+            "gc": {
+              "overlap_ms": 0.21407799795269966,
+              "events": 2,
+              "dropped_events": 0,
+              "generations": {
+                "0": 2,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 618480,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 24,
+          "capture": {
+            "http_ms": 3.655498003354296,
+            "baseline_revision_http_ms": 1.1676350040943362,
+            "revision_http_ms": [
+              3.9147879942902364
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.024263004888780415,
+              0.01841600169427693
+            ],
+            "capture_lock_wait_ms": [
+              0.0005849942681379616,
+              0.0003899986040778458
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.0068209992605261505,
+              0.011789998097810894
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009740033419802785,
+              0.0009740033419802785
+            ],
+            "gc": {
+              "overlap_ms": 0,
+              "events": 0,
+              "dropped_events": 0,
+              "generations": {
+                "0": 0,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1282.8610860015033,
+          "publication": {
+            "http_ms": 18.120123000699095,
+            "baseline_revision_http_ms": 1.048074998834636,
+            "revision_http_ms": [
+              5.033411005570088,
+              13.891087997762952
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.0038969956221990287,
+              0.04735600668936968
+            ],
+            "publication_lock_wait_ms": [
+              0.001072003215085715,
+              0.0011699958122335374
+            ],
+            "light_request_lock_hold_ms": [
+              0.006431000656448305,
+              0.01305700425291434,
+              0.010036004823632538,
+              0.011595002433750778
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009739960660226643,
+              0.0008770002750679851,
+              0.0012669988791458309,
+              0.0008770002750679851
+            ],
+            "gc": {
+              "overlap_ms": 0.1795839998521842,
+              "events": 2,
+              "dropped_events": 0,
+              "generations": {
+                "0": 2,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 618480,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        }
+      ],
+      "errors": [],
+      "source_sealing_ms": 11.892772003193386,
+      "source_bytes": 306582,
+      "source_rows": 63,
+      "source_recovery_bytes": 261252,
+      "retained_source_and_undo_bytes": 306582,
+      "retention_stress": null,
+      "expected_candidate_rows": 64,
+      "candidate_bytes": 311898,
+      "candidate_rows": 64,
+      "cold_verification": {
+        "status": "verified",
+        "native_editable": true,
+        "issues": []
+      },
+      "capture": {
+        "http": {
+          "count": 30,
+          "p50_ms": 3.911889001756208,
+          "p95_ms": 4.568737997033168,
+          "max_ms": 5.513142001291271
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 1.1375885005691089,
+          "p95_ms": 1.4649399963673204,
+          "max_ms": 1.7768359975889325
+        },
+        "revision_http": {
+          "count": 58,
+          "p50_ms": 2.7738364988181274,
+          "p95_ms": 3.522813000017777,
+          "max_ms": 3.9147879942902364
+        },
+        "capture_lock_hold": {
+          "count": 60,
+          "p50_ms": 0.016807502106530592,
+          "p95_ms": 0.024165994545910507,
+          "max_ms": 0.03088400262640789
+        },
+        "capture_lock_wait": {
+          "count": 60,
+          "p50_ms": 0.0005840010999236256,
+          "p95_ms": 0.0008770002750679851,
+          "max_ms": 0.001071006408892572
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 116,
+          "p50_ms": 0.009936997230397537,
+          "p95_ms": 0.013641001714859158,
+          "max_ms": 0.057870995078701526
+        },
+        "light_request_lock_wait": {
+          "count": 116,
+          "p50_ms": 0.0009739960660226643,
+          "p95_ms": 0.0014610050129704177,
+          "max_ms": 0.0027279966161586344
+        },
+        "overlapping_revision_requests": 30,
+        "gc_overlap": {
+          "count": 30,
+          "p50_ms": 0.0,
+          "p95_ms": 0,
+          "max_ms": 0
+        },
+        "dropped_gc_events": 0
+      },
+      "publication": {
+        "http": {
+          "count": 30,
+          "p50_ms": 17.976057501073228,
+          "p95_ms": 19.33589399413904,
+          "max_ms": 20.23515399923781
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 1.1254920027568005,
+          "p95_ms": 1.6492029972141609,
+          "max_ms": 1.9160949959768914
+        },
+        "revision_http": {
+          "count": 60,
+          "p50_ms": 9.30983449870837,
+          "p95_ms": 15.582628999254666,
+          "max_ms": 17.155456000182312
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 60,
+          "p50_ms": 0.036486995668383315,
+          "p95_ms": 0.05786999827250838,
+          "max_ms": 0.07425100193358958
+        },
+        "publication_lock_wait": {
+          "count": 60,
+          "p50_ms": 0.001072003215085715,
+          "p95_ms": 0.0016559934010729194,
+          "max_ms": 0.0020459992811083794
+        },
+        "light_request_lock_hold": {
+          "count": 120,
+          "p50_ms": 0.009790503099793568,
+          "p95_ms": 0.01744199835229665,
+          "max_ms": 0.03157099854433909
+        },
+        "light_request_lock_wait": {
+          "count": 120,
+          "p50_ms": 0.0008770002750679851,
+          "p95_ms": 0.0018509963410906494,
+          "max_ms": 0.002826003765221685
+        },
+        "overlapping_revision_requests": 58,
+        "gc_overlap": {
+          "count": 30,
+          "p50_ms": 0.17666150233708322,
+          "p95_ms": 0.21407799795269966,
+          "max_ms": 0.23639300343347713
+        },
+        "dropped_gc_events": 0
+      },
+      "private_materialization": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "private_sealing": {
+        "count": 30,
+        "p50_ms": 11.717570498149144,
+        "p95_ms": 13.104071003908757,
+        "max_ms": 13.187661003030371
+      },
+      "job_completion": {
+        "count": 30,
+        "p50_ms": 1285.9476884987089,
+        "p95_ms": 1350.3882459990564,
+        "max_ms": 1357.0290360003128
+      },
+      "sample_count": 30,
+      "successful_publications": 30
+    }
+  ]
+}

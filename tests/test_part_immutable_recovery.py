@@ -1,6 +1,7 @@
 """Explicit strict recovery uses owned temporary bytes and the existing job slot."""
 
 from collections import OrderedDict
+from contextlib import ExitStack
 from dataclasses import replace
 from time import monotonic
 from uuid import uuid4
@@ -21,22 +22,21 @@ from backend.core.models import Design
 @pytest.fixture
 def document(tmp_path, monkeypatch):
     doc = "__recovery__" + uuid4().hex
-    token = doc_context.set_current_doc(doc)
     previous = policy.current_configuration()
-    host.configure(policy.HostPolicyConfiguration(default_mode=previous.default_mode,
-        document_modes={**previous.document_modes, doc: "registered_only"}))
     owner = StrictPersistence(tmp_path)
-    monkeypatch.setattr(session_cache, "_strict_persistence", owner)
-    monkeypatch.setattr(jobs, "_jobs", OrderedDict())
-    monkeypatch.setattr(recovery, "_submit", recovery._run)
-    try:
+    with ExitStack() as cleanup:
+        token = doc_context.set_current_doc(doc)
+        cleanup.callback(doc_context.reset_current_doc, token)
+        cleanup.callback(host.configure, previous)
+        cleanup.callback(state.drop_doc, doc)
+        host.configure(policy.HostPolicyConfiguration(default_mode=previous.default_mode,
+            document_modes={**previous.document_modes, doc: "registered_only"}))
+        monkeypatch.setattr(session_cache, "_strict_persistence", owner)
+        monkeypatch.setattr(jobs, "_jobs", OrderedDict())
+        monkeypatch.setattr(recovery, "_submit", recovery._run)
         yield doc, owner
-    finally:
-        state.drop_doc(doc)
-        host.configure(previous)
-        doc_context.reset_current_doc(token)
-        assert _slot.acquire(blocking=False), "Recovery leaked the shared native worker slot"
-        _slot.release()
+    assert _slot.acquire(blocking=False), "Recovery leaked the shared native worker slot"
+    _slot.release()
 
 
 @pytest.fixture

@@ -5,6 +5,16 @@ measured refusal/recording regression must be addressed before expanding live
 admission. This document does not enable Apply, change a scientific algorithm or
 claim performance qualification. Assemblies remain deferred.
 
+Tests-first pure slice is prepared in
+`tests/test_part_connection_application_commands.py` (36 cases, not yet run).
+Its proposed `build(design, params) -> (Design, MutationReport)` uses the closed
+schema below. Two controls capture the existing route's actual callback against
+the authentic native bundle/extrusion prefix, injecting only the random output
+connection ID. The remaining cases compare complete authoring parity or require
+strict input/ownership/budget refusal. No route admission, dispatcher, model,
+identity policy or numerical source has changed for this new slice. Combined
+Connect and registered cold proof remain subsequent integration gates.
+
 ## Existing authority and behavior
 
 `backend/api/routes_connection_versions.py::_apply_connection_version_impl`
