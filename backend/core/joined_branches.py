@@ -285,7 +285,7 @@ def _fit_stem(summary, lattice):
     )
 
 
-def _attach_crossbar(design, spec, *, identity_seed=None):
+def _attach_crossbar(design, spec, *, identity_seed=None, fixed_cluster_id=None):
     """Keep the authored curve fixed while finding short native bridge pairs."""
     from backend.core.cluster_join_free import propose_free_cluster_join
 
@@ -300,7 +300,8 @@ def _attach_crossbar(design, spec, *, identity_seed=None):
         body = dict(
             mode="free",
             moving_cluster_id=spec["cluster_id"],
-            fixed_cluster_id=design.cluster_transforms[0].id,
+            fixed_cluster_id=(design.cluster_transforms[0].id
+                              if fixed_cluster_id is None else fixed_cluster_id),
             reach_nm=reach,
             world_translation=[0.0, dy, 0.0],
             expected_design_id=design.id,
@@ -326,12 +327,13 @@ def _attach_crossbar(design, spec, *, identity_seed=None):
     return best
 
 
-def _attach_arm(design, spec, *, identity_seed=None):
+def _attach_arm(design, spec, *, identity_seed=None, fixed_cluster_id=None):
     from backend.core.cluster_join import _geometry, _ports
     from backend.core.cluster_join_free import propose_free_cluster_join
 
     stem, moving = (
-        design.cluster_transforms[0],
+        (design.cluster_transforms[0] if fixed_cluster_id is None
+         else next(c for c in design.cluster_transforms if c.id == fixed_cluster_id)),
         next(c for c in design.cluster_transforms if c.id == spec["cluster_id"]),
     )
     geo = _geometry(design, set(stem.helix_ids))

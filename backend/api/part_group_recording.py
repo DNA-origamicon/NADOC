@@ -10,7 +10,8 @@ from fastapi import HTTPException
 from backend.api import doc_context, state
 from backend.api.part_replacement_transaction import publish_replacement
 from backend.core.models import ClusterCreateLogEntry, ClusterRigidTransform, DomainRef
-from backend.core.part_overlay_commands import build
+from backend.core.part_overlay_commands import GROUP_CREATE_VERSION, build
+from backend.core.part_structure_gate import PartStructureError, require_valid_structure
 
 
 def create_group(body):
@@ -36,9 +37,10 @@ def create_group(body):
             helix_ids=list(body.helix_ids),
             domain_ids=[DomainRef.model_validate(item) for item in body.domain_ids],
         )
-        grouped = build("cluster_create", source, {"cluster": group.model_dump(mode="json")})
+        grouped = build("cluster_create", source, {
+            "cluster": group.model_dump(mode="json"), "_proof_version": GROUP_CREATE_VERSION})
         entry = ClusterCreateLogEntry(
-            proof_version=1,
+            proof_version=GROUP_CREATE_VERSION,
             cluster_snapshot=group,
             cluster_id=group.id,
             name=group.name,
@@ -46,6 +48,10 @@ def create_group(body):
             domain_ids=list(group.domain_ids),
         )
         candidate = grouped.copy_with(feature_log=[*source.feature_log, entry])
+        try:
+            require_valid_structure(candidate)
+        except PartStructureError as exc:
+            raise HTTPException(409, detail=exc.as_issue()) from exc
         report = state.validate_design(candidate)
         # This caller already owns the non-reentrant state lock. Reuse the
         # lock-owned transaction, with set_design's source/publication checks,

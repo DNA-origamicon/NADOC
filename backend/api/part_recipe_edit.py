@@ -16,6 +16,7 @@ from backend.core.part_overlay_commands import (
     KINDS as OVERLAY_KINDS,
     command_input,
     edit_entry,
+    proof_version_supported,
 )
 from backend.core.part_history_proof import ProofBudgetExceeded, command_rows, root_design
 from backend.core.part_verification_capture import CaptureLimit
@@ -24,7 +25,8 @@ from backend.core.validator import validate_design
 
 def is_versioned(entry):
     children = entry.children if entry.feature_type == "routing-cluster" else [entry]
-    return any(command_input(child)[1].get("_proof_version") == 1 for child in children)
+    return any(proof_version_supported(kind, params.get("_proof_version"))
+               for kind, params in map(command_input, children))
 
 
 def supports_recipe_edit(design, entry):
@@ -296,6 +298,8 @@ def prepare_change(source, captured, index, checkpoint, *, params=None, sub_inde
     try:
         if candidate is None:
             candidate = regenerate(source, log, checkpoint, prefix=prefix, executor=executor)
+        from backend.core.part_structure_gate import require_valid_structure
+        require_valid_structure(candidate, checkpoint=checkpoint)
     except CommandContractError as exc:
         raise HTTPException(409, detail=exc.as_issue()) from exc
     except ValidationError as exc:

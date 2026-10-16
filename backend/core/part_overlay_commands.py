@@ -1,6 +1,12 @@
 """Authoring inputs for ordinary pose/grouping entries, without recovery data."""
 
 KINDS = frozenset({"deformation", "cluster_op", "cluster_create", "overhang_rotation"})
+GROUP_CREATE_VERSION = 2
+
+
+def proof_version_supported(kind, version):
+    """Grouping v2 is a local contract change, not a global proof upgrade."""
+    return type(version) is int and version in ((1, GROUP_CREATE_VERSION) if kind == "cluster_create" else (1,))
 
 
 def pose_fields(entry, *, include_authored=True):
@@ -100,12 +106,23 @@ def build(kind, design, params):
         from backend.core.cluster_autodetect import with_default_cluster
         from backend.core.feature_identity import identity_factory
 
+        version = params.get("_proof_version", 1)
+        if not proof_version_supported(kind, version):
+            raise ValueError("Unsupported cluster_create proof version")
         cluster = ClusterRigidTransform.model_validate(params["cluster"])
         if cluster.id in {c.id for c in clusters}:
             raise ValueError("Duplicate cluster identity")
         check_members(cluster.helix_ids, cluster.domain_ids)
+        try:
+            default_identity = identity_factory(cluster.id)
+        except ValueError:
+            if version != GROUP_CREATE_VERSION:
+                raise  # Saved v1 required a UUID even when a default existed.
+            from uuid import NAMESPACE_URL, uuid5
+            default_identity = identity_factory(uuid5(
+                NAMESPACE_URL, f"nadoc:cluster-create:v2:{cluster.id}"))
         clusters = with_default_cluster(
-            design, identity_factory=identity_factory(cluster.id)
+            design, identity_factory=default_identity
         ).cluster_transforms
         kept = []
         for existing in clusters:
@@ -113,7 +130,9 @@ def build(kind, design, params):
                 remaining = [
                     h for h in existing.helix_ids if h not in cluster.helix_ids
                 ]
-                if remaining:
+                # v1 removes an exhausted default; preserve saved replay exactly.
+                # v2 edits membership without deleting persistent owner identities.
+                if remaining or version == GROUP_CREATE_VERSION:
                     kept.append(existing.model_copy(update={"helix_ids": remaining}))
             else:
                 kept.append(existing)

@@ -12,6 +12,7 @@ from backend.core.models import (
 )
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_history_contract import FIELD_ROLES
+from backend.core.part_overlay_commands import proof_version_supported
 
 
 MAX_PUBLIC_HISTORY_ROWS = 64
@@ -35,7 +36,7 @@ def _native_row(row):
                  and row.params["nanoparticle_version"] == 1
                  and not {"coating_version", "quantum_dot_version", "thiol_version"}.intersection(row.params))
     elif type(row) in {ClusterCreateLogEntry, ClusterOpLogEntry}:
-        known = type(row.proof_version) is int and row.proof_version == 1
+        known = proof_version_supported(row.feature_type, row.proof_version)
     else:
         known = False
     if not known:

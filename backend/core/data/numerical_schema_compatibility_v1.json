@@ -1,0 +1,47 @@
+{
+  "schema": "nadoc.numerical-schema-compatibility.v1",
+  "transitions": [
+    {
+      "id": "grouping-proof-v2.nadoc.cpd-native-engine.v1",
+      "event": "cluster-create-proof-v2",
+      "source_checkpoint": "1ae1137f",
+      "engine_id": "nadoc.cpd-native-engine.v1",
+      "from_sha256": "094b0e289c7f02ed4c97408605619a9b7711954e0a3aec8ffc4c7360ceda18ab",
+      "to_sha256": "f91acd3473e89ba351034e2520e9bbff77c7186d50b9a6267d4a84f354c61400",
+      "changed_paths": [
+        "backend/core/models.py",
+        "backend/core/part_cpd_contract.py",
+        "backend/core/part_numerical_schema_compatibility.py"
+      ],
+      "rationale": "ClusterCreateLogEntry accepts proof version 2; numerical validation adds this exact-manifest compatibility helper. All pre-existing numerical source/data except the reviewed schema and validation boundary are unchanged. Runtime/template checks remain strict; stored pins are not rewritten."
+    },
+    {
+      "id": "grouping-proof-v2.nadoc.duplex-relax-native.v1",
+      "event": "cluster-create-proof-v2",
+      "source_checkpoint": "1ae1137f",
+      "engine_id": "nadoc.duplex-relax-native.v1",
+      "from_sha256": "6c00a274d08a7423f714f95d1fb9fdb6332c6fba3ee8497a9e04dbb385b5b99c",
+      "to_sha256": "015ca817a2dd9669a513cdaee70d629f3870e94f47b4e46fea71e8a19022df3a",
+      "changed_paths": [
+        "backend/core/models.py",
+        "backend/core/part_duplex_relax_contract.py",
+        "backend/core/part_numerical_schema_compatibility.py"
+      ],
+      "rationale": "ClusterCreateLogEntry accepts proof version 2; numerical validation adds this exact-manifest compatibility helper. All pre-existing numerical source/data except the reviewed schema and validation boundary are unchanged. Runtime/template checks remain strict; stored pins are not rewritten."
+    },
+    {
+      "id": "grouping-proof-v2.nadoc.streptavidin-native.v1",
+      "event": "cluster-create-proof-v2",
+      "source_checkpoint": "1ae1137f",
+      "engine_id": "nadoc.streptavidin-native.v1",
+      "from_sha256": "6b2b55a59160868f16d15b50ab02d7d48ac3a2b152b400a1386b391eb762ab49",
+      "to_sha256": "d16f581fde15048d78d6d8e630b45939952e8d7d0a09cec9034a936e57d67bfa",
+      "changed_paths": [
+        "backend/core/models.py",
+        "backend/core/part_numerical_schema_compatibility.py",
+        "backend/core/part_streptavidin_contract.py"
+      ],
+      "rationale": "ClusterCreateLogEntry accepts proof version 2; numerical validation adds this exact-manifest compatibility helper. All pre-existing numerical source/data except the reviewed schema and validation boundary are unchanged. Runtime/template checks remain strict; stored pins are not rewritten."
+    }
+  ]
+}

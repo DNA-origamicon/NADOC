@@ -17,7 +17,8 @@ def entry_for(kind, before, after, params, *, group, retained, identity, scoped)
     source_id = params["cluster"]["id"] if kind == "cluster_create" else params["cluster_id"]
     target_id = source_id if not scoped or source_id in retained else f"gen_{group}_{source_id}"
     cluster = next(cluster for cluster in mapped.cluster_transforms if cluster.id == target_id)
-    common = {"id": identity, "cluster_id": target_id, "proof_version": 1}
+    common = {"id": identity, "cluster_id": target_id,
+              "proof_version": params.get("_proof_version", 1)}
     if kind == "cluster_create":
         entry = ClusterCreateLogEntry(**common, cluster_snapshot=cluster,
             name=cluster.name, helix_ids=cluster.helix_ids, domain_ids=cluster.domain_ids)

@@ -7,7 +7,7 @@ from backend.api.part_cell_commands import KINDS as CELL_KINDS
 from backend.api.part_annotation_commands import KINDS as ANNOTATION_KINDS
 from backend.api.part_ligation_commands import KINDS as LIGATION_KINDS
 from backend.api.part_auto_commands import KINDS as AUTO_KINDS
-from backend.core.part_overlay_commands import KINDS as OVERLAY_KINDS
+from backend.core.part_overlay_commands import GROUP_CREATE_VERSION, KINDS as OVERLAY_KINDS, proof_version_supported
 from backend.core.part_dependencies import Dependencies, Resource
 from backend.api.part_native_commands import LOOP_COMMANDS, SEQUENCE_COMMANDS, PATTERN_COMMANDS
 from backend.api.part_structural_commands import KINDS as STRUCTURAL_KINDS
@@ -54,12 +54,14 @@ def capabilities():
     from backend.api.part_recipe_capabilities import editing_capabilities
     kinds = PROOF_MINOR_KINDS | PROOF_SNAPSHOT_KINDS | OVERLAY_KINDS
     return {**part_replay_capabilities(), **editing_capabilities(kinds), "proof_version": PROOF_VERSION,
+            "proof_version_overrides": {"cluster_create": {"supported": [1, GROUP_CREATE_VERSION],
+                                                            "authoring": GROUP_CREATE_VERSION}},
             "proof_commands": sorted(PROOF_MINOR_KINDS | PROOF_SNAPSHOT_KINDS | OVERLAY_KINDS),
             "proof_root_kinds": ["empty", "import"]}
 
 
 def dependencies(kind, params):
-    if type(params.get("_proof_version")) is not int or params["_proof_version"] != PROOF_VERSION:
+    if not proof_version_supported(kind, params.get("_proof_version")):
         return Dependencies(known=False)
     if "_generated_scope" in params and (kind in NP_CONNECTION_KINDS or (
             kind == "overhang-bulk" and (is_pending_action(params)

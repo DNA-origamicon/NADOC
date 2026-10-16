@@ -1,8 +1,8 @@
 """ISSUE-106: characterize an invalid legacy output, not desired grouping behavior.
 
 This target stays separate from the deformation-retarget acceptance dossier.
-After an explicit compatibility decision, replace the failure expectation with
-successful roundtrip/replay and retain the native all-members grouping setup.
+Saved v1 output stays unchanged. New v2 grouping has a separate successful
+roundtrip/replay acceptance suite; explicit verification flags this old defect.
 """
 
 from uuid import uuid4
@@ -30,8 +30,10 @@ def test_legacy_all_members_group_dangles_lattice_frame_placement_owner():
     assert placement_id not in {group.id for group in candidate.cluster_transforms}
     with pytest.raises(ValidationError, match="lattice frame placement cluster is missing"):
         Design.model_validate_json(candidate.model_dump_json())
-    # Reproducibility alone currently misses this structural invalidity: the
-    # same v1 builder recreates the dangling reference without full validation.
+    # Reproduction succeeds, while structural closure correctly refuses an
+    # overall verified/editable result. Old authored inputs are not upgraded.
     report = assess_part_history(candidate, execute=part_proof_commands.execute,
                                  dependencies=part_proof_commands.dependencies)
-    assert report["status"] == "verified", report
+    assert report["status"] == "failed", report
+    assert report["reproducibility_status"] == "verified"
+    assert report["structure"]["status"] == "invalid"

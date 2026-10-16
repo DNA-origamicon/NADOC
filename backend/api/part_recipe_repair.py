@@ -138,6 +138,7 @@ def prepare_repair(source, request, *, source_revision, executor, dependency_res
     """
     from backend.api.part_recipe_edit import regenerate
     from backend.core.validator import validate_design
+    from backend.core.part_structure_gate import require_valid_structure
 
     request = RepairRequest.model_validate(request)
     rows, completed, upgrades = [], [], []
@@ -197,12 +198,13 @@ def prepare_repair(source, request, *, source_revision, executor, dependency_res
         if len(completed) != len(rows):
             raise RuntimeError("Repair did not execute every planned command")
         phase = "validation"
+        structure = require_valid_structure(candidate, checkpoint=checkpoint)
         validation = validate_design(candidate)
         checkpoint()
         return {"status": "ready", "issues": [], "candidate": candidate, "validation": validation,
             "repair": {"source_revision": source_revision, "source_design_id": source.id,
                 "old_state_verified": False, "completed_prefix": completed, "not_evaluated": [],
-                "numerical_upgrades": upgrades, "integrity_checked": True}}
+                "numerical_upgrades": upgrades, "integrity_checked": True, "structure": structure}}
     except _ReplayStopped as error:
         return result(error.status, error.issue)
     except CommandContractError as error:

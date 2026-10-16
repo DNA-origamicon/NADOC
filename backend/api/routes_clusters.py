@@ -196,16 +196,23 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
 @router.delete("/design/cluster/{cluster_id}", status_code=200)
 def delete_cluster(cluster_id: str) -> dict:
     """Remove a cluster. Pushes to the undo stack."""
+    from backend.core.part_structure_gate import PartStructureError, require_valid_structure
     from backend.core.validator import validate_design
 
-    design = design_state.get_or_404()
+    design, revision = design_state.get_design_with_revision()
+    if design is None:
+        raise HTTPException(404, detail="No active design.")
     cts = [c for c in design.cluster_transforms if c.id != cluster_id]
     if len(cts) == len(design.cluster_transforms):
         raise HTTPException(404, detail=f"Cluster {cluster_id!r} not found.")
 
     updated = design.model_copy(update={"cluster_transforms": cts}, deep=True)
-    design_state.set_design(updated)
+    try:
+        require_valid_structure(updated)
+    except PartStructureError as exc:
+        raise HTTPException(409, detail=exc.as_issue()) from exc
     report = validate_design(updated)
+    design_state.set_design(updated, expected_revision=revision, expected_source=design)
     return _design_response(updated, report)
 
 

@@ -14,6 +14,7 @@ import math
 from fastapi import HTTPException
 from backend.api import state
 from backend.core.models import Design, SnapshotLogEntry
+from backend.core.part_overlay_commands import proof_version_supported
 
 
 def _ids(value):
@@ -133,7 +134,7 @@ class GeneratedHistory:
                     self.renames.setdefault(
                         identifier, f"{prefix}gen_{self.group_id}_{identifier}"
                     )
-            if self.standard and params.get("_proof_version") == 1:
+            if self.standard and proof_version_supported(kind, params.get("_proof_version")):
                 from backend.api.generated_native_scope import merge_changes
                 from backend.core.part_scope_references import namespace_design
 
@@ -190,7 +191,7 @@ class GeneratedHistory:
             )
         native_params = None
         overlay_entry = None
-        if self.standard and params.get("_proof_version") == 1:
+        if self.standard and proof_version_supported(kind, params.get("_proof_version")):
             from backend.api.part_proof_commands import execute
             from backend.core.part_history_proof import AUTHORING_FIELDS
             from backend.api.generated_overlay_entries import KINDS as OVERLAY_KINDS, entry_for

@@ -147,6 +147,14 @@ def add_deformation(body: AddDeformationBody) -> dict:
         targets, target_ranges = source.targets, source.target_ranges
         helix_ids, cluster_ids = source.affected_helix_ids, source.cluster_ids
 
+    if (body.source_operation_id is None and body.targets is None and body.cluster_ids
+            and (not helix_ids or set(body.cluster_ids) != set(cluster_ids))):
+        # Empty native affected lists mean all helices. A newly authored empty
+        # or missing group selection must never reach that legacy convention.
+        # Replaying an existing operation retains its exact recorded inputs.
+        raise HTTPException(409, detail={"code": "invalid_selection",
+            "message": "Selected groups are missing or do not intersect the deformation window."})
+
     op = DeformationOp(
         targets=targets,
         target_ranges=target_ranges,

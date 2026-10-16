@@ -23,7 +23,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 # PDB and optional publication bytes are independently pinned command inputs;
 # there is intentionally no bundled-data lookup or hidden file in this list.
 SOURCE_PATHS = tuple(f"backend/core/{name}.py" for name in (
-    "part_streptavidin_contract", "part_numerical_runtime", "streptavidin",
+    "part_streptavidin_contract", "part_numerical_runtime", "part_numerical_schema_compatibility", "streptavidin",
     "protein", "pdb_to_design", "nanoparticle", "models",
 )) + ("backend/api/part_streptavidin_commands.py",)
 Hash = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
@@ -62,9 +62,12 @@ def contract_defaults():
 
 
 def validate_environment(engine):
-    if engine.implementation_sha256 != digest(implementation_manifest()):
-        raise CoatingContractError("Coating code differs from the authored numerical engine",
-                                   code="engine_mismatch")
+    from backend.core.part_numerical_schema_compatibility import require_implementation
+
+    transition = require_implementation(ENGINE_ID, engine.implementation_sha256,
+        implementation_manifest(), error_type=CoatingContractError,
+        detail="Coating code differs from the authored numerical engine")
     if engine.runtime_sha256 != digest(runtime_fingerprint()):
         raise CoatingContractError("Coating runtime differs from the authored numerical engine",
                                    code="runtime_mismatch")
+    return transition

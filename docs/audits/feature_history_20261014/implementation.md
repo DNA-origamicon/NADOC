@@ -15,6 +15,17 @@ regression debt are recorded in [the checkpoint evidence](validation_pause_check
 Use [G1–G6](remaining_standard_part_checkpoints.md) for current sequencing; the
 original P-phase table below retains architectural scope, not queue priority.
 
+The current grouping checkpoint preserves empty placement owners through a
+specific `cluster_create` v2 contract while retaining exact saved v1 behavior.
+Explicit verification now reports reproducibility and bounded structural
+reference validity separately, and history-edit/repair publication refuses
+invalid final closure. Numerical pins use a disclosed exact-manifest schema
+compatibility transition. This prevents new invalid grouping; repairing old
+definitions and invalid saved-file admission remain the next core work.
+Assemblies, VR validation and further nanoparticle feature expansion remain
+deferred. Neither this checkpoint nor the private editor tests establish desktop
+interaction or latency qualification.
+
 The October 16 continuation connects complete private bend/twist controls to the
 existing history entry point behind a default-false qualification gate. Preview
 uses fixed feature-stage context; its dedicated camera layer excludes later

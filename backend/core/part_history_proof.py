@@ -73,6 +73,33 @@ def command_rows(design, limit):
 
 
 def assess(design, *, max_entries, execute, dependencies, checkpoint):
+    """Report reproduction and bounded structural closure as separate facts."""
+    from backend.core.part_structure import assess_structure
+    from backend.core.part_structure_gate import PartStructureError
+    from backend.core.part_numerical_schema_compatibility import collect_implementation_compatibility
+
+    with collect_implementation_compatibility() as compatibility:
+        result = _assess_recipe(design, max_entries=max_entries, execute=execute,
+                                dependencies=dependencies, checkpoint=checkpoint)
+    if compatibility["transitions"] or compatibility["truncated"]:
+        result["numerical_compatibility"] = compatibility
+    result["reproducibility_status"] = result["status"]
+    structure = assess_structure(design, checkpoint=checkpoint)
+    result["structure"] = structure
+    if structure["status"] != "valid":
+        error = PartStructureError(structure)
+        issue = error.as_issue()
+        if origin := result.get("structure_origin"):
+            issue.update(feature_id=origin["feature_id"], kind=origin["kind"],
+                         possible_dependents=origin["possible_dependents"])
+        result["issues"].append(issue)
+        if result["status"] in {"verified", "reproduced_import"}:
+            result["status"] = error.status
+        result["native_editable"] = False
+    return result
+
+
+def _assess_recipe(design, *, max_entries, execute, dependencies, checkpoint):
     result = {"scope": "part", "contract_version": 1, "status": "unverified", "issues": [],
               "verification_scope": "authoring_reproducibility", "integrity_checked": False,
               "excluded_roles": ["presentation", "physical", "document_identity", "repair_draft"],
@@ -119,6 +146,12 @@ def assess(design, *, max_entries, execute, dependencies, checkpoint):
         return result
     for feature_id, kind, params, _ in rows:
         check()
+        # The known v1 grouping defect is attributed at its actual replay
+        # boundary. This explicit proof scan never runs in slider evaluation.
+        before_structure = None
+        if kind == "cluster_create" and params.get("_proof_version") == 1 and "structure_origin" not in result:
+            from backend.core.part_structure import assess_structure
+            before_structure = assess_structure(rebuilt, checkpoint=check)
         try:
             rebuilt = execute(kind, rebuilt, params)
         except ProofBudgetExceeded as exc:
@@ -137,6 +170,12 @@ def assess(design, *, max_entries, execute, dependencies, checkpoint):
                            "detail": str(exc), "possible_dependents": sorted(index.affected([feature_id]) - {feature_id})})
             return result
         result["checked_commands"] += 1
+        if before_structure is not None and before_structure["status"] == "valid":
+            after_structure = assess_structure(rebuilt, checkpoint=check)
+            if after_structure["status"] == "invalid":
+                result["structure_origin"] = {"feature_id": feature_id, "kind": kind,
+                    "structure": after_structure,
+                    "possible_dependents": sorted(index.affected([feature_id]) - {feature_id})}
     check()
     mismatches = sorted(name for name in AUTHORING_FIELDS if getattr(design, name) != getattr(rebuilt, name))
     if mismatches:

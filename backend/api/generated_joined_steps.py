@@ -7,6 +7,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 
 from backend.api.generated_branch_steps import _execute_recorded
+from backend.core.part_overlay_commands import GROUP_CREATE_VERSION
 
 
 def build_joined_sections(design, summary, history, *, history_seed=None):
@@ -49,7 +50,7 @@ def build_joined_sections(design, summary, history, *, history_seed=None):
             history.source_ids.add(cluster.id)
         design = _execute_recorded(design, history, "cluster_create",
             f"Group independent section {index + 1}",
-            {"cluster": cluster.model_dump(mode="json"), "_proof_version": 1},
+            {"cluster": cluster.model_dump(mode="json"), "_proof_version": GROUP_CREATE_VERSION},
             f"branch-group:{index}")
         xy = np.mean([helix.axis_start.to_array() for helix in helices], axis=0)
         xy[2] = 0
@@ -99,7 +100,8 @@ def route_joined_sections(design, summary, history):
     for index, spec in enumerate(summary.get("join_crossbars", summary.get("join_arms", []))):
         identity = str(uuid4())
         attach = _attach_crossbar if summary.get("join_curved") else _attach_arm
-        proposed, body, report = attach(design, spec, identity_seed=identity)
+        proposed, body, report = attach(design, spec, identity_seed=identity,
+                                       fixed_cluster_id=summary["join_sections"][0]["id"])
         params = {**body, "bridge_identity_seed": identity,
                   "flexible_choices": capture_flexible_choices(proposed), "_proof_version": 1}
         before = design

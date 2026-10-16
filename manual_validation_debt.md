@@ -984,6 +984,17 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   display scope. The existing dedicated e2e isolation/output cleanup rules apply.
 
 - **MV-48 — PENDING — Ordinary grouping and geometry preview lifecycle (2026-10-15).**
+  **October 16 grouping-v2 checkpoint:** 563 focused backend passes include real
+  spawned numerical compatibility; no frontend file changed or app was exercised.
+  Group every helix, confirm the retained empty frame owner and named group,
+  save/reopen, append in the original frame and undo/redo. Check the visible 0h
+  group, color ordering and group-picker defaults. Selecting only the empty owner
+  for bend/twist must refuse without changing the document; deleting a frame owner
+  must explain its missing-reference dependency. Old v1 output must remain
+  unchanged and explicitly fail structural verification. Legacy upgrade repair,
+  moved-default regrouping pose preservation and grouped-end continuation are
+  separate open work. Measure actual interaction latency; bounded unit tests do
+  not qualify responsiveness. See [evidence](docs/audits/feature_history_20261014/validation_grouping_structure.json).
   **NOT VERIFIED IN APP.** On a fresh small native bundle, create a group from
   selected strands and then selected domains through the normal cluster panel
   or selection menu. Confirm one visible grouping entry, unchanged molecular

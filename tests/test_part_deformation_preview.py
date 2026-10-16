@@ -173,9 +173,11 @@ def test_prepare_runs_prefix_once_and_sliders_never_prove_or_replay_suffix(monke
 
     from backend.api import part_recipe_edit, state
     import backend.core.part_history_contract as history
+    import backend.core.part_structure as structure
     monkeypatch.setattr(service, "execute", execute)
     monkeypatch.setattr(part_recipe_edit, "assess_part_history", forbidden)
     monkeypatch.setattr(history, "assess_part_history", forbidden)
+    monkeypatch.setattr(structure, "assess_structure", forbidden)
     monkeypatch.setattr(state, "encode_design_snapshot", forbidden)
     monkeypatch.setattr(state, "decode_design_snapshot", forbidden)
     prepared = service.prepare_from_capture(owned_capture(source), "edited-feature")

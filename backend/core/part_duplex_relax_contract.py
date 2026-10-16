@@ -17,7 +17,8 @@ ENGINE_ID = "nadoc.duplex-relax-native.v1"
 MAX_SOURCE_NUCLEOTIDES = 50_000
 _ROOT = Path(__file__).resolve().parents[2]
 SOURCE_PATHS = tuple(f"backend/core/{name}.py" for name in (
-    "part_duplex_relax_contract", "part_numerical_runtime", "direct_relax", "duplex_cluster",
+    "part_duplex_relax_contract", "part_numerical_runtime", "part_numerical_schema_compatibility",
+    "direct_relax", "duplex_cluster",
     "linker_relax", "bond_relax", "duplex", "constants", "geometry", "design_geometry",
     "deformation", "deformation_scope", "sweep_path", "native_full_placement",
     "native_slab_placement", "measured_atomistic", "measured_positioning", "nucleotide_landmarks",
@@ -117,12 +118,15 @@ def contract_defaults():
 
 
 def validate_environment(command):
-    if command.engine.implementation_sha256 != digest(implementation_manifest()):
-        raise DuplexRelaxContractError("Duplex relaxation code/data differs from the authored engine",
-                                       code="engine_mismatch")
+    from backend.core.part_numerical_schema_compatibility import require_implementation
+
+    transition = require_implementation(ENGINE_ID, command.engine.implementation_sha256,
+        implementation_manifest(), error_type=DuplexRelaxContractError,
+        detail="Duplex relaxation code/data differs from the authored engine")
     if command.engine.runtime_sha256 != digest(runtime_fingerprint()):
         raise DuplexRelaxContractError("Duplex relaxation runtime differs from the authored engine",
                                        code="runtime_mismatch")
+    return transition
 
 
 def _reference(detail, kind, identity, path, *, invalid=False):

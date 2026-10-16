@@ -75,7 +75,7 @@ def test_default_desktop_and_legacy_log_values_record_exact_group_input(document
     assert len(updated.feature_log) == len(document.feature_log) + 1
     row = updated.feature_log[-1]
     assert row.feature_type == "cluster_create"
-    assert row.proof_version == 1
+    assert row.proof_version == 2
     assert row.cluster_id == group.id
     assert row.cluster_snapshot == group
     assert row.helix_ids == [document.helices[0].id]

@@ -131,7 +131,8 @@ def _compile(source, request, history_seed, timestamp, dependency_resolver):
         elif kind == "cluster_create":
             cluster = ClusterRigidTransform(id=params["cluster_id"], name=params["name"],
                 helix_ids=params["helix_ids"], auto_created=False)
-            entry = ClusterCreateLogEntry(id=identity, proof_version=1, cluster_id=cluster.id,
+            from backend.core.part_overlay_commands import GROUP_CREATE_VERSION
+            entry = ClusterCreateLogEntry(id=identity, proof_version=GROUP_CREATE_VERSION, cluster_id=cluster.id,
                 name=cluster.name, helix_ids=list(cluster.helix_ids), cluster_snapshot=cluster)
             log.append(entry)
             feature_id = identity

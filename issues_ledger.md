@@ -2364,7 +2364,7 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   desktop All/None, group/plane reversals, undo/redo and save/reopen remain MV-48;
   do not claim ordinary desktop closure until the integration gate is qualified.
 
-## ISSUE-106 — Grouping every helix removes a retained lattice-frame owner (2026-10-16, SOURCE REPRODUCED; OPEN)
+## ISSUE-106 — Grouping every helix removes a retained lattice-frame owner (2026-10-16, PREVENTION IMPLEMENTED; REPAIR/APP OPEN)
 
 - `part_overlay_commands.build("cluster_create", ...)` drops the default group
   when its final helices move into named groups. A retained
@@ -2376,16 +2376,31 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
 - The dedicated [characterization](tests/test_group_frame_ownership_characterization.py)
   constructs a valid native bundle, groups all helices and demonstrates the
   dangling reference. It deliberately records invalid legacy behavior, not an
-  acceptance criterion. Input-only reproduction currently returns `verified`
+  acceptance criterion. Input-only reproduction previously returned `verified`
   because the same builder recreates the invalid output; this does not establish
   structural validity. The isolated characterization passes inside the final
   373-case run; its passing result reproduces the defect and does not fix it.
 - Keep ISSUE-105's acceptance fixture valid using its named arm plus the real
   surviving default group, both moved through native inputs; retain initial
   and final full JSON roundtrips. Do not remove the save/reload check.
-- Proposed next checkpoint: preserve a referenced empty placement owner when
-  its grouping membership is exhausted, with ordinary route, frame continuation,
-  persistence and cold-replay tests. This changes the output of affected saved
-  `cluster_create` v1 commands, so decide compatibility/version handling first;
-  do not silently reinterpret old rows or change numerical/model pins in the
-  retarget fix. No grouping replay fix has been implemented for this issue.
+- New grouping uses `cluster_create` v2, retaining all existing identities and
+  order even when membership becomes empty. Saved v1 remains exact and is now
+  flagged as structurally invalid separately from successful reproduction.
+  Final history-edit/repair candidates require bounded frame-reference closure;
+  direct deletion cannot remove a referenced placement owner. No full model
+  validation or structural inventory enters the isolated slider path.
+- Generated joins select the stem by ID; namespaced grouping uses a deterministic
+  v2-only identity seed. Ordinary empty/missing group selections no longer create
+  bend/twist operations whose empty affected list means all helices. These are
+  authoring guards, not changes to native deformation math or saved v1 replay.
+- The schema extension uses an explicit exact-manifest compatibility policy for
+  the three affected numerical families; no stored pins, numerical kernels,
+  constants, data or geometry goldens are rewritten. Proof discloses transitions.
+- Still open: explicit v1→v2 definition repair and its UI/durable draft lifecycle;
+  definition-only admission for invalid saved files; broader cluster-delete
+  references and logged deletion; actual desktop save/reopen/selection/latency.
+  Retention does not solve regrouping pose loss or grouped-end continuation.
+- Validation: **563 distinct backend passes**, including three fresh-process
+  numerical compatibility cases. [Evidence](docs/audits/feature_history_20261014/validation_grouping_structure.json)
+  retains red/integration failures and cleanup. MV-48 desktop/latency and broad
+  regression debt remain open; no frontend or scientific golden was changed.

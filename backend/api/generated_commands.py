@@ -16,6 +16,7 @@ from backend.core.models import (
     OverhangRotationLogEntry,
 )
 from backend.core.design_diff import encode_child_diff
+from backend.core.part_overlay_commands import GROUP_CREATE_VERSION, proof_version_supported
 
 
 def fine_routing(before, after, commands):
@@ -56,7 +57,7 @@ def fine_routing(before, after, commands):
 
 def ordinary_entries(before, after, entry, key):
     """Replace compound generator labels with native, fully specified operations."""
-    if entry.params.get("_proof_version") == 1:
+    if proof_version_supported(entry.op_kind, entry.params.get("_proof_version")):
         from backend.api.part_proof_commands import PROOF_MINOR_KINDS
         if entry.op_kind in PROOF_MINOR_KINDS:
             params = {k: v for k, v in entry.params.items() if k != "_generator"}
@@ -283,7 +284,10 @@ def certify_entries(before, after, entries):
     candidates = []
     for entry in entries:
         if entry.feature_type in KINDS:
-            candidate = entry.model_copy(update={"proof_version": 1})
+            version = entry.proof_version
+            if version is None:
+                version = GROUP_CREATE_VERSION if entry.feature_type == "cluster_create" else 1
+            candidate = entry.model_copy(update={"proof_version": version})
         elif entry.feature_type == "snapshot":
             candidate = entry.model_copy(update={"params": {
                 **{k: v for k, v in entry.params.items() if k != "_generator"}, "_proof_version": 1}})

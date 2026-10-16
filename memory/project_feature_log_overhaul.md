@@ -18,6 +18,48 @@ Existing core command support is enabled, but preview and editor integration
 gaps prevent claiming end-to-end completion. Assemblies and machine-specific
 VR validation remain deferred.
 
+**Current grouping/structure continuation:** `cluster_create` v2 retains every
+existing cluster identity/order when grouping empties its membership; v1 replay
+remains unchanged. Ordinary/generated/registered-batch authors emit v2, generated
+joins name their stem explicitly, and namespaced v2 group IDs have deterministic
+bootstrap seeds. Explicit proof reports `reproducibility_status` independently
+from bounded `structure` diagnostics and withholds native-editable success for
+invalid/incomplete closure. A replay boundary can attribute the first broken
+v1 group; conservative dependents remain possible, not proven blocked.
+History-edit and repair final candidates require structural closure; direct
+frame-owner deletion refuses before guarded publication. Empty/missing ordinary
+bend/twist groups refuse before canonical preview/commit, preserving saved replay.
+No structural scan enters isolated slider evaluation. Empty owners can still
+appear as 0h in the UI; actual desktop behavior and latency remain unqualified.
+
+Only `ClusterCreateLogEntry`'s version literal changed in `models.py` (three
+bytes). Exact before/current full-manifest transitions for CPD, duplex relaxation
+and coating preserve old pins without rewriting them. Runtime/template/data and
+all unrelated implementation changes still refuse. Explicit proof discloses
+applied transitions; the external fixed policy is reviewed host trust policy,
+not inferred schema compatibility. No molecular formulas/constants/goldens changed.
+
+Next: explicit `upgrade_cluster_creation` action for recognized v1 definitions,
+with exact original-definition digest plus version/group IDs retained across
+durable draft rebase. Replace the typed row rather than attaching `params` to
+an overlay, regenerate from inputs, then validate and publish once. Thread it
+through proposal/capture/metadata/jobs and a specific UI choice; ordinary field
+repair stays snapshot/child-only. Invalid saved files still need a separate
+definition-only recovery entry. Broader incoming cluster-delete dependencies
+and a logged delete contract remain open. Do not claim ISSUE-106 fully closed
+or G1 complete. Geometry/Fine Routing stays ahead of assets, assemblies and VR.
+
+Validation: **563 distinct backend passes**—560 focused cases/35 warnings in
+51.22 s plus three real spawned numerical compatibility cases in 49.09 s. All
+three families reproduce exact current authoring with the approved historical
+implementation pin and refuse unknown pins; these are unchanged-kernel checks,
+not historical-binary equivalence. Scope Ruff/diff checks pass. No frontend files
+changed; `main.js` delta is zero. Selector dry-run chose FAST with FULL deferred;
+it executed no suite. [Checkpoint evidence](../docs/audits/feature_history_20261014/validation_grouping_structure.json)
+retains red/integration failures and cleanup of 73 disposable files/148,379 bytes,
+689 directories and 23 links after zero active references. No shared worker
+buffers or owned test roots remain. No desktop or interaction timing pass.
+
 **G1 current checkpoint:** ordinary/headless group creation always records a
 versioned input (ISSUE-99); `log` is now an ignored compatibility argument.
 The shared pure builder and existing lock-owned replacement publisher run under

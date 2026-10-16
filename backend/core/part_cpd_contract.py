@@ -33,7 +33,8 @@ TEMPLATE_SHA256 = "cfb5cd66b05f210b8e6f5e95478373ad169d9de3dfbfcff91a2b0c9fe908c
 # Empty-family guards are part of the closure too (aptamer, linker and biotin
 # helpers). Imports of unrelated simulation/export functions are not execution.
 SOURCE_PATHS = tuple(f"backend/core/{name}.py" for name in (
-    "part_cpd_contract", "part_numerical_runtime", "cpd_design", "cpd_product", "atomistic",
+    "part_cpd_contract", "part_numerical_runtime", "part_numerical_schema_compatibility",
+    "cpd_design", "cpd_product", "atomistic",
     "atomistic_helpers", "atomistic_minimisers", "atomistic_validation",
     "base_keys", "constants", "geometry", "design_geometry", "deformation",
     "deformation_scope", "sweep_path", "native_full_placement",
@@ -229,12 +230,16 @@ def prepare_command(kind, inputs):
 
 
 def validate_environment(command):
+    from backend.core.part_numerical_schema_compatibility import require_implementation
+
     if command.template != _qualified_template():
         raise CPDContractError("CPD template identity differs from the authored recipe", code="template_mismatch")
-    if command.engine.implementation_sha256 != _digest(implementation_manifest()):
-        raise CPDContractError("CPD placement code/data differs from the authored engine", code="engine_mismatch")
+    transition = require_implementation(ENGINE_ID, command.engine.implementation_sha256,
+        implementation_manifest(), error_type=CPDContractError,
+        detail="CPD placement code/data differs from the authored engine")
     if command.engine.runtime_sha256 != _digest(runtime_fingerprint()):
         raise CPDContractError("CPD numerical runtime differs from the authored engine", code="runtime_mismatch")
+    return transition
 
 
 def _reference(detail, kind, identity, path, *, invalid=False):

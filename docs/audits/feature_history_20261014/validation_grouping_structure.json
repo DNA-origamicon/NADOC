@@ -1,0 +1,163 @@
+{
+  "date": "2026-10-16",
+  "checkpoint_before": "1ae1137f",
+  "scope": "Core geometry: grouping v2, bounded frame structural diagnostics, explicit schema compatibility, empty selection and deletion guards",
+  "goal_status": "active; G1-G6 incomplete; core geometry and Fine Routing precede assets",
+  "commands": {
+    "focused": "just validate-safe scripts/test_guard.sh test-focused 0 focused -- uv run pytest <22 explicit targets> -q --tb=short --disable-warnings --durations=8",
+    "native": "just validate-safe scripts/test_guard.sh test-focused 0 focused -- uv run pytest tests/test_native_schema_compatibility.py -q --tb=short --disable-warnings --durations=5"
+  },
+  "focused_targets": [
+    "test_group_creation_v2.py",
+    "test_geometry_group_history.py",
+    "test_generated_joined_steps.py",
+    "test_part_registered_batch.py",
+    "test_generated_native_proof.py",
+    "test_generated_joined_proof.py",
+    "test_part_batch_publication_scope.py",
+    "test_native_overlay_proof.py",
+    "test_part_recipe_edit.py",
+    "test_part_structure.py",
+    "test_part_structure_proof.py",
+    "test_empty_group_deformation_guard.py",
+    "test_cluster_delete_structure.py",
+    "test_group_frame_ownership_characterization.py",
+    "test_part_numerical_schema_compatibility.py",
+    "test_part_cpd_contract.py",
+    "test_part_duplex_relax_contract.py",
+    "test_part_streptavidin_commands.py",
+    "test_part_recipe_repair.py",
+    "test_part_proof_engine.py",
+    "test_part_history_verification.py",
+    "test_part_deformation_preview.py"
+  ],
+  "final_checks": {
+    "focused": {
+      "passed": 560,
+      "warnings": 35,
+      "seconds": 51.22
+    },
+    "native_schema_compatibility": {
+      "passed": 3,
+      "seconds": 49.09,
+      "families": {
+        "duplex": 4.46,
+        "coating": 5.29,
+        "cpd": 36.4
+      },
+      "meaning": "Worker-authored current runtime/template and outputs; independent current/approved-old/unknown implementation-pin workers. Same installed unchanged kernels; not historical binary equivalence.",
+      "shared_transport_buffers_after": 0
+    },
+    "distinct_backend_passes": 563,
+    "scoped_ruff": "passed",
+    "diff_check": "passed",
+    "main_js_line_delta": 0,
+    "frontend": "No frontend files changed; frontend suite not rerun for this checkpoint.",
+    "app": "NOT VERIFIED IN APP; Archive unavailable; desktop interaction and latency remain open; VR deferred by user."
+  },
+  "red_and_integration_evidence": [
+    {
+      "scope": "structure/proof initial fixture",
+      "failed": 4,
+      "seconds": 2.91,
+      "cause": "Non-UUID fixture group ID; corrected without weakening assertions."
+    },
+    {
+      "scope": "structure/proof behavioral red",
+      "failed": 4,
+      "seconds": 2.87,
+      "cause": "Invalid reproduced state was verified/returned as ready; missing structural results."
+    },
+    {
+      "scope": "group-v2 behavior red",
+      "failed": 1,
+      "passed": 1,
+      "seconds": 3.01,
+      "cause": "Existing default identities were deleted."
+    },
+    {
+      "scope": "empty/missing group selection red",
+      "failed": 8,
+      "seconds": 2.82,
+      "cause": "Canonical bend/twist preview/commit admitted empty affected lists."
+    },
+    {
+      "scope": "numerical compatibility initial red",
+      "errors": 1,
+      "seconds": 3.15,
+      "cause": "New compatibility helper absent."
+    },
+    {
+      "scope": "structure integration fixture",
+      "failed": 1,
+      "passed": 32,
+      "seconds": 3.46,
+      "cause": "Trap named nonexistent nucleotide_arrays; corrected to real nucleotide_positions_arrays."
+    },
+    {
+      "scope": "overlapping pre-fix structural rerun",
+      "failed": 1,
+      "passed": 33,
+      "seconds": 3.42,
+      "cause": "Same fixture trap before correction reached shared worktree."
+    },
+    {
+      "scope": "grouping integration",
+      "failed": 3,
+      "passed": 142,
+      "warnings": 34,
+      "seconds": 30.32,
+      "cause": "One namespaced group UUID seed failure corrected in v2 only; two cold workers saw root integration before collector dependency was frozen. Final run used frozen code."
+    },
+    {
+      "scope": "delete safety red with other new controls",
+      "failed": 5,
+      "passed": 73,
+      "seconds": 4.0,
+      "cause": "Delete removed frame owner, admitted incomplete structural checks, published before validation, and overwrote raced sources."
+    }
+  ],
+  "compatibility": {
+    "policy": "Exact engine + old full manifest + current full manifest only; no transitive acceptance or pin rewriting; runtime/template strict; transition disclosed.",
+    "before_manifests": "grouping_schema_compatibility_before.json",
+    "models_before_sha256": "022314058fe3d8aecbc69cad81d62486e43ad73405ba73d2600832b3b9857fe6",
+    "models_after_sha256": "ba120f7c7ea69bc2fdcf91745115be324d17a858ef7cf2c8c1be69cbcb8eede6",
+    "models_bytes_added": 3,
+    "molecular_changes": false,
+    "policy_path": "backend/core/data/numerical_schema_compatibility_v1.json"
+  },
+  "selector": {
+    "command": "just test-smart --dry-run",
+    "changed_files_since_last_full": 5444,
+    "decision": "FAST  (fast suite only)",
+    "tests_executed": false,
+    "deferred_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\n  This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\n  Only request `just test-session` when a broad/full sweep is actually needed.",
+    "clarification": "The quoted selector boilerplate says ran; this was dry-run selection only. Existing aggregate fast-suite and broad-suite debt is not cleared."
+  },
+  "cleanup": {
+    "active_fd_cwd_map_references": 0,
+    "owned_roots": [
+      "/tmp/pytest-of-joshua/pytest-277",
+      "/tmp/pytest-of-joshua/pytest-278",
+      "/tmp/pytest-of-joshua/pytest-279"
+    ],
+    "removed_files": 73,
+    "removed_bytes": 148379,
+    "removed_directories": 689,
+    "removed_symlinks": 23,
+    "owned_roots_remaining": false,
+    "preserved": "Historical pytest-268 lock (6 bytes) and unrelated user/runtime state",
+    "frontend_test_results_files": 0,
+    "frontend_playwright_report_files": 0,
+    "bulk_or_native_scratch_generated": false
+  },
+  "remaining": [
+    "Explicit recognized v1-to-v2 grouping repair, durable draft/rebase/UI",
+    "Definition-only recovery entry for invalid saved files",
+    "Broader incoming cluster delete references and recorded deletion contract",
+    "Desktop and actual request/render latency qualification",
+    "Enable both isolated bend/twist gates only after qualification; then prune legacy history preview path",
+    "G2 remaining geometry editors, G3 core dependency repair, G4 performance, G5 automation enforcement",
+    "Lower-priority assets G6, assemblies and machine-specific VR deferred"
+  ]
+}

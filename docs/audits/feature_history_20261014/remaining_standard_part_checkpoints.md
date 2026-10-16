@@ -79,10 +79,11 @@ Unperformed desktop and broad-suite checks remain completion debt, not passes.
 local evaluation on owned input. Prefix support now includes ordinary extrude,
 sweep and Fine Routing commands alongside bundle/group/pose/deformation.
 The private host, DTO, disabled HTTP adapter, transport/controller and owned
-native renderer are implemented. The router is not registered in the main app
-and the existing editor is not wired to it. ISSUE-100 remains open. Full control
-validation, cluster retargeting (ISSUE-105), popup/editor integration and actual
-interaction measurements are required before rollout. Existing admission
+native renderer are implemented. The router is not registered in the main app;
+the existing editor is wired behind its default-false qualification gate.
+ISSUE-100 remains open. Control validation, authored cluster retargeting
+(ISSUE-105) and popup/editor integration are implemented; actual desktop
+interaction and latency measurements are still required before rollout. Existing admission
 limits remain; sweep has a separate bounded path-sampling allowance.
 
 The focused backend lifecycle tests reproduce the current desktop sequence:
@@ -183,12 +184,19 @@ model pins, comparison-v2 contract or admission limits changed.
 
 Next checkpoints, in order:
 
-1. Resolve ISSUE-106: grouping all helices can drop a lattice-frame placement
-   owner. The characterization shows that replaying invalid output can currently
-   report equivalence; structural validity must remain a separate requirement.
-   Decide explicit compatibility/version handling at a reversible checkpoint
-   before changing old `cluster_create` output. Add ordinary route, continuation,
-   initial/final save/reload and cold-proof checks.
+1. Complete ISSUE-106 repair after the grouping-v2 prevention checkpoint.
+   New ordinary, generated and registered-batch grouping retains empty owner
+   identities; saved v1 output is unchanged. Explicit verification distinguishes
+   reproduction from bounded frame-reference validity; final history edits and
+   repairs must pass the structural gate. Direct frame-owner deletion refuses
+   before publication. No structural scan is added to deformation sliders.
+   Add a closed `upgrade_cluster_creation` repair action for recognized v1 rows,
+   with an exact expected definition digest and group/version identities. Preserve
+   all other fields, rebuild from inputs and require valid final closure. Carry
+   the same action through durable proposals/rebase, metadata, job publication
+   and an explicit UI choice. Do not expose generic version-field editing or
+   disguise this as a numerical upgrade. Invalid saved files need a separate
+   bounded definition-only recovery entry; ordinary loading still refuses them.
 2. Qualify the complete private editor on representative desktop interactions
    and actual request/render tails, including repeated open/close, group/plane
    reversals, busy/expiry, lost Apply, source switches and one undo. Archive is
@@ -197,6 +205,53 @@ Next checkpoints, in order:
    obsolete peel/delete/seek-restore history path and its characterization only
    after replacement behavior is proven. Then continue sweep, extrude,
    move/rotate and Fine Routing history editors under G2.
+
+Grouping changes membership, not identity lifetime. Keeping every existing
+cluster avoids a reference-inventory walk and protects frame, parent, joint and
+deformation owners. Generated joins now name their stem explicitly rather than
+depending on group-list order. Empty owners remain visible as 0h groups; newly
+authored empty/missing bend or twist selections refuse rather than falling into
+the native empty-list-means-all convention. This does not fix existing pose loss
+when members leave a moved default group, or broaden grouped-end continuation.
+Frame/cell append can refill a retained owner. Direct group deletion still needs
+its own recorded command and broader incoming-reference policy; frame closure
+alone is not complete cluster dependency coverage.
+
+The three-byte `ClusterCreateLogEntry` schema extension affects three numerical
+implementation manifests. The explicit
+[compatibility policy](../../../backend/core/data/numerical_schema_compatibility_v1.json)
+accepts only the captured checkpoint's exact old/current full-manifest pairs;
+all other source/data changes and runtime/template mismatches still refuse.
+Stored pins are never rewritten. Explicit proof reports any applied transition.
+This is compatibility maintenance for core geometry, not resumed asset work.
+The version choice follows Onshape's explicit
+[custom-feature updates](https://cad.onshape.com/help/Content/PartStudio/add_custom_features.htm)
+and [pinned imports](https://cad.onshape.com/FsDoc/imports.html); the planned
+repair remains a deliberate definition change, consistent with its
+[repair workflow](https://cad.onshape.com/help/Content/Document/repairing.htm).
+These sources establish workflow precedent, not numerical equivalence.
+
+The next repair increment uses the existing worker and publication boundary:
+
+- Strict action: `upgrade_cluster_creation`, stable feature ID, no child target,
+  `expected_version: 1`, `expected_cluster_id` and
+  `expected_definition_sha256`. The only admitted transition is recognized v1
+  to v2; unknown/unmarked/already-v2 rows refuse. Hash the bounded complete typed
+  overlay definition, including redundant wrapper fields, outside the state lock.
+- Planner: admit overlays only for that action, with a separate structural
+  replacement field. Keep `set_input` snapshot/child-only and numerical upgrades
+  separate. Discovery-only source capture must neither hash nor execute.
+  Definition rebuilding must replace the actual typed overlay row, preserve both
+  identities and all fields except its proof version, and regenerate recovery.
+- Proposal/draft/job lifecycle: preserve exact expectations through explicit
+  rebase, serialization, source staging and evaluation. Add a separate metadata
+  upgrade descriptor and UI action; no arbitrary replacement placement owner.
+  Require valid final closure, one guarded publication/undo, and source/session
+  conflict refusal. Cancellation never publishes or restores a partial candidate.
+- Acceptance: real broken v1 → private v2 repair → save/reopen/cold proof;
+  unknown versions, wrong row digest after rebase, poisoned recovery, source ABA,
+  cancellation, limits, and undo restoring the original broken state honestly.
+  The saved-invalid-file recovery entry remains a separate bounded continuation.
 
 The duplicate response walk is removed: DTO methods accept a closed scalar host
 envelope, reject collisions before native work, and bound the merged response

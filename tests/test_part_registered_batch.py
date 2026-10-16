@@ -130,8 +130,9 @@ def test_mixed_batch_builds_separate_standard_rows_and_does_not_mutate_input():
     assert candidate.feature_log[-1].label == "Resize gold"
     assert candidate.nanoparticles[0].diameter_nm == 12.
     assert candidate.strands[0].id == STRAND
-    assert candidate.cluster_transforms[0].id == CLUSTER
-    assert candidate.cluster_transforms[0].translation == [1., 2., 3.]
+    group = next(cluster for cluster in candidate.cluster_transforms if cluster.id == CLUSTER)
+    assert group.translation == [1., 2., 3.]
+    assert candidate.cluster_transforms[0].is_default and not candidate.cluster_transforms[0].helix_ids
     assert result["batch"]["completed"] == [item["child_id"] or item["feature_id"] for item in result["batch"]["commands"]]
     assert result["batch"]["not_evaluated"] == []
     assert result["batch"]["candidate_replay_verified"] is False
@@ -402,6 +403,6 @@ def test_ordinary_feature_and_child_edits_preserve_batch_ids_and_cold_reproducib
     assert changed.helices[0].id == HELIX and changed.helices[0].length_bp == 40
     assert [(entry.id, [child.id for child in getattr(entry, "children", [])]) for entry in changed.feature_log] == identities
     changed, _ = prepare_change(changed, changed, 2, lambda: None, params={"translation": [3., 2., 1.]})
-    assert changed.cluster_transforms[0].translation == [3., 2., 1.]
+    assert next(cluster for cluster in changed.cluster_transforms if cluster.id == CLUSTER).translation == [3., 2., 1.]
     assert proof(changed)["status"] == "verified"
     assert candidate.model_dump(include=AUTHORING_FIELDS) != changed.model_dump(include=AUTHORING_FIELDS)

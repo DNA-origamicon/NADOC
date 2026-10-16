@@ -31,11 +31,20 @@ def test_compiled_joined_seed_matches_native_and_maps_only_typed_references(latt
     history = GeneratedHistory(source, GeneratorSettings())
     actual, compiled = build_joined_sections(source, summary, history, history_seed=SEED)
     normalized = native_names(actual, expected)
+    # v2 retains the native seed's empty placement owner. The independent
+    # legacy seed omits it; all populated groups retain identical pose/members.
+    retained = actual.cluster_transforms[0]
+    assert retained.is_default and retained.auto_created and retained.helix_ids == []
+    assert retained.domain_ids == []
+    assert len(actual.cluster_transforms) == len(expected.cluster_transforms) + 1
     normalized = remap_design(normalized, {("cluster", actual.id): expected.id
-                                          for actual, expected in zip(actual.cluster_transforms,
-                                                                      expected.cluster_transforms)})
+                                          for actual, expected in zip(actual.cluster_transforms[1:],
+                                                                      expected.cluster_transforms, strict=True)})
     for field in AUTHORING_FIELDS - {"metadata"}:
-        assert getattr(normalized, field) == getattr(expected, field), field
+        if field == "cluster_transforms":
+            assert normalized.cluster_transforms[1:] == expected.cluster_transforms
+        else:
+            assert getattr(normalized, field) == getattr(expected, field), field
     assert summary["join_sections"][1]["id"] == original["join_sections"][1]["id"]
     assert "join_section_cluster_ids" not in summary
     assert compiled["join_section_cluster_ids"] == {
@@ -49,7 +58,7 @@ def test_compiled_joined_seed_matches_native_and_maps_only_typed_references(latt
     for group in groups:
         UUID(group.cluster_id)
         assert all(identity.startswith(f"gen_{history.group_id}_") for identity in group.helix_ids)
-        assert group.proof_version == 1
+        assert group.proof_version == 2
         assert "_generated_scope" not in command_input(group)[1]
     rebuilt = source
     for entry in history.design.feature_log:
@@ -63,12 +72,12 @@ def test_generated_overlay_cannot_certify_a_change_absent_from_its_inputs():
     source = create_empty_part("Joined construction", "HONEYCOMB")
     history = GeneratedHistory(source, GeneratorSettings())
     local, _ = build_joined_sections(source, selected_plan(), history, history_seed=SEED)
-    cluster = local.cluster_transforms[0]
+    cluster = next(cluster for cluster in local.cluster_transforms if cluster.helix_ids)
     params = {"cluster_id": cluster.id, "translation": [1, 2, 3],
               "rotation": cluster.rotation, "pivot": cluster.pivot, "_proof_version": 1}
     after = execute("cluster_op", local, params)
-    after = after.copy_with(cluster_transforms=[after.cluster_transforms[0].model_copy(
-        update={"name": "unrecorded change"}), *after.cluster_transforms[1:]])
+    after = after.copy_with(cluster_transforms=[item.model_copy(update={"name": "unrecorded change"})
+        if item.id == cluster.id else item for item in after.cluster_transforms])
     before = history.design.model_dump_json()
     with pytest.raises(ValueError, match="authored inputs"):
         history.record(local, after, "cluster_op", "Move", params, "bad-pose")
