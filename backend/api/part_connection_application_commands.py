@@ -1,19 +1,20 @@
 """Bounded finite ordinary-linker Apply over the existing native algorithms.
 
-This pure contract does not admit routes, direct bindings, indirect linkers or
-combined Connect. Its finite orchestration matches the independently retained
-legacy callback; consolidate that seam when live routing is separately reviewed.
+The pure builder and private recording adapter share one admitted selection and
+the unchanged native materializer. Direct bindings, indirect linkers and combined
+Connect retain their independently available legacy callback.
 """
 
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from math import isfinite
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 
 from backend.core.cluster_reconcile import MutationReport
-from backend.core.models import OverhangConnection, StrandType
+from backend.core.models import ConnectionVersion, OverhangConnection, StrandType
 from backend.core.part_command_errors import CommandContractError, ReferenceResolutionError
 from backend.core.part_operation_input import MAX_OPERATION_BYTES, MAX_OPERATION_NODES, validate_operation_input
 from backend.core.part_scope_references import COLLECTIONS, SCHEMAS, identity_index, referenced_resources
@@ -349,12 +350,16 @@ class _Selected:
     bridge_length: int
 
 
-def _select(design, body):
+def _source_index(design):
     _bounded_source(design)
     try:
         index, _ = identity_index(design)
     except NotImplementedError as error:
         _unsupported(str(error))
+    return index
+
+
+def _select_inputs(design, body, index):
     version = _resolve(index, "connection_version", body.version_id, "version_id")
     for field in ("overhang_a_id", "overhang_b_id"):
         _resolve(index, "overhang", getattr(body, field), field)
@@ -380,6 +385,10 @@ def _select(design, body):
     connections = _conflicts(design, body, index)
     removed = _removed_ownership(design, index, connections, backings, host_owners)
     _complement_ownership(design, index, targets, removed)
+    return _Selected(version, tuple(connections), bridge_length), removed
+
+
+def _check_outputs(design, body, index, removed):
     prefix = f"__lnk__{body.connection_id}"
     strands = {f"{prefix}__a", f"{prefix}__b"} if "dsdna" in body.connection_type else {f"{prefix}__s"}
     outputs = {("overhang_connection", body.connection_id), ("helix", prefix),
@@ -396,7 +405,13 @@ def _select(design, body):
             _fail("Linker output enters a retained connection's removal namespace",
                   "overhang_connection", body.connection_id, "connection_id")
     _incoming(design, removed, outputs)
-    return _Selected(version, tuple(connections), bridge_length)
+
+
+def _select(design, body):
+    index = _source_index(design)
+    selected, removed = _select_inputs(design, body, index)
+    _check_outputs(design, body, index, removed)
+    return selected
 
 
 def _materialize(design, body, selected):
@@ -444,3 +459,87 @@ def _materialize(design, body, selected):
 def build(design, params):
     body = parse_command(params)
     return _materialize(design, body, _select(design, body))
+
+
+def _route_version(design, version_id):
+    """Classify a bounded selected version before full-source preparation."""
+    versions = design.connection_versions
+    if type(versions) is not list or len(versions) > MAX_OPERATION_NODES:
+        _unsupported("Finite application cannot inspect this version table")
+    selected = None
+    for version in versions:
+        if type(version) is not ConnectionVersion:
+            _unsupported("Finite application requires ordinary connection versions")
+        if version.id == version_id:
+            if selected is not None:
+                _fail("Selected connection version identity is ambiguous", "connection_version", version_id, "version_id")
+            selected = version
+    if selected is None:
+        _fail("Selected linker application input is missing", "connection_version", version_id, "version_id", missing=True)
+    return selected
+
+
+def try_record(version_id):
+    """Record one finite Apply under the existing document transaction lock.
+
+    Only explicitly unsupported input scope returns None. Selection finishes
+    before undo allocation; an admitted failure never retries through legacy.
+    The prepared selection lives only within this source-owned lock scope.
+    """
+    from fastapi import HTTPException
+    from backend.api import state
+    from backend.api.feature_recording import record_feature
+
+    try:
+        with state._lock:
+            state._require_compatibility_write("finite_connection_apply")
+            session = state._session()
+            source = session.design
+            if source is None:
+                raise HTTPException(404, detail="No active design.")
+            try:
+                version = _route_version(source, version_id)
+                if version.connection_type not in get_args(_FiniteType):
+                    return None
+                state._assert_active_loadout_editable(source)
+                index = _source_index(source)
+                endpoints = {version.overhang_a_id, version.overhang_b_id}
+                values = {"_proof_version": 1, "connection_application_version": 1, "action": ACTION,
+                    "version_id": version.id, "overhang_a_id": version.overhang_a_id,
+                    "overhang_b_id": version.overhang_b_id, "connection_type": version.connection_type,
+                    "connection_id": "pending",
+                    "conflict_connection_ids": [item.id for item in source.overhang_connections
+                        if endpoints.intersection((item.overhang_a_id, item.overhang_b_id))],
+                    "conflict_version_ids": [item.id for item in source.connection_versions
+                        if endpoints.intersection((item.overhang_a_id, item.overhang_b_id))]}
+                if any(len(values[field]) > MAX_CONFLICTS for field in
+                       ("conflict_connection_ids", "conflict_version_ids")):
+                    _unsupported("Finite application exceeds its selected conflict allowance")
+                body = parse_command(values)
+                selected, removed = _select_inputs(source, body, index)
+                # The placeholder never reaches output ownership or recording.
+                values["connection_id"] = str(uuid4())
+                body = parse_command(values)
+                _check_outputs(source, body, index, removed)
+            except CommandContractError as error:
+                if error.code == "unsupported_connection_application_source":
+                    return None
+                raise
+
+            def native(design):
+                if session.design is not source or design is not source:
+                    raise HTTPException(409, detail="Connection application source changed before recording.")
+                result, report = _materialize(design, body, selected)
+                # Recording appends in place; keep the source's history list
+                # independent without adding another whole-model clone.
+                return result.copy_with(feature_log=list(design.feature_log)), report
+
+            a = index[("overhang", body.overhang_a_id)].label
+            b = index[("overhang", body.overhang_b_id)].label
+            label = f"Apply version {version.name or version.id[:8]} ({a}↔{b})"
+            updated, report, entry = record_feature(session, "overhang-bulk", label, values, native)
+            return source, updated, report, entry
+    except ReferenceResolutionError as error:
+        raise HTTPException(404 if error.code == "missing_reference" else 422, detail=error.as_issue()) from error
+    except (CommandContractError, ValueError) as error:
+        raise HTTPException(422, detail=error.as_issue() if isinstance(error, CommandContractError) else str(error)) from error

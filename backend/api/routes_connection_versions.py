@@ -31,6 +31,9 @@ from backend.core.render_diff import _local_changed_helices, _strand_occupancy
 
 router = APIRouter()
 
+# Internal rollout only; whole-request latency must be qualified before enabling.
+OWNED_FINITE_CONNECTION_APPLY_ENABLED = False
+
 
 @router.post("/design/connection-versions", status_code=201)
 def create_connection_version(body: ConnectionVersionCreateRequest) -> dict:
@@ -300,6 +303,18 @@ def _cv_create_bound_binding(
 def _apply_connection_version_impl(
     version_id: str, *, new_version: ConnectionVersion | None = None
 ) -> dict:
+    if OWNED_FINITE_CONNECTION_APPLY_ENABLED and new_version is None:
+        from backend.api.part_connection_application_commands import try_record
+        recorded = try_record(version_id)
+        if recorded is not None:
+            source, updated, report, _entry = recorded
+            return _connection_apply_response(source, updated, report)
+    return _apply_connection_version_legacy(version_id, new_version=new_version)
+
+
+def _apply_connection_version_legacy(
+    version_id: str, *, new_version: ConnectionVersion | None = None
+) -> dict:
     """Materialize a candidate version ATOMICALLY (one undo): set both overhang
     sequences (resizing each overhang to the sequence length), tear down the
     pair's current OverhangConnection / OverhangBinding, and (re)create the
@@ -501,12 +516,13 @@ def _apply_connection_version_impl(
         params={"version_id": version_id, "connection_type": vtype},
         fn=_fn,
     )
-    # A connection apply is local even on very large designs. Returning full
-    # geometry made VoltronCoreArm OH49↔OH50 rebuild all 67 helices in the
-    # browser: ~10 s request + ~37 s parse/store/scene work. Derive the exact
-    # occupancy footprint (including the driven helix removed by relocation)
-    # and use the established partial merge protocol so the renderer replaces
-    # only those helices. The full fallback remains for a non-local diff.
+    return _connection_apply_response(design, updated, report)
+
+
+def _connection_apply_response(design, updated, report):
+    # Preserve the existing occupancy-based response selection. Connection-list
+    # changes (including finite Apply) currently require full geometry; other
+    # local cases may use the established partial merge protocol.
     changed = _local_changed_helices(
         _strand_occupancy(design), _strand_occupancy(updated)
     )

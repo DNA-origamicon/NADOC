@@ -1,0 +1,586 @@
+{
+  "date": "2026-10-15",
+  "scope": "Private default-disabled existing-version finite ssDNA/dsDNA Apply and reapply; ordinary parts only",
+  "gate": "routes_connection_versions.OWNED_FINITE_CONNECTION_APPLY_ENABLED=False",
+  "unique_focused_cases_passed": 244,
+  "files": [
+    "tests/test_connection_version_owned_apply_route.py",
+    "tests/test_part_connection_application_commands.py",
+    "tests/test_native_connection_application_proof.py",
+    "tests/test_part_pending_connection_versions.py",
+    "tests/test_pending_connection_early_refusal.py",
+    "tests/test_connection_versions.py",
+    "tests/test_direct_connection_unified.py",
+    "tests/test_targeted_reassign.py",
+    "tests/test_feature_recording_transactions.py"
+  ],
+  "executed_runs": [
+    {
+      "stage": "Initial 21 route cases before implementation",
+      "passed": 5,
+      "failed": 16,
+      "seconds": 3.48,
+      "interpretation": "15 failures exposed absent native routing; one legacy response control had an incorrect ss bridge-bead expectation. Production was held until that control was corrected against the existing geometry contract."
+    },
+    {
+      "stage": "Corrected unchanged legacy response control",
+      "passed": 1,
+      "seconds": 2.69
+    },
+    {
+      "stage": "Initial route plus pure materializer",
+      "passed": 76,
+      "seconds": 3.68
+    },
+    {
+      "stage": "Seven related compatibility, registry, cold proof and recording files",
+      "passed": 154,
+      "warnings": 28,
+      "seconds": 8.49
+    },
+    {
+      "stage": "Preflight ordering regressions before correction",
+      "passed": 21,
+      "failed": 10,
+      "seconds": 3.42
+    },
+    {
+      "stage": "Corrected preflight plus pure materializer",
+      "passed": 86,
+      "seconds": 3.51
+    },
+    {
+      "stage": "Output identity and compatibility conflict-boundary controls before correction",
+      "passed": 2,
+      "failed": 2,
+      "seconds": 2.84
+    },
+    {
+      "stage": "Final route contract",
+      "passed": 35,
+      "seconds": 3.0
+    }
+  ],
+  "established": [
+    "One bounded version-only classification precedes full source preparation; unsupported direct/indirect types retain legacy dispatch without inspecting unrelated topology",
+    "Protected finite loadouts refuse before source indexing, UUID allocation, undo copy or encoding",
+    "One bounded authoring walk, one typed identity index and one materialization feed the existing single recording transaction",
+    "Exact ordered version/endpoints/conflicts and a stable allocated output identity are recorded; pending is never used as an output-ownership placeholder",
+    "One undo copy, two recovery encodes, one reconciliation/retry/validation pass and existing CPD/draft protection remain",
+    "Missing/ambiguous selected references and output collisions refuse before recording; admitted failures and cancellation never retry through legacy",
+    "Conflict sets outside the new 128-item contract explicitly fall back before strict command parsing",
+    "Complete source history remains independent of the recorded row append",
+    "Fresh input-only replay and existing real cold worker proofs reproduce Apply/reapply with saved recovery poisoned",
+    "The current full geometry response is preserved: ss virtual bridges use recorded topology/complement anchors, ds bridge beads are separately emitted, and virtual linker axes are excluded"
+  ],
+  "limits": [
+    "Gate remains false; correctness is not interactive latency qualification",
+    "Combined Connect, direct/indirect native history and broader source profiles remain separate work",
+    "Source classification bounds exclude retained history/presentation costs; complete HTTP measurement is required",
+    "Response serialization remains after publication as in legacy; response failure is not claimed to roll back a committed transaction",
+    "Shared-host legacy sequence-resize issue remains unsupported by the new contract"
+  ],
+  "broad_validation": {
+    "latest_selector": "just test-smart --dry-run -- --ignore-glob=tests/test_vr* --ignore-glob=tests/test_scrywrite* --tb=short --disable-warnings -q",
+    "decision": "FAST  (fast suite only)",
+    "executed_for_this_checkpoint": false,
+    "reason": "Archive remains unavailable. Earlier broad and headless runs unexpectedly produced bulk local temporary fixtures; further broad/bulk execution is deferred until Archive scratch is verified or a bounded selection is reviewed. These nine focused files were reviewed for memory-only or tiny fixture work.",
+    "previous_actual_run": "validation_backend_resume.json: 14101 passed, 9 baseline failures, 8 baseline errors, 11 skipped; predates this route checkpoint and does not clear its broad regression debt",
+    "selector_deferral_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\nThis is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\nOnly request `just test-session` when a broad/full sweep is actually needed.",
+    "dry_run_caveat": "The selector's wording says ran; --dry-run did not execute that suite."
+  },
+  "artifacts": "Native topology, responses and cold proof transport stayed in memory. No lifespan, cache/workspace writer, simulation, native build, screenshot or model dump ran.",
+  "app_status": "NOT VERIFIED IN APP",
+  "vr_status": "Explicitly deferred by user to a later capable-machine session",
+  "assemblies": "Deferred",
+  "frontend_main_js_loc_delta": 0,
+  "http_benchmark": {
+    "reports": [
+      "benchmark_finite_connection_apply_route_initial.json",
+      "benchmark_finite_connection_apply_route_warning_diagnostic.json",
+      "benchmark_finite_connection_apply_route.json"
+    ],
+    "initial_result": "Failed complete response parity for ds only: an unquoted generated virtual-helix ID in an existing duplicate-occupancy warning was not normalized; all authoring digests matched. One-repeat diagnostic retained exact bounded messages before the oracle changed.",
+    "oracle_correction": "Normalize only the exact known (ID, bp token inside the existing Duplicate nucleotide occupancy message. Preserve verdict, warning text, indices and polarity. No production geometry or validation change.",
+    "final_repeats_per_case": 31,
+    "final_main_requests": 496,
+    "final_status_200": 496,
+    "final_refusal_controls": 2,
+    "final_equal_pairs": 124,
+    "final_input_only_replays_verified": 4,
+    "all_correctness_checks_passed": true,
+    "cleanup": true,
+    "observed_gc_events": 27206,
+    "dropped_gc_events": 0,
+    "cases": [
+      {
+        "background": "six-cell",
+        "material": "ss",
+        "pending_rows": 1,
+        "summary": {
+          "legacy": {
+            "apply": {
+              "http": {
+                "count": 31,
+                "p50_ms": 21.97558499756269,
+                "p95_ms": 72.01346899819328,
+                "max_ms": 72.33063600142486
+              },
+              "light_max": {
+                "count": 31,
+                "p50_ms": 14.972070996009279,
+                "p95_ms": 66.63560400193091,
+                "max_ms": 66.71397000172874
+              },
+              "lock_total": {
+                "count": 31,
+                "p50_ms": 4.144441001699306,
+                "p95_ms": 5.681609000021126,
+                "max_ms": 6.466547994932625
+              },
+              "lock": {
+                "count": 62,
+                "p50_ms": 1.8512234964873642,
+                "p95_ms": 5.097468005260453,
+                "max_ms": 6.4581479964545
+              }
+            },
+            "reapply": {
+              "http": {
+                "count": 31,
+                "p50_ms": 21.404913000878878,
+                "p95_ms": 77.60487800260307,
+                "max_ms": 79.11579700157745
+              },
+              "light_max": {
+                "count": 31,
+                "p50_ms": 15.504133996728342,
+                "p95_ms": 68.56816299841739,
+                "max_ms": 73.69252399803372
+              },
+              "lock_total": {
+                "count": 31,
+                "p50_ms": 4.146649996982887,
+                "p95_ms": 5.204988003242761,
+                "max_ms": 5.886293998628389
+              },
+              "lock": {
+                "count": 62,
+                "p50_ms": 1.944145500601735,
+                "p95_ms": 4.77403900003992,
+                "max_ms": 5.875732000276912
+              }
+            }
+          },
+          "native": {
+            "apply": {
+              "http": {
+                "count": 31,
+                "p50_ms": 22.381524002412334,
+                "p95_ms": 79.9486660034745,
+                "max_ms": 80.48018599947682
+              },
+              "light_max": {
+                "count": 31,
+                "p50_ms": 14.741904000402428,
+                "p95_ms": 74.46368399541825,
+                "max_ms": 74.85086000087904
+              },
+              "lock_total": {
+                "count": 31,
+                "p50_ms": 4.988768996554427,
+                "p95_ms": 5.924073004280217,
+                "max_ms": 5.969354999251664
+              },
+              "lock": {
+                "count": 31,
+                "p50_ms": 4.988768996554427,
+                "p95_ms": 5.924073004280217,
+                "max_ms": 5.969354999251664
+              }
+            },
+            "reapply": {
+              "http": {
+                "count": 31,
+                "p50_ms": 22.941381997952703,
+                "p95_ms": 81.94943100534147,
+                "max_ms": 83.31948400154943
+              },
+              "light_max": {
+                "count": 31,
+                "p50_ms": 17.138729999714997,
+                "p95_ms": 72.67844599846285,
+                "max_ms": 77.22366799862357
+              },
+              "lock_total": {
+                "count": 31,
+                "p50_ms": 5.560329998843372,
+                "p95_ms": 6.374092001351528,
+                "max_ms": 7.23167099931743
+              },
+              "lock": {
+                "count": 31,
+                "p50_ms": 5.560329998843372,
+                "p95_ms": 6.374092001351528,
+                "max_ms": 7.23167099931743
+              }
+            }
+          }
+        }
+      },
+      {
+        "background": "six-cell",
+        "material": "ds",
+        "pending_rows": 16,
+        "summary": {
+          "legacy": {
+            "apply": {
+              "http": {
+                "count": 31,
+                "p50_ms": 25.76215600129217,
+                "p95_ms": 79.42300799913937,
+                "max_ms": 89.8647899957723
+              },
+              "light_max": {
+                "count": 31,
+                "p50_ms": 18.31721799680963,
+                "p95_ms": 20.057227004144806,
+                "max_ms": 20.462442000280134
+              },
+              "lock_total": {
+                "count": 31,
+                "p50_ms": 4.57711900526192,
+                "p95_ms": 5.975837004370987,
+                "max_ms": 6.045502006600145
+              },
+              "lock": {
+                "count": 62,
+                "p50_ms": 2.1164070021768566,
+                "p95_ms": 5.377950001275167,
+                "max_ms": 6.034939004166517
+              }
+            },
+            "reapply": {
+              "http": {
+                "count": 31,
+                "p50_ms": 25.16227999876719,
+                "p95_ms": 82.98953600024106,
+                "max_ms": 84.14633700158447
+              },
+              "light_max": {
+                "count": 31,
+                "p50_ms": 14.799940996454097,
+                "p95_ms": 73.75724400480976,
+                "max_ms": 77.25916200433858
+              },
+              "lock_total": {
+                "count": 31,
+                "p50_ms": 5.016355004045181,
+                "p95_ms": 6.574393999471795,
+                "max_ms": 63.755754999874625
+              },
+              "lock": {
+                "count": 62,
+                "p50_ms": 2.216177999798674,
+                "p95_ms": 5.709805998776574,
+                "max_ms": 63.74756000150228
+              }
+            }
+          },
+          "native": {
+            "apply": {
+              "http": {
+                "count": 31,
+                "p50_ms": 26.57595300115645,
+                "p95_ms": 86.90641699649859,
+                "max_ms": 89.57758200267563
+              },
+              "light_max": {
+                "count": 31,
+                "p50_ms": 18.771693998132832,
+                "p95_ms": 72.18091100367019,
+                "max_ms": 76.8791099981172
+              },
+              "lock_total": {
+                "count": 31,
+                "p50_ms": 5.533793002541643,
+                "p95_ms": 6.635575999098364,
+                "max_ms": 61.37970899726497
+              },
+              "lock": {
+                "count": 31,
+                "p50_ms": 5.533793002541643,
+                "p95_ms": 6.635575999098364,
+                "max_ms": 61.37970899726497
+              }
+            },
+            "reapply": {
+              "http": {
+                "count": 31,
+                "p50_ms": 27.26953299861634,
+                "p95_ms": 91.08207399549428,
+                "max_ms": 92.46692099986831
+              },
+              "light_max": {
+                "count": 31,
+                "p50_ms": 17.01710199995432,
+                "p95_ms": 28.52079500007676,
+                "max_ms": 84.46799800003646
+              },
+              "lock_total": {
+                "count": 31,
+                "p50_ms": 6.211946994881146,
+                "p95_ms": 7.796459998644423,
+                "max_ms": 8.516359994246159
+              },
+              "lock": {
+                "count": 31,
+                "p50_ms": 6.211946994881146,
+                "p95_ms": 7.796459998644423,
+                "max_ms": 8.516359994246159
+              }
+            }
+          }
+        }
+      },
+      {
+        "background": "sixteen-cell",
+        "material": "ss",
+        "pending_rows": 1,
+        "summary": {
+          "legacy": {
+            "apply": {
+              "http": {
+                "count": 31,
+                "p50_ms": 86.24905300530372,
+                "p95_ms": 160.52374599530594,
+                "max_ms": 165.90834900125628
+              },
+              "light_max": {
+                "count": 31,
+                "p50_ms": 11.679103001370095,
+                "p95_ms": 88.31870299763978,
+                "max_ms": 88.41867600131081
+              },
+              "lock_total": {
+                "count": 31,
+                "p50_ms": 5.585593993600924,
+                "p95_ms": 82.56769799481845,
+                "max_ms": 83.64200600044569
+              },
+              "lock": {
+                "count": 62,
+                "p50_ms": 2.5551340004312806,
+                "p95_ms": 64.93587199656758,
+                "max_ms": 83.63726900279289
+              }
+            },
+            "reapply": {
+              "http": {
+                "count": 31,
+                "p50_ms": 96.29802300332813,
+                "p95_ms": 159.68447900377214,
+                "max_ms": 161.61297299549915
+              },
+              "light_max": {
+                "count": 31,
+                "p50_ms": 12.087033996067476,
+                "p95_ms": 102.40022299694829,
+                "max_ms": 106.20978200313402
+              },
+              "lock_total": {
+                "count": 31,
+                "p50_ms": 6.071340998460073,
+                "p95_ms": 78.93159400555305,
+                "max_ms": 95.17086599225877
+              },
+              "lock": {
+                "count": 62,
+                "p50_ms": 2.6272119976056274,
+                "p95_ms": 7.734795006399509,
+                "max_ms": 95.15064599690959
+              }
+            }
+          },
+          "native": {
+            "apply": {
+              "http": {
+                "count": 31,
+                "p50_ms": 79.15465199766913,
+                "p95_ms": 156.76390699809417,
+                "max_ms": 163.06179499952123
+              },
+              "light_max": {
+                "count": 31,
+                "p50_ms": 13.421638999716379,
+                "p95_ms": 90.48654900107067,
+                "max_ms": 92.70299999479903
+              },
+              "lock_total": {
+                "count": 31,
+                "p50_ms": 7.215752004412934,
+                "p95_ms": 86.59863800130552,
+                "max_ms": 89.8663980042329
+              },
+              "lock": {
+                "count": 31,
+                "p50_ms": 7.215752004412934,
+                "p95_ms": 86.59863800130552,
+                "max_ms": 89.8663980042329
+              }
+            },
+            "reapply": {
+              "http": {
+                "count": 31,
+                "p50_ms": 144.27468199573923,
+                "p95_ms": 161.47669200290693,
+                "max_ms": 167.28323900315445
+              },
+              "light_max": {
+                "count": 31,
+                "p50_ms": 14.359039996634237,
+                "p95_ms": 104.83131700311787,
+                "max_ms": 106.03989200171782
+              },
+              "lock_total": {
+                "count": 31,
+                "p50_ms": 7.4263380010961555,
+                "p95_ms": 77.5895459955791,
+                "max_ms": 100.67036399414064
+              },
+              "lock": {
+                "count": 31,
+                "p50_ms": 7.4263380010961555,
+                "p95_ms": 77.5895459955791,
+                "max_ms": 100.67036399414064
+              }
+            }
+          }
+        }
+      },
+      {
+        "background": "sixteen-cell",
+        "material": "ds",
+        "pending_rows": 16,
+        "summary": {
+          "legacy": {
+            "apply": {
+              "http": {
+                "count": 31,
+                "p50_ms": 81.71828299964545,
+                "p95_ms": 166.73730600450654,
+                "max_ms": 175.3573769965442
+              },
+              "light_max": {
+                "count": 31,
+                "p50_ms": 12.102520006010309,
+                "p95_ms": 72.04703000024892,
+                "max_ms": 72.28355199913494
+              },
+              "lock_total": {
+                "count": 31,
+                "p50_ms": 6.3101600026129745,
+                "p95_ms": 11.994329004664905,
+                "max_ms": 86.07647699682275
+              },
+              "lock": {
+                "count": 62,
+                "p50_ms": 2.8677424998022616,
+                "p95_ms": 8.232426000176929,
+                "max_ms": 86.07096099876799
+              }
+            },
+            "reapply": {
+              "http": {
+                "count": 31,
+                "p50_ms": 77.8683570024441,
+                "p95_ms": 179.09505200077547,
+                "max_ms": 179.7064920028788
+              },
+              "light_max": {
+                "count": 31,
+                "p50_ms": 12.26209499873221,
+                "p95_ms": 82.52712799730944,
+                "max_ms": 110.80241399758961
+              },
+              "lock_total": {
+                "count": 31,
+                "p50_ms": 6.672108997008763,
+                "p95_ms": 77.1544500021264,
+                "max_ms": 105.04962399863871
+              },
+              "lock": {
+                "count": 62,
+                "p50_ms": 2.8971085012017284,
+                "p95_ms": 8.240945004217792,
+                "max_ms": 105.03414399863686
+              }
+            }
+          },
+          "native": {
+            "apply": {
+              "http": {
+                "count": 31,
+                "p50_ms": 84.40555100241909,
+                "p95_ms": 169.69979699933901,
+                "max_ms": 188.54494900006102
+              },
+              "light_max": {
+                "count": 31,
+                "p50_ms": 13.691815998754464,
+                "p95_ms": 72.99808700190624,
+                "max_ms": 91.78313199663535
+              },
+              "lock_total": {
+                "count": 31,
+                "p50_ms": 7.901293000031728,
+                "p95_ms": 9.530255003483035,
+                "max_ms": 10.161973994399887
+              },
+              "lock": {
+                "count": 31,
+                "p50_ms": 7.901293000031728,
+                "p95_ms": 9.530255003483035,
+                "max_ms": 10.161973994399887
+              }
+            },
+            "reapply": {
+              "http": {
+                "count": 31,
+                "p50_ms": 78.27302000077907,
+                "p95_ms": 181.03016499662772,
+                "max_ms": 181.80492000101367
+              },
+              "light_max": {
+                "count": 31,
+                "p50_ms": 13.94128999527311,
+                "p95_ms": 18.639868998434395,
+                "max_ms": 90.09308399981819
+              },
+              "lock_total": {
+                "count": 31,
+                "p50_ms": 8.457889001874719,
+                "p95_ms": 10.459722994710319,
+                "max_ms": 10.738680997746997
+              },
+              "lock": {
+                "count": 31,
+                "p50_ms": 8.457889001874719,
+                "p95_ms": 10.459722994710319,
+                "max_ms": 10.738680997746997
+              }
+            }
+          }
+        }
+      }
+    ],
+    "latency_qualified": false,
+    "interpretation": "The sixteen-cell ss reapply median remains worse (144.27 ms native vs96.30 ms legacy; initial145.20 vs73.26 ms). Both arms have GC-overlapping long tails. Per-request summed lock medians are7.43 vs6.07 ms in the final case; pooled individual lock holds are not comparable because legacy takes two and native one. GC overlap is correlation, never latency subtraction. Gates remain false.",
+    "serialization": "Installed FastAPI includes JSON encoding in serialize_response via response-field dump_json=True for successful annotated dict responses; separate response_json is empty on success and used by refusal JSONResponse.",
+    "scope": "In-memory HTTP, actual native generation/full geometry/serialization and concurrent paced revision reads. No application lifespan, UI rendering, disk cache, scientific solver or production job."
+  },
+  "lint": {
+    "changed_files": "Ruff and diff check pass",
+    "repository": "just lint retains five existing F401 findings: vr_prompts.py and four CPD test imports; no new finding."
+  }
+}

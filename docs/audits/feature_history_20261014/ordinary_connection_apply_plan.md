@@ -164,8 +164,11 @@ The actual callback, rather than its stale resize docstring, defines parity:
    source design; update the selected version's padded sequences; mark it
    applied and clear all versions sharing either endpoint.
 5. Run established recording/reconciliation/CPD validation. Return the existing
-   occupancy-derived partial geometry/axes response. Full rendering previously
-   caused a large local-Apply UI regression, documented at that response seam.
+   occupancy-derived geometry/axes response. The original comment claimed local
+   Apply was partial, but finite connection-list changes actually force full
+   geometry through `_local_changed_helices`. Preserve that actual contract;
+   partial finite-linker rendering is separate work requiring complete footprint
+   and client-merge validation.
 
 `part_linker_commands.create` is **not** an equivalent replacement: it adds
 polarity/attachment compatibility and per-end uniqueness gates that this Apply
@@ -253,7 +256,7 @@ Meaningful tests, in order:
    and `test_targeted_reassign.py` remain parity oracles for legacy behavior.
    Direct cases remain unsupported native history rather than being relabeled.
 5. Bounded natural-GC route/lock/concurrent-read benchmark with retained native
-   history, and exact partial-response footprint. Keep failures and initial
+   history, and exact full-response footprint. Keep failures and initial
    limits; do not turn correctness success into latency qualification.
 
 The input/identity contract is the software change. Calling existing native

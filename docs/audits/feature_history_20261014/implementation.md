@@ -17,7 +17,7 @@ regression debt are recorded in [the checkpoint evidence](validation_pause_check
 | P1 | Standard-part recording transactions, executable replay registry and evidenced cleanup | Foundation implemented below. Retain legacy callbacks and compatibility recovery; no claim of general isolated evaluation |
 | P2 | Explicit recipe roots/versions, authoritative-field classification, read-only verification and incremental dependencies | Implementation exit checks complete: independent nonempty replay, content-pinned roots, typed dependencies, fingerprints, bounded capture/jobs and stale/cancel handling. Supported-family expansion continues in P3/P4; validation debt below remains explicit |
 | P3 | Native DNA command families and generated construction | DNA implementation exit checks recorded below, including joined/connectivity input compilation and bounded native-source CPD conversion/relaxation. Registered kinds retain method/action restrictions; their count is not universal operation coverage. Generated asset/attachment histories remain in P4 |
-| P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol, pinned small protein/catalog/aptamer inputs, supported protein conjugation and duplex lifecycle/relaxation implemented. Pending NP and ordinary overhang connection contracts pass independent replay. Bounded applied NP lifecycle/rename and finite ordinary linker Apply/reapply are implemented; ordinary applied-route migration and performance qualification remain open. Owned oxDNA preparation is wired behind a default-disabled host gate; 182 focused cases pass, with live capture/HTTP responsiveness still under qualification. Full import/attachment coverage and complete physical-input receipts remain open |
+| P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol, pinned small protein/catalog/aptamer inputs, supported protein conjugation and duplex lifecycle/relaxation implemented. Pending NP and ordinary overhang connection contracts pass independent replay. Bounded applied NP lifecycle/rename and finite ordinary linker Apply/reapply are implemented. Finite ordinary Apply/reapply now has a private default-disabled route with 244 focused passes; a measured reapply latency regression keeps rollout closed. Applied NP route migration remains open. Owned oxDNA preparation is also wired behind a default-disabled host gate; 182 focused cases pass, with live capture/HTTP responsiveness still under qualification. Full import/attachment coverage and complete physical-input receipts remain open |
 | P5 | Standard-part repair, drafts, desktop and part-mode VR | Saved draft evaluation/apply, reference selection, source staging/restoration and persistence pass. Desktop UI-1 and narrow invalid-gold repair pass. Private gold/QD/free-protein and complete DNA comparisons pass automated checks; broader invalid-family selectors and desktop app review remain open. VR/headset validation is explicitly deferred to a later capable-machine session |
 | P6 | Strict standard-part agent transactions and legacy retirement | Private policy/permits, closed strict HTTP dispatch, immutable internal ownership and outside-lock evaluation/publication pass. Atomic typed records and pending-safe autosave pass. Cold-qualified recovery and durable initial creation pass focused lifecycle checks. Private byte transport now moves source decode/projection into the admitted worker; public immutable creation/batch stay disabled pending responsiveness and memory qualification. Catalog expansion, explicit imports and later replay reuse remain open |
 
@@ -1261,3 +1261,37 @@ responsiveness must precede public enablement. Existing files and cache pruning
 behavior are preserved. See [validation](validation_immutable_state_p6.json),
 [storage plan](immutable_part_revision_plan.md) and
 [durability plan](immutable_part_persistence_plan.md). P4/P5/P6 remain open.
+
+## Private finite-linker route and HTTP qualification — October 15
+
+Existing-version finite ssDNA/dsDNA Apply/reapply now has a default-disabled
+native adapter. One bounded source inventory and owned selection feed the
+existing failure-atomic recorder: one undo, two recovery encodes and the original
+reconcile/retry/CPD/validation behavior. Missing or ambiguous references refuse
+before recording. Unsupported families and source bounds retain compatibility
+dispatch; an admitted failure never retries through legacy. Exact input,
+conflict and generated-output identities make the resulting row replayable.
+
+**244 focused cases across nine files pass**, including independent input-only
+replay, real cold proofs, rollback, protected context, output collisions,
+conflict-boundary fallback and exact full-response behavior. The stale comment
+claiming partial finite-linker geometry was corrected: connection-list changes
+actually force the established full geometry path. Scientific helpers and
+numerical pins remain unchanged.
+
+The final complete-HTTP benchmark passes 124 paired full authoring/response
+comparisons, 496 successful Apply/reapply requests and four fresh input-only
+replays. Its initial ds response mismatch was isolated to an unquoted random ID
+in an existing occupancy warning; a bounded diagnostic preceded the exact-token
+oracle correction. Original warning content and initial evidence are retained.
+
+Rollout remains closed: 16-cell ss reapply measured 144.27 ms native versus
+96.30 ms legacy median, after an initial 145.20 versus 73.26 ms result. Both
+arms have natural-GC tails; neither overlapping GC nor pure correctness is a
+latency exemption. Reference inventory allocation and benchmark lifetime effects
+are the next measured investigation. No UI or app rendering was exercised.
+Repository lint retains its five existing unused imports. The backend selector
+was FAST/deferred FULL in dry-run only; prior broad failures/debt remain separate.
+VR is deferred by the user, assemblies remain deferred, and P4–P6 remain open.
+See [the route plan](ordinary_connection_owned_route_plan.md) and
+[validation](validation_finite_connection_apply_route.json).

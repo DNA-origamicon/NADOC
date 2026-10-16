@@ -89,7 +89,7 @@ def _legacy(design, params, monkeypatch):
         patch.setattr(routes, "OverhangConnection", lambda **values:
                       connection_model(id=params["connection_id"], **values))
         patch.setattr(routes, "_design_response_with_geometry", lambda *_args, **_kwargs: {})
-        routes._apply_connection_version_impl(params["version_id"])
+        routes._apply_connection_version_legacy(params["version_id"])
     assert len(captured) == 1
     return captured[0]
 
