@@ -1,0 +1,225 @@
+{
+  "checkpoint": "U17 \u2014 FH-22 checkpoint 1; owned native Sweep history editor",
+  "source_checkpoint": "a148d934",
+  "date": "2026-10-16",
+  "evidence_status": "Focused software checks passed; NOT VERIFIED IN APP because Archive is unavailable; desktop/performance acceptance remains FH27/MV51.",
+  "scope": {
+    "implemented": [
+      "Complete ordinary native Sweep input editor using historical-prefix controls, private picker/manipulators and shared source-bound preview lifecycle.",
+      "Recovery-independent feature-stage preview, explicit false source/downstream/physical claims, full-source proof and downstream native replay on Apply.",
+      "Exact feature/output identity, source/session/revision/family/sequence/policy binding, cancellation, expiry, atomic undo and lost-response status.",
+      "Native fixed routing addresses retained; typed single-nick missing-helix diagnostics identify failing feature. Legacy snapshot proportional rebasing remains separate.",
+      "Closed Sweep route family shares existing bounded JSON, lease/work catalog, frontend controller and guarded publication refresh; paired rollout gates remain false."
+    ],
+    "limits": [
+      "128 commands,16 helices,1024 sites/path work bounds,60-second lease; cooperative native deadlines are not process interruption or performance qualification.",
+      "Prepare rebuilds prefix once; preview evaluates selected Sweep; Apply independently proves and regenerates source/suffix. No history work per rendering frame.",
+      "Assembly and machine-specific VR deferred; nanoparticle/assets parked. Strict registered automation release remains separate.",
+      "FH18 stays open after13 checkpoints; movement/generated/qualification exits unchanged.",
+      "Archive unavailable: no browser, bulk benchmark, native build or scientific simulation started."
+    ],
+    "main_js": {
+      "lines": 7349,
+      "delta": 0
+    }
+  },
+  "runs": {
+    "pure_red": {
+      "failed": 49,
+      "passed": 2,
+      "seconds": 3.65,
+      "files": 2
+    },
+    "host_http_red": {
+      "failed": 15,
+      "passed": 1,
+      "errors": 9,
+      "seconds": 3.17,
+      "files": 2
+    },
+    "frontend_red": {
+      "failed_tests": 1,
+      "passed_tests": 11,
+      "failed_suites": 2,
+      "seconds": 1.53,
+      "files": 3
+    },
+    "backend_first": {
+      "passed": 75,
+      "failed": 1,
+      "warnings": 5,
+      "seconds": 5.52,
+      "files": 4,
+      "reason": "Single nick reference validation and edit failure attribution were missing; source refused atomically but diagnostic lacked missing_reference/feature_id."
+    },
+    "backend_new_final": {
+      "passed": 108,
+      "warnings": 13,
+      "seconds": 6.07,
+      "files": 6,
+      "scope": [
+        "test_part_sweep_preview.py",
+        "test_part_sweep_preview_dto.py",
+        "test_part_sweep_preview_sessions.py",
+        "test_part_sweep_preview_routes.py",
+        "test_part_command_references.py",
+        "test_part_recipe_edit.py"
+      ]
+    },
+    "backend_shared": {
+      "passed": 283,
+      "warnings": 6,
+      "seconds": 8.94,
+      "files": 8,
+      "scope": [
+        "test_part_deformation_preview.py",
+        "test_part_deformation_preview_dto.py",
+        "test_part_deformation_preview_sessions.py",
+        "test_part_deformation_preview_receipts.py",
+        "test_part_deformation_preview_routes.py",
+        "test_organized_recipe_permit.py",
+        "test_part_publication_permit.py",
+        "test_group_organization_public_gate.py"
+      ]
+    },
+    "backend_legacy": {
+      "passed": 80,
+      "warnings": 48,
+      "seconds": 10.66,
+      "files": 5,
+      "scope": [
+        "test_part_deformation_creation_transport.py",
+        "test_sweep.py",
+        "test_sweep_edit.py",
+        "test_sweep_detach.py",
+        "test_sweep_orientation.py"
+      ]
+    },
+    "backend_wire": {
+      "passed": 4,
+      "seconds": 3.08,
+      "files": 1,
+      "scope": [
+        "test_sweep_preview_native_display.py"
+      ]
+    },
+    "backend_replay": {
+      "passed": 79,
+      "warnings": 55,
+      "seconds": 5.37,
+      "files": 4,
+      "scope": [
+        "test_native_routing_proof.py",
+        "test_part_evaluation.py",
+        "test_part_evaluation_jobs.py",
+        "test_part_evaluation_session.py"
+      ]
+    },
+    "backend_unique_final": {
+      "passed": 554,
+      "warnings": 122,
+      "files": 24,
+      "qualification": "Disjoint final files:108new/reference/edit +283shared/permits +80legacy/creation +4actualPython-to-JS +79nativeRouting/evaluation. Repeated/intermediate passes excluded."
+    },
+    "frontend_focused": {
+      "passed": 120,
+      "files": 11,
+      "seconds": 5.61
+    },
+    "frontend_private": {
+      "passed": 23,
+      "files": 4,
+      "seconds": 2.64
+    },
+    "frontend_isolation": {
+      "passed": 14,
+      "files": 2,
+      "seconds": 1.43
+    },
+    "frontend_interrupted": [
+      {
+        "exit_code": 143,
+        "reason": "Intentionally terminated exact owned full-suite process after final review found a hidden legacy Extrude callback could author through the private picker. No full-suite pass claimed; restart follows guard regression."
+      },
+      {
+        "exit_code": 143,
+        "reason": "Stopped exact owned full-suite process to close concrete camera-transition/private-picker ownership race; final validation will restart after completed review."
+      }
+    ],
+    "frontend_full_final": {
+      "command": "just test-frontend",
+      "passed": 8918,
+      "skipped": 1,
+      "files": 753,
+      "seconds": 323.55
+    },
+    "changed_python_lint": {
+      "passed": true,
+      "files": 17
+    },
+    "lint": {
+      "exit_code": 1,
+      "errors": 5,
+      "delta": 0,
+      "reason": "Same existing F401 findings."
+    },
+    "selector": {
+      "decision": "FAST",
+      "routed": "FULL",
+      "tests_executed": 0,
+      "dry_run": true,
+      "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\n  This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\n  Only request `just test-session` when a broad/full sweep is actually needed.",
+      "qualification": "Selector says ran but dry-run executed zero tests; broad backend debt remains."
+    },
+    "frontend_ownership_final": {
+      "passed": 21,
+      "files": 3,
+      "seconds": 1.99
+    },
+    "memory_lint": {
+      "exit_code": 1,
+      "errors": 6,
+      "warnings": 59,
+      "delta": 0,
+      "current_project_lines": 199
+    }
+  },
+  "numerical_manifest_check": {
+    "changed_members": {
+      "nadoc.cpd-native-engine.v1": [],
+      "nadoc.duplex-relax-native.v1": [],
+      "nadoc.streptavidin-native.v1": []
+    }
+  },
+  "cleanup": {
+    "status": "Complete for task-owned disposable output; no browser/bulk/scientific writer started. Archive unavailable.",
+    "paths": [
+      "/tmp/pytest-of-joshua/pytest-5",
+      "/tmp/pytest-of-joshua/pytest-6",
+      "/tmp/pytest-of-joshua/pytest-7",
+      "/tmp/pytest-of-joshua/pytest-current"
+    ],
+    "removed_files": 0,
+    "removed_bytes": 0,
+    "removed_directories": 194,
+    "removed_symlinks": 4,
+    "remaining_task_paths": [],
+    "process_reference_check": "No readable same-user cwd/fd/maps references. Inspection denied for persistent systemd/PAM435/436; ps identifies both as pre-existing session processes, not validation.",
+    "preserved": "Shared caches, active runtimes, workspace user designs/jobs and historical provenance."
+  },
+  "progress": {
+    "baseline": "B1:17/38 through2c15e747",
+    "completed": 20,
+    "estimated_total": 38,
+    "remaining": 18,
+    "core_remaining": 9,
+    "parked_remaining": 9,
+    "delta_completed": 1,
+    "delta_total": 0,
+    "fh18_checkpoints": 13,
+    "fh22_checkpoints": 1,
+    "engineering_checkpoints_since_b1": 17,
+    "milestones_closed_since_b1": 3,
+    "task_growth_flagged": true
+  }
+}

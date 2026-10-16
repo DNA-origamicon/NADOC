@@ -144,6 +144,12 @@ function _freeColor(row, col) { return isForwardCell(row, col) ? C_FWD : C_REV }
  * @param {{ onExtrude: Function, getDesign: Function }} opts
  */
 export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, getDesign, getHelixAxes, onOffsetChange, onPreviewToggle, onCancel, onPlace, onPlacePaste, getBluntEnds } = {}) {
+  const liveDesign = getDesign, liveAxes = getHelixAxes, liveBluntEnds = getBluntEnds
+  let privateContext = null
+  getDesign = () => privateContext ? privateContext.design : liveDesign?.()
+  getHelixAxes = () => privateContext ? privateContext.helixAxes : liveAxes?.()
+  getBluntEnds = () => privateContext ? null : liveBluntEnds?.()
+  const displayLayer = () => privateContext?.displayLayer ?? 0
   // Mutable camera ref — replaced by setCamera() when an ortho camera takes over (cadnano mode).
   let _camera = camera
 
@@ -969,6 +975,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
     _latGroup.add(fill)
     _latGroup.add(ring)
+    fill.layers.set(displayLayer()); ring.layers.set(displayLayer())
     _circleMeshes.push({ fill, ring, row, col, state })
 
     const entry = _makeLabelEntry(row, col)
@@ -978,6 +985,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     }
     entry.spr.position.copy(pos).add(_latNudge)
     _latGroup.add(entry.spr)
+    entry.spr.layers.set(displayLayer())
     _labelEntries.push(entry)
   }
 
@@ -1187,6 +1195,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       m.frustumCulled = false
       m.renderOrder = 4
       _previewGroup.add(m)
+      m.layers.set(displayLayer())
       _previewMeshes.push(m)
     }
   }
@@ -1466,7 +1475,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   /** Commit the placement at the current hover cell via onPlace (additive segment). */
   async function _commitPlacement() {
-    if (_commitInFlight || !_placementMode || !_placementSpec || !_hoverCell) return
+    if (privateContext || _commitInFlight || !_placementMode || !_placementSpec || !_hoverCell) return
     if (_placementHasConflict) {
       showToast('Placement overlaps existing DNA — move to a clear spot.', { severity: 'error' })
       return
@@ -1813,7 +1822,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
 
   if (_ctxEl) {
     async function _doExtrude() {
-      if (_commitInFlight) return
+      if (privateContext || _commitInFlight) return
       const rawVal  = parseFloat(_ctxEl.querySelector('#slice-length').value)
       const unit    = _ctxEl.querySelector('#slice-unit').value
       const absVal  = Math.abs(rawVal)
@@ -1900,6 +1909,21 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   // ── Public API ──────────────────────────────────────────────────────────────
 
   return {
+    /** Temporarily bind this existing picker to an owned feature prefix. */
+    usePrivateContext({ design, helixAxes, displayLayer: layer }) {
+      if (!design || !helixAxes || !Number.isInteger(layer) || layer < 0 || layer > 31) throw new Error('Invalid private lattice context')
+      this.hide()
+      const token = { design, helixAxes, displayLayer: layer }
+      privateContext = token
+      _root.traverse(node => node.layers.set(layer)); _raycaster.layers.set(layer)
+      const release = () => {
+        if (privateContext !== token) return
+        this.hide(); privateContext = null
+        _root.traverse(node => node.layers.set(0)); _raycaster.layers.set(0)
+      }
+      release.isCurrent = () => privateContext === token
+      return release
+    },
     /**
      * Show the slice plane at the given lattice plane + offset.
      * @param {string}  plane          - 'XY' | 'XZ' | 'YZ'
@@ -2182,7 +2206,15 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
     },
 
     /** Replace the camera used for raycasting (called by cadnano_view when switching to ortho). */
-    setCamera(cam) { _camera = cam },
+    setCamera(cam) {
+      if (privateContext && cam !== _camera) {
+        // A different view has taken the picker before its store notification.
+        // Retire this binding before that view resolves its own live topology.
+        privateContext = null
+        _root.traverse(node => node.layers.set(0)); _raycaster.layers.set(0)
+      }
+      _camera = cam
+    },
 
     /** Current plane and offset getters (used by cadnano_view to save/restore state). */
     getPlane()  { return _plane },

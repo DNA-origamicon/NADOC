@@ -1242,3 +1242,23 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   Legacy recovery editing remains available where its prior conditions hold.
   Organized mode requires its existing disabled host gate; this task does not
   qualify rollout. This is part of existing FH-27, not an added milestone.
+
+- **MV-51 — PENDING — Owned Sweep history editor (2026-10-16).**
+  **NOT VERIFIED IN APP.** With Archive mounted, privately enable the paired
+  client/host gates and edit an earlier native Sweep with evicted recovery.
+  Exercise independent and attached start/end sources, prefix-only cells and
+  frames, plane/strands/ligation, add/remove path points, automatic and explicit
+  orientation, canvas translation/rotation and sticky origin detachment.
+  Previous/Next must retain the draft. Check warning visibility with visual
+  preview on/off, feature-stage labelling and canonical scene restoration.
+  Apply a length change through a later nick: keep its recorded address, rebuild
+  later history and verify undo/redo/save/reload/cold proof. Remove its source
+  cell: show the failing feature and missing helix; retain the source and draft.
+  Cancel during Prepare/evaluation, Escape, switch tools/documents, same-ID reset,
+  expiry and a lost Apply response must never publish or adopt a stale result.
+  Check that hidden legacy Extrude controls cannot commit from the private picker.
+  Measure actual capture/evaluation/Apply, HTTP/display, lock and retained-memory
+  costs on representative admitted recipes. Tiny tests and cooperative deadlines
+  do not qualify interactive speed or larger designs. Both rollout gates remain
+  false until qualification; legacy creation/recovery remain available. This is
+  the existing FH-27 exit, not additional milestone scope. VR stays deferred.

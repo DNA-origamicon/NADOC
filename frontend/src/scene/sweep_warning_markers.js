@@ -23,7 +23,7 @@ export function createSweepWarningMarkers(scene, {canvas,getCamera,addFrameCallb
   const tooltip=document.createElement('div'); tooltip.role='tooltip';tooltip.textContent=SWEEP_LIMIT_TEXT
   tooltip.style.cssText='position:fixed;display:none;pointer-events:none;z-index:10000;background:#171b22;color:#fff;border:1px solid #f5a623;border-radius:4px;padding:7px 10px;font:13px sans-serif'
   if(canvas)document.body.append(tooltip)
-  let anchors=[], disposed=false
+  let anchors=[], disposed=false, displayLayer=0
   function hide(){tooltip.style.display='none'}
   function sync() {
     // Reading the canvas bounds can force layout. Empty overlays have no
@@ -54,9 +54,10 @@ export function createSweepWarningMarkers(scene, {canvas,getCamera,addFrameCallb
     set(values){if(disposed)return;anchors=values.map(v=>Array.isArray(v)?{position:v}:v);group.clear();hide()
       anchors.forEach(anchor=>{const icon=new THREE.Mesh(triangle,amber);icon.renderOrder=1100;icon.userData.helixIds=anchor.keys?.map(key=>key.split(':')[0]) ?? []
         const bar=new THREE.Mesh(stem,ink),point=new THREE.Mesh(dot,ink);bar.position.set(0,.15,.01);point.position.set(0,-.43,.01)
-        bar.renderOrder=point.renderOrder=1101;icon.add(bar,point);group.add(icon)
+        bar.renderOrder=point.renderOrder=1101;icon.add(bar,point);group.add(icon);icon.traverse(node=>node.layers.set(displayLayer))
       });sync()
     },
+    setDisplayLayer(layer){displayLayer=layer;group.traverse(node=>node.layers.set(layer));ray.layers.set(layer)},
     dispose(){disposed=true;group.removeFromParent();triangle.dispose();stem.dispose();dot.dispose();amber.dispose();ink.dispose();tooltip.remove();window.removeEventListener('pointermove',hover,true);window.removeEventListener('blur',hide);canvas?.removeEventListener('pointerleave',hide);removeFrameCallback?.(sync)},
   }
 }

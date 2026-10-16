@@ -197,7 +197,7 @@ def admit_organized_recipe(doc_id, session, *, operation, request_sha256):
 
     effective = policy.require_compatibility(doc_id, "owned_recipe_rebuild")
     require_group_edit_enabled()
-    if type(operation) is not str or operation not in {"repair", "deformation_preview", "pattern", "extrusion_edit"}:
+    if type(operation) is not str or operation not in {"repair", "deformation_preview", "sweep_preview", "pattern", "extrusion_edit"}:
         _refusal("Unknown owned recipe operation", code="invalid_operation_admission")
     if type(request_sha256) is not str or fullmatch(r"[0-9a-f]{64}", request_sha256) is None:
         raise ValueError("Admission requires the canonical bounded request digest")
@@ -218,7 +218,7 @@ def issue_organized_recipe_permit(admission, candidate, *, request_sha256, expir
     """
     context = admission_context(admission)
     if (context is None or context.scope_tag != "organized_recipe_v1"
-            or context.operation not in {"repair", "deformation_preview", "pattern", "extrusion_edit"}):
+            or context.operation not in {"repair", "deformation_preview", "sweep_preview", "pattern", "extrusion_edit"}):
         _refusal("Recipe publication requires its original owned host admission")
     _require_organized_recipe_policy(context)
     if type(request_sha256) is not str or request_sha256 != context.request_sha256:
@@ -379,7 +379,7 @@ def check_publication(permit, *, doc_id, session, candidate):
             _refusal("Group publication lost its checked source or candidate binding")
     elif context.admission.scope_tag == "organized_recipe_v1":
         if (context.evidence_class != "owned_recipe_rebuild"
-                or context.admission.operation not in {"repair", "deformation_preview", "pattern", "extrusion_edit"}
+                or context.admission.operation not in {"repair", "deformation_preview", "sweep_preview", "pattern", "extrusion_edit"}
                 or not _group_source(session.design, context.admission.operation)
                 or not _group_candidate(session.design, candidate)):
             _refusal("Recipe publication lost its checked source or candidate binding")

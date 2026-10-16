@@ -59,6 +59,14 @@ def editing_capabilities(kinds):
             "references": "Resolved against the independently rebuilt pre-feature design; missing selections refuse without publication",
             "organization": "Existing host rollout gate applies; this editor does not enable organization",
         },
+        "sweep_history_editor": {
+            "endpoint": "POST /api/design/features/sweep-preview",
+            "rollout": "disabled pending desktop and latency qualification",
+            "inputs": "Complete ordinary native Sweep inputs, including historical source, footprint, path and orientation",
+            "preview": "Isolated selected-feature stage; downstream and source equivalence are not certified",
+            "apply": "Fresh full source proof and downstream native regeneration; one source-bound publication and undo",
+            "limits": ["128 commands", "16 helices", "1024 sites", "60-second lease", "cooperative deadlines"],
+        },
         "evaluation_jobs": {
             "start": "POST /api/design/features/evaluation/jobs",
             "inspect": "GET /api/design/features/evaluation/jobs/{job_id}",

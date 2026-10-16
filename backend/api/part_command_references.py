@@ -16,7 +16,9 @@ def _reference(kind: str, identity: str, path: list[str | int]) -> CommandRefere
 def validate_command_references(kind, design, params):
     """Reject missing targets before executing a permissive native builder."""
     references = []
-    if kind == "nick-batch":
+    if kind == "nick":
+        references = [_reference("helix", params["helix_id"], ["helix_id"])]
+    elif kind == "nick-batch":
         references = [
             _reference("helix", nick["helix_id"], ["nicks", i, "helix_id"])
             for i, nick in enumerate(params["nicks"])

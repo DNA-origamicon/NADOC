@@ -8,7 +8,7 @@ export class DeformationPreviewRequestError extends Error {
   }
 }
 
-const PATH = '/design/features/deformation-preview'
+const PATHS = Object.freeze({ deformation: '/design/features/deformation-preview', sweep: '/design/features/sweep-preview' })
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const ORIGIN = ['preview_id', 'expected_design_id', 'expected_revision', 'feature_id']
 const RECEIPT = [...ORIGIN, 'lease_id', 'doc_id', 'deformation_id', 'request_sequence', 'design_id', 'revision']
@@ -29,7 +29,9 @@ export function previewPublicationReceipt(value, context, expected = null) {
   return { status: 'applied', ...Object.fromEntries(RECEIPT.map(key => [key, value[key]])) }
 }
 
-export function createDeformationPreviewEndpoints({ request }) {
+export function createDeformationPreviewEndpoints({ request, family = 'deformation' }) {
+  if (!Object.hasOwn(PATHS, family)) throw new Error('Unsupported feature preview family')
+  const PATH = PATHS[family]
   async function json(method, path, body, { context, signal } = {}) {
     if (!context || !Object.hasOwn(context, 'docId')
         || !(context.docId === null || typeof context.docId === 'string')) {
@@ -50,7 +52,8 @@ export function createDeformationPreviewEndpoints({ request }) {
   }
   return {
     prepare: (body, options) => json('POST', PATH, body, options),
-    prepareCreation: (body, options) => json('POST', `${PATH}/create`, body, options),
+    prepareCreation: (body, options) => family === 'deformation' ? json('POST', `${PATH}/create`, body, options)
+      : Promise.reject(new DeformationPreviewRequestError(422, 'Sweep creation uses its ordinary authoring tool')),
     evaluate: (body, options) => json('POST', `${PATH}/evaluate`, body, options),
     apply: (body, options) => json('POST', `${PATH}/apply`, body, options),
     cancel: (body, options) => json('POST', `${PATH}/cancel`, body, options),

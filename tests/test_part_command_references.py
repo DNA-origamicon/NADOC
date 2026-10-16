@@ -36,6 +36,31 @@ def nick(helix_id="helix", bp=3):
     return {"helix_id": helix_id, "bp_index": bp, "direction": "FORWARD"}
 
 
+def test_single_nick_reports_removed_helix_without_native_execution(part, monkeypatch):
+    from backend.api import crud
+
+    original = part.model_dump_json()
+    monkeypatch.setattr(crud, "_build_nick", lambda *_: pytest.fail("native nick before reference check"))
+    with pytest.raises(ReferenceResolutionError) as caught:
+        execute("nick", part, {"_proof_version": 1, **nick("removed")})
+    assert caught.value.as_issue() == {"code": "missing_reference",
+        "detail": "Command targets no longer exist", "references": [{
+            "kind": "helix", "identity": "removed", "parameter_path": ["helix_id"]}]}
+    assert part.model_dump_json() == original
+
+
+def test_single_nick_keeps_valid_native_inputs_and_output(part):
+    from backend.api.crud import NickRequest, _build_nick
+
+    params = {"_proof_version": 1, **nick()}
+    original = part.model_dump_json()
+    expected = _build_nick(part, NickRequest.model_validate(nick()))
+    result = execute("nick", part, params)
+    assert result.strands == expected.strands
+    assert params == {"_proof_version": 1, **nick()}
+    assert part.model_dump_json() == original
+
+
 @pytest.mark.parametrize("nicks, index", [
     ([nick("missing")], 0),
     ([nick(), nick("missing")], 1),

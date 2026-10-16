@@ -1745,3 +1745,41 @@ claimed from tiny native test timings.
 Cleanup removed 64 disposable test files (86,029 bytes), 624 empty directories
 and four symlinks after active-reference checks. No task output remains; shared
 caches, runtimes, workspace designs/jobs and historical provenance are preserved.
+
+## Complete owned Sweep history editor — U17, October 16
+
+FH-22 is complete at its fixed implementation boundary: full ordinary native
+Sweep controls, input-based isolated preview, recovery-independent Apply/Cancel
+and downstream rebuild. See [the contract](sweep_history_editor_plan.md) and
+[validation](validation_sweep_history_editor.json). The historical prefix supplies
+source ends, cells and frames; the current display cannot leak later geometry
+into those controls. Private native DNA display and path manipulators share the
+existing preview lifecycle, bounded HTTP transport and guarded publication host.
+
+Apply proves the full source and rebuilds later recorded inputs, retaining exact
+feature identities and one undo. A later nick keeps its recorded address; missing
+helices identify the failing feature and refuse publication without discarding
+the draft. This differs explicitly from still-used legacy snapshot rebasing.
+The shared host also checks its final deadline after document preservation.
+Private picker callbacks cannot author through hidden legacy controls, and old
+cleanup cannot hide a newer view. Native numerical algorithms remain unchanged.
+
+**20/38 milestones complete; 18 remaining (9 core, 9 parked).** Delta **+1 completed,
++0 total**. Seventeen engineering checkpoints since B1 close three milestones;
+FH-18 remains growth-flagged after thirteen, with movement/generated/qualification
+exits unchanged. Next is the finite FH-23 move/rotate matrix, then Fine Routing.
+
+Final checks: **554 distinct backend passes** across 24 files (122 warnings) and
+**8,918 frontend passes/one existing skip** across 753 files (323.55s). Actual
+Python display packets pass the JavaScript validator. Seventeen changed Python
+files pass Ruff; repository lint retains five existing F401 findings and
+memory lint retains six errors/59 warnings (current project 199 lines). The
+selector dry-run reports FAST/FULL deferred and executes zero tests; broad backend
+debt remains. Two partial frontend runs were intentionally stopped for concrete
+ownership corrections and receive no pass credit. `main.js` delta 0; numerical
+manifests/goldens unchanged.
+
+**NOT VERIFIED IN APP:** Archive is unavailable; desktop/latency remains
+FH-27/MV-51. Both Sweep rollout gates stay false. Cleanup removed 194 empty task
+directories and 4 symlinks, zero files/bytes; exact paths are verified absent.
+Shared caches, active runtimes, workspace state and historical evidence remain.

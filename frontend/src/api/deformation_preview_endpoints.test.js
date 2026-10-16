@@ -91,3 +91,14 @@ it('prepares creation only through the dedicated source-bound endpoint', async (
   expect(request).toHaveBeenCalledWith('POST', '/design/features/deformation-preview/create', body,
     expect.objectContaining({ docId: 'origin-doc', protectedRetry: false, skipSimulationPrepare: true }))
 })
+
+it('uses the closed Sweep family for every lease operation and guarded publication refresh', async () => {
+  const request = vi.fn(async () => ({}))
+  const { createDeformationPreviewEndpoints } = await import(modulePath)
+  const api = createDeformationPreviewEndpoints({ request, family: 'sweep' })
+  for (const method of ['prepare', 'evaluate', 'apply', 'cancel', 'status']) await api[method](origin, { context })
+  expect(request.mock.calls.map(([, path]) => path)).toEqual(['/design/features/sweep-preview',
+    ...['evaluate', 'apply', 'cancel', 'status'].map(method => `/design/features/sweep-preview/${method}`)])
+  await expect(api.prepareCreation(origin, { context })).rejects.toThrow()
+  expect(() => createDeformationPreviewEndpoints({ request, family: '../design' })).toThrow()
+})

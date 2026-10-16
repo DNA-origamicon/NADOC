@@ -2721,3 +2721,36 @@ milestone because FH-18 remains open. App qualification remains MV-48/FH-27.
 - Source binding, full historical reconstruction, failed-edit atomicity and real
   worker transport are covered by the U16 checks. Desktop acceptance remains
   FH-27/MV-50; no additional milestone credit is assigned to this correction.
+
+## ISSUE-120 — Native Sweep preview used legacy downstream rebasing (2026-10-16, CORRECTED IN GATED EDITOR)
+
+- The legacy history preview proportionally rebases routing addresses and follows
+  attachments using recovery snapshots. Native Apply rebuilds saved command
+  inputs. Those two meanings must not share an authoritative preview claim.
+- The owned editor rebuilds the historical prefix and selected Sweep privately,
+  labels the feature stage, and checks the complete source/suffix only at Apply.
+  A later nick retains its recorded address. Removing its helix now gives a typed
+  reference issue and the failing feature ID, without changing the source/draft.
+- The first backend pass exposed the missing single-nick reference check and
+  lost feature attribution. Corrected checks pass; native geometry formulas and
+  still-used legacy recovery behavior remain unchanged. Rollout stays disabled.
+
+## ISSUE-121 — Preview Apply could exceed deadline during preservation (2026-10-16, CORRECTED)
+
+- The legacy-source branch checked the deadline before preserving presentation
+  and validating dependencies but could publish after that work exceeded it.
+- Recheck the deadline, original source and lease immediately before publication,
+  using lock-owned checks rather than reacquiring the non-reentrant state lock.
+  Failure restores the ready lease and preserves source/undo. A deterministic
+  post-preservation expiry regression covers the shared host.
+
+## ISSUE-122 — Legacy picker callbacks and newer-view ownership during Sweep (2026-10-16, CORRECTED IN GATED EDITOR)
+
+- A hidden Extrude button/Enter handler could still call canonical authoring
+  while the picker held Sweep's private prefix. Private context now refuses
+  legacy extrusion/placement callbacks; releasing it restores ordinary behavior.
+- Closing an old editor must not hide a newer camera/view's picker. Picker
+  release and panel cleanup retain exact context ownership, including camera
+  transitions. Held Prepare can be cancelled from Escape or another tool.
+- These are isolation corrections within FH-22, not new milestones. Actual
+  controls and ownership regressions are included in U17; desktop remains MV-51.

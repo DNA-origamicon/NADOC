@@ -14,7 +14,9 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
   let liveFrame = null, pendingDraft = null
   const warnings = createSweepWarningMarkers(scene,{canvas,getCamera,addFrameCallback,removeFrameCallback})
   const hidden = new Map()
-  function restoreScene() { setPreviewHelices([]); for (const [node, visible] of hidden) node.visible = visible; hidden.clear() }
+  let privateLayer = null, masked = false
+  function restoreScene() { if (masked) setPreviewHelices([]); masked = false; for (const [node, visible] of hidden) node.visible = visible; hidden.clear() }
+  function include(node) { node?.traverse(child => child.layers.set(privateLayer ?? 0)) }
   let mode = 'translate', pointBases = [], orientationBasis = new THREE.Matrix4()
   const arrows = new THREE.Group(); arrows.name = 'sweep-orientation-arrows'; root.add(arrows)
   const sections = new THREE.Group(); sections.name = 'sweep-cross-sections'; root.add(sections)
@@ -69,6 +71,7 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
     // cannot consume a point/handle drag before TransformControls receives it.
     tc.disconnect(); tc.setMode(mode); tc.setRotationSnap(null); tc.setSpace('world'); tc.setSize(.65)
     helper = tc.getHelper(); helper.name = 'sweep-point-gizmo'; scene.add(helper)
+    include(helper); include(target)
     tc.addEventListener('objectChange', () => {
       const point = points.children[selected]
       if (!point) return
@@ -113,6 +116,7 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
         point = new THREE.Mesh(new THREE.SphereGeometry(.55, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffc857, depthTest: false, depthWrite: false }))
         point.name = `sweep-point-${i}`; point.userData.pointIndex = i; point.renderOrder = 101
         points.add(point)
+        include(point)
       }
       point.visible = p.every(Number.isFinite)
       if (point.visible) point.position.fromArray(p).applyMatrix3(rotation).add(origin)
@@ -125,6 +129,13 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
     return { x: (event.clientX - rect.left) / rect.width * 2 - 1, y: -(event.clientY - rect.top) / rect.height * 2 + 1, button: event.button }
   }
   function consume(event) { event.preventDefault(); event.stopImmediatePropagation() }
+  // TransformControls shares its raycaster between instances. Scope its layer
+  // for this synchronous event only; another tool must retain its own mask.
+  function controlPointer(method, value) {
+    const shared = tc.getRaycaster(), prior = shared.layers.mask
+    shared.layers.set(privateLayer ?? 0)
+    try { tc[method](value) } finally { shared.layers.mask = prior }
+  }
   function down(event) {
     if (event.target !== canvas || event.button !== 0 || !points.children.length) return
     syncCamera(); scene.updateMatrixWorld(true); getCamera().updateMatrixWorld(true)
@@ -134,9 +145,9 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
     const hit = raycaster.intersectObjects(points.children.filter(p => p.visible), false)[0]
     if (hit) { onSelect?.(hit.object.userData.pointIndex); consume(event); return }
     if (!tc?.object) return
-    helper.updateMatrixWorld(true); tc.pointerHover(p)
+    helper.updateMatrixWorld(true); controlPointer('pointerHover', p)
     if (!tc.axis) return
-    tc.pointerDown(p)
+    controlPointer('pointerDown', p)
     if (!tc.dragging) return
     pointerId = event.pointerId; canvas.setPointerCapture?.(pointerId)
     orbit = getControls?.(); orbitEnabled = orbit?.enabled ?? true
@@ -144,8 +155,8 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
     consume(event)
   }
   function move(event) {
-    if (pointerId !== null) { tc.pointerMove(pointer(event)); consume(event) }
-    else if (event.target === canvas && tc?.object) { syncCamera(); tc.pointerHover(pointer(event)) }
+    if (pointerId !== null) { controlPointer('pointerMove', pointer(event)); consume(event) }
+    else if (event.target === canvas && tc?.object) { syncCamera(); controlPointer('pointerHover', pointer(event)) }
   }
   function keydown(event) {
     const from = event.target
@@ -171,6 +182,12 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
     addFrameCallback?.(syncCamera)
   }
   return {
+    setPrivateDisplayLayer(layer) {
+      if (layer !== null && (!Number.isInteger(layer) || layer < 0 || layer > 31)) throw new Error('Invalid Sweep display layer')
+      clear(); privateLayer = layer
+      include(root); include(helper); include(target)
+      raycaster.layers.set(layer ?? 0); warnings.setDisplayLayer(layer ?? 0)
+    },
     update(data, draft) {
       clearGeometry()
       if (!data) { clear(); return }
@@ -184,9 +201,9 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
         const frame = new THREE.Matrix4().makeRotationFromQuaternion(target.quaternion)
         pointBases[selected] = [0,1,2].map(r => [0,1,2].map(c => frame.elements[c*4+r]))
       }
-      if (data.edit_backbones_nm) {
+      if (privateLayer === null && data.edit_backbones_nm) {
         const affected = new Set(data.edit_helix_ids ?? [])
-        setPreviewHelices([...affected])
+        setPreviewHelices([...affected]); masked = true
         scene.getObjectByName('sweep-warning-icons-saved')?.children.forEach(icon => {
           if (icon.userData.helixIds?.some(id => affected.has(id))) {
             hidden.set(icon, icon.visible); icon.visible = false
@@ -247,7 +264,7 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
       }
       const path = new THREE.BufferGeometry().setFromPoints(data.path_nm.map(p => new THREE.Vector3(...p)))
       geometry.add(new THREE.Line(path, new THREE.LineBasicMaterial({ color: 0x58a6ff, depthTest: false })))
-      for (const [i, axis] of (data.helix_paths_nm ?? []).entries()) {
+      for (const [i, axis] of (privateLayer === null ? data.helix_paths_nm ?? [] : []).entries()) {
         if (data.edit_helix_ids && !data.edit_helix_ids.includes(data.helix_path_ids?.[i])) continue
         // A piecewise-linear curve preserves the exact server samples; do not
         // interpolate a second spline with a different shape for the ghost.
@@ -263,6 +280,7 @@ export function createSweepPreview(scene, { canvas, getCamera, getControls, addF
         geometry.add(mesh)
       }
       setPoints(data.points_nm.map(p => new THREE.Vector3(...p).sub(origin).applyMatrix3(inverse).toArray()))
+      include(root)
     },
     updateDraft(values, angles, index = selected) {
       if (!hasFrame) return

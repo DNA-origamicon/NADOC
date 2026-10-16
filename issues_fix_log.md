@@ -899,3 +899,12 @@ to the proved prefix after identity preservation; never infer it from the latest
 displayed geometry. Shared owned publication and typed reference failure keep
 rejected edits atomic. The seven-family editor is one FH-21 milestone, not extra
 credit for this fix or the shared-host extraction.
+
+2026-10-16 — U17 / ISSUE-120–122: the gated Sweep history editor now distinguishes
+native input replay from legacy snapshot rebasing. It identifies typed downstream
+nick dependencies and preserves rejected drafts. Shared Apply rechecks its final
+deadline after preservation. Private picker ownership blocks hidden legacy
+authoring and prevents old cleanup from hiding a newer view; preparation can be
+cancelled before the panel opens. Existing molecular algorithms and legacy
+recovery contracts are retained. These corrections earn only the fixed FH-22
+milestone when its full software acceptance passes; desktop remains FH-27/MV-51.

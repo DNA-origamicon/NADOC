@@ -7,15 +7,15 @@ unchanged; each new adapter must preserve their complete admitted output.
 
 ## Progress baseline and mandatory update counts — October 16, 2026
 
-**Completed: 19. Estimated total: 38. Remaining: 19 — 10 core-priority and
+**Completed: 20. Estimated total: 38. Remaining: 18 — 9 core-priority and
 9 parked asset/provenance milestones.** Baseline B1 remains 17/38, reconstructed
 from implementation and evidence through `2c15e747`. No earlier numerical target was
 agreed; do not invent historical estimate deltas. This is a milestone estimate,
 not a count of messages/commits or a percentage of time or user-ready features.
 Core estimates have moderate confidence; parked work has lower confidence.
 
-Keep delivery and effort visible separately: **16 engineering checkpoints have
-been delivered since B1 (U1–U16), closing two additional milestones**. Thirteen of
+Keep delivery and effort visible separately: **17 engineering checkpoints have
+been delivered since B1 (U1–U17), closing three additional milestones**. Thirteen of
 those checkpoints were spent on still-open FH-18. The 38 is an estimate of
 deliverable milestones, not a promise of 38 commits or assistant responses;
 the thirteen-checkpoint effort must not disappear behind the unchanged denominator.
@@ -51,6 +51,7 @@ once; its remaining rollout is parked, not removed from the total.
 | FH-17 | Done | Versioned group-creation frame-owner closure and explicit live-part legacy repair: `64a262a2`, `2c15e747`, [prevention](validation_grouping_structure.json), [repair](validation_grouping_repair.json). Invalid-file recovery is FH-19; desktop checks remain open. |
 | FH-19 | Done · 2 checkpoints | Recover supported invalid saved recipes: original bytes/digest preserved, bounded read-only admission, explicit grouping repair, independently regenerated valid copy and exact download. Isolated HTTP/process lifecycle and File-menu controls are connected and automated-tested; [contract](saved_recipe_recovery_contract.md), [evidence](validation_saved_recipe_delivery.json). Native empty-root recipes within the declared bounds only; desktop/latency acceptance remains FH-27/MV-49, as allocated before implementation. |
 | FH-21 | Done · 1 checkpoint | Complete ordinary native extrusion history editor: seven families, earlier edits through downstream features, stable identities, full input controls and validation; independent rebuild with evicted recovery, typed source diagnostics, atomic source-bound publication and undo/reload. [Contract](extrusion_history_editor_plan.md), [evidence](validation_extrusion_history_editor.json). Desktop/latency remains the existing FH-27/MV-50 exit; organization rollout remains disabled. |
+| FH-22 | Done · 1 checkpoint | Complete owned native Sweep history editor: full prefix-based controls, isolated feature-stage display, recovery-independent Apply/Cancel, full source proof and downstream rebuild, atomic undo/reload and typed missing references. [Contract](sweep_history_editor_plan.md), [evidence](validation_sweep_history_editor.json). Both rollout gates remain false; desktop/latency stays FH-27/MV-51. |
 
 ### Remaining core-priority milestones
 
@@ -62,7 +63,6 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 |---|---|---|
 | FH-18 | In progress · 13 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Owned organization transactions, named deformation preview/repair/comparison, qualified final-topology lineage including extrusion/crossover and resize/domain-shift edits and matching Fine Routing recovery are implemented; Groups/Placements UI, explicit placement Apply and ordinary owned Bend/Twist creation are integrated privately; persistent group visibility follows current identity membership and saves after queued writes; ordinary explicit-placement patterns now copy declared named groups through owned create/edit/replay; generated consumers, new-group movement and qualification stay open. |
 | FH-20 | Remaining | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
-| FH-22 | Remaining | Sweep history editor: input-based isolated preview, recovery-independent Apply/Cancel and downstream rebuild. |
 | FH-23 | Remaining | Move/rotate history editing: complete parameter controls, guarded commit, downstream edits and undo/persistence parity. |
 | FH-24 | Remaining | Fine Routing child editors: resize, ligate, nick, crossovers and loop/skips editable through ordinary UI with downstream replay. |
 | FH-25 | Remaining | Ordinary DNA connection completion: explicit supported core matrix including required combined/direct/indirect paths, recorded and qualified. |
@@ -94,7 +94,7 @@ After **every major engineering update**, update this ledger and the project
 memory, and include this line in the user-facing final report even when no
 milestone closed:
 
-> Overhaul: **19 / 38 complete**; **19 remaining** (10 core, 9 parked).
+> Overhaul: **20 / 38 complete**; **18 remaining** (9 core, 9 parked).
 > Change this update: **+1 completed, +0 total**. Baseline total: **38**.
 
 Replace the numbers with current counts, name the milestone worked/closed, and
@@ -141,9 +141,8 @@ bound their matrices before implementation rather than expanding them indefinite
 | U13 · 2026-10-16 | FH-18 checkpoint 11: ordinary Bend/Twist creation uses the shared isolated preview lifecycle, complete controls and one input-defined append; [evidence](validation_deformation_creation.json) | None; persistent group visibility, generated consumers, new-group movement and qualification remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** eleven checkpoints on unfinished FH-18. One complete creation workflow within D; fixed exits and five batches unchanged. |
 | U14 · 2026-10-16 | FH-18 checkpoint 12: persistent named-group visibility, cached display queries and guarded save/export; [evidence](validation_group_visibility.json) | None; generated consumers, new-group movement and qualification remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** twelve checkpoints on unfinished FH-18. Existing D visibility exit advances; original five batches and full milestone exit unchanged. |
 | U15 · 2026-10-16 | FH-18 checkpoint 13: explicit-placement linear/circular patterns retain declared named groups through owned creation, input edits and cold replay; [evidence](validation_group_patterns.json) | None; generated consumers, new-group movement and qualification remain | 18 | 38 | 11 | 9 | +0 total, +0 completed. **Task growth remains flagged:** thirteen checkpoints on unfinished FH-18. Connected ordinary pattern workflow within B–D; original five batches and full milestone exit unchanged. |
-
-
 | U16 · 2026-10-16 | FH-21 checkpoint 1: complete seven-family native extrusion input editor, source-prefix binding, isolated downstream rebuild, shared owned host and source-bound full-geometry adoption; [evidence](validation_extrusion_history_editor.json) | FH-21 implementation exit closed; existing FH-27 desktop/performance exit remains | 19 | 38 | 10 | 9 | +0 total, +1 completed. Sixteen checkpoints since B1 close two milestones. FH-18 stays open after thirteen checkpoints; no exit/scope/denominator changes. |
+| U17 · 2026-10-16 | FH-22 checkpoint 1: complete native Sweep controls, historical-prefix private display/picker, shared owned lifecycle, source proof and downstream rebuild; [evidence](validation_sweep_history_editor.json) | FH-22 implementation exit closed; existing FH-27 desktop/performance exit remains | 20 | 38 | 9 | 9 | +0 total, +1 completed. Seventeen checkpoints since B1 close three milestones. FH-18 stays open after thirteen checkpoints; no scope/exit/denominator changes. |
 
 ### U16 closure and sequencing — bounded core editors
 
@@ -168,11 +167,36 @@ on overlapping owners. Existing generated callers also do not justify an unused
 generic compiler. Those original exits remain open; they are not moved to FH-36.
 No additional FH-18 implementation credit is assigned to that audit.
 
-Next: the finite FH-22 Sweep history editor, followed by the existing FH-23
-move/rotate and FH-24 Fine Routing exits. Bound their complete control/lifecycle
+U16 scheduled FH-22 Sweep, then the existing FH-23 move/rotate and FH-24 Fine
+Routing exits. U17 below closes the Sweep implementation boundary. Bound their complete control/lifecycle
 matrices before implementation, reuse owned evaluation/publication, and retain
 FH-18's required movement/generated qualification work. Molecular placement
 changes still need demonstrated authorization and Archive-backed evidence.
+
+### U17 closure and next step — Sweep complete, move/rotate next
+
+The fixed FH-22 implementation exit is complete after one engineering checkpoint.
+Full source/footprint/path/orientation controls use an independently rebuilt
+prefix; private preview never installs candidate geometry in the active part.
+Apply proves the source and replays the suffix with its recorded inputs, retaining
+one undo and stable identities. Removed dependencies identify the failing feature
+and missing reference. The existing lease/controller, display projection and
+publication host are shared; no duplicate job catalog or general callback exists.
+
+The 554 distinct backend checks and 8,918 frontend tests pass (one existing skip).
+Both client/host rollout gates stay false. Desktop/latency remains the original
+FH-27/MV-51 exit; Archive is unavailable. Native algorithms, numerical manifests
+and goldens are unchanged; `main.js` delta 0. Legacy recovery still has callers and
+is retained; hidden legacy picker callbacks are blocked during owned preview.
+
+**20/38 complete; 18 remaining (9 core, 9 parked); +1 completed, +0 total.** U1–U17
+are seventeen engineering checkpoints, closing three milestones since B1.
+FH-18 remains growth-flagged after thirteen checkpoints: its movement, generated
+consumer and qualification exits are unchanged. Next, bound the complete FH-23
+move/rotate control and lifecycle matrix, reuse owned evaluation/publication, and
+resolve any named-group motion/frame uncertainty with CAD research before coding.
+Do not turn that work into another series of identity-only subsets or transfer
+unfinished FH-18 work into a parked milestone. FH-24 Fine Routing follows.
 
 ### FH-18 containment update — U15
 

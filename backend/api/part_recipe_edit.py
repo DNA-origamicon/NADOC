@@ -69,7 +69,8 @@ def without_commands(log, removed):
     return retained
 
 
-def regenerate(source, log, checkpoint, *, identify_failures=False, prefix=None, executor=None):
+def regenerate(source, log, checkpoint, *, identify_failures=False, attribute_failures=False,
+               prefix=None, executor=None):
     """Execute input commands only; replace every recovery snapshot and child diff."""
 
     executor = executor or execute
@@ -81,7 +82,10 @@ def regenerate(source, log, checkpoint, *, identify_failures=False, prefix=None,
         try:
             return executor(kind, current, arguments)
         except (ValueError, HTTPException) as exc:
-            if (isinstance(exc, CommandContractError) and exc.status == "unverified") or not identify_failures or (
+            typed_failure = isinstance(exc, CommandContractError) and exc.status != "unverified"
+            if (isinstance(exc, CommandContractError) and exc.status == "unverified") or not (
+                identify_failures or (attribute_failures and typed_failure)
+            ) or (
                 isinstance(exc, HTTPException) and exc.status_code in {408, 429}
             ):
                 raise
@@ -302,9 +306,12 @@ def prepare_change(source, captured, index, checkpoint, *, params=None, sub_inde
             }
     try:
         if candidate is None:
-            candidate = regenerate(source, log, checkpoint, prefix=prefix, executor=executor)
+            candidate = regenerate(source, log, checkpoint, prefix=prefix, executor=executor,
+                                   attribute_failures=True)
         from backend.core.part_structure_gate import require_valid_structure
         require_valid_structure(candidate, checkpoint=checkpoint)
+    except CommandReplayError as exc:
+        raise HTTPException(409, detail={**exc.issue, "feature_id": exc.feature_id}) from exc
     except CommandContractError as exc:
         raise HTTPException(409, detail=exc.as_issue()) from exc
     except ValidationError as exc:

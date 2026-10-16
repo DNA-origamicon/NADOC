@@ -28,9 +28,17 @@ def _fail(status, code, detail):
     raise HTTPException(status, detail={"code": code, "detail": detail})
 
 
-def _enabled():
-    if not DEFORMATION_PREVIEW_ENABLED:
-        _fail(403, "preview_disabled", "The isolated deformation editor is not enabled on this host")
+def _enabled(family="deformation"):
+    if family == "sweep":
+        from backend.api.routes_part_sweep_preview import SWEEP_PREVIEW_ENABLED
+
+        enabled = SWEEP_PREVIEW_ENABLED
+    elif family == "deformation":
+        enabled = DEFORMATION_PREVIEW_ENABLED
+    else:
+        _fail(422, "invalid_preview_family", "Unknown preview family")
+    if not enabled:
+        _fail(403, "preview_disabled", f"The isolated {family} editor is not enabled on this host")
 
 
 async def _read_request(request):
@@ -38,9 +46,9 @@ async def _read_request(request):
                                      slot=_input_slot, read_seconds=READ_SECONDS)
 
 
-def _respond(operation, value, generation):
-    _enabled()
-    current = policy.require_compatibility(doc_context.get_current_doc(), "deformation_preview")
+def _respond(operation, value, generation, family="deformation"):
+    _enabled(family)
+    current = policy.require_compatibility(doc_context.get_current_doc(), f"{family}_preview")
     if current.generation != generation:
         _fail(409, "policy_changed", "Construction policy changed during request acquisition")
     from backend.api import part_deformation_preview_sessions as host
@@ -48,19 +56,22 @@ def _respond(operation, value, generation):
     # The DTO has already bounded the whole response, including host identity.
     # Returning Response avoids FastAPI's generic coordinate traversal; only the
     # actual final JSON encoding remains, on this worker thread.
-    return ORJSONResponse(getattr(host, operation)(value))
+    options = {} if family == "deformation" else {"family": family}
+    return ORJSONResponse(getattr(host, operation)(value, **options))
 
 
-async def _dispatch(request, operation):
-    _enabled()  # disabled means no body acquisition or native host import
+async def _dispatch(request, operation, *, family="deformation"):
+    _enabled(family)  # disabled means no body acquisition or native host import
     doc = doc_context.get_current_doc()
-    selected = policy.require_compatibility(doc, "deformation_preview")
+    selected = policy.require_compatibility(doc, f"{family}_preview")
     try:
         require_document_identity(doc)
     except UnsafeDocumentIdentity as error:
         _fail(422, error.code, str(error))
     value = await _read_request(request)
-    return await run_in_threadpool(_respond, operation, value, selected.generation)
+    if family == "deformation":
+        return await run_in_threadpool(_respond, operation, value, selected.generation)
+    return await run_in_threadpool(_respond, operation, value, selected.generation, family)
 
 
 @router.post(_PATH)
