@@ -81,9 +81,119 @@
   "latency_qualified": false,
   "app_status": "NOT VERIFIED IN APP",
   "remaining": [
-    "Pure bounded application timing",
-    "Ordinary route migration and interactive latency",
+    "Ordinary application-route migration and interactive latency/publication/memory qualification",
+    "Pending-alternative metadata while another version on the same particle is applied",
     "Unequal-length cases that would shorten the NP handle remain explicit refusals",
+    "Constraints-aware bound particle motion/resize and graft replacement",
+    "Collective relaxation, legacy direct/fitted attachment and coated/biotin/QD source contracts",
     "Generated multi-anchor history compiler and existing platform collision debt"
-  ]
+  ],
+  "pure_application_benchmark": {
+    "source_state": "5783b656 plus shared capture/recovery extraction subsequently committed as 3e12323f; uncommitted oxDNA/linker adapters were not used",
+    "evidence": "benchmark_np_application_repeated.json",
+    "repeats_per_cell": 9,
+    "cells": 4,
+    "correctness_verified": true,
+    "cleanup_verified": true,
+    "failed_cases": [],
+    "paired_output_parity_checks": 180,
+    "owned_lifecycles": 36,
+    "cold_nine_row_proofs": 4,
+    "worker_geometry_edits_verified": 4,
+    "comparator": "Same current extracted native kernel with identical explicit IDs, times and seeds; not a historical binary or HTTP recorder",
+    "cold_capture_ms": [
+      3.572911002265755,
+      7.753655001579318
+    ],
+    "cold_input_pickle_bytes": [
+      15255,
+      60979
+    ],
+    "cold_proof_ms": [
+      1153.8384660016163,
+      1251.1999569978798
+    ],
+    "full_worker_edit_ms": [
+      1245.0640829993063,
+      1442.918352993729
+    ],
+    "same_process_verification_ms": [
+      22.101998998550698,
+      103.96937699988484
+    ],
+    "max_recovery_bytes": 154820,
+    "diagnostics": {
+      "event_limit": 4096,
+      "gc_events": 1183,
+      "dropped_gc_events": 0
+    },
+    "adapter_max_ms": 58.95580200012773,
+    "kernel_max_ms": 55.0518230011221,
+    "natural_gc_correlation": "Four >20ms leaf samples include generation 2; overlap is reported without subtracting user-visible latency. Worker GC is not observed.",
+    "latency_qualified": false,
+    "peak_memory_qualified": false,
+    "applied_rename_timed": false,
+    "per_action_summary": {
+      "create-applied": {
+        "adapter_cell_median_ms": [
+          4.35276200005319,
+          9.945254998456221
+        ],
+        "paired_adapter_minus_kernel_cell_median_ms": [
+          0.7266579996212386,
+          3.198334001353942
+        ],
+        "adapter_max_ms": 58.95580200012773,
+        "kernel_max_ms": 7.754140002361964
+      },
+      "reapply": {
+        "adapter_cell_median_ms": [
+          4.695319003076293,
+          10.751554000307806
+        ],
+        "paired_adapter_minus_kernel_cell_median_ms": [
+          1.100372988730669,
+          4.034013996715657
+        ],
+        "adapter_max_ms": 11.9367119987146,
+        "kernel_max_ms": 8.172756002750248
+      },
+      "unapply": {
+        "adapter_cell_median_ms": [
+          0.8785699974396266,
+          3.5112539990223013
+        ],
+        "paired_adapter_minus_kernel_cell_median_ms": [
+          0.8292589991469868,
+          3.4329999980400316
+        ],
+        "adapter_max_ms": 3.558090000296943,
+        "kernel_max_ms": 0.1060840004356578
+      },
+      "apply-pending": {
+        "adapter_cell_median_ms": [
+          4.377612000098452,
+          10.212793000391684
+        ],
+        "paired_adapter_minus_kernel_cell_median_ms": [
+          0.8128550034598447,
+          3.47207800950855
+        ],
+        "adapter_max_ms": 57.357944002433214,
+        "kernel_max_ms": 55.0518230011221
+      },
+      "delete-applied": {
+        "adapter_cell_median_ms": [
+          0.9183689981000498,
+          3.6529260032693855
+        ],
+        "paired_adapter_minus_kernel_cell_median_ms": [
+          0.8414900003117509,
+          3.5467440029606223
+        ],
+        "adapter_max_ms": 4.799973998160567,
+        "kernel_max_ms": 0.17637400014791638
+      }
+    }
+  }
 }

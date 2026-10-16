@@ -1,0 +1,5319 @@
+{
+  "scope": "Pure bounded NP owned application lifecycle; current shared native kernel comparison",
+  "notes": [
+    "No HTTP publication, user document, simulation, solver change or global budget change.",
+    "Both arms use the current extracted kernel with identical explicit IDs, timestamps and history seeds.",
+    "Cold input-only proof with poisoned recovery succeeds before timed cycles; no fixture shrinking or retries.",
+    "Alternating paired order reduces fixed ordering bias; full output parity and input immutability are checked outside timing.",
+    "Full verification and private edit evaluation include their existing unchanged admission and recovery budgets.",
+    "GC remains natural; overlap is correlation only and is never subtracted from elapsed latency.",
+    "Main-process GC observations exclude worker-process collections; no peak-memory qualification is claimed."
+  ],
+  "repeats": 9,
+  "completed": true,
+  "correctness_verified": true,
+  "latency_qualified": false,
+  "exit_status_basis": "Correctness and cleanup only; no latency acceptance threshold",
+  "cleanup_verified": true,
+  "failure": null,
+  "failed_cases": [],
+  "diagnostics": {
+    "event_limit": 4096,
+    "gc_events": 1183,
+    "dropped_gc_events": 0
+  },
+  "cases": [
+    {
+      "case": "six-cell-1-handles",
+      "completed": true,
+      "active_phase": "complete",
+      "handles": 1,
+      "background": "six-cell",
+      "samples": [
+        {
+          "iteration": 0,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.177945000468753,
+          "gc_overlap_ms": 0.10260199633194134,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.699392000271473,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 0,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.714634997071698,
+          "gc_overlap_ms": 0.08813799649942666,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.6292110016802326,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 0,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 0.8616810009698384,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.048533998779021204,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 0,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.428961001394782,
+          "gc_overlap_ms": 0.0909529990167357,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.5548560044844635,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 0,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 0.8940039988374338,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.05251399852568284,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 1,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.710263001266867,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 1,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.4369210008881055,
+          "gc_overlap_ms": 0.08027600415516645,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 1,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.5563130004447885,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 1,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.745794998598285,
+          "gc_overlap_ms": 0.09289500303566456,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 1,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.06726900028297678,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 1,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 0.8748810068937019,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 1,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.562621001037769,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 1,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.321020998759195,
+          "gc_overlap_ms": 0.10366999777033925,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 1,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.06814199878135696,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 1,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.0487320032552816,
+          "gc_overlap_ms": 0.09425399912288412,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.3215059995418414,
+          "gc_overlap_ms": 0.10017499880632386,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.550196997821331,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 2,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.695319003076293,
+          "gc_overlap_ms": 0.08580899884691462,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.588927000237163,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 2,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 0.9280760059482418,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.049408001359552145,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 2,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.675128002418205,
+          "gc_overlap_ms": 0.10260200360789895,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 4.0411709996988066,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 2,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.2583040006575175,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.06775400106562302,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 3,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.752584998437669,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 3,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.236765002133325,
+          "gc_overlap_ms": 0.0852270022733137,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 3,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.697450003528502,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 3,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.585144997690804,
+          "gc_overlap_ms": 0.09609799599274993,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 3,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.06532800034619868,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 3,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 0.8557590044802055,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 3,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.474094999546651,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 3,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.304519003198948,
+          "gc_overlap_ms": 0.09541899635223672,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 3,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.07173299673013389,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 3,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 0.8414900003117509,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.183376993751153,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.5655329993460327,
+          "gc_overlap_ms": 0.08008199802134186,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 4,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.662023995479103,
+          "gc_overlap_ms": 0.10318400018149987,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.561651006748434,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 4,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 0.8785699974396266,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.04931099829263985,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 4,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.321991000324488,
+          "gc_overlap_ms": 0.10201899567618966,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.54592599614989,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 4,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 0.8686689980095252,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.05309600237524137,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 5,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.5058369976468384,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 5,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.029720996390097,
+          "gc_overlap_ms": 0.09512699762126431,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 5,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 4.240356000082102,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 5,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.829758996493183,
+          "gc_overlap_ms": 0.13288699847180396,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 5,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.06950199895072728,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 5,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 0.899148995813448,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 5,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.6342589955893345,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 5,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.291220997401979,
+          "gc_overlap_ms": 0.09930200030794367,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 5,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.0713460030965507,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 5,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 0.8542069990653545,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.203664997476153,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.667942000902258,
+          "gc_overlap_ms": 0.0809560006018728,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 6,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.590968994307332,
+          "gc_overlap_ms": 0.09580700134392828,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.481861000182107,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 6,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 0.9381710042362101,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.049019996367860585,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 6,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.377612000098452,
+          "gc_overlap_ms": 0.1029900013236329,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.460020001512021,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 6,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 0.9234159952029586,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.05300000339047983,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 7,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.576016999431886,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 7,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.35276200005319,
+          "gc_overlap_ms": 0.08823600364848971,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 7,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.5024390017497353,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 7,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.573012003675103,
+          "gc_overlap_ms": 0.098718999652192,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 7,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.0659099969197996,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 7,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 0.8326570023200475,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 7,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.7297739982022904,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 7,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.542629001662135,
+          "gc_overlap_ms": 0.098718999652192,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 7,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.0797909960965626,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 7,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 0.9183689981000498,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.874605001532473,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 4.939251994073857,
+          "gc_overlap_ms": 0.11269700189586729,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 8,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 6.224153003131505,
+          "gc_overlap_ms": 0.14890299644321203,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.848587002721615,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 8,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 0.9544780041323975,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.04940799408359453,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 8,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.504771997744683,
+          "gc_overlap_ms": 0.1048339981934987,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.5499060031725094,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 8,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 0.9338989984826185,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": [],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.05338800110621378,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        }
+      ],
+      "helices": 8,
+      "strands": 13,
+      "domains": 14,
+      "helix_bases": 276,
+      "domain_bases": 528,
+      "loop_descriptors": 0,
+      "source_work_and_node_byte_admitted": true,
+      "applied_recipe_rows": 9,
+      "applied_recovery_bytes": 60060,
+      "cold_capture_ms": 3.572911002265755,
+      "cold_input_pickle_bytes": 15255,
+      "cold_verification": {
+        "cleanup_verified": true,
+        "status": "verified",
+        "issues": [],
+        "checked_commands": 9,
+        "validation": null,
+        "execution_ms": 1165.1904760001344,
+        "cleanup_ms": 0.17724699864629656
+      },
+      "same_process_full_verification": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "verified",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 9,
+        "proof_coverage": "versioned_commands",
+        "native_editable": true,
+        "dependencies": {
+          "complete": true,
+          "parents": {
+            "bundle": [],
+            "target": [
+              "bundle"
+            ],
+            "sequence": [
+              "target"
+            ],
+            "gold": [
+              "sequence"
+            ],
+            "graft": [
+              "gold"
+            ],
+            "create-applied": [
+              "gold",
+              "graft"
+            ],
+            "reapply": [
+              "create-applied",
+              "gold"
+            ],
+            "unapply": [
+              "gold",
+              "reapply"
+            ],
+            "apply-pending": [
+              "gold",
+              "unapply"
+            ]
+          }
+        },
+        "recipe_fingerprint": "06d44745ed2f48584b6ba91827c92344e31daa4ea7444a3249d378b1f7506efe",
+        "authoring_fingerprint": "a7a15de4f53f56d56ef3c23b77911df95d2608e607da2033cb12c8aa551a484b",
+        "imported_sources": []
+      },
+      "same_process_full_verification_ms": 22.101998998550698,
+      "full_edit_evaluation": {
+        "cleanup_verified": true,
+        "status": "ready",
+        "issues": [],
+        "checked_commands": null,
+        "validation": {
+          "passed": true,
+          "results": [
+            {
+              "ok": true,
+              "message": "Helix IDs are unique."
+            },
+            {
+              "ok": true,
+              "message": "Strand IDs are unique."
+            },
+            {
+              "ok": true,
+              "message": "All domain helix references are valid."
+            },
+            {
+              "ok": true,
+              "message": "Multi-scaffold design: 6 scaffold strands."
+            },
+            {
+              "ok": true,
+              "message": "Strand 'c6aac5db-5378-5805-88f9-961f04ca354c' sequence length is consistent."
+            }
+          ]
+        },
+        "execution_ms": 1252.8897750016768,
+        "cleanup_ms": 0.20374700397951528,
+        "geometry_edit_verified": true,
+        "recovery_bytes": 60140
+      },
+      "case_elapsed_ms": 2933.1365209945943,
+      "timings": {
+        "create-applied": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 4.35276200005319,
+            "p95_ms": 5.177945000468753,
+            "max_ms": 5.177945000468753
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 3.667942000902258,
+            "p95_ms": 4.939251994073857,
+            "max_ms": 4.939251994073857
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 0.7266579996212386,
+            "p95_ms": 1.5238839987432584,
+            "max_ms": 1.5238839987432584
+          }
+        },
+        "reapply": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 4.695319003076293,
+            "p95_ms": 6.224153003131505,
+            "max_ms": 6.224153003131505
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 3.588927000237163,
+            "p95_ms": 4.240356000082102,
+            "max_ms": 4.240356000082102
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 1.100372988730669,
+            "p95_ms": 2.37556600040989,
+            "max_ms": 2.37556600040989
+          }
+        },
+        "unapply": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 0.8785699974396266,
+            "p95_ms": 0.9544780041323975,
+            "max_ms": 0.9544780041323975
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 0.049408001359552145,
+            "p95_ms": 0.06950199895072728,
+            "max_ms": 0.06950199895072728
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 0.8292589991469868,
+            "p95_ms": 0.9050700100488029,
+            "max_ms": 0.9050700100488029
+          }
+        },
+        "apply-pending": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 4.377612000098452,
+            "p95_ms": 4.675128002418205,
+            "max_ms": 4.675128002418205
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 3.5548560044844635,
+            "p95_ms": 4.0411709996988066,
+            "max_ms": 4.0411709996988066
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 0.8128550034598447,
+            "p95_ms": 0.9548659945721738,
+            "max_ms": 0.9548659945721738
+          }
+        },
+        "delete-applied": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 0.9183689981000498,
+            "p95_ms": 1.2583040006575175,
+            "max_ms": 1.2583040006575175
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 0.06775400106562302,
+            "p95_ms": 0.0797909960965626,
+            "max_ms": 0.0797909960965626
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 0.8414900003117509,
+            "p95_ms": 1.1905499995918944,
+            "max_ms": 1.1905499995918944
+          }
+        }
+      },
+      "output_parity_pairs": 45
+    },
+    {
+      "case": "six-cell-16-handles",
+      "completed": true,
+      "active_phase": "complete",
+      "handles": 16,
+      "background": "six-cell",
+      "samples": [
+        {
+          "iteration": 0,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.470315998536535,
+          "gc_overlap_ms": 0.0909529990167357,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.8967320069787093,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 0,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.868687003385276,
+          "gc_overlap_ms": 0.2012229961110279,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.901682997820899,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 0,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.8637219982338138,
+          "gc_overlap_ms": 0.10308800119673833,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.05494100332725793,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 0,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.605824000667781,
+          "gc_overlap_ms": 0.09755499922903255,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.8837259999127127,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 0,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.9409890010138042,
+          "gc_overlap_ms": 0.1265780010726303,
+          "gc_events": 1,
+          "gc_generations": [
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.06134799332357943,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 1,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 4.224728996632621,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 1,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.541274003917351,
+          "gc_overlap_ms": 0.19763199816225097,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 1,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 4.140375996939838,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 1,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.960028996923938,
+          "gc_overlap_ms": 0.21481300063896924,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 1,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.07959600043250248,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 1,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.7621880033402704,
+          "gc_overlap_ms": 0.10502900113351643,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 1,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 4.359072001534514,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 1,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.68813800055068,
+          "gc_overlap_ms": 0.1971469901036471,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 1,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.17637400014791638,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 1,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.8904169992310926,
+          "gc_overlap_ms": 0.13278999540489167,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 7.006820000242442,
+          "gc_overlap_ms": 0.11667599756037816,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.9257560056285,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 2,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 6.200661999173462,
+          "gc_overlap_ms": 0.211318998481147,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.897023998433724,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 2,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.825963001465425,
+          "gc_overlap_ms": 0.10114500037161633,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.06629800191149116,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 2,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.72832599573303,
+          "gc_overlap_ms": 0.08969199552666396,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 4.023989997222088,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 2,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.9000259999302216,
+          "gc_overlap_ms": 0.1654050065553747,
+          "gc_events": 1,
+          "gc_generations": [
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.05930900078965351,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 3,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 4.662509003537707,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 3,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.557775002671406,
+          "gc_overlap_ms": 0.18685800023376942,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 3,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.9415780047420412,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 3,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 6.0220550003577955,
+          "gc_overlap_ms": 0.20500898972386494,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 3,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.07260800339281559,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 3,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.7483080009697005,
+          "gc_overlap_ms": 0.10696899698814377,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 3,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.8772219995735213,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 3,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.545252999581862,
+          "gc_overlap_ms": 0.19520599744282663,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 3,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.08804100070847198,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 3,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.8109169977833517,
+          "gc_overlap_ms": 0.10648400348145515,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.617181996058207,
+          "gc_overlap_ms": 0.09182700159726664,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.8573229976464063,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 4,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 6.2272600043797866,
+          "gc_overlap_ms": 0.19462299678707495,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.97409699507989,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 4,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.817420998122543,
+          "gc_overlap_ms": 0.10444600047776476,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.05600800068350509,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 4,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.451194003398996,
+          "gc_overlap_ms": 0.09037100244313478,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.857031995721627,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 4,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.7773309955373406,
+          "gc_overlap_ms": 0.12356899969745427,
+          "gc_events": 1,
+          "gc_generations": [
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.05998800043016672,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 5,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 4.044180001073983,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 5,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.669890000717714,
+          "gc_overlap_ms": 0.19074000738328323,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 5,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.892558997904416,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 5,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 6.007397998473607,
+          "gc_overlap_ms": 0.21801700495416299,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 5,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.07542200182797387,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 5,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.7812139994930476,
+          "gc_overlap_ms": 0.10697000107029453,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 5,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 4.009041003882885,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 5,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 6.839570000011008,
+          "gc_overlap_ms": 0.6334709978546016,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 5,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.1172600022982806,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 5,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.8015009991358966,
+          "gc_overlap_ms": 0.1137650033342652,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.653583000821527,
+          "gc_overlap_ms": 0.09182700159726664,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.8884820023668,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 6,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.8655799948610365,
+          "gc_overlap_ms": 0.19598200015025213,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.8940150043345056,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 6,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.9557440027710982,
+          "gc_overlap_ms": 0.20627100457204506,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.05765900277765468,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 6,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.515162003575824,
+          "gc_overlap_ms": 0.09075900015886873,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.774523996980861,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 6,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 2.2790799994254485,
+          "gc_overlap_ms": 0.14094400103203952,
+          "gc_events": 1,
+          "gc_generations": [
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.0744520002626814,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 7,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 4.247539996867999,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 7,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.640867006150074,
+          "gc_overlap_ms": 0.18899200222222134,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 7,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 5.3696559989475645,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 7,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.876258001080714,
+          "gc_overlap_ms": 0.2000579916057177,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 7,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.07241300045279786,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 7,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.8379989996901713,
+          "gc_overlap_ms": 0.10900800407398492,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 7,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.855187002045568,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 7,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.47953800560208,
+          "gc_overlap_ms": 0.18967100913869217,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 7,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.08600299770478159,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 7,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.8138279992854223,
+          "gc_overlap_ms": 0.1380320027237758,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.8228699999745,
+          "gc_overlap_ms": 0.09318600496044382,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.7853940011700615,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 8,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 6.660963001195341,
+          "gc_overlap_ms": 0.44185700244270265,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.8836280000396073,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 8,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.7277290025958791,
+          "gc_overlap_ms": 0.10861999908229336,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.07765500049572438,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 8,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 5.434108999907039,
+          "gc_overlap_ms": 0.09134099673246965,
+          "gc_events": 1,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 3.741227999853436,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 8,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 1.795384996512439,
+          "gc_overlap_ms": 0.13842000043950975,
+          "gc_events": 1,
+          "gc_generations": [
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.05989099736325443,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        }
+      ],
+      "helices": 23,
+      "strands": 28,
+      "domains": 29,
+      "helix_bases": 456,
+      "domain_bases": 708,
+      "loop_descriptors": 0,
+      "source_work_and_node_byte_admitted": true,
+      "applied_recipe_rows": 9,
+      "applied_recovery_bytes": 112240,
+      "cold_capture_ms": 5.256861004454549,
+      "cold_input_pickle_bytes": 34708,
+      "cold_verification": {
+        "cleanup_verified": true,
+        "status": "verified",
+        "issues": [],
+        "checked_commands": 9,
+        "validation": null,
+        "execution_ms": 1153.8384660016163,
+        "cleanup_ms": 0.15744499978609383
+      },
+      "same_process_full_verification": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "verified",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 9,
+        "proof_coverage": "versioned_commands",
+        "native_editable": true,
+        "dependencies": {
+          "complete": true,
+          "parents": {
+            "bundle": [],
+            "target": [
+              "bundle"
+            ],
+            "sequence": [
+              "target"
+            ],
+            "gold": [
+              "sequence"
+            ],
+            "graft": [
+              "gold"
+            ],
+            "create-applied": [
+              "gold",
+              "graft"
+            ],
+            "reapply": [
+              "create-applied",
+              "gold"
+            ],
+            "unapply": [
+              "gold",
+              "reapply"
+            ],
+            "apply-pending": [
+              "gold",
+              "unapply"
+            ]
+          }
+        },
+        "recipe_fingerprint": "86c13ba0a69e4852a74cab98a1bb8ab3750dfa793d79dddd5bd722d7f7e21c82",
+        "authoring_fingerprint": "c60768951026da46308771d8adc3f3a222a561f7b82b6c4295fadd8ee2364073",
+        "imported_sources": []
+      },
+      "same_process_full_verification_ms": 28.63434699975187,
+      "full_edit_evaluation": {
+        "cleanup_verified": true,
+        "status": "ready",
+        "issues": [],
+        "checked_commands": null,
+        "validation": {
+          "passed": true,
+          "results": [
+            {
+              "ok": true,
+              "message": "Helix IDs are unique."
+            },
+            {
+              "ok": true,
+              "message": "Strand IDs are unique."
+            },
+            {
+              "ok": true,
+              "message": "All domain helix references are valid."
+            },
+            {
+              "ok": true,
+              "message": "Multi-scaffold design: 6 scaffold strands."
+            },
+            {
+              "ok": true,
+              "message": "Strand 'c6aac5db-5378-5805-88f9-961f04ca354c' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '59cb97a5-a0b5-5016-81f1-c8dba6cf5108' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '968812d5-b098-5fb6-908f-6b18fb85d07f' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '20dfe457-df38-5a95-885d-869a20102a00' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '95481bea-09e1-5490-bb21-6a7b80cbfb13' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '670dce34-ea15-5fa4-8ac2-9f569439275a' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '04ad7504-270c-5462-9a5d-f0daed85f016' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand 'b80851bc-09e0-590e-9909-d823d42254d2' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand 'bb732315-78bd-52e6-869c-0ee4b3045d42' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '1deb3aca-4ed3-51a1-9cb3-3b02b49728af' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '2aa5dd9f-a9ed-52aa-a8ea-9d3dc5b8ecf1' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '1dfc463d-312c-55eb-aa31-ef426b72c873' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '2aab2bae-712e-573d-abf0-5165126a2b4c' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand 'b9bccb73-03e5-5bd9-80ed-9a33e0b70e38' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '2fd63fb5-63c1-5356-8547-5dfa5063a9cc' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '7430afb3-afc2-5e1c-8f0f-a6def2ef058c' sequence length is consistent."
+            }
+          ]
+        },
+        "execution_ms": 1245.0640829993063,
+        "cleanup_ms": 0.2251030018669553,
+        "geometry_edit_verified": true,
+        "recovery_bytes": 111992
+      },
+      "case_elapsed_ms": 2853.526069004147,
+      "timings": {
+        "create-applied": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 5.640867006150074,
+            "p95_ms": 7.006820000242442,
+            "max_ms": 7.006820000242442
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 3.9257560056285,
+            "p95_ms": 4.662509003537707,
+            "max_ms": 4.662509003537707
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 1.6257099996437319,
+            "p95_ms": 3.0810639946139418,
+            "max_ms": 3.0810639946139418
+          }
+        },
+        "reapply": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 6.007397998473607,
+            "p95_ms": 6.660963001195341,
+            "max_ms": 6.660963001195341
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 3.901682997820899,
+            "p95_ms": 5.3696559989475645,
+            "max_ms": 5.3696559989475645
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 2.0804769956157543,
+            "p95_ms": 2.777335001155734,
+            "max_ms": 2.777335001155734
+          }
+        },
+        "unapply": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 1.817420998122543,
+            "p95_ms": 1.9557440027710982,
+            "max_ms": 1.9557440027710982
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 0.07241300045279786,
+            "p95_ms": 0.07959600043250248,
+            "max_ms": 0.07959600043250248
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 1.7596649995539337,
+            "p95_ms": 1.8980849999934435,
+            "max_ms": 1.8980849999934435
+          }
+        },
+        "apply-pending": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 5.545252999581862,
+            "p95_ms": 6.839570000011008,
+            "max_ms": 6.839570000011008
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 3.8772219995735213,
+            "p95_ms": 4.359072001534514,
+            "max_ms": 4.359072001534514
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 1.6928810000536032,
+            "p95_ms": 2.8305289961281233,
+            "max_ms": 2.8305289961281233
+          }
+        },
+        "delete-applied": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 1.8138279992854223,
+            "p95_ms": 2.2790799994254485,
+            "max_ms": 2.2790799994254485
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 0.0744520002626814,
+            "p95_ms": 0.17637400014791638,
+            "max_ms": 0.17637400014791638
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 1.7278250015806407,
+            "p95_ms": 2.204627999162767,
+            "max_ms": 2.204627999162767
+          }
+        }
+      },
+      "output_parity_pairs": 45
+    },
+    {
+      "case": "36-cell-42bp-1-handles",
+      "completed": true,
+      "active_phase": "complete",
+      "handles": 1,
+      "background": "36-cell-42bp",
+      "samples": [
+        {
+          "iteration": 0,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 8.568971999920905,
+          "gc_overlap_ms": 0.5861789904884063,
+          "gc_events": 5,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.222511998203117,
+          "gc_overlap_ms": 0.4276340041542426,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 0,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 8.984193998912815,
+          "gc_overlap_ms": 0.6625899914070033,
+          "gc_events": 5,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.321323002339341,
+          "gc_overlap_ms": 0.4313189929234795,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 0,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 2.6585070008877665,
+          "gc_overlap_ms": 0.17056900105671957,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.06099400343373418,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 0,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.447901000385173,
+          "gc_overlap_ms": 0.6635589961661026,
+          "gc_events": 5,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 5.996185995172709,
+          "gc_overlap_ms": 0.4360690072644502,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 0,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 2.957754004455637,
+          "gc_overlap_ms": 0.17066598957171664,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.06409599882317707,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 1,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.314730002486613,
+          "gc_overlap_ms": 0.44828800309915096,
+          "gc_events": 3,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 1,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 12.187182997877244,
+          "gc_overlap_ms": 0.6570639961864799,
+          "gc_events": 5,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 1,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 7.254361000377685,
+          "gc_overlap_ms": 0.43054499838035554,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 1,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.86671000282513,
+          "gc_overlap_ms": 0.6943949920241721,
+          "gc_events": 5,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 1,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.08921200060285628,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 1,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 2.759160997811705,
+          "gc_overlap_ms": 0.18016799731412902,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 1,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 7.674237000173889,
+          "gc_overlap_ms": 0.5919000032008626,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 1,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 8.75234100385569,
+          "gc_overlap_ms": 0.6572580023203045,
+          "gc_events": 5,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 1,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.10705400200095028,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 1,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.188054994097911,
+          "gc_overlap_ms": 0.3094280036748387,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.198011000989936,
+          "gc_overlap_ms": 0.6162379941088147,
+          "gc_events": 5,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.447772000683472,
+          "gc_overlap_ms": 0.42937898979289457,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 2,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.424530995602254,
+          "gc_overlap_ms": 0.6179860065458342,
+          "gc_events": 5,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.469783002103213,
+          "gc_overlap_ms": 0.492989995109383,
+          "gc_events": 3,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 2,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.308491999632679,
+          "gc_overlap_ms": 0.17522300186101347,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.06225499964784831,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 2,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 8.698231999005657,
+          "gc_overlap_ms": 0.5972330036456697,
+          "gc_events": 5,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.299699998635333,
+          "gc_overlap_ms": 0.5044329955126159,
+          "gc_events": 3,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 2,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 2.730749001784716,
+          "gc_overlap_ms": 0.17599899729248136,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.06283599941525608,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 3,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.647334004810546,
+          "gc_overlap_ms": 0.43897900468437,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 3,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 8.673891999933403,
+          "gc_overlap_ms": 0.6370880073518492,
+          "gc_events": 5,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 3,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.547456003318075,
+          "gc_overlap_ms": 0.49696798669174314,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 3,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 8.891976001905277,
+          "gc_overlap_ms": 0.6220559880603105,
+          "gc_events": 5,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 3,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.07369599916273728,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 3,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 2.714458001719322,
+          "gc_overlap_ms": 0.22739300038665533,
+          "gc_events": 2,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 3,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.374849996063858,
+          "gc_overlap_ms": 0.4334519981057383,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 3,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.264241001801565,
+          "gc_overlap_ms": 0.6517300062114373,
+          "gc_events": 5,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 3,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.10036300227511674,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 3,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 2.6331010012654588,
+          "gc_overlap_ms": 0.19403499754844233,
+          "gc_events": 2,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.304289000283461,
+          "gc_overlap_ms": 0.6620079875574447,
+          "gc_events": 5,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.600691995117813,
+          "gc_overlap_ms": 0.42705200030468404,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 4,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 10.120575003384147,
+          "gc_overlap_ms": 0.6373780051944777,
+          "gc_events": 5,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.216209003468975,
+          "gc_overlap_ms": 0.44596000225283206,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 4,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.18058900302276,
+          "gc_overlap_ms": 0.1843389982241206,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.06370899791363627,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 4,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 8.815855995635502,
+          "gc_overlap_ms": 0.6303979971562512,
+          "gc_events": 5,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.184208999911789,
+          "gc_overlap_ms": 0.466712997877039,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 4,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 2.600714004074689,
+          "gc_overlap_ms": 0.16746600158512592,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.06749099702574313,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 5,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.08918000216363,
+          "gc_overlap_ms": 0.44382800842868164,
+          "gc_events": 3,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 5,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.245718996680807,
+          "gc_overlap_ms": 0.6052819881006144,
+          "gc_events": 5,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 5,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.398996003554203,
+          "gc_overlap_ms": 0.45779200445394963,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 5,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 8.944435998273548,
+          "gc_overlap_ms": 0.6415469906642102,
+          "gc_events": 5,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 5,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.07476299651898444,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 5,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 2.5097559991991147,
+          "gc_overlap_ms": 0.18860500131268054,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 5,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.490922998636961,
+          "gc_overlap_ms": 0.41978000081144273,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 5,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.51471200096421,
+          "gc_overlap_ms": 0.6628819901379757,
+          "gc_events": 5,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 5,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.10550200386205688,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 5,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 2.6204949972452596,
+          "gc_overlap_ms": 0.1874410008895211,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 55.42563900235109,
+          "gc_overlap_ms": 46.10467199381674,
+          "gc_events": 5,
+          "gc_generations": [
+            0,
+            1,
+            2
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.247336001251824,
+          "gc_overlap_ms": 0.45216800208436325,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 6,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.087272002943791,
+          "gc_overlap_ms": 0.697304007189814,
+          "gc_events": 6,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.478315997810569,
+          "gc_overlap_ms": 0.5649419981637038,
+          "gc_events": 3,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 6,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 2.563089001341723,
+          "gc_overlap_ms": 0.16465299268020317,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.058472003729548305,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 6,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.03684800141491,
+          "gc_overlap_ms": 0.619827005721163,
+          "gc_events": 5,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.392499002686236,
+          "gc_overlap_ms": 0.5173310055397451,
+          "gc_events": 3,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 6,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.489144000923261,
+          "gc_overlap_ms": 0.25105299573624507,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.07466600072802976,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 7,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.536012995638885,
+          "gc_overlap_ms": 0.43529600225156173,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 7,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 8.917672996176407,
+          "gc_overlap_ms": 0.6434879978769459,
+          "gc_events": 5,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 7,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.195263005793095,
+          "gc_overlap_ms": 0.4288950003683567,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 7,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.458469998207875,
+          "gc_overlap_ms": 0.6567729942617007,
+          "gc_events": 5,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 7,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.07476299651898444,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 7,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 2.5569799981894903,
+          "gc_overlap_ms": 0.18753799668047577,
+          "gc_events": 2,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 7,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.720739002048504,
+          "gc_overlap_ms": 0.49434800166636705,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 7,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 8.462500001769513,
+          "gc_overlap_ms": 0.5948089965386316,
+          "gc_events": 5,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 7,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.12644800153793767,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 7,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 2.681294994545169,
+          "gc_overlap_ms": 0.19403499754844233,
+          "gc_events": 2,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 8.756510003877338,
+          "gc_overlap_ms": 0.6021789959049784,
+          "gc_events": 5,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.232111998542678,
+          "gc_overlap_ms": 0.4326770067564212,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 8,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.297694996348582,
+          "gc_overlap_ms": 0.6348570095724426,
+          "gc_events": 5,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 7.481267995899543,
+          "gc_overlap_ms": 0.5738629915867932,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 8,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 2.6975850050803274,
+          "gc_overlap_ms": 0.17609599308343604,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.0635149990557693,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 8,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.915389004163444,
+          "gc_overlap_ms": 0.6323360066744499,
+          "gc_events": 5,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.086367000534665,
+          "gc_overlap_ms": 0.45400999806588516,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 8,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 2.7131969982292503,
+          "gc_overlap_ms": 0.16659299581078812,
+          "gc_events": 2,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.07010899571469054,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        }
+      ],
+      "helices": 38,
+      "strands": 73,
+      "domains": 74,
+      "helix_bases": 1536,
+      "domain_bases": 3048,
+      "loop_descriptors": 0,
+      "source_work_and_node_byte_admitted": true,
+      "applied_recipe_rows": 9,
+      "applied_recovery_bytes": 98440,
+      "cold_capture_ms": 6.058554004994221,
+      "cold_input_pickle_bytes": 42918,
+      "cold_verification": {
+        "cleanup_verified": true,
+        "status": "verified",
+        "issues": [],
+        "checked_commands": 9,
+        "validation": null,
+        "execution_ms": 1251.1999569978798,
+        "cleanup_ms": 0.17357400065520778
+      },
+      "same_process_full_verification": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "verified",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 9,
+        "proof_coverage": "versioned_commands",
+        "native_editable": true,
+        "dependencies": {
+          "complete": true,
+          "parents": {
+            "bundle": [],
+            "target": [
+              "bundle"
+            ],
+            "sequence": [
+              "target"
+            ],
+            "gold": [
+              "sequence"
+            ],
+            "graft": [
+              "gold"
+            ],
+            "create-applied": [
+              "gold",
+              "graft"
+            ],
+            "reapply": [
+              "create-applied",
+              "gold"
+            ],
+            "unapply": [
+              "gold",
+              "reapply"
+            ],
+            "apply-pending": [
+              "gold",
+              "unapply"
+            ]
+          }
+        },
+        "recipe_fingerprint": "939ef4ffd64c07f411c4d012138d5aacd3c1b63d87b7dd5b52d484efb79d7025",
+        "authoring_fingerprint": "126fe03f17be3a1687078ce662add09059213de180579db78e9099e2244092a2",
+        "imported_sources": []
+      },
+      "same_process_full_verification_ms": 50.53063599916641,
+      "full_edit_evaluation": {
+        "cleanup_verified": true,
+        "status": "ready",
+        "issues": [],
+        "checked_commands": null,
+        "validation": {
+          "passed": true,
+          "results": [
+            {
+              "ok": true,
+              "message": "Helix IDs are unique."
+            },
+            {
+              "ok": true,
+              "message": "Strand IDs are unique."
+            },
+            {
+              "ok": true,
+              "message": "All domain helix references are valid."
+            },
+            {
+              "ok": true,
+              "message": "Multi-scaffold design: 36 scaffold strands."
+            },
+            {
+              "ok": true,
+              "message": "Strand 'c6aac5db-5378-5805-88f9-961f04ca354c' sequence length is consistent."
+            }
+          ]
+        },
+        "execution_ms": 1347.8134119941387,
+        "cleanup_ms": 0.23340500047197565,
+        "geometry_edit_verified": true,
+        "recovery_bytes": 98440
+      },
+      "case_elapsed_ms": 3461.958533000143,
+      "timings": {
+        "create-applied": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 9.198011000989936,
+            "p95_ms": 55.42563900235109,
+            "max_ms": 55.42563900235109
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 6.314730002486613,
+            "p95_ms": 6.647334004810546,
+            "max_ms": 6.647334004810546
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 2.7035970051656477,
+            "p95_ms": 49.178303001099266,
+            "max_ms": 49.178303001099266
+          }
+        },
+        "reapply": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 9.297694996348582,
+            "p95_ms": 10.120575003384147,
+            "max_ms": 10.120575003384147
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 6.469783002103213,
+            "p95_ms": 7.481267995899543,
+            "max_ms": 7.481267995899543
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 2.612349002447445,
+            "p95_ms": 3.9043659999151714,
+            "max_ms": 3.9043659999151714
+          }
+        },
+        "unapply": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 2.6975850050803274,
+            "p95_ms": 3.308491999632679,
+            "max_ms": 3.308491999632679
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 0.06370899791363627,
+            "p95_ms": 0.08921200060285628,
+            "max_ms": 0.08921200060285628
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 2.634070006024558,
+            "p95_ms": 3.2462369999848306,
+            "max_ms": 3.2462369999848306
+          }
+        },
+        "apply-pending": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 9.03684800141491,
+            "p95_ms": 9.915389004163444,
+            "max_ms": 9.915389004163444
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 6.374849996063858,
+            "p95_ms": 7.674237000173889,
+            "max_ms": 7.674237000173889
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 2.644348998728674,
+            "p95_ms": 3.829022003628779,
+            "max_ms": 3.829022003628779
+          }
+        },
+        "delete-applied": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 2.7131969982292503,
+            "p95_ms": 3.489144000923261,
+            "max_ms": 3.489144000923261
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 0.07466600072802976,
+            "p95_ms": 0.12644800153793767,
+            "max_ms": 0.12644800153793767
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 2.6430880025145598,
+            "p95_ms": 3.4144780001952313,
+            "max_ms": 3.4144780001952313
+          }
+        }
+      },
+      "output_parity_pairs": 45
+    },
+    {
+      "case": "36-cell-42bp-16-handles",
+      "completed": true,
+      "active_phase": "complete",
+      "handles": 16,
+      "background": "36-cell-42bp",
+      "samples": [
+        {
+          "iteration": 0,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.787971001060214,
+          "gc_overlap_ms": 0.7927240149001591,
+          "gc_events": 9,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.811405997723341,
+          "gc_overlap_ms": 0.5591240042122081,
+          "gc_events": 6,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 0,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 10.565081996901426,
+          "gc_overlap_ms": 0.971340989053715,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.558606997714378,
+          "gc_overlap_ms": 0.5143249945831485,
+          "gc_events": 6,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 0,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.5280289957881905,
+          "gc_overlap_ms": 0.2796589978970587,
+          "gc_events": 3,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.06632700387854129,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 0,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 10.212793000391684,
+          "gc_overlap_ms": 0.9675590044935234,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 8.521069001290016,
+          "gc_overlap_ms": 0.6169179978314787,
+          "gc_events": 6,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 0,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.6529260032693855,
+          "gc_overlap_ms": 0.2662780025275424,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 0,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.0834909951663576,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 1,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 7.284227998752613,
+          "gc_overlap_ms": 0.6039229992893524,
+          "gc_events": 6,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 1,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 10.013036997406743,
+          "gc_overlap_ms": 0.9378879840369336,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 1,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.856786996650044,
+          "gc_overlap_ms": 0.7157290092436597,
+          "gc_events": 6,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 1,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 10.165956999117043,
+          "gc_overlap_ms": 0.761694012908265,
+          "gc_events": 9,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 1,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.09318700176663697,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 1,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.4192300008726306,
+          "gc_overlap_ms": 0.2797570050461218,
+          "gc_events": 3,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 1,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.8043270002817735,
+          "gc_overlap_ms": 0.4994889968656935,
+          "gc_events": 6,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 1,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.842565006692894,
+          "gc_overlap_ms": 0.778176989115309,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 1,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.11752599675673991,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 1,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.2942799991578795,
+          "gc_overlap_ms": 0.34928300010506064,
+          "gc_events": 3,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.945254998456221,
+          "gc_overlap_ms": 0.7738130007055588,
+          "gc_events": 9,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.503333999717142,
+          "gc_overlap_ms": 0.5299370095599443,
+          "gc_events": 6,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 2,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 11.400471994420514,
+          "gc_overlap_ms": 0.98171598801855,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.553661994985305,
+          "gc_overlap_ms": 0.508409008034505,
+          "gc_events": 6,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 2,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.5112539990223013,
+          "gc_overlap_ms": 0.28421600291039795,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.0769929974921979,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 2,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 57.357944002433214,
+          "gc_overlap_ms": 46.43717700673733,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1,
+            2
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 7.16553700476652,
+          "gc_overlap_ms": 0.4991000023437664,
+          "gc_events": 6,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 2,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.4871079988079146,
+          "gc_overlap_ms": 0.25958699552575126,
+          "gc_events": 3,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 2,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.06923600449226797,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 3,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 7.328348001465201,
+          "gc_overlap_ms": 0.4997790019842796,
+          "gc_events": 6,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 3,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.804455999983475,
+          "gc_overlap_ms": 0.7926279868115671,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 3,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.693879004160408,
+          "gc_overlap_ms": 0.690323009621352,
+          "gc_events": 6,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 3,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 11.9367119987146,
+          "gc_overlap_ms": 0.8123090156004764,
+          "gc_events": 9,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 3,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.0956110015977174,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 3,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.541120997397229,
+          "gc_overlap_ms": 0.28683400887530297,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 3,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.978676996368449,
+          "gc_overlap_ms": 0.7023469952400774,
+          "gc_events": 6,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 3,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.92101300653303,
+          "gc_overlap_ms": 0.8224920093198307,
+          "gc_events": 9,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 3,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.11170799552928656,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 3,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.4393019959679805,
+          "gc_overlap_ms": 0.27888399199582636,
+          "gc_events": 3,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.961739997379482,
+          "gc_overlap_ms": 0.8001909955055453,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.589830998564139,
+          "gc_overlap_ms": 0.5140330031281337,
+          "gc_events": 6,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 4,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 10.708305999287404,
+          "gc_overlap_ms": 0.8241419927799143,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 8.172756002750248,
+          "gc_overlap_ms": 0.7411330007016659,
+          "gc_events": 6,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 4,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.5022360025322996,
+          "gc_overlap_ms": 0.2828579890774563,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.07709099736530334,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 4,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 11.226702998101246,
+          "gc_overlap_ms": 1.1140790156787261,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.411891998141073,
+          "gc_overlap_ms": 0.5115109961479902,
+          "gc_events": 6,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 4,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.6095809991820715,
+          "gc_overlap_ms": 0.2599740037112497,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 4,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.07301799632841721,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 5,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.658193997282069,
+          "gc_overlap_ms": 0.5092819992569275,
+          "gc_events": 6,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 5,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.856527998636011,
+          "gc_overlap_ms": 0.8005770141608082,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 5,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.955113996809814,
+          "gc_overlap_ms": 0.6806259989389218,
+          "gc_events": 6,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 5,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 10.219969000900164,
+          "gc_overlap_ms": 0.8637049977551214,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 5,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.1060840004356578,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 5,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.5390839984756894,
+          "gc_overlap_ms": 0.31495499570155516,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 5,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.877829000586644,
+          "gc_overlap_ms": 0.6978870005696081,
+          "gc_events": 6,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 5,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 10.668741997506004,
+          "gc_overlap_ms": 0.8867819778970443,
+          "gc_events": 9,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 5,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.10249600018141791,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 5,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.7561010030913167,
+          "gc_overlap_ms": 0.2669570021680556,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 58.95580200012773,
+          "gc_overlap_ms": 48.95643900090363,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1,
+            2
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.867161995614879,
+          "gc_overlap_ms": 0.5136459803907201,
+          "gc_events": 6,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 6,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 10.751554000307806,
+          "gc_overlap_ms": 0.806587006081827,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.717540003592148,
+          "gc_overlap_ms": 0.5555380121222697,
+          "gc_events": 6,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 6,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.558090000296943,
+          "gc_overlap_ms": 0.24445900635328144,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.09318700176663697,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 6,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 10.147436005354393,
+          "gc_overlap_ms": 0.8000929810805246,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.675357995845843,
+          "gc_overlap_ms": 0.5664929994964041,
+          "gc_events": 6,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 6,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.5034960019402206,
+          "gc_overlap_ms": 0.26666399935493246,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 6,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.08087199967121705,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 7,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 7.754140002361964,
+          "gc_overlap_ms": 0.7015719966148026,
+          "gc_events": 6,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 7,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 9.740262998093385,
+          "gc_overlap_ms": 0.7820559912943281,
+          "gc_events": 9,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 7,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.953951000468805,
+          "gc_overlap_ms": 0.5446749928523786,
+          "gc_events": 6,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 7,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 11.653853005554993,
+          "gc_overlap_ms": 1.033205997373443,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 7,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.09619299817131832,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 7,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.496805002214387,
+          "gc_overlap_ms": 0.25890800316119567,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 7,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 7.1321799987345,
+          "gc_overlap_ms": 0.5871480025234632,
+          "gc_events": 6,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 7,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 10.956546997476835,
+          "gc_overlap_ms": 1.149567986431066,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 7,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.111805995402392,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 7,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.6585499983630143,
+          "gc_overlap_ms": 0.26530800096224993,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "create-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 10.389858005510177,
+          "gc_overlap_ms": 0.9972320112865418,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "create-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.5814920017146505,
+          "gc_overlap_ms": 0.5287720123305917,
+          "gc_events": 6,
+          "gc_generations": [
+            0
+          ]
+        },
+        {
+          "iteration": 8,
+          "action": "reapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 11.237659993639681,
+          "gc_overlap_ms": 0.8453769987681881,
+          "gc_events": 9,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "reapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 6.4869469933910295,
+          "gc_overlap_ms": 0.5482639971887693,
+          "gc_events": 6,
+          "gc_generations": [
+            0,
+            1
+          ]
+        },
+        {
+          "iteration": 8,
+          "action": "unapply",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 3.451520999078639,
+          "gc_overlap_ms": 0.2538660046411678,
+          "gc_events": 3,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "unapply",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.06564800423802808,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        },
+        {
+          "iteration": 8,
+          "action": "apply-pending",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 10.173230002692435,
+          "gc_overlap_ms": 0.8587600095779635,
+          "gc_events": 9,
+          "gc_generations": [
+            0,
+            1
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "apply-pending",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 55.0518230011221,
+          "gc_overlap_ms": 48.68007699406007,
+          "gc_events": 6,
+          "gc_generations": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "iteration": 8,
+          "action": "delete-applied",
+          "mode": "adapter",
+          "completed": true,
+          "elapsed_ms": 4.799973998160567,
+          "gc_overlap_ms": 0.888431997736916,
+          "gc_events": 4,
+          "gc_generations": [
+            0
+          ],
+          "output_parity_verified": true
+        },
+        {
+          "iteration": 8,
+          "action": "delete-applied",
+          "mode": "kernel",
+          "completed": true,
+          "elapsed_ms": 0.07204800203908235,
+          "gc_overlap_ms": 0,
+          "gc_events": 0,
+          "gc_generations": []
+        }
+      ],
+      "helices": 53,
+      "strands": 88,
+      "domains": 89,
+      "helix_bases": 1716,
+      "domain_bases": 3228,
+      "loop_descriptors": 0,
+      "source_work_and_node_byte_admitted": true,
+      "applied_recipe_rows": 9,
+      "applied_recovery_bytes": 154820,
+      "cold_capture_ms": 7.753655001579318,
+      "cold_input_pickle_bytes": 60979,
+      "cold_verification": {
+        "cleanup_verified": true,
+        "status": "verified",
+        "issues": [],
+        "checked_commands": 9,
+        "validation": null,
+        "execution_ms": 1223.4776959958253,
+        "cleanup_ms": 0.1683390000835061
+      },
+      "same_process_full_verification": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "verified",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 9,
+        "proof_coverage": "versioned_commands",
+        "native_editable": true,
+        "dependencies": {
+          "complete": true,
+          "parents": {
+            "bundle": [],
+            "target": [
+              "bundle"
+            ],
+            "sequence": [
+              "target"
+            ],
+            "gold": [
+              "sequence"
+            ],
+            "graft": [
+              "gold"
+            ],
+            "create-applied": [
+              "gold",
+              "graft"
+            ],
+            "reapply": [
+              "create-applied",
+              "gold"
+            ],
+            "unapply": [
+              "gold",
+              "reapply"
+            ],
+            "apply-pending": [
+              "gold",
+              "unapply"
+            ]
+          }
+        },
+        "recipe_fingerprint": "e6b254999a6a483324882af3c19351259261e763ca9ecbe41d58db48401c35b1",
+        "authoring_fingerprint": "77e8b72bc97e55351f832f4f04c1eabeb3cf11e2093c9a487678f13887ab51a5",
+        "imported_sources": []
+      },
+      "same_process_full_verification_ms": 103.96937699988484,
+      "full_edit_evaluation": {
+        "cleanup_verified": true,
+        "status": "ready",
+        "issues": [],
+        "checked_commands": null,
+        "validation": {
+          "passed": true,
+          "results": [
+            {
+              "ok": true,
+              "message": "Helix IDs are unique."
+            },
+            {
+              "ok": true,
+              "message": "Strand IDs are unique."
+            },
+            {
+              "ok": true,
+              "message": "All domain helix references are valid."
+            },
+            {
+              "ok": true,
+              "message": "Multi-scaffold design: 36 scaffold strands."
+            },
+            {
+              "ok": true,
+              "message": "Strand 'c6aac5db-5378-5805-88f9-961f04ca354c' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '59cb97a5-a0b5-5016-81f1-c8dba6cf5108' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '968812d5-b098-5fb6-908f-6b18fb85d07f' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '20dfe457-df38-5a95-885d-869a20102a00' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '95481bea-09e1-5490-bb21-6a7b80cbfb13' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '670dce34-ea15-5fa4-8ac2-9f569439275a' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '04ad7504-270c-5462-9a5d-f0daed85f016' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand 'b80851bc-09e0-590e-9909-d823d42254d2' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand 'bb732315-78bd-52e6-869c-0ee4b3045d42' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '1deb3aca-4ed3-51a1-9cb3-3b02b49728af' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '2aa5dd9f-a9ed-52aa-a8ea-9d3dc5b8ecf1' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '1dfc463d-312c-55eb-aa31-ef426b72c873' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '2aab2bae-712e-573d-abf0-5165126a2b4c' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand 'b9bccb73-03e5-5bd9-80ed-9a33e0b70e38' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '2fd63fb5-63c1-5356-8547-5dfa5063a9cc' sequence length is consistent."
+            },
+            {
+              "ok": true,
+              "message": "Strand '7430afb3-afc2-5e1c-8f0f-a6def2ef058c' sequence length is consistent."
+            }
+          ]
+        },
+        "execution_ms": 1442.918352993729,
+        "cleanup_ms": 0.34850699739763513,
+        "geometry_edit_verified": true,
+        "recovery_bytes": 154776
+      },
+      "case_elapsed_ms": 3747.1950510007446,
+      "timings": {
+        "create-applied": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 9.945254998456221,
+            "p95_ms": 58.95580200012773,
+            "max_ms": 58.95580200012773
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 6.811405997723341,
+            "p95_ms": 7.754140002361964,
+            "max_ms": 7.754140002361964
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 3.198334001353942,
+            "p95_ms": 52.088640004512854,
+            "max_ms": 52.088640004512854
+          }
+        },
+        "reapply": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 10.751554000307806,
+            "p95_ms": 11.9367119987146,
+            "max_ms": 11.9367119987146
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 6.717540003592148,
+            "p95_ms": 8.172756002750248,
+            "max_ms": 8.172756002750248
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 4.034013996715657,
+            "p95_ms": 5.242832994554192,
+            "max_ms": 5.242832994554192
+          }
+        },
+        "unapply": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 3.5112539990223013,
+            "p95_ms": 3.558090000296943,
+            "max_ms": 3.558090000296943
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 0.09318700176663697,
+            "p95_ms": 0.1060840004356578,
+            "max_ms": 0.1060840004356578
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 3.4329999980400316,
+            "p95_ms": 3.464902998530306,
+            "max_ms": 3.464902998530306
+          }
+        },
+        "apply-pending": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 10.212793000391684,
+            "p95_ms": 57.357944002433214,
+            "max_ms": 57.357944002433214
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 6.978676996368449,
+            "p95_ms": 55.0518230011221,
+            "max_ms": 55.0518230011221
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 3.47207800950855,
+            "p95_ms": 50.192406997666694,
+            "max_ms": 50.192406997666694
+          }
+        },
+        "delete-applied": {
+          "adapter": {
+            "count": 9,
+            "p50_ms": 3.6529260032693855,
+            "p95_ms": 4.799973998160567,
+            "max_ms": 4.799973998160567
+          },
+          "kernel": {
+            "count": 9,
+            "p50_ms": 0.0834909951663576,
+            "p95_ms": 0.11752599675673991,
+            "max_ms": 0.11752599675673991
+          },
+          "observed_adapter_minus_kernel": {
+            "count": 9,
+            "p50_ms": 3.5467440029606223,
+            "p95_ms": 4.727925996121485,
+            "max_ms": 4.727925996121485
+          }
+        }
+      },
+      "output_parity_pairs": 45
+    }
+  ]
+}

@@ -1,11 +1,11 @@
 # Native nanoparticle connection contract — phased status and next scope
 
-Reviewed 2026-10-15. Pending CRUD and pending-version-preserving thiol motion are implemented and checkpointed; their evidence appears below. Applied lifecycle remains the next tests-first proposal. Scientific calculations and assembly behavior are unchanged. The visible overhang panel calls the connection-version routes (`frontend/src/ui/overhang_connections_panel.js:394,401`); the older direct surface-strand bind is exposed by the client/test API but is not this panel's action.
+Reviewed 2026-10-15. Pending CRUD and pending-version-preserving thiol motion are implemented and checkpointed. Pure registered application, restoration, deletion and applied-version rename also have focused validation; ordinary applied-route migration and its latency qualification remain open. Their evidence and the precise next scope appear below. Scientific calculations and assembly behavior are unchanged. The visible overhang panel calls the connection-version routes (`frontend/src/ui/overhang_connections_panel.js:394,401`); the older direct surface-strand bind is exposed by the client/test API but is not this panel's action.
 
 **Checkpoint sequencing refinement:** implement pending create/rename/delete
 first, as specified in [the finite closure map](remaining_standard_part_checkpoints.md).
-The complete application contract below remains a later increment. Pending
-contracts and routes are implemented; their original red dossier is
+The broader live application lifecycle below remains a later increment. Pending
+contracts/routes and the bounded pure application contracts are implemented; the original pending red dossier is
 `tests/test_part_pending_np_connections.py`. The new lifecycle ownership red
 target is `tests/test_np_applied_lifecycle_ownership.py` (ISSUE-92).
 
@@ -26,8 +26,9 @@ The documentation supports editable, deterministic feature construction and expl
 
 ## Original audit baseline and concrete gaps
 
-This is the pre-implementation inventory. The pending registration/recording
-gaps are closed below; application/ownership gaps remain current unless stated.
+This is the pre-implementation inventory. Later sections identify the closed
+pending registration/recording and pure application/ownership gaps; this list is
+retained as the original audit, not the current registry status.
 
 - `api/part_proof_commands.py:58` recognizes exact integer `_proof_version == 1`, strips scope wrappers for strict schema admission, and treats unknown contracts as unknown. None of the three NP connection-version kinds or `nanoparticle-strand-bind` belongs to its registered proof families. The strings already exist in `core/models.py:2015`; persistence support is not execution support.
 - `api/routes_nanoparticles.py:827,870,894` currently logs IDs without all choices. Creation omits selected strand/overhang, name, variant, creation time and apply choice; patch omits the patch itself. `_set_np_version_applied` at line 596 generates a new Duplex identity/time implicitly, computes register and placement, stores the exact attachment joint, and relocates through the existing duplex builder.
@@ -291,9 +292,9 @@ latency is unqualified.** Three repeats cannot establish a tail guarantee; the
 shared mutable recording/copy path remains the appropriate follow-up, without
 raising limits, retrying refusals or changing collection policy.
 
-### Later checkpoint: explicit application
+### Implemented pure checkpoint: explicit application
 
-**Current tests-first refinement:** preserve the pending-v1 schemas rather than
+**Contract refinement:** preserve the pending-v1 schemas rather than
 widening formerly unknown sparse applied receipts. The proposed separate
 `nanoparticle_application_version: 1` discriminator uses the same three kind
 strings and also requires `_proof_version: 1` and
@@ -404,7 +405,7 @@ historical platform collision failure above.
 Ordinary applied-route recording and bounded performance qualification remain
 subsequent work.
 
-The following rename increment is implemented for root validation, with no
+The following rename increment passed scoped root validation, with no
 ordinary-route migration. PATCH without an `applied` field selects a separate
 strict required-name variant; it cannot carry duplex output IDs/times. PATCH
 with `applied` retains the existing transition schema. The rename variant keeps
@@ -437,6 +438,124 @@ expected missing-adapter failure in 16.38 seconds**, with 35 deprecation
 warnings; the additional result belongs to the independent OH tests-first
 increment and is not an NP failure or NP pass count. No new live workflow or
 latency qualification is claimed.
+
+The root-run nine-repeat pure benchmark is retained as
+`benchmark_np_application_repeated.json`. All four cells (1/16 handles on
+6-cell and 36-cell × 42-bp backgrounds) completed: **180 exact output-parity
+pairs across 36 five-action lifecycles**, four independent cold nine-row proofs
+with poisoned recovery, and four real worker upstream-diameter edits that
+changed the attachment geometry while preserving owned identities. Source
+immutability and cleanup passed; there were no failures or diagnostic drops.
+Both timed arms use the **same current extracted native kernel** with identical
+explicit identities/times/seeds. This measures adapter overhead, not a
+historical-binary speedup, HTTP publication or applied-rename cost.
+The run used `5783b656` plus the shared capture/recovery extraction subsequently
+committed as `3e12323f`; it did not use the uncommitted oxDNA or linker adapters.
+
+| Action | Adapter median, 6-cell (1 / 16 handles), ms | Adapter median, 36-cell (1 / 16 handles), ms | Paired adapter-minus-kernel median across cells, ms |
+|---|---:|---:|---:|
+| Create applied | 4.35 / 5.64 | 9.20 / 9.95 | 0.73–3.20 |
+| Reapply | 4.70 / 6.01 | 9.30 / 10.75 | 1.10–4.03 |
+| Unapply | 0.88 / 1.82 | 2.70 / 3.51 | 0.83–3.43 |
+| Apply pending | 4.38 / 5.55 | 9.04 / 10.21 | 0.81–3.47 |
+| Delete applied | 0.92 / 1.81 | 2.71 / 3.65 | 0.84–3.55 |
+
+The bounds and private preparation remain useful: admission/ownership checks
+dominate the tiny unapply/delete kernel but contribute only a few milliseconds
+at these measured median scopes. Tails remain visible. Adapter maxima were
+**55.43 and 58.96 ms** for larger-model creation and **57.36 ms** for larger
+16-handle pending application; these samples overlapped 46.10–48.96 ms of
+natural collection including generation 2. The shared-kernel arm also reached
+55.05 ms with 48.68 ms collection overlap. The collector retained 1,183 events
+without drops. These are correlations; none is subtracted from elapsed time,
+and nine samples per action cannot qualify an interactive tail.
+
+Ordinary cold captures took 3.57–7.75 ms, with 15,255–60,979 input pickle bytes.
+Cold proofs took 1.154–1.251 seconds; complete worker edits took
+1.245–1.443 seconds. The single same-process full-verification observation per
+cell ranged from 22.10 to 103.97 ms. The largest recorded nine-row recovery was
+154,820 bytes. All existing capture/transport/recovery budgets remained in
+force. **Correctness passed; ordinary-route latency and peak memory remain
+unqualified.** Keep the live gate closed pending the route measurements below;
+do not raise bounds, retry or alter GC from these results.
+
+### Next checkpoint: bounded ordinary application lifecycle
+
+The remaining live seam is explicit: `part_nanoparticle_connection_commands`
+currently admits only unbound pending metadata. Its route predicate declines
+application flags, active versions and bound handles before the native recorder.
+The new pure application and rename contracts therefore do not yet make the
+visible apply/rename/unapply/delete workflow fully input-defined. Keep any new
+public migration gate closed until actual route and concurrent-request
+qualification; existing pure proof/edit access remains a separate capability.
+
+The smallest useful live lifecycle is pending create → apply → applied rename →
+unapply → reapply → applied delete, plus combined create-and-apply. Reuse the
+existing single lock-owned `try_record` transaction, dispatching pending versus
+application intent before recording. Resolve the actual session, source object,
+revision and editable loadout under that lock. Freeze version/duplex identities,
+times, names and the history seed once after selection, using the established
+route defaults. Preserve explicit `applied=false`, omitted/null names and
+reapplication behavior; do not conflate a rename with an application transition.
+
+Extract a private application preparation packet bound to that exact source
+object and parsed request. It should contain the admitted work counts, typed
+identity/reference inventory and selected live/restoration ownership needed by
+the builder. Resolve missing selections, exact conflict/duplex selectors,
+prospective output collisions and ownership before the recorder's recovery
+snapshot. The lock-owned callback must recheck source identity, consume only
+that packet and run the unchanged native kernel. Standalone/cold build prepares
+its own packet from its current prefix. No packet survives a lock release or
+becomes a public validation-skip token, cross-revision cache or proof receipt.
+Preserve the current native restore/placement order; a proposed removal of a
+private restoration pass needs separate parity evidence, not an assumption
+that it is redundant.
+
+Classify genuinely unsupported ownership, opaque retained families and oversize
+work before native evaluation; compatibility remains explicitly unverified.
+Within admitted scope, missing or mismatched references fail with their typed
+paths. There is no fallback after preparation/build failure and no complete
+prefix proof in an ordinary route. The common recorder still reconciles cluster
+membership, retries pending ligations, publishes once, and owns one undo entry,
+revision and recovery row. Native suffix recording does not certify a legacy
+or broken prefix. Keep capture, operation, transport and recovery limits fixed.
+
+One additional metadata gap must not be hidden by this migration: adding,
+renaming or deleting a **pending alternative while another version on the same
+particle is applied** is not supported by the current pending contract. Its
+ownership resolver requires all selected particle handles to be unbound. The
+application deletion branch also refuses unrelated active ownership outside its
+declared restoration set. Such an alternative can therefore still append a
+legacy row even when the primary application workflow becomes native. Address
+this as a separate bounded metadata-ownership increment: explicitly identify the
+retained active version/duplex and validate its exact live/restoration closure,
+then preserve that entire active graph while changing only the chosen pending
+version. It must not restore, relocate or rewrite the active handle, constraints,
+child cluster, saved topology or sequence, and it must retain the ordinary NP
+postprocessing. No contract or public gate for that increment is enabled yet.
+
+Required route evidence is exact full-authoring parity with legacy
+postprocessing, one undo/revision/row, protected child identities, all lifecycle
+transitions, and cold proof while the final connection is still applied.
+Boundary controls include missing/stale selectors, no duplicate preparation,
+non-reentrant locking, document/session isolation and close/reopen ABA, encoding
+or publication failure, and rejection without a late compatibility fallback.
+Qualify actual HTTP response serialization and recording-lock/light-request
+tails at 1/16 handles with small and larger admitted DNA backgrounds and a
+retained mixed native history. Keep natural-GC correlation separate from
+observed latency; include explicit refusal and cleanup cases. The completed pure
+application benchmark compares the adapter with the same extracted native
+kernel and measures cold proof/edit separately. Its correctness and adapter
+overhead cannot substitute for ordinary publication or memory qualification.
+
+After that checkpoint, remaining NP contracts are finite and separate:
+pending-alternative metadata on an applied particle; unequal-length shortening
+with reversible ownership; constraints-aware bound motion/resize and graft
+replacement; collective relaxation with exact solver/input provenance; legacy
+direct binding and fitted attachment; generated multi-anchor compilation; and
+coated/biotin/QD attachment with pinned source closure. Assemblies and headset
+validation remain deferred. None is implied complete by the current registry
+count or the 262-case scoped application/rename result.
 
 Proposed cohesive files: new `api/part_np_application_commands.py`; extraction
 into existing unpinned `core/nanoparticle_connections.py` with optional explicit
