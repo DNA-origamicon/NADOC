@@ -14,8 +14,8 @@
   },
   "dependencies": {
     "gifenc": "^1.0.3",
-    "jsqr": "^1.4.0",
     "mediabunny": "^1.61.3",
+    "obscenity": "0.4.6",
     "qrcode-generator": "^2.0.4",
     "svg-pan-zoom": "^3.6.2",
     "three": "^0.172.0",
@@ -24,6 +24,7 @@
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "jsdom": "^29.0.1",
+    "jsqr": "^1.4.0",
     "vite": "^6.4.3",
     "vitest": "^4.1.11"
   }

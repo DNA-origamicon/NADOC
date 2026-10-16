@@ -77,6 +77,10 @@ export function normalizeVRToolConfig(input) {
   const target = _target(input)
   if (!target) return null
   if (input.mode === 'sweep') {
+    const reference = input.edit_reference
+    if (reference != null && (!Number.isSafeInteger(reference.index) || reference.index < 0 || reference.index > 99999 ||
+        !Number.isSafeInteger(reference.revision) || reference.revision < 0 ||
+        ['feature_id', 'design_id'].some(k => typeof reference[k] !== 'string' || !reference[k] || reference[k].length > 256))) return null
     const footprint = normalizePaintedFootprint(input.painted_footprint)
     if (target.target_kind !== 'none' || !footprint ||
         footprint.cells.some(cell => cell.some(v => Math.abs(v) > 10000)) ||
@@ -89,7 +93,7 @@ export function normalizeVRToolConfig(input) {
     const orientations = input.orientations_deg
     if (orientations != null && (!Array.isArray(orientations) || orientations.length !== input.points_nm.length ||
         orientations.some(a => a != null && (!Array.isArray(a) || a.length !== 3 || a.some(v => !Number.isFinite(v) || Math.abs(v) > 360))))) return null
-    return { ...(orientations == null ? {} : { orientations_deg: orientations.map(a => a && [...a]) }), mode: input.mode, ...target, painted_footprint: footprint,
+    return { ...(reference == null ? {} : { edit_reference: { index: reference.index, revision: reference.revision, feature_id: reference.feature_id, design_id: reference.design_id } }), ...(orientations == null ? {} : { orientations_deg: orientations.map(a => a && [...a]) }), mode: input.mode, ...target, painted_footprint: footprint,
       extrude_from: input.extrude_from, strand_filter: input.strand_filter,
       ligate_adjacent: input.ligate_adjacent, points_nm: input.points_nm.map(point => [...point]) }
   }

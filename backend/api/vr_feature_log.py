@@ -79,3 +79,67 @@ def parse_event(value):
     if not isinstance(value.get('id'), str) or not re.fullmatch(r'(?:[rt]:[0-9]{1,5}|a:[0-9]{1,5}:(?:edit|revert|delete|expand))', value['id']):
         return None
     return {key: value[key] for key in ('sequence', 'version', 'id')}
+
+
+class SweepEditRequest(BaseModel):
+    index: int = Field(ge=0, le=99999)
+    feature_id: str = Field(min_length=1, max_length=256)
+    expected_design_id: str = Field(min_length=1, max_length=256)
+    expected_revision: int = Field(ge=0)
+
+
+@router.post('/vr/sweep-edit')
+def open_sweep_edit(body: SweepEditRequest, request: Request):
+    """Resolve saved parameters and placement before asking the native editor to open."""
+    from backend.api import routes_vr as vr, state
+    from backend.api.doc_context import get_current_doc
+    from backend.api.routes_sweep import preview_sweep
+    from backend.core.sweep import SweepRequest
+    from backend.core.vr_sweep_draft import validate_sweep_draft
+    import time
+
+    vr._require_local(request)
+    design, revision = state.get_design_with_revision()
+    if (design is None or design.id != body.expected_design_id or revision != body.expected_revision
+            or body.index >= len(design.feature_log) or design.feature_log[body.index].id != body.feature_id):
+        raise HTTPException(409, 'Sweep feature changed; reopen the Feature Log')
+    entry = design.feature_log[body.index]
+    if getattr(entry, 'op_kind', None) != 'sweep':
+        raise HTTPException(422, 'Select a Sweep feature')
+    params = SweepRequest.model_validate({**entry.params, 'expected_design_id': design.id, 'expected_revision': revision})
+    draft = dict(target_kind='none', painted_footprint=dict(lattice_type=design.lattice_type.value, cells=params.cells),
+                 points_nm=params.points_nm, orientations_deg=params.orientations_deg, extrude_from=params.plane,
+                 strand_filter=params.strand_filter, ligate_adjacent=params.ligate_adjacent)
+    # Native editing has explicit bounded geometry limits; never silently truncate.
+    draft = json.loads(json.dumps(draft))
+    try:
+        validate_sweep_draft(draft)
+    except ValueError as exc:
+        raise HTTPException(422, 'This Sweep exceeds the native editor limits') from exc
+    preview = preview_sweep(params, feature_index=body.index)
+    rotation = preview['point_rotation']
+    origin = preview['origin_nm']
+    # The native editor keeps authored coordinates; this maps them to the saved placement.
+    import numpy as np
+    basis = (np.asarray(rotation).T @ np.asarray(preview['orientation_basis'])).tolist()
+    serial = time.time_ns()
+    values = [f'NADOC_SWEEP_EDIT_1 {serial} {body.index} {revision} {json.dumps(entry.id)} {json.dumps(design.id)}',
+              f'{params.plane} {int(design.lattice_type.value == "SQUARE")} {params.strand_filter} {int(params.ligate_adjacent)}',
+              ' '.join(map(str, origin + [v for row in rotation for v in row] + [v for row in basis for v in row])),
+              f'{len(params.cells)} {len(params.points_nm)}']
+    values.extend(f'{r} {c}' for r, c in params.cells)
+    orientations = params.orientations_deg or [None] * len(params.points_nm)
+    values.extend(' '.join(map(str, [*point, int(angles is not None), *(angles or [0, 0, 0])]))
+                  for point, angles in zip(params.points_nm, orientations))
+    with vr._FEEDBACK_LOCK:
+        session = vr._read_state()
+        if not session or session.get('doc_id') != get_current_doc():
+            raise HTTPException(409, 'VR belongs to another document or is unavailable')
+        if state.get_design_with_revision()[1] != revision:
+            raise HTTPException(409, 'Design changed while opening the Sweep')
+        path = Path(session['event_path'] + '.sweep-edit')
+        temporary = Path(str(path) + '.next')
+        temporary.write_text('\n'.join(values) + '\n')
+        temporary.chmod(0o600)
+        os.replace(temporary, path)
+    return {'published': True}

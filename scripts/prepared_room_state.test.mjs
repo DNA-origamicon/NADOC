@@ -79,3 +79,14 @@ test('selection state reaches late guests once, without repeating geometry in ca
   assert.match(late.last, /"selectionUpdate":null/)
   room.close()
 })
+
+test('headset camera metadata is validated and expiry is issued by the host', () => {
+  const room=createPresentationState({id:'room',revision:'rev',now:()=>1000})
+  room.publish({revision:'rev',camera:{...pose,source:'headset',unitsPerMeter:100,expiresAt:Infinity}})
+  assert.equal(room.snapshot().camera.source,'headset')
+  assert.equal(room.snapshot().camera.expiresAt,2500)
+  assert.throws(()=>room.publish({revision:'rev',camera:{...pose,source:'headset',unitsPerMeter:NaN}}),/Invalid/)
+  room.publish({revision:'rev',camera:pose})
+  assert.equal(room.snapshot().camera.expiresAt,undefined)
+  room.close()
+})

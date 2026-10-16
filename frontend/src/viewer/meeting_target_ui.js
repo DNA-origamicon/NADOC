@@ -1,13 +1,12 @@
-import { createGuestQR, createMeetingTarget, createMobileTrackingTarget } from './meeting_target.js'
+import { createGuestQR, createGuestInvitationPrint } from './meeting_target.js'
 
 /** Local QR/print rendering for the existing guest invitation. No host mutation. */
 export function initMeetingTarget({ parent, document: doc = document, onError = () => {}, now = Date.now }) {
   let share = null, busy = false, renderedURL = ''
   const root = doc.createElement('section'); root.className = 'meeting-target'; root.hidden = true
-  root.innerHTML = '<div data-guest-qr></div><p data-join-instructions></p><button type="button" class="btn" data-print-meeting-target>Print meeting target</button><button type="button" class="btn" data-print-mobile-target hidden>Print large tracking QR</button><p class="meeting-target-note">Includes a QR camera-tracking prototype and a reference marker for future headset alignment. The design’s QR is reusable. Reset the link to revoke old invitations.</p>'
+  root.innerHTML = '<div data-guest-qr></div><p data-join-instructions></p><button type="button" class="btn" data-print-meeting-target>Print guest invitation</button><p class="meeting-target-note">The design’s QR is reusable. Reset the link to revoke old invitations.</p>'
   parent.querySelector('[data-links]').after(root)
   const qr = root.querySelector('[data-guest-qr]'), button = root.querySelector('button')
-  const mobileButton = root.querySelector('[data-print-mobile-target]')
   const qrDialog = doc.createElement('dialog')
   qrDialog.id = 'presentation-qr-dialog'
   qrDialog.className = 'sharing-dialog'
@@ -18,23 +17,23 @@ export function initMeetingTarget({ parent, document: doc = document, onError = 
   const presentationQR = qrDialog.querySelector('[data-guest-qr]')
   const active = () => !!share?.url && (!Number.isFinite(share.expiresAt) || share.expiresAt > now())
   function update() {
-    root.hidden = !active(); button.disabled = busy || !active(); mobileButton.disabled = button.disabled; mobileButton.hidden = !share?.qrUrl
+    root.hidden = !active(); button.disabled = busy || !active()
     const available = active() && !!share?.qrUrl
     const svg = available ? qr.innerHTML : ''
     if (presentationQR.innerHTML !== svg) presentationQR.innerHTML = svg
     qrDialog.querySelector('[data-qr-unavailable]').hidden = available
     qrDialog.querySelector('.meeting-target > p').hidden = !available
   }
-  const print = mobile => {
+  const print = () => {
     if (busy || !active()) { update(); return }
     let popup
     try {
-      const svg = mobile ? createMobileTrackingTarget(share) : createMeetingTarget(share)
+      const svg = createGuestInvitationPrint(share)
       popup = doc.defaultView.open('', '_blank')
       if (!popup) throw Error('Allow the print window to open, then try again.')
       popup.opener = null
       const target = popup.document
-      target.title = 'NADOC meeting target'
+      target.title = 'NADOC guest invitation'
       const style = target.createElement('style')
       style.textContent = '@page { size: auto; margin: 10mm; } body { margin: 0; background: white; color: black; } body > svg { display: block; width: 190mm; height: 250mm; } @media screen { body { padding: 12px; } }'
       target.head.append(style)
@@ -43,8 +42,7 @@ export function initMeetingTarget({ parent, document: doc = document, onError = 
       popup.setTimeout(() => { if (!popup.closed) popup.print() }, 100)
     } catch (error) { popup?.close(); onError(error) }
   }
-  button.onclick = () => print(false)
-  mobileButton.onclick = () => print(true)
+  button.onclick = () => print()
   return {
     showQR() {
       update()

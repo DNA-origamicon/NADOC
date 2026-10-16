@@ -4,6 +4,12 @@ from backend.core.vr_extrude_draft import validate_painted_footprint
 
 
 def validate_sweep_draft(raw):
+    reference = raw.get('edit_reference')
+    if reference is not None and (not isinstance(reference, dict)
+            or type(reference.get('index')) is not int or not 0 <= reference['index'] <= 99999
+            or type(reference.get('revision')) is not int or reference['revision'] < 0
+            or any(not isinstance(reference.get(k), str) or not 1 <= len(reference[k]) <= 256 for k in ('feature_id', 'design_id'))):
+        raise ValueError('invalid sweep edit reference')
     footprint = validate_painted_footprint(raw.get('painted_footprint'))
     points = raw.get('points_nm')
     if (raw.get('target_kind') != 'none'
@@ -21,6 +27,6 @@ def validate_sweep_draft(raw):
     if orientations is not None and (not isinstance(orientations, list) or len(orientations) != len(points)
             or any(a is not None and (not isinstance(a, list) or len(a) != 3 or any(type(v) not in (int, float) or not math.isfinite(v) or abs(v) > 360 for v in a)) for a in orientations)):
         raise ValueError('invalid sweep orientations')
-    return {**({'orientations_deg': [None if a is None else list(a) for a in orientations]} if orientations is not None else {}), 'painted_footprint': footprint, 'points_nm': [list(p) for p in points],
+    return {**({'edit_reference': {k: reference[k] for k in ('index', 'revision', 'feature_id', 'design_id')}} if reference is not None else {}), **({'orientations_deg': [None if a is None else list(a) for a in orientations]} if orientations is not None else {}), 'painted_footprint': footprint, 'points_nm': [list(p) for p in points],
             'extrude_from': raw['extrude_from'], 'strand_filter': raw['strand_filter'],
             'ligate_adjacent': raw['ligate_adjacent']}

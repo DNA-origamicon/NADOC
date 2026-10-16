@@ -1,3 +1,4 @@
+#include "sweep_edit.hpp"
 #include "scrollable_set.hpp"
 #include "placement_integrity.hpp"
 #include <atomic>
@@ -503,7 +504,6 @@ GLuint makeDesktopProgram() {
 
 #include "frosted_glass.hpp"
 #include "room_floor.hpp"
-#include "qr_calibration.hpp"
 
 GLuint makeMenuPanelProgram() {
     static constexpr const char* vertexSource = R"GLSL(
@@ -5325,7 +5325,6 @@ class Viewer {
         compositorRecording_.shutdown();
         gpuPassTiming_.shutdown();
         gpuFrameTimer_.shutdown();
-        qrCalibration_.shutdown();
         referenceModels_.shutdown();
         roomFloor_.shutdown();
         menuGlass_.shutdown();
@@ -5726,20 +5725,15 @@ class Viewer {
                 if(action=="recording:status")return compositorRecording_.enabled()?compositorRecording_.status():stereoRecording_.status();
                 if(action=="recording:folder" && compositorRecording_.enabled())return std::string("Open final-output folder");
                 if(action=="vr:head-light")return std::string(shadowLight_.headFollowing()?"Head-following lighting: On":"Head-following lighting: Off");
-                if(action=="qr:calibrate")return std::string(qrCalibration_.running()?"Cancel QR calibration":"Calibrate QR code");
-                if(action=="qr:cube")return std::string(qrCalibration_.running()&&qrCalibration_.cubeMode()?"Cancel cube calibration":"Calibrate cube");
-                if(action=="qr:status" || action=="qr:cube-status")return qrCalibration_.status;
+                if(action=="share:guests")return std::to_string(shareGuests_)+" active / "+std::to_string(shareWaiting_)+" waiting";
                 if(action!="share:status")return fallback;
-                return std::string(shareFailed_?"Action failed - check desktop":!shareActive_?"Start presentation on desktop":shareBusy_ || shareAck_<shareSequence_?"Updating presentation...":sharePerspective_?"Sharing desktop perspective":"Perspective paused");
+                return std::string(shareFailed_?"Action failed - check desktop":shareBusy_ || shareAck_<shareSequence_?"Updating presentation...":!shareActive_?(shareStartAvailable_?"Ready to start presentation":"Open a design to present"):sharePerspective_?(shareHeadsetPerspective_?"Sharing smoothed headset view":"Sharing desktop perspective"):"Perspective paused");
             };
             sidebar.available=[this](const std::string& action) {
                 if(action=="recording:start")return !stereoRecording_.busy() && !compositorRecording_.busy();
                 if(action=="recording:duration")return compositorRecording_.enabled() && !compositorRecording_.busy();
                 if(action=="recording:status")return false;
                 if(action.starts_with("routing:"))return routingPanel_.available(action);
-                if(action=="qr:status" || action=="qr:cube-status")return false;
-                if(action=="qr:cube")return !qrCalibration_.running() || qrCalibration_.cubeMode();
-                if(action=="qr:calibrate")return !qrCalibration_.running() || !qrCalibration_.cubeMode();
                 if(action.starts_with("share:")) return shareAvailable(action);
                 if(action=="tool:bend" || action=="tool:twist" || action=="tool:sweep")return !toolShell_.executionPending();
                 if(action.starts_with("sweep:"))return sweepActionAvailable(action);
@@ -6066,7 +6060,7 @@ class Viewer {
         radialToolMenu_.setWorkflow(bendPanel_.active,bendHasAngle());
         radialToolMenu_.setSweep(sweepPanel_.active && sweepDraft_.step==2);
         sweepPanel_.refresh(sidebarMenus_.menus,sweepDraft_,extrudeLatticeDraft_.cells().size(),latticeSquare_,
-            nadoc_vr::toolStrandFilterName(toolConfig_.strandFilter()),toolConfig_.ligateAdjacent(),sweepStatus(),extrudePlane_.plane,sweepTotalBpText());
+            nadoc_vr::toolStrandFilterName(toolConfig_.strandFilter()),toolConfig_.ligateAdjacent(),sweepStatus(),extrudePlane_.plane,sweepTotalBpText(),sweepEdit_.has_value());
         const std::string bendStatus=toolShell_.executionPending()?toolShell_.status()
             :bendPanel_.hand?"PLANE "+std::to_string(2-bendPanel_.grabbed)+" FIXED / RELEASE TO FINISH"
             :bendPanel_.pickSlot?"HOLD TRIGGER CLOSE TO ELEMENT"
@@ -6107,9 +6101,10 @@ class Viewer {
 
     bool shareAvailable(const std::string& action) const {
         if(action=="share:avatar")return true;
-        if(action=="share:status")return false;
+        if(action=="share:status" || action=="share:guests")return false;
+        if(action=="share:start")return !shareActive_ && shareStartAvailable_ && !shareBusy_ && shareAck_>=shareSequence_;
         if(!shareActive_ || shareBusy_ || shareAck_<shareSequence_)return false;
-        return action=="share:end" || (action=="share:pause" && sharePerspective_) || (action=="share:resume" && !sharePerspective_);
+        return action=="share:end" || action=="share:admit" || (sharePerspectiveAvailable_ && ((action=="share:pause" && sharePerspective_) || (action=="share:resume" && (!sharePerspective_ || !shareHeadsetPerspective_))));
     }
     void activateSidebarAction(const std::string& requestedAction, size_t hand) {
         if(requestedAction=="trajectory") {
@@ -6152,7 +6147,7 @@ class Viewer {
         const bool known=requestedAction=="options" || requestedAction=="tools" || requestedAction=="settings" ||
             requestedAction=="jobs" || requestedAction=="trajectory" || requestedAction=="desktop" || requestedAction=="recenter" ||
             requestedAction=="feedback:activate" || requestedAction=="vr:head-light" || requestedAction=="vr:exit" ||
-            requestedAction=="qr:calibrate" || requestedAction=="qr:cube" || requestedAction.starts_with("tool:") ||
+            requestedAction.starts_with("tool:") ||
             requestedAction.starts_with("twist:") || requestedAction.starts_with("bend:") || requestedAction.starts_with("join:") || requestedAction.starts_with("move:") ||
             requestedAction.starts_with("extrude:") || requestedAction.starts_with("sweep:") || requestedAction.starts_with("routing:") || requestedAction.starts_with("simulation:") || requestedAction.starts_with("history:") || requestedAction.starts_with("share:") ||
             requestedAction.starts_with("volume:") || requestedAction.starts_with("dimension:") || requestedAction.starts_with("repr:") ||
@@ -6294,8 +6289,6 @@ class Viewer {
         if(action.starts_with("history:")) {if(featureLogPanel_.activate(action)){publishEventState();if(action.ends_with(":edit"))desktopPanel_.show(hands_[hand].position,hands_[hand].orientation);}return;}
         if(action=="simulation:local:frame"){activateSidebarAction("recenter",hand);return;}
         if(action.starts_with("simulation:")) {if(simulationPanel_.activate(action))publishEventState();return;}
-        if(action=="qr:calibrate") {qrCalibration_.start();return;}
-        if(action=="qr:cube") {qrCalibration_.start(true);return;}
         if(action=="share:avatar") {showVRAvatar_=!showVRAvatar_;return;}
         if(action.starts_with("share:")) {
             if(shareAvailable(action)) {shareAction_=action.substr(6);++shareSequence_;publishEventState();}
@@ -7125,7 +7118,6 @@ class Viewer {
             controllerGuides_.push_back(Vertex{b, color, 1.0F});
         };
         componentGallery_.guides(hands_,line);
-        qrCalibration_.drawAnchor(line);
         auto circle = [&](const glm::vec3& center, float radius,
                           int axisA, int axisB, const glm::vec3& color) {
             constexpr int segments = 24;
@@ -7346,7 +7338,9 @@ class Viewer {
                     toolConfig_.lengthBp()*toolConfig_.directionSign(),manipulator_.transform(),
                     normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters},line);
         }
+        sweepGuideBegin_ = controllerGuides_.size();
         drawSweep(line);
+        sweepGuideEnd_ = controllerGuides_.size();
         drawSweepWarnings(line);
         drawBend(line);
         drawMoveWheels();
@@ -7704,13 +7698,14 @@ class Viewer {
         auto pose=[&](const glm::vec3& p,const glm::quat& q) {
             out<<"{\"position\":["<<p.x<<','<<p.y<<','<<p.z<<"],\"orientation\":["<<q.x<<','<<q.y<<','<<q.z<<','<<q.w<<"]}";
         };
-        out<<"{\"enabled\":"<<(showVRAvatar_&&shareActive_?"true":"false")<<",\"tracked\":"<<(tracked?"true":"false")
+        out<<"{\"presenting\":"<<(shareActive_?"true":"false")<<",\"enabled\":"<<(showVRAvatar_&&shareActive_?"true":"false")<<",\"tracked\":"<<(tracked?"true":"false")
            <<",\"presentation\":"<<nadoc_vr::livePresentationJson(manipulator_.transform(),normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters})<<",\"head\":";
         pose(witnessObserverPosition_,witnessObserverOrientation_);
         out<<",\"hands\":[";
         for(size_t h=0;h<2;++h) {if(h)out<<',';if(hands_[h].valid)pose(hands_[h].position,hands_[h].orientation);else out<<"null";}
         out<<"]";
-        if(showVRAvatar_ && shareActive_ && tracked)presenterUI_.write(out,controllerGuides_,witnessActorGuideCount_,sidebarMenus_,viewTools_,desktopSurface_,desktopPanel_,desktopFrameSurface_);
+        writeSweepPreview(out);
+        if(showVRAvatar_ && shareActive_ && tracked)presenterUI_.write(out,controllerGuides_,witnessActorGuideCount_,sidebarMenus_,viewTools_,desktopSurface_,desktopPanel_,desktopFrameSurface_,sweepGuideBegin_,sweepGuideEnd_);
         out<<"}";
         avatarWriter_.publish(path,out.str());
     }
@@ -8010,7 +8005,7 @@ class Viewer {
         if(feedback->mode=="sweep" && feedback->action=="confirm" && feedback->status!="pending") {
             if(feedback->status=="succeeded") {
                 sweepPanel_.exit(sidebarMenus_.menus);latticeOpen_=false;
-                sweepDraft_.reset(sweepDefaultDirection());extrudeLatticeDraft_.clear();
+                sweepEdit_.reset();sweepDraft_.reset(sweepDefaultDirection());extrudeLatticeDraft_.clear();
                 if(toolConfig_.clear())publishToolConfiguration();
             } else publishToolConfiguration();
         }
@@ -8439,7 +8434,7 @@ class Viewer {
             out << quote(selectedOwnerTokens_[i]);
         }
         const auto moveCenter=glScene_?glScene_->ownerHandle(selectedOwnerTokens_,manipulator_.transform()):std::nullopt;
-        out << "],\"gpu_pass_timing\":" << gpuPassTiming_.json() << ",\"frame_identity\":" << frameMarker_.json() << ",\"pose_journal\":" << poseJournal_.json() << ",\"recording\":" << (compositorRecording_.enabled()?compositorRecording_.json():stereoRecording_.json()) << ",\"qr_calibration\":" << qrCalibration_.json() << ",\"room_floor\":" << roomFloor_.json() << ",\"menu_glass\":{\"enabled\":true,\"gray_opacity\":0.10,\"blur_radius_px\":15},\"view_tools\":{\"open\":" << (viewTools_.open?"true":"false") << ",\"waiting\":" << (viewTools_.waiting?"true":"false")
+        out << "],\"gpu_pass_timing\":" << gpuPassTiming_.json() << ",\"frame_identity\":" << frameMarker_.json() << ",\"pose_journal\":" << poseJournal_.json() << ",\"recording\":" << (compositorRecording_.enabled()?compositorRecording_.json():stereoRecording_.json()) << ",\"room_floor\":" << roomFloor_.json() << ",\"menu_glass\":{\"enabled\":true,\"gray_opacity\":0.10,\"blur_radius_px\":15},\"view_tools\":{\"open\":" << (viewTools_.open?"true":"false") << ",\"waiting\":" << (viewTools_.waiting?"true":"false")
             << ",\"close_hover\":[" << (viewTools_.closeHover[0]?"true":"false") << ',' << (viewTools_.closeHover[1]?"true":"false") << "]"
             << ",\"following\":" << ((viewTools_.open && !viewTools_.placement.worldDocked())?"true":"false")
             << ",\"sequence\":" << viewTools_.sequence << ",\"ack_sequence\":" << viewTools_.acknowledged << ",\"version\":" << viewTools_.version << ",\"flags\":" << viewTools_.flags << ",\"triangles\":" << viewTools_.triangles.size()/3
@@ -9340,12 +9335,13 @@ class Viewer {
         simulationPanel_.poll(eventPath_);
 
         featureLogPanel_.poll(eventPath_);
+        pollSweepEdit();
         routingPanel_.poll(eventPath_,routingPopup_.menus[1],sidebarMenus_.menus[1]);
         { std::error_code error; const auto path=eventPath_+".share";
           const auto changed=std::filesystem::last_write_time(path,error);
           if(error || std::filesystem::file_time_type::clock::now()-changed>std::chrono::seconds(3)) {shareActive_=false;shareBusy_=true;}
           else {std::ifstream share(path); int active=0,perspective=0,busy=1,ack=0,failed=0;
-            if(share>>active>>perspective>>busy>>ack>>failed) {shareActive_=active;sharePerspective_=perspective;shareBusy_=busy;shareAck_=ack;shareFailed_=failed;} }
+            if(share>>active>>perspective>>busy>>ack>>failed) {shareActive_=active;sharePerspective_=perspective;shareBusy_=busy;shareAck_=ack;shareFailed_=failed; shareGuests_=shareWaiting_=0; share>>shareGuests_>>shareWaiting_; int canPerspective=1; if(share>>canPerspective)sharePerspectiveAvailable_=canPerspective; else sharePerspectiveAvailable_=true; int canStart=0; shareStartAvailable_=bool(share>>canStart) && canStart; int headset=0; shareHeadsetPerspective_=bool(share>>headset) && headset;} }
         }
         if(viewTools_.poll(eventPath_,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters})) {
         }
@@ -10101,7 +10097,6 @@ class Viewer {
         poseJournal_.eye(index,swapchain.width,swapchain.height,imageIndex,view,manipulator_.transform());
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::reference_grid);
         roomFloor_.render(viewProjection);
-        qrCalibration_.render(viewProjection,witnessObserverPosition_,witnessObserverOrientation_);
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::design);
         if (!liveSceneHidden_) renderVolumeScene(
             viewProjection, manipulator_.transform(),
@@ -10529,7 +10524,6 @@ class Viewer {
         const glm::mat4 viewProjection = projection * viewFromPose(view.pose);
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::reference_grid);
         roomFloor_.render(viewProjection);
-        qrCalibration_.render(viewProjection,witnessObserverPosition_,witnessObserverOrientation_);
         setSpectatorRenderClass(nadoc_vr::SpectatorRenderClass::design);
         if (!liveSceneHidden_) renderVolumeScene(
             viewProjection, manipulator_.transform(), {});
@@ -10582,7 +10576,6 @@ class Viewer {
             controllerGuides_.begin() + static_cast<std::ptrdiff_t>(
                 std::min(witnessActorGuideCount_, controllerGuides_.size())));
         roomFloor_.render(viewProjection);
-        qrCalibration_.render(viewProjection,witnessObserverPosition_,witnessObserverOrientation_);
         if (!liveSceneHidden_) renderVolumeScene(
             viewProjection, manipulator_.transform(),
             actorGuides);
@@ -10676,13 +10669,6 @@ class Viewer {
         poseJournal_.begin(liveFrame_,frameState.predictedDisplayTime,frameState.predictedDisplayPeriod,frameState.shouldRender,journalFrameStart);
         captureUiDiagnostics_.begin(poseJournal_.frame()?&poseJournal_.frame()->captureUi:nullptr);
         roomFloor_.update(session_,space_,frameState.predictedDisplayTime);
-        qrCalibration_.update(roomFloor_.located?std::optional<glm::mat4>(roomFloor_.stageToLocal):std::nullopt);
-        if(const auto position=qrCalibration_.takePosition()) {
-            manipulator_.anchorOrigin(*position, -normalizationCenter_*normalizationScale_+glm::vec3(0,0,-kViewDistanceMeters));
-            initialScenePlacementRequested_=false;
-            initialRoomPlacementRequested_=false;
-            recenterRequested_=false;
-        }
         const auto frameStarted = std::chrono::steady_clock::now();
         XrFrameBeginInfo beginInfo{XR_TYPE_FRAME_BEGIN_INFO};
         checkXr(instance_, xrBeginFrame(session_, &beginInfo), "xrBeginFrame");
@@ -11437,6 +11423,7 @@ class Viewer {
     std::vector<Vertex> controllerPathGuides_;
     std::array<std::vector<Vertex>,2> controllerContactGuides_;
     size_t witnessActorGuideCount_ = 0;
+    size_t sweepGuideBegin_ = 0, sweepGuideEnd_ = 0;
     std::vector<Vertex> referenceGridGuides_;
     std::optional<nadoc_vr::scrywrite::WitnessReplay> witness_;
     nadoc_vr::scrywrite::WitnessSurface witnessSurface_;
@@ -11456,6 +11443,9 @@ class Viewer {
     nadoc_vr::ExtrudePanel extrudePanel_;
     nadoc_vr::SweepPanel sweepPanel_;
     nadoc_vr::SweepDraft sweepDraft_;
+    std::optional<nadoc_vr::SweepEdit> sweepEdit_;
+    uint64_t sweepEditSerial_=0;
+    unsigned sweepEditPoll_=0;
     std::optional<size_t> sweepHand_,sweepGripHand_;
     glm::quat sweepGripStart_{1,0,0,0};
     glm::mat3 sweepGripFrame_{1};
@@ -11491,7 +11481,6 @@ class Viewer {
     std::optional<size_t> thumbwheelHovered_,thumbwheelHand_;
     bool suppressManipulationUntilRelease_ = false;
     RoomFloor roomFloor_;
-    QrCalibration qrCalibration_;
     FrostedGlass menuGlass_;
     MenuPanelSurface latticePanelSurface_;
     nadoc_vr::MenuLayoutAudit latticeLayoutAudit_;
@@ -11529,8 +11518,8 @@ class Viewer {
     bool showVRAvatar_=true;
     double avatarPublishedAt_=-1;
     nadoc_vr::PresenterUI presenterUI_;
-    bool shareActive_=false,sharePerspective_=false,shareBusy_=true,shareFailed_=false;
-    int shareSequence_=0,shareAck_=0;
+    bool shareActive_=false,sharePerspective_=false,shareBusy_=true,shareFailed_=false,sharePerspectiveAvailable_=true,shareStartAvailable_=false,shareHeadsetPerspective_=false;
+    int shareSequence_=0,shareAck_=0,shareGuests_=0,shareWaiting_=0;
     std::string shareAction_;
     nadoc_vr::SimulationPanel simulationPanel_;
     nadoc_vr::FeatureLogPanel featureLogPanel_;

@@ -8,8 +8,8 @@ export function createRoomPresence({ presentation, now = Date.now }) {
   let serial = 0
   const publish = () => {
     const roster = new Map([...saved].map(([id, record]) => [id, { ...record, online: connected.has(id) }]))
-    for (const { session } of connected.values()) if (session.role === 'guest') roster.set(session.participantId, {
-      id: session.participantId, name: session.name, color: session.color, online: true, ...(session.health ? { health: { networkSlow: session.health.networkSlow, renderSlow: session.health.renderSlow } } : {}), ...(saved.get(session.participantId)?.sharedView ? { sharedView: saved.get(session.participantId).sharedView } : {}),
+    for (const { session } of connected.values()) if (session.role === 'guest' || session.role === 'display') roster.set(session.participantId, {
+      id: session.participantId, ...(session.role === 'display' ? { role: 'display' } : {}), name: session.name, color: session.color, online: true, ...(session.health ? { health: { networkSlow: session.health.networkSlow, renderSlow: session.health.renderSlow } } : {}), ...(saved.get(session.participantId)?.sharedView ? { sharedView: saved.get(session.participantId).sharedView } : {}),
     })
     roster.set('presenter', { id: 'presenter', role: 'presenter', name: 'Presenter', color: '#a8d8ff', online: true })
     presentation.setParticipants([...roster.values()])

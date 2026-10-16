@@ -919,3 +919,12 @@ quiet host condition before claiming complete four-profile coverage.
   fields; missing telemetry must not become zero activity.
   Reusable workflow: Debug → VR Tours & Tests → Controls & layout → SteamVR final
   output · capture and calibration; original manual recordings remain preserved.
+
+
+2026-10-16: QR shared-position AR tools retired at user request. Earlier QR calibration, cube printing, reference-marker and phone tracking entries are historical, not active validation debt. Guest QR invitations remain. VR Share now starts and ends presentations through the desktop lifecycle; see docs/vr_sharing.md.
+
+2026-10-16: Sweep-edit headset Follow regression fixed and verified in real protected-display workflows with both steady profiles. Variable-fast and variable-deliberate controller simulations remain blocked by missed sweep adjustment/point button reaches (three attempts each); do not report those end-to-end cases as passed. See `.development-artifacts/sweep-headset-follow-20261016/results.json` and docs/vr_sharing.md. No target sizes, motion presets or thresholds were changed.
+
+2026-10-16 compact sweep preview: direct enlarged-node dragging and guest preview lifecycle passed steady_fast, steady_deliberate (avatar hidden), and variable_deliberate (mobile-sized guest). variable_fast was blocked by the overlapping Feature Log Close control; a Menu-button dismissal diagnostic also failed and was reverted. Existing noisy numeric-button reach debt is not resolved by enlarging 3D nodes. No motion preset, retry count or acceptance threshold was relaxed. Evidence: `.development-artifacts/sweep-preview-20261016/results.json`.
+
+2026-10-16 — OPEN, deferred by user: eight simultaneous guests worked while the presenter shared headset perspective and edited a sweep, but VR became very laggy and maintaining good framerate was difficult. No measured FPS or bottleneck attribution is available. This is functional evidence, not a performance/capacity sign-off. See docs/vr_sharing.md.

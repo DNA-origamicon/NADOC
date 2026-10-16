@@ -2,6 +2,8 @@
 /** Meeting-scoped static test host. Deliberately independent of the editor API. */
 import { preparedHostBuildId } from './prepared_host_build.mjs'
 import http from 'node:http'
+import { createAdmission } from './prepared_admission.mjs'
+import { screenGuestName } from './prepared_guest_names.mjs'
 import { createDesignLinks } from './prepared_design_links.mjs'
 import { readFile, readdir, writeFile, unlink } from 'node:fs/promises'
 import { resolve, join, basename } from 'node:path'
@@ -16,7 +18,7 @@ import { unpackTrajectory, updateTrajectory, initialTrajectory } from './prepare
 const same = (a, b) => typeof a === 'string' && /^[a-f0-9]{64}$/.test(a) && timingSafeEqual(Buffer.from(a), Buffer.from(b))
 const mime = name => name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : name.endsWith('.html') ? 'text/html' : name.endsWith('.gif') ? 'image/gif' : name.endsWith('.png') ? 'image/png' : name.endsWith('.svg') ? 'image/svg+xml' : 'application/octet-stream'
 
-export async function createPreparedHost({ dist, packagePath, publicOrigin = '', lifetimeMs = 2 * 60 * 60 * 1000, maxGuests = 4, now = Date.now, getPublicAccess = null, persistent = false, ownerLeaseMs = 0, linksFile = null }) {
+export async function createPreparedHost({ dist, packagePath, publicOrigin = '', lifetimeMs = 2 * 60 * 60 * 1000, maxGuests = 16, now = Date.now, getPublicAccess = null, persistent = false, ownerLeaseMs = 0, linksFile = null }) {
   if (publicOrigin && (!publicOrigin.startsWith('https://') || new URL(publicOrigin).origin !== publicOrigin)) throw new Error('Public sharing requires an exact HTTPS origin')
   if (!Number.isFinite(lifetimeMs) || lifetimeMs < 1000 || lifetimeMs > 8 * 60 * 60 * 1000) throw new Error('Lifetime must be between one second and eight hours')
   const designLinks = await createDesignLinks(linksFile)
@@ -30,7 +32,8 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
   const invite = randomBytes(32).toString('hex'), expiresAt = persistent ? null : now() + lifetimeMs
   const rooms = new Map(), controlToken = randomBytes(32).toString('hex'), probeId = randomBytes(16).toString('hex')
   let publicBase = publicOrigin, ownerSeenAt = now()
-  const summary = room => ({ id: room.id, ...(room.key ? { key: room.key } : {}), title: room.title, revision: room.revision, participants: room.presentation?.snapshot().participants ?? [], serverTime: now(), expiresAt: room.expiresAt, ...(room.trajectory ? { trajectory: { id: room.trajectory.id, count: room.trajectory.count, fps: room.trajectory.fps, state: room.presentation.snapshot().trajectory, serverTime: now() } } : {}), ...(room.password ? { password: room.password } : {}),
+  const admission = createAdmission({ rooms, maxGuests, now, disconnect: session => { for (const stream of session.streams ?? []) stream.end(); for (const transfer of session.transfers ?? []) transfer.destroy() } })
+  const summary = room => ({ admission: admission.summary(room), id: room.id, ...(room.key ? { key: room.key } : {}), title: room.title, revision: room.revision, participants: room.presentation?.snapshot().participants ?? [], serverTime: now(), expiresAt: room.expiresAt, ...(room.trajectory ? { trajectory: { id: room.trajectory.id, count: room.trajectory.count, fps: room.trajectory.fps, state: room.presentation.snapshot().trajectory, serverTime: now() } } : {}), ...(room.password ? { password: room.password } : {}), ...(room.displayPassword ? { displayPassword: room.displayPassword } : {}),
     url: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.invite}${room.password ? '&password=required' : ''}${room.key ? '&persistent=1' : ''}`,
     qrUrl: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.qrToken}&entry=qr${room.key ? '&persistent=1' : ''}`,
     ...(room.presenterToken ? { presenterUrl: `${publicBase}/viewer.html?view=${room.id}#room=${room.id}&invite=${room.presenterToken}&role=presenter${room.password ? '&password=required' : ''}` } : {}) })
@@ -55,7 +58,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     if (rooms.has(id)) throw new Error('This design is already presenting.')
     if (rooms.size >= 8) throw new Error('Share capacity reached. Stop an existing share first (eight snapshots).')
     const { scene, trajectory, revision } = prepareContent(bytes)
-    const room = { id, expiresAt: persistent ? now() + lifetimeMs : expiresAt, revision, title: String(title).slice(0, 200), scene, trajectory, password: publicOrigin ? randomBytes(12).toString('base64url') : '', invite: id === 'default' ? invite : randomBytes(32).toString('hex'), presenterToken: randomBytes(32).toString('hex'), qrToken: randomBytes(32).toString('hex'), sessions: new Map(), presentation: createPresentationState({ id, revision, now }) }
+    const room = { displayPassword: randomBytes(18).toString('base64url'), id, expiresAt: persistent ? now() + lifetimeMs : expiresAt, revision, title: String(title).slice(0, 200), scene, trajectory, password: publicOrigin ? randomBytes(12).toString('base64url') : '', invite: id === 'default' ? invite : randomBytes(32).toString('hex'), presenterToken: randomBytes(32).toString('hex'), qrToken: randomBytes(32).toString('hex'), sessions: new Map(), presentation: createPresentationState({ id, revision, now }) }
     if (link) Object.assign(room, link, { password: publicOrigin ? link.password : '' })
     preparing.delete(id)
     if (trajectory) room.presentation.setTrajectory(initialTrajectory(trajectory, now))
@@ -70,6 +73,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     const session = room.sessions.get(id)
     room.sessions.delete(id)
     for (const stream of session?.streams ?? []) stream.end()
+    for (const transfer of session?.transfers ?? []) transfer.destroy()
   }
   function endShare(id) {
     const room = rooms.get(id)
@@ -92,7 +96,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
     if (route?.startsWith('/host/')) {
       if (!management) return send(404, { error: 'Not found' })
       if (req.headers.origin || !same(req.headers.authorization?.replace(/^Bearer /, ''), controlToken)) return send(403, { error: 'Local host credential required' })
-      if (req.method === 'GET' && route === '/host/shares') return send(200, { buildId, capabilities: ['design-links-v1', 'persistent-sharing-v1', 'editor-broadcast-v1', 'animation-stream-v1', 'view-lock-v1', 'guest-drawing-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1', 'live-timeline-v1', 'live-large-frames-v1', 'live-unlimited-frames-v1', 'guest-visualizations-v1', 'sphere-impostors-v1', 'view-tools-v1', 'annotations-v1', 'selection-ping-v1', 'selection-ping-stream-v1', 'selection-update-v1', 'visualization-labels-v1', 'multi-overlay-v1', 'hull-cutouts-v1', 'vr-avatar-v1', 'vr-ui-v1'], expiresAt, publicAccess: getPublicAccess?.(), shares: [...rooms.values()].map(summary) })
+      if (req.method === 'GET' && route === '/host/shares') return send(200, { buildId, capabilities: ['design-links-v1', 'persistent-sharing-v1', 'editor-broadcast-v1', 'animation-stream-v1', 'view-lock-v1', 'guest-drawing-v1', 'trajectory-clip-v1', 'share-content-v1', 'job-stream-v1', 'live-timeline-v1', 'live-large-frames-v1', 'live-unlimited-frames-v1', 'guest-visualizations-v1', 'sphere-impostors-v1', 'view-tools-v1', 'annotations-v1', 'selection-ping-v1', 'selection-ping-stream-v1', 'selection-update-v1', 'visualization-labels-v1', 'multi-overlay-v1', 'hull-cutouts-v1', 'headset-follow-v1', 'vr-avatar-v1', 'vr-ui-v1', 'guest-admission-v1', 'demo-display-v1', 'sweep-preview-v1'], expiresAt, publicAccess: getPublicAccess?.(), shares: [...rooms.values()].map(summary) })
       if (req.method === 'POST' && route === '/host/heartbeat') { ownerSeenAt = now(); return send(200, { ok: true }) }
       if (req.method === 'DELETE' && route === '/host/shares') {
         for (const id of rooms.keys()) endShare(id)
@@ -125,10 +129,30 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
           return send(200, replaceShare(content[1], Buffer.concat(chunks), decodeURIComponent(req.headers['x-nadoc-title'] ?? 'Shared design')))
         } catch (error) { return send(409, { error: error.message }) }
       }
+      const guests = route.match(/^\/host\/shares\/([a-f0-9]{32})\/admission(?:\/([a-f0-9]{24}))?$/)
+      if (guests && ['GET', 'POST', 'DELETE'].includes(req.method)) {
+        const room = rooms.get(guests[1]); if (!room) return send(410, { error: 'This share has ended.' })
+        if (req.method === 'DELETE' && guests[2]) {
+          const guest = [...room.sessions.values()].find(s => s.role === 'guest' && s.participantId === guests[2])
+          if (!guest) return send(404, { error: 'Guest not found' })
+          admission.release(guest, 'removed'); admission.sweep()
+        } else if (req.method === 'POST' && !guests[2]) return send(200, admission.rotate(room))
+        else if (req.method !== 'GET') return send(405, { error: 'Unsupported admission action' })
+        return send(200, admission.summary(room))
+      }
       const drawing = route.match(/^\/host\/shares\/([a-f0-9]{32})\/drawings$/)
       if (req.method === 'GET' && drawing) {
         const room = rooms.get(drawing[1]); if (!room) return send(410, { error: 'This share has ended.' })
         return send(200, room.drawings.snapshot())
+      }
+      const preview = route.match(/^\/host\/shares\/([a-f0-9]{32})\/preview$/)
+      if (req.method === 'POST' && preview) {
+        const room=rooms.get(preview[1]);if(!room)return send(410,{error:'This share has ended.'})
+        try {
+          const chunks=[];let size=0
+          for await(const chunk of req){size+=chunk.length;if(size>128*1024)return send(413,{error:'Sweep preview too large'});chunks.push(chunk)}
+          return send(200,room.presentation.publishPreview(JSON.parse(Buffer.concat(chunks))))
+        } catch(error){return send(409,{error:error.message})}
       }
       const avatar = route.match(/^\/host\/shares\/([a-f0-9]{32})\/avatar$/)
       if (req.method === 'POST' && avatar) {
@@ -186,7 +210,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
       if (!designLinks.find(availability[1])) return send(404, { error: 'This invitation is no longer available. Ask the presenter for a new link.' })
       return send(200, { state: rooms.has(availability[1]) ? 'active' : preparing.get(availability[1]) > now() ? 'preparing' : 'inactive' })
     }
-    const match = route?.match(/^\/meeting\/([a-f0-9]{32}|default)\/(join|scene|status|events|camera|share-view|drawings|health|pause|leave|trajectory|frame|live-frame)$/)
+    const match = route?.match(/^\/meeting\/([a-f0-9]{32}|default)\/(join|admission|scene|status|events|camera|share-view|drawings|health|pause|leave|trajectory|frame|live-frame)$/)
     const room = rooms.get(match ? match[1] : 'default')
     if (match) route = `/meeting/${match[2]}`
     if (route?.startsWith('/meeting/') && !room) return send(410, { error: 'This share has ended.' })
@@ -197,54 +221,75 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
       if (req.headers.origin !== (publicOrigin || `http://${req.headers.host}`)) return send(403, { error: 'Open the invite in this browser.' })
       // Bound unauthenticated work without trusting proxy-supplied client IPs.
       if (now() - joinWindow >= 60000) { joinWindow = now(); joinAttempts = 0 }
-      if (++joinAttempts > 60) return send(429, { error: 'Too many join attempts. Please wait one minute.' }, 'application/json', { 'Retry-After': '60' })
+      if (++joinAttempts > 240) return send(429, { error: 'Too many join attempts. Please wait one minute.' }, 'application/json', { 'Retry-After': '60' })
       try {
         let body = '', bytes = 0
         for await (const chunk of req) { bytes += chunk.length; if (bytes > 2048) { send(413, { error: 'Request too large' }); return } body += chunk.toString() }
         const value = JSON.parse(body)
         if (rooms.get(room.id) !== room || now() >= room.expiresAt) return send(410, { error: 'This share has ended.' })
-        const role = value.role === 'presenter' ? 'presenter' : 'guest'
+        const role = value.role === 'presenter' ? 'presenter' : value.role === 'display' ? 'display' : 'guest'
         if (role === 'presenter' && room.editorBroadcast.active) return send(409, { error: 'The NADOC editor is presenting. Turn off Broadcast to presentation before using this presenter page.' })
-        const qrEntry = role === 'guest' && value.entry === 'qr'
+        const qrEntry = role !== 'presenter' && value.entry === 'qr'
         if (!same(value.token, role === 'presenter' ? room.presenterToken : qrEntry ? room.qrToken : room.invite)) return send(403, { error: 'Invalid or expired invite.' })
         const previous = req.headers.cookie?.match(cookiePattern)?.[1]
         // Keep presenter credentials until the meeting
         // ends. Leaving the viewer does not revoke the meeting or its guests.
-        for (const r of rooms.values()) for (const [key, s] of r.sessions) if (s.role !== 'presenter' && now() - s.seenAt > 120000) revokeSession(r, key)
+        admission.sweep()
         if (value.resume === true) {
           const existing = sessions.get(previous)
           if (!existing || existing.role !== role) return send(401, { error: 'Please sign in to this view.' })
+          if (role === 'guest' && existing.admission === 'released') return send(401, { error: 'Your place was released. Join again to return.' })
           existing.away = false; existing.seenAt = now(); existing.generation++
-          return send(200, { name: existing.name, participantId: room.presence.identify(existing), role, revision: room.revision, expiresAt: room.expiresAt })
+          return send(role === 'guest' && existing.admission !== 'active' ? 202 : 200, { ...(role === 'guest' ? { admission: admission.status(existing) } : {}), name: existing.name, participantId: room.presence.identify(existing), role, revision: room.revision, expiresAt: room.expiresAt })
+        }
+        if (role === 'display') {
+          if (typeof value.password !== 'string' || !room.displayPassword || !timingSafeEqual(createHash('sha256').update(value.password).digest(), createHash('sha256').update(room.displayPassword).digest())) return send(403, { error: 'Incorrect demo display password.' })
+          // One protected display across the host, in addition to regular guests.
+          // An offline display can be reclaimed; idle but connected displays cannot.
+          for (const other of rooms.values()) for (const [key, candidate] of other.sessions) {
+            if (candidate.role !== 'display' || (other === room && key === previous)) continue
+            if (now() - candidate.seenAt < 120000) return send(409, { error: 'The protected demo display place is already in use.' })
+            revokeSession(other, key)
+          }
         }
         // Generated passwords contain 96 bits of entropy; compare fixed-size hashes.
-        if (!qrEntry && room.password && (typeof value.password !== 'string' || !timingSafeEqual(createHash('sha256').update(value.password).digest(), createHash('sha256').update(room.password).digest()))) return send(403, { error: 'Incorrect meeting password.' })
-        const name = typeof value.name === 'string' ? value.name.trim() : ''
-        if (!name || name.length > 40 || /[\x00-\x1f\x7f]/.test(name)) return send(400, { error: 'Enter a display name of 1–40 characters.' })
+        if (role !== 'display' && !qrEntry && room.password && (typeof value.password !== 'string' || !timingSafeEqual(createHash('sha256').update(value.password).digest(), createHash('sha256').update(room.password).digest()))) return send(403, { error: 'Incorrect meeting password.' })
+        let name
+        try { name = screenGuestName(value.name) } catch (error) { return send(400, { error: error.message }) }
         // A separately authenticated presenter can reclaim an absent presenter's
         // place, without changing the invitation or any guest's session.
         if (role === 'presenter') for (const [key, s] of sessions) {
           if (key !== previous && s.role === 'presenter' && (s.away || now() - s.seenAt > 120000)) revokeSession(room, key)
         }
         if (role === 'presenter' && [...sessions].some(([key, session]) => session.role === 'presenter' && key !== previous)) return send(409, { error: 'A presenter is already connected to this view.' })
-        // Guest capacity must never prevent the host from presenting a full room.
-        // Rejoining a guest reuses its slot; switching from presenter needs one.
-        if (role === 'guest' && sessions.get(previous)?.role !== 'guest' &&
-          [...rooms.values()].reduce((n, r) => n + [...r.sessions.values()].filter(s => s.role === 'guest').length, 0) >= maxGuests)
-          return send(409, { error: `This host is full (${maxGuests} guest sessions). Close an unused guest session and wait two minutes before retrying.` })
         // Reauthentication (especially a role change) must invalidate the old cookie
         // and its event streams. Preserve display identity only within the same role.
         const previousSession = sessions.get(previous)
         const identity = previousSession?.role === role ? previousSession : null
         const id = randomBytes(32).toString('hex')
         revokeSession(room, previous)
-        const joined = { participantId: identity?.participantId, color: identity?.color, name, role, seenAt: now(), away: false, generation: 0, streams: new Set() }
+        const joined = { ...(role === 'guest' && identity ? identity : {}), participantId: identity?.participantId, color: identity?.color, name, role, seenAt: now(), away: false, generation: 0, streams: new Set() }
+        if (role === 'guest') { try { admission.enroll(joined) } catch (error) { return send(429, { error: error.message }) } }
         sessions.set(id, joined)
-        return send(200, { name, participantId: room.presence.identify(joined), role, revision: room.revision, expiresAt: room.expiresAt }, 'application/json', { 'Set-Cookie': `${cookieName}=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.max(1, Math.floor((room.expiresAt - now()) / 1000))}${publicOrigin ? '; Secure' : ''}` })
+        return send(role === 'guest' && joined.admission !== 'active' ? 202 : 200, { ...(role === 'guest' ? { admission: admission.status(joined) } : {}), name, participantId: room.presence.identify(joined), role, revision: room.revision, expiresAt: room.expiresAt }, 'application/json', { 'Set-Cookie': `${cookieName}=${id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.max(1, Math.floor((room.expiresAt - now()) / 1000))}${publicOrigin ? '; Secure' : ''}` })
       } catch { return send(400, { error: 'Invalid join request.' }) }
     }
     const sessionId = req.headers.cookie?.match(cookiePattern)?.[1], session = sessions?.get(sessionId)
-    if (session) session.seenAt = now()
+    if (session?.role === 'presenter' || session?.role === 'display') session.seenAt = now()
+    admission.sweep()
+    if (req.method === 'POST' && route === '/meeting/admission') {
+      if (req.headers.origin !== (publicOrigin || `http://${req.headers.host}`) || session?.role !== 'guest') return send(403, { error: 'Guest access required' })
+      try {
+        let body = ''; for await (const chunk of req) { body += chunk; if (body.length > 1024) return send(413, { error: 'Message too large' }) }
+        const value = JSON.parse(body)
+        if (!value || typeof value.visible !== 'boolean' || typeof value.active !== 'boolean' || (value.action && !['accept','leave'].includes(value.action))) return send(400, { error: 'Invalid presence message' })
+        return send(200, { admission: admission.pulse(session, value), name: session.name, participantId: room.presence.identify(session), role: 'guest', revision: room.revision, expiresAt: room.expiresAt })
+      } catch { return send(400, { error: 'Invalid presence message' }) }
+    }
+    if (session?.role === 'guest' && !admission.active(session)) return send(409, { error: 'Return to admission to join the presentation.', admission: admission.status(session) })
+    if (session?.role === 'guest' && req.method === 'GET' && ['/meeting/scene','/meeting/frame','/meeting/live-frame'].includes(route)) {
+      session.transfers ??= new Set(); session.transfers.add(res); res.once('close', () => session.transfers.delete(res))
+    }
     if (req.method === 'POST' && ['/meeting/share-view', '/meeting/health', '/meeting/drawings'].includes(route)) {
       if (req.headers.origin !== (publicOrigin || `http://${req.headers.host}`) || session?.role !== 'guest') return send(403, { error: 'Guest access required' })
       try {
@@ -254,6 +299,10 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
         if (route === '/meeting/drawings') return send(200, room.drawings.publish(session, JSON.parse(Buffer.concat(chunks))))
         return send(200, room.presence[route === '/meeting/health' ? 'health' : 'share'](session, JSON.parse(Buffer.concat(chunks))))
       } catch (error) { return send(409, { error: error.message }) }
+    }
+    if (req.method === 'POST' && route === '/meeting/leave' && session?.role === 'display') {
+      if (req.headers.origin !== (publicOrigin || `http://${req.headers.host}`)) return send(403, { error: 'Open this display in its browser.' })
+      revokeSession(room, sessionId); return send(200, { ok: true })
     }
     if (req.method === 'POST' && ['/meeting/camera', '/meeting/pause', '/meeting/leave', '/meeting/trajectory'].includes(route)) {
       if (room.editorBroadcast.active) return send(403, { error: 'The editor is presenting this view.' })
@@ -304,7 +353,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
         room.presence.connect(session, res)
         const heartbeat = setInterval(() => {
           if (sessions.get(sessionId) !== session) { res.end(); return }
-          session.seenAt = now(); if (!res.write(': heartbeat\n\n')) res.destroy()
+          if (!res.write(': heartbeat\n\n')) res.destroy()
         }, 10000)
         res.on('close', () => { clearInterval(heartbeat) })
         return
@@ -324,7 +373,7 @@ export async function createPreparedHost({ dist, packagePath, publicOrigin = '',
   const controlServer = publicOrigin ? http.createServer(handler(true)) : null
   server.requestTimeout = 15000; server.headersTimeout = 10000
   if (controlServer) { controlServer.requestTimeout = 15000; controlServer.headersTimeout = 10000 }
-  const leases = setInterval(() => { if ((expiresAt !== null && now() >= expiresAt) || (ownerLeaseMs && now() - ownerSeenAt >= ownerLeaseMs)) { stop(); return }; expireShares(); for (const room of rooms.values()) { room.drawings.expire(); room.presentation.expireAvatar(); room.editorBroadcast.expire(); room.presence.expireHealth() } }, 1000); leases.unref()
+  const leases = setInterval(() => { if ((expiresAt !== null && now() >= expiresAt) || (ownerLeaseMs && now() - ownerSeenAt >= ownerLeaseMs)) { stop(); return }; expireShares(); admission.sweep(); for (const room of rooms.values()) { room.drawings.expire(); room.presentation.expireAvatar(); room.editorBroadcast.expire(); room.presence.expireHealth() } }, 1000); leases.unref()
   const stop = () => { closed = true; clearInterval(leases); for (const room of rooms.values()) room.presentation.close(); rooms.clear(); for (const listener of [server, controlServer]) { listener?.close(); if (listener) setTimeout(() => listener.closeAllConnections(), 250).unref() } }
   return { probeId, server, controlServer, invite, expiresAt, stop, controlToken, createShare, setPublicBase: value => { if (publicOrigin && value !== publicOrigin) throw new Error('Public origin is fixed'); publicBase = value } }
 }
@@ -342,7 +391,7 @@ async function main() {
     await writeFile(controlFile, JSON.stringify({ url: `http://${host}:${port}`, token: app.controlToken, expiresAt: app.expiresAt }), { mode: 0o600 })
     app.server.once('close', () => { unlink(controlFile).catch(() => {}) })
   }
-  console.log(`Prepared host${flags['--package'] ? ': ' + basename(flags['--package']) : ''}\n${flags['--package'] ? `Invite: http://${host}:${port}/viewer.html#invite=${app.invite}` : 'Use NADOC File → Sharing to publish the current part.'}\nExpires: ${new Date(app.expiresAt).toISOString()}\nCtrl-C stops this host immediately. Anyone with this link on your trusted network can join (four browsers maximum).`)
+  console.log(`Prepared host${flags['--package'] ? ': ' + basename(flags['--package']) : ''}\n${flags['--package'] ? `Invite: http://${host}:${port}/viewer.html#invite=${app.invite}` : 'Use NADOC File → Sharing to publish the current part.'}\nExpires: ${new Date(app.expiresAt).toISOString()}\nCtrl-C stops this host immediately. Anyone with this link on your trusted network can join (16 guest sessions maximum).`)
   app.server.once('close', () => clearTimeout(timer))
   const timer = setTimeout(() => { console.log('Test session expired.'); app.stop() }, app.expiresAt - Date.now())
   const stop = () => { clearTimeout(timer); app.stop() }

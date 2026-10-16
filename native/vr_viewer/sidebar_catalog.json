@@ -1,18 +1,18 @@
 {
   "version": 2,
   "sourceHashes": {
-    "frontend/index.html": "1f6a42e4e75242ce892c118fc52cfbb28c080fdef38d704e9bc4ddb047e34499",
-    "frontend/scripts/generate-vr-sidebar-catalog.mjs": "29adb3d88b49eb670220e015f7402e8dd27ecc1711f5367ced6ac4d62e9b5b33",
+    "frontend/index.html": "36ac4d327c4a1247f7c96116bca94c5b52769b5ee7f2a292f0663e3f40eb7dd9",
+    "frontend/scripts/generate-vr-sidebar-catalog.mjs": "aee1964f27670b3942006fd8d8e6f59a404fdc92cd0845bfa357dce2d08cc6d3",
     "frontend/scripts/vr-sidebar-sections.mjs": "263f383abf0572352d6e5fd36406618a4e87e12961a005fe50de108391387e55",
     "frontend/src/scene/coloring_modes.js": "38b8f278e205a935a63413a0aa0d32d89762759d0b77c7da7eaba28c7d802bae",
     "frontend/src/scene/view_volumes.js": "8cb5f50859a2394fa47cf78b1d60ffd6aaf3e6319dc8cae4585ee452f3f24c9b",
     "frontend/src/scene/vr_representations.js": "cc3ce5e23239209acc9255ba07bc53688320fccdac54b8925590199210fc60c7",
-    "frontend/src/scene/vr_share.js": "16721aa0cacc45bf65f8b5c74e00a297a3678d57f8c4e150d95e74de0bef8ab4",
+    "frontend/src/scene/vr_share.js": "20d992c6ab0e61ecb70cee5c66a18b078bf50bf6bfde10ffebfbb53fdc336247",
     "frontend/src/ui/annotation_panel.js": "c4555b987b01a80f1e900f21945a38c0a93758352e5fa4702bb9b7f2678e68ad",
     "frontend/src/ui/assembly_panel.js": "e9ac3b882878bfd7c812343413116dc4794df28f2471d514105f61b6168c658b",
     "frontend/src/ui/cluster_panel.js": "15370c04b46579d01fcc9a26a17b79663d9f88e302a0e52d6864771b42fe4235",
     "frontend/src/ui/engine_selector.js": "fd02c24efd621426ffbfd84c66bbcb5eb22f4972aa88cca76c498df359f87488",
-    "frontend/src/ui/feature_log_panel.js": "fbfe28be1a95cabcdafb83548d6c9466a745e5ab21f204d2cfd15017d3ee1d4b",
+    "frontend/src/ui/feature_log_panel.js": "6fc1d67f474e2cc2d8eb3da47e0d93fa8e1ef0af762a08e64437796cb7b40adc",
     "frontend/src/ui/jobs_panel_base.js": "6062e22fb1881a79f576267311216455f7ea1e3de3a7e07d050277905558540b",
     "frontend/src/ui/multi_overlay.js": "567f177c9f8f267e7a45883bf782d776f5263af5ebb1a2abca4098fc4265b310",
     "frontend/src/ui/multi_view.js": "d897f8b8f2bbe22a6ec27c5fb049e3710a3d5ff86733c6546f52f2461f2c9ab2",
@@ -13236,26 +13236,6 @@
           "reason": ""
         },
         {
-          "id": "qr-cube-calibrate",
-          "label": "Calibrate cube",
-          "action": "qr:cube",
-          "section": "VR",
-          "kind": "button",
-          "options": [],
-          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
-          "reason": ""
-        },
-        {
-          "id": "qr-cube-status",
-          "label": "Keep cube fixed; scan all five faces",
-          "action": "qr:cube-status",
-          "section": "VR",
-          "kind": "button",
-          "options": [],
-          "source": "frontend/scripts/generate-vr-sidebar-catalog.mjs",
-          "reason": ""
-        },
-        {
           "id": "vr-exit",
           "label": "Exit VR",
           "action": "vr:exit",
@@ -13273,59 +13253,49 @@
       "label": "Share",
       "rows": [
         {
-          "id": "share-avatar",
-          "label": "Show VR model",
-          "action": "share:avatar",
+          "id": "share-start",
+          "label": "Start presentation",
+          "action": "share:start",
           "section": "Share",
           "kind": "button",
           "options": [],
           "source": "frontend/src/scene/vr_share.js",
           "reason": ""
-        },
-        {
-          "id": "qr-calibrate",
-          "label": "Calibrate QR code",
-          "action": "qr:calibrate",
-          "section": "Share",
-          "kind": "button",
-          "options": [],
-          "source": "frontend/src/scene/vr_share.js",
-          "reason": ""
-        },
-        {
-          "id": "qr-status",
-          "label": "QR not calibrated",
-          "action": "qr:status",
-          "section": "Share",
-          "kind": "button",
-          "options": [],
-          "source": "frontend/src/scene/vr_share.js",
-          "reason": ""
-        },
-        {
-          "id": "share-desktop",
-          "label": "Start sharing and manage links on desktop",
-          "action": "",
-          "section": "Share",
-          "kind": "button",
-          "options": [],
-          "source": "frontend/src/scene/vr_share.js",
-          "reason": "Desktop only"
-        },
-        {
-          "id": "share-source",
-          "label": "Perspective source: desktop camera",
-          "action": "",
-          "section": "Share",
-          "kind": "button",
-          "options": [],
-          "source": "frontend/src/scene/vr_share.js",
-          "reason": "Desktop only"
         },
         {
           "id": "share-active",
           "label": "Presentation active",
           "action": "share:status",
+          "section": "Share",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/src/scene/vr_share.js",
+          "reason": ""
+        },
+        {
+          "id": "share-guests",
+          "label": "0 active / 0 waiting",
+          "action": "share:guests",
+          "section": "Share",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/src/scene/vr_share.js",
+          "reason": ""
+        },
+        {
+          "id": "share-admit",
+          "label": "Admit new guests",
+          "action": "share:admit",
+          "section": "Share",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/src/scene/vr_share.js",
+          "reason": ""
+        },
+        {
+          "id": "share-avatar",
+          "label": "Show VR model",
+          "action": "share:avatar",
           "section": "Share",
           "kind": "button",
           "options": [],
@@ -13344,7 +13314,7 @@
         },
         {
           "id": "share-resume",
-          "label": "Resume perspective",
+          "label": "Share headset perspective",
           "action": "share:resume",
           "section": "Share",
           "kind": "button",
@@ -13361,6 +13331,16 @@
           "options": [],
           "source": "frontend/src/scene/vr_share.js",
           "reason": ""
+        },
+        {
+          "id": "share-source",
+          "label": "Headset view is smoothed for guests",
+          "action": "",
+          "section": "Share",
+          "kind": "button",
+          "options": [],
+          "source": "frontend/src/scene/vr_share.js",
+          "reason": "Desktop only"
         }
       ]
     }

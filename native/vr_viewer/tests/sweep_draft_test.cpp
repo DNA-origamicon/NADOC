@@ -1,9 +1,24 @@
 #include "sweep_draft.hpp"
+#include "sweep_edit.hpp"
 #include <cassert>
 #include <iostream>
 
 using namespace nadoc_vr;
 int main() {
+    static_assert(sweepNodeRadius == .024F && sweepNodeHitRadius == .032F);
+    const std::vector<glm::vec3> enlarged{{.025F,0,-1}};
+    assert(sweepPointRayHit(enlarged,{0,0,0},{0,0,-1},sweepNodeHitRadius));
+    assert(!sweepPointRayHit(enlarged,{0,0,0},{0,0,-1},.016F));
+
+    std::istringstream saved("NADOC_SWEEP_EDIT_1 1 2 8 \"feature\" \"design\" XY 0 both 1 10 20 30 0 -1 0 1 0 0 0 0 1 1 0 0 0 1 0 0 0 1 1 2 0 0 0 0 0 0 0 0 0 2 3 10 1 15 30 45");
+    auto edit=SweepEdit::read(saved);assert(edit && edit->index==2 && edit->draft.step==2);
+    assert(edit->draft.pointsNm[1]==glm::vec3(2,3,10));
+    assert(edit->rotation*glm::vec3(1,0,0)==glm::vec3(0,1,0));
+    assert(edit->draft.orientations[1]==glm::vec3(15,30,45));
+    std::istringstream invalid("NADOC_SWEEP_EDIT_1 1 -1 8 \"feature\" \"design\"");
+    assert(!SweepEdit::read(invalid));
+    std::istringstream old("NADOC_SWEEP_EDIT_1 1 2 8 \"feature\" \"design\" unread");
+    assert(!SweepEdit::read(old,1));std::string unread;old>>unread;assert(unread=="unread");
     SweepDraft draft;
     assert(draft.step==1 && draft.pointsNm.size()==2 && draft.selected==1);
     assert(draft.movePoint(0,{1,2,3}));

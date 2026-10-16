@@ -13,6 +13,8 @@
 #include <vector>
 
 namespace nadoc_vr {
+inline constexpr float sweepNodeRadius = .024F;
+inline constexpr float sweepNodeHitRadius = .032F;
 inline bool finiteSweepPoint(glm::vec3 p) {
     return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
 }

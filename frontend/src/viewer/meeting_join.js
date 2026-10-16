@@ -1,3 +1,5 @@
+import { mountDemoDisplayAccess } from './demo_display_access.js'
+import { mountMeetingAdmission } from './meeting_admission.js'
 import { mountMeetingPassword } from './meeting_password.js'
 import { mountInvitationLobby } from './invitation_lobby.js'
 import { mountViewerHealth } from './viewer_health.js'
@@ -33,11 +35,18 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
   const qrEntry = params.get('entry') === 'qr' && params.get('role') !== 'presenter'
   const needsPassword = !qrEntry && params.get('password') === 'required'
   const password = mountMeetingPassword({ document: doc, required: needsPassword }), passwordField = password.field
+  const displayAccess = params.get('role') !== 'presenter' ? mountDemoDisplayAccess({ base, document: doc, onExit: async () => {
+    try { await request(`${base}/leave`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }) } catch {}
+    if (disposed) return
+    if (onInactive) finish()
+    else doc.defaultView.location.reload()
+  } }) : null
   const abort = new AbortController()
   const sharedViews = new WeakSet()
   let disposed = false, ended = false, timer = null, promptTimer = null, polling = false, busy = false, disconnectPresentation = () => {}
   const display = mountMeetingStatus({ viewer, document: doc })
   const ping = createMeetingPing({ document: doc })
+  let admission = null, viewGeneration = 0, viewAbort = null
   let presence = null, moveView = () => {}
   const health = mountViewerHealth({ viewer, base, document: doc, fetch: request, onChange: value => presence?.setHealth(value) })
   const measuredRequest = health.fetch
@@ -45,7 +54,7 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
     if (ended || disposed) return
     ended = true; abort.abort(); if (timer) cancel(timer); timer = null
     if (promptTimer) cancel(promptTimer); promptTimer = null
-    disconnectPresentation(); health.dispose(); presence?.dispose(); ping.dispose(); display.end(); identity.textContent = 'Presentation ended · Session ended'
+    admission?.dispose(); viewAbort?.abort(); disconnectPresentation(); health.dispose(); presence?.dispose(); ping.dispose(); display.end(); identity.textContent = 'Presentation ended · Session ended'
     if (dialog.open) dialog.close()
     onInactive?.()
   }
@@ -58,39 +67,30 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
     const response = await request(`${base}/join`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: abort.signal })
     return { response, details: await response.json() }
   }
-  async function loadSharedView(details) {
+  async function loadSharedView(details, signal = abort.signal) {
     if (sharedViews.has(viewer.current) && (!viewer.current?.packageHash || viewer.current.packageHash === details.revision)) return
-    const response = await measuredRequest(`${base}/scene`, { signal: abort.signal })
+    const response = await measuredRequest(`${base}/scene`, { signal })
     if (response.status === 410 && onInactive) { finish(); return }
     if (!response.ok) throw new Error('The host is unavailable or the session has ended.')
     const size = Number(response.headers.get('Content-Length'))
     if (!Number.isFinite(size) || size <= 0 || size > 512 * 1024 * 1024) throw new Error('Invalid package size')
     const blob = await response.blob()
     if (blob.size !== size) throw new Error('Incomplete package download; please retry')
-    if (disposed) return
+    if (disposed || signal.aborted) return
     const loaded = await viewer.loadFile(new File([blob], 'Shared design.nadocview'))
     if (!loaded) throw new Error(status.textContent || 'Could not open the shared design')
     if (details.revision && viewer.current?.packageHash && viewer.current.packageHash !== details.revision) throw new Error('Downloaded design does not match this invitation')
     if (viewer.current) sharedViews.add(viewer.current)
   }
-  async function enter(resume = false) {
-    if (busy || disposed || ended) return
-    busy = true; button.disabled = true; error.textContent = ''
-    button.textContent = resume ? 'Checking existing session…' : 'Joining…'
-    try {
-      const { response, details } = await join(resume ? { ...credential, resume: true } : {
-        ...credential, name: doc.getElementById('guest-name').value.trim(), ...(needsPassword ? { password: passwordField?.value.trim() ?? '' } : {}) })
-      if (disposed) return
-      if (!response.ok) {
-        if (response.status === 410 && onInactive) { finish(); return }
-        if (resume && [401, 403, 404, 405].includes(response.status)) return
-        throw new Error(details.error || 'Could not join this session')
-      }
+  async function showPresentation(details) {
+      const generation = ++viewGeneration
+      viewAbort?.abort(); viewAbort = new AbortController()
       button.textContent = 'Loading design…'
-      await loadSharedView(details)
-      if (disposed || ended) return
+      disconnectPresentation(); disconnectPresentation = () => {}
+      await loadSharedView(details, viewAbort.signal)
+      if (disposed || ended || generation !== viewGeneration) return
       if (promptTimer) cancel(promptTimer); promptTimer = null
-      identity.textContent = `${details.name} · Private test`
+      identity.textContent = `${details.name} · ${details.role === 'display' ? 'Demo display' : 'Private test'}`
       if (passwordField) passwordField.value = ''
       dialog.close()
       presence?.dispose()
@@ -104,6 +104,32 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
           await loadSharedView(details)
         } }) : mount()
       }
+  }
+  async function enter(resume = false) {
+    if (busy || disposed || ended) return
+    busy = true; button.disabled = true; error.textContent = ''
+    button.textContent = resume ? 'Checking existing session…' : 'Joining…'
+    try {
+      const credentials = () => ({ ...credential, name: doc.getElementById('guest-name').value.trim(), ...(needsPassword ? { password: passwordField?.value.trim() ?? '' } : {}), ...displayAccess?.credentials() })
+      let { response, details } = await join(resume ? { ...credential, ...(displayAccess?.enabled ? { role: 'display' } : {}), resume: true } : credentials())
+      if (resume && [401,403].includes(response.status) && displayAccess?.remembered) ({ response, details } = await join(credentials()))
+      if (disposed) return
+      if (!response.ok) {
+        if (response.status === 403 && displayAccess?.enabled) { displayAccess.reject(); throw new Error(details.error || 'Demo display access was revoked.') }
+        if (response.status === 410 && onInactive) { finish(); return }
+        if (resume && [401, 403, 404, 405].includes(response.status)) return
+        throw new Error(details.error || 'Could not join this session')
+      }
+      if (details.role === 'display') displayAccess?.accept(details.name)
+      if (details.role === 'guest' && details.admission) {
+        admission?.dispose(); dialog.close()
+        admission = mountMeetingAdmission({ details, base, document: doc, fetch: request, setInterval: repeat, clearInterval: cancel,
+          onActive: showPresentation, onReleased: () => viewer.clear?.(),
+          onSuspend: () => { viewGeneration++; viewAbort?.abort(); health.pause(); disconnectPresentation(); disconnectPresentation = () => {}; presence?.dispose(); presence = null },
+          onRejoin: () => { admission?.dispose(); admission = null; dialog.showModal(); void enter() }, onEnded: finish })
+        return
+      }
+      await showPresentation(details)
       timer = repeat(async () => {
         if (disposed || ended || polling) return
         polling = true
@@ -114,7 +140,7 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
             return
           }
           if (!response.ok) throw new Error('ended')
-          if (!disposed && !ended) identity.textContent = `${details.name} · Private test`
+          if (!disposed && !ended) identity.textContent = `${details.name} · ${details.role === 'display' ? 'Demo display' : 'Private test'}`
         } catch {
           // A transient outage must not disable EventSource's reconnect or local navigation.
           if (!disposed && !ended) identity.textContent = `${details.name} · Host disconnected; reconnecting…`
@@ -127,6 +153,7 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
   form.addEventListener('submit', submit)
   if (onInactive) promptTimer = repeat(async () => {
     if (disposed || ended || busy || polling || !dialog.open) return
+    if (displayAccess?.remembered) { void enter(true); return }
     polling = true
     try {
       const response = await request(`${base}/availability`, { signal: abort.signal })
@@ -136,7 +163,7 @@ export function mountMeetingJoin({ viewer, document: doc = document, location: l
     finally { polling = false }
   }, 3000)
   void enter(true)
-  return () => { disposed = true; password.dispose(); abort.abort(); disconnectPresentation(); health.dispose(); presence?.dispose(); ping.dispose(); display.dispose(); if (timer) cancel(timer); if (promptTimer) cancel(promptTimer); form.removeEventListener('submit', submit); dialog.removeEventListener('cancel', preventClose); if (dialog.open) dialog.close() }
+  return () => { disposed = true; displayAccess?.dispose(); password.dispose(); abort.abort(); admission?.dispose(); viewAbort?.abort(); disconnectPresentation(); health.dispose(); presence?.dispose(); ping.dispose(); display.dispose(); if (timer) cancel(timer); if (promptTimer) cancel(promptTimer); form.removeEventListener('submit', submit); dialog.removeEventListener('cancel', preventClose); if (dialog.open) dialog.close() }
 }
 
 /** A second invite can change only the fragment in an already-open viewer tab. */

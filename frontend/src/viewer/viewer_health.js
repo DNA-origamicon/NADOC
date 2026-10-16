@@ -61,5 +61,5 @@ export function mountViewerHealth({ viewer, base, onChange, document: doc = docu
     finally { flight = false }
   }
   const timer = repeat(report, 10000)
-  return { fetch: measuredFetch, start() { if (active) return; active = true; paint(); void report() }, dispose() { disposed = true; active = false; abort.abort(); cancel(timer); viewer.runtime?.removeFrameCallback?.(frame) } }
+  return { fetch: measuredFetch, pause() { active = false }, start() { if (active) return; active = true; paint(); void report() }, dispose() { disposed = true; active = false; abort.abort(); cancel(timer); viewer.runtime?.removeFrameCallback?.(frame) } }
 }

@@ -34,3 +34,12 @@ it('rejects invalid poses, unbounded dimensions, malformed hands and shearing tr
     const p=packet();modify(p);expect(()=>validateVRAvatar(p)).toThrow()
   }
 })
+
+it('hides the presenter head and body only for first-person followers, keeping controllers visible', () => {
+  const a=createVRAvatar({scene:new THREE.Scene(),now:()=>0})
+  a.receive({avatar:{pose:packet(),expiresAt:1500},serverTime:0});a.setFirstPerson(true);a.frame()
+  expect(a.root.children[0].visible).toBe(false)
+  expect(a.root.children[1].visible).toBe(true)
+  a.setFirstPerson(false);a.frame();expect(a.root.children[0].visible).toBe(true)
+  a.dispose()
+})

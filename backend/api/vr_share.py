@@ -1,4 +1,4 @@
-"""Local, document-bound presenter controls for an existing desktop share."""
+"""Local, document-bound presenter controls for the presentation lifecycle."""
 import json
 import os
 from pathlib import Path
@@ -21,25 +21,29 @@ async def share_controls(request: Request):
         raise HTTPException(422, detail="Invalid presenter state")
     if not isinstance(data, dict) or any(type(data.get(k)) is not bool for k in ('active', 'perspective', 'busy', 'failed')) or type(data.get('acknowledged')) is not int or not 0 <= data['acknowledged'] <= 2147483647:
         raise HTTPException(422, detail='Invalid presenter state')
+    if type(data.get('perspectiveAvailable', True)) is not bool or type(data.get('startAvailable', False)) is not bool or type(data.get('headsetPerspective', False)) is not bool:
+        raise HTTPException(422, detail='Invalid presenter availability')
+    if any(type(data.get(k, 0)) is not int or not 0 <= data.get(k, 0) <= 10000 for k in ('activeGuests', 'waitingGuests')):
+        raise HTTPException(422, detail='Invalid guest counts')
     with vr._FEEDBACK_LOCK:
         state = vr._read_state()
         if not state or state.get('doc_id') != get_current_doc():
             raise HTTPException(409, detail='VR belongs to another document or is unavailable')
         path = Path(state['event_path'] + '.share')
         temp = Path(str(path) + '.next')
-        temp.write_text(' '.join(str(int(data[k])) for k in ('active', 'perspective', 'busy', 'acknowledged', 'failed')))
+        temp.write_text(' '.join(str(int(data[k])) for k in ('active', 'perspective', 'busy', 'acknowledged', 'failed')) + f" {data.get('activeGuests', 0)} {data.get('waitingGuests', 0)} {int(data.get('perspectiveAvailable', True))} {int(data.get('startAvailable', False))} {int(data.get('headsetPerspective', False))}")
         temp.chmod(0o600)
         os.replace(temp, path)
     return {'published': True}
 
 
 def parse_share_event(value):
-    if isinstance(value, dict) and type(value.get('sequence')) is int and 0 < value['sequence'] <= 2147483647 and value.get('action') in ('pause', 'resume', 'end'):
+    if isinstance(value, dict) and type(value.get('sequence')) is int and 0 < value['sequence'] <= 2147483647 and value.get('action') in ('start', 'pause', 'resume', 'end', 'admit'):
         return {'sequence': value['sequence'], 'action': value['action']}
     return None
 
 
-def presenter_pose(value, rotation):
+def presenter_pose(value, rotation, *, include_ui=True):
     """Invert the exact source-nm -> normalized model -> tracking-metre mapping."""
     import numpy as np
     p = value['presentation']
@@ -57,7 +61,7 @@ def presenter_pose(value, rotation):
     if not np.isfinite(transform).all():
         raise ValueError('Invalid tracking transform')
     transform[3] = [0, 0, 0, 1]
-    return dict(schema=1, trackingToSource=transform.T.ravel().tolist(), head=value['head'], hands=value['hands'], **({'ui': value['ui']} if 'ui' in value else {}))
+    return dict(schema=1, trackingToSource=transform.T.ravel().tolist(), head=value['head'], hands=value['hands'], **({'ui': value['ui']} if include_ui and 'ui' in value else {}))
 
 
 @router.get('/vr/presenter-pose')
@@ -80,8 +84,13 @@ def read_presenter_pose(request: Request):
             return {'avatar': None}
         with path.open() as stream:
             value = json.loads(stream.read(4 * 1024 * 1024))
-        if not value.get('enabled') or not value.get('tracked'):
+        if request.query_params.get('preview') == '1':
+            preview = value.get('sweepPreview')
+            if not value.get('tracked') or not value.get('presenting') or not preview:
+                return {'preview': None}
+            return {'preview': {**preview, 'trackingToSource': presenter_pose(value, state['view_rotation'], include_ui=False)['trackingToSource']}}
+        if not value.get('tracked') or not (value.get('enabled') or (request.query_params.get('camera') == '1' and value.get('presenting'))):
             return {'avatar': None}
-        return {'avatar': presenter_pose(value, state['view_rotation'])}
+        return {'avatar': presenter_pose(value, state['view_rotation'], include_ui=request.query_params.get('camera') != '1')}
     except (OSError, ValueError, KeyError, TypeError, np.linalg.LinAlgError):
         return {'avatar': None}

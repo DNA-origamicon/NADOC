@@ -197,3 +197,6 @@ failure: 2,778 passed, 17 skipped, one failed. Its broad-suite deferral was:
 > session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 > This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
 > Only request `just test-session` when a broad/full sweep is actually needed.
+
+
+2026-10-16: QR shared-position AR tools retired at user request. Earlier QR calibration, cube printing, reference-marker and phone tracking entries are historical, not active validation debt. Guest QR invitations remain. VR Share now starts and ends presentations through the desktop lifecycle; see docs/vr_sharing.md.

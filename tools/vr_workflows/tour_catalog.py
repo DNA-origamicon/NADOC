@@ -119,17 +119,15 @@ def catalog():
     add('avatar', 'left', 'VR presenter model',
         'Real local guest sees tracked headset, estimated arms, gestures, inverse model scaling and the Show VR model toggle. No public hosting.', module='avatar_tour')
     add('origami-tracking', 'interaction', 'Origami tracking · pixels, poses and frame identity',
-        'Terminal workflow: measure origami landmarks and expected application positions. Optional submitted-eye markers identify exact session/eye/frame IDs in final SteamVR output and join the bounded pose journal, reporting unreadable IDs, repeats and skips explicitly. Interaction timing reviews correlate exact image reuse with input/submission intervals and recording-only menu hover, texture updates and haptic calls, retaining unavailable diagnostics. GPU pass summaries locate shadow/eye cost with missing-measurement accounting. Distorted pixel projection still requires lens calibration; optical scanout remains separate evidence.',
+        'Terminal workflow: measure origami landmarks and expected application positions. Optional submitted-eye markers identify exact session/eye/frame IDs in final SteamVR output and join the bounded pose journal, reporting unreadable IDs, repeats and skips explicitly. Interaction timing reviews correlate exact image reuse with input/submission intervals and recording-only menu hover, texture updates and haptic calls, retaining unavailable diagnostics. Compare exact indexed groups on/off with saved presentation, GPU pass summaries and molecular held-frame drift/new-frame return; preserve missing measurements and unknown IDs. Distorted pixel projection still requires lens calibration; optical scanout remains separate evidence.',
         module='origami_tracking_check', runnable=False)
     add('compositor-capture', 'interaction', 'SteamVR final output · capture and calibration',
         'Terminal workflow: record the prepared SteamVR final direct-display swapchain with presentation IDs, lossless pixels, explicit omissions and measured overhead. Includes accounting and frame review. Requires a process-scoped capture-layer launch; never silently restarts SteamVR. Submitted images, compositor output, refresh association and optical evidence have separate verdicts.',
         module='compositor_capture_check', runnable=False)
     add('stereo-recording', 'interaction', 'Tools · five-second stereo recording',
         'Select Record through ordinary controller input, move the model with menus open/closed, and verify distinct full-resolution eye videos, real timestamps and skipped-pair accounting. Validation uses all four motion profiles; physical headset scanout is outside this capture.', ['--recording-checks'])
-    add('qr-calibration', 'left', 'Calibrate QR code · Vive camera',
-        'Real edge-filtered camera preview and cancellation through Share controls. Software validates QR pose and origin snapping separately; physical target alignment requires on-site review.', ['--qr-checks'])
     add('share', 'left', 'Share presenter controls',
-        'Control a desktop-started presentation from the left menu. Isolated simulated hosting; creates no public link. All four controller profiles in validation.', module='share_tour')
+        'Start and end a presentation from the left menu. Isolated real local hosting; creates no public link. All four controller profiles in validation.', module='share_tour')
     add('view-tools', 'right', 'Left-hand view tools',
         'Equip the two-column desktop-icon panel with the left quiver gesture and exercise the ten supported view toggles in native stereo; Quick Expand is excluded.', module='view_tools_tour')
     add('nick', 'authoring', 'Nick with scissors, Undo and Redo',

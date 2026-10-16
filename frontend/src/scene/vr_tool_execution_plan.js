@@ -251,7 +251,7 @@ export async function evaluateVRToolPreflight(sequence, draft, {
   let result = null, sweepPreview = null
   try {
     if (described.plan.kind === 'sweep') {
-      const preview = await api?.previewSweep?.(described.plan.preflight.arguments, null, { includeGeometry: true })
+      const preview = await api?.previewSweep?.(described.plan.preflight.arguments, described.plan.preflight.featureIndex ?? null, { includeGeometry: true })
       result = preview && Number.isFinite(preview.length_nm) && preview.length_nm > 0 &&
         preview.revision === described.plan.preflight.arguments.expected_revision
         ? { status: preview.feasibility?.status === 'warning' ? 'warn' : 'ok', message: preview.feasibility?.message } : null
@@ -259,9 +259,11 @@ export async function evaluateVRToolPreflight(sequence, draft, {
         const cloud = (preview.helix_paths_nm ?? []).flat()
         const stride = Math.max(1, Math.ceil(cloud.length / 4096))
         const origin = preview.origin_nm ?? [0,0,0]
-        const relative = p => p.map((v, i) => v - origin[i])
+        const rotation = preview.point_rotation ?? [[1,0,0],[0,1,0],[0,0,1]]
+        const unrotate = p => [0,1,2].map(i => rotation.reduce((sum, row, j) => sum + row[i] * p[j], 0))
+        const relative = p => unrotate(p.map((v, i) => v - origin[i]))
         sweepPreview = { ...(Number.isSafeInteger(preview.total_new_bp) ? { total_new_bp: preview.total_new_bp } : {}), path: (preview.path_nm ?? []).map(relative), cloud: cloud.filter((_, i) => i % stride === 0).map(relative),
-          bases: (preview.point_bases ?? []).map(b => b.flat()), warning_segments: preview.feasibility?.warning_segments ?? [] }
+          bases: (preview.point_bases ?? []).map(b => [0,1,2].map(i => [0,1,2].map(j => rotation.reduce((sum, row, k) => sum + row[i] * b[k][j], 0))).flat()), warning_segments: preview.feasibility?.warning_segments ?? [] }
       }
     } else result = described.plan.kind === 'extrude_frame'
       ? await api?.validateFrameExtrusion?.(described.plan.preflight.arguments)

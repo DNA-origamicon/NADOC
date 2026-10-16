@@ -1501,7 +1501,11 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
                 }
                 return
               }
-              if (entry.op_kind === 'sweep') { onEditSweep?.(entry, i); return }
+              if (entry.op_kind === 'sweep') {
+                const result = onEditSweep?.(entry, i, { nativeVR: e.detail?.nativeVR === true })
+                if (e.detail?.nativeVR) e.detail.completion = result
+                return
+              }
               const current = entry.params?.length_bp
               if (current == null) {
                 showPersistentToast(`This op has no length_bp parameter to edit.`)

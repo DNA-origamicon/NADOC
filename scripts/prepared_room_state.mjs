@@ -1,3 +1,4 @@
+import { validateSweepPreview } from '../frontend/src/viewer/sweep_preview_protocol.js'
 import { validateSelectionUpdate } from '../frontend/src/viewer/selection_update.js'
 import { validateSelectionPing } from '../frontend/src/viewer/selection_ping_protocol.js'
 import { encodeVRUIState } from '../frontend/src/viewer/vr_ui_stream.js'
@@ -11,14 +12,18 @@ export function createPresentationState({ id, revision, now = Date.now }) {
   let trajectory = null, liveFrame = null, loading = null, participants = [], drawings = []
   let selectionPing = null, selectionUpdate = null
   let manualViewLock = false, animationViewLock = false
+  let preview = null, previewWindow = now(), previewUpdates = 0
   let avatar = null, avatarWindow = now(), avatarUpdates = 0
-  const snapshot = () => ({ schema: 1, room: id, revision, sequence, camera, presenting, viewLocked: manualViewLock || animationViewLock, animationActive: animationViewLock, avatar, trajectory, liveFrame, loading, participants, drawings, selectionPing, selectionUpdate, ended: closed, serverTime: now() })
+  const snapshot = () => ({ schema: 1, room: id, revision, sequence, camera, presenting, viewLocked: manualViewLock || animationViewLock, animationActive: animationViewLock, avatar, preview, trajectory, liveFrame, loading, participants, drawings, selectionPing, selectionUpdate, ended: closed, serverTime: now() })
   const textureCaches = new WeakMap()
   const selectionCaches = new WeakMap()
+  const previewCaches = new WeakMap()
   const encode = (state, response) => {
     if (!textureCaches.has(response)) textureCaches.set(response, new Map())
     const selectionId = state.selectionUpdate?.id ?? null
     const packet = { ...state }
+    if (state.preview && previewCaches.get(response) === state.preview.data) packet.preview = { expiresAt: state.preview.expiresAt }
+    previewCaches.set(response, state.preview?.data)
     if (selectionCaches.has(response) && selectionCaches.get(response) === selectionId) delete packet.selectionUpdate
     else selectionCaches.set(response, selectionId)
     return `event: state\ndata: ${JSON.stringify(encodeVRUIState(packet, textureCaches.get(response)))}\n\n`
@@ -52,11 +57,24 @@ export function createPresentationState({ id, revision, now = Date.now }) {
     if (now() - windowStart >= 1000) { windowStart = now(); updates = 0 }
     if (updates >= 20) throw new Error('Too many camera updates')
     updates++
-    camera = validated
+    camera = validated.source === 'headset' ? { ...validated, expiresAt: now() + 1500 } : validated
     sequence++; presenting = true; broadcast()
     return snapshot()
   }
   return { snapshot, publish, pause,
+    publishPreview(value) {
+      if (closed || value?.revision !== revision) throw Error('Sweep preview belongs to a different snapshot')
+      if (now()-previewWindow >= 1000) {previewWindow=now();previewUpdates=0}
+      if (++previewUpdates > 20) throw Error('Too many sweep preview updates')
+      if (value.keep === true) {
+        if (!preview) throw Error('Sweep preview expired; republish it')
+        preview = {...preview, expiresAt:now()+3000}
+      } else {
+        const data=validateSweepPreview(value.preview)
+        preview=data?{data,expiresAt:now()+3000}:null
+      }
+      sequence++;broadcast();return {ok:true}
+    },
     publishSelectionUpdate(value) {
       const validated = validateSelectionUpdate(value)
       if (closed || validated.revision !== revision) throw new Error('Selection belongs to a different snapshot')
@@ -82,7 +100,7 @@ export function createPresentationState({ id, revision, now = Date.now }) {
       avatarUpdates++; avatar = pose ? { pose, expiresAt: now()+1500 } : null
       sequence++; broadcast(); return { ok:true }
     },
-    expireAvatar() { if(avatar && now()>=avatar.expiresAt){avatar=null;sequence++;broadcast()} },
+    expireAvatar() { if(preview && now()>=preview.expiresAt){preview=null;sequence++;broadcast()} if(avatar && now()>=avatar.expiresAt){avatar=null;sequence++;broadcast()} },
     setParticipants(value) { if (!closed && JSON.stringify(value) !== JSON.stringify(participants)) { participants = value; sequence++; broadcast() } },
     setLoading(value) {
       if (value !== null && (!value || typeof value !== 'object' || (value.fraction !== null && (!Number.isFinite(value.fraction) || value.fraction < 0 || value.fraction > 1)))) throw new Error('Invalid visualization progress')
@@ -90,16 +108,16 @@ export function createPresentationState({ id, revision, now = Date.now }) {
     },
     setTrajectory(value) { trajectory = value; sequence++; broadcast(); return snapshot() },
     setLiveFrame(value) { liveFrame = value; if (value?.animation) { camera = value.animation.camera; presenting = true }; sequence++; broadcast(); return snapshot() },
-    replaceContent(next, clip) { selectionUpdate=null; selectionPing=null; avatar=null; revision = next; trajectory = clip; liveFrame = null; camera = null; presenting = false; sequence++; broadcast(); return snapshot() },
-    replaceRevision(next) { selectionUpdate=null; selectionPing=null; avatar=null; revision = next; sequence++; broadcast() },
+    replaceContent(next, clip) { selectionUpdate=null; selectionPing=null; avatar=null; preview=null; revision = next; trajectory = clip; liveFrame = null; camera = null; presenting = false; sequence++; broadcast(); return snapshot() },
+    replaceRevision(next) { selectionUpdate=null; selectionPing=null; avatar=null; preview=null; revision = next; sequence++; broadcast() },
     leavePresenter() { pause(); for (const response of presenters) response.end() },
     subscribe(response, { presenter = false } = {}) {
       if (closed) { response.end(); return false }
-      if (listeners.size >= 8) { response.destroy(); return false }
+      if (listeners.size >= 18) { response.destroy(); return false }
       listeners.add(response); if (presenter) presenters.add(response)
       response.on('close', () => { listeners.delete(response); if (presenters.delete(response) && presenters.size === 0) pause() }); send(response, snapshot())
       return listeners.has(response)
     },
-    close() { if (closed) return; closed = true; avatar=null; presenting = false; loading = null; sequence++; broadcast(); for (const response of listeners) response.end(); listeners.clear(); presenters.clear() },
+    close() { if (closed) return; closed = true; avatar=null; preview=null; presenting = false; loading = null; sequence++; broadcast(); for (const response of listeners) response.end(); listeners.clear(); presenters.clear() },
   }
 }

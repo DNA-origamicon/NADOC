@@ -3,6 +3,7 @@ import { createVRCommitRefresh } from './vr_commit_refresh.js'
 export function createVRSweepCommit({ preflight, transaction, api, getState, sendFeedback, onOutcome = () => {} }) {
   let sequence = 0
   let busy = false
+  let edited = null
   async function acknowledge(event, status, reason, committed) {
     const response = await sendFeedback(event, status, reason, committed)
     if (response?.published !== true) throw new Error('feedback_not_published')
@@ -22,16 +23,37 @@ export function createVRSweepCommit({ preflight, transaction, api, getState, sen
     try {
       if (event.action === 'undo') {
         await acknowledge(event, 'pending', 'undoing')
-        outcome = await transaction.undo({ tool: 'sweep', onCommitted: sceneRefresh.onCommitted })
+        if (edited) {
+          if (edited.design !== getState()?.currentDesign || edited.revision !== api.currentRevisionWatermark()) {
+            outcome = { accepted: false, reason: 'undo_stale_desktop_changed' }; edited = null
+          } else {
+            const result = await api.undo({ onCommitted: sceneRefresh.onCommitted })
+            outcome = { accepted: !!result, reason: result ? 'undone' : 'undo_failed', transaction: edited.transaction }
+            if (result) edited = null
+          }
+        } else outcome = await transaction.undo({ tool: 'sweep', onCommitted: sceneRefresh.onCommitted })
       } else {
         const plan = preflight.takeValidatedPlan(event.configSequence)
         const args = plan?.commit?.arguments
-        if (plan?.kind !== 'sweep' || plan.commit.apiMethod !== 'createSweep') {
+        if (plan?.kind !== 'sweep' || !['createSweep', 'editFeature'].includes(plan.commit.apiMethod)) {
           outcome = { accepted: false, reason: 'validated_draft_required' }
         } else if (args.expected_design_id !== getState()?.currentDesign?.id ||
                    args.expected_revision !== api.currentRevisionWatermark()) {
           outcome = { accepted: false, reason: 'document_changed' }
+        } else if (plan.commit.apiMethod === 'editFeature') {
+          const reference = plan.editReference
+          const entry = getState()?.currentDesign?.feature_log?.[reference?.index]
+          if (!entry || entry.id !== reference.feature_id || reference.revision !== api.currentRevisionWatermark()) {
+            outcome = { accepted: false, reason: 'sweep_edit_stale' }
+          } else {
+            await acknowledge(event, 'pending', 'committing')
+            const result = await api.editFeature(reference.index, args)
+            const token = { targetIdentity: null, targetKind: 'none', featureLogEntryId: entry.id }
+            outcome = { accepted: !!result, reason: result ? 'committed' : 'commit_failed', transaction: token }
+            if (result) { transaction.clear(); edited = { design: getState().currentDesign, revision: api.currentRevisionWatermark(), transaction: token } }
+          }
         } else {
+          edited = null
           await acknowledge(event, 'pending', 'committing')
           outcome = await transaction.commit({ tool: 'sweep', targetKey: plan.targetIdentity,
             targetIdentity: null, targetKind: 'none', execute: async () => {
@@ -69,6 +91,6 @@ export function createVRSweepCommit({ preflight, transaction, api, getState, sen
           !Number.isSafeInteger(event.sequence) || event.sequence < 1) return null
       return run(event)
     },
-    reset() { if (!busy) sequence = 0 },
+    reset() { if (!busy) { sequence = 0; edited = null } },
   }
 }

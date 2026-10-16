@@ -966,20 +966,18 @@ inline const std::vector<SidebarTab> kSidebarTabs = {
   {0, "vr", "VR", {
     {"vr-desktop", "View desktop", "VR", "desktop", {}},
     {"vr-head-light", "Head-following lighting: Off", "VR", "vr:head-light", {}},
-    {"qr-cube-calibrate", "Calibrate cube", "VR", "qr:cube", {}},
-    {"qr-cube-status", "Keep cube fixed; scan all five faces", "VR", "qr:cube-status", {}},
     {"vr-exit", "Exit VR", "VR", "vr:exit", {}},
   }},
   {0, "share", "Share", {
-    {"share-avatar", "Show VR model", "Share", "share:avatar", {}},
-    {"qr-calibrate", "Calibrate QR code", "Share", "qr:calibrate", {}},
-    {"qr-status", "QR not calibrated", "Share", "qr:status", {}},
-    {"share-desktop", "Start sharing and manage links on desktop", "Share", "", {}},
-    {"share-source", "Perspective source: desktop camera", "Share", "", {}},
+    {"share-start", "Start presentation", "Share", "share:start", {}},
     {"share-active", "Presentation active", "Share", "share:status", {}},
+    {"share-guests", "0 active / 0 waiting", "Share", "share:guests", {}},
+    {"share-admit", "Admit new guests", "Share", "share:admit", {}},
+    {"share-avatar", "Show VR model", "Share", "share:avatar", {}},
     {"share-pause", "Pause perspective", "Share", "share:pause", {}},
-    {"share-resume", "Resume perspective", "Share", "share:resume", {}},
+    {"share-resume", "Share headset perspective", "Share", "share:resume", {}},
     {"share-end", "End presentation (all links)", "Share", "share:end", {}},
+    {"share-source", "Headset view is smoothed for guests", "Share", "", {}},
   }},
 };
 inline const std::vector<unsigned> kSidebarColoringMasks = {5,7,15,15,7,15,0,5,0,0,7,5};

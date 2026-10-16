@@ -9,7 +9,7 @@ import { createPreparedHost } from './prepared_view_host.mjs'
 test('local editor broadcasts update the existing invitation and guest cookie, with stale writes rejected', async t => {
   const root = await mkdtemp(join(tmpdir(), 'nadoc-editor-room-')); t.after(() => rm(root, { recursive: true, force: true }))
   await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
-  const host = await createPreparedHost({ dist: root }); t.after(host.stop)
+  const host = await createPreparedHost({ maxGuests: 4, dist: root }); t.after(host.stop)
   await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
   const base = `http://127.0.0.1:${host.server.address().port}`; host.setPublicBase(base)
   const share = host.createShare(Buffer.from('NADOCVW1before')), endpoint = `${base}/meeting/${share.id}`
@@ -18,13 +18,13 @@ test('local editor broadcasts update the existing invitation and guest cookie, w
   const cookie = joinResponse.headers.get('set-cookie').split(';')[0]
   const joinGuest = () => fetch(endpoint + '/join', { method: 'POST', headers: { Origin: base }, body: JSON.stringify({ name: 'Guest', token: new URLSearchParams(new URL(share.url).hash.slice(1)).get('invite') }) })
   for (let i = 0; i < 3; i++) assert.equal((await joinGuest()).status, 200)
-  assert.equal((await joinGuest()).status, 409)
+  assert.equal((await joinGuest()).status, 202)
   const route = `${base}/host/shares/${share.id}/broadcast/`
   assert.equal((await fetch(route + 'start', { method: 'POST', headers: { Cookie: cookie } })).status, 403)
   const started = await (await fetch(route + 'start', { method: 'POST', headers: auth })).json()
   const headers = { ...auth, 'X-NADOC-Broadcast': started.lease }
   assert.ok(started.lease)
-  assert.equal((await joinGuest()).status, 409)
+  assert.equal((await joinGuest()).status, 202)
   assert.equal((await fetch(route + 'view-lock', { method: 'POST', headers: auth, body: JSON.stringify({ locked: true }) })).status, 200)
   assert.equal((await (await fetch(endpoint + '/status', { headers: { Cookie: cookie } })).json()).presentation.viewLocked, true)
 
@@ -52,7 +52,7 @@ test('only the presenter can publish; late guests receive the latest snapshot-bo
   const root = await mkdtemp(join(tmpdir(), 'nadoc-room-test-')); t.after(() => rm(root, { recursive: true, force: true }))
   await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
   let now = Date.now()
-  const host = await createPreparedHost({ dist: root, now: () => now }); t.after(host.stop)
+  const host = await createPreparedHost({ maxGuests: 4, dist: root, now: () => now }); t.after(host.stop)
   await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
   const base = `http://127.0.0.1:${host.server.address().port}`; host.setPublicBase(base)
   const share = host.createShare(Buffer.from('NADOCVW1room')), endpoint = base + `/meeting/${share.id}`
@@ -76,10 +76,10 @@ test('only the presenter can publish; late guests receive the latest snapshot-bo
   assert.match(new TextDecoder().decode((await reader.read()).value), /"presenting":false/)
   await reader.cancel()
   await joinRoom(share.url); await joinRoom(share.url); await joinRoom(share.url)
-  assert.equal((await joinRoom(share.url)).status, 409)
+  assert.equal((await joinRoom(share.url)).status, 202)
   const second = host.createShare(Buffer.from('NADOCVW1second'))
   const joinOther = () => fetch(base + `/meeting/${second.id}/join`, { method: 'POST', headers: { Origin: base }, body: JSON.stringify({ token: new URLSearchParams(new URL(second.url).hash.slice(1)).get('invite'), name: 'Other room' }) })
-  assert.equal((await joinOther()).status, 409) // limit is across snapshots
+  assert.equal((await joinOther()).status, 202) // limit is across snapshots
   now += 120001
   assert.equal((await joinOther()).status, 200) // disconnected leases are reclaimed
   const resume = (cookie, url, role) => fetch(endpoint + '/join', { method: 'POST', headers: { Origin: base, Cookie: cookie }, body: JSON.stringify({ resume: true, role, token: new URLSearchParams(new URL(url).hash.slice(1)).get('invite') }) })
@@ -91,7 +91,7 @@ test('only the presenter can publish; late guests receive the latest snapshot-bo
   await joinRoom(share.url); await joinRoom(share.url) // four guest slots occupied
   assert.equal((await fetch(endpoint + '/leave', { method: 'POST', headers: { Origin: base, Cookie: freshCookie } })).status, 403)
   assert.equal((await fetch(endpoint + '/leave', { method: 'POST', headers: { Origin: base, Cookie: pc } })).status, 200)
-  assert.equal((await joinRoom(share.url)).status, 409) // the host can still return to a full room
+  assert.equal((await joinRoom(share.url)).status, 202) // the host can still return to a full room
   assert.equal((await post(pc)).status, 403)
   const away = await (await fetch(endpoint + '/status', { headers: { Cookie: freshCookie } })).json()
   assert.equal(away.presentation.presenting, false)
@@ -123,7 +123,7 @@ test('only the presenter can publish; late guests receive the latest snapshot-bo
 test('internet guests require the password and HTTPS origin; management is on a separate listener', async t => {
   const root = await mkdtemp(join(tmpdir(), 'nadoc-host-test-')); t.after(() => rm(root, { recursive: true, force: true }))
   await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
-  const publicOrigin = 'https://meeting.example', host = await createPreparedHost({ dist: root, publicOrigin }); t.after(host.stop)
+  const publicOrigin = 'https://meeting.example', host = await createPreparedHost({ maxGuests: 4, dist: root, publicOrigin }); t.after(host.stop)
   await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
   await new Promise(ok => host.controlServer.listen(0, '127.0.0.1', ok))
   const base = `http://127.0.0.1:${host.server.address().port}`, control = `http://127.0.0.1:${host.controlServer.address().port}`
@@ -145,7 +145,7 @@ test('internet guests require the password and HTTPS origin; management is on a 
   const scene = await fetch(base + endpoint + '/scene', { headers: { Cookie: cookie.split(';')[0] } })
   assert.equal(await scene.text(), 'NADOCVW1internet')
   assert.equal((await fetch(control + '/viewer.html')).status, 404)
-  for (let i = 0; i < 60; i++) await joinRoom('incorrect')
+  for (let i = 0; i < 240; i++) await joinRoom('incorrect')
   assert.equal((await joinRoom('incorrect')).status, 429)
   host.stop(); await assert.rejects(fetch(control + '/host/shares', { headers: auth }))
 })
@@ -159,7 +159,7 @@ test('invite, session limit, exact file surface, expiry and stop protect the pac
   await writeFile(join(root, 'secret.txt'), 'must not be served')
   await writeFile(join(root, 'scene.nadocview'), 'NADOCVW1test')
   let clock = 1000
-  const host = await createPreparedHost({ dist: root, packagePath: join(root, 'scene.nadocview'), lifetimeMs: 10000, now: () => clock })
+  const host = await createPreparedHost({ maxGuests: 4, dist: root, packagePath: join(root, 'scene.nadocview'), lifetimeMs: 10000, now: () => clock })
   t.after(host.stop)
   await new Promise(resolve => host.server.listen(0, '127.0.0.1', resolve))
   const base = `http://127.0.0.1:${host.server.address().port}`
@@ -181,7 +181,7 @@ test('invite, session limit, exact file surface, expiry and stop protect the pac
   assert.equal(scene.headers.get('cache-control'), 'no-store')
   assert.equal(await scene.text(), 'NADOCVW1test')
   for (const name of ['B', 'C', 'D']) assert.equal((await joinView(host.invite, name)).status, 200)
-  assert.equal((await joinView(host.invite, 'E')).status, 409)
+  assert.equal((await joinView(host.invite, 'E')).status, 202)
   assert.equal((await joinView(host.invite, 'Alice', base, cookie)).status, 200)
   clock = 11000
   assert.equal((await get('/meeting/scene', cookie)).status, 410)
@@ -193,7 +193,7 @@ test('invite, session limit, exact file surface, expiry and stop protect the pac
 test('part-specific links isolate snapshots and cookies and revoke independently', async t => {
   const root = await mkdtemp(join(tmpdir(), 'nadoc-host-test-')); t.after(() => rm(root, { recursive: true, force: true }))
   await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
-  const host = await createPreparedHost({ dist: root }); t.after(host.stop)
+  const host = await createPreparedHost({ maxGuests: 4, dist: root }); t.after(host.stop)
   await new Promise(resolve => host.server.listen(0, '127.0.0.1', resolve))
   const base = `http://127.0.0.1:${host.server.address().port}`; host.setPublicBase(base)
   const auth = { Authorization: `Bearer ${host.controlToken}` }
@@ -217,7 +217,7 @@ test('part-specific links isolate snapshots and cookies and revoke independently
 test('reauthentication rotates cookies, revokes old streams, and bounds streams per session', async t => {
   const root = await mkdtemp(join(tmpdir(), 'nadoc-session-audit-')); t.after(() => rm(root, { recursive: true, force: true }))
   await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
-  const host = await createPreparedHost({ dist: root }); t.after(host.stop)
+  const host = await createPreparedHost({ maxGuests: 4, dist: root }); t.after(host.stop)
   await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
   const base = `http://127.0.0.1:${host.server.address().port}`; host.setPublicBase(base)
   const share = host.createShare(Buffer.from('NADOCVW1session')), endpoint = `${base}/meeting/${share.id}`
@@ -251,7 +251,7 @@ test('host expiry closes an already authenticated event stream without another r
   const root = await mkdtemp(join(tmpdir(), 'nadoc-expiry-audit-')); t.after(() => rm(root, { recursive: true, force: true }))
   await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
   let clock = 1000
-  const host = await createPreparedHost({ dist: root, lifetimeMs: 1000, now: () => clock }); t.after(host.stop)
+  const host = await createPreparedHost({ maxGuests: 4, dist: root, lifetimeMs: 1000, now: () => clock }); t.after(host.stop)
   await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
   const base = `http://127.0.0.1:${host.server.address().port}`; host.setPublicBase(base)
   const share = host.createShare(Buffer.from('NADOCVW1expiry')), endpoint = `${base}/meeting/${share.id}`
@@ -269,7 +269,7 @@ test('public hosting refuses invitations until verified and exposes only a probe
   const root = await mkdtemp(join(tmpdir(), 'nadoc-public-ready-')); t.after(() => rm(root, { recursive: true, force: true }))
   await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
   let access = { state: 'dns_pending', message: 'Public DNS is not ready' }
-  const host = await createPreparedHost({ dist: root, publicOrigin: 'https://host.example.ts.net', getPublicAccess: () => access }); t.after(host.stop)
+  const host = await createPreparedHost({ maxGuests: 4, dist: root, publicOrigin: 'https://host.example.ts.net', getPublicAccess: () => access }); t.after(host.stop)
   await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
   const base = `http://127.0.0.1:${host.server.address().port}`
   assert.throws(() => host.createShare(Buffer.from('NADOCVW1test')), /Public DNS/)
@@ -287,7 +287,7 @@ test('persistent gateway stays ready across idle time, per-presentation expiry a
   await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
   let time = Date.now()
   const lifetimeMs = 2 * 60 * 60 * 1000
-  const host = await createPreparedHost({ dist: root, persistent: true, lifetimeMs, now: () => time }); t.after(host.stop)
+  const host = await createPreparedHost({ maxGuests: 4, dist: root, persistent: true, lifetimeMs, now: () => time }); t.after(host.stop)
   await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
   const base = `http://127.0.0.1:${host.server.address().port}`; host.setPublicBase(base)
   const auth = { Authorization: `Bearer ${host.controlToken}` }
@@ -321,7 +321,7 @@ test('managed gateway shuts down if its editor server stops renewing ownership',
   const root = await mkdtemp(join(tmpdir(), 'nadoc-owner-')); t.after(() => rm(root, { recursive: true, force: true }))
   await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
   let time = Date.now()
-  const host = await createPreparedHost({ dist: root, persistent: true, ownerLeaseMs: 90000, now: () => time }); t.after(host.stop)
+  const host = await createPreparedHost({ maxGuests: 4, dist: root, persistent: true, ownerLeaseMs: 90000, now: () => time }); t.after(host.stop)
   await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
   const base = `http://127.0.0.1:${host.server.address().port}`, auth = { Authorization: `Bearer ${host.controlToken}` }
   time += 80000
@@ -339,7 +339,7 @@ test('QR invitation grants guest-only name-based entry, preserves passwords and 
   await mkdir(join(root, 'assets')); await writeFile(join(root, 'viewer.html'), 'viewer')
   let time = Date.now()
   const origin = 'https://meeting.example.test'
-  const host = await createPreparedHost({ dist: root, publicOrigin: origin, now: () => time }); t.after(host.stop)
+  const host = await createPreparedHost({ maxGuests: 4, dist: root, publicOrigin: origin, now: () => time }); t.after(host.stop)
   await new Promise(ok => host.server.listen(0, '127.0.0.1', ok))
   const base = `http://127.0.0.1:${host.server.address().port}`
   const share = host.createShare(Buffer.from('NADOCVW1qr')), other = host.createShare(Buffer.from('NADOCVW1other'))

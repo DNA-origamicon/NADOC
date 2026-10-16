@@ -29,18 +29,18 @@ class SweepPanel {
         m.rowScroll={};m.focus.reset();m.hovered.clear();
     }
     void refresh(std::array<SidebarMenu,2>& menus,const SweepDraft& draft,size_t cells,bool square,
-        const std::string& strands,bool ligate,const std::string& status,const std::string& plane="XY",const std::string& totalBp="CALCULATING") {
+        const std::string& strands,bool ligate,const std::string& status,const std::string& plane="XY",const std::string& totalBp="CALCULATING",bool editing=false) {
         if(!active)return;
         const RefreshState state{draft.revision,draft.selected,cells,draft.step,square,ligate,
-            draft.freeDrawArmed,draft.drawing,draft.smoothingStrength,strands,status,plane,totalBp};
+            draft.freeDrawArmed,draft.drawing,draft.smoothingStrength,strands,status,plane,totalBp,editing};
         if(refreshState_==state && menus[1].customTab && menus[1].tab().key=="sweep")return;
         refreshState_=state;
-        SidebarTab tab{1,"sweep",draft.step==1?"Sweep - Paint lattice":"Sweep - Define path",{}};
+        SidebarTab tab{1,"sweep",editing?"Edit Sweep - Define path":draft.step==1?"Sweep - Paint lattice":"Sweep - Define path",{}};
         auto row=[&](const std::string& id,const std::string& label,const std::string& detail="",const std::string& action="") {
             tab.rows.push_back({"sweep:"+id,label,detail,action.empty()?"sweep:"+id:action,{}});
         };
-        row("back","BACK",status);
-        row("confirm",draft.step==1?"NEXT":"CONFIRM",std::to_string(cells)+" HELICES");
+        row("back",editing?"CANCEL":"BACK",status,editing?"sweep:cancel":"sweep:back");
+        row("confirm",editing?"APPLY":draft.step==1?"NEXT":"CONFIRM",std::to_string(cells)+" HELICES");
         if(draft.step==1) {
             row("cancel","CANCEL","STEP 1 OF 2 - PAINT LATTICE");
             row("plane","SWEEP FROM "+plane);
@@ -80,7 +80,7 @@ class SweepPanel {
     }
  private:
     using RefreshState=std::tuple<uint64_t,size_t,size_t,int,bool,bool,bool,bool,float,
-        std::string,std::string,std::string,std::string>;
+        std::string,std::string,std::string,std::string,bool>;
     std::optional<RefreshState> refreshState_;
 };
 }

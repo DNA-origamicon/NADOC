@@ -68,3 +68,10 @@
 .meeting-target[hidden], .meeting-target [hidden] { display: none !important; }
 
 .meeting-target--presentation [data-guest-qr] { width: min(420px, 100%); }
+.presentation-controls [data-guest-management] { position: relative; }
+.presentation-controls [data-guest-management] summary { cursor: pointer; }
+.presentation-controls [data-admission-guests] { position: absolute; right: 0; top: calc(100% + 8px); min-width: 220px; max-height: 45vh; overflow: auto; padding: 12px; background: var(--color-bg-surface); border: 1px solid var(--color-border-strong); border-radius: 8px; }
+.presentation-controls [data-admission-guests] > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 0; }
+
+.presentation-controls { width: max-content; flex-wrap: wrap; }
+.presentation-controls [data-admission-count] { white-space: nowrap; font-size: 12px; }

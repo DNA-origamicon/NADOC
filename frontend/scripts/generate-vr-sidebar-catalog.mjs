@@ -157,20 +157,18 @@ for (const [id,label] of routingActions) tabs.find(tab=>tab.key==='tools').rows.
 tabs.push({side:'left',key:'vr',label:'VR',rows:[
   ['vr-desktop','View desktop','desktop'],
   ['vr-head-light','Head-following lighting: Off','vr:head-light'],
-  ['qr-cube-calibrate','Calibrate cube','qr:cube'],
-  ['qr-cube-status','Keep cube fixed; scan all five faces','qr:cube-status'],
   ['vr-exit','Exit VR','vr:exit'],
 ].map(([id,label,action])=>({id,label,action,section:'VR',kind:'button',options:[],source:'frontend/scripts/generate-vr-sidebar-catalog.mjs',reason:''}))})
 tabs.push({side:'left',key:'share',label:'Share',rows:[
-  ['share-avatar','Show VR model','share:avatar'],
-  ['qr-calibrate','Calibrate QR code','qr:calibrate'],
-  ['qr-status','QR not calibrated','qr:status'],
-  ['share-desktop','Start sharing and manage links on desktop',''],
-  ['share-source','Perspective source: desktop camera',''],
+  ['share-start','Start presentation','share:start'],
   ['share-active','Presentation active','share:status'],
+  ['share-guests','0 active / 0 waiting','share:guests'],
+  ['share-admit','Admit new guests','share:admit'],
+  ['share-avatar','Show VR model','share:avatar'],
   ['share-pause','Pause perspective','share:pause'],
-  ['share-resume','Resume perspective','share:resume'],
+  ['share-resume','Share headset perspective','share:resume'],
   ['share-end','End presentation (all links)','share:end'],
+  ['share-source','Headset view is smoothed for guests',''],
 ].map(([id,label,action])=>({id,label,action,section:'Share',kind:'button',options:[],source:'frontend/src/scene/vr_share.js',reason:action?'':'Desktop only'}))})
 // Select options are separate discoverable disabled choices, preserving all values.
 for (const tab of tabs) tab.rows = tab.rows.flatMap(row => [row, ...row.options.map(o => ({...row,id:`${row.id}:option:${o.value}`,label:`${row.label}: ${o.label}`,kind:'option',options:[],action:'',reason:'Not supported in VR yet'}))])

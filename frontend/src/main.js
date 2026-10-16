@@ -1,3 +1,4 @@
+import { openVRSweepEdit } from './scene/vr_sweep_edit.js'
 import { createVRFeatureLog } from './scene/vr_feature_log.js'
 import { initReferenceModels } from './scene/reference_models.js'
 import { initNativePlacementIntegrityMonitor } from './viewer/native_placement.js'
@@ -5821,7 +5822,9 @@ async function main() {
   // ── Feature Log panel ────────────────────────────────────────────────────────
   _partFeatureLogPanel = initFeatureLogPanel(store, {
     showSeekPreview: createFeatureSeekPreview(scene),
-    onEditSweep: (entry, index) => sweepPanel.edit(entry, index),
+    onEditSweep: (entry, index, options) => options?.nativeVR
+      ? openVRSweepEdit({ entry, index, api, getState: store.getState })
+      : sweepPanel.edit(entry, index),
     api: {
       ...api,
       seekFeatures:         _seekFeaturesWithDelta,

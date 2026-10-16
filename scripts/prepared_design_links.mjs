@@ -22,8 +22,10 @@ export async function createDesignLinks(file) {
     ensure(key, reset = false) {
       const task = writes.then(async () => {
         if (typeof key !== 'string' || !/^(part|assembly):[^\x00-\x1f]{1,200}$/.test(key)) throw new Error('Open a design before creating its link.')
-        if (links.has(key) && !reset) return links.get(key)
-        const link = { key, id: randomBytes(16).toString('hex'), invite: randomBytes(32).toString('hex'), qrToken: randomBytes(32).toString('hex'), password: randomBytes(12).toString('base64url') }
+        const existing = links.get(key)
+        if (existing?.displayPassword && !reset) return existing
+        // Add display access without rotating any printed invitation credential.
+        const link = existing && !reset ? { ...existing, displayPassword: randomBytes(18).toString('base64url') } : { displayPassword: randomBytes(18).toString('base64url'), key, id: randomBytes(16).toString('hex'), invite: randomBytes(32).toString('hex'), qrToken: randomBytes(32).toString('hex'), password: randomBytes(12).toString('base64url') }
         const next = new Map(links).set(key, link)
         if (file) {
           await mkdir(dirname(file), { recursive: true, mode: 0o700 })

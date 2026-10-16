@@ -170,3 +170,40 @@ def test_sweep_orientations_survive_transport_and_warning_preview_is_sequenced(t
     assert path.read_text().rstrip().endswith(' 1234')
     with pytest.raises(ValueError):
         VRToolPreflightFeedbackRequest(**{**body.model_dump(),'sweep_preview':{'path':[],'cloud':[],'bases':[], 'warning_segments':[0]}})
+
+
+def test_saved_sweep_opens_native_edit_without_mutation_and_rejects_stale_target(tmp_path, monkeypatch):
+    from backend.api import state, routes_vr as vr, doc_context
+    from backend.core.models import Design
+    state.set_design(Design())
+    client = TestClient(app)
+    result = client.post('/api/design/sweep', json=dict(cells=[[0, 0], [0, 1]], points_nm=[[0, 0, 0], [0, 0, 10]], ligate_adjacent=False))
+    assert result.status_code == 201, result.text
+    design, revision = state.get_design_with_revision()
+    entry = design.feature_log[0]
+    before = design.model_dump(mode='json')
+    path = tmp_path / 'event'
+    monkeypatch.setattr(vr, '_require_local', lambda request: None)
+    monkeypatch.setattr(vr, '_read_state', lambda: {'doc_id': 'test', 'event_path': str(path)})
+    monkeypatch.setattr(doc_context, 'get_current_doc', lambda: 'test')
+    body = dict(index=0, feature_id=entry.id, expected_design_id=design.id, expected_revision=revision)
+    response = client.post('/api/vr/sweep-edit', json=body)
+    assert response.status_code == 200, response.text
+    payload = (tmp_path / 'event.sweep-edit').read_text()
+    assert payload.startswith('NADOC_SWEEP_EDIT_1 ')
+    assert 'XY 0 both 0' in payload
+    assert state.get_or_404().model_dump(mode='json') == before
+    assert state.get_design_with_revision()[1] == revision
+    for patch in ({'expected_revision': revision - 1}, {'feature_id': 'missing'}, {'index': 1}, {'expected_design_id': 'other'}):
+        assert client.post('/api/vr/sweep-edit', json={**body, **patch}).status_code == 409
+    monkeypatch.setattr(doc_context, 'get_current_doc', lambda: 'other')
+    assert client.post('/api/vr/sweep-edit', json=body).status_code == 409
+    assert (tmp_path / 'event.sweep-edit').read_text() == payload
+
+
+def test_sweep_edit_reference_round_trip_and_rejection():
+    reference = dict(index=2, revision=8, feature_id='feature', design_id='design')
+    assert _parse_tool_config({**draft(), 'edit_reference': reference}, 1)['edit_reference'] == reference
+    for patch in ({'index': -1}, {'index': True}, {'revision': '8'}, {'feature_id': ''}):
+        with pytest.raises(ValueError):
+            _parse_tool_config({**draft(), 'edit_reference': {**reference, **patch}}, 1)

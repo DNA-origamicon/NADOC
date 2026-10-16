@@ -1,3 +1,6 @@
+import { initSweepPreviewPublisher } from './sweep_preview_publisher.js'
+import { headsetCamera } from './headset_camera.js'
+import { docHeaders } from '../shared/doc_id.js'
 import { initEditorDrawings } from './editor_drawings.js'
 import { initAnimationSharing } from './animation_sharing.js'
 import { initMeetingTarget } from './meeting_target_ui.js'
@@ -13,6 +16,7 @@ import { initEditorBroadcast } from './editor_broadcast.js'
 import { initJobSharing } from './job_sharing.js'
 import { initPresentationControls } from './presentation_controls.js'
 export function initShareLink({ exportView, broadcast, document: doc = document, fetch: request = fetch, clipboard = navigator.clipboard }) {
+  let perspectiveSource = 'desktop'
   let preservingPerspective = false, nativeFlight = null, animationActive = false
   const presenter = broadcast ? initEditorBroadcast({ ...broadcast, document: doc, fetch: request, embedded: true, onStop: reason => {
     if (!preservingPerspective) { const wasSharing = controls.perspective; controls.setPerspective(false); if (wasSharing) controls.error(reason) }
@@ -69,19 +73,29 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
     preservingPerspective = true
     try { await presenter?.stop(); await nativeFlight?.catch(() => {}) } finally { preservingPerspective = false }
   }
-  async function sharePerspective(enabled, refreshScene = false) {
+  async function sharePerspective(enabled, refreshScene = false, source = perspectiveSource) {
     if (animationActive) return
+    if (enabled && source === 'headset' && !capabilities.includes('headset-follow-v1')) throw new Error('Restart presentation hosting to share the headset perspective.')
+    if (enabled && source === 'headset' && jobs?.active) throw new Error('Stop trajectory sharing before sharing the headset perspective.')
     if (jobs?.active) return jobs.setPerspective(enabled)
     if (!enabled) return stopNative()
     const share = currentRoom()
     if (!share || !presenter) throw new Error('Create a presentation link in an open design first.')
-    nativeFlight = presenter.present(share, { refreshScene, capabilities })
+    if (presenter.active && source !== perspectiveSource) await stopNative()
+    perspectiveSource = source
+    controls.setSource(source)
+    const getCamera = source === 'headset' ? async () => {
+      const response = await request('/api/vr/presenter-pose?camera=1', { headers: docHeaders(), signal: AbortSignal.timeout(2000) })
+      if (!response.ok) throw new Error('Headset tracking unavailable')
+      return headsetCamera((await response.json()).avatar)
+    } : null
+    nativeFlight = presenter.present(share, { refreshScene, capabilities, getCamera })
     try {
       await nativeFlight
       if (presenter.revision) shares = shares.map(value => value.id === share.id ? { ...value, revision: presenter.revision } : value)
     } finally { nativeFlight = null }
   }
-  const controls = initPresentationControls({ document: doc, onPerspective: sharePerspective, onEnd: stopHosting, onViewLock: async locked => {
+  const controls = initPresentationControls({ document: doc, onPerspective: (enabled, options) => sharePerspective(enabled, false, options?.nativeVR ? 'headset' : 'desktop'), onEnd: stopHosting, onAdmit: () => manageAdmission(), onRemoveGuest: id => manageAdmission(id), onViewLock: async locked => {
     if (!capabilities.includes('view-lock-v1')) throw new Error('Restart presentation hosting to lock guest perspectives.')
     if (locked && !controls.perspective) {
       if (!jobs?.active) { nativeTools?.clear(); await nativeTools?.settle() }
@@ -146,24 +160,38 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
       if (controls.perspective) await sharePerspective(true)
     },
   }) : null
+  const sweepPreview = initSweepPreviewPublisher({getRoom:currentRoom,
+    available:()=>!busy && !disposed && capabilities.includes('sweep-preview-v1'), request,
+    publish:(room,body)=>api(`shares/${room.id}/preview`,{method:'POST',body:JSON.stringify(body)}),
+    onError:message=>controls.error(message)})
   const vrAvatar = initVRAvatarPublisher({ getRoom: currentRoom,
     available: () => !busy && !disposed && capabilities.includes('vr-avatar-v1'), request,
     publish: (room, body) => api(`shares/${room.id}/avatar`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }),
     onError: message => controls.error(message),
   })
+  async function manageAdmission(guestId) {
+    if (!capabilities.includes('guest-admission-v1')) throw new Error('Restart presentation hosting to enable guest admission.')
+    const room = currentRoom(); if (!room) throw new Error('Start a presentation first.')
+    const value = await api(`shares/${room.id}/admission${guestId ? '/' + guestId : ''}`, {method: guestId ? 'DELETE' : 'POST'})
+    shares = shares.map(share => share.id === room.id ? {...share, admission:value} : share)
+    syncControls()
+  }
   function syncControls() {
     if (broadcast?.store?.getState().presentationActive !== (shares.length > 0)) broadcast?.store?.setState?.({ presentationActive: shares.length > 0 })
     controls.setActive(shares.length > 0)
+    controls.setAdmission(currentRoom()?.admission)
     controls.setParticipants(currentRoom()?.participants ?? [], { serverTime: currentRoom()?.serverTime })
     if (!shares.length) void stopNative()
     jobs?.refresh()
   }
   function clearError() {
+    controls.error('')
     el('[data-error]').hidden = true
     el('[data-error]').open = false
     el('[data-error-log]').textContent = ''
   }
   function reportError(error) {
+    controls.error(String(error.message ?? error))
     status.textContent = ''
     const details = el('[data-error]')
     if (details.hidden) details.open = false
@@ -217,6 +245,7 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
     for (const [key, label, value] of [
       ['link', 'Link', currentInvitation()?.url],
       ['password', 'Password', currentInvitation()?.password],
+      ['display-password', 'Demo display password', currentInvitation()?.displayPassword],
     ]) {
       let row = el(`[data-share-field="${key}"]`)
       if (!value) { row?.remove(); continue }
@@ -227,13 +256,14 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
         caption.textContent = label; caption.htmlFor = `share-${key}-value`
         const line = doc.createElement('div'); line.className = 'sharing-copy-row'
         const input = doc.createElement('input')
-        input.type = 'text'; input.readOnly = true; input.spellcheck = false
-        input.className = 'input'; input.id = caption.htmlFor; input.dataset[key] = ''
+        input.type = key === 'display-password' ? 'password' : 'text'; input.readOnly = true; input.spellcheck = false
+        input.className = 'input'; input.id = caption.htmlFor; input.setAttribute(`data-${key}`, '')
         input.addEventListener('dblclick', () => input.select())
         const copy = doc.createElement('button')
         copy.type = 'button'; copy.className = 'btn sharing-copy-button'
         copy.setAttribute(`data-copy-${key}`, '')
-        copy.setAttribute('aria-label', `Copy ${key}`); copy.title = `Copy ${key}`
+        const copyLabel = key === 'display-password' ? 'demo display password' : key
+        copy.setAttribute('aria-label', `Copy ${copyLabel}`); copy.title = `Copy ${copyLabel}`
         copy.append(icon('copy', { size: 16 }))
         copy.onclick = async () => {
           clearError()
@@ -339,7 +369,7 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
       void ensureInvitation().catch(reportError)
     }
   }
-  const startFromMenu = () => { if (!dialog.open) dialog.showModal(); void create() }
+  const startFromMenu = event => { if (!event.detail?.nativeVR && !dialog.open) dialog.showModal(); void create() }
   const resetLink = async () => {
     if (busy || refreshing) return
     busy = true; revision++; clearError(); syncButtons()
@@ -393,5 +423,5 @@ export function initShareLink({ exportView, broadcast, document: doc = document,
       finally { polling = false }
     }, 5000)
     return jobs
-  }, dispose() { drawings?.dispose(); animation?.dispose(); meetingTarget.dispose(); vrAvatar.dispose(); documentClosed(); unsubscribeDocument?.(); hostWindow?.removeEventListener('nadoc:document-reset', documentClosed); hostWindow?.removeEventListener('pagehide', documentClosed); nativeTools?.dispose(); clearInterval(statusTimer); disposed = true; hostingAbort.abort(new DOMException('Sharing closed', 'AbortError')); preservingPerspective = true; broadcast?.prepared.cancelSharedCamera?.(); jobs?.dispose(); presenter?.dispose(); controls.dispose(); if (oldBroadcast) oldBroadcast.hidden = false; startTrigger?.removeEventListener('click', startFromMenu); trigger?.removeEventListener('click', show); qrTrigger?.removeEventListener('click', showQR); stopTrigger?.removeEventListener('click', stopFromMenu); dialog.remove() } }
+  }, dispose() { drawings?.dispose(); animation?.dispose(); meetingTarget.dispose(); sweepPreview.dispose(); vrAvatar.dispose(); documentClosed(); unsubscribeDocument?.(); hostWindow?.removeEventListener('nadoc:document-reset', documentClosed); hostWindow?.removeEventListener('pagehide', documentClosed); nativeTools?.dispose(); clearInterval(statusTimer); disposed = true; hostingAbort.abort(new DOMException('Sharing closed', 'AbortError')); preservingPerspective = true; broadcast?.prepared.cancelSharedCamera?.(); jobs?.dispose(); presenter?.dispose(); controls.dispose(); if (oldBroadcast) oldBroadcast.hidden = false; startTrigger?.removeEventListener('click', startFromMenu); trigger?.removeEventListener('click', show); qrTrigger?.removeEventListener('click', showQR); stopTrigger?.removeEventListener('click', stopFromMenu); dialog.remove() } }
 }

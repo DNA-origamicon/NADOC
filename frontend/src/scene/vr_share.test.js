@@ -32,3 +32,47 @@ it('keeps failed perspective state retryable and exposes desktop errors', async 
   expect(vr.state().busy).toBe(false)
   controls.dispose()
 })
+it('VR admits through the same desktop action, deduplicates it, and reports counts', async () => {
+  const onAdmit=vi.fn(),controls=initPresentationControls({onAdmit,onEnd:vi.fn(),onPerspective:vi.fn()})
+  controls.setActive(true);controls.setAdmission({active:16,waiting:8,guests:[]})
+  const vr=createVRShare({request:async()=>({ok:true})})
+  await vr.activate({sequence:1,action:'admit'});await vr.activate({sequence:1,action:'admit'})
+  expect(onAdmit).toHaveBeenCalledOnce();expect(vr.state()).toMatchObject({activeGuests:16,waitingGuests:8});controls.dispose()
+})
+
+it('perspective lock does not block audience admission',async()=>{
+ const onAdmit=vi.fn(),controls=initPresentationControls({onAdmit,onEnd:vi.fn(),onPerspective:vi.fn()})
+ controls.setActive(true);document.querySelector('.presentation-view-lock').click()
+ await vi.waitFor(()=>expect(controls.viewLocked).toBe(true))
+ const vr=createVRShare({request:async()=>({ok:true})})
+ expect(vr.state()).toMatchObject({busy:false,perspectiveAvailable:false})
+ await vr.activate({sequence:1,action:'admit'});expect(onAdmit).toHaveBeenCalledOnce();controls.dispose()
+})
+
+it('starts through the desktop lifecycle without a dialog and ignores duplicate or busy starts', async () => {
+  document.body.innerHTML = '<button id="menu-presentation-start"></button><dialog id="share-link-dialog"></dialog>'
+  const button = document.getElementById('menu-presentation-start'), start = vi.fn(event => {
+    expect(event.detail.nativeVR).toBe(true)
+    document.getElementById('share-link-dialog').setAttribute('aria-busy', 'true')
+  })
+  button.addEventListener('click', start)
+  const vr = createVRShare({ request: async () => ({ ok: true }) })
+  button.disabled = true
+  await vr.activate({ sequence: 1, action: 'start' })
+  expect(start).not.toHaveBeenCalled()
+  button.disabled = false
+  await vr.activate({ sequence: 2, action: 'start' })
+  await vr.activate({ sequence: 2, action: 'start' })
+  await vr.activate({ sequence: 3, action: 'start' })
+  expect(start).toHaveBeenCalledOnce()
+  expect(vr.state().busy).toBe(true)
+})
+
+it('switches an already shared desktop perspective to headset sharing from VR', async () => {
+ const onPerspective=vi.fn(),controls=initPresentationControls({onPerspective,onEnd:vi.fn()})
+ controls.setActive(true);controls.setPerspective(true);controls.setSource('desktop')
+ const vr=createVRShare({request:async()=>({ok:true})})
+ await vr.activate({sequence:1,action:'resume'})
+ expect(onPerspective).toHaveBeenCalledWith(true,{nativeVR:true})
+ controls.dispose()
+})

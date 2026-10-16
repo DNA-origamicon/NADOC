@@ -264,7 +264,7 @@ class SidebarMenu {
                 const std::string id=tab().key+":"+(back?"back":(tab().key=="move" || tab().key=="join")?"apply":"confirm");
                 const auto row=std::find_if(tab().rows.begin(),tab().rows.end(),[&](const auto& r){return r.id==id;});
                 if(row==tab().rows.end())continue;
-                out.push_back({id,back?"BACK":(tab().key=="move" || tab().key=="join")?"APPLY":tab().key=="sweep"?row->label:"CONFIRM","",row->action,
+                out.push_back({id,back?(tab().key=="sweep"?row->label:"BACK"):(tab().key=="move" || tab().key=="join")?"APPLY":tab().key=="sweep"?row->label:"CONFIRM","",row->action,
                     {{back?left:middle+gap,footerY()-ui_style::footerHalfHeight},{back?middle-gap:right,footerY()+ui_style::footerHalfHeight}},available(row->action)});
             }
         }

@@ -26,14 +26,14 @@ it('reports blocked printing and never prints an expired invitation', () => {
   expect(onError.mock.calls[0][0].message).toContain('Allow the print window')
   ui.setShare({ ...share, expiresAt: 999 }); button.click(); expect(open).toHaveBeenCalledOnce()
 })
-it('uses the separate QR credential and exposes the larger tracking print only for QR-enabled hosts', () => {
+it('uses the separate QR credential without AR printing controls', () => {
   const { ui, root } = setup()
   ui.setShare(share)
-  expect(root.querySelector('[data-print-mobile-target]').hidden).toBe(true)
+  expect(root.querySelector('[data-print-mobile-target]')).toBeNull()
   const old = root.querySelector('svg').outerHTML
   ui.setShare({ ...share, qrUrl: 'https://example.test/#invite=qr-only&entry=qr' })
   expect(root.querySelector('svg').outerHTML).not.toBe(old)
-  expect(root.querySelector('[data-print-mobile-target]').hidden).toBe(false)
+  expect(root.querySelectorAll('button')).toHaveLength(1)
   expect(root.textContent).toContain('guest name')
   ui.dispose()
 })

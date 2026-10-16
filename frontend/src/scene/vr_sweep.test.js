@@ -1,3 +1,4 @@
+import { buildVRSweepPlan } from './vr_sweep_plan.js'
 import { describe, expect, it, vi } from 'vitest'
 import { normalizeVRToolConfig, vrToolConfigMissing } from './vr_tool_config.js'
 import { buildVRParameterizedToolPlan, evaluateVRToolPreflight } from './vr_tool_execution_plan.js'
@@ -188,4 +189,32 @@ it('starts Sweep export before desktop sync and preserves acknowledgement orderi
   expect((await done).accepted).toBe(true)
   expect(h.sendFeedback.mock.calls.map(call => call[1])).toEqual(['pending', 'succeeded'])
   expect(h.api.refreshNativeVRScene).toHaveBeenCalledOnce()
+})
+
+it.each([false, true])('edits the saved Sweep and guards Undo against later changes (stale=%s)', async stale => {
+  const d = design()
+  const params = { cells: [[0,0]], plane: 'XY', points_nm: [[0,0,0],[0,0,10]], sweep_id: 'saved', source_helix_id: 'source', source_end: 'start', detach_source: true, strand_filter: 'staples', ligate_adjacent: false }
+  d.feature_log = [{ id: 'saved-entry', op_kind: 'sweep', params }]
+  const input = { ...draft(), edit_reference: { index: 0, revision: 4, feature_id: 'saved-entry', design_id: d.id } }
+  const planned = buildVRSweepPlan(input, d, 4)
+  expect(planned.plan.commit).toMatchObject({ apiMethod: 'editFeature', featureIndex: 0, arguments: { ...params, points_nm: input.points_nm, orientations_deg: null, expected_revision: 4 } })
+  expect(buildVRSweepPlan(input, d, 5).reason).toBe('sweep_edit_stale')
+  expect(buildVRSweepPlan(input, { ...d, feature_log: [] }, 4).reason).toBe('sweep_edit_stale')
+  let revision = 4
+  const state = { currentDesign: d }
+  const api = { currentRevisionWatermark: () => revision, previewSweep: vi.fn(async () => ({ length_nm: 20, revision })),
+    editFeature: vi.fn(async () => { state.currentDesign = { ...d }; revision++; return {} }), createSweep: vi.fn(),
+    undo: vi.fn(async () => { state.currentDesign = d; revision++; return {} }), refreshNativeVRScene: vi.fn(async () => ({ published: true })) }
+  const preflight = createVRToolPreflightCoordinator({ sendFeedback: async () => ({ published: true }) })
+  await preflight.request(7, input, { design: d, api })
+  expect(api.previewSweep).toHaveBeenCalledWith(expect.objectContaining({ source_helix_id: 'source' }), 0, { includeGeometry: true })
+  const controller = createVRSweepCommit({ preflight, transaction: { clear: vi.fn() }, api, getState: () => state, sendFeedback: async () => ({ published: true }) })
+  const event = { mode: 'sweep', action: 'confirm', targetKind: 'none', targetIdentity: null, targetOwnerTokens: [], sequence: 1, configSequence: 7 }
+  expect((await controller.handle(event)).accepted).toBe(true)
+  expect(api.editFeature).toHaveBeenCalledWith(0, expect.objectContaining({ sweep_id: 'saved', expected_revision: 4 }))
+  expect(api.createSweep).not.toHaveBeenCalled()
+  expect(state.currentDesign.feature_log).toHaveLength(1)
+  if (stale) { revision++; state.currentDesign = { ...state.currentDesign } }
+  expect((await controller.handle({ ...event, action: 'undo', sequence: 2 })).reason).toBe(stale ? 'undo_stale_desktop_changed' : 'undone')
+  expect(api.undo).toHaveBeenCalledTimes(stale ? 0 : 1)
 })

@@ -63,7 +63,7 @@ class CompositorRecording {
         posix_spawn_file_actions_adddup2(&actions,pipes[1],STDOUT_FILENO);
         posix_spawn_file_actions_addclose(&actions,pipes[0]);
         posix_spawn_file_actions_addclose(&actions,pipes[1]);
-        std::vector<std::string> args={"/usr/bin/python3",std::string(NADOC_QR_ROOT)+"/tools/vr_capture/viewer_record.py",
+        std::vector<std::string> args={"/usr/bin/python3",std::string(NADOC_SOURCE_ROOT)+"/tools/vr_capture/viewer_record.py",
             "--directory",directory_,"--viewer-pid",std::to_string(getpid()),"--context",context,
             "--seconds",std::to_string(seconds)};
         std::vector<char*> argv;for(auto& arg:args)argv.push_back(arg.data());argv.push_back(nullptr);

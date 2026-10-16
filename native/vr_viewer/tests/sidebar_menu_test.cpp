@@ -56,7 +56,12 @@ int main() {
     }
     const auto vrTab=std::find_if(nadoc_vr::kSidebarTabs.begin(),nadoc_vr::kSidebarTabs.end(),[](const auto& tab){return tab.key=="vr";});
     require(vrTab!=nadoc_vr::kSidebarTabs.end(),"VR tab missing");
-    require(std::any_of(vrTab->rows.begin(),vrTab->rows.end(),[](const auto& row){return row.id=="qr-cube-calibrate" && row.action=="qr:cube";}),"Cube calibration must be available in VR tab");
+    for(const auto& tab:nadoc_vr::kSidebarTabs)for(const auto& row:tab.rows)
+        require(!row.action.starts_with("qr:"),"Retired AR tools exposed in menu");
+    const auto shareTab=std::find_if(nadoc_vr::kSidebarTabs.begin(),nadoc_vr::kSidebarTabs.end(),[](const auto& tab){return tab.key=="share";});
+    require(shareTab!=nadoc_vr::kSidebarTabs.end(),"Share tab missing");
+    for(const auto* action:{"share:start","share:end"})
+        require(std::any_of(shareTab->rows.begin(),shareTab->rows.end(),[&](const auto& row){return row.action==action;}),"Presentation lifecycle action missing");
     nadoc_vr::SidebarMenu part(1);
     require(std::none_of(part.tabs.begin(),part.tabs.end(),[](auto i){return nadoc_vr::kSidebarTabs[i].key=="assembly";}),"Part session exposed Assembly navigation");
     nadoc_vr::MenuFocus focus;
