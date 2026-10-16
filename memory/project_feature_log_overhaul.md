@@ -8,6 +8,22 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 
 ## Current delivery status (2026-10-16)
 
+**Mandatory progress reporting (user request, October 16):** after every major
+engineering update, report completed / estimated total, remaining, changes since
+the previous report, and why scope changed. Baseline B1 is **17 / 38 complete**,
+**21 remaining (12 core-priority, 9 parked assets/provenance)** through `2c15e747`.
+The stable FH-01–FH-38 milestone ledger and exit criteria are in the
+[delivery map](../docs/audits/feature_history_20261014/remaining_standard_part_checkpoints.md#progress-baseline-and-mandatory-update-counts--october-16-2026).
+These are completed implementation milestones, some gated, not percentages of
+user-ready functionality or time. Assemblies and machine-specific VR validation
+are excluded; desktop qualification is included. Planning/test reruns/commits do
+not earn extra credit. Keep the baseline fixed, log every estimate change, and
+decrement completed if an exit reopens. Flag three major checkpoints spent on
+any still-open milestone (cumulative even across alternating work), or total
+growth to 42 (more than 10% over B1).
+Update the ledger and these current counts before each major final response.
+This reporting-only change closes no additional engineering milestone.
+
 **Active user priority:** standard geometry first—extrude, sweep, bend, twist,
 move/rotate and Fine Routing resize/ligate/nick/crossovers/loop-skips. Complete
 recording and preview/commit integrity, history editors, dependency repair,

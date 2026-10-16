@@ -5,6 +5,122 @@ new claim that every registered kind or legacy receipt regenerates. Assemblies
 remain outside the agreed scope. Existing molecular builders and constants stay
 unchanged; each new adapter must preserve their complete admitted output.
 
+## Progress baseline and mandatory update counts — October 16, 2026
+
+**Completed: 17. Estimated total: 38. Remaining: 21 — 12 core-priority and
+9 parked asset/provenance milestones.** Baseline B1 is reconstructed from the
+implementation and evidence through `2c15e747`. No earlier numerical target was
+agreed; do not invent historical estimate deltas. This is a milestone estimate,
+not a count of messages/commits or a percentage of time or user-ready features.
+Core estimates have moderate confidence; parked work has lower confidence.
+
+One counted update is a named, reviewable milestone with a fixed exit. Completed
+implementation foundations below have scoped tests/evidence; some remain gated.
+Their outstanding desktop, performance and rollout exits are explicitly included
+in the remaining milestones. No G1–G5 phase is claimed complete by this count.
+Assemblies and machine-specific VR validation are excluded and remain deferred;
+desktop qualification is included. Previously completed asset work is counted
+once; its remaining rollout is parked, not removed from the total.
+
+### Completed implementation milestones
+
+| ID | Status | Delivered boundary and representative evidence |
+|---|---|---|
+| FH-01 | Done | Failure-atomic recording, shared executable registry and proven legacy cleanup: `bd9248cc`, [foundation](implementation.md#implemented-foundation). Initial research/audit is supporting evidence, not an extra update. |
+| FH-02 | Done | Explicit roots, full-authoring proof, typed dependencies and bounded verification: `6336d1fe`, [P0–P2 exit audit](implementation.md#p0p2-exit-audit-october-14-continuation). |
+| FH-03 | Done | Admitted native DNA contracts and downstream API regeneration/edit/delete: `a8bc9fc9`, [native coverage](implementation.md#p3-expanded-native-coverage--october-15-continuation). Desktop editor parity remains open. |
+| FH-04 | Done | Typed generated DNA scopes and branch/Join/connectivity compilation: `87a5b3f5`, `2b323824`, [native evidence](validation_native_jobs.json). Generated assets excluded. |
+| FH-05 | Done | Isolated evaluation/commit lifecycle and pinned native CPD contracts: `febac3a0`, `2b323824`, [contract](cpd_conversion_contract.md), [worker evidence](validation_native_jobs.json). |
+| FH-06 | Done | Portable pinned sources, bounded document transport and supported import subsets: `8a4a9dec`–`60d3ea52`, [transport](document_transport.md), [caDNAno contract](cadnano_route_contract.md). Free-protein rollout remains gated. |
+| FH-07 | Done | Bounded native asset/conjugate/duplex contracts and typed rigid copy: `9084838c`–`28def718`, [duplex](validation_inputs_duplex_p4.json), [conjugates](validation_conjugates_transport_p4.json), [copy](validation_element_copy_p4.json). Admitted subsets only. |
+| FH-08 | Done | Pending/applied connection contract foundation and ordinary adapters: `acad1d51`–`c9f1d185`, [ordinary DNA](ordinary_connection_owned_route_plan.md), [NP adapter](ordinary_np_application_route_plan.md). Applied ordinary routes remain gated. |
+| FH-09 | Done | Explicit repair evaluator, isolated reference selection and reviewed input metadata: `60d3ea52`–`971251e3`, [selection](validation_selection_drafts_p5.json), [input catalog](validation_repair_inputs_p5.json). Core-tool adapters remain incomplete. |
+| FH-10 | Done | Portable saved proposals, exact expectations, source restoration and guarded evaluation/Apply: `aecc7812`, `3128a402`, [saved-job evidence](validation_saved_repair_jobs_p5.json). |
+| FH-11 | Done | Desktop repair controller/panel implementation: `f6f3c5ad`, [UI evidence](validation_repair_ui1_p5.json). Wired and automated-tested; desktop qualification remains open. |
+| FH-12 | Done | Private candidate comparison backend and owned viewers: `3b3a6452`, `30acd990`, `eefe292f`, [comparison](validation_repair_comparison_frontend_p5.json), [DNA viewer](validation_repair_dna_comparison_frontend_p5.json). DNA comparison remains gated. |
+| FH-13 | Done | Registered batches, trusted strict policy, one-shot permits and closed HTTP boundary: `f7c20fbc`, `cec8aa55`, `7d02a5f2`, [publication checkpoint](strict_publication_checkpoint.md). Public batch gate remains closed. |
+| FH-14 | Done | Immutable revision ownership, typed persistence and owned cold recovery: `7886cd42`–`800a093c`, [persistence](immutable_part_persistence_plan.md), [recovery evidence](validation_immutable_recovery_transport.json). Public immutable rollout remains open. |
+| FH-15 | Done | Honest physical-input freshness and isolated oxDNA preparation foundation: `764b413b`–`ad800573`, [freshness](physical_freshness_plan.md), [preparation evidence](validation_oxdna_preparation_route.json). Full receipts and owned-preparation rollout remain open. |
+| FH-16 | Done | Core transaction hardening and complete private bend/twist editor implementation: `35a96ef7`–`1ae1137f`, [lifecycle](validation_core_geometry_lifecycle.json), [editor](validation_deformation_history_editor.json). Isolated editor/HTTP rollout remains gated. |
+| FH-17 | Done | Versioned group-creation frame-owner closure and explicit live-part legacy repair: `64a262a2`, `2c15e747`, [prevention](validation_grouping_structure.json), [repair](validation_grouping_repair.json). Invalid-file recovery and desktop checks remain open. |
+
+### Remaining core-priority milestones
+
+Each row begins with zero major engineering checkpoints spent since B1. Track
+future checkpoints against these IDs in the update ledger below. This accounting
+starts now; historical work on an unfinished row is not claimed to be zero.
+
+| ID | Status | Fixed remaining exit |
+|---|---|---|
+| FH-18 | Remaining | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. |
+| FH-19 | Remaining | Recover known invalid saved recipes: preserve original bytes, bounded read-only admission, explicit repair, valid recovered-copy publication. Next implementation target. |
+| FH-20 | Remaining | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
+| FH-21 | Remaining | Extrusion history editor: eligible earlier edits through downstream features, stable identities, complete ordinary controls and validation. |
+| FH-22 | Remaining | Sweep history editor: input-based isolated preview, recovery-independent Apply/Cancel and downstream rebuild. |
+| FH-23 | Remaining | Move/rotate history editing: complete parameter controls, guarded commit, downstream edits and undo/persistence parity. |
+| FH-24 | Remaining | Fine Routing child editors: resize, ligate, nick, crossovers and loop/skips editable through ordinary UI with downstream replay. |
+| FH-25 | Remaining | Ordinary DNA connection completion: explicit supported core matrix including required combined/direct/indirect paths, recorded and qualified. |
+| FH-26 | Remaining | Core dependency repair: earliest failure/blocked descendants, reviewed input/reference replacement or explicit cascade, candidate review, Apply/undo/reload. |
+| FH-27 | Remaining | Integrated desktop geometry acceptance: representative full workflows, measured latency/memory and broad regression exits; relevant app debt and proven-unused legacy paths closed. Test reruns alone do not close this. |
+| FH-28 | Remaining | Qualify existing immutable host lifecycle: durable creation/recovery/publication on actual paths, cancellation and retained-state limits accepted. |
+| FH-29 | Remaining | Core registered automation release: complete geometry catalog under trusted policy, editable UI/script equivalence, bypass/stale/tamper closure and qualified public gates. |
+
+### Parked milestones still included in the estimate
+
+Resume after the core-priority exits, preserving scientific authorization rules.
+Ordinary DNA connections belong to FH-25, not the parked nanoparticle bucket.
+
+| ID | Status | Fixed remaining exit |
+|---|---|---|
+| FH-30 | Parked | Applied NP connections and pending alternatives: complete ordinary lifecycle, ownership, cold replay, desktop/performance qualification and rollout. |
+| FH-31 | Parked | NP fitting, bound motion and multi-anchor relaxation: explicit inputs, numerical provenance and complete admitted lifecycle. |
+| FH-32 | Parked | Coupled biotin attachment lifecycle: pinned tether/coating sources and complete create/remove contracts. |
+| FH-33 | Parked | Protein import/library placement rollout: original bytes, portability and qualified source capture; explicit measured exclusions remain honest. |
+| FH-34 | Parked | scadnano import: complete source/options/identity/loss contract and independent regeneration. |
+| FH-35 | Parked | DNA-PDB import: complete source/conversion/identity/loss contract and independent regeneration. |
+| FH-36 | Parked | Generated asset composition: ordinary commands through final connections, cold replay and upstream edits. |
+| FH-37 | Parked | oxDNA preparation/run provenance: owned archive and package/solver/attempt/restart receipts, qualified rollout. |
+| FH-38 | Parked | NAMD/atomistic-reference provenance: complete declared consumed-input receipts and honest current/stale/unknown reporting. |
+
+### Reporting and scope-control rule
+
+After **every major engineering update**, update this ledger and the project
+memory, and include this line in the user-facing final report even when no
+milestone closed:
+
+> Overhaul: **17 / 38 complete**; **21 remaining** (12 core, 9 parked).
+> Change this update: **+0 completed, +0 total**. Baseline total: **38**.
+
+Replace the numbers with current counts, name the milestone worked/closed, and
+explain every total or scope change. Counts are whole milestones, not fractional
+credit or a time estimate. Supporting bug fixes, test runs, refactors, commits,
+planning and reporting-only updates do not create additional completion credit.
+A gated implementation can close only its explicit implementation milestone;
+its rollout/qualification remains open. Never silently move unfinished core work
+to parked status, drop it from the denominator, or weaken an exit to close it.
+
+Keep IDs and B1 fixed. Split work into substeps without increasing completed
+credit; the parent closes only when its full exit passes. If genuinely new scope
+requires extra milestones, append IDs and record old/new totals, reason, evidence
+and whether it is newly requested scope or an estimate correction. Reopened
+milestones reduce the completed count, with the reason recorded. Deferral alone
+never counts as completion. This prevents splitting/relabeling from manufacturing
+progress while still allowing honest estimate changes.
+
+Flag **task growth** after three major checkpoints spent on any still-open
+milestone; count cumulatively since B1 even when work alternates between IDs.
+Report checkpoints spent, remaining exit and
+the proposed containment/refactor/re-estimate before continuing. Flag **overhaul
+scope growth** when the total reaches 42 (at least 10% above B1's 38), while still
+disclosing every smaller change immediately. These are review triggers, not
+automatic permission requests or reasons to lower validation requirements.
+FH-24, FH-25 and the parked scientific families are the largest uncertainty areas;
+bound their matrices before implementation rather than expanding them indefinitely.
+
+| Update | Implementation basis / milestone worked | Closed or reopened | Completed | Estimated total | Core remaining | Parked remaining | Total delta / reason |
+|---|---|---|---|---|---|---|---|
+| B1 · 2026-10-16 | Evidence through `2c15e747`; retrospective fixed milestone baseline | FH-01–FH-17 documented; no new engineering closure in this reporting update | 17 | 38 | 12 | 9 | Initial estimate; no earlier numerical baseline |
+
 ## Active goal and priority override — October 15, 2026
 
 User direction supersedes the asset-first ordering below. Complete the ordinary

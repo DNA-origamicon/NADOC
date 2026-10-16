@@ -11,6 +11,10 @@ regression debt are recorded in [the checkpoint evidence](validation_pause_check
 
 ## Delivery sequence
 
+Progress accounting uses the fixed [FH milestone ledger](remaining_standard_part_checkpoints.md#progress-baseline-and-mandatory-update-counts--october-16-2026),
+with completed/estimated-total counts and visible scope changes after every major
+update. Historical sections below are evidence, not additional completion credit.
+
 **Active delivery order:** core geometry and Fine Routing precede asset expansion.
 Use [G1–G6](remaining_standard_part_checkpoints.md) for current sequencing; the
 original P-phase table below retains architectural scope, not queue priority.
