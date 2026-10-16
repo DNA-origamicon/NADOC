@@ -10,9 +10,9 @@ Scope approved October 14, 2026: implement standard-part validation, editability
 | P1 | Standard-part recording transactions, executable replay registry and evidenced cleanup | Foundation implemented below. Retain legacy callbacks and compatibility recovery; no claim of general isolated evaluation |
 | P2 | Explicit recipe roots/versions, authoritative-field classification, read-only verification and incremental dependencies | Implementation exit checks complete: independent nonempty replay, content-pinned roots, typed dependencies, fingerprints, bounded capture/jobs and stale/cancel handling. Supported-family expansion continues in P3/P4; validation debt below remains explicit |
 | P3 | Native DNA command families and generated construction | DNA implementation exit checks recorded below, including joined/connectivity input compilation and bounded native-source CPD conversion/relaxation. Registered kinds retain method/action restrictions; their count is not universal operation coverage. Generated asset/attachment histories remain in P4 |
-| P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol, pinned small protein/catalog/aptamer inputs, supported protein conjugation and duplex lifecycle/relaxation implemented. Native unapplied NP connection create/rename/delete now pass independent replay; motion with pending connections and applied connections are next. Full import/attachment coverage and complete physical-input receipts remain open |
+| P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol, pinned small protein/catalog/aptamer inputs, supported protein conjugation and duplex lifecycle/relaxation implemented. Native unapplied NP connection create/rename/delete and coupled pending-handle motion pass independent replay; applied connection lifecycle is next. Full import/attachment coverage and complete physical-input receipts remain open |
 | P5 | Standard-part repair, drafts, desktop and part-mode VR | Saved draft evaluation/apply, reference selection, source staging/restoration and persistence pass. Desktop UI-1 and narrow invalid-gold repair pass. Private complete gold/QD/free-protein comparisons pass automated UI checks; complete DNA comparison, broader invalid-family selectors and native VR remain open. App review remains pending |
-| P6 | Strict standard-part agent transactions and legacy retirement | Private policy/permits, closed strict HTTP dispatch, immutable internal ownership and outside-lock evaluation/publication pass. Atomic typed records and pending-safe autosave pass. Public immutable creation/batch stay disabled until cold restore, complete lifecycle and responsiveness qualification. Catalog expansion, explicit imports and later replay reuse remain open |
+| P6 | Strict standard-part agent transactions and legacy retirement | Private policy/permits, closed strict HTTP dispatch, immutable internal ownership and outside-lock evaluation/publication pass. Atomic typed records and pending-safe autosave pass. Cold-qualified recovery and durable initial creation pass focused lifecycle checks. Private byte transport now moves source decode/projection into the admitted worker; public immutable creation/batch stay disabled pending responsiveness and memory qualification. Catalog expansion, explicit imports and later replay reuse remain open |
 
 Assemblies are not an exit condition for any phase above. Existing assembly compatibility tests may catch collateral changes to shared infrastructure, but new assembly features and fixes remain deferred.
 
@@ -67,14 +67,33 @@ following [the remaining standard-part checkpoints](remaining_standard_part_chec
 Keep unsupported contracts unverified, retain the import/native distinction, and
 keep full proof off automatic edit, frame and scrub paths.
 
-Latest completed checkpoints are private comparison UI (`30acd990`, 8,263 full
-frontend tests passed, one skipped), typed pending-safe persistence (`13ce0289`,
-136 focused tests), and native pending NP connection metadata (`ee90a927`, 161
-distinct focused tests). Their detailed limits and failures remain in the linked
-validation ledgers. NP correctness passed 30 repeated lifecycles per case, but
-larger-model median requests rose from about 17 to 24 ms and latency qualification
-is still open. Internal immutable capture/publication passes real strict HTTP and
-cold replay; separate performance evidence must precede public enablement.
+Recent completed checkpoints include pending NP motion (`a24b60b7`, 204 focused
+cases including 35 new), cold-qualified strict recovery (`d52a30a7`, 318 distinct
+cases), durable initial strict creation (`05707b38`, 283 distinct cases), and
+strict byte worker transport (`d412e402`, 64 cases). The host wiring continuation
+(`78386957`, 147 distinct cases) keeps the exact sealed source reservation in the
+request process and moves source decode/projection into the admitted child.
+Existing mutable capture remains unchanged; the obsolete parent-only immutable
+capture helper was removed. Repeated HTTP latency, retained-memory and concurrent
+light-request measurements must pass before public storage/batch enablement.
+
+Complete native DNA comparison has a bounded lossless version-2 DTO and private
+renderer (`eefe292f`). Focused frontend 195, full frontend 8,291 (one skipped),
+and three actual Python/Node/HTTP cases pass. Exact response serialization
+reduced the largest observed concurrent scalar request from 165.58 to 16.46 ms
+across nine actual HTTP comparisons, with no output or byte-limit change.
+The first CPU scene run is retained as an explicit-GC memory diagnostic;
+natural-GC timing and browser/GPU/native VR qualification remain separate.
+The public version-two comparison gate remains false.
+
+Nanoparticle lifecycle ownership corrections (`91756139`) passed 181 distinct
+cases; new applied-native and ordinary pending-overhang contracts are now being
+implemented from reproduced failures. The strict cold-DNA serializer correction
+(`72815c1d`) passed 115 distinct cases, including cancellation during owned
+decode. Its corrected three-repeat byte benchmark completed 12 publications and
+four independent cold proofs. All 12 scoped RSS observations stayed within the
+predeclared +256 MiB target, but these small-source cases do not qualify full
+retention or repeated latency. Public storage/batch gates remain false.
 
 Broad-suite/environment debt is separate: the latest FAST selection collected
 no executable tests because the archived CPD fixture was absent and a new

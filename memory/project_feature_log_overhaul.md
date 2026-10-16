@@ -34,8 +34,11 @@ batch permits and a closed strict HTTP route table are implemented. Strict HTTP
 refuses unknown routes before body acquisition and exposes only reviewed scalar
 reads, empty creation and existing batch/verify jobs. Public batch stays gated.
 Internal immutable revision ownership and outside-lock batch/verify capture and
-publication are implemented. Typed durable recovery, public lifecycle wiring and
-actual HTTP latency qualification remain open. This is
+publication are implemented. Typed durable recovery and durable initial creation now pass focused
+lifecycle checks. Strict byte transport moves source decode/projection into the
+admitted child; request preparation retains the exact sealed source reference.
+Public gates remain false pending actual HTTP responsiveness, retained-memory
+and complete lifecycle qualification. This is
 not authentication or a sandbox for unrestricted local Python.
 
 An experimental ordinary free-protein importer records pinned original bytes and
@@ -59,9 +62,13 @@ Private desktop comparison now covers complete uncoated gold/QD and free-protein
 parts, bound to the existing repair job, draft, revision and expiry. One isolated
 renderer shares a camera across published and evaluated views; no candidate is
 installed in ordinary display, export or simulation state. Full frontend checks
-passed 8,263 tests (one skipped). App/E2E review is MV-47 pending. Complete DNA
-comparison and native VR remain separate increments; coarse comparison does not
-authorize a molecular geometry upgrade.
+passed 8,263 tests (one skipped). App/E2E review is MV-47 pending. Complete DNA comparison now has a bounded lossless DTO and private native
+renderer. Focused/frontend full checks passed 195/8,291 cases (one full-suite
+skip), and real Python-to-Node/HTTP parity passed. Route-local explicit JSON
+serialization reduced measured concurrent scalar latency from 165.58 to 16.46 ms
+in nine actual HTTP comparisons. The version-two public gate remains false;
+natural-GC resource qualification, browser/GPU and native VR remain outstanding.
+No molecular geometry upgrade was made.
 
 oxDNA/NAMD job APIs now expose additive physical `input_freshness`: equal legacy
 partial hashes remain unknown, while known comparable changes are stale. This

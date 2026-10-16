@@ -5,7 +5,7 @@ new claim that every registered kind or legacy receipt regenerates. Assemblies
 remain outside the agreed scope. Existing molecular builders and constants stay
 unchanged; each new adapter must preserve their complete admitted output.
 
-## Completed pending candidates; next P4 checkpoint: coupled motion and application
+## Completed pending candidates and motion; next P4 checkpoint: application
 
 Implemented in `ee90a927`: the existing `nanoparticle-connection-version-create`, `-patch` and
 `-delete` kinds for **unapplied candidates only**. The visible overhang panel
@@ -38,8 +38,10 @@ correct publication and five native cold proofs, but larger-model medians rose
 from about 17 to 24 ms, with native request outliers reaching 88.57 ms. Latency
 remains unqualified; remove duplicate transaction-local reference scans and
 measure allocation/GC overlap before expanding this path. Existing global
-capture/recovery limits do not change. Motion with pending versions is the next
-input contract; application remains a separate topology-changing continuation.
+capture/recovery limits do not change. Motion with pending versions subsequently passed native cold proof and 204
+focused cases in `a24b60b7` (35 new). Its 20-cell diagnostic retained correctness
+but did not qualify latency. Applied connections remain a separate topology-
+changing continuation; the ownership/constraint audit precedes their contract.
 
 ## Finite P4 remainder
 
@@ -70,10 +72,13 @@ replaces this per-family evidence.
    actionable earliest-error/downstream-blocked displays, explicit dependency
    replacement/cascade, and desktop/part-mode VR parity. Keep failed drafts and
    source repair portable; do not imply verified geometry from saved metadata.
-3. **P6 ownership and responsiveness:** implement the already reviewed exclusive
-   immutable strict revision storage, persistence/transition/retention boundaries,
-   then qualify actual HTTP batch capture/evaluation/publication with concurrent
-   light reads. The public batch gate remains closed until this passes.
+3. **P6 ownership and responsiveness:** exclusive immutable ownership, bounded
+   retention, typed persistence, cold recovery and durable initial creation now
+   have focused implementation evidence. The existing host now sends sealed
+   source bytes to the admitted child without parent decode/projection. Qualify
+   actual HTTP start/evaluation/publication with concurrent light reads and
+   scoped parent/child memory. Public storage/batch gates remain closed until
+   the declared lifecycle, latency and retention criteria pass.
 4. **P6 catalog and policy:** extend the finite public native command catalog to
    the admitted P3/P4 families; imports require explicit host policy and retain
    imported provenance. Close all strict read/write routes against that catalog.

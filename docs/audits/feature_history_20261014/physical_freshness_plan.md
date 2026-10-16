@@ -69,6 +69,141 @@ Compute hashes once from the already-owned preparation input and stream packaged
 
 Meaningful tests: topology/sequence/cluster/residue pose/protein/force-selector changes become stale; camera/color/proposal/recovery-only changes do not; old/missing/version-mismatched receipts remain unknown; source/package tampering and parent restart replacement cannot appear current; source restoration and undo can recover current; session close/reopen and concurrent mutation cannot reuse another comparison; failed/cancelled preparation publishes no receipt; repeated polls reuse cached work; all status paths leave topology and result bytes unchanged. Reuse `test_oxdna_staleness`, `test_md_staleness`, protected loadout and artifact-catalog tests. No production simulation is required for this contract qualification.
 
+## Next finite checkpoint: owned local DNA-only oxDNA inputs
+
+Read-only implementation map, 2026-10-15; no simulation or production change.
+Implement the next receipt at a real preparation/launch boundary, rather than
+adding an unused receipt library or describing all engines as complete.
+
+**Ownership prerequisite:** `routes_oxdna.py:850` takes the current design's
+`without_reference_geometry()` projection. `models.py:3521,3553` implements that
+projection with shallow `model_copy` calls, retaining nested mutable authoring
+objects. Geometry is derived at `routes_oxdna.py:1106`; the design then enters
+threaded preparation at `1122`. Neither a revision label nor a separately
+computed hash proves that these consumers observed the same state. Capture one
+bounded owned physical-input projection before geometry or package I/O, using
+the existing isolation primitives and exact session/source/revision guard. A
+native feature-log proof is a separate claim and is not required to prepare a
+legacy design honestly. Do not widen ordinary capture limits.
+
+| Boundary | Current source | Required evidence |
+|---|---|---|
+| Preparation | `routes_oxdna.py:833`; `_seed_geometry:179`; resolved stages and seeds at `1010–1030` | Owned positive model projection, selected protocol, resolved defaults and seed; no reconstruction from sampled output |
+| Final package | `oxdna_runner.prepare_oxdna_job:541–708` | Final `topology.top`, `conf.dat`, `forces.txt`, copied average-sequence parameter bytes and resolved `stages_spec.json`; any accepted optional file must be in the explicit closure |
+| Actual launch | `oxdna_runner.run_job:1683`, final `render_stage_input:1879`, `_run_oxdna_async:1122/1138` | Actual rendered input and selected files, solver executable/build/backend and relevant runtime identity; requested engine flavor is insufficient |
+| Restart/retry | `_starting_conf:1214`, `resume_point:1377`, retry helpers `1530/1645` | Exact consumed restart frame/configuration digest and actual retry parameters/seed for each attempt; parent job ID is insufficient |
+| Copy/settings/children | `routes_oxdna.py:1249`, `1323`, `1679` and later field/surface children | Refresh the new receipt or mark coverage unknown; never inherit complete receipt authority after changing seed, protocol or frame |
+
+Initial coverage should be a bounded local standard-part DNA2 preparation with
+no particles, proteins, CPD, auxiliary linker geometry, surface/anchor/field
+forces, remote seed chain or atomistic reference. Account explicitly for every
+accepted DNA input: topology and sequence, loop/skip placement, crossovers and
+forced ligations, deformation paths, cluster/domain poses, nucleotide poses and
+ordinary unbound-overhang placement. A closed nested-field inventory must reject
+unreviewed future fields/families. The DNA comparison display DTO is not an
+appropriate physics authority: its deliberately reduced presentation fields do
+not define all physical consumers. Scope admission is a separate small profile;
+final numerical limits require measured preparation/capture qualification.
+
+Use separate preparation and per-attempt receipts. Preparation completion does
+not prove that a process used those files; retries can change the selected
+configuration and resolved protocol. Seal the attempt after final input
+rewrites, immediately before actual spawn. Hash the exact selected frame, never
+an entire trajectory. File closure must be fixed and bounded, with path/symlink
+admission and coordination against NADOC writers; a digest taken before a
+concurrent overwrite is not evidence of the bytes consumed by the solver. The
+receipt records observed input identity, not guaranteed bit-identical stochastic
+output. Solver identity belongs to the actual run; installing a different solver
+later does not itself make that historical run stale.
+
+Keep the existing additive `input_freshness` response and legacy behavior. A
+complete comparable model projection can distinguish current/stale; unavailable
+or incomplete evidence remains unknown. Execution success, artifact availability
+and scientific validity remain independent. Cache current projection comparison
+once per document/revision/profile after the usual source recheck. Polling and
+ordinary mutations must not derive geometry, scan trajectories or hash solver
+executables. Source/file integrity work happens during preparation/launch or an
+explicit bounded verification, outside the global state lock.
+
+The implementation target is a cohesive pure projection/receipt module,
+optional `OxdnaJob` metadata, and thin hooks in the existing create/package/launch
+flow. Preserve existing formulas, stage generation, seed choices and retries.
+Legacy receipts are never retroactively upgraded. Unsupported settings, copies,
+remote jobs and child families remain explicitly unknown until their exact
+closure is supported.
+
+Required tests before claiming complete input coverage:
+
+- Mutation during threaded preparation cannot change the owned projection or
+  create mixed package/lineage evidence; failed or cancelled preparation emits
+  no complete receipt. Session close/reopen cannot reuse a stale comparison.
+- Sequence, loops, cluster/domain/nucleotide poses, deformation and overhang
+  changes become stale; color, names, camera, repair drafts and history-only
+  metadata do not. Unknown shapes and old receipts remain unknown.
+- A fake subprocess captures the actual argv/rendered input/files. Changed
+  restart frames, recovery of the last complete frame, retry seed/dt, or a
+  replaced binary change the appropriate attempt evidence. No solver run is
+  needed for these boundary tests.
+- Copy and settings edits cannot retain the old complete receipt; missing or
+  altered package data cannot appear current through a matching legacy hash.
+- Repeated list/detail calls reuse comparison work and leave topology, physical
+  result bytes and simulation configuration untouched. Benchmark bounded
+  preparation capture and concurrent lightweight requests without a simulation.
+
+NAMD remains the next separate closure. Saved draft loading at
+`routes_md.py:2932` produces a private `Design`; direct current preparation at
+`2938` uses the same shallow projection issue. `_prepare_job_bg:3685` branches
+through oxDNA/mrDNA/BLADE/vacuum seeds. `namd_gbis.py:58` packages PSF/PDB,
+CHARMM files, ENM selections and resolved configurations; `namd_topology.py:784`
+also invokes psfgen/atomistic construction. `namd_runner.py:1902/1929` chooses
+actual binary/thread/device arguments, while other paths select restart
+coordinates/velocities/box files and alter configurations for retries. Even GBIS
+therefore needs a larger source/toolchain closure than the first oxDNA slice.
+
+### Concrete package and ownership seams confirmed in follow-up review
+
+`copy_oxdna_job` (`routes_oxdna.py:1295`) copies topology, configuration,
+snapshot and force/ANM files, but omits the prepared
+`oxDNA2_average_sequence_parameters.txt`. At launch, `oxdna_runner.py:1886`
+passes that path only if it exists; `render_stage_input` then falls back to the
+current bundled parameter file (`oxdna_protocol.py:445`). A copied DNA2 job can
+therefore use different parameter bytes from its source. Write a characterization
+test for this concrete gap before the narrow copy fix; receipt inheritance must
+remain unknown until the copied closure is exact. The official input contract
+makes `seq_dep_file` mandatory when `use_average_seq=false`, and separately
+identifies configuration, topology and RNG seed as consumed inputs.
+[oxDNA input documentation](https://lorenzo-rovigatti.github.io/oxDNA/input.html).
+
+The settings route (`routes_oxdna.py:1323`) checks editable status and later
+rewrites `stages_spec.json` (`1401`, `1479`) without the reservation held by
+start/resume (`1577`). This permits a check/write race with start. Coordinate
+settings and source-copy reads with the existing nonblocking runtime lease;
+do not invent another job owner. Initial preparation is also outside the
+execution lease and needs an explicit preparing-package completion boundary.
+The runtime contract covers cooperating NADOC writers, not arbitrary external
+filesystem modification. Receipt language must retain that distinction.
+
+Final attempt observation belongs after `configure_adaptive_memory_input`
+(`oxdna_runner.py:1137`), because that helper rewrites actual input options.
+Resume changes remaining step count and output cadence (`1780` onward), and
+retry helpers overwrite resolved specs. Store immutable preparation evidence
+and append a separate attempt record, including the runtime generation, selected
+restart bytes, actual parameters and executable identity. A later overwrite of
+`last_conf.dat` must not rewrite earlier attempt provenance. Path hashing alone
+does not freeze subsequently consumed bytes; use a bounded attempt-owned input
+closure or proven descriptor pinning while retaining the same numerical inputs.
+Never substitute a newly installed solver for the historical attempt's identity.
+
+Extend the test-first sequence with copy-parameter preservation, a deterministic
+settings/start reservation race, and a fake subprocess that inspects the final
+adaptive-memory input and every referenced file. Unknown `forces_file`/`parfile`
+paths, symlinks outside the admitted closure, missing packaged parameters and
+unsupported child families cannot acquire a complete receipt. No simulation is
+needed for these ownership and transport tests. Current-projection comparison
+should initially be an explicit bounded inspection; mutable aliases remain a
+barrier to treating a session/revision memo as authoritative. Ordinary job polls
+must not add model traversal, geometry generation or file hashing.
+
 ## Official CAD precedent
 
 SOLIDWORKS exposes separate mesh/result states, including Out of Date, and reruns a required parent study when explicitly running a dependent study. This supports retaining stale output separately from the current model, rather than claiming feature regeneration refreshed physics. [Run Specified Studies](https://help.solidworks.com/2026/english/SolidWorks/Cworks/HIDD_RUN_SPECIFIED_STUDIES.htm).
