@@ -68,6 +68,26 @@ export function initImportMenu(deps) {
 
   // ── Library panel import callbacks (cadnano / scadnano with autodetection) ──────
 
+  async function dissolveImportedClusters(clusters, importedDesign) {
+    const ids = clusters.map(cluster => cluster.id)
+    try {
+      if (store.getState().currentDesign?.id !== importedDesign.id) {
+        throw new Error('The imported document is not current; nothing was saved.')
+      }
+      const result = await api.dissolveClusters(ids)
+      if (!result) throw new Error(store.getState().lastError?.message ?? 'The operation was cancelled or refused.')
+      const current = store.getState().currentDesign
+      const selected = new Set(ids)
+      if (current?.id !== importedDesign.id || (current.cluster_transforms ?? []).some(cluster => selected.has(cluster.id))) {
+        throw new Error('The group removal is not current; nothing was saved.')
+      }
+      return true
+    } catch (error) {
+      showToast(`Could not omit imported groups: ${error.message}`, { severity: 'error' })
+      return false
+    }
+  }
+
   async function importCadnanoWithAutodetection() {
     const input = document.createElement('input')
     input.type = 'file'; input.accept = '.json'
@@ -101,7 +121,7 @@ export function initImportMenu(deps) {
     if (!dest) return
 
     if (dest.includeClusters === false && clusters.length) {
-      for (const cl of clusters) await api.deleteCluster(cl.id)
+      if (!await dissolveImportedClusters(clusters, design)) return
     }
     if (dest.includeOverhangs === false && overhangs.length) {
       await api.clearOverhangs()
@@ -151,7 +171,7 @@ export function initImportMenu(deps) {
     if (!dest) return
 
     if (dest.includeClusters === false && clusters.length) {
-      for (const cl of clusters) await api.deleteCluster(cl.id)
+      if (!await dissolveImportedClusters(clusters, design)) return
     }
     if (dest.includeOverhangs === false && overhangs.length) {
       await api.clearOverhangs()

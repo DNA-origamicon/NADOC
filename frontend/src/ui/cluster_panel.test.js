@@ -10,6 +10,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { initClusterPanel } from './cluster_panel.js'
 import { withClusterDisplay } from '../scene/cluster_entries.js'
+import { showToast } from './toast.js'
+
+vi.mock('./toast.js', () => ({ showToast: vi.fn() }))
 
 function mountDom() {
   document.body.innerHTML = `
@@ -44,6 +47,64 @@ const hexOf = (v) => {
 const swatchBg = (row) => hexOf(swatchOf(row).style.backgroundColor)
 const colorInput = () => document.querySelector('.cluster-style-popover input[type=color]')
 const rangeInput = () => document.querySelector('.cluster-style-popover input[type=range]')
+
+describe('cluster panel — dissolve group', () => {
+  let store, api, panel, visibility
+  const button = () => rows()[0].querySelector('button[aria-label="Dissolve group"]')
+  beforeEach(() => {
+    localStorage.clear(); vi.clearAllMocks(); mountDom()
+    store = createMockStore({ currentDesign: design(), selection: { items: [] }, lastError: { message: 'Group still owns a lattice frame' } })
+    api = { patchCluster: vi.fn(), createCluster: vi.fn(), deleteCluster: vi.fn() }
+    visibility = vi.fn(ids => new Set(ids))
+    panel = initClusterPanel(store, { api, onClusterClick: vi.fn(), onVisibilityChange: visibility })
+    store.setState({ currentDesign: design() })
+    rows()[0].querySelector('button[title="Hide cluster"]').click()
+  })
+  afterEach(() => { panel?.destroy(); document.body.innerHTML = ''; localStorage.clear(); vi.restoreAllMocks() })
+
+  it('names the operation and explains that members are kept', () => {
+    expect(button()).not.toBeNull()
+    expect(button().title).toMatch(/keep members/i)
+  })
+
+  it.each(['null', 'throw'])('keeps a hidden group hidden while pending and after %s refusal', async failure => {
+    let resolve, reject
+    api.deleteCluster.mockImplementation(() => new Promise((done, fail) => { resolve = done; reject = fail }))
+    button().click()
+    expect(api.deleteCluster).toHaveBeenCalledExactlyOnceWith('cA')
+    store.setState({ currentDesign: design() })
+    expect(rows()[0].querySelector('button[title="Show cluster"]')).not.toBeNull()
+    if (failure === 'throw') reject(new Error('Dissolve disconnected'))
+    else resolve(null)
+    await vi.waitFor(() => expect(showToast).toHaveBeenCalledWith(
+      expect.stringContaining(failure === 'throw' ? 'Dissolve disconnected' : 'Group still owns a lattice frame'), { severity: 'error' }))
+    store.setState({ currentDesign: design() })
+    expect(rows()[0].querySelector('button[title="Show cluster"]')).not.toBeNull()
+    expect(visibility).toHaveBeenCalledTimes(1)
+  })
+
+  it('removes the visibility override only after an accepted dissolve', async () => {
+    let resolve
+    api.deleteCluster.mockImplementation(() => new Promise(done => { resolve = done }))
+    button().click(); expect(visibility).toHaveBeenCalledTimes(1)
+    const remaining = { ...design(), cluster_transforms: [design().cluster_transforms[1]] }
+    store.setState({ currentDesign: remaining }); resolve({ design: remaining })
+    await vi.waitFor(() => expect(visibility).toHaveBeenCalledTimes(2))
+    expect(visibility.mock.results.at(-1).value).toEqual(new Set())
+    expect(rows()).toHaveLength(1); expect(rows()[0].dataset.clusterId).toBe('cB')
+  })
+
+  it('does not prune visibility when a non-null stale response leaves the current group present', async () => {
+    let resolve
+    api.deleteCluster.mockImplementation(() => new Promise(done => { resolve = done }))
+    button().click()
+    const remaining = { ...design(), cluster_transforms: [design().cluster_transforms[1]] }
+    resolve({ design: remaining }); await Promise.resolve(); await Promise.resolve()
+    store.setState({ currentDesign: design() })
+    expect(rows()[0].querySelector('button[title="Show cluster"]')).not.toBeNull()
+    expect(visibility).toHaveBeenCalledTimes(1)
+  })
+})
 
 describe('cluster panel — style round trip', () => {
   let store, api, panel, onStylePreview

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { patchCluster, getPersistedDesign, resetRevisionWatermark } from './client.js'
+import * as client from './client.js'
 import { store } from '../state/store.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
 import { activeOperationTiming, finishOperationTiming } from '../perf/operation_timing.js'
@@ -158,5 +159,65 @@ it('ignores a completed ordinary edit after the document is replaced, even if fe
   resolve(response({ ...payload(100, { helix_ids: [] }), ...geometryPayload() }))
   expect(await pending).toBeNull(); expect(store.getState().currentDesign).toBe(replacement)
   expect(store.getState().currentGeometry).toBe(geometry)
+  expect(getPersistedDesign()).toBeNull(); expect(nadocBroadcast.emit).not.toHaveBeenCalled()
+})
+
+const dissolvedPayload = (revision = 1) => {
+  const result = { ...payload(revision), ...geometryPayload() }
+  result.design.cluster_transforms = []
+  result.design.feature_log.at(-1).op_kind = 'cluster-dissolve'
+  return result
+}
+
+it.each(['single', 'batch'])('adopts a %s dissolve with its exact geometry and one recorded response', async mode => {
+  const result = dissolvedPayload(), fetch = transport(result)
+  const ids = Object.freeze(['group', 'other'])
+  expect(await (mode === 'single' ? client.deleteCluster('group') : client.dissolveClusters(ids))).toBe(result)
+  expect(fetch).toHaveBeenCalledTimes(1)
+  const [url, request] = fetch.mock.calls[0]
+  expect(url).toBe(mode === 'single' ? '/api/design/cluster/group' : '/api/design/clusters/dissolve')
+  expect(request.method).toBe(mode === 'single' ? 'DELETE' : 'POST')
+  if (mode === 'batch') expect(JSON.parse(request.body)).toEqual({ cluster_ids: ['group', 'other'] })
+  expect(store.getState().currentDesign.cluster_transforms).toEqual([])
+  expect(store.getState().currentGeometry).toBe(result.nucleotides)
+  expect(store.getState().currentHelixAxes.h.start).toEqual([7, 0, 0])
+  expect(getPersistedDesign().feature_log[0].post_state_gz_b64).toBe('retained-recovery')
+  expect(getPersistedDesign().feature_log.at(-1).op_kind).toBe('cluster-dissolve')
+  expect(nadocBroadcast.emit).toHaveBeenCalledTimes(1)
+})
+
+it.each(['single', 'batch'])('preserves all browser state when %s dissolve is refused', async mode => {
+  const before = store.getState()
+  vi.stubGlobal('fetch', vi.fn(async () => response({ detail: { code: 'group_has_dependencies', message: 'Group is required by a bend' } }, 409)))
+  expect(await (mode === 'single' ? client.deleteCluster('group') : client.dissolveClusters(['group']))).toBeNull()
+  expect(store.getState().currentDesign).toBe(before.currentDesign)
+  expect(store.getState().currentGeometry).toBe(before.currentGeometry)
+  expect(store.getState().lastError).toMatchObject({ status: 409 })
+  expect(getPersistedDesign()).toBeNull(); expect(nadocBroadcast.emit).not.toHaveBeenCalled()
+})
+
+it('does not adopt a late dissolve over a newer same-document edit', async () => {
+  const pending = []
+  vi.stubGlobal('fetch', vi.fn(() => new Promise(resolve => pending.push(resolve))))
+  const old = client.dissolveClusters(['group']), newer = patchCluster('group', { name: 'Retained', helix_ids: ['h'] })
+  await vi.waitFor(() => expect(pending).toHaveLength(2))
+  const latest = { ...payload(3, { name: 'Retained' }), ...geometryPayload(9) }
+  pending[1](response(latest)); await newer
+  pending[0](response(dissolvedPayload(2))); await old
+  expect(store.getState().currentDesign.cluster_transforms[0].name).toBe('Retained')
+  expect(store.getState().currentGeometry).toBe(latest.nucleotides)
+  expect(getPersistedDesign().cluster_transforms[0].name).toBe('Retained')
+  expect(nadocBroadcast.emit).toHaveBeenCalledTimes(1)
+})
+
+it('returns null for a dissolve cancelled by document replacement even when fetch ignores abort', async () => {
+  let resolve
+  vi.stubGlobal('fetch', vi.fn(() => new Promise(done => { resolve = done })))
+  const pending = client.dissolveClusters(['group'])
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+  window.dispatchEvent(new Event('nadoc:document-reset'))
+  const replacement = { ...original(), id: 'replacement' }; store.setState({ currentDesign: replacement })
+  resolve(response(dissolvedPayload(10)))
+  expect(await pending).toBeNull(); expect(store.getState().currentDesign).toBe(replacement)
   expect(getPersistedDesign()).toBeNull(); expect(nadocBroadcast.emit).not.toHaveBeenCalled()
 })

@@ -2243,6 +2243,42 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
 - FH-18 remains open for logged deletion, placement-preserving regrouping and
   auxiliary group lifecycle. MV-48 remains open; no app/performance claim.
 
+### ISSUE-99 continuation — recorded group dissolution (2026-10-16, ADMITTED SUBSET IMPLEMENTED; APP OPEN)
+
+- The old DELETE filtered a live group without recording its inputs. Imported
+  group omission looped through those deletes and ignored failures before Save;
+  timeline creation/pattern/Join restoration could resurrect removed groups.
+- `cluster-dissolve` v1 now records an atomic selected-ID batch under the shared
+  group transaction. Single DELETE and batch POST share bounded typed incoming
+  reference and native placement admission. One undo/revision, input-only replay,
+  producer-edit/cascade and exact new-row recovery payload preservation are tested.
+  The old unlogged-delete implementation and sequential import-removal loops were
+  removed; their tests now assert recorded behavior and failure preservation.
+- Only identity/zero-pivot nonempty groups and eligible empty identity groups
+  are admitted. Posed, repivoted, child/duplex-owned or deformation/pose-overlapping
+  groups refuse rather than move their members. This is an explicit supported
+  subset, not completion of the original placement-preservation milestone.
+- Recovery merges selected presence/order from already decoded snapshots and
+  filters chronological removals after all existing restorers. Later explicit
+  recreation clears a prior removal; histories without this new command retain
+  their existing creation-restoration path and avoid new inventory limits.
+  Rootless response normalization also respects authored removal histories; a
+  later read cannot silently bootstrap their removed groups or refill membership.
+- Moves, Join and pattern baselines now respect explicit recreation lifetimes;
+  imported initial groups and original pattern poses survive backward seek.
+  Missing/evicted dissolution bodies refuse timeline seek with typed 410 before
+  publication; malformed/over-budget metadata refuse with 409. All dissolution
+  PRE/POST bodies are required by this conservative reader, including end seek;
+  native input regeneration remains independent. Ordinary histories retain
+  their prior recovery behavior.
+  A pattern that implicitly reuses a removed ID without explicit creation is
+  refused rather than silently losing its new wrapper during recovery.
+- Sidebar **Dissolve** preserves hidden state on refusal/stale responses. Import
+  omission is one all-or-none request and stops Save on error/cancellation or a
+  superseded result. See [evidence](docs/audits/feature_history_20261014/validation_group_dissolve.json).
+  FH-18 remains open for posed/regrouped and auxiliary lifecycle; actual desktop,
+  serialization/undo/geometry cost and interaction latency remain MV-48/FH-27.
+
 ## ISSUE-100 — Bend/twist history preview replaces canonical state before Apply (2026-10-15, REPRODUCED; OPEN)
 
 - `tests/test_geometry_history_preview_lifecycle.py` mirrors the current desktop
@@ -2386,7 +2422,7 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   desktop All/None, group/plane reversals, undo/redo and save/reopen remain MV-48;
   do not claim ordinary desktop closure until the integration gate is qualified.
 
-## ISSUE-106 — Grouping every helix removes a retained lattice-frame owner (2026-10-16, PREVENTION + LIVE REPAIR IMPLEMENTED; SAVED-FILE RECOVERY/APP OPEN)
+## ISSUE-106 — Grouping every helix removes a retained lattice-frame owner (2026-10-16, PREVENTION + LIVE/SAVED REPAIR IMPLEMENTED; APP OPEN)
 
 - `part_overlay_commands.build("cluster_create", ...)` drops the default group
   when its final helices move into named groups. A retained
@@ -2426,9 +2462,11 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   cover downstream move/bend/twist, save/reload/cold proof, stale revisions,
   cancellation and session changes. Source-free overlay discovery no longer
   serializes typed definitions under the state lock.
-- Still open: definition-only admission for invalid saved files; broader cluster-delete
-  references and logged deletion; actual desktop save/reopen/selection/latency.
-  Retention does not solve regrouping pose loss or grouped-end continuation.
+- Subsequent FH-19 delivery implements bounded saved-file recovery as a separate
+  downloaded copy. FH-18 U4 adds broader typed incoming group-reference refusal
+  and recorded admitted dissolution. Still open: actual desktop save/reopen,
+  selection and latency, plus general posed/regrouped membership and auxiliary
+  group lifecycle. Retention does not solve grouped-end continuation.
 - Validation: **563 distinct backend passes**, including three fresh-process
   numerical compatibility cases. [Evidence](docs/audits/feature_history_20261014/validation_grouping_structure.json)
   retains red/integration failures and cleanup. MV-48 desktop/latency and broad

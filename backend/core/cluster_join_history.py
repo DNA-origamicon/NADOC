@@ -14,6 +14,8 @@ def restore_join_history_poses(
     clusters: list[ClusterRigidTransform],
     active_count: int,
     decode_snapshot: Callable[[str], Design],
+    *,
+    pose_windows=None,
 ) -> list[ClusterRigidTransform]:
     """Restore Join poses without replaying a routing mutation.
 
@@ -28,6 +30,10 @@ def restore_join_history_poses(
     are ignored just as in the general snapshot history evaluator.
     """
     log = design.feature_log
+    def owns_pose(cid, index):
+        window = pose_windows.get(cid) if pose_windows else None
+        return window is None or window.contains(index)
+
     baselines = {}
     joins = {}
     for index, entry in enumerate(log):
@@ -53,6 +59,8 @@ def restore_join_history_poses(
             donor = next((c for c in after.cluster_transforms if c.id == requested), None)
             if donor is not None:
                 changed[requested] = donor
+        if pose_windows:
+            changed = {cid: cluster for cid, cluster in changed.items() if owns_pose(cid, index)}
         for cid in changed:
             baselines.setdefault(cid, (index, previous[cid]))
         joins[index] = changed
@@ -64,13 +72,15 @@ def restore_join_history_poses(
     for cid, (first_join_index, baseline) in baselines.items():
         earlier_move = any(
             entry.feature_type == "cluster_op" and entry.cluster_id == cid
-            for entry in log[:first_join_index]
+            and owns_pose(cid, index)
+            for index, entry in enumerate(log[:first_join_index])
         )
         if not earlier_move:
             poses[cid] = baseline
     for index, entry in enumerate(log[:active_count]):
         poses.update(joins.get(index, {}))
-        if entry.feature_type == "cluster_op" and entry.cluster_id in baselines:
+        if (entry.feature_type == "cluster_op" and entry.cluster_id in baselines
+                and owns_pose(entry.cluster_id, index)):
             poses[entry.cluster_id] = entry
 
     return [

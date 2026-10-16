@@ -6,13 +6,14 @@ does not infer a recipe root or validate an entire historical recipe.
 """
 
 import math
+from datetime import datetime, timezone
 
 from fastapi import HTTPException
 from pydantic import ValidationError
 
 from backend.api import doc_context, state
 from backend.api.part_replacement_transaction import publish_replacement
-from backend.core.models import ClusterCreateLogEntry, ClusterOpLogEntry, ClusterRigidTransform, DomainRef
+from backend.core.models import ClusterCreateLogEntry, ClusterOpLogEntry, ClusterRigidTransform, DomainRef, SnapshotLogEntry
 from backend.core.part_command_errors import ReferenceResolutionError
 from backend.core.part_operation_input import validate_operation_input
 from backend.core.part_overlay_commands import GROUP_CREATE_VERSION, build
@@ -205,5 +206,45 @@ def update_group(cluster_id, fields):
         # dependency admission, including unchanged legacy membership/name data.
         _check_operation(params)
         grouped = build(kind, source, params)
+        candidate = grouped.copy_with(feature_log=[*source.feature_log, entry])
+        return _publish(session, source, revision, identity, candidate)
+
+
+def dissolve_groups(cluster_ids):
+    """Record one atomic keep-members operation, with recovery kept separate.
+
+    The native command proves its own finite reference/placement admission.
+    Whole-design recovery uses the established snapshot format only for seek
+    and undo; replay depends solely on the versioned selected identities.
+    """
+    from backend.api.part_recovery_budget import RecoveryBudget
+    from backend.core.part_capture_graph import CaptureLimit
+    from backend.core.part_command_errors import CommandContractError
+    from backend.core.part_group_dissolve import KIND, build as dissolve
+    from backend.core.part_history_proof import ProofBudgetExceeded
+    from backend.core.part_recovery_storage import MAX_RECOVERY_BYTES, retained_recovery_bytes
+
+    with state._lock:
+        session, source, revision, identity = _start("group_dissolve")
+        params = {"_proof_version": 1, "cluster_ids": cluster_ids}
+        try:
+            grouped = dissolve(source, params)
+        except CommandContractError as exc:
+            raise HTTPException(404 if exc.code == "missing_reference" else 409, detail=exc.as_issue()) from exc
+        try:
+            retained = retained_recovery_bytes(source.feature_log, max_rows=1999)
+            budget = RecoveryBudget(MAX_RECOVERY_BYTES - retained)
+            pre, pre_size = state.encode_design_snapshot(source)
+            budget.charge(pre)
+            post, post_size = state.encode_design_snapshot(grouped)
+            budget.charge(post)
+        except (CaptureLimit, ProofBudgetExceeded) as exc:
+            raise HTTPException(409, detail={"code": "group_recovery_limit", "message": str(exc)}) from exc
+        entry = SnapshotLogEntry(
+            op_kind=KIND, label="Dissolve group" if len(cluster_ids) == 1 else f"Dissolve {len(cluster_ids)} groups",
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            params=params, design_snapshot_gz_b64=pre, snapshot_size_bytes=pre_size,
+            post_state_gz_b64=post, post_state_size_bytes=post_size,
+        )
         candidate = grouped.copy_with(feature_log=[*source.feature_log, entry])
         return _publish(session, source, revision, identity, candidate)

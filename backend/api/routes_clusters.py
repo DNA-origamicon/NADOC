@@ -15,7 +15,8 @@ Routes
 ------
   POST   /design/cluster               — create a named cluster (pushes undo)
   PATCH  /design/cluster/{cluster_id}  — update pose/membership (silent preview; commit→undo + feature_log)
-  DELETE /design/cluster/{cluster_id}  — remove a cluster (pushes undo)
+  DELETE /design/cluster/{cluster_id}  — recorded dissolve (keeps members)
+  POST   /design/clusters/dissolve    — atomic recorded batch dissolve
   POST   /design/cluster-paste         — duplicate cluster(s) at a lattice offset (feature-logged)
 
 URLs are unchanged from their previous home in crud.py. Mounting is done in
@@ -183,25 +184,28 @@ def update_cluster(cluster_id: str, body: PatchClusterBody) -> dict:
 
 @router.delete("/design/cluster/{cluster_id}", status_code=200)
 def delete_cluster(cluster_id: str) -> dict:
-    """Remove a cluster. Pushes to the undo stack."""
-    from backend.core.part_structure_gate import PartStructureError, require_valid_structure
-    from backend.core.validator import validate_design
+    """Dissolve one group when its members retain their native placement."""
+    return _dissolve_response([cluster_id])
 
-    design, revision = design_state.get_design_with_revision()
-    if design is None:
-        raise HTTPException(404, detail="No active design.")
-    cts = [c for c in design.cluster_transforms if c.id != cluster_id]
-    if len(cts) == len(design.cluster_transforms):
-        raise HTTPException(404, detail=f"Cluster {cluster_id!r} not found.")
 
-    updated = design.model_copy(update={"cluster_transforms": cts}, deep=True)
-    try:
-        require_valid_structure(updated)
-    except PartStructureError as exc:
-        raise HTTPException(409, detail=exc.as_issue()) from exc
-    report = validate_design(updated)
-    design_state.set_design(updated, expected_revision=revision, expected_source=design)
-    return _design_response(updated, report)
+class DissolveClustersBody(BaseModel):
+    model_config = {"extra": "forbid", "strict": True}
+    cluster_ids: List[str] = Field(min_length=1, max_length=128)
+
+
+@router.post("/design/clusters/dissolve", status_code=200)
+def dissolve_clusters(body: DissolveClustersBody) -> dict:
+    """Import omission and ordinary batch removal are all-or-none."""
+    return _dissolve_response(body.cluster_ids)
+
+
+def _dissolve_response(cluster_ids):
+    from backend.api.crud import _design_response_with_geometry
+    from backend.api.part_group_recording import dissolve_groups
+
+    updated, report = dissolve_groups(cluster_ids)
+    return _design_response_with_geometry(updated, report, normalize_legacy=False,
+        preserve_feature_log_id=updated.feature_log[-1].id)
 
 
 # ── Overhang-duplex cluster rotation point ([[overhang-duplex-cluster]] P2) ────

@@ -3835,6 +3835,12 @@ export async function deleteCluster(clusterId) {
   return _syncFromDesignResponse(json)
 }
 
+/** Dissolve all selected group wrappers atomically, retaining their members. */
+export async function dissolveClusters(clusterIds) {
+  const json = await _request('POST', '/design/clusters/dissolve', { cluster_ids: clusterIds })
+  return _syncFromDesignResponse(json)
+}
+
 // ── Independent atomistic nucleotide transforms ─────────────────────────────
 
 export async function putNucleotideTransform(body) {

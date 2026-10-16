@@ -53,7 +53,7 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 
 | ID | Status | Fixed remaining exit |
 |---|---|---|
-| FH-18 | In progress · 1 checkpoint | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Ordinary PATCH recording is implemented; the full exit stays open. |
+| FH-18 | In progress · 2 checkpoints | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Ordinary PATCH and admitted identity-group dissolution are implemented; posed/regrouped and auxiliary lifecycle exits stay open. |
 | FH-20 | Remaining | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
 | FH-21 | Remaining | Extrusion history editor: eligible earlier edits through downstream features, stable identities, complete ordinary controls and validation. |
 | FH-22 | Remaining | Sweep history editor: input-based isolated preview, recovery-independent Apply/Cancel and downstream rebuild. |
@@ -123,8 +123,9 @@ bound their matrices before implementation rather than expanding them indefinite
 | U1 · 2026-10-16 | FH-19 checkpoint 1: bounded definition-only saved-file admission and explicit private recovered-copy evaluation; [contract](saved_recipe_recovery_contract.md), [evidence](validation_saved_recipe_core.json) | None; HTTP/process lifecycle and copy-download controls remain | 17 | 38 | 12 | 9 | +0; first engineering checkpoint spent on FH-19, no scope change |
 | U2 · 2026-10-16 | FH-19 checkpoint 2: isolated HTTP worker, exact server-text download and explicit File-menu review/cancellation; [evidence](validation_saved_recipe_delivery.json) | FH-19 implementation exit closed; existing FH-27 desktop/latency exit remains open | 18 | 38 | 11 | 9 | +0 total, +1 completed; two checkpoints spent on FH-19, no scope change or growth trigger |
 | U3 · 2026-10-16 | FH-18 checkpoint 1: owned ordinary group PATCH recording, bounded typed membership, conservative dependencies and exact-candidate geometry response; [evidence](validation_group_edit_recording.json) | None; deletion, regrouping pose preservation and auxiliary group paths remain | 18 | 38 | 11 | 9 | +0 total, +0 completed; first checkpoint on FH-18, existing scope, no growth trigger |
+| U4 · 2026-10-16 | FH-18 checkpoint 2: native identity-group dissolve, bounded incoming owners, atomic batch/undo, seek without resurrection and import/sidebar delivery; [evidence](validation_group_dissolve.json) | None; posed/regrouped membership and auxiliary paths remain | 18 | 38 | 11 | 9 | +0 total, +0 completed; second checkpoint on FH-18, existing scope. If still open after a third checkpoint, flag task growth and review the remaining exit before continuing. |
 
-### FH-18 finite closure matrix — U3
+### FH-18 finite closure matrix — U4
 
 The next work is within the existing FH-18 estimate; implementation substeps do
 not create new completion credit. The full milestone remains open.
@@ -132,17 +133,49 @@ not create new completion credit. The full milestone remains open.
 | Substep | Current evidence / remaining exit |
 |---|---|
 | Ordinary authored PATCH | Implemented: membership/name/style always record despite omitted/false legacy flags; direct pose confirm shares the owned transaction. One undo; exact reload/cold proof; missing/ambiguous references, historical/protected/stale sources and publication failures refuse atomically. Membership and mixed authored-pose responses embed their matching geometry outside the state lock. Pose-only gizmo responses remain lean. |
-| Explicit group removal | Open: typed live incoming owners include frame, child group, joint, Join attachment, flexible connection, deformation selectors and saved driven topology. Historical rows/inactive branch snapshots are not live consumers. Use a dedicated recorded lifecycle contract; do not disguise deletion as `cluster-pose`. Coordinate exact numerical-schema compatibility if the closed model enums change. |
-| Placement semantics | Open: deleting or regrouping may remove a transform layer or change implicit bend/twist arm selection. Cover translated/rotated defaults, partial/all membership, domains, children and overlaps without baking coordinates or changing molecular kernels. Unsupported combinations require an explicit refusal, not silent movement. Ordinary membership PATCH retains its existing transform-application meaning. |
-| Auxiliary paths and recovery | Open: `/cluster-unassigned`, duplex rotation-point publication, response-time legacy group inference and timeline creation-restoration must agree with authored lifecycle. A deleted group must not be resurrected during seek. Keep saved v1/v2 replay exact. |
+| Explicit group removal | Implemented admitted subset: dedicated `cluster-dissolve` v1 records 1–128 unique IDs through one owned transaction; single DELETE and atomic batch POST share it. Bounded typed incoming owners cover frame, child group, joint, both Join attachments, flexible endpoints, deformation selectors and recognized saved driven topology. Historical rows/presentation strings are not live consumers. Unknown grammar, missing/ambiguous IDs and unsafe placement refuse. Exact old→current numerical-schema edges retain both previous generations without rewriting stored pins. |
+| Placement semantics | Still open for posed/regrouped members. Dissolution currently admits identity rotation, zero translation and zero pivot for nonempty scope; empty identity groups may have a finite pivot. It refuses child/duplex ownership, incoming consumers, implicit/explicit overlapping deformation scopes, and overlapping retained pose/pivot effects. Even an identity quaternion performs pivot subtraction/addition in the existing kernel; admitting an arbitrary finite nonzero pivot would not guarantee output preservation. No coordinates are baked and kernels are unchanged. Ordinary membership PATCH keeps its existing transform-application meaning. |
+| Auxiliary paths and recovery | Dissolve recovery implemented: restore touched groups from the already decoded snapshot, then apply chronological removals after create/pattern/Join restorers. Later explicit recreation clears its earlier removal. Ordinary and optimized seek, imported empty groups, reload and cold replay are covered. Normalized reads now also suppress inference for rootless histories containing dissolution; they cannot recreate deliberately removed groups. Still open: `/cluster-unassigned`, duplex rotation-point publication and legacy inference outside authored removal histories/owned responses. Preserve saved v1/v2 behavior. |
 | Full milestone acceptance | Recorded lifecycle → undo/redo → save/reload → independent cold proof; supported placement preservation and complete incoming-reference decisions. Desktop/latency remain the existing FH-27/MV-48 exit. Pose-preview private ownership/cancel/history controls remain FH-23; this checkpoint does not close them. |
 
 CAD workflow precedent: Onshape's composite-part **Dissolve** removes the wrapper
 and retains its bodies, while creating a composite does not alter those bodies.
 [Official composite-part documentation](https://cad.onshape.com/help/Content/PartStudio/composite_part.htm).
-This supports a distinct group-dissolution action; it does not supply NADOC's
-transform/deformation composition policy. That policy still needs native parity
-evidence before implementation is claimed complete.
+Onshape also records [transforms](https://cad.onshape.com/help/Content/PartStudio/transform.htm)
+and [part removal](https://cad.onshape.com/help/Content/PartStudio/delete_part.htm)
+as features. SOLIDWORKS exposes dependent-child choices when
+[deleting a feature](https://help.solidworks.com/2026/english/SolidWorks/sldworks/HIDD_CONFIRM_DELETE_NEW.htm?format=P&value=).
+These are workflow precedents. NADOC's placement policy is our inference:
+full posed dissolution needs an explicit editable member-transform representation
+and deformation-frame ownership, not a hidden replacement group or sampled
+coordinates. That design and native parity remain part of the original FH-18
+exit; the conservative admitted subset does not close the milestone.
+
+U4 performance boundary: reference admission is bounded metadata only and never
+runs proof, atoms or reconciliation. It runs on an explicit dissolve, not drag
+frames. Recovery reuses the two existing whole-design snapshot encodings and one
+undo copy; encoded retention is bounded, but that is not a serialization-time or
+heap bound. Full HTTP/geometry/lock-tail measurements remain FH-27. Imports use
+one atomic batch instead of serial deletion; failures stop Save, and stale browser
+responses cannot prune live visibility or continue saving. Archive is unavailable,
+so sidebar layout, error clarity and real-workload latency remain MV-48.
+The exact numerical policy currently uses 9 of its 16 transition slots. A future
+schema extension must review active-generation edges and archive obsolete edges
+without dropping supported saved pins; raising the policy bound automatically is
+not an accepted compatibility strategy.
+
+U4 recovery acceptance includes same-ID explicit recreation, preserving imported
+initial groups and pattern poses, and excluding moves/Join/pattern baselines from
+other lifetimes. Missing dissolution PRE/POST bodies or eviction now cause a
+typed 410 before snapshot decoding or state publication; malformed/over-budget
+command metadata cause 409. The conservative compatibility-reader policy requires
+all dissolution bodies even for end seek or creation-backed restoration. Native
+input regeneration remains independent and tested with unusable recovery data.
+General corrupt-payload diagnostics and more permissive recovery admission remain
+outside this checkpoint; an unavailable body is never silently treated as proof.
+An implicit pattern birth reusing a dissolved ID without explicit creation also
+refuses with typed 409, using the existing decoded birth facts. General implicit
+and auxiliary recreation remains open; this is not an all-command lifetime proof.
 
 ## Active goal and priority override — October 15, 2026
 
@@ -190,8 +223,8 @@ than overloading an unrelated command kind or silently accepting old proofs.
 - Ordinary group creation now always records exact inputs, including the old
   `log=False` call form, and validates before one atomic publication. The 102
   distinct focused checks include input-only replay across nick/group/nick.
-  Direct group deletion still lacks a history operation; response-time
-  default-group inference must be included in its deletion contract.
+  U4 adds the admitted recorded dissolve subset, including response-time
+  inference suppression. Posed dissolution and auxiliary paths remain open.
 - Ordinary membership/name/style PATCH now records an owned input regardless of
   old `commit`/`log` flags. It uses the same publication boundary as creation,
   validates before publication and does not reconcile intentional membership

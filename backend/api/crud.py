@@ -232,6 +232,11 @@ def _ensure_default_cluster(design: Design, *, persist: bool = True) -> Design:
     # Their native builders create any required placement cluster explicitly.
     if design.recipe_root is not None:
         return design
+    from backend.core.feature_history_clusters import has_group_dissolution
+    if has_group_dissolution(design.feature_log):
+        # A recorded removal is intentional even on an unverified legacy root.
+        # Response formatting must not reintroduce its groups or memberships.
+        return design
     from backend.core.cluster_autodetect import repair_empty_auto_clusters
 
     repaired = repair_empty_auto_clusters(design)
@@ -6880,6 +6885,8 @@ def _topology_substitute(design: Design, snap_design: Design) -> Design:
         )
     from backend.core.sweep_edit import restore_follow_poses
     from backend.core.part_overlay_recovery import restore_authored_fields
+    from backend.core.feature_history_clusters import restore_dissolve_fields
+    design = restore_dissolve_fields(design, snap_design)
     design = restore_authored_fields(design, snap_design)
     return design.copy_with(
         cluster_transforms=restore_follow_poses(design, snap_design),
@@ -7172,18 +7179,23 @@ def _seek_feature_log(
     if optimized is None:
         from backend.core.feature_evaluation import optimization_enabled
         optimized = optimization_enabled()
+    from backend.api.part_group_recovery import prepare_group_seek
+    pose_windows = prepare_group_seek(design, position)
     log = list(design.feature_log)
 
     # Substitute topology to match the requested position. Subsequent delta
     # logic operates on this topology-corrected base, so the existing
     # rebuild-from-log logic Just Works for snapshot-bearing histories.
     design = _seek_snapshot_base(design, position, sub_position, optimized=optimized)
-    from backend.core.feature_history_clusters import restore_cluster_creations
+    from backend.core.feature_history_clusters import (
+        restore_cluster_creations, apply_cluster_dissolutions,
+        filter_group_pose_overlays,
+    )
     design = restore_cluster_creations(design, position)
     log = list(design.feature_log)
-    from backend.core.circular_pattern import pattern_history_overlays
-    pattern_clusters, pattern_ops, pattern_baselines = pattern_history_overlays(
-        design, design_state.decode_design_snapshot
+    from backend.api.part_group_recovery import restore_group_patterns
+    pattern_clusters, pattern_ops, pattern_baselines = restore_group_patterns(
+        design, design_state.decode_design_snapshot, pose_windows
     )
     design = design.copy_with(cluster_transforms=pattern_clusters)
     from backend.core.cluster_join_history import restore_join_history_poses
@@ -7194,6 +7206,8 @@ def _seek_feature_log(
         clusters_with_any_op = {
             e.cluster_id for e in log if e.feature_type == "cluster_op"
         }
+        _, clusters_with_any_op, _ = filter_group_pose_overlays(
+            log, pose_windows, {}, clusters_with_any_op, pattern_baselines)
         new_cts = [
             ct.model_copy(
                 update={
@@ -7206,8 +7220,9 @@ def _seek_feature_log(
             for ct in design.cluster_transforms
         ]
         new_cts = restore_join_history_poses(
-            design, new_cts, 0, design_state.decode_design_snapshot
+            design, new_cts, 0, design_state.decode_design_snapshot, pose_windows=pose_windows
         )
+        new_cts = apply_cluster_dissolutions(design.copy_with(cluster_transforms=new_cts), position).cluster_transforms
         new_joints = _rebase_joints_to_cts(design, new_cts)
         # Reset overhang rotations + sub-domain (theta, phi) for any
         # overhang that has ops in the log.
@@ -7298,6 +7313,8 @@ def _seek_feature_log(
         # Collect cluster IDs that have ANY cluster_op anywhere in the full log.
         clusters_with_ops = {e.cluster_id for e in log if e.feature_type == "cluster_op"}
 
+    cluster_last, clusters_with_ops, pattern_baselines = filter_group_pose_overlays(
+        log, pose_windows, cluster_last, clusters_with_ops, pattern_baselines)
     from backend.core.part_overlay_recovery import after_payload
     authored_after_payload = after_payload(active, cluster_last)
     new_cts = []
@@ -7318,8 +7335,9 @@ def _seek_feature_log(
         new_cts.append(ct)
 
     new_cts = restore_join_history_poses(
-        design, new_cts, len(active), design_state.decode_design_snapshot
+        design, new_cts, len(active), design_state.decode_design_snapshot, pose_windows=pose_windows
     )
+    new_cts = apply_cluster_dissolutions(design.copy_with(cluster_transforms=new_cts), position).cluster_transforms
     new_joints = _rebase_joints_to_cts(design, new_cts)
 
     if optimize_overlays:

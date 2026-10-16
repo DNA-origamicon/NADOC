@@ -42,7 +42,7 @@ PROOF_SNAPSHOT_KINDS = (
     | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS
     | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS
     | frozenset({"photoproduct-relax", "bundle-create", "sweep", "cluster-join", "strand-sequence",
-                 "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste"})
+                 "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste", "cluster-dissolve"})
 )
 PROOF_MINOR_KINDS = MOVE_KINDS | CELL_KINDS | LIGATION_KINDS | TOPOLOGY_MINOR_KINDS | LOOP_COMMANDS | STRUCTURAL_KINDS | frozenset({"joint-place", "joint-update", "joint-delete", "strand-patch"})
 PROOF_VERSION = 1
@@ -109,6 +109,16 @@ def capabilities():
 def dependencies(kind, params):
     if kind == "cluster_op":
         return _cluster_op_dependencies(params)
+    if kind == "cluster-dissolve":
+        from backend.core.part_group_dissolve import parse_command
+        if type(params) is not dict or not 2 <= len(params) <= 3:
+            return Dependencies(known=False)
+        try:
+            selected = parse_command({key: value for key, value in params.items() if key != "_generator"})
+        except (ValueError, TypeError, AttributeError):
+            return Dependencies(known=False)
+        resources = frozenset({PART_TOPOLOGY, *(Resource("cluster", cid) for cid in selected)})
+        return Dependencies(resources, resources, barrier=True)
     if not proof_version_supported(kind, params.get("_proof_version")):
         return Dependencies(known=False)
     if "_generated_scope" in params and (kind in NP_CONNECTION_KINDS or (
@@ -337,6 +347,9 @@ def _execute(kind, design, params, *, expensive):
     if kind in OVERLAY_KINDS:
         from backend.core.part_overlay_commands import build
         return build(kind, design, params)
+    if kind == "cluster-dissolve":
+        from backend.core.part_group_dissolve import build
+        return build(design, params)
     from backend.api.part_feature_commands import replay_minor, replay_snapshot
     from backend.core.cluster_reconcile import reconcile_cluster_membership
     from backend.core.lattice import retry_pending_ligations

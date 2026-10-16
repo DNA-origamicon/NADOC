@@ -1937,6 +1937,7 @@ SnapshotOpKind = Literal[
     "generate-design",
     "nick",
     "cluster-pose",
+    "cluster-dissolve",
     "cluster-join",
     "extrude-frame",
     "aptamer-import",

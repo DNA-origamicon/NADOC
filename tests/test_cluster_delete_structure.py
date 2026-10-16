@@ -1,7 +1,7 @@
-"""Direct legacy deletion must not remove a retained lattice placement owner.
+"""Recorded dissolve preserves placement owners and refuses atomic publication.
 
-Tiny memory-only route tests. This safety guard does not make deletion a new
-native history command or claim complete incoming-cluster dependency coverage.
+Tiny memory-only route tests also cover rootless compatibility: recording the
+new operation preserves the absent recipe root rather than blessing old state.
 """
 
 import pytest
@@ -75,26 +75,28 @@ def test_retained_empty_frame_owner_delete_is_typed_and_failure_atomic(document)
     with pytest.raises(HTTPException) as caught:
         routes.delete_cluster("placement")
     assert caught.value.status_code == 409
-    assert caught.value.detail["code"] == "invalid_structure"
-    assessment = caught.value.detail["structure"]
-    assert assessment["status"] == "invalid"
-    assert assessment["scientific_integrity_checked"] is False
-    assert assessment["issues"] == [{
-        "code": "missing_reference", "model_path": ["lattice_frames", 0, "placement_cluster_id"],
-        "resource": {"kind": "lattice_frame", "identity": "frame"},
-        "reference": {"kind": "cluster", "identity": "placement"},
+    assert caught.value.detail["code"] == "invalid_selection"
+    assert caught.value.detail["references"] == [{
+        "kind": "cluster", "identity": "placement", "parameter_path": ["cluster_ids", 0],
+        "model_path": ["lattice_frames", 0, "placement_cluster_id"],
+        "owner": {"kind": "lattice_frame", "identity": "frame"},
     }]
     unchanged(before)
 
 
-def test_unreferenced_delete_keeps_legacy_history_and_one_undo(document):
+def test_unreferenced_dissolve_records_one_row_without_inventing_a_root(document):
     before = snapshot()
     response = routes.delete_cluster("spare")
     updated = state.get_or_404()
     assert [group.id for group in updated.cluster_transforms] == ["placement", "members"]
     assert updated.helices == document.helices
     assert updated.lattice_frames == document.lattice_frames
-    assert updated.feature_log == document.feature_log == []
+    assert document.feature_log == []
+    assert len(updated.feature_log) == 1
+    entry = updated.feature_log[0]
+    assert entry.feature_type == "snapshot" and entry.op_kind == "cluster-dissolve"
+    assert entry.params == {"_proof_version": 1, "cluster_ids": ["spare"]}
+    assert entry.design_snapshot_gz_b64 and entry.post_state_gz_b64
     assert updated.recipe_root is document.recipe_root is None
     assert state.undo_depth() == len(before["history"]) + 1
     assert state.redo_depth() == 0
@@ -145,6 +147,7 @@ def test_candidate_validation_failure_is_before_publication(document, monkeypatc
 
     with monkeypatch.context() as faults:
         faults.setattr(validator, "validate_design", reject)
+        faults.setattr(state, "validate_design", reject)
         with pytest.raises(RuntimeError, match="delete candidate validation failed"):
             routes.delete_cluster("spare")
     unchanged(before)
@@ -152,28 +155,27 @@ def test_candidate_validation_failure_is_before_publication(document, monkeypatc
 
 @pytest.mark.parametrize("changed_revision", [True, False], ids=["revision-race", "source-object-aba"])
 def test_candidate_cannot_overwrite_a_concurrent_source(document, monkeypatch, changed_revision):
-    original_check = part_structure_gate.require_valid_structure
+    original_validate = state.validate_design
     concurrent = []
 
-    def check_then_replace(candidate, **kwargs):
-        result = original_check(candidate, **kwargs)
+    def check_then_replace(candidate):
+        result = original_validate(candidate)
         replacement = document.model_copy(deep=True)
         replacement.cluster_transforms[-1].name = "Concurrent name"
+        # The route already owns state._lock. Simulate a hostile same-lock
+        # callback without reacquiring that non-reentrant lock via set_design.
+        session = state._session()
+        session.design = replacement
         if changed_revision:
-            state.set_design(replacement)
-        else:
-            # A reopened/reinstated source can share IDs and revision; the
-            # source-object CAS must still reject it. This does not claim an
-            # incarnation guard for the exact same object/revision restored.
-            with state._lock:
-                state._session().design = replacement
+            session.revision += 1
         concurrent.append(snapshot())
         return result
 
-    monkeypatch.setattr(part_structure_gate, "require_valid_structure", check_then_replace)
+    monkeypatch.setattr(state, "validate_design", check_then_replace)
+    monkeypatch.setattr(validator, "validate_design", check_then_replace)
     with pytest.raises(HTTPException) as caught:
         routes.delete_cluster("spare")
-    assert caught.value.status_code == 409
+    assert caught.value.status_code == 409 and caught.value.detail["code"] == "source_changed"
     assert len(concurrent) == 1
     unchanged(concurrent[0])
 

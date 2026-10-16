@@ -6,11 +6,10 @@
  *                  dna / protein / both), driven via a mock api + deps.
  *   initImportMenu — factory returns its callbacks + wires the PDB menu item.
  *
- * The caDNAno/scadnano flows open a real <input type=file> dialog (unreachable
- * in jsdom without a user file), so they are covered by the running-app exercise
- * + verbatim move, not here.
+ * caDNAno/scadnano autodetection uses a controlled file-picker boundary to
+ * exercise the actual import, atomic group omission, and save ordering.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
 
@@ -20,9 +19,11 @@ vi.mock('./toast.js', () => ({
   dismissToast: vi.fn(),
 }))
 vi.mock('./import_pdb_modal.js', () => ({ openImportPdbModal: vi.fn() }))
+vi.mock('./file_browser.js', () => ({ openFileBrowser: vi.fn() }))
 
 import { showToast } from './toast.js'
 import { openImportPdbModal } from './import_pdb_modal.js'
+import { openFileBrowser } from './file_browser.js'
 import {
   sanitizeImportName,
   importedClusterOverhangExtras,
@@ -75,6 +76,7 @@ function makeDeps(initialState = {}, apiOverrides = {}) {
     addInstance: vi.fn(),
     addRecentFile: vi.fn(),
     deleteCluster: vi.fn(),
+    dissolveClusters: vi.fn(),
     clearOverhangs: vi.fn(),
     ...apiOverrides,
   }
@@ -185,5 +187,90 @@ describe('runPdbImport', () => {
     const { runPdbImport } = initImportMenu(deps)
     await runPdbImport({})
     expect(showToast).toHaveBeenCalledWith('Imported DNA design + protein GFP (10 atoms)', 4000)
+  })
+})
+
+describe.each([
+  ['caDNAno', 'importCadnanoWithAutodetection', 'importCadnanoDesign', 'sample.json'],
+  ['scadnano', 'importScadnanoWithAutodetection', 'importScadnanoDesign', 'sample.sc'],
+])('%s imported group omission', (_format, callback, importMethod, filename) => {
+  let deps, imported, pickFile
+  const destination = { path: 'parts/sample.nadoc', name: 'sample.nadoc', includeClusters: false, includeOverhangs: false }
+  beforeEach(() => {
+    clearDom(); vi.clearAllMocks(); openFileBrowser.mockReset()
+    imported = { id: 'imported', metadata: { name: 'Imported' },
+      cluster_transforms: [{ id: 'default', is_default: true }, { id: 'a' }, { id: 'b', is_default: false }],
+      overhangs: [{ id: 'overhang' }] }
+    deps = makeDeps({ currentDesign: imported, lastError: { message: 'Group is needed by a deformation' } })
+    deps.api[importMethod].mockResolvedValue({ design: imported })
+    deps.api.saveDesignAs.mockResolvedValue({ saved: true })
+    pickFile = { name: filename, text: vi.fn().mockResolvedValue('{}') }
+    vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function () {
+      Object.defineProperty(this, 'files', { configurable: true, value: pickFile ? [pickFile] : [] })
+      this.onchange?.()
+    })
+    openFileBrowser.mockResolvedValue(destination)
+  })
+  afterEach(() => { vi.restoreAllMocks(); clearDom() })
+  const run = () => initImportMenu(deps)[callback]()
+
+  it('waits for one atomic nondefault-group dissolve before other omissions and save', async () => {
+    let resolve
+    deps.api.dissolveClusters.mockImplementation(() => new Promise(done => { resolve = done }))
+    const pending = run()
+    await vi.waitFor(() => expect(deps.api.dissolveClusters).toHaveBeenCalledExactlyOnceWith(['a', 'b']))
+    expect(deps.api.deleteCluster).not.toHaveBeenCalled()
+    expect(deps.api.clearOverhangs).not.toHaveBeenCalled(); expect(deps.api.saveDesignAs).not.toHaveBeenCalled()
+    const accepted = { ...imported, cluster_transforms: [imported.cluster_transforms[0]] }
+    deps.store.setState({ currentDesign: accepted }); resolve({ design: accepted }); await pending
+    expect(deps.api.clearOverhangs).toHaveBeenCalledTimes(1)
+    expect(deps.api.saveDesignAs).toHaveBeenCalledExactlyOnceWith(destination.path, false)
+    expect(deps.setWorkspacePath).toHaveBeenCalledWith(destination.path)
+  })
+
+  it.each(['null', 'throw'])('retains the imported model and stops save on %s dissolve failure', async failure => {
+    if (failure === 'throw') deps.api.dissolveClusters.mockRejectedValue(new Error('Dissolve connection lost'))
+    else deps.api.dissolveClusters.mockResolvedValue(null)
+    await expect(run()).resolves.toBeUndefined()
+    expect(deps.api.dissolveClusters).toHaveBeenCalledExactlyOnceWith(['a', 'b'])
+    expect(deps.api.deleteCluster).not.toHaveBeenCalled(); expect(deps.api.clearOverhangs).not.toHaveBeenCalled()
+    expect(deps.api.saveDesignAs).not.toHaveBeenCalled(); expect(deps.setWorkspacePath).not.toHaveBeenCalled()
+    expect(deps.store.getState().currentDesign).toBe(imported)
+    expect(showToast).toHaveBeenCalledWith(expect.stringContaining(failure === 'throw' ? 'Dissolve connection lost' : 'Group is needed by a deformation'), { severity: 'error' })
+  })
+
+  it.each(['retained groups', 'replaced document'])('does not save after a non-null stale reply with %s', async stale => {
+    let resolve
+    deps.api.dissolveClusters.mockImplementation(() => new Promise(done => { resolve = done }))
+    const pending = run()
+    await vi.waitFor(() => expect(deps.api.dissolveClusters).toHaveBeenCalledTimes(1))
+    const current = stale === 'retained groups' ? imported : { ...imported, id: 'replacement', cluster_transforms: [] }
+    deps.store.setState({ currentDesign: current })
+    resolve({ design: { ...imported, cluster_transforms: [] } }); await pending
+    expect(deps.store.getState().currentDesign).toBe(current)
+    expect(deps.api.clearOverhangs).not.toHaveBeenCalled(); expect(deps.api.saveDesignAs).not.toHaveBeenCalled()
+    expect(deps.setWorkspacePath).not.toHaveBeenCalled()
+    expect(showToast).toHaveBeenCalledWith(expect.stringContaining('not current'), { severity: 'error' })
+  })
+
+  it('does not omit groups or save after the destination dialog is cancelled', async () => {
+    openFileBrowser.mockResolvedValue(null); await run()
+    expect(deps.api.dissolveClusters).not.toHaveBeenCalled(); expect(deps.api.deleteCluster).not.toHaveBeenCalled()
+    expect(deps.api.saveDesignAs).not.toHaveBeenCalled(); expect(deps.store.getState().currentDesign).toBe(imported)
+  })
+
+  it('does not import or change anything when the file picker is cancelled', async () => {
+    pickFile = null; await run()
+    expect(deps.api[importMethod]).not.toHaveBeenCalled(); expect(deps.resetForNewDesign).not.toHaveBeenCalled()
+    expect(openFileBrowser).not.toHaveBeenCalled(); expect(deps.api.dissolveClusters).not.toHaveBeenCalled()
+    expect(deps.api.saveDesignAs).not.toHaveBeenCalled()
+  })
+
+  it.each(['keep', 'empty'])('does not send a dissolve for %s selection', async selection => {
+    if (selection === 'keep') openFileBrowser.mockResolvedValue({ ...destination, includeClusters: true })
+    else imported.cluster_transforms = [imported.cluster_transforms[0]]
+    await run()
+    expect(deps.api.dissolveClusters).not.toHaveBeenCalled(); expect(deps.api.deleteCluster).not.toHaveBeenCalled()
+    expect(deps.api.saveDesignAs).toHaveBeenCalledTimes(1)
   })
 })

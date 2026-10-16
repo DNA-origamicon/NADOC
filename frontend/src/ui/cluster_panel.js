@@ -2,8 +2,8 @@
  * Cluster panel — sidebar list of named cluster rigid transforms.
  *
  * Displays all design.cluster_transforms. Click a cluster row to activate
- * the 3D gizmo (or deactivate if already active). Delete button removes the
- * cluster from the design. "New Cluster from Selection" creates a cluster
+ * the 3D gizmo (or deactivate if already active). Dissolve removes an eligible
+ * group wrapper while keeping its members. "New Cluster from Selection" creates a cluster
  * from canonical strand/domain refs.
  *
  * Joint placement and move/rotate transform controls now live in their own
@@ -64,8 +64,8 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
   // ── Cluster colour + opacity ────────────────────────────────────────────────
   // One shared popover in document.body, reused across rows (the list is rebuilt
   // wholesale on every design change, so it cannot live inside a row).
-  // Commit is the no-commit PATCH form, exactly like the rename below: a cosmetic
-  // edit must not land on the undo stack.
+  // The shared API records ordinary name/style edits even without an explicit
+  // commit flag. Slider previews stay renderer-only until their commit callback.
   const _stylePopover = initClusterStylePopover({
     onPreview: (id, patch, uiState) => onStylePreview?.(id, patch, uiState),
     onCommit:  (id, patch) => api.patchCluster(id, patch),
@@ -328,17 +328,30 @@ export function initClusterPanel(store, { onClusterClick, onAssemblyClusterClick
         _notifyVisibility()
       })
 
-      // Delete button
+      // Recorded dissolve keeps the members; the server reports dependencies
+      // or unsupported placement rather than silently moving/deleting geometry.
       const delBtn = document.createElement('button')
-      delBtn.textContent = '×'
+      delBtn.textContent = 'Dissolve'
+      delBtn.setAttribute('aria-label', 'Dissolve group')
       delBtn.style.cssText = _delStyle
-      delBtn.title = 'Delete cluster'
+      delBtn.title = 'Dissolve group — keep members and placement'
       delBtn.addEventListener('pointerenter', () => { delBtn.style.background = '#3d1c1c'; delBtn.style.color = '#ff6b6b' })
       delBtn.addEventListener('pointerleave', () => { delBtn.style.cssText = _delStyle })
       delBtn.addEventListener('click', async e => {
         e.stopPropagation()
-        _hiddenClusterIds.delete(cluster.id)
-        await api.deleteCluster(cluster.id)
+        try {
+          const result = await api.deleteCluster(cluster.id)
+          if (!result) {
+            showToast(`Could not dissolve group: ${store.getState().lastError?.message ?? 'The operation was cancelled or refused.'}`, { severity: 'error' })
+            return
+          }
+          // A superseded same-document response can be non-null while shared
+          // sync retains newer state. Do not unhide a group still present there.
+          if (!(store.getState().currentDesign?.cluster_transforms ?? []).some(c => c.id === cluster.id)
+              && _hiddenClusterIds.delete(cluster.id)) _notifyVisibility()
+        } catch (error) {
+          showToast(`Could not dissolve group: ${error.message}`, { severity: 'error' })
+        }
       })
 
       // Row click → notify parent. Ctrl/Cmd/Shift+click = additive multi-select, the

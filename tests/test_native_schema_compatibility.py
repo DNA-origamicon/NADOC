@@ -23,6 +23,7 @@ from backend.core.part_verification_capture import capture
 
 ROOT = Path(__file__).resolve().parents[1]
 BEFORE = ROOT / "docs/audits/feature_history_20261014/grouping_schema_compatibility_before.json"
+DISSOLVE_BEFORE = ROOT / "docs/audits/feature_history_20261014/cluster_dissolve_schema_compatibility_before.json"
 
 
 def _fixture(family):
@@ -103,8 +104,6 @@ def test_spawned_numerical_schema_transition_preserves_exact_authored_outputs(fa
     entry = entries[0]
     params = deepcopy(entry.params)
     current_pin = params["engine"]["implementation_sha256"]
-    historical = json.loads(BEFORE.read_text())["engines"][contract.ENGINE_ID]["implementation_sha256"]
-    assert current_pin != historical
     for row in candidate.feature_log:
         row.design_snapshot_gz_b64 = row.post_state_gz_b64 = "poisoned recovery is not an input"
 
@@ -112,21 +111,24 @@ def test_spawned_numerical_schema_transition_preserves_exact_authored_outputs(fa
     assert current["status"] == "reproduced_import", current
     assert not current.get("numerical_compatibility", {}).get("transitions")
 
-    entry.params = {**params, "engine": {**params["engine"], "implementation_sha256": historical}}
-    before_old = candidate.model_dump_json()
-    approved = _cold(candidate, {"operation": "verify"}, family=family)
-    assert approved["status"] == current["status"], approved
-    assert approved["checked_commands"] == current["checked_commands"] == len(candidate.feature_log)
-    assert approved["authoring_fingerprint"] == current["authoring_fingerprint"]
-    assert approved["numerical_compatibility"] == {"transitions": [{
-        "transition_id": f"grouping-proof-v2.{contract.ENGINE_ID}", "engine_id": contract.ENGINE_ID,
-        "from_sha256": historical, "to_sha256": current_pin,
-    }], "truncated": False}
-    assert candidate.model_dump_json() == before_old
-    assert candidate.model_dump(mode="json", include=AUTHORING_FIELDS) == authored
-    assert entry.params["engine"]["runtime_sha256"] == params["engine"]["runtime_sha256"]
-    assert {key: value for key, value in entry.params.items() if key != "engine"} == {
-        key: value for key, value in params.items() if key != "engine"}
+    for generation, path in (("grouping-v1", BEFORE), ("grouping-v2", DISSOLVE_BEFORE)):
+        historical = json.loads(path.read_text())["engines"][contract.ENGINE_ID]["implementation_sha256"]
+        assert current_pin != historical
+        entry.params = {**params, "engine": {**params["engine"], "implementation_sha256": historical}}
+        before_old = candidate.model_dump_json()
+        approved = _cold(candidate, {"operation": "verify"}, family=family)
+        assert approved["status"] == current["status"], (generation, approved)
+        assert approved["checked_commands"] == current["checked_commands"] == len(candidate.feature_log)
+        assert approved["authoring_fingerprint"] == current["authoring_fingerprint"]
+        assert approved["numerical_compatibility"] == {"transitions": [{
+            "transition_id": f"cluster-dissolve-v1.from-{generation}.{contract.ENGINE_ID}",
+            "engine_id": contract.ENGINE_ID, "from_sha256": historical, "to_sha256": current_pin,
+        }], "truncated": False}
+        assert candidate.model_dump_json() == before_old
+        assert candidate.model_dump(mode="json", include=AUTHORING_FIELDS) == authored
+        assert entry.params["engine"]["runtime_sha256"] == params["engine"]["runtime_sha256"]
+        assert {key: value for key, value in entry.params.items() if key != "engine"} == {
+            key: value for key, value in params.items() if key != "engine"}
 
     entry.params = {**params, "engine": {**params["engine"], "implementation_sha256": "0" * 64}}
     unknown = _cold(candidate, {"operation": "verify"}, family=family)

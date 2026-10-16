@@ -1,0 +1,200 @@
+{
+  "date": "2026-10-16",
+  "checkpoint_before": "96ed8fe1ab9486b6adb4b32961fb0946272bb295",
+  "scope": "U4 / FH-18 checkpoint 2: bounded recorded identity-group dissolution and conservative lifecycle recovery",
+  "progress": {
+    "baseline": "B1: 17/38 through 2c15e747",
+    "completed": 18,
+    "estimated_total": 38,
+    "remaining": 20,
+    "core_remaining": 11,
+    "parked_remaining": 9,
+    "completed_delta": 0,
+    "total_delta": 0,
+    "milestone": "FH-18",
+    "major_checkpoints_spent_since_B1": 2,
+    "milestone_closed": false,
+    "scope_change": "None. Posed/regrouped members and auxiliary group lifecycle remain in the fixed FH-18 exit. A third checkpoint leaving it open must flag task growth; total growth trigger remains 42."
+  },
+  "final_checks": {
+    "backend_distinct_passes": 476,
+    "backend_focused": {
+      "command": "just validate-safe scripts/test_guard.sh test-focused 0 focused -- uv run pytest <explicit targets> -q --tb=short --disable-warnings --durations=8",
+      "targets": [
+        "tests/test_group_dissolve_command.py",
+        "tests/test_group_dissolve_recording.py",
+        "tests/test_group_dissolve_recovery.py",
+        "tests/test_group_dissolve_seek_admission.py",
+        "tests/test_cluster_delete_structure.py",
+        "tests/test_geometry_group_history.py",
+        "tests/test_group_edit_recording.py",
+        "tests/test_group_owned_response.py",
+        "tests/test_group_edit_dependencies.py",
+        "tests/test_group_creation_v2.py",
+        "tests/test_part_structure_proof.py",
+        "tests/test_part_recipe_edit.py",
+        "tests/test_part_proof_engine.py",
+        "tests/test_native_overlay_proof.py",
+        "tests/test_feature_log_snapshot.py",
+        "tests/test_feature_log_clusters.py",
+        "tests/test_feature_history_clusters.py",
+        "tests/test_cluster_join_history.py",
+        "tests/test_circular_pattern.py",
+        "tests/test_feature_evaluation.py",
+        "tests/test_part_feature_registry.py",
+        "tests/test_recipe_load_preservation.py",
+        "tests/test_part_numerical_schema_compatibility.py"
+      ],
+      "passed": 473,
+      "warnings": 227,
+      "seconds": 12.53
+    },
+    "native_workers": {
+      "target": "tests/test_native_schema_compatibility.py",
+      "passed": 3,
+      "seconds": 59.68,
+      "families": [
+        "CPD",
+        "duplex",
+        "coating"
+      ],
+      "qualification": "Each family authors once with the installed native kernel, then checks current and both historical schema pins, unknown-pin refusal and worker cleanup. No historical native binary comparison."
+    },
+    "frontend_full": {
+      "command": "just test-frontend",
+      "passed": 8546,
+      "skipped": 1,
+      "files": 731,
+      "seconds": 316.7,
+      "new_cases": 29
+    },
+    "overlapping_runs": "Intermediate 304, 56, 440 and 69-case green runs, 50 pure compatibility cases and scoped frontend runs overlap final evidence; not additional credit.",
+    "scoped_ruff": "All 17 changed/new Python implementation and test files passed",
+    "diff_check": "Passed",
+    "main_js_line_delta": 0,
+    "app": "NOT VERIFIED IN APP. Archive is not mounted. No browser/visual geometry or interactive latency qualification; MV-48/FH-27 remain open. VR is separately deferred.",
+    "resource_safety": "Root serialized all heavy backend, native-worker and frontend runs under validation guard; agents did not run tests."
+  },
+  "selection_only": {
+    "command": "just test-smart --dry-run",
+    "decision": "FAST (fast suite only)",
+    "verbatim_deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+    "executed_suite": false,
+    "clarification": "The 'only the fast suite ran' text is selector boilerplate; dry-run executed no suite. Aggregate fast and broad FULL debt remain; no test session, escape hatch or system-disk bulk-artifact fallback was created."
+  },
+  "red_and_review_evidence": [
+    {
+      "scope": "Initial native command",
+      "failed": 41,
+      "finding": "Missing command module; final pure command target has 49 cases."
+    },
+    {
+      "scope": "Initial frontend",
+      "failed": 14,
+      "passed": 60,
+      "seconds": 3.99,
+      "finding": "Missing atomic request, refusal/stale-state and import-save guards."
+    },
+    {
+      "scope": "Initial recording",
+      "failed": 16,
+      "passed": 4,
+      "seconds": 3.1,
+      "finding": "Unrecorded DELETE and missing owned transaction/response contract."
+    },
+    {
+      "scope": "Initial recovery",
+      "failed": 17,
+      "seconds": 2.78,
+      "finding": "Imported/empty removal and creation/pattern/Join resurrection."
+    },
+    {
+      "scope": "Response retention",
+      "failed": 2,
+      "seconds": 2.82,
+      "finding": "Missing new-row recovery-body preservation marker; added preservation and timestamp."
+    },
+    {
+      "scope": "Same-ID explicit recreation",
+      "failed": 6,
+      "passed": 24,
+      "seconds": 2.86,
+      "finding": "Four genuine old-Join pose leaks; two native fixtures first needed explicit proof_version=1. Final ordinary/optimized seek, reload and cold replay pass."
+    },
+    {
+      "scope": "Pattern pose baseline",
+      "failed": 2,
+      "seconds": 2.78,
+      "finding": "Scrubbing before reset/dissolve lost the original nonidentity pattern pose; now preserves the current incarnation baseline."
+    },
+    {
+      "scope": "Recovery admission",
+      "failed": 21,
+      "seconds": 3.78,
+      "finding": "Missing/evicted bodies could publish a false earlier cursor; metadata failures escaped as 500. Four failures were invalid test kind 'extrude', corrected to 'extrude-frame'. Shared admission now returns typed 409/410 before decoding/publication."
+    },
+    {
+      "scope": "Implicit pattern rebirth",
+      "failed": 2,
+      "seconds": 2.82,
+      "finding": "A pattern reusing a removed group ID was silently filtered. Existing decoded birth facts now trigger typed unsupported-recovery refusal."
+    },
+    {
+      "scope": "Additional integration corrections",
+      "finding": "Schema closure initially rejected exact scalar-only ProteinTargetAssembly leaf; locally classified it without relaxing shared schemas. Corrected mappingproxy fixture mutation and nonexistent response geometry keys. Added rootless normalized-read regression to prevent group resurrection. No molecular behavior or product requirement weakened."
+    }
+  ],
+  "delivered_contract": [
+    "Closed cluster-dissolve v1 selected-ID input, 1–128 unique IDs, <=512 characters each; bounded operation metadata and typed incoming-owner inventory. The pure builder changes cluster_transforms only.",
+    "Incoming owners cover frame placement, child groups, joints, both Join attachments, flexible endpoints, deformation selectors and recognized saved driven topology. Unknown grammar and ambiguous/missing references refuse with structured diagnostics; history/presentation strings are not live owners.",
+    "Admits identity quaternion, zero translation and zero pivot for populated groups; eligible empty groups may retain finite pivots. Refuses posed/repivoted, child/duplex-owned, overlapping deformation or retained pose effects without changing scientific kernels.",
+    "Single DELETE and batch POST share one lock-owned, source/session/revision/cursor/loadout-guarded publication with one undo/revision. Retained plus new recovery encodings have the existing 8 MB budget and a 2,000-row limit. No full proof, atom walk or reconciliation enters ordinary admission.",
+    "Owned response embeds matching geometry outside the lock, preserves the new row's recovery bodies and disables legacy group inference. Rootless histories containing dissolution also suppress later default-group inference without inventing a recipe root.",
+    "Recovery restores touched group presence/order from already decoded snapshots, filters active removals after existing restorers, and respects explicit recreation lifetimes for moves, Join and pattern baselines. Imported initial groups and original pattern poses survive tested ordinary/optimized seek and reload.",
+    "Shared seek admission returns 409 for malformed/bounded metadata and 410 for any evicted/missing dissolution PRE/POST body. This conservative rule includes end seek and creation-backed groups. Implicit pattern rebirth without explicit creation returns 409 after existing birth decoding, before publication. Native input verification remains independent.",
+    "Sidebar Dissolve preserves visibility on refusal/stale responses. Import omission uses one atomic request and stops Save on refusal/cancellation/supersession. Removed old unlogged deletion and sequential import loops; updated legacy tests and stale cosmetic-edit commentary."
+  ],
+  "numerical_compatibility": {
+    "before_artifact": "cluster_dissolve_schema_compatibility_before.json",
+    "policy": "backend/core/data/numerical_schema_compatibility_v1.json",
+    "direct_transitions": 9,
+    "transition_limit": 16,
+    "bytes": 8256,
+    "byte_limit": 16384,
+    "qualification": "Retains three original A→B transitions and adds six exact A→C/B→C whole-manifest transitions. B→C differs only in the SnapshotOpKind literal in models.py. No transitive admission, stored-pin rewrite, native kernel, constants, runtime or template change. Current pure tests independently verify these claims.",
+    "current_signatures": {
+      "cpd": "b27662c778b2cbbefe6f0fbf2151aa7ad8a08e9a136a3347a1ba7d0b2a3ee027",
+      "duplex": "266031eda0da33158023c7cf4206478ef9e24b41aaf93a4158aea04b858c94e3",
+      "coating": "bf071fef6464e05a45db04e75ae7e80fd1635a23aab3ad515225b4d3f1235599"
+    },
+    "future_policy": "Review/archive obsolete exact edges without dropping supported saved pins; do not automatically raise the bounded policy."
+  },
+  "remaining_limits": [
+    "FH-18 remains open for posed dissolution, placement-preserving regrouping, cluster-unassigned, duplex rotation-point authoring and general implicit/auxiliary recreation. The tested explicit-lifetime subset is not an all-command lifetime proof.",
+    "Actual desktop layout, warning clarity, geometry comparison and latency/memory tails remain MV-48/FH-27. Bounded metadata/retention does not qualify whole-design snapshot serialization, undo copying, lock duration or response cost.",
+    "Full PRE/POST serialization and undo copying remain under the state lock; no time/heap guarantee or measured performance improvement is claimed.",
+    "General corrupt snapshot diagnostics and a more permissive creation-backed or anchor-specific recovery reader are not implemented. Missing dissolution data refuses rather than borrowing an unrelated surviving snapshot.",
+    "Native edit/SetInput/repair/cascade is tested. Rootless histories remain unverified; mixed legacy edit and public batch/reference-selection catalog rollout remain closed or unqualified.",
+    "Accepted compatibility Designs remain mutable. Response geometry runs after commit and failures there do not roll back the accepted edit. Standalone geometry GET pairing remains ISSUE-107.",
+    "Assemblies and machine-specific VR remain deferred; assets retain lower priority."
+  ],
+  "cleanup": {
+    "archive_mounted": false,
+    "bulk_artifacts_created": false,
+    "removed_paths": [
+      "/tmp/pytest-of-joshua/pytest-15",
+      "/tmp/pytest-of-joshua/pytest-16",
+      "/tmp/pytest-of-joshua/pytest-17",
+      "/tmp/pytest-of-joshua/pytest-current"
+    ],
+    "removed_files": 25,
+    "removed_bytes": 121755,
+    "removed_directories": 575,
+    "removed_symlinks": 16,
+    "earlier_pytest_directories": "Automatically pruned by pytest retention during serialized runs.",
+    "active_cwd_fd_maps_references": 0,
+    "remaining_pytest_paths": [],
+    "remaining_nadoc_shared_memory": [],
+    "retained": "Source tests and compact audit/compatibility evidence only; no browser captures, traces, scientific outputs or user designs changed."
+  }
+}

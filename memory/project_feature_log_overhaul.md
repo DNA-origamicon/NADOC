@@ -24,11 +24,60 @@ growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
 Engineering update U2 closed **FH-19 after two checkpoints**. Current
 counts are **18 / 38 complete, 20 remaining (11 core, 9 parked)**, delta
-for latest update U3 **+0 completed, +0 total**. U3 is **FH-18 checkpoint 1**:
-ordinary authored group PATCH is implemented, but deletion, placement-preserving
-regrouping and auxiliary group lifecycle still keep FH-18 open. No scope-growth
-trigger fired. The finite remaining matrix is in the delivery map; next finish
-that lifecycle before the standard history editors.
+for latest update U4 **+0 completed, +0 total**. U4 is **FH-18 checkpoint 2**:
+ordinary authored PATCH and admitted identity-group dissolution are implemented;
+posed/regrouped membership and auxiliary group lifecycle still keep FH-18 open.
+No scope-growth trigger fired. A third checkpoint leaving FH-18 open MUST flag
+task growth and review its remaining exit. The finite matrix is in the delivery
+map; next finish that lifecycle before the standard history editors.
+
+**FH-18 dissolve checkpoint:** single DELETE and atomic batch POST now record
+`cluster-dissolve` v1 (1–128 IDs), with one owned undo/revision and native input
+replay. Typed bounded incoming references include frames, children, joints,
+Join attachments, flexible endpoints, deformation selectors and recognized saved
+driven topology. Nonempty groups require exact identity rotation, zero translation
+and zero pivot; empty groups may retain finite pivots. Child/duplex ownership,
+overlapping deformation or remaining pose effects, unknown saved grammar and
+ambiguous/missing references refuse. No molecular kernel or geometry baking.
+The narrow pivot admission preserves native floating-point placement; an identity
+quaternion alone does not bypass pivot subtraction/addition in existing kernels.
+
+Recovery restores selected groups from already decoded snapshots and filters
+active removals after creation/pattern/Join restoration; explicit later recreation
+clears a prior removal. New response bodies retain the new row's recovery data.
+Move, Join and pattern pose restoration respect the selected identity's lifetime;
+an old pose cannot leak into a same-ID explicit recreation. Imported groups
+remain recoverable before a future creation, and pattern poses survive backward
+seek before a later move/reset. The shared seek boundary refuses malformed or
+over-budget dissolution metadata with 409 and unavailable dissolution recovery
+bodies with 410, before decoding/publication. This deliberately requires every
+dissolution's PRE/POST body, even for end seek or a creation-backed group; it
+does not disable independent native input regeneration. Ordinary histories
+without dissolution retain their existing recovery behavior.
+Pattern-created reuse of a dissolved ID without an explicit creation is refused
+with typed 409 from the existing decoded birth facts; no new lifetime semantics
+or geometry arithmetic is inferred. General implicit/auxiliary recreation remains
+part of the open lifecycle matrix.
+Rootless normalized reads also skip inference when dissolution is in history;
+this prevents later responses from recreating deliberately removed groups without
+inventing a recipe root. Other rootless legacy inference remains unchanged.
+The sidebar calls this **Dissolve**, keeps visibility unchanged on failure, and
+import omission uses one atomic request with stale/error checks before Save.
+No whole-history proof or atom scan enters ordinary admission or drag frames.
+Existing full pre/post snapshot serialization and undo copying still require
+real-workload timing; the retained-byte limit is not a time/heap guarantee.
+Exact compatibility policy contains 9 direct edges, preserving both earlier
+schema generations; no transitive admission or stored-pin rewrite. See
+[dissolve evidence](../docs/audits/feature_history_20261014/validation_group_dissolve.json).
+Validation: **473 focused backend checks** (227 warnings, 12.53 s), plus **3
+real native-worker compatibility cases** (59.68 s). Full frontend: **8,546 passed,
+one skipped**, 731 files, 316.70 s. Scoped Ruff/diff pass; `main.js` delta 0.
+Selector dry-run chose FAST with FULL deferred; it executed no suite. Aggregate
+fast/broad debt remains. Owned pytest artifacts were checked for active references
+and removed: 25 files/121,755 bytes, 575 directories and 16 links; roots and NADOC
+shared memory are empty. No browser/bulk artifacts were created.
+**NOT VERIFIED IN APP:** Archive remains unavailable. MV-48/FH-27 retain desktop,
+geometry comparison and latency acceptance; assemblies and VR stay deferred.
 
 **FH-18 ordinary group edits:** non-null membership/name/style fields always
 commit, even when old callers omit or falsify `commit`/`log`; pure pose previews
@@ -159,13 +208,11 @@ remain. Selector dry-run chose FAST with FULL deferred; no selector suite ran.
 **NOT VERIFIED IN APP**; Archive is unavailable, and actual desktop/latency
 qualification remains open. No shared-server mutation or molecular change.
 
-Next: connect the separate bounded **Recover recipe** entry for invalid saved
-files to the private core described above. Normal typed loading stays strict;
-explicit private repair must finish before recovered-copy download. Primary
-Onshape/SOLIDWORKS recovery precedents and NADOC-specific inferences are in the
-delivery map. Broader incoming cluster-delete dependencies
-and a logged delete contract remain open. Do not claim ISSUE-106 fully closed or
-G1 complete. Geometry/Fine Routing stays ahead of assets, assemblies and VR.
+Saved-file delivery was completed under FH-19 above. Next: close the remaining
+FH-18 placement and auxiliary lifecycle matrix; the admitted dissolve subset does
+not establish general posed regrouping. Primary Onshape/SOLIDWORKS precedents and
+NADOC-specific inferences are in the delivery map. Do not claim ISSUE-106 fully
+closed or G1 complete. Geometry/Fine Routing stays ahead of assets, assemblies and VR.
 
 Prevention checkpoint validation: **563 distinct backend passes**—560 focused cases/35 warnings in
 51.22 s plus three real spawned numerical compatibility cases in 49.09 s. All

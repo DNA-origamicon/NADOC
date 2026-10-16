@@ -984,6 +984,20 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   display scope. The existing dedicated e2e isolation/output cleanup rules apply.
 
 - **MV-48 — PENDING — Ordinary grouping and geometry preview lifecycle (2026-10-15).**
+  **October 16 FH-18 dissolve checkpoint:** use **Dissolve** on an ordinary
+  unmoved/unrepivoted group. Members must stay in place, one history row/undo
+  must appear, and repeated scrub/undo/redo/save/reopen must not resurrect it.
+  Inspect the wider button's sidebar layout. Try frame owners, child/Join/flexible
+  dependencies, posed and deformed groups: refusal must explain the limitation
+  without changing visibility or geometry. In caDNAno/scadnano import, omit
+  groups and check all-or-none removal; failure must stop Save. Replace the
+  document or make a newer edit while the response is pending; stale replies
+  must not alter visibility or save the wrong state. Native proof/regression
+  checks are automated, but full snapshot/undo/geometry and request/render tails
+  still need measurement. General posed dissolve/regrouping is not yet supported.
+  Exercise an evicted dissolution: seek/preview must explain unavailable recovery
+  and preserve the current model/cursor. Check imported and pattern-created groups
+  while scrubbing backward, and explicit same-ID recreation through saved history.
   **October 16 FH-18 authored-edit checkpoint:** rename/recolor/change opacity
   and assign selected strands/domains to an existing group through ordinary
   controls. Each accepted action must add one history row and one undo step,

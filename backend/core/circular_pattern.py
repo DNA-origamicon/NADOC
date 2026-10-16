@@ -51,10 +51,17 @@ def create_circular_pattern(
     return copy_pattern_instances(design, cluster_id, placements, id_seed=id_seed)
 
 
-def pattern_history_overlays(design, decode_snapshot):
+def pattern_history_overlays(design, decode_snapshot, *, pose_windows=None):
     """Restore copy-owned overlays after topology seek, preserving later pose edits."""
     clusters, deformations = {}, {}
-    for entry in design.feature_log:
+    dissolved = set()
+    for index, entry in enumerate(design.feature_log):
+        if pose_windows:
+            if entry.feature_type == "cluster_create":
+                dissolved.discard(entry.cluster_id)
+            elif entry.feature_type == "snapshot" and entry.op_kind == "cluster-dissolve":
+                # The shared seek boundary has admitted this closed metadata.
+                dissolved.update(entry.params["cluster_ids"])
         if (
             entry.feature_type != "snapshot"
             or entry.op_kind
@@ -68,9 +75,17 @@ def pattern_history_overlays(design, decode_snapshot):
         after = decode_snapshot(entry.post_state_gz_b64)
         old_clusters = {c.id for c in before.cluster_transforms}
         old_ops = {op.id for op in before.deformations}
-        clusters.update(
-            {c.id: c for c in after.cluster_transforms if c.id not in old_clusters}
-        )
+        born = {c.id: c for c in after.cluster_transforms if c.id not in old_clusters}
+        if pose_windows:
+            if dissolved.intersection(born):
+                from backend.core.part_command_errors import CommandContractError
+                raise CommandContractError(
+                    "Timeline recovery cannot restore a pattern that reuses a dissolved group identity "
+                    "without an explicit group creation. Use input regeneration when supported.",
+                    code="group_recovery_unsupported")
+            born = {cid: c for cid, c in born.items()
+                    if cid not in pose_windows or pose_windows[cid].contains(index)}
+        clusters.update(born)
         deformations.update(
             {op.id: op for op in after.deformations if op.id not in old_ops}
         )
