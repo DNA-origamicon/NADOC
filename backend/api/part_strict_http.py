@@ -20,7 +20,7 @@ from backend.api.doc_context import DocContextMiddleware, _extract_doc_id
 from backend.api.document_identity import UnsafeDocumentIdentity, require_document_identity
 from backend.api.part_strict_reads import (
     CONTEXT_KEY, StrictRequestContext, construction_policy, create_registered_empty,
-    require_context, revision_metadata,
+    require_context, revision_metadata, recovery_status, start_recovery,
 )
 from backend.core.part_operation_input import MAX_OPERATION_BYTES, validate_operation_input
 
@@ -44,6 +44,8 @@ def _strict_application():
         (_EMPTY, "POST", create_registered_empty, 201, MAX_EMPTY_BYTES),
         (_POLICY, "GET", construction_policy, 200, 0),
         (_REVISION, "GET", revision_metadata, 200, 0),
+        ("/api/design/recovery", "GET", recovery_status, 200, 0),
+        ("/api/design/recovery/jobs", "POST", start_recovery, 202, MAX_EMPTY_BYTES),
         (_JOBS, "POST", start_part_evaluation, 202, MAX_OPERATION_BYTES),
         (_JOBS + "/{job_id}", "GET", get_part_evaluation, 200, 0),
         (_JOBS + "/{job_id}", "DELETE", cancel_part_evaluation, 200, 0),

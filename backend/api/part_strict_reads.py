@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
 from backend.api import part_publication_policy as policy
 from backend.api import state
 from backend.api.doc_context import get_current_doc
+from backend.api.part_immutable_recovery_inputs import RestoreRequest
 
 
 CONTEXT_KEY = "nadoc.strict_part_context"
@@ -90,3 +91,17 @@ def revision_metadata(request: Request):
     with state._lock:
         context, current = _require_context_locked(request)
         return {**revision_status_locked(context.doc_id), "policy_generation": current.generation}
+
+
+def recovery_status(request: Request):
+    from backend.api.part_immutable_recovery import status
+
+    context, _current = require_context(request)
+    return status(expected_policy_generation=context.policy_generation)
+
+
+def start_recovery(body: RestoreRequest, request: Request):
+    from backend.api.part_immutable_recovery import start
+
+    context, _current = require_context(request)
+    return start(body, expected_policy_generation=context.policy_generation)

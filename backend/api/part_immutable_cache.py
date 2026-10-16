@@ -219,6 +219,17 @@ class StrictPartCache:
 
     def assert_current(self, lease):
         """Recheck a host file lease outside the document state lock."""
+        with self.checked_lease(lease):
+            pass
+
+    @contextmanager
+    def checked_lease(self, lease):
+        """Hold cooperating-writer exclusion through a short host publication.
+
+        Acquisition and file checks precede the caller's state lock. The body
+        must perform no disk work; arbitrary external replacement is outside
+        this advisory locking contract.
+        """
         name = self._check_lease(lease)
         with self._directory() as directory:
             if lease._fingerprint is None:
@@ -228,6 +239,22 @@ class StrictPartCache:
                 _manifest, _payload, current = self._read(directory, name, payload=False)
                 if current != lease._fingerprint:
                     _refuse("Durable content changed after its lease was acquired", "strict_cache_changed")
+            yield
+
+    def inspect(self, doc_id):
+        """Bounded exact-record header inspection, without proof or decode."""
+        name = _record_name(doc_id)
+        try:
+            os.lstat(self.directory)
+        except FileNotFoundError:
+            return None
+        with self._directory() as directory:
+            try:
+                os.stat(name, dir_fd=directory, follow_symlinks=False)
+            except FileNotFoundError:
+                return None
+            manifest, _payload, _fingerprint = self._read(directory, name, payload=False)
+            return manifest
 
     def discover(self):
         if not self.directory.exists() and not self.directory.is_symlink():

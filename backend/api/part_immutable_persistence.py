@@ -149,6 +149,27 @@ class StrictPersistence:
             self.cache.assert_current(lease)
             self._bind_locked(capture, lease)
 
+    @contextmanager
+    def bind_for_publication(self, capture, lease):
+        """Prepare file ownership, then retain its lease through host CAS.
+
+        File checks and the payload digest finish before yielding. The host
+        performs its separate permitted publication under the state lock.
+        Failure restores only this file binding, never removes durable bytes.
+        """
+        _check_capture(capture)
+        with self._writer(), self.cache.checked_lease(lease):
+            previous = self._bindings.get(capture.doc_id)
+            self._bind_locked(capture, lease)
+            try:
+                yield
+            except BaseException:
+                if previous is None:
+                    self._bindings.pop(capture.doc_id, None)
+                else:
+                    self._bindings[capture.doc_id] = previous
+                raise
+
     def write_capture(self, capture):
         """Persist a previously captured handle; no state lock is acquired here."""
         _check_capture(capture)

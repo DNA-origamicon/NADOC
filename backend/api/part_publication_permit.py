@@ -167,6 +167,41 @@ def admit_empty_creation(doc_id, session):
     return _register(_admissions, EvaluationAdmission(), context)
 
 
+def admit_recovery(doc_id, session, *, request_sha256):
+    """Host-only empty-session admission; no public operation selects restore."""
+    from backend.api.part_immutable_storage import require_empty_session
+
+    require_empty_session(session)
+    current = policy.resolve(doc_id)
+    if not current.strict:
+        _refusal("Recovery requires strict host policy", code="immutable_publication_scope")
+    if type(request_sha256) is not str or fullmatch(r"[0-9a-f]{64}", request_sha256) is None:
+        raise ValueError("Recovery admission requires the canonical bounded request digest")
+    context = AdmissionContext(doc_id, session.identity, lambda: None, session.revision,
+        current.generation, "restore", request_sha256, "strict_recovery_v1")
+    return _register(_admissions, EvaluationAdmission(), context)
+
+
+def issue_recovery_permit(admission, candidate, *, qualification, expires, cancelled):
+    from backend.api.part_immutable_recovery import require_qualification
+    from backend.api.part_immutable_storage import require_sealed
+
+    context = admission_context(admission)
+    if context is None or context.operation != "restore" or context.scope_tag != "strict_recovery_v1":
+        _refusal("Recovery needs its original host admission")
+    if not policy.resolve(context.doc_id).strict or context.policy_generation != policy.resolve(context.doc_id).generation:
+        _refusal("Recovery host policy changed", code="policy_changed")
+    require_qualification(qualification, admission, candidate)
+    metadata = require_sealed(candidate)
+    now = monotonic()
+    if type(expires) not in {int, float} or not now < expires <= now + MAX_LIFETIME:
+        _refusal("Recovery candidate expired", code="publication_expired")
+    if not isinstance(cancelled, Event) or cancelled.is_set():
+        _refusal("Recovery was cancelled", code="cancelled")
+    return _register(_permits, PublicationPermit(), _PermitContext(context, ref(candidate),
+        metadata.authoring_sha256, metadata.recipe_sha256, "independent_cold_replay", expires, cancelled))
+
+
 def prepare_admitted_empty(admission, *, name, lattice_type):
     """Build/seal outside state lock; this API accepts no authored model/bytes."""
     from backend.api.part_immutable_revision import prepare_revision
@@ -215,6 +250,13 @@ def check_publication(permit, *, doc_id, session, candidate):
                 admit_batch_source(candidate)
         except CommandContractError as error:
             raise HTTPException(422, detail=error.as_issue()) from error
+    elif context.admission.scope_tag == "strict_recovery_v1":
+        metadata = require_sealed(candidate)
+        require_empty_session(session)
+        if (not policy.resolve(doc_id).strict or context.evidence_class != "independent_cold_replay"
+                or metadata.authoring_sha256 != context.authoring_sha256
+                or metadata.recipe_sha256 != context.recipe_sha256):
+            _refusal("Recovery lost its checked candidate binding", code="immutable_publication_scope")
     elif context.admission.scope_tag == "empty_root_v1":
         if is_immutable(candidate):
             require_sealed(candidate)

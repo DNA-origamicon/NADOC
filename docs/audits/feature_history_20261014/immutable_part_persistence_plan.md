@@ -25,6 +25,23 @@ durable record, or qualify end-to-end restart behavior. In particular, public
 creation must serialize against an already-admitted compatibility autosave, not
 only check for a record before writing.
 
+The next, gated recovery increment now passes **33 parent-run cases in 5.02
+seconds**, including an actual spawned cold restore followed by a separate cold
+verification. The initial run stopped at collection because a test used pytest's
+reserved `request` parameter name; renaming it required no production correction.
+See [recovery validation](validation_immutable_recovery_p6.json). The subsequent
+storage-owner regression sweep passed 315 cases and found three fixture failures:
+their replacement workspace directories had not been created. Those fixtures are
+corrected without a production change; all **36 recovery cases passed in 4.89
+seconds** on rerun. The union of the eleven-file sweep and rerun is **318 distinct
+green cases**, including jobs, publication permits, strict HTTP and persistence.
+The implementation reuses the existing evaluation catalog and native worker
+slot, keeps candidates as sealed bytes, and requires a private qualification from
+the host-observed native replay before issuing a restore permit. File checks and
+cooperating-writer exclusion precede and span the short state publication. There
+is no persisted proof shortcut. Durable first creation and its compatibility
+autosave serialization remain the next prerequisite; public gates remain false.
+
 ## Durable record
 
 Use a versioned sibling of the existing `.session` directory, never a child of

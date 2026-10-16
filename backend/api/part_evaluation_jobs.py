@@ -69,6 +69,14 @@ def _assert_publishable(job):
         raise HTTPException(409, detail={"code": "policy_changed", "detail": "Construction policy changed; evaluate again"})
 
 
+def _discard_candidate(job):
+    if job.result is not None:
+        job.result.pop("candidate", None)
+    from backend.api.part_immutable_recovery import discard_candidate
+
+    discard_candidate(job)
+
+
 def _has_session_context(job):
     return type(job.session_identity) is str and bool(job.session_identity)
 
@@ -170,7 +178,8 @@ def start(request, *, expected_source=None, expected_session_identity=None, expe
         }}
         with _lock:
             while len(_jobs) >= MAX_RESULTS:
-                _jobs.popitem(last=False)
+                _key, evicted = _jobs.popitem(last=False)
+                _discard_candidate(evicted)
             _jobs[identity] = job
         _submit(job, captured, operation)
         return {"job_id": identity, "status": "running", "source_revision": revision,
@@ -192,8 +201,7 @@ def _lookup(identity):
         raise HTTPException(404, detail="Unknown part evaluation job")
     if job.committed_revision is None and monotonic() - job.created > RESULT_TTL:
         job.cancelled.set()
-        if job.result is not None:
-            job.result.pop("candidate", None)
+        _discard_candidate(job)
         raise HTTPException(410, detail="Part evaluation result expired")
     return job
 
@@ -208,8 +216,7 @@ def inspect(identity, *, cancel=False):
                     "stale": matches is False, "source_busy": matches is None}
         if cancel:
             job.cancelled.set()
-            if job.result is not None:
-                job.result.pop("candidate", None)
+            _discard_candidate(job)
         # Candidate/recovery bytes remain internal and bounded; polling never
         # clones or transmits an entire design merely to show job progress.
         result = None if job.result is None else deepcopy({
@@ -239,6 +246,12 @@ def commit(identity):
     if not _slot.acquire(blocking=False):
         raise HTTPException(429, detail="A part history operation is already running")
     try:
+        from backend.api.part_immutable_recovery import is_recovery_job, commit_registered
+
+        with _lock:
+            restoring = _lookup(identity)
+        if is_recovery_job(restoring):
+            return commit_registered(identity, restoring)
         with _lock:
             job = _lookup(identity)
             _assert_publishable(job)
