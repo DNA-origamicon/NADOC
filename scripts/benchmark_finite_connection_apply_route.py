@@ -25,7 +25,7 @@ from starlette.responses import JSONResponse
 from backend.api import doc_context, part_connection_application_commands as native
 from backend.api import routes_connection_versions as routes, state
 from backend.api.part_revision_status import revision_status
-from backend.core import lattice, sequences
+from backend.core import lattice, part_scope_references, sequences
 from backend.core.models import Design
 from backend.core.part_history_contract import create_empty_part
 from backend.core.part_history_proof import AUTHORING_FIELDS
@@ -282,7 +282,8 @@ def scalar_mismatches(left, right, paths):
             for path in paths[:8]]
 
 
-def cycle(client, template, mode, iteration, locks, timers, runtime, *, replay=False, missing=False):
+def cycle(client, template, mode, iteration, locks, timers, runtime, *, replay=False, missing=False,
+          compact_parity=False):
     doc = f"__benchmark_finite_apply_{uuid4()}"
     session = state._DesignSession(design=template.model_copy(deep=True), revision=7)
     if missing:
@@ -347,8 +348,14 @@ def cycle(client, template, mode, iteration, locks, timers, runtime, *, replay=F
                     and entry.params["connection_application_version"] == 1)
             semantic = {"authoring": normalize(current.model_dump(mode="json", include=AUTHORING_FIELDS), identities),
                 "response": response_semantics(payload, identities, len(template.feature_log))}
-            compared.append(semantic)
+            if not compact_parity:
+                compared.append(semantic)
             outputs.append({key: digest(value) for key, value in semantic.items()})
+            if compact_parity:
+                # Keep only exact semantic digests between requests/arms. These
+                # client-side graphs otherwise inflate the server's GC heap in
+                # this in-process harness. No collection policy is changed.
+                del semantic, payload, response
         replay_result = None
         if replay and len(outputs) == 2 and all(outputs):
             owned = Design.model_validate_json(session.design.model_dump_json())
@@ -362,13 +369,16 @@ def cycle(client, template, mode, iteration, locks, timers, runtime, *, replay=F
         state.drop_doc(doc)
 
 
-def run(repeats):
+def run(repeats, *, compact_parity=False):
     original_lock, original_gate = state._lock, routes.OWNED_FINITE_CONNECTION_APPLY_ENABLED
     before_sessions, before_gc = dict(state._sessions), tuple(gc.callbacks)
     timers, locks = Timings(), LockProbe(original_lock)
     observed_gc_events = dropped_gc_events = 0
     report = {"comparison": "Same current runtime, private gate false/true; no historical binary",
         "repeats": repeats, "natural_gc": True, "forced_gc": False,
+        "compact_parity": compact_parity,
+        "response_retention": ("Only exact authoring/response digests survive between requests and arms; raw, decoded and normalized client responses are released. Untimed decoding/normalization still shares this process and may shift GC cadence."
+            if compact_parity else "Full decoded/normalized client responses survive between requests and arms for mismatch diagnostics; this inflates the shared server/client GC heap and is not external-browser latency qualification."),
         "production_gate_initial": original_gate, "stage_columns": STAGES,
         "response_normalization": "Exact generated identity keys/values, quoted validator references and documented duplicate-occupancy (ID, bp location tokens; appended history id/time/recovery sizes and intentional params representation only",
         "serialization_stages": "response_serialization includes FastAPI annotated-dict direct JSON-byte encoding; response_json measures JSONResponse.render, ordinarily error responses. Stages are nested, not additive.",
@@ -376,7 +386,8 @@ def run(repeats):
         "source_policy": "Authoring unchanged in both arms; complete source unchanged required for native, legacy history aliasing reported",
         "latency_qualified": False, "cases": [], "fixture_errors": [], "cleanup": False,
         "source_sha256": {str(Path(module.__file__).relative_to(Path.cwd())): hashlib.sha256(Path(module.__file__).read_bytes()).hexdigest()
-                          for module in (native, routes)}}
+                          for module in (native, routes, part_scope_references)},
+        "benchmark_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
     templates = []
     for background, material, count in CASES:
         try:
@@ -411,14 +422,15 @@ def run(repeats):
                     with RuntimeProbe(phase=lambda: _PHASE.get(), max_events=16_384) as runtime:
                         for mode in order:
                             pair[mode], comparison[mode] = cycle(client, template, mode, iteration, locks, timers, runtime,
-                                                                replay=mode == "native" and iteration == 0)
+                                replay=mode == "native" and iteration == 0, compact_parity=compact_parity)
                     observed_gc_events += len(runtime.events)
                     dropped_gc_events += runtime.dropped_events
                     equal = (len(pair["legacy"]["semantic_digests"]) == 2
                         and all(pair["legacy"]["semantic_digests"])
                         and pair["legacy"]["semantic_digests"] == pair["native"]["semantic_digests"])
-                    mismatch_paths = differing_paths(comparison["legacy"], comparison["native"]) if not equal else []
-                    if mismatch_paths and "first_scalar_mismatches" not in case:
+                    mismatch_paths = (([["semantic_digests"]] if compact_parity else
+                        differing_paths(comparison["legacy"], comparison["native"])) if not equal else [])
+                    if mismatch_paths and not compact_parity and "first_scalar_mismatches" not in case:
                         case["first_scalar_mismatches"] = scalar_mismatches(
                             comparison["legacy"], comparison["native"], mismatch_paths)
                     case["pairs"].append({"order": order, "semantic_parity": equal,
@@ -471,9 +483,11 @@ def run(repeats):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repeats", type=int, default=31)
+    parser.add_argument("--compact-parity", action="store_true",
+        help="Release large client response graphs before the next request; retain exact semantic digests")
     args = parser.parse_args()
     if not 1 <= args.repeats <= 31:
         parser.error("repeats must be between 1 and 31")
-    result = run(args.repeats)
+    result = run(args.repeats, compact_parity=args.compact_parity)
     print(json.dumps(result, separators=(",", ":"), allow_nan=False))
     raise SystemExit(0 if result["all_correctness_checks_passed"] else 1)

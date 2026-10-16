@@ -17,7 +17,7 @@ regression debt are recorded in [the checkpoint evidence](validation_pause_check
 | P1 | Standard-part recording transactions, executable replay registry and evidenced cleanup | Foundation implemented below. Retain legacy callbacks and compatibility recovery; no claim of general isolated evaluation |
 | P2 | Explicit recipe roots/versions, authoritative-field classification, read-only verification and incremental dependencies | Implementation exit checks complete: independent nonempty replay, content-pinned roots, typed dependencies, fingerprints, bounded capture/jobs and stale/cancel handling. Supported-family expansion continues in P3/P4; validation debt below remains explicit |
 | P3 | Native DNA command families and generated construction | DNA implementation exit checks recorded below, including joined/connectivity input compilation and bounded native-source CPD conversion/relaxation. Registered kinds retain method/action restrictions; their count is not universal operation coverage. Generated asset/attachment histories remain in P4 |
-| P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol, pinned small protein/catalog/aptamer inputs, supported protein conjugation and duplex lifecycle/relaxation implemented. Pending NP and ordinary overhang connection contracts pass independent replay. Bounded applied NP lifecycle/rename and finite ordinary linker Apply/reapply are implemented. Finite ordinary Apply/reapply now has a private default-disabled route with 244 focused passes; a measured reapply latency regression keeps rollout closed. Applied NP route migration remains open. Owned oxDNA preparation is also wired behind a default-disabled host gate; 182 focused cases pass, with live capture/HTTP responsiveness still under qualification. Full import/attachment coverage and complete physical-input receipts remain open |
+| P4 | Standard-part assets and attachments | In progress. Source-free gold/thiol, pinned small protein/catalog/aptamer inputs, supported protein conjugation and duplex lifecycle/relaxation implemented. Pending NP and ordinary overhang connection contracts pass independent replay. Bounded applied NP lifecycle/rename and finite ordinary linker Apply/reapply are implemented. Finite ordinary Apply/reapply has a private default-disabled route with 244 focused passes. A shared reference-walker lifetime refactor passes 247 cases and removes the observed median regression in the compact benchmark; HTTP tails and app qualification still keep rollout closed. Applied NP route migration remains open. Owned oxDNA preparation is also wired behind a default-disabled host gate; 182 focused cases pass, with live capture/HTTP responsiveness still under qualification. Full import/attachment coverage and complete physical-input receipts remain open |
 | P5 | Standard-part repair, drafts, desktop and part-mode VR | Saved draft evaluation/apply, reference selection, source staging/restoration and persistence pass. Desktop UI-1 and narrow invalid-gold repair pass. Private gold/QD/free-protein and complete DNA comparisons pass automated checks; broader invalid-family selectors and desktop app review remain open. VR/headset validation is explicitly deferred to a later capable-machine session |
 | P6 | Strict standard-part agent transactions and legacy retirement | Private policy/permits, closed strict HTTP dispatch, immutable internal ownership and outside-lock evaluation/publication pass. Atomic typed records and pending-safe autosave pass. Cold-qualified recovery and durable initial creation pass focused lifecycle checks. Private byte transport now moves source decode/projection into the admitted worker; public immutable creation/batch stay disabled pending responsiveness and memory qualification. Catalog expansion, explicit imports and later replay reuse remain open |
 
@@ -1295,3 +1295,24 @@ was FAST/deferred FULL in dry-run only; prior broad failures/debt remain separat
 VR is deferred by the user, assemblies remain deferred, and P4–P6 remain open.
 See [the route plan](ordinary_connection_owned_route_plan.md) and
 [validation](validation_finite_connection_apply_route.json).
+
+## Reference inventory lifetime and measured follow-up — October 15
+
+The dependency reference walker retained each temporary set in a recursive
+closure cycle. Moving only that visitor to module scope releases the scratch
+storage when the call returns, preserving complete typed-reference semantics,
+saved-owner subtraction and fail-closed diagnostics. **247 focused cases pass**;
+the immediate-lifetime test failed before the extraction. No cache, scientific
+algorithm, numerical manifest, limit or GC policy changed.
+
+A separate benchmark profile now releases large decoded client responses before
+the next request while retaining exact parity digests. Its baseline and final
+31-pair runs each pass 496 successful requests, 124 comparisons and four fresh
+input-only replays, with complete cleanup and no dropped GC events. Native
+16-cell ss reapply median fell from 125.83 to 72.99 ms; the final legacy median
+was 71.30 ms. This resolves the observed median regression in that profile,
+without qualifying long tails: native ds Apply still reached 181.68 ms. Both
+profiles share server and client allocation, so neither replaces app validation.
+The route gate remains false; initial and failed evidence is retained. See
+[the analysis](reference_inventory_lifetime.md) and
+[validation](validation_reference_inventory_lifetime.json).

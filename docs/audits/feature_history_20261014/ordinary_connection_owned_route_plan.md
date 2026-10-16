@@ -70,12 +70,28 @@ known occupancy-location token; the original warning, polarity and verdict are
 still compared. Initial and diagnostic evidence is retained. Cleanup passed and
 the bounded natural-GC probes dropped no events.
 
-Latency is **not qualified**. In the final run, 16-cell ss reapply was 144.27 ms
+Latency is **not qualified**. In the corrected full-retention run, 16-cell ss reapply was 144.27 ms
 native versus 96.30 ms legacy at the median (initially 145.20 versus 73.26 ms).
 Both arms have substantial GC-overlapping tails. Summed per-request lock medians
 were 7.43 versus 6.07 ms; compare these rather than pooled individual holds,
 because legacy takes two holds per request and native one. Natural GC overlap
-does not remove user-visible cost or establish its cause. Investigate reference
-inventory allocation and retained benchmark lifetimes before any optimization.
-The public gate remains false. See [validation](validation_finite_connection_apply_route.json)
+does not remove user-visible cost or establish its cause. Those reports remain
+unchanged. See [validation](validation_finite_connection_apply_route.json)
 and [complete measurements](benchmark_finite_connection_apply_route.json).
+
+The subsequent allocation review found per-record recursive-visitor closure
+cycles in the typed reference inventory. A module-level visitor now releases its
+scratch reference set immediately, preserving traversal, errors and saved-owner
+subtraction. The focused lifetime/caller/owned-route run passed **247 cases across
+seven files in 5.37 s**. No numerical or GC-policy changes were made.
+
+Compact-parity measurements release large client response graphs before the next
+request but retain exact authoring/response digests. Both before/after runs passed
+496 requests, 124 parity pairs, four input-only replays, cleanup and zero GC drops.
+The 16-cell ss reapply median was **125.832 ms native / 73.552 ms legacy before**
+and **72.985 / 71.304 ms after**. The large observed median regression is absent
+in this rerun; native p95 remains 135.619 ms and concurrent-read maximum 71.359 ms.
+Untimed client normalization still shares the server process, and other cases
+retain long tails. This does not establish external-browser latency or authorize
+rollout: the gate remains false. See the [lifetime audit](reference_inventory_lifetime.md)
+and [compact before/after validation](validation_reference_inventory_lifetime.json).

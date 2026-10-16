@@ -1,0 +1,149 @@
+{
+  "date": "2026-10-15",
+  "scope": "Remove the per-call recursive reference-visitor closure cycle without changing typed reference semantics",
+  "production_file": "backend/core/part_scope_references.py",
+  "test_file": "tests/test_part_reference_lifetime.py",
+  "baseline_checkpoint": "0a0913e7",
+  "executed_runs": [
+    {
+      "stage": "Tests first before extraction",
+      "passed": 9,
+      "failed": 2,
+      "seconds": 2.9,
+      "interpretation": "One expected immediate scratch-lifetime failure; one invalid CPD control fixture rejected by the real two-endpoint coordinate schema. Production remained unchanged."
+    },
+    {
+      "stage": "Corrected independent CPD control before extraction",
+      "passed": 1,
+      "seconds": 2.73,
+      "interpretation": "Both declared endpoints have finite C5/C6 coordinates; no validation bypass."
+    },
+    {
+      "stage": "Lifetime, semantics and reviewed callers after extraction",
+      "passed": 247,
+      "seconds": 5.37,
+      "new_cases": 11,
+      "files": [
+        "tests/test_part_reference_lifetime.py",
+        "tests/test_generated_scope_references.py",
+        "tests/test_generated_saved_topology.py",
+        "tests/test_part_connection_application_commands.py",
+        "tests/test_part_np_application_commands.py",
+        "tests/test_part_dna_comparison.py",
+        "tests/test_connection_version_owned_apply_route.py"
+      ]
+    }
+  ],
+  "semantics_preserved": [
+    "Public signature and immutable returned reference set",
+    "Typed child traversal, error strings and fail-closed shape handling",
+    "Derived linker ownership, domain/frame/cluster references and authored text exclusion",
+    "Deformation targets, frozen ranges, preceding operations and canonical CPD keys",
+    "Saved definitions exclude their own historical identities while retaining all external references"
+  ],
+  "benchmark": {
+    "profile": "Same-process actual FastAPI HTTP with compact parity retention, paced concurrent revision reads and natural GC",
+    "benchmark_sha256_both_runs": "b7b76e51786d9ce3b3e83b5feef3e47320a7f109b7e8cd0b961d57380a3710d0",
+    "source_policy": "Route and native materializer hashes are identical; only part_scope_references.py changed",
+    "repeats_per_case": 31,
+    "fixtures": [
+      "six-cell 42-bp ss with 1 pending row",
+      "six-cell 42-bp ds with 16 pending rows",
+      "16-cell 84-bp ss with 1 pending row",
+      "16-cell 84-bp ds with 16 pending rows"
+    ],
+    "each_run": {
+      "main_requests": 496,
+      "status_200": 496,
+      "equal_pairs": 124,
+      "input_only_replays_verified": 4,
+      "missing_endpoint_controls": 2,
+      "all_correctness_checks_passed": true,
+      "cleanup": true,
+      "dropped_gc_events": 0
+    },
+    "before": {
+      "report": "benchmark_finite_connection_apply_compact_baseline.json",
+      "reference_helper_sha256": "a3701bb3b596af22c389edc434a766e357d19dcbdec4512429584d440d2147b0",
+      "observed_gc_events": 27122,
+      "max_rss_kib": 171004,
+      "sixteen_cell_ss_reapply_ms": {
+        "legacy": {
+          "http_p50": 73.552,
+          "http_p95": 130.262,
+          "http_max": 145.791,
+          "light_p95": 69.999,
+          "light_max": 71.436,
+          "summed_lock_p50": 5.852
+        },
+        "native": {
+          "http_p50": 125.832,
+          "http_p95": 141.318,
+          "http_max": 193.682,
+          "light_p95": 70.593,
+          "light_max": 72.481,
+          "summed_lock_p50": 7.191
+        }
+      }
+    },
+    "after": {
+      "report": "benchmark_finite_connection_apply_compact_refactor.json",
+      "reference_helper_sha256": "c850d8859f9589582137061cb27d558b28a1291395c32e8a2bf8bebf91b2c90a",
+      "observed_gc_events": 27015,
+      "max_rss_kib": 172860,
+      "sixteen_cell_ss_reapply_ms": {
+        "legacy": {
+          "http_p50": 71.304,
+          "http_p95": 135.737,
+          "http_max": 136.062,
+          "light_p95": 67.785,
+          "light_max": 67.872,
+          "summed_lock_p50": 5.45
+        },
+        "native": {
+          "http_p50": 72.985,
+          "http_p95": 135.619,
+          "http_max": 136.482,
+          "light_p95": 68.82,
+          "light_max": 71.359,
+          "summed_lock_p50": 6.97
+        }
+      },
+      "native_sixteen_cell_ds_apply_http_max_ms": 181.677
+    },
+    "summary_precision": "Milliseconds rounded to three decimals; full samples and precision remain in original reports",
+    "interpretation": "The large observed 16-cell ss reapply median regression is absent after extraction in this rerun. Long HTTP and concurrent-read tails remain; this is not interactive latency qualification.",
+    "latency_qualified": false,
+    "gate": "routes_connection_versions.OWNED_FINITE_CONNECTION_APPLY_ENABLED=False",
+    "gc_policy_changed": false,
+    "gc_overlap_subtracted": false,
+    "limitations": [
+      "Client and server share a process; untimed decoding/normalization still changes allocation and collection cadence",
+      "No browser rendering, external-client application validation or public rollout",
+      "Only the four bounded finite-linker fixtures were measured; combined Connect and direct/indirect families remain separate",
+      "Summed outer lock holds are compared because legacy uses two holds and native one"
+    ]
+  },
+  "retained_prior_reports": [
+    "benchmark_finite_connection_apply_route_initial.json",
+    "benchmark_finite_connection_apply_route_warning_diagnostic.json",
+    "benchmark_finite_connection_apply_route.json"
+  ],
+  "prior_evidence_policy": "Original failures, warnings and full-response-retention latency remain intact; no report was erased or retroactively qualified",
+  "numerical_algorithms_or_pins_changed": false,
+  "artifacts": "Typed-model tests and in-memory HTTP; compact JSON reports only, no model dumps, lifespan, simulation, native scratch or worker launch",
+  "lint": "Changed source/tests passed Ruff and git diff --check",
+  "app_status": "NOT VERIFIED IN APP",
+  "vr_status": "Deferred by user to a later capable-machine session",
+  "assemblies": "Deferred",
+  "cold_replay_followup": {
+    "target": "tests/test_native_connection_application_proof.py",
+    "passed": 17,
+    "containing_run": {
+      "passed": 257,
+      "seconds": 14.3,
+      "other_scope": "240 immutable recovery/revision/worker/permit/session/cache/persistence regressions"
+    },
+    "meaning": "Native ss/ds Apply and reapply still regenerate in independent spawned processes after the shared reference extraction."
+  }
+}

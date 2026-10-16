@@ -266,45 +266,47 @@ def referenced_resources(model):
             references.add((kind, identity))
         return identity
 
-    def visit(value):
-        schema = _schema_for(value)
-        # These identities encode a real ownership reference even though no
-        # explicit owner field exists on the Helix/Strand model.
-        if isinstance(value, (models.Helix, models.Strand)) and value.id.startswith("__lnk__"):
-            owner = value.id[len("__lnk__"):]
-            if isinstance(value, models.Strand):
-                suffix = next((suffix for suffix in ("__a", "__b", "__s") if owner.endswith(suffix)), None)
-                if suffix is None:
-                    raise NotImplementedError("Generated scope has an unsupported linker strand identity")
-                owner = owner[:-len(suffix)]
-            reference("overhang_connection", owner)
-        for field, kind in schema.refs.items():
-            child = getattr(value, field)
-            for identity in child if isinstance(child, list) else [child]:
-                reference(kind, identity)
-        for field in schema.children:
-            child = getattr(value, field)
-            for item in child if isinstance(child, list) else [child]:
-                if item is not None:
-                    visit(item)
-        if isinstance(value, models.DeformationOp):
-            _targets(value.targets, reference)
-        if isinstance(value, models.PhotoproductJunction):
-            for key in [value.base_key_1, value.base_key_2, *value.design_coordinates]:
-                _base_key(key, reference)
-        snapshot = snapshot_for(value)
-        if snapshot is not None:
-            for field in ("driver_oh_id", "driven_oh_id"):
-                reference("overhang", snapshot.value[field])
-            reference("strand", snapshot.value["strand_id"])
-            saved = {key for key, _ in snapshot.definitions()}
-            for _, definition in snapshot.definitions():
-                # Saved definitions own their historical references. External
-                # dependencies still participate in incoming-removal checks.
-                references.update(referenced_resources(definition) - saved)
-
-    visit(model)
+    _visit_references(model, references, reference)
     return frozenset(references)
+
+
+def _visit_references(value, references, reference):
+    """Module recursion avoids retaining scratch sets in per-call closure cycles."""
+    schema = _schema_for(value)
+    # These identities encode a real ownership reference even though no
+    # explicit owner field exists on the Helix/Strand model.
+    if isinstance(value, (models.Helix, models.Strand)) and value.id.startswith("__lnk__"):
+        owner = value.id[len("__lnk__"):]
+        if isinstance(value, models.Strand):
+            suffix = next((suffix for suffix in ("__a", "__b", "__s") if owner.endswith(suffix)), None)
+            if suffix is None:
+                raise NotImplementedError("Generated scope has an unsupported linker strand identity")
+            owner = owner[:-len(suffix)]
+        reference("overhang_connection", owner)
+    for field, kind in schema.refs.items():
+        child = getattr(value, field)
+        for identity in child if isinstance(child, list) else [child]:
+            reference(kind, identity)
+    for field in schema.children:
+        child = getattr(value, field)
+        for item in child if isinstance(child, list) else [child]:
+            if item is not None:
+                _visit_references(item, references, reference)
+    if isinstance(value, models.DeformationOp):
+        _targets(value.targets, reference)
+    if isinstance(value, models.PhotoproductJunction):
+        for key in [value.base_key_1, value.base_key_2, *value.design_coordinates]:
+            _base_key(key, reference)
+    snapshot = snapshot_for(value)
+    if snapshot is not None:
+        for field in ("driver_oh_id", "driven_oh_id"):
+            reference("overhang", snapshot.value[field])
+        reference("strand", snapshot.value["strand_id"])
+        saved = {key for key, _ in snapshot.definitions()}
+        for _, definition in snapshot.definitions():
+            # Saved definitions own their historical references. External
+            # dependencies still participate in incoming-removal checks.
+            references.update(referenced_resources(definition) - saved)
 
 
 def remap_design(design, mapping):
