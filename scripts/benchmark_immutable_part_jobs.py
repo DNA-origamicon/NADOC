@@ -78,7 +78,7 @@ def main():
     doc = f"__immutable_benchmark_{uuid4()}"
     prior_policy = policy.current_configuration()
     original = {"lock": state._lock, "capture": state.capture_design_for_evaluation,
-        "commit": jobs.commit, "run": jobs._run, "decode": immutable.materialize_revision,
+        "commit": jobs.commit, "run": jobs._run, "decode": revisions.materialize_revision,
         "seal": immutable.prepare_revision, "gate": part_batch_evaluation.REGISTERED_BATCH_ENABLED,
         "revision_path": baseline.REVISION_PATH, "worker_start": VerificationWorker.start}
     existing_jobs = set(jobs._jobs)
@@ -189,7 +189,7 @@ def main():
         jobs._run = run
         if args.rss:
             VerificationWorker.start = start_worker
-        immutable.materialize_revision = measured(original["decode"], decode_times)
+        revisions.materialize_revision = measured(original["decode"], decode_times)
         immutable.prepare_revision = measured(original["seal"], seal_times)
         part_batch_evaluation.REGISTERED_BATCH_ENABLED = True
         baseline.REVISION_PATH = "/api/design/revision"
@@ -366,7 +366,7 @@ def main():
         state._lock, state.capture_design_for_evaluation = original["lock"], original["capture"]
         jobs.commit, jobs._run = original["commit"], original["run"]
         VerificationWorker.start = original["worker_start"]
-        immutable.materialize_revision, immutable.prepare_revision = original["decode"], original["seal"]
+        revisions.materialize_revision, immutable.prepare_revision = original["decode"], original["seal"]
         part_batch_evaluation.REGISTERED_BATCH_ENABLED = original["gate"]
         baseline.REVISION_PATH = original["revision_path"]
     clean = doc not in state.revision_map() and not cleanup_errors

@@ -120,23 +120,48 @@ scope, correctness, lifecycle, latency and memory evidence is reviewed explicitl
 
 ## Measured byte transport checkpoint
 
-The corrected four-case run completed120 publications and four independent cold
-proofs at30 repetitions per case, without retry or dropped GC samples. All
-predeclared latency targets passed for those42–307KB sources. Start p95 was at
-most6.99ms; commit p95 at most69.59ms; concurrent commit-read p95 at most21.34ms.
-Maximum observed state-lock hold was0.30ms. The scoped3-repeat RSS diagnostic
-recorded all12 operations within the existing +256MiB target.
+The corrected four-case run completed 120 publications and four independent cold
+proofs at 30 repetitions per case, without retry or dropped GC samples. All
+predeclared latency targets passed for those 42–307 KB sources. Start p95 was at
+most 6.99 ms; commit p95 at most 69.59 ms; concurrent commit-read p95 at most 21.34 ms.
+Maximum observed state-lock hold was 0.30 ms. The scoped 3-repeat RSS diagnostic
+recorded all 12 operations within the existing +256 MiB target.
 
-Separate near-retention stress retained31,995,904 bytes across four sealed
-handles, one7,998,976-byte source and two ready results of321,517 bytes each.
+Separate near-retention stress retained 31,995,904 bytes across four sealed
+handles, one 7,998,976-byte source and two ready results of 321,517 bytes each.
 All three publications, independent cold proof, exact undo eviction and cleanup
-passed. Scoped RSS increased at most178,237,440 bytes, with sampling gaps up to
-57.41ms; this is sampled evidence, not a hard heap guarantee. Commit concurrent
-reads reached p9554.53ms, exceeding the declared25ms criterion. Public gates
-remain false. Two occupied small results do not qualify two16MB results.
+passed. Scoped RSS increased at most 178,237,440 bytes, with sampling gaps up to
+57.41 ms; this is sampled evidence, not a hard heap guarantee. Commit concurrent
+reads reached p95 54.53 ms, exceeding the declared 25 ms criterion. Public gates
+remain false. Two occupied small results do not qualify two 16 MB results.
 
 The next review concerns removing a full source materialization used solely for
 non-proof metadata preservation. Any replacement must derive only from the
 exact host seal, retain ID/annotation state, enforce an explicit closed source
 scope and fail closed when preservation requirements expand. No thresholds or
 input limits are raised.
+
+## Closed preservation implementation
+
+The source metadata now includes an exact boolean annotation flag and a digest
+of the complete preserved document projection, derived from its exact decoded
+bytes before sealing. A separate positive field/role manifest requires every
+other presentation, physical and repair field to retain its reviewed empty
+shape. Unknown fields, reclassified roles, changed nested visibility schemas,
+list subclasses and nondefault state fail before serialization or recursive
+comparison. Scope expansion therefore requires explicit preservation review.
+
+Publication copies only the private candidate header, restores the sealed ID
+and annotation flag, checks that small projection, and performs the unchanged
+full candidate admission/roundtrip/seal. It preserves the candidate's authored
+name and the original source handle for undo; no source decode or generic
+fallback remains. Obsolete parent materialization imports and test/benchmark
+instrumentation were moved to the actual revision owner.
+
+Tests first: two expected missing-metadata failures in 2.84 s. The completed
+implementation passed 276 focused cases in 18.16 s across preservation, revision,
+evaluation, byte worker, state, cache, creation and recovery. Tests include exact
+full-byte parity with the former preservation path, near-8 MB opaque recovery,
+hostile worker state, schema evolution, seal substitution and atomic refusal
+with a valid retry. Performance is not inferred from those tests: the same
+30-cycle retention measurement remains required against unchanged criteria.

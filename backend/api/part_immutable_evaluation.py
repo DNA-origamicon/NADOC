@@ -9,8 +9,10 @@ preparation at commit still happens outside the state lock in the parent.
 from fastapi import HTTPException
 
 from backend.api import part_publication_policy as policy
-from backend.api.part_immutable_revision import materialize_revision, prepare_revision
+from backend.api.part_immutable_preservation import preservation_digest
+from backend.api.part_immutable_revision import prepare_revision
 from backend.api.part_immutable_storage import require_sealed
+from backend.core.models import Design
 from backend.core.part_command_errors import CommandContractError
 
 
@@ -61,13 +63,17 @@ def capture_reserved(doc_id, session, source, revision, generation, request, req
 
 
 def prepare_candidate(source, candidate):
-    """Preserve non-proof state from owned bytes, then seal private full content.
+    """Preserve the closed document projection without decoding source undo.
 
     The job owner already checked exact recipe/authoring transport digests. The
     seal still grants no proof or publication authority; its permit is separate.
     """
-    from backend.core.part_recipe_publication import preserve_document_state
-
-    private_source = materialize_revision(source)
-    candidate = preserve_document_state(private_source, candidate)
+    metadata = require_sealed(source)
+    if type(candidate) is not Design:
+        raise CommandContractError("Strict publication requires a private exact Design model")
+    candidate = candidate.model_copy(update={"id": metadata.design_id,
+        "annotations_enabled": metadata.annotations_enabled})
+    if preservation_digest(candidate) != metadata.preserved_document_sha256:
+        raise CommandContractError("Candidate changed preserved document state",
+                                   code="revision_preservation_changed")
     return prepare_revision(candidate)

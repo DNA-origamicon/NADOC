@@ -89,7 +89,7 @@ def test_source_reservation_preserves_handle_without_parent_decode_or_projection
     doc, source = document
     from backend.core import part_capture_inputs
 
-    monkeypatch.setattr(immutable, "materialize_revision", lambda *_a: pytest.fail("Request decoded source"))
+    monkeypatch.setattr(revisions, "_decoded_exact", lambda *_a: pytest.fail("Request decoded source"))
     monkeypatch.setattr(part_capture_inputs, "visit_inputs", lambda *_a, **_kw: pytest.fail("Request projected source"))
     result = state.capture_design_for_evaluation(EvaluationRequest.model_validate(body(source)),
         include_admission=admission, include_session_identity=identity)
@@ -116,7 +116,7 @@ def test_initial_context_refuses_before_materialization(document, monkeypatch, c
         monkeypatch.setattr(part_batch_evaluation, "REGISTERED_BATCH_ENABLED", False)
     elif change == "operation":
         value = {"operation": "append", "kind": "duplex-relax", "params": {}}
-    monkeypatch.setattr(immutable, "materialize_revision", lambda value: pytest.fail("Refused request decoded source"))
+    monkeypatch.setattr(revisions, "_decoded_exact", lambda *_a: pytest.fail("Refused request decoded source"))
     with pytest.raises(HTTPException):
         jobs.start(value, **({"expected_policy_generation": policy.resolve(doc).generation + 1} if change == "policy" else {}))
     assert state._sessions[doc].design is source and not jobs._jobs

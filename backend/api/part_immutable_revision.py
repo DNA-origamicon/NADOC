@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from backend.api.part_batch_publication_scope import MAX_PUBLIC_HISTORY_ROWS, admit_batch_source
 from backend.api.part_evaluation_worker import MAX_CANDIDATE_BYTES
+from backend.api.part_immutable_preservation import PRESERVATION_VERSION, preservation_digest
 from backend.api.part_recovery_budget import retained_recovery_bytes
 from backend.core.models import Design, Helix
 from backend.core.part_command_errors import CommandContractError
@@ -49,6 +50,9 @@ class RevisionMetadata:
     recipe_sha256: str
     history_rows: int
     recovery_bytes: int
+    annotations_enabled: bool
+    preservation_version: int
+    preserved_document_sha256: str
     storage_version: int = 1
     scope_tag: str = _SCOPE
 
@@ -86,6 +90,9 @@ def is_prepared_revision(value):
             and type(value.payload) is bytes and seal.payload is value.payload
             and type(metadata) is RevisionMetadata and seal.metadata is metadata
             and metadata.storage_version == 1 and metadata.scope_tag == _SCOPE
+            and type(metadata.annotations_enabled) is bool
+            and type(metadata.preservation_version) is int
+            and metadata.preservation_version == PRESERVATION_VERSION
             and metadata.payload_bytes == len(value.payload) <= MAX_CANDIDATE_BYTES)
     except AttributeError:
         return False
@@ -217,6 +224,7 @@ def prepare_revision(candidate, *, checkpoint=lambda: None):
         _reject("Revision preparation needs a private exact Design model")
     _model_schema(candidate)
     _scalar_metadata(candidate)
+    preservation_digest(candidate)
     admit_batch_source(candidate)
     admit(candidate)  # Existing ordinary authoring node/byte bounds, unchanged.
     _check_structure(candidate, checkpoint)
@@ -243,6 +251,8 @@ def prepare_revision(candidate, *, checkpoint=lambda: None):
         history_rows=len(decoded.feature_log) + sum(len(entry.children) for entry in decoded.feature_log
                                                    if entry.feature_type == "routing-cluster"),
         recovery_bytes=retained_recovery_bytes(decoded.feature_log, max_rows=MAX_PUBLIC_HISTORY_ROWS),
+        annotations_enabled=decoded.annotations_enabled, preservation_version=PRESERVATION_VERSION,
+        preserved_document_sha256=preservation_digest(decoded),
     )
     checkpoint()
     revision = object.__new__(StrictPartRevision)

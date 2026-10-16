@@ -48,9 +48,9 @@
   "latency_qualified": false,
   "http_wired": true,
   "next": [
-    "Review closed scalar preservation from the exact source seal to avoid full recovery decode solely for publication metadata",
-    "Test full identity/presentation preservation and fail-closed scope evolution before optimizing",
-    "Repeat retention latency against unchanged predeclared criteria; gates remain false"
+    "Repeat 30-cycle retention latency against unchanged predeclared criteria",
+    "Repeat ordinary four-case HTTP timings after preservation change",
+    "Qualify remaining storage and public lifecycle scope before enabling gates"
   ],
   "app_status": "NOT VERIFIED IN APP",
   "host_wiring": {
@@ -145,5 +145,29 @@
       "latency_verdict": "Unqualified: commit concurrent-read p95 exceeds predeclared25ms target;3diagnostic repetitions do not satisfy30-cycle requirement",
       "maximum_candidate_result_retention_qualified": false
     }
+  },
+  "closed_preservation": {
+    "initial_red": {
+      "failed": 2,
+      "seconds": 2.84,
+      "reason": "New exact metadata fields absent"
+    },
+    "focused": {
+      "passed": 276,
+      "seconds": 18.16,
+      "targets": [
+        "part_immutable_preservation",
+        "part_immutable_revision",
+        "part_immutable_evaluation",
+        "part_immutable_worker",
+        "part_immutable_state",
+        "part_immutable_cache",
+        "part_immutable_creation",
+        "part_immutable_recovery"
+      ]
+    },
+    "source_decode_removed": true,
+    "candidate_full_roundtrip_retained": true,
+    "retention_remeasurement_pending": true
   }
 }
