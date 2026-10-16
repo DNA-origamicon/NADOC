@@ -763,3 +763,10 @@ boundary now resolves the existing schema once; pinned model/engine files remain
 unchanged. Independent cold serialization, spawned DNA proof and controlled decode
 cancellation pass within 115 distinct focused cases (one incomplete expected
 proof fixture corrected). Actual HTTP measurements remain pending.
+
+2026-10-15 — ISSUE-95 oxDNA copy input preservation: add the existing packaged
+sequence-parameter filename to Copy Job's file set. Tests verify exact independent
+bytes, stage rendering and honest legacy absence alongside the existing seed,
+protocol and lineage contract. Initial present-file test failed as expected; both
+copy cases plus 42 related physics/freshness cases now pass. Complete physical
+input receipts and immutable preparation remain separate work.

@@ -209,3 +209,12 @@ must not add model traversal, geometry generation or file hashing.
 SOLIDWORKS exposes separate mesh/result states, including Out of Date, and reruns a required parent study when explicitly running a dependent study. This supports retaining stale output separately from the current model, rather than claiming feature regeneration refreshed physics. [Run Specified Studies](https://help.solidworks.com/2026/english/SolidWorks/Cworks/HIDD_RUN_SPECIFIED_STUDIES.htm).
 
 Onshape asynchronous simulations record document version, configuration, named position and solver version. Existing results are reused when the assembly state matches; solver improvements can change later results. This supports exact input/configuration lineage and explicit solver identity. The documented feature is an assembly workflow; NADOC's proposed standard-part metadata policy is an inference from that precedent, not assembly implementation work. [Asynchronous Simulation](https://cad.onshape.com/help/Content/Assembly/asynchronous_simulation.htm?TocPath=Assemblies%7CSimulation%7C_____2).
+
+## Packaged parameter propagation correction
+
+ISSUE-95: Copy Job now preserves the already-packaged oxDNA sequence parameters
+byte-for-byte. Two present/absent cases cover independent copied bytes, actual
+stage-input file selection and legacy absence; the original missing-file failure
+was reproduced first. Both copy cases and 42 related physics/freshness tests pass.
+This removes one consumed-input gap before receipts are implemented, without
+changing the parameter values, solver calculations or historical source claims.

@@ -1248,6 +1248,8 @@ async def get_oxdna_job(job_id: str) -> dict:
 @router.post("/oxdna/jobs/{job_id}/copy")
 async def copy_oxdna_job(job_id: str) -> dict:
     """Create a clean, queued copy with identical inputs and a fresh RNG seed."""
+    from backend.core.oxdna_protocol import AVERAGE_SEQUENCE_FILE
+
     source = _load_job(job_id)
     ws = _workspace()
     source_dir = source.job_dir(ws)
@@ -1293,7 +1295,7 @@ async def copy_oxdna_job(job_id: str) -> dict:
 
     copied_dir = copied.job_dir(ws)
     copied_dir.mkdir(parents=True, exist_ok=False)
-    files = {"topology.top", "conf.dat", "design.json", "forces.txt", "equil_forces.txt"}
+    files = {"topology.top", "conf.dat", "design.json", "forces.txt", "equil_forces.txt", AVERAGE_SEQUENCE_FILE}
     files.update(spec.forces_file for spec in copied_specs if spec.forces_file)
     files.update(spec.parfile for spec in copied_specs if spec.parfile)
     try:

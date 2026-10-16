@@ -2099,3 +2099,20 @@ completed Cancel, reselection, Apply, one routed scaffold and Undo. Evidence:
   correcting one new assertion to compare the complete independent proof report.
   Controlled cancellation during owned decode also reaps within two seconds
   and releases both buffers. Corrected actual HTTP measurement remains pending.
+
+## ISSUE-95 — Copying an oxDNA job drops its packaged sequence parameters (2026-10-15, FOCUSED FIX VALIDATED)
+
+- Preparation freezes `oxDNA2_average_sequence_parameters.txt` in the job package;
+  the runner selects that exact file when rendering stage inputs. Copy Job omitted
+  it, so a copied job could fall back to the currently installed parameters.
+  The copy therefore did not preserve all consumed physical inputs.
+- The copy file set now includes the existing shared protocol filename. Existing
+  bytes are copied exactly and independently; legacy absence is retained without
+  inventing historical evidence. Fresh seeds, protocol overrides, topology, forces,
+  lineage and queued state retain their established behavior.
+- Tests first: the added present-file case failed with FileNotFoundError; the
+  absent-file control passed (3.66 s). Both cases and 42 related physics/freshness
+  tests then passed in a combined 4.95 s run; seven unrelated new pending-connection
+  early-refusal cases intentionally remained red. No production simulation ran.
+- This repairs package propagation only. It does not certify source isolation,
+  complete physical receipts or per-attempt solver/restart provenance.
