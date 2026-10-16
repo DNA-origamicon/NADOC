@@ -177,3 +177,88 @@ narrow `_run` and revision-seal integration, reference preparation preserved, an
 focused recovery transport/parity tests. No public API expansion, numerical pins,
 geometry formulas, compatibility promotion, or storage-budget change belongs in
 this checkpoint.
+
+## Exact proposed callables: tests-first stage one
+
+The module is `backend/api/part_immutable_recovery_worker.py`; it was absent
+at the tests-first checkpoint. `tests/test_immutable_recovery_worker.py`
+imports it lazily. Interfaces agreed with root:
+
+```python
+reserve_input(stored: StoredRevision, *, admission: EvaluationAdmission) -> RecoveryInput
+encode_input(ticket: RecoveryInput) -> tuple[tuple[bytes, ...], dict]
+evaluate_payload(payload: bytes) -> dict
+
+class RecoveryWorker(VerificationWorker):
+    def __init__(self, ticket: RecoveryInput): ...
+    def result(self) -> dict: ...
+    def take_revision(self, ticket: RecoveryInput, *, admission: EvaluationAdmission) -> StrictPartRevision: ...
+```
+
+`RecoveryInput` has a guarded constructor, frozen slots, `payload` retaining the
+exact stored `bytes`, the actual registered `admission`, a fresh per-ticket string
+`nonce`, and `id=None`. No file lease is transported. Reservation validates the
+record's fixed manifest length/hash and document against the registered recovery
+context without parsing its document. Encoding preserves the ticket and binds
+at least transport version, `nonce`, `source_sha256` and `request_sha256`; the
+ticket retains the original complete admission context. Stale policy/context or
+an unregistered admission refuses transport.
+
+`evaluate_payload` is the pure child implementation and returns only
+`{"issues": [], "binding": ..., "metadata": ..., "result": ...}`. Metadata
+matches `dataclasses.asdict(revision_metadata(reference_candidate))`; the result
+is the existing ordinary proof report. Failure cannot produce a host seal or
+candidate. No user JSON carries an admission object or supplies a nonce to the
+parent reservation. A syntactically valid child frame remains data without the
+parent's exact private ticket and completion observation.
+
+Use the existing **2,000,000-byte total result envelope** for this slice, including
+binding and metadata. This deliberately leaves slightly less space for the proof
+report than a bare 2 MB report; overflow returns the bound `result_limit` refusal
+without completion. Do not silently raise the ceiling. A hypothetical 4 KB
+metadata allowance would not cover the currently admitted 1024-character Unicode
+ID and name under canonical ASCII escaping. Output encoding/capacity and malformed
+result-observation tests belong to the actual worker stage; the pure evaluator
+returns its dictionary before that bounded encoding.
+
+`result()` retains a private successful observation on the exact worker after
+zero exit, binding and strict metadata checks; its public return is only the
+ordinary proof dictionary. `_run` keeps the worker reference through a small
+factory closure, allowing existing `supervise` to remain the lifecycle owner.
+Only after successful cleanup, final supervision guards and the original recovery
+checkpoint does `_run` call `take_revision` with the original ticket/admission.
+That one-shot method requires a closed successful worker and consumes its private
+observation; revision integration accepts that observation, never arbitrary
+`(bytes, metadata)`. The existing job qualification is created separately.
+
+Stage-one tests cover pure reference parity, poisoned recovery, metadata and
+document-ID preservation, raw framing, untrusted JSON and scope refusal, existing
+admission/pickle bounds, and refusal to mint from an unstarted or forged worker.
+They start no process and write no cache file. Stage two adds malformed returned
+reports/completion reuse, successful parent sealing, parent decode tripwires and
+real supervised cleanup/context/publication regressions before host wiring is
+claimed complete. Root runs the red target before production implementation.
+
+## Stage-one checkpoint
+
+The private worker is implemented and unmounted. Root first ran three existing
+reference controls successfully, then observed the intended missing-module error
+on the new parity target. All initial 40 cases passed after implementation;
+18 additional framing/admission/lifetime-of-context negatives then brought the
+target to **58 passing cases in 3.07 seconds**. Changed-file Ruff and whitespace
+checks pass. No child process, disk cache or publication ran in this stage.
+
+Reservation checks the actual empty session incarnation/revision and policy,
+as well as the registered restore operation and scope. Exact manifest scalar
+types reject bool/int and string-subclass equivalence. Independently corrupted
+lengths, transport/storage versions, canonical content, unknown commands and
+nonfinite/duplicate JSON refuse before proof. Empty, gold and DNA/group fixtures
+match every reference metadata field and complete proof report, with saved
+recovery poisoned. Existing capture and actual 2 MB pickle admission remain.
+
+`take_revision` currently **always refuses** with `recovery_seal_unavailable`.
+Positive worker completion, output overflow, zero-exit/cleanup, one-shot parent
+sealing and host integration are not established by these pure tests. They are
+the next separate checkpoint; existing parent preparation remains active. No
+public gate, model, scientific helper or numerical pin changed. See
+[the validation record](validation_immutable_recovery_worker_stage1.json).

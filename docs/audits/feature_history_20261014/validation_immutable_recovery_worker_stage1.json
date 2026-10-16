@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-15",
+  "scope": "Unmounted private recovery transport and unchanged canonical preparation/native proof; no parent seal or host integration",
+  "target": "tests/test_immutable_recovery_worker.py",
+  "executed_runs": [
+    {"stage": "Existing preparation controls and first new parity case before implementation", "passed": 3, "setup_errors": 1, "seconds": 2.78, "reason": "Expected absent backend.api.part_immutable_recovery_worker module"},
+    {"stage": "Initial implemented target", "passed": 40, "seconds": 2.96},
+    {"stage": "Additional strict framing, admission and session negatives", "passed": 58, "seconds": 3.07}
+  ],
+  "established": [
+    "Exact original raw bytes, owner-bound private ticket, registered restore admission, fresh nonce and strict bounded framing",
+    "Actual session incarnation/revision and policy generation admission, wrong-operation/scope rejection",
+    "Every metadata field and complete ordinary proof report match existing preparation for empty, gold and DNA/group designs",
+    "Unicode/control characters, independent document identity, annotations and poisoned recovery remain correctly preserved",
+    "Existing full preparation, strict canonical content, capture node/charge/deadline and actual 2 MB pickle checks remain before proof",
+    "Unstarted or forged workers and plain metadata cannot mint a parent revision"
+  ],
+  "not_established": [
+    "Actual child startup, complete result encoding/overflow/nonzero-exit and lifecycle cleanup",
+    "Successful parent sealing, completion swap/copy/reuse resistance and host final deadline/context integration",
+    "Near-cap retained memory and HTTP responsiveness after host integration"
+  ],
+  "authority": "take_revision always refuses recovery_seal_unavailable. Existing host still prepares recovery in the parent. No public gate changed.",
+  "review": "Independent static review found no blocker for the unmounted stage-one checkpoint; stage-two obligations remain explicit.",
+  "lint": "Changed-file Ruff and whitespace pass; repository lint retains five pre-existing F401 imports.",
+  "validation_scope": "Focused guarded root execution only. No child process or disk-cache write; unstarted worker buffers close in finally. Broad FAST/deferred FULL debt remains recorded in validation_finite_connection_apply_route.json.",
+  "app_status": "NOT VERIFIED IN APP",
+  "vr_status": "Explicitly deferred by user to a later capable-machine session",
+  "assemblies": "Deferred",
+  "frontend_main_js_loc_delta": 0
+}
