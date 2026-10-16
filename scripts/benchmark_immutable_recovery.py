@@ -14,7 +14,7 @@ from hashlib import sha256
 import json
 from multiprocessing.shared_memory import SharedMemory
 from pathlib import Path
-from threading import Event, current_thread, get_ident
+from threading import Event, Thread, current_thread, get_ident
 from time import perf_counter
 from unittest.mock import patch
 from uuid import uuid4
@@ -47,6 +47,98 @@ TARGET_BYTES = 15_900_000
 PHASE_CAPACITY = 256
 READ_CAPACITY = 6 * 256  # Two starts, two completion waits and two result releases.
 REPORTED_READS = 32
+SCALAR_READ_CAP = 256
+SCALAR_READ_SPACING_SECONDS = .020
+
+
+def concurrent_request(client, headers, callback, probe):
+    """Paced, bounded reads; sampler lifetime is not continuous read coverage."""
+    began = perf_counter()
+    client.get(baseline.REVISION_PATH, headers=headers).raise_for_status()
+    baseline_ms = (perf_counter() - began) * 1000
+    first_record = len(probe.records)
+    ready, go, done = Event(), Event(), Event()
+    samples, errors, operation, lifecycle = [], [], {}, {}
+
+    def sample():
+        lifecycle["start"] = perf_counter()
+        ready.set()
+        try:
+            if not go.wait(5):
+                errors.append("Scalar-read sampler did not receive its operation start")
+                lifecycle["stop_reason"] = "start_timeout"
+                return
+            for index in range(SCALAR_READ_CAP):
+                if done.is_set():
+                    lifecycle["stop_reason"] = "operation_finished"
+                    return
+                started, success = perf_counter(), False
+                try:
+                    client.get(baseline.REVISION_PATH, headers=headers).raise_for_status()
+                    success = True
+                except Exception as error:
+                    errors.append(str(error))
+                    lifecycle["stop_reason"] = "read_error"
+                    return
+                finally:
+                    samples.append((started, perf_counter(), success))
+                if done.is_set():
+                    lifecycle["stop_reason"] = "operation_finished"
+                    return
+                if index + 1 == SCALAR_READ_CAP:
+                    lifecycle["stop_reason"] = "capacity_exhausted"
+                    return
+                # Immediate first read; only subsequent probes are spaced.
+                if done.wait(SCALAR_READ_SPACING_SECONDS):
+                    lifecycle["stop_reason"] = "operation_finished"
+                    return
+        finally:
+            lifecycle["end"] = perf_counter()
+
+    sampler = Thread(target=sample, name="batch-light-http-probe")
+    sampler.start()
+    try:
+        if not ready.wait(5):
+            raise RuntimeError("Scalar-read sampler did not start")
+        operation["start"] = perf_counter()
+        go.set()
+        try:
+            response = callback()
+        finally:
+            operation["end"] = perf_counter()
+    finally:
+        done.set()
+        go.set()
+        sampler.join(5)
+        if sampler.is_alive():
+            raise RuntimeError("Light-request probe did not stop")
+    successful = [(start, end) for start, end, success in samples if success]
+    first_start = successful[0][0] if successful else None
+    last_end = successful[-1][1] if successful else None
+    rows = probe.records[first_record:]
+    holds = [row for row in rows if row["phase"] in {"capture", "publication"} and row["nesting"] == 0]
+    elapsed = (operation["end"] - operation["start"]) * 1000
+    return response, {"http_ms": elapsed, "baseline_revision_http_ms": baseline_ms,
+        "revision_http_ms": [(end - start) * 1000 for start, end in successful], "errors": errors,
+        "operation_interval": operation, "probe_interval": lifecycle,
+        "light_sample_cap_reached": len(samples) == SCALAR_READ_CAP,
+        "light_sample_cap_exhausted": lifecycle["stop_reason"] == "capacity_exhausted",
+        "scalar_read_coverage": {"capacity": SCALAR_READ_CAP, "spacing_ms": SCALAR_READ_SPACING_SECONDS * 1000,
+            "attempted": len(samples), "successful": len(successful),
+            "sampler_active_to_finish": (lifecycle["stop_reason"] == "operation_finished"
+                and lifecycle["start"] <= operation["start"] <= operation["end"] <= lifecycle["end"]),
+            "first_successful_start": first_start, "last_observed_endpoint": samples[-1][1] if samples else None,
+            "last_successful_endpoint": last_end,
+            "uncovered_head_ms": elapsed if first_start is None else min(elapsed,
+                max(0., first_start - operation["start"]) * 1000),
+            "uncovered_tail_ms": elapsed if last_end is None else max(0., operation["end"] - last_end) * 1000,
+            "overlapping_operation_reads": sum(start <= operation["end"] and operation["start"] <= end
+                                               for start, end in successful)},
+        "overlapping_revision_requests": sum(any(start <= row["ended"] and row["entered"] <= end
+            for row in holds) for start, end in successful),
+        **{f"{phase}_lock_{what}_ms": [row[f"{what}_ms"] for row in rows
+            if row["phase"] == phase and row["nesting"] == 0]
+           for phase in ("capture", "publication", "light_request") for what in ("hold", "wait")}}
 
 
 class PreparationPhases:
@@ -196,6 +288,9 @@ def summarize_metrics(rows):
     value.pop("samples")
     value.update(errors=[error for row in rows for error in row["errors"]],
         light_sample_caps=sum(row["light_sample_cap_reached"] for row in rows),
+        light_sample_cap_exhaustions=sum(row["light_sample_cap_exhausted"] for row in rows),
+        samplers_active_to_finish=sum(row["scalar_read_coverage"]["sampler_active_to_finish"] for row in rows),
+        uncovered_tail=stats([row["scalar_read_coverage"]["uncovered_tail_ms"] for row in rows]),
         gc_overlap=stats([row["gc_overlap_ms"] for row in rows]))
     return value
 
@@ -320,22 +415,12 @@ def main():
 
     def measure(client, doc, callback, runtime):
         begin = perf_counter()
-        operation = {}
-
-        def timed_callback():
-            operation["start"] = perf_counter()
-            try:
-                return callback()
-            finally:
-                operation["end"] = perf_counter()
-
-        response, metrics = baseline.concurrent_request(client, {"X-NADOC-Doc": doc}, timed_callback, probe)
+        response, metrics = concurrent_request(client, {"X-NADOC-Doc": doc}, callback, probe)
         end = perf_counter()
         events = runtime.intervals(begin, end)
         metrics.update(gc_overlap_ms=overlap_ms(events, begin, end),
             gc_generations={str(g): sum(e["generation"] == g for e in events) for g in range(3)},
-            light_sample_cap_reached=len(metrics["revision_http_ms"]) == 256,
-            status_code=response.status_code, operation_interval=operation)
+            status_code=response.status_code)
         if response.is_error:
             metrics["refusal"] = response.json()
         if metrics["errors"]:
@@ -559,6 +644,9 @@ def main():
             "capacity_per_cycle": PHASE_CAPACITY, "read_capacity_per_cycle": READ_CAPACITY,
             "reported_slowest_reads_per_cycle": REPORTED_READS,
             "clock": "time.perf_counter process-wide monotonic seconds; phase/read/operation intervals align across parent threads.",
+            "scalar_read_sampler": {"capacity_per_operation": SCALAR_READ_CAP,
+                "spacing_ms": SCALAR_READ_SPACING_SECONDS * 1000, "immediate_first_probe": True,
+                "spacing_interruptible_on_operation_finish": True},
             "attribution_limits": [
                 "Intervals include scheduling/GIL/GC delay and instrumentation overhead, not CPU attribution; no time is subtracted from user-observed latency.",
                 "Inclusive phases nest and must not be added. Exclusive time subtracts immediate traced children only, not all helper work.",
@@ -568,6 +656,7 @@ def main():
                 "Only parent natural GC is observed; child GC is not sampled. Weak worker records store scalar close/reap evidence and buffer names, never tickets or bytes.",
                 "Read intervals begin outside ASGI inside the external sampler's TestClient.get call; they exclude the tiny caller-to-wrapper dispatch overhead.",
                 "All bounded observed reads contribute overlap counts; only the slowest32 intervals are printed. Overlap identifies correlation, not causation or exclusive blocking responsibility.",
+                "Sampler activity through operation finish is not continuous HTTP coverage. Pacing can miss brief late phases; their zero overlaps, uncovered tail, read errors and cap exhaustion stay explicit.",
                 "Dropped/unfinished counters disclose incomplete traces; current scopes, five-second deadline, fixtures and GC policy are unchanged."]},
         "targets": {"recovery_deadline_seconds_unchanged": recovery.TIME_BUDGET,
             "measured_cycles_for_qualification": 30, "state_lock_p95_ms": 1, "state_lock_max_ms": 5,

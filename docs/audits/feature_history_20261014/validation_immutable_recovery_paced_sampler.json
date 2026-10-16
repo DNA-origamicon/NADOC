@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-15",
+  "scope": "Corrected bounded scalar-read sampling, unchanged recovery production baseline",
+  "evidence": "benchmark_immutable_recovery_worker_paced_baseline.json",
+  "sampler_tests": {
+    "passed": 5,
+    "seconds": 2.58
+  },
+  "cycles": 3,
+  "verified_workers": 6,
+  "cleanup": true,
+  "memory_increment_bytes": [
+    284725248,
+    253341696,
+    254091264
+  ],
+  "memory_target_bytes": 268435456,
+  "cycles_exceeding_memory_target": 1,
+  "completion_wait_probe_counts": [
+    67,
+    66,
+    69,
+    67,
+    70,
+    70
+  ],
+  "completion_wait_cap_exhaustions": 0,
+  "limits": [
+    "Sampler remains active through operation finish, but discrete probes do not continuously cover execution. Per-phase overlaps and uncovered tails are explicit; zero overlap does not qualify a phase.",
+    "This diagnostic uses unchanged production and independent read allocations; compare only with the same frozen paced sampler for the transport optimization.",
+    "Five-second deadline, 16 MB source, 2 MB output/pickle and 256 MiB memory target unchanged. No disk lease, publication, app or simulation."
+  ],
+  "qualification": false
+}
