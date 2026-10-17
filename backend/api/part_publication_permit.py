@@ -372,7 +372,10 @@ def check_publication(permit, *, doc_id, session, candidate):
     check_liveness(context)
     from backend.api.part_immutable_storage import immutable_pair, is_immutable, require_sealed, require_empty_session
 
-    if context.admission.scope_tag == "extensions_v1":
+    if context.admission.scope_tag == "immutable_extrusion_edit_v1":
+        from backend.api.part_immutable_geometry_publication import check
+        check(context, session.design, candidate)
+    elif context.admission.scope_tag == "extensions_v1":
         from backend.api.part_extension_publication import check
         check(context, session.design, candidate)
     elif context.admission.scope_tag == "group_organization_v1":
@@ -425,7 +428,10 @@ def check_publication(permit, *, doc_id, session, candidate):
 
 def check_liveness(context):
     """Repeat after undo preparation, immediately before assignment."""
-    if context.admission.scope_tag == "extensions_v1":
+    if context.admission.scope_tag == "immutable_extrusion_edit_v1":
+        from backend.api.part_immutable_geometry_publication import require_policy
+        require_policy(context.admission)
+    elif context.admission.scope_tag == "extensions_v1":
         from backend.api.part_extension_publication import require_policy
         require_policy(context.admission)
     elif context.admission.scope_tag == "group_organization_v1":
