@@ -669,3 +669,33 @@ def test_real_http_recovers_exact_download_without_changing_original_or_live_sta
             assert current is item and current.design is design and current.revision == revision
             assert tuple(current.history) == history and tuple(current.redo) == redo
     assert available(transport.slot)
+
+
+def test_disconnect_monitor_stops_when_receiver_consumes_task_cancellation():
+    """A cancellation scope inside receive must not strand request cleanup."""
+    import asyncio
+    from threading import Event
+    from backend.api.part_recipe_file_transport import _watch_disconnect
+
+    async def run():
+        entered = asyncio.Event()
+        cancelled, stopped = Event(), Event()
+
+        class Request:
+            async def is_disconnected(self):
+                entered.set()
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    # Model the receive poll's cancellation scope swallowing
+                    # the external edge while its own cancellation is active.
+                    return False
+
+        monitor = asyncio.create_task(_watch_disconnect(Request(), cancelled, stopped))
+        await entered.wait()
+        stopped.set()
+        monitor.cancel()
+        await asyncio.wait_for(monitor, .5)
+        assert monitor.done() and not cancelled.is_set()
+
+    asyncio.run(run())

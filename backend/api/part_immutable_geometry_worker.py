@@ -6,11 +6,11 @@ from time import monotonic
 from backend.api import part_immutable_worker as transport
 from backend.api.part_evaluation import EvaluationRequest
 from backend.api.part_evaluation_worker import MAX_CANDIDATE_BYTES, evaluate_native
-from backend.api.part_geometry_inputs import KINDS, normalize, normalize_creation
+from backend.api.part_geometry_inputs import KINDS, normalize, normalize_creation, selected
 from backend.api.part_immutable_geometry_scope import SCOPE, admit_source
 from backend.api.part_immutable_revision import _decoded_exact
 from backend.api.part_verification_worker import failure
-from backend.core.models import Design, SnapshotLogEntry
+from backend.core.models import Design
 from backend.core.part_capture_inputs import visit_inputs
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_operation_input import validate_operation_input
@@ -61,10 +61,8 @@ def _project(source_bytes, operation_bytes):
         if request.index >= len(private.feature_log):
             raise CommandContractError('The selected extrusion source changed', code='source_changed')
         entry = private.feature_log[request.index]
-        if (type(entry) is not SnapshotLogEntry or entry.id != header['expected_feature_id']
-                or entry.op_kind != header['expected_kind']):
-            raise CommandContractError('The selected extrusion feature changed', code='source_changed')
-        values = normalize(entry.op_kind, entry.params, request.params)
+        previous = selected(entry, header['expected_kind'], header['expected_feature_id'])
+        values = normalize(header['expected_kind'], previous, request.params)
         operation['request'] = request.model_copy(update={'params': values}).model_dump(mode='json')
     deadline = monotonic() + .025
     admit_source(private)

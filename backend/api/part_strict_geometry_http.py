@@ -79,7 +79,7 @@ class SourceRequest(BaseModel):
 
 
 GeometryKind = Literal['bundle-create', 'extrude-segment', 'extrude-continuation',
-    'extrude-deformed-continuation', 'extrude-frame', 'circle-segment', 'overhang-extrude', 'sweep']
+    'extrude-deformed-continuation', 'extrude-frame', 'circle-segment', 'overhang-extrude', 'sweep', 'deformation']
 
 
 class EditRequest(SourceRequest):
@@ -124,14 +124,15 @@ async def append(body: AppendRequest, request: Request):
 
 async def _change(request, function, *args, **kwargs):
     context = _context(request)
-    cancelled = Event()
+    cancelled, stopped = Event(), Event()
     from backend.api.part_recipe_file_transport import _watch_disconnect
-    watcher = asyncio.create_task(_watch_disconnect(request, cancelled))
+    watcher = asyncio.create_task(_watch_disconnect(request, cancelled, stopped))
     try:
         work = partial(function, *args, **kwargs, cancelled=cancelled,
             expected_source=context.source, expected_session_identity=context.session_identity)
         return await thread_call(work, cancelled=cancelled)
     finally:
+        stopped.set()
         watcher.cancel()
         await asyncio.gather(watcher, return_exceptions=True)
 

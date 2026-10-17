@@ -4,7 +4,8 @@ from backend.api import state
 from backend.api.part_recipe_prefix import ReplayPrefix
 from backend.api.part_native_commands import PATTERN_COMMANDS
 from backend.api.part_geometry_inputs import KINDS as EXTRUSIONS, normalize_creation, bind_prefix
-from backend.core.models import SnapshotLogEntry
+from backend.core.models import SnapshotLogEntry, DeformationLogEntry
+from backend.core.part_overlay_commands import command_input
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_history_contract import assess_part_history
 from backend.core.part_history_proof import ProofBudgetExceeded, command_rows, root_design
@@ -112,6 +113,11 @@ def append_features(source, request, header, executor, dependencies, *, metadata
         compiled = compile_steps(current, request.params, prepared, history_seed=header["identity"])
         current = current.copy_with(input_sources=compiled.input_sources)
         definitions = [(step.identity, step.kind, step.label, step.params) for step in compiled.steps]
+    elif request.kind == "deformation":
+        from backend.api.part_deformation_inputs import creation_entry
+        entry = creation_entry(inputs, current, header["identity"])
+        kind, params = command_input(entry)
+        definitions = [(entry.id, kind, entry.op_snapshot.type, params)]
     elif request.kind in EXTRUSIONS:
         params = bind_prefix(request.kind, inputs, current)
         definitions = [(header["identity"], request.kind, request.kind, params)]
@@ -132,6 +138,11 @@ def append_features(source, request, header, executor, dependencies, *, metadata
         updated = executor(kind, current, params)
         if request.kind in EXTRUSIONS:
             updated = updated.copy_with(id=source.id)
+        if kind == "deformation":
+            log.append(DeformationLogEntry(id=identity, timestamp=header["timestamp"],
+                deformation_id=identity, op_snapshot=updated.deformations[-1], proof_version=1))
+            current = updated.copy_with(feature_log=list(log), feature_log_cursor=-1, feature_log_sub_cursor=None)
+            continue
         pre, pre_size = state.encode_design_snapshot(current)
         post, post_size = state.encode_design_snapshot(updated)
         prefix.budget.charge(pre, post)

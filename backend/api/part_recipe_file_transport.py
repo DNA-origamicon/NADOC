@@ -172,9 +172,10 @@ def _evaluate(raw, operation, cancelled, deadline, policy_check):
     return encoded
 
 
-async def _watch_disconnect(request, cancelled):
+async def _watch_disconnect(request, cancelled, stopped):
+    """Stop explicitly: receive cancellation scopes can consume task.cancel()."""
     try:
-        while True:
+        while not stopped.is_set():
             if await request.is_disconnected():
                 cancelled.set()
                 return
@@ -219,7 +220,7 @@ async def recover_file(request):
     if not _slot.acquire(blocking=False):
         _fail(429, "part_worker_busy", "A part history operation is active; retry after it finishes")
     deadline = monotonic() + TOTAL_SECONDS
-    cancelled, transferred = Event(), False
+    cancelled, stopped, transferred = Event(), Event(), False
 
     def policy_check():
         current = policy.resolve(doc)
@@ -228,7 +229,7 @@ async def recover_file(request):
 
     try:
         raw, header = await _read_frame(request, length, deadline)
-        monitor = asyncio.create_task(_watch_disconnect(request, cancelled))
+        monitor = asyncio.create_task(_watch_disconnect(request, cancelled, stopped))
         try:
             operation = await thread_call(_parse_header, header, cancelled=cancelled)
             encoded = await thread_call(partial(_evaluate, raw, operation, cancelled, deadline, policy_check),
@@ -237,6 +238,7 @@ async def recover_file(request):
                 _fail(499, "recovery_cancelled", "Recovery request disconnected")
             policy_check()
         finally:
+            stopped.set()
             monitor.cancel()
             await asyncio.gather(monitor, return_exceptions=True)
         response = _OwnedResponse(encoded, _slot, deadline, policy_check)

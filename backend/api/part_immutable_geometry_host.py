@@ -1,4 +1,4 @@
-"""Private sealed-source extrusion transaction; no HTTP or mutable conversion."""
+"""Private sealed-source geometry transaction; no HTTP or mutable conversion."""
 
 from datetime import datetime, timezone
 from threading import Event
@@ -54,9 +54,9 @@ def _current(context, session, deadline, cancelled):
     require_http_source()
     publication.require_policy(context)
     if cancelled.is_set():
-        _refuse('Extrusion edit cancelled', 'cancelled')
+        _refuse('Geometry operation cancelled', 'cancelled')
     if monotonic() >= deadline:
-        _refuse('Extrusion edit deadline exceeded', 'time_limit', 408)
+        _refuse('Geometry operation deadline exceeded', 'time_limit', 408)
     if (doc_context.get_current_doc() != context.doc_id
             or state._sessions.get(context.doc_id) is not session
             or not permits.context_matches(context, context.doc_id, session)):
@@ -83,7 +83,7 @@ def _change(action, index, params, *, expected_kind, expected_feature_id, expect
     if (type(expected_kind) is not str or expected_kind not in KINDS
             or type(expected_feature_id) is not str or not 1 <= len(expected_feature_id) <= 512
             or (cancelled is not None and not isinstance(cancelled, Event))):
-        _refuse('An exact extrusion target and private cancellation event are required', 'invalid_geometry_input', 422)
+        _refuse('An exact geometry target and private cancellation event are required', 'invalid_geometry_input', 422)
     if not _slot.acquire(blocking=False):
         _refuse('A part history operation is already running', 'geometry_busy', 429)
     slot_owned = True
@@ -126,7 +126,7 @@ def _change(action, index, params, *, expected_kind, expected_feature_id, expect
         candidate, authoring_hash, recipe_hash = decode_candidate(result['candidate'])
         candidate = candidate.model_copy(update={'annotations_enabled': source_metadata.annotations_enabled})
         if preservation_digest(candidate) != source_metadata.preserved_document_sha256:
-            _refuse('Extrusion candidate changed preserved document state', 'revision_preservation_changed')
+            _refuse('Geometry candidate changed preserved document state', 'revision_preservation_changed')
         prepared = prepare_geometry_revision(candidate,
             checkpoint=lambda: _preparation_checkpoint(deadline, cancelled))
         with state._lock:
@@ -151,9 +151,9 @@ def _change(action, index, params, *, expected_kind, expected_feature_id, expect
 
 def _preparation_checkpoint(deadline, cancelled):
     if cancelled.is_set():
-        _refuse('Extrusion edit cancelled', 'cancelled')
+        _refuse('Geometry operation cancelled', 'cancelled')
     if monotonic() >= deadline:
-        _refuse('Extrusion edit deadline exceeded', 'time_limit', 408)
+        _refuse('Geometry operation deadline exceeded', 'time_limit', 408)
 
 
 def history(action, *, expected_design_id, expected_revision, expected_source=None, expected_session_identity=None):

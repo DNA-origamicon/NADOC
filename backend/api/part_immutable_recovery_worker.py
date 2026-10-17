@@ -271,6 +271,9 @@ def _evaluate_input(read_frame):
         from backend.api.part_proof_commands import dependencies, execute
         from backend.core.part_history_contract import assess_part_history
 
+        if context.get("storage_scope") == "native_extrusion_v1":
+            from backend.api.part_geometry_inputs import bounded_executor
+            execute = bounded_executor(execute)
         result = assess_part_history(proof_input, execute=execute, dependencies=dependencies)
     except CommandContractError as error:
         result = {"status": "unverified", "native_editable": False, "issues": [error.as_issue()]}

@@ -22,7 +22,7 @@ class EvaluationRequest(BaseModel):
     kind: Literal["photoproduct-create", "photoproduct-relax", "duplex-relax", "streptavidin-coating",
                   "linear-pattern", "circular-pattern", "overhang-bulk",
                   "bundle-create", "extrude-segment", "extrude-continuation",
-                  "extrude-deformed-continuation", "extrude-frame", "circle-segment", "overhang-extrude", "sweep"] | None = None
+                  "extrude-deformed-continuation", "extrude-frame", "circle-segment", "overhang-extrude", "sweep", "deformation"] | None = None
     params: dict | None = None
     index: StrictInt | None = Field(default=None, ge=0)
     sub_index: StrictInt | None = Field(default=None, ge=0)
@@ -103,7 +103,7 @@ def evaluate(source, operation, *, executor=None, dependency_resolver=None):
         from backend.api.part_routing_edit_evaluation import evaluate as evaluate_routing
         return evaluate_routing(source, operation, executor=executor, dependency_resolver=dependency_resolver)
     if "extrusion_recording_version" in header:
-        return _evaluate_extrusion(source, operation, executor=executor,
+        return _evaluate_geometry(source, operation, executor=executor,
                                    dependency_resolver=dependency_resolver)
     if "pattern_recording_version" not in header:
         return _evaluate(source, operation, executor=executor, dependency_resolver=dependency_resolver)
@@ -144,9 +144,11 @@ def evaluate(source, operation, *, executor=None, dependency_resolver=None):
                 "native_editable": False}
 
 
-def _evaluate_extrusion(source, operation, *, executor=None, dependency_resolver=None):
-    from backend.api.part_geometry_inputs import KINDS, bind_prefix
+def _evaluate_geometry(source, operation, *, executor=None, dependency_resolver=None):
+    from backend.api.part_geometry_inputs import KINDS, bind_prefix, selected, bounded_executor
+    from backend.api.part_proof_commands import execute_long
 
+    executor = bounded_executor(executor or execute_long)
     try:
         header = operation["header"]
         request = EvaluationRequest.model_validate(operation["request"])
@@ -156,7 +158,7 @@ def _evaluate_extrusion(source, operation, *, executor=None, dependency_resolver
                 or type(header.get("source_revision")) is not int
                 or header["source_revision"] != request.expected_revision
                 or header.get("source_design_id") != source.id):
-            raise CommandContractError("Extrusion edit lacks its exact captured context",
+            raise CommandContractError("Geometry operation lacks its exact captured context",
                                        code="invalid_capture_context")
         if request.operation == "append":
             if (request.kind not in KINDS or header.get("expected_kind") != request.kind
@@ -165,17 +167,10 @@ def _evaluate_extrusion(source, operation, *, executor=None, dependency_resolver
             return _evaluate(source, operation, executor=executor, dependency_resolver=dependency_resolver)
         if (request.operation != "edit" or request.sub_index is not None
                 or request.index >= len(source.feature_log)):
-            raise CommandContractError("Unknown owned extrusion operation",
+            raise CommandContractError("Unknown owned geometry operation",
                                        code="invalid_operation_admission")
         entry = source.feature_log[request.index]
-        if (entry.feature_type != "snapshot" or entry.op_kind not in KINDS
-                or header.get("expected_kind") != entry.op_kind
-                or header.get("expected_feature_id") != entry.id
-                or type(entry.params.get("_proof_version")) is not int
-                or entry.params["_proof_version"] != 1
-                or "_generated_scope" in entry.params or "_generator" in entry.params):
-            raise CommandContractError("The selected native extrusion feature changed",
-                                       code="source_changed")
+        selected(entry, header.get("expected_kind"), header.get("expected_feature_id"))
         return _evaluate(source, operation, executor=executor,
                          dependency_resolver=dependency_resolver, input_binder=bind_prefix)
     except CommandContractError as error:
