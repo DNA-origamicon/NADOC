@@ -33,6 +33,7 @@ router = APIRouter()
 
 # Internal rollout only; whole-request latency must be qualified before enabling.
 OWNED_FINITE_CONNECTION_APPLY_ENABLED = False
+OWNED_COMBINED_CONNECTION_APPLY_ENABLED = False
 
 
 @router.post("/design/connection-versions", status_code=201)
@@ -347,6 +348,8 @@ def _apply_connection_version_legacy(
     b_label = next((o.label for o in design.overhangs if o.id == b_id), b_id[:8])
 
     def _fn(d: Design):
+        from backend.api.part_source_bound_route import require_current
+        require_current()  # A staged HTTP fallback retains its captured source.
         # First-time Connect supplies a not-yet-persisted version so candidate
         # creation and materialization share ONE undo snapshot. Add it only
         # inside the logged mutation; Undo then restores the truly pre-Connect
@@ -547,9 +550,14 @@ def apply_connection_version(version_id: str) -> dict:
     return _apply_connection_version_impl(version_id)
 
 
-@router.post("/design/connection-versions/connect", status_code=201)
 def create_and_apply_connection_version(body: ConnectionVersionCreateRequest) -> dict:
     """Create and materialize a first-time connection as one undoable action."""
+    if OWNED_COMBINED_CONNECTION_APPLY_ENABLED:
+        from backend.api.part_connection_composition_commands import try_record
+        recorded = try_record(body.model_dump())
+        if recorded is not None:
+            source, updated, report, _entry = recorded
+            return _connection_apply_response(source, updated, report)
     design = design_state.get_or_404()
     ids = {o.id for o in design.overhangs}
     for oid in (body.overhang_a_id, body.overhang_b_id):
@@ -569,3 +577,9 @@ def create_and_apply_connection_version(body: ConnectionVersionCreateRequest) ->
         applied=True,
     )
     return _apply_connection_version_impl(version.id, new_version=version)
+
+
+from backend.api.part_connection_composition_route import ConnectRoute
+
+router.add_api_route("/design/connection-versions/connect", create_and_apply_connection_version,
+                     methods=["POST"], status_code=201, route_class_override=ConnectRoute)

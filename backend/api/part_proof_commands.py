@@ -28,6 +28,7 @@ from backend.api.part_cadnano_commands import KINDS as CADNANO_KINDS
 from backend.api.part_nanoparticle_connection_commands import KINDS as NP_CONNECTION_KINDS
 from backend.api.part_connection_version_commands import is_pending_action
 from backend.api.part_connection_application_commands import ACTION as CONNECTION_APPLY_ACTION
+from backend.api.part_connection_composition_commands import ACTION as CONNECTION_COMPOSE_ACTION
 from backend.core.part_group_organization import KINDS as GROUP_ORGANIZATION_KINDS
 
 
@@ -143,7 +144,7 @@ def dependencies(kind, params):
         return Dependencies(known=False)
     if "_generated_scope" in params and (kind in NP_CONNECTION_KINDS or (
             kind == "overhang-bulk" and (is_pending_action(params)
-                or params.get("action") == CONNECTION_APPLY_ACTION)) or (
+                or params.get("action") in (CONNECTION_APPLY_ACTION, CONNECTION_COMPOSE_ACTION))) or (
             kind == "nanoparticle-patch" and "thiol_version" in params
             and params.get("pending_connection_version_ids"))):
         return Dependencies(known=False)  # Compound scoped owner selection is not qualified yet.
@@ -151,6 +152,9 @@ def dependencies(kind, params):
     # strict command schema. Preserve source provenance during scoped admission.
     params = {key: value for key, value in params.items()
               if key not in {"_generated_scope", "_generator"}}
+    if kind == "overhang-bulk" and params.get("action") == CONNECTION_COMPOSE_ACTION:
+        from backend.api.part_connection_composition_commands import dependency_contract
+        return dependency_contract(params, topology=PART_TOPOLOGY)
     if kind == "overhang-bulk" and params.get("action") == CONNECTION_APPLY_ACTION:
         from backend.api.part_connection_application_commands import parse_command
         try:
@@ -523,7 +527,10 @@ def _execute(kind, design, params, *, expensive):
         result = build(kind, design, params)
         updated, report = result if isinstance(result, tuple) else (result, None)
     elif kind == "overhang-bulk":
-        if params.get("action") == CONNECTION_APPLY_ACTION:
+        if params.get("action") == CONNECTION_COMPOSE_ACTION:
+            from backend.api.part_connection_composition_commands import build
+            updated, report = build(design, params)
+        elif params.get("action") == CONNECTION_APPLY_ACTION:
             from backend.api.part_connection_application_commands import build
             updated, report = build(design, params)
         else:

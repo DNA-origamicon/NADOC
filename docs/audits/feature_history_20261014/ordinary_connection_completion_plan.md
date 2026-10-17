@@ -145,3 +145,88 @@ cwd/fd/maps references or shared-memory remnants remained; persistent systemd/PA
 435/436 denied inspection, as in the prior checkpoint. Removed those empty task
 paths and verified the root empty. Workspace designs/jobs, historical artifacts
 and shared caches are preserved. No browser/solver/bulk capture was launched.
+
+
+## U29 — closed finite compound Connect
+
+Based on `e253be13`. `part_connection_composition_commands` implements the fixed
+`connection-version-connect-linker` action/version1 under `overhang-bulk`.
+It inherits the strict pending-definition grammar, restricts the existing eight
+finite types, declares both stable outputs and exact old conflicts, and calls the
+same admitted native materializer. A new version is a dependency write, not a
+read of a nonexistent producer. Apply v1 is unchanged. Generated scopes, unknown
+fields, incorrect versions and malformed/conflicting IDs remain unregistered.
+Creator version ID/time and connection ID are protected during history editing;
+endpoint/sequence/bridge/name inputs remain editable. No copied output geometry
+is part of the definition.
+
+The ordinary adapter selects metadata/loadout/latest cursor before allocation,
+stages a private version table, indexes the bounded source once, selects actual
+conflicts and records one callback. It performs one materialization, undo copy,
+reconciliation and pending-ligation retry, with the existing two recovery encodes.
+No full proof runs on ordinary Connect. Complete HTTP source capture occurs
+before bounded JSON reading through the existing shared SourceBoundRoute. Even
+an explicit unsupported-scope fallback checks that same source inside its legacy
+recording callback. The public `OWNED_COMBINED_CONNECTION_APPLY_ENABLED` switch
+is false; caller fields cannot enable it. Existing disabled-route behavior stays
+available and finite Apply has its independent unchanged false gate.
+
+Qualification tests cover all eight finite native output/report comparisons,
+actual registered cold replay with poisoned recovery, selected bridge and earlier
+overhang-length edits, protected output IDs, exact dependency declarations,
+missing/version-collision inputs, one postprocessing pass, actual ordinary route
+one-undo/redo, failed materialization/publication, two successive Connects with
+exact replacement conflicts, real ASGI requests, held-body source revision change,
+compatibility fallback revision change, protected loadout/latest-cursor admission
+before UUID allocation, one source index/materialization and a spawned native
+verification worker. No molecular algorithm or numerical pin changed.
+
+The first20-case run observed13 failed/7 passed in3.00s (missing new contract).
+After implementation20 passed3.03s; with initial route tests24 passed3.06s.
+The seven-file regression first passed215/14 warnings in9.60s. Final review then
+observed a real held-request fallback failure (201 instead of409) in2.80s;
+checking captured ownership inside the legacy callback fixed it without altering
+uncaptured legacy operations. The final seven-file run passed218/14 warnings in
+10.54s. Two added pre-allocation guard cases then passed with the complete
+compound file:37 passed4.34s. This yields220 distinct passing cases, not a sum of
+reruns. A test's initial recipe-edit invocation was corrected to the established
+`prepare_change(source,capture,index,checkpoint,params=...)` signature before its
+first successful execution; no production API was invented for the test.
+
+Final command:
+`just test-affected tests/test_part_connection_compose.py tests/test_connection_composition_contract.py tests/test_connection_version_owned_apply_route.py tests/test_native_connection_application_proof.py tests/test_part_connection_application_commands.py tests/test_connection_versions.py tests/test_part_pending_connection_versions.py --tb=short`
+Final added-guard command:
+`just test-affected tests/test_part_connection_compose.py --tb=short`.
+
+This is FH-25 checkpoint2, not closure. Indirect/direct application, applied
+metadata, organized group ownership, full user-facing history controls and
+performance/desktop qualification remain in the original matrix. Existing DS
+occupancy and shared-host defects are not resolved by reproducibility. The native
+proof can reproduce a warning-bearing design; it does not declare its molecular
+geometry valid. Both public gates remain off. Next implement the separate
+zero-bridge output/removal grammar, preserving finite v1 and all other exits.
+
+
+Final module-boundary review moved the compound dependency description into its
+own module; the large proof dispatcher gains only thin calls. The same37-case
+compound file passed again in4.65s after that extraction. Small bounded metadata
+selection occurs twice (initial endpoints then staged definition); the full typed
+source index and native materialization occur once. This is structural evidence,
+not a measured latency claim. `main.js` is unchanged at7,350 lines,delta0.
+`just lint` retains5 baseline F401 findings; memory lint retains6 errors/59 warnings.
+No frontend behavior changed or frontend/app run is claimed.
+
+The initial selector dry-run request was correctly refused while a focused run
+was live; after waiting for that exact process to finish, the retry completed.
+`just test-smart --dry-run` again selected FAST from a would-be FULL historical
+diff and executed zero tests. The literal DEFERRED notice remains the U28 notice
+above; neither broad FAST nor FULL passed. Archive remains absent, so no broad
+scratch, browser capture, scientific run or native build was launched. Public
+rollout requires the existing desktop/performance exits.
+
+Cleanup: final task-owned `/tmp/pytest-of-joshua/pytest-5`, `pytest-6`, `pytest-7`
+and `pytest-current` contained295 empty directories,4 symlinks,0 regular-file bytes.
+No readable same-user cwd/fd/maps references or shared-memory remnants remained;
+only persistent systemd/PAM435/436 denied inspection. Removed those empty task
+paths and verified the root empty. Workspace designs/jobs and shared caches are
+preserved. Retained evidence is this compact report and reusable source/tests.
