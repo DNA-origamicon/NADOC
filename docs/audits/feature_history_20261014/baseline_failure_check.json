@@ -1,0 +1,211 @@
+{
+  "baseline": "dfa63eeba98dd9325cd3a34b241a1f672c78b7d1",
+  "restored_modules": [
+    "backend.api.state",
+    "backend.api.crud",
+    "backend.api.doc_context",
+    "backend.api.routes_feature_log",
+    "backend.core.feature_dependencies"
+  ],
+  "selected_nodes": [
+    "tests/test_vr_capture_launch.py::test_normal_route_enables_coherent_final_recording[off-inspect]",
+    "tests/test_vr_capture_launch.py::test_normal_route_enables_coherent_final_recording[transactions-transactions]",
+    "tests/test_vr_representation_loading.py::test_full_only_does_not_construct_atoms_or_extra_representations",
+    "tests/test_vr_join.py::test_join_feedback_publication_is_private_atomic_ordered_and_document_bound",
+    "tests/test_junction_balance.py::test_the_square_full_rep_draws_both_arcs_of_a_dx_junction_equally",
+    "tests/test_junction_balance.py::test_the_honeycomb_full_rep_stays_balanced_and_unrolled",
+    "tests/test_vr_startup.py::test_launch_starts_viewer_before_scheduling_export",
+    "tests/test_cpd_gpu_npt_context_v4.py",
+    "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[full]",
+    "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[cylinders]",
+    "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[ballstick]",
+    "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[stick]",
+    "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[surface]",
+    "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[hull-prism]",
+    "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[mrdna-coarse]",
+    "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[mrdna-fine]",
+    "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[oxdna]",
+    "tests/test_photoproduct_review.py::test_review_catalog_revalidates_sources_and_marks_focus_geometry",
+    "tests/test_photoproduct_review.py::test_definition_decision_for_old_embedding_is_marked_stale",
+    "tests/test_photoproduct_review.py::test_visual_decision_is_atomic_gate_neutral_and_revision_stays_unresolved",
+    "tests/test_photoproduct_review.py::test_conformer_approval_requires_partition_and_source_hashes_are_immutable",
+    "tests/test_photoproduct_review.py::test_boundary_review_is_hash_pinned_without_fit_partition",
+    "tests/test_photoproduct_review.py::test_complete_visual_conformer_decisions_materialize_audited_plans",
+    "tests/test_photoproduct_review.py::test_scientific_review_api_serves_geometry_and_records_gate_neutral_decisions",
+    "tests/test_cpd_preview.py::test_all_eight_identities_and_crosslinks_match_registered_chemistry",
+    "tests/test_cpd_preview.py::test_estimated_sugars_preserve_reference_geometry_and_handedness",
+    "tests/test_cpd_preview.py::test_core_distances_preserved_and_current_cis_syn_template_used",
+    "tests/test_cpd_preview.py::test_snapshot_refresh_preserves_evidence_and_release_registry"
+  ],
+  "results": [
+    {
+      "nodeid": "tests/test_cpd_gpu_npt_context_v4.py",
+      "phase": "collection",
+      "outcome": "failed",
+      "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: '/home/joshua/NADOC/.development-artifacts/cpd-anti-gpu-longbox-v3/assembly.json'"
+    },
+    {
+      "nodeid": "tests/test_vr_capture_launch.py::test_normal_route_enables_coherent_final_recording[off-inspect]",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   fastapi.exceptions.HTTPException: 503: NADOC native VR is not supported under WSL. Run NADOC on a native Linux desktop with SteamVR."
+    },
+    {
+      "nodeid": "tests/test_vr_capture_launch.py::test_normal_route_enables_coherent_final_recording[transactions-transactions]",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   fastapi.exceptions.HTTPException: 503: NADOC native VR is not supported under WSL. Run NADOC on a native Linux desktop with SteamVR."
+    },
+    {
+      "nodeid": "tests/test_vr_representation_loading.py::test_full_only_does_not_construct_atoms_or_extra_representations",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: 'native/vr_viewer/build/nadoc-vr-viewer'"
+    },
+    {
+      "nodeid": "tests/test_vr_join.py::test_join_feedback_publication_is_private_atomic_ordered_and_document_bound",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   fastapi.exceptions.HTTPException: 503: NADOC native VR is not supported under WSL. Run NADOC on a native Linux desktop with SteamVR."
+    },
+    {
+      "nodeid": "tests/test_junction_balance.py::test_the_square_full_rep_draws_both_arcs_of_a_dx_junction_equally",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "     +  where 0.001015730377341928 = max(<generator object test_the_square_full_rep_draws_both_arcs_of_a_dx_junction_equally.<locals>.<genexpr> at 0x73b73a71bed0>)"
+    },
+    {
+      "nodeid": "tests/test_junction_balance.py::test_the_honeycomb_full_rep_stays_balanced_and_unrolled",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "     +  where 0.0013676456009520388 = max(<generator object test_the_honeycomb_full_rep_stays_balanced_and_unrolled.<locals>.<genexpr> at 0x73b71be5fed0>)"
+    },
+    {
+      "nodeid": "tests/test_vr_startup.py::test_launch_starts_viewer_before_scheduling_export",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   fastapi.exceptions.HTTPException: 503: NADOC native VR is not supported under WSL. Run NADOC on a native Linux desktop with SteamVR."
+    },
+    {
+      "nodeid": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[full]",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: 'native/vr_viewer/build/nadoc-vr-viewer'"
+    },
+    {
+      "nodeid": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[cylinders]",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: 'native/vr_viewer/build/nadoc-vr-viewer'"
+    },
+    {
+      "nodeid": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[ballstick]",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: 'native/vr_viewer/build/nadoc-vr-viewer'"
+    },
+    {
+      "nodeid": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[stick]",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: 'native/vr_viewer/build/nadoc-vr-viewer'"
+    },
+    {
+      "nodeid": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[surface]",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: 'native/vr_viewer/build/nadoc-vr-viewer'"
+    },
+    {
+      "nodeid": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[hull-prism]",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: 'native/vr_viewer/build/nadoc-vr-viewer'"
+    },
+    {
+      "nodeid": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[mrdna-coarse]",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: 'native/vr_viewer/build/nadoc-vr-viewer'"
+    },
+    {
+      "nodeid": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[mrdna-fine]",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: 'native/vr_viewer/build/nadoc-vr-viewer'"
+    },
+    {
+      "nodeid": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[oxdna]",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: 'native/vr_viewer/build/nadoc-vr-viewer'"
+    },
+    {
+      "nodeid": "tests/test_photoproduct_review.py::test_review_catalog_revalidates_sources_and_marks_focus_geometry",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: '/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-human-review-packet-v7/definition_review_packet.json'"
+    },
+    {
+      "nodeid": "tests/test_photoproduct_review.py::test_definition_decision_for_old_embedding_is_marked_stale",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: '/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-human-review-packet-v7/definition_review_packet.json'"
+    },
+    {
+      "nodeid": "tests/test_photoproduct_review.py::test_visual_decision_is_atomic_gate_neutral_and_revision_stays_unresolved",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: '/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-human-review-packet-v7/definition_review_packet.json'"
+    },
+    {
+      "nodeid": "tests/test_photoproduct_review.py::test_conformer_approval_requires_partition_and_source_hashes_are_immutable",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: '/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-human-review-packet-v7/definition_review_packet.json'"
+    },
+    {
+      "nodeid": "tests/test_photoproduct_review.py::test_boundary_review_is_hash_pinned_without_fit_partition",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: '/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-human-review-packet-v7/definition_review_packet.json'"
+    },
+    {
+      "nodeid": "tests/test_photoproduct_review.py::test_complete_visual_conformer_decisions_materialize_audited_plans",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: '/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-human-review-packet-v7/definition_review_packet.json'"
+    },
+    {
+      "nodeid": "tests/test_photoproduct_review.py::test_scientific_review_api_serves_geometry_and_records_gate_neutral_decisions",
+      "phase": "call",
+      "outcome": "failed",
+      "reason": "E   FileNotFoundError: [Errno 2] No such file or directory: '/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-definition-human-review-packet-v7/definition_review_packet.json'"
+    },
+    {
+      "nodeid": "tests/test_cpd_preview.py::test_all_eight_identities_and_crosslinks_match_registered_chemistry",
+      "phase": "setup",
+      "outcome": "failed",
+      "reason": "E   ValueError: Incorrect preview stereochemistry: cis-anti-I"
+    },
+    {
+      "nodeid": "tests/test_cpd_preview.py::test_estimated_sugars_preserve_reference_geometry_and_handedness",
+      "phase": "setup",
+      "outcome": "failed",
+      "reason": "E   ValueError: Incorrect preview stereochemistry: cis-anti-I"
+    },
+    {
+      "nodeid": "tests/test_cpd_preview.py::test_core_distances_preserved_and_current_cis_syn_template_used",
+      "phase": "setup",
+      "outcome": "failed",
+      "reason": "E   ValueError: Incorrect preview stereochemistry: cis-anti-I"
+    },
+    {
+      "nodeid": "tests/test_cpd_preview.py::test_snapshot_refresh_preserves_evidence_and_release_registry",
+      "phase": "setup",
+      "outcome": "failed",
+      "reason": "E   ValueError: Incorrect preview stereochemistry: cis-anti-I"
+    }
+  ],
+  "exit_code": 1
+}

@@ -56,7 +56,8 @@ def pattern_history_overlays(design, decode_snapshot):
     clusters, deformations = {}, {}
     for entry in design.feature_log:
         if (
-            getattr(entry, "op_kind", None)
+            entry.feature_type != "snapshot"
+            or entry.op_kind
             not in {"circular-pattern", "linear-pattern"}
             or entry.evicted
             or not entry.post_state_gz_b64

@@ -1,4 +1,6 @@
 import { welcomeVisible, observeWelcomeVisibility } from '../shared/welcome_visibility.js'
+import { captureAssemblyJointInputs, sameAssemblyJointInputs } from '../scene/assembly_joint_inputs.js'
+import { versionedAssemblySourceKey } from '../api/assembly_instance_design_cache.js'
 
 /** Read-only readiness refresh shared by the desktop and cadnano hosts. */
 export function readinessTarget(state, mode = '3d') {
@@ -11,7 +13,12 @@ export function readinessTarget(state, mode = '3d') {
 }
 
 function sameTarget(a, b) {
-  return a?.document === b?.document && a?.assembly === b?.assembly
+  if (a?.assembly !== b?.assembly) return false
+  if (!a?.assembly) return a?.document === b?.document
+  // Renderer source waits retain exact-snapshot authority for inline/legacy
+  // sources. Only live file versions can keep a wait across fresh snapshots.
+  if (a.document !== b.document && (!a.versionedSources || !b.versionedSources)) return false
+  return sameAssemblyJointInputs(a.inputs, b.inputs)
 }
 
 export function initDesignReadinessController({
@@ -29,7 +36,13 @@ export function initDesignReadinessController({
   function currentTarget(state = store.getState()) {
     if (mode !== 'cadnano' && welcomeVisible(document)) return null
     const next = readinessTarget(state, mode)
-    return dismissed || next?.document === resetDocument ? null : next
+    if (dismissed || next?.document === resetDocument) return null
+    // Capture values now: an old target's mutable document must never be used
+    // to reconstruct its identity after an in-place source or pose edit.
+    return next?.assembly ? {
+      ...next, inputs: captureAssemblyJointInputs(next.document),
+      versionedSources: next.document.instances.every(instance => !!versionedAssemblySourceKey(instance)),
+    } : next
   }
   let target = currentTarget()
   let report = null
@@ -114,6 +127,7 @@ export function initDesignReadinessController({
     if (!sameTarget(target, next)) {
       invalidate()
     } else if (!document.hidden && target) {
+      target = next
       clearTimeout(debounce)
       debounce = setTimeout(() => refresh(), debounceMs)
     }
@@ -129,7 +143,9 @@ export function initDesignReadinessController({
   }
 
   const unsubscribe = store.subscribe(state => {
-    if (!sameTarget(target, currentTarget(state))) invalidate()
+    const next = currentTarget(state)
+    if (!sameTarget(target, next)) invalidate()
+    else target = next // retain pending work, but poll against the latest snapshot
   })
   window.addEventListener('nadoc:document-reset', reset)
   window.addEventListener('focus', wake)

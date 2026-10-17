@@ -93,7 +93,7 @@ def _bridge(start, end, geo, *, extra_bases=0):
     }
 
 
-def propose_free_cluster_join(design, body, *, selected_ports=None):
+def propose_free_cluster_join(design, body, *, selected_ports=None, identity_seed=None):
     if isinstance(body, dict):
         body = FreeClusterJoinRequest.model_validate(body)
     if design.id != body.expected_design_id:
@@ -233,7 +233,8 @@ def propose_free_cluster_join(design, body, *, selected_ports=None):
         )
     if deferred:
         return join_precursors(
-            design, result, body, pairs, candidate_count, clearance, rot, translation
+            design, result, body, pairs, candidate_count, clearance, rot, translation,
+            identity_seed=identity_seed,
         )
     # Route placeholders refer to the complete candidate array.
     selected_index = {original: selected for selected, original in enumerate(indices)}
@@ -242,10 +243,11 @@ def propose_free_cluster_join(design, body, *, selected_ports=None):
         for sid, path in paths.items()
     }
     token = join_preview_token(design, body)
+    bridge_identity = identity_seed or token[:14]
     bridges, connector_domains = [], {}
     for i, pair in enumerate(pairs):
         for j, bridge in enumerate(pair[3]):
-            hid = f"join_ss_{token[:14]}_{2 * i + j}"
+            hid = f"join_ss_{bridge_identity}_{2 * i + j}"
             bridge = {**bridge, "helix_id": hid}
             bridges.append(bridge)
             pa, pb = np.array(bridge["points"])[[0, -1]]
@@ -271,7 +273,7 @@ def propose_free_cluster_join(design, body, *, selected_ports=None):
             ):
                 result.forced_ligations.append(
                     ForcedLigation(
-                        id=f"join_bond_{token[:14]}_{2 * i + j}_{k}",
+                        id=f"join_bond_{bridge_identity}_{2 * i + j}_{k}",
                         three_prime_helix_id=a[0],
                         three_prime_bp=a[1],
                         three_prime_direction=a[2],

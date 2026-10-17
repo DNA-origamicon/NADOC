@@ -11,6 +11,41 @@ import {
 
 afterEach(() => { document.body.replaceChildren(); localStorage.clear(); vi.restoreAllMocks() })
 
+describe('hidden direct-open library startup', () => {
+  const mountHidden = () => {
+    document.body.innerHTML = '<div id="welcome-screen" class="hidden"><div id="library-panel-mount"></div></div>'
+    return {
+      listLibraryFiles: vi.fn().mockResolvedValue([]),
+      libraryDiskUsage: vi.fn().mockResolvedValue({}),
+    }
+  }
+
+  it('defers the initial listing until the hidden welcome screen becomes visible', async () => {
+    const api = mountHidden()
+    initLibraryPanel({ api })
+    await Promise.resolve()
+    expect(api.listLibraryFiles).not.toHaveBeenCalled()
+    expect(api.libraryDiskUsage).not.toHaveBeenCalled()
+    document.getElementById('welcome-screen').classList.remove('hidden')
+    await vi.waitFor(() => expect(api.listLibraryFiles).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(api.libraryDiskUsage).toHaveBeenCalledOnce())
+    document.getElementById('welcome-screen').classList.add('hidden')
+    document.getElementById('welcome-screen').classList.remove('hidden')
+    await Promise.resolve()
+    expect(api.listLibraryFiles).toHaveBeenCalledOnce()
+  })
+
+  it('keeps an explicit hidden refresh immediate and does not repeat it on first show', async () => {
+    const api = mountHidden()
+    const panel = initLibraryPanel({ api })
+    await panel.refresh()
+    expect(api.listLibraryFiles).toHaveBeenCalledOnce()
+    document.getElementById('welcome-screen').classList.remove('hidden')
+    await Promise.resolve(); await Promise.resolve()
+    expect(api.listLibraryFiles).toHaveBeenCalledOnce()
+  })
+})
+
 describe('hasLargeSimulationData', () => {
   const halfGb = 0.5 * 1024 ** 3
 

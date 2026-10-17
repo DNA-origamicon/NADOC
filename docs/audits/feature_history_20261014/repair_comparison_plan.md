@@ -1,0 +1,234 @@
+# P5 UI-2: private candidate comparison
+
+2026-10-15. Backend comparison foundation and compatibility endpoint implemented
+and validated. Parent ran 180 focused tests: 31 pure projection, 31 owner-lifecycle,
+three worker, 13 HTTP and 102 existing lifecycle/strict-route regressions, including
+a real spawned display process. The first frontend implementation has 115 unique
+focused cases green after the pose adapter correction below; the full frontend
+suite passed 8,263 cases with one skipped across 714 files in 311.62 seconds.
+No browser, native build or scientific check run.
+Assemblies remain deferred.
+
+## First frontend increment
+
+`part_comparison_model` admits only the exact complete version-one display packet;
+`part_comparison_controller` subscribes to the existing repair workflow, retaining
+only an in-memory display binding/request epoch. Explicit Compare uses original
+document context and aborts/discards obsolete responses. Closing this read never
+cancels or commits the evaluated repair. Source/job/draft/revision changes,
+document reset and conservative remaining-job expiry remove both panes. Saved
+proposal JSON never grants display or Apply readiness.
+
+`part_comparison_surface` is inline in the existing repair modal. It labels the
+published authored source as unverified and the proposed pane as evaluated,
+states that physical/presentation layers are excluded, and lists unplaced assets.
+Unsupported/failed comparison leaves the repair available for ordinary guarded
+Apply and never shows a partial success. No normal store, export, simulation or
+`main.js` integration is introduced.
+
+`part_comparison_viewer` owns one WebGL renderer, two scissored scenes and one
+camera/OrbitControls. It draws on orbit/resize/fit without a permanent animation
+loop. Existing particle pose/sphere/material construction was extracted verbatim
+into `nanoparticle_display`; the normal subsystem reuses it without changing
+coating, selection, glow or physical-pose behavior. Existing protein trace and
+no-C-alpha ovoid construction are reused. The comparison adapter wraps raw pose
+arrays as native Transform values: its initial missing wrapper was caught by
+the focused translation test (114 passed/one failed), then fixed with exact
+world-rotation coverage (eight viewer cases passed). All owned geometries,
+materials, controls, observers/listeners, canvas and GPU context are disposed,
+including initialization failure. Inputs and published geometry remain untouched.
+
+The prepared e2e scenario now checks private Compare, same published/export data,
+close/reopen/cancel and ordinary Apply. It remains unrun: see MV-47, Archive
+availability and the existing artifact inventory. Finite 128-placement/4,096-atom
+ceilings do not establish worst-case browser responsiveness; near-limit CPU/GPU
+cost qualification remains an explicit completion gate.
+
+## First backend increment
+
+`core/part_comparison_projection.py`, `api/part_comparison_worker.py` and
+`api/part_evaluation_comparison.py` implement the first private projection. The
+existing job owner delegates through `jobs.comparison`; no second catalog,
+persisted readiness, candidate cache, feature row or publication permit is added.
+Only complete uncoated gold/QD particles and free protein placements are admitted.
+DNA, coated/conjugated particles and anchored proteins refuse explicitly. Missing
+or ambiguous protein assets and unsupported particle transforms also refuse.
+All authored placements are represented, with authored visibility flags; physical
+and presentation state are excluded, so this is not the normal displayed scene.
+
+The strict request carries projection version, expected design/revision and saved
+draft ID/generation only. Its saved actions reconstruct the normalized existing
+`EvaluationRequest`; its digest must match that job's private admission. This
+prevents labeling a different evaluated repair as the saved proposal. No planner,
+base rehash, source parser or numerical feature execution is repeated.
+
+Capture starts one shared 25 ms/2 MB/30,000-node allowance before scope checks;
+draft cloning spends that allowance and source isolation receives its remainder.
+Busy state/work locks refuse without queueing. Both panes together retain the
+existing 2 MB worker input/result limits and use a 5-second disposable worker.
+Initial display ceilings are 128 placements and 4,096 projected protein atoms;
+they are conservative new display limits, not increases to existing proof limits.
+Large retained recovery/history may exceed combined transport even when evaluation
+succeeded. Cost qualification remains pending; existing proof limits are unchanged.
+
+`POST /design/features/evaluation/jobs/{id}/comparison` delegates only to that
+owner. Its typed request accepts no candidate or geometry. The synchronous FastAPI
+handler runs on a request thread; worker cancellation is the existing job DELETE
+operation and disconnecting the read does not cancel or publish the repair. The
+five-second process deadline remains active even when the caller stops waiting.
+Strict dispatch does not register this route and refuses it before reading a body.
+The final owner guard returns only the remaining job lifetime as
+`expires_in_seconds`; it does not renew the existing job. A nonpositive remainder
+refuses the response. The private view charges this interval from request-start
+monotonic time and disposes at expiry, so transport delay shortens its display
+lease rather than extending it. This adds no polling or persistent token.
+
+Protein coordinates reuse `compose_protein_world_transform` and
+`protein_asset_to_atomistic`. Their coordinates are already nm: the existing PDB
+parser divides Angstrom input by ten, and `Atom.x/y/z` use nm. Particle poses,
+diameters, protein atoms and `bounds_nm` therefore share one frame and unit; the
+projection adds no unit conversion. Proteins without C-alpha atoms declare an
+ovoid fallback rather than producing an empty trace. Invalid nonpositive particle
+diameters return an unavailable comparison, never invented or negative geometry.
+
+Candidate authoring/recipe digests must survive exact decoding and still match
+the retained candidate after projection. Final checks repeat catalog object,
+candidate identity, cancellation/expiry, source/session/policy and draft guards.
+Worker cleanup acts on an unregistered temporary receipt so it cannot overwrite
+the original evaluated candidate. The original job remains available for its
+normal explicit commit. Strict HTTP admission remains refused.
+
+## Ownership and contract
+
+`backend/api/part_evaluation_jobs.py` owns the only evaluated candidate, its
+admitted operation, source identity, document session incarnation, policy generation,
+creation/expiry time and cancellation. Its job/admission weak references point to
+the mutable live source; captured worker input is released after evaluation and
+is not a retained immutable comparison input. `inspect()` deliberately excludes
+candidate bytes. A comparison must obtain a private read lease through this owner; it must
+not read `_jobs` from a route, decode feature recovery, re-execute a command, create
+a second candidate catalog, or turn a saved draft into a ready result.
+
+Proposed `POST /design/features/evaluation/jobs/{id}/comparison` is explicit and
+nonpublishing. Require current expected design/revision and draft ID/generation
+for this UI. The job owner admits only a completed, uncommitted repair with a
+matching private host admission and retained candidate; reject verify/selection,
+cancelled, expired, stale-session/source/policy and busy-source states. Capture
+owned references briefly, perform decoding/projection outside state/job locks,
+then recheck the same guards and `_jobs[id] is admitted_job` before releasing any
+response. Holding the shared work slot alone does not prevent cancellation,
+expiry or catalog removal. Cancellation/expiry
+may remove a catalog pointer while a private read is running; a lease must keep
+its input alive only until that bounded read finishes, without reviving the job.
+The first route remains compatibility-only; strict HTTP continues refusing it
+until its read admission is separately reviewed.
+
+Keep comparison transport separate from ordinary design responses. Suggested
+envelope: `projection_version`, job/design/source-revision/draft-generation IDs,
+`comparison_basis`, explicit representation, complete/omitted coverage, bounds,
+and two display-only projections. Never send a `design` field or a candidate
+publication permit. The view can consume this envelope; `_syncFromDesignResponse`,
+normal `currentDesign`/`currentGeometry`, export and simulation cannot.
+
+The first pane is **published authored geometry, not verified** unless an exact
+matching proof actually exists. The second is **evaluated proposed geometry**.
+Old failed definitions need not regenerate to display the published materialized
+reference. Do not label that reference “last good” or use the recovery timeline
+as a regenerated candidate. Physical/FEM/simulation positions are excluded from
+both panes; make that comparison basis visible if the normal viewport uses them.
+
+## Reuse and bounded work
+
+Use the existing native geometry derivation (`core.design_geometry._geometry_for_helices`,
+deformed axes and established placement helpers) through a cohesive pure display
+adapter. Preserve current formulae, polarity and constants. Review the complete
+allowed output closure before rendering: a successful DNA-only projection must
+not silently omit proteins, particles or attached strands. Return an explicit
+unsupported/over-budget diagnostic when complete comparison cannot be provided.
+No atomistic/surface calculation is needed for initial coarse authored geometry.
+
+Decode candidate transport with the same no-authoring-drift checks as commit,
+without copying source presentation/recovery into it. Capture the published
+source afresh under its state lock, checking the job's source/session/revision
+identity before bounded copying. Do not derive geometry outside the lock from
+the live weak-referenced model. A separately budgeted immutable source retained
+during evaluation is an alternative only after explicit memory qualification.
+Ordinary 25 ms/2 MB capture and existing job/result limits stay unchanged; any
+extended capture needs the same reviewed family profile, never caller-selected
+limits. Projection has a separate measured output/work allowance and uses the
+existing single nonqueued work slot. Prefer one disposable read-only process using
+the established spawn/shared-memory/terminate-and-join supervisor for native
+derivation; this is a rendering task, not another numerical evaluation. Share
+admission with other part work initially so preview cannot compete with an edit
+or solver. Keep input/output in memory and release it on every error/timeout.
+
+Do not select generous new limits without evidence. Qualify tiny DNA, uncoated
+gold/QD, free protein and mixed supported models near the existing capture limit;
+measure lock time, process/serialization time, bytes, renderer allocations and
+concurrent lightweight requests. Refuse before rendering if output exceeds its
+allowance. Polling readiness never starts projection work. An optional one-job
+bounded cached projection can be considered only after measurements show repeat
+Compare cost; no persistent geometry cache is necessary initially.
+
+## Frontend surface
+
+Reuse `ui/primitives/modal.js` and the lifecycle pattern of
+`scene/t_junction_preview.js`: independent scene/camera/OrbitControls, bounded
+pixel ratio, resize observer, keyboard controls, explicit frame lifecycle and
+complete GPU/context disposal. Do not copy its T-junction geometry routines.
+
+`initDesignRenderer` is not currently a disposable preview owner: it drops its
+store unsubscribe handle, and `dispose()` removes roots without releasing all
+GPU resources/timers. Use an explicitly owned static builder or harden that
+lifecycle with focused tests before reuse. Shared helix geometry templates are
+tagged `userData.shared`; disposal must preserve them, as the existing assembly
+renderer does, rather than copying the live renderer's traversal wholesale. Existing
+`protein_trace_renderer.js` already takes explicit atom arrays and a scene.
+`nanoparticle_subsystem.js` mixes drawing with API edits/gizmos and must not be
+installed wholesale; extract/reuse a pure particle display builder instead.
+`assembly_visualization.js` demonstrates private display stores, but assembly
+logic itself is outside this work. Do not use the normal renderer's external
+geometry/simulation swap: it shares the main viewport and consumers.
+
+Add a cohesive `part_repair_comparison` view/controller, invoked by the existing
+repair controller's explicit Compare action. Keep the normal store and `main.js`
+flat. Two panes share a camera frame/orbit and reset-to-fit action, with published
+and proposed visibility controls and unambiguous labels. Optional overlay colors
+may highlight positional/resource changes; stable IDs supply correspondence.
+Never infer correspondence by nearest geometry. No screenshots, projections or
+readiness go into browser storage. Closing the pane, changing doc/loadout/revision,
+new proposal edits, cancellation, expiry or reset disposes all private resources.
+
+This coarse comparison does **not** satisfy the molecular-geometry authorization
+gate for numerical-engine upgrades. That requires the separate same-frame atom,
+bond/ring/junction evidence and deltas; UI-1's evaluation/Apply block for those
+proposals remains until that review exists.
+
+## Completion gates
+
+- Owner/transport tests: exact source/session/policy/draft generation; cancellation,
+  expiry and close/reopen ABA during projection; no candidate publication or new
+  feature row; fail-closed unsupported output families and byte/work bounds.
+- Geometry oracle: compare coordinates/IDs against unchanged native display
+  helpers for the same two inputs, including moved gold, free protein pose and a
+  small DNA edit. No geometry lock or visual golden regeneration.
+- UI tests: no normal store, simulation or export mutation; matching camera frame;
+  old projection cannot appear after context change; deterministic disposal of
+  observer, RAF, controls, buffers/materials, renderer and canvas.
+- App exercise: explicit Compare before Apply, visible old/new difference, normal
+  geometry/export unchanged, close/reopen, cancellation/expiry while displayed,
+  then one Apply and ordinary refresh. Root's Archive/artifact inventory and
+  cleanup gate apply. Until executed, report `NOT VERIFIED IN APP`.
+
+## Established CAD behavior
+
+Onshape separates a written change list from graphical comparison of workspace,
+version and history states. This supports offering both compact changes and a
+separately invoked visual comparison; it does not make a preview a validity
+certificate. [Official Onshape Compare documentation](https://cad.onshape.com/help/Content/Document/compare.htm).
+SOLIDWORKS compares reference and modified document geometry explicitly, with
+distinct volume and face comparisons. NADOC needs molecular/topological display
+correspondence instead of borrowing a solid-volume metric.
+[Official SOLIDWORKS Compare utility](https://help.solidworks.com/2023/English/SolidWorks/sldworks/t_running_the_compare_utility.htm).
+Job leases, bounded admission and private renderer ownership above are NADOC
+architecture choices, not claims about those products' internal implementations.

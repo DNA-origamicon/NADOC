@@ -10,15 +10,7 @@ import { addStreptavidinCoating, addBiotinMarkers, applyCoatingTransforms } from
 import { nanoparticleRenderInputsChanged } from './nanoparticle_render_dependencies.js'
 import { createStreptavidinAtomicRenderer } from './streptavidin_atomic_renderer.js'
 import { openStreptavidinDialog } from '../ui/streptavidin_dialog.js'
-
-const GOLD = 0xeac13b
-
-function poseMatrix(particle) {
-  const values = particle?.pose?.values ?? particle?.pose
-  const matrix = new THREE.Matrix4()
-  if (Array.isArray(values) && values.length === 16) matrix.fromArray(values).transpose()
-  return matrix
-}
+import { createNanoparticleMaterial, createNanoparticleMesh, nanoparticlePoseMatrix as poseMatrix } from './nanoparticle_display.js'
 
 export function initNanoparticleSubsystem({ scene, store, controls, camera, canvas, selectionController, designRenderer = null, rightSidebar = null, openConjugateManager = null, attachToOverhang = null }) {
   const root = new THREE.Group()
@@ -39,11 +31,7 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
   // The editor has no studio environment: diffuse colour and a small emissive
   // fill keep gold readable, while broad highlights retain the sphere's shape.
   // Photo mode supplies its own physically metallic material and studio lighting.
-  const material = new THREE.MeshPhysicalMaterial({
-    color: GOLD, metalness: 0.575, roughness: 0.34, clearcoat: 0.265,
-    clearcoatRoughness: 0.26, envMapIntensity: 0.975,
-    emissive: GOLD, emissiveIntensity: 0.15,
-  })
+  const material = createNanoparticleMaterial({ kind: 'gold_nanosphere' })
   const selectedMaterial = material.clone()
   selectedMaterial.emissiveIntensity = 0.35
   const dotMaterials = new Map()
@@ -54,11 +42,7 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
     if (particle.kind !== 'quantum_dot') return selected ? selectedMaterial : material
     const color = particle.quantum_dot?.display_color ?? '#58d65d'
     const key = particle.id
-    if (!dotMaterials.has(key)) dotMaterials.set(key, new THREE.MeshPhysicalMaterial({
-      color, metalness: 0, roughness: 0.3, clearcoat: 0.35,
-      emissive: color, emissiveIntensity: fluorescenceOn ? 1.5 : selected ? 0.5 : 0.12,
-      toneMapped: !fluorescenceOn,
-    }))
+    if (!dotMaterials.has(key)) dotMaterials.set(key, createNanoparticleMaterial(particle, { selected, fluorescence: fluorescenceOn }))
     const mat = dotMaterials.get(key)
     mat.color.set(color)
     mat.emissive.set(color)
@@ -124,13 +108,7 @@ export function initNanoparticleSubsystem({ scene, store, controls, camera, canv
     connectorRoot.clear(); linkerAtomRoot.clear()
     for (const particle of view.currentDesign?.nanoparticles ?? []) {
       if (!particle.visible) continue
-      const mesh = new THREE.Mesh(new THREE.SphereGeometry(particle.diameter_nm / 2, 48, 32),
-        particleMaterial(particle, particle.id === highlighted))
-      mesh.name = `${particle.kind === 'quantum_dot' ? 'quantum-dot' : 'gold-nanosphere'}:${particle.id}`
-      mesh.userData.nanoparticleId = particle.id
-      mesh.userData.nanoparticleKind = particle.kind
-      if (particle.kind !== 'quantum_dot') mesh.userData.photoMaterialKind = 'gold-nanoparticle'
-      mesh.applyMatrix4(poseMatrix(particle))
+      const mesh = createNanoparticleMesh(particle, particleMaterial(particle, particle.id === highlighted))
       if (oxdnaPoses.has(particle.id)) {
         mesh.matrix.copy(new THREE.Matrix4().fromArray(oxdnaPoses.get(particle.id)).transpose())
         mesh.matrixAutoUpdate = false

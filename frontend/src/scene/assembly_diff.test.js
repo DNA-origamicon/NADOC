@@ -44,6 +44,18 @@ describe('assemblyTransformOnlyChange', () => {
     const next = { instances: [inst('a', IDENTITY, { representation: 'full', mode: 'cg' })] }
     expect(assemblyTransformOnlyChange(base, next)).toBe(false)
   })
+  it('rejects a changed live source version even when its path and transform are unchanged', () => {
+    const source = { type: 'file', path: 'part.nadoc' }
+    const before = { instances: [inst('a', IDENTITY, { source, geometrySourceKey: 'f:/part:1:' })] }
+    const after = { instances: [inst('a', IDENTITY, { source, geometrySourceKey: 'f:/part:2:' })] }
+    expect(assemblyTransformOnlyChange(before, after)).toBe(false)
+    expect(assemblyTransformOnlyChange(before, structuredClone(before))).toBe(true)
+  })
+  it('rejects replacement inline content whose design ID is unchanged', () => {
+    const before = { instances: [inst('a', IDENTITY, { source: { type: 'inline', design: { id: 'part' } } })] }
+    const after = structuredClone(before)
+    expect(assemblyTransformOnlyChange(before, after)).toBe(false)
+  })
   it('false when the instance set changes or is empty', () => {
     expect(assemblyTransformOnlyChange(base, { instances: [] })).toBe(false)
     expect(assemblyTransformOnlyChange({ instances: [] }, base)).toBe(false)

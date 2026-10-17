@@ -10,6 +10,8 @@ def restore_cluster_creations(design, position):
         for i, e in enumerate(entries)
         if e.feature_type == "cluster_create"
     }
+    if not creations:
+        return design
     end = len(entries) - 1 if position == -1 else position
     active = {cid: e for cid, (i, e) in creations.items() if i <= end}
     clusters = [

@@ -65,10 +65,13 @@ undo points use `snapshot()`. Configuration restore is silent (so it can be
 animated) — it does NOT push to the undo stack.
 
 ### Geometry cache
-`_GEO_CACHE` (LRU 16) in `backend/api/assembly.py`. Key = file path + mtime
-(or inline design id) + sha256(cluster_transform_overrides). Used by both
-`/instances/{id}/geometry` and `/assembly/geometry` to skip re-running
-`_geometry_for_design` on undo/redo, tab switches, etc.
+`_GEO_CACHE` (LRU 16) in `backend/core/assembly_geometry.py`. Key = file path +
+mtime (or inline design id) + sha256(cluster_transform_overrides), with the
+canonical native display suffix from `display_geo_cache_key`. Reads and feature
+seek prewarming share this key and cache the compact response once. Editing a
+source invalidates only that source's cached revisions/overrides; other parts
+remain warm. Both `/instances/{id}/geometry` and `/assembly/geometry` reuse the
+same payload without rebuilding nucleotide dictionaries or compact arrays.
 
 ### `update_assembly_*` patch semantics changed
 `update_assembly_animation` and `update_assembly_keyframe` switched from

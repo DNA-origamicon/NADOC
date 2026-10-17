@@ -12,6 +12,9 @@ CG-to-atomistic handoff. Historical phases and experiments are in
 
 ## Current state
 
+- Copy Job retains the job-owned sequence-parameter file byte-for-byte (ISSUE-95).
+  Missing legacy files remain absent; this is not complete physical provenance.
+
 - The local upstream physics-v3 builder adapts thermostat rigidity masks to upstream's
   packed particle IDs (2026-10-02); adaptive-memory builds retain their explicit ID buffer.
   The managed CUDA engine and project oxpy were rebuilt. Native John/Langevin checks

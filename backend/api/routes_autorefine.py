@@ -212,6 +212,7 @@ def apply_autorefine_skips(run_id: str, period: int | None = None) -> dict:
         label = f"Autorefine skips ({placement}, {n_del} deletions)"
         params = {
             "placement": placement,
+            "skips": explicit_skips,
             "skip_period": result.get("converged_period"),
             "source": "autorefine",
             "run_id": run_id,

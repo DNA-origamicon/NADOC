@@ -1,0 +1,27 @@
+{
+  "date": "2026-10-15",
+  "executor": "root, serialized focused validation",
+  "scope": "UI-2 complete uncoated gold/QD and free protein authored comparison",
+  "focused_first_run": {"files": 10, "passed": 114, "failed": 1, "seconds": 4.24},
+  "failure": "Private packet supplied a raw pose array; the native Transform adapter interpreted Array.values instead of matrix values, leaving particle translation at origin.",
+  "correction": "Wrap only the private display adapter pose as {values: pose}; unchanged native helper and geometry. Added transformed local-axis/world-rotation assertion.",
+  "focused_rerun": {"target": "src/scene/part_comparison_viewer.test.js", "passed": 8, "failed": 0, "seconds": 0.871},
+  "unique_cases_green": 115,
+  "full_frontend": {"command": "just test-frontend", "files_passed": 714, "passed": 8263, "skipped": 1, "failed": 0, "seconds": 311.62},
+  "static": {"node_syntax": "passed", "git_diff_check": "passed", "main_js_delta": 0},
+  "properties": [
+    "Exact complete bounded envelope and no candidate/Design transport",
+    "Original context, job and draft binding, reset/late response protection and conservative lease expiry",
+    "Read close/error leaves existing evaluated repair available and never publishes to the normal store",
+    "One renderer/shared camera, on-demand draws, native particle/protein reuse and complete GPU/listener cleanup",
+    "Desktop Compare/close/cancel/Apply integration with unchanged ordinary geometry"
+  ],
+  "app_status": "NOT VERIFIED IN APP",
+  "manual_validation_debt": "MV-47",
+  "limitations": [
+    "Prepared isolated e2e updated but not run; Archive unavailable",
+    "Near-limit rendering cost unqualified; no performance claim from focused cases",
+    "No DNA/coated/anchored/assembly comparison or molecular upgrade authorization",
+    "No browser/native/headset build or simulation run"
+  ]
+}

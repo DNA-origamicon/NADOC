@@ -1,0 +1,236 @@
+{
+  "method": "17 serial in-memory deep-copy plus assessment samples, GC enabled, 84 bp per helix, synthetic 1024-character immutable payload per history row. Does not include network or large protein/physical assets; descriptive costs, not a pass gate.",
+  "results": [
+    {
+      "helices": 1,
+      "history_rows": 0,
+      "status": "mismatch",
+      "median_copy_ms": 0.126553,
+      "median_assessment_ms": 0.038886,
+      "samples": [
+        {
+          "copy_ms": 0.420645,
+          "assessment_ms": 0.075872
+        },
+        {
+          "copy_ms": 0.147245,
+          "assessment_ms": 0.048483
+        },
+        {
+          "copy_ms": 0.129553,
+          "assessment_ms": 0.040285
+        },
+        {
+          "copy_ms": 0.128252,
+          "assessment_ms": 0.038386
+        },
+        {
+          "copy_ms": 0.178335,
+          "assessment_ms": 0.049481
+        },
+        {
+          "copy_ms": 0.126553,
+          "assessment_ms": 0.038886
+        },
+        {
+          "copy_ms": 0.123455,
+          "assessment_ms": 0.059078
+        },
+        {
+          "copy_ms": 0.128852,
+          "assessment_ms": 0.038886
+        },
+        {
+          "copy_ms": 0.125654,
+          "assessment_ms": 0.036086
+        },
+        {
+          "copy_ms": 0.142348,
+          "assessment_ms": 0.047582
+        },
+        {
+          "copy_ms": 0.124954,
+          "assessment_ms": 0.036387
+        },
+        {
+          "copy_ms": 0.122755,
+          "assessment_ms": 0.036287
+        },
+        {
+          "copy_ms": 0.121955,
+          "assessment_ms": 0.034987
+        },
+        {
+          "copy_ms": 0.121755,
+          "assessment_ms": 0.034887
+        },
+        {
+          "copy_ms": 0.121255,
+          "assessment_ms": 0.034188
+        },
+        {
+          "copy_ms": 0.120955,
+          "assessment_ms": 0.059078
+        },
+        {
+          "copy_ms": 0.127653,
+          "assessment_ms": 0.037586
+        }
+      ]
+    },
+    {
+      "helices": 24,
+      "history_rows": 100,
+      "status": "unverified",
+      "median_copy_ms": 2.597046,
+      "median_assessment_ms": 0.236014,
+      "samples": [
+        {
+          "copy_ms": 2.736794,
+          "assessment_ms": 0.290893
+        },
+        {
+          "copy_ms": 3.284493,
+          "assessment_ms": 0.264803
+        },
+        {
+          "copy_ms": 2.723499,
+          "assessment_ms": 0.230715
+        },
+        {
+          "copy_ms": 2.597046,
+          "assessment_ms": 0.225917
+        },
+        {
+          "copy_ms": 2.552262,
+          "assessment_ms": 0.239413
+        },
+        {
+          "copy_ms": 2.985303,
+          "assessment_ms": 0.236014
+        },
+        {
+          "copy_ms": 2.583251,
+          "assessment_ms": 0.231015
+        },
+        {
+          "copy_ms": 2.978905,
+          "assessment_ms": 0.235114
+        },
+        {
+          "copy_ms": 2.623236,
+          "assessment_ms": 0.228117
+        },
+        {
+          "copy_ms": 2.548064,
+          "assessment_ms": 0.238812
+        },
+        {
+          "copy_ms": 2.553862,
+          "assessment_ms": 0.242211
+        },
+        {
+          "copy_ms": 2.576554,
+          "assessment_ms": 0.229115
+        },
+        {
+          "copy_ms": 2.574854,
+          "assessment_ms": 0.294892
+        },
+        {
+          "copy_ms": 2.704906,
+          "assessment_ms": 0.237613
+        },
+        {
+          "copy_ms": 2.598646,
+          "assessment_ms": 0.229315
+        },
+        {
+          "copy_ms": 2.573654,
+          "assessment_ms": 0.238713
+        },
+        {
+          "copy_ms": 2.529771,
+          "assessment_ms": 0.235213
+        }
+      ]
+    },
+    {
+      "helices": 256,
+      "history_rows": 2000,
+      "status": "unverified",
+      "median_copy_ms": 43.211925,
+      "median_assessment_ms": 4.673083,
+      "samples": [
+        {
+          "copy_ms": 43.181236,
+          "assessment_ms": 5.414211
+        },
+        {
+          "copy_ms": 43.806406,
+          "assessment_ms": 4.68158
+        },
+        {
+          "copy_ms": 40.977445,
+          "assessment_ms": 4.876608
+        },
+        {
+          "copy_ms": 71.892287,
+          "assessment_ms": 4.335307
+        },
+        {
+          "copy_ms": 43.211925,
+          "assessment_ms": 4.505944
+        },
+        {
+          "copy_ms": 45.193596,
+          "assessment_ms": 4.587515
+        },
+        {
+          "copy_ms": 42.704511,
+          "assessment_ms": 5.052444
+        },
+        {
+          "copy_ms": 44.115993,
+          "assessment_ms": 11.011654
+        },
+        {
+          "copy_ms": 69.802755,
+          "assessment_ms": 4.610507
+        },
+        {
+          "copy_ms": 43.46793,
+          "assessment_ms": 4.511243
+        },
+        {
+          "copy_ms": 42.721804,
+          "assessment_ms": 4.504046
+        },
+        {
+          "copy_ms": 41.761857,
+          "assessment_ms": 4.979971
+        },
+        {
+          "copy_ms": 45.116125,
+          "assessment_ms": 4.352201
+        },
+        {
+          "copy_ms": 65.295311,
+          "assessment_ms": 4.78954
+        },
+        {
+          "copy_ms": 42.347941,
+          "assessment_ms": 4.480754
+        },
+        {
+          "copy_ms": 41.311023,
+          "assessment_ms": 5.013158
+        },
+        {
+          "copy_ms": 42.325251,
+          "assessment_ms": 4.673083
+        }
+      ]
+    }
+  ]
+}

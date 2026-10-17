@@ -10,7 +10,7 @@ import re
 
 from backend.core.models import Design, StrandType
 from backend.core.scaffold_length import scaffold_length_checks
-from backend.core.sequences import strand_sequence_length
+from backend.core.sequences import _build_loop_skip_map, strand_sequence_length
 from backend.core.topology_integrity import (
     domain_order_errors, junction_errors, occupancy_errors,
 )
@@ -32,12 +32,12 @@ def _step(identifier, label, complete, detail, *, applicable=True, issues=None, 
     }
 
 
-def _sequence_issues(design, strands):
+def _sequence_issues(design, strands, loop_skip_map):
     from backend.core.hairpin_dimer import linker_strand_sequence
 
     issues = []
     for strand in strands:
-        expected = strand_sequence_length(design, strand)
+        expected = strand_sequence_length(design, strand, loop_skip_map=loop_skip_map)
         sequence = strand.sequence or ""
         if strand.strand_type == StrandType.LINKER:
             sequence = linker_strand_sequence(design, strand)
@@ -123,10 +123,11 @@ def standard_readiness(design: Design | None) -> dict:
     for strand in active.strands:
         if not strand.domains:
             route_issues.append(f"Strand {strand.name or strand.id!r} has no routed domains.")
-    scaffold_issues = _sequence_issues(active, scaffolds)
-    oligo_issues = _sequence_issues(active, oligos)
+    loop_skip_map = _build_loop_skip_map(active)
+    scaffold_issues = _sequence_issues(active, scaffolds, loop_skip_map)
+    oligo_issues = _sequence_issues(active, oligos, loop_skip_map)
     scaffold_precursors = _routing_precursors(active, scaffolds)
-    scaffold_lengths = scaffold_length_checks(active)
+    scaffold_lengths = scaffold_length_checks(active, loop_skip_map=loop_skip_map)
     length_issues = [check["detail"] for check in scaffold_lengths if not check["complete"]]
     staple_precursors = _routing_precursors(active, staples)
     scaffold_routed = bool(scaffolds) and all(s.domains for s in scaffolds) and not route_issues and not scaffold_precursors

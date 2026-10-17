@@ -32,7 +32,7 @@ if TYPE_CHECKING:  # avoid a runtime import cycle cost; types only
     from backend.core.models import Design, PartInstance
 
 
-# Geometry result cache: {cache_key: {"nucleotides": [...], "helix_axes": [...], ...}}
+# Cache the JSON-ready compact response, not duplicate per-nucleotide dictionaries.
 _GEO_CACHE: "OrderedDict[str, dict]" = OrderedDict()
 _GEO_CACHE_MAX = 16
 
@@ -86,8 +86,39 @@ def geo_cache_set(key: str, value: dict) -> None:
 
 
 def clear_geo_cache() -> None:
-    """Drop all cached geometry (called when an instance's source design changes)."""
+    """Drop all cached geometry."""
     _GEO_CACHE.clear()
+
+
+def display_geo_cache_key(base_key: str | None) -> str | None:
+    """Canonical native Full key shared by reads and mutation-response prewarming."""
+    return f"{base_key}:measured=1" if base_key else None
+
+
+def invalidate_geo_cache_source(inst: "PartInstance", workspace_dir: Path | None) -> None:
+    """Release only this source's revisions/overrides; unrelated parts stay warm."""
+    key = geo_cache_key(inst, workspace_dir)
+    if key is None:
+        return
+    # File keys end in mtime + override hash; inline keys end in override hash.
+    prefix = key.rsplit(":", 2 if inst.source.type == "file" else 1)[0] + ":"
+    for cached_key in list(_GEO_CACHE):
+        if cached_key.startswith(prefix):
+            _GEO_CACHE.pop(cached_key, None)
+
+
+def cache_display_geometry(key: str | None, nucleotides: list, helix_axes: list, design: dict, *, compact: dict | None = None) -> dict:
+    """Pack once, then reuse the exact native display payload on cache hits."""
+    from backend.core.design_geometry import _compact_geometry_from_nucleotides
+
+    payload = {
+        "nucleotides_compact": compact if compact is not None else _compact_geometry_from_nucleotides(nucleotides),
+        "helix_axes": helix_axes,
+        "design": design,
+    }
+    if key:
+        geo_cache_set(key, payload)
+    return payload
 
 
 def merge_cluster_overrides(design: "Design", overrides) -> "Design":

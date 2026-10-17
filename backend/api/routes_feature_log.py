@@ -32,11 +32,17 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel
 
 from backend.api import state as design_state
+from backend.api.part_evaluation import EvaluationRequest
+from backend.core.part_comparison_projection import ComparisonRequest
+from backend.core.part_repair_draft_host import DraftRequest
+from backend.core.part_repair_draft_evaluation import DraftEvaluationRequest
+from backend.core.part_repair_sources import SourceSelection
+from backend.api.part_repair_input_metadata import RepairInputSelection
 
 # Shared kernel/infra helpers that stay in crud.py and are imported back
 # (same convention as routes_camera_poses.py / routes_loop_skip.py):
@@ -62,6 +68,120 @@ from backend.core.display_placement import measured_display_placement
 from backend.core.feature_evaluation import batch_target_groups, optimization_enabled
 
 router = APIRouter()
+
+
+@router.get("/design/revision")
+def get_part_revision():
+    from backend.api.part_revision_status import revision_status
+    return revision_status()
+
+
+@router.post("/design/features/repair-inputs")
+def inspect_part_repair_inputs(body: RepairInputSelection):
+    from backend.api.part_repair_input_metadata import inspect_inputs
+    return inspect_inputs(body)
+
+
+@router.get("/design/features/repair-draft")
+def get_part_repair_draft():
+    return design_state.get_repair_draft()
+
+
+@router.post("/design/features/repair-draft")
+def update_part_repair_draft(body: DraftRequest):
+    return design_state.mutate_repair_draft(body)
+
+
+@router.post("/design/features/repair-draft/evaluate", status_code=202)
+def evaluate_part_repair_draft(body: DraftEvaluationRequest):
+    """Check the saved base, then start one existing isolated repair job."""
+    return design_state.evaluate_repair_draft(body)
+
+
+@router.post("/design/features/repair-draft/source/inspect")
+def inspect_part_repair_draft_source(body: SourceSelection):
+    """Inspect a named binding and return its explicit prior-byte expectation."""
+    return design_state.inspect_repair_draft_source(body)
+
+
+@router.post("/design/features/repair-draft/source", openapi_extra={
+    "requestBody": {"required": True, "content": {"application/octet-stream": {
+        "schema": {"type": "string", "format": "binary"},
+        "description": "Original source bytes; exact selected command size/SHA and family bounds apply."}}},
+    "parameters": [{"name": "X-NADOC-Repair-Source", "in": "header", "required": True,
+        "schema": {"type": "string", "maxLength": 8192},
+        "description": "ASCII JSON returned by source/inspect, including the exact expected_blob receipt."}],
+})
+async def upload_part_repair_draft_source(request: Request):
+    """Stage a proposed source or explicitly restore a published binding."""
+    return await design_state.stage_repair_draft_source(request)
+
+
+@router.post("/design/features/evaluation/jobs", status_code=202)
+def start_part_evaluation(body: EvaluationRequest, request: Request = None):
+    from backend.api.part_evaluation_jobs import start
+    from backend.api.part_strict_reads import CONTEXT_KEY, require_context
+    if request is not None and CONTEXT_KEY in request.scope:
+        context, _policy = require_context(request)
+        return start(body, expected_policy_generation=context.policy_generation)
+    return start(body)
+
+
+@router.get("/design/features/evaluation/jobs/{job_id}")
+def get_part_evaluation(job_id: str):
+    from backend.api.part_evaluation_jobs import inspect
+    return inspect(job_id)
+
+
+@router.delete("/design/features/evaluation/jobs/{job_id}")
+def cancel_part_evaluation(job_id: str):
+    from backend.api.part_evaluation_jobs import inspect
+    return inspect(job_id, cancel=True)
+
+
+@router.post("/design/features/evaluation/jobs/{job_id}/commit")
+def commit_part_evaluation(job_id: str):
+    from backend.api.part_evaluation_jobs import commit
+    return commit(job_id)
+
+
+@router.post("/design/features/evaluation/jobs/{job_id}/comparison")
+def compare_part_evaluation(job_id: str, body: ComparisonRequest):
+    """Private authored display only; cancel through the existing job endpoint.
+
+    This synchronous handler uses FastAPI's request thread. The existing shared
+    admission and five-second spawned-worker deadline bound projection work;
+    disconnecting this read neither publishes nor cancels the evaluated repair.
+    """
+    from backend.api.part_evaluation_jobs import comparison
+    # The worker returns bounded JSON primitives after complete native-output
+    # checks. Encode here in the request thread rather than make FastAPI walk
+    # every coordinate again on the event loop after this handler returns.
+    return ORJSONResponse(comparison(job_id, body))
+
+
+@router.post("/design/features/verification/jobs", status_code=202)
+def start_part_verification():
+    from backend.api.part_verification_jobs import start
+    return start()
+
+
+@router.get("/design/features/verification/jobs/{job_id}")
+def get_part_verification(job_id: str):
+    from backend.api.part_verification_jobs import inspect
+    return inspect(job_id)
+
+
+@router.delete("/design/features/verification/jobs/{job_id}")
+def cancel_part_verification(job_id: str):
+    from backend.api.part_verification_jobs import inspect
+    return inspect(job_id, cancel=True)
+
+
+@router.post("/design/features/verification")
+def verify_part_history():
+    from backend.api.part_history_verification import verify_current_part
+    return verify_current_part()
 
 
 class SeekFeaturesBody(BaseModel):
@@ -114,6 +234,13 @@ def preview_instance_features(instance_id: str, body: SeekFeaturesBody):
     target = _seek_feature_log(source, body.position, body.sub_position)
     return {"helix_axes": deformed_helix_axes(target),
             "transform": instance.transform.values}
+
+
+@router.get("/design/features/capabilities")
+def get_part_feature_capabilities() -> dict:
+    """Executor availability only; this endpoint does not certify a design."""
+    from backend.api.part_proof_commands import capabilities
+    return capabilities()
 
 
 @router.get("/design/features/evaluation-plan")

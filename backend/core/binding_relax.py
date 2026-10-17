@@ -204,6 +204,7 @@ def compute_bind_topology(
     driver_side: Optional[str] = None,
     target_start_override: Optional[int] = None,
     target_end_override: Optional[int] = None,
+    forced_ligation_id: Optional[str] = None,
 ) -> BindTopology:
     """Describe the topology edit for binding *binding*.
 
@@ -351,6 +352,7 @@ def compute_bind_topology(
     # as a ForcedLigation instead (3'→5' in strand order: earlier domain's end → later
     # domain's start), mirroring the convention POST /design/forced-ligation uses.
     relocate_fl = None
+    ligation_identity = {"id": forced_ligation_id} if forced_ligation_id is not None else {}
     n_dom = len(driven_strand.domains)
     if n_dom >= 2 and xover_snapshots:
         is_tip_last = driven_di == n_dom - 1
@@ -361,6 +363,7 @@ def compute_bind_topology(
         )
         if is_tip_last:
             relocate_fl = ForcedLigation(
+                **ligation_identity,
                 three_prime_helix_id=root_dom.helix_id,
                 three_prime_bp=root_dom.end_bp,
                 three_prime_direction=root_dom.direction,
@@ -370,6 +373,7 @@ def compute_bind_topology(
             )
         else:
             relocate_fl = ForcedLigation(
+                **ligation_identity,
                 three_prime_helix_id=target_helix_id,
                 three_prime_bp=target_end_bp,
                 three_prime_direction=target_direction,

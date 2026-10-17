@@ -66,6 +66,50 @@ def _driver_side(binding: OverhangBinding) -> str:
     return "left"
 
 
+def synthesize_duplex_from_binding(
+    design: Design, binding: OverhangBinding, *, fallback_name: str = "D1",
+    duplex_id: Optional[str] = None, created_at: Optional[float] = None,
+    subdomain_lookup=None,
+) -> Optional[Duplex]:
+    """Derive one legacy binding's register, retaining its compatibility fields.
+
+    Missing source topology returns None for legacy migration callers. Native
+    commands resolve and validate their explicit inputs before calling this.
+    Identity/time overrides are authored inputs; register arithmetic is shared.
+    """
+    if subdomain_lookup is None:
+        subdomain_lookup = {sd.id: (overhang.id, sd) for overhang in design.overhangs
+                            for sd in overhang.sub_domains}
+    res_a = subdomain_lookup.get(binding.sub_domain_a_id)
+    res_b = subdomain_lookup.get(binding.sub_domain_b_id)
+    if res_a is None or res_b is None:
+        return None
+    oid_a, sd_a = res_a
+    oid_b, sd_b = res_b
+    _, dom_a = _overhang_backing_domain(design, oid_a)
+    _, dom_b = _overhang_backing_domain(design, oid_b)
+    if dom_a is None or dom_b is None:
+        return None
+    length = min(sd_a.length_bp, sd_b.length_bp)
+    if length <= 0:
+        return None
+    identity = {"id": duplex_id} if duplex_id is not None else {}
+    return Duplex(
+        **identity,
+        name=binding.name or fallback_name,
+        created_at=binding.created_at if created_at is None else created_at,
+        left=subdomain_end(dom_a, sd_a, length, oid_a),
+        right=subdomain_end(dom_b, sd_b, length, oid_b),
+        driver=_driver_side(binding),
+        bound=binding.bound,
+        binding_mode=binding.binding_mode,
+        allow_n_wildcard=binding.allow_n_wildcard,
+        target_joint_id=binding.target_joint_id,
+        locked_angle_deg=binding.locked_angle_deg,
+        connection_type=binding.connection_type,
+    )
+
+
 def synthesize_duplexes_from_bindings(design: Design) -> List[Duplex]:
     """Convert every legacy :class:`OverhangBinding` into an equivalent
     :class:`Duplex`. Pure — returns a new list, does not mutate ``design``.
@@ -82,34 +126,10 @@ def synthesize_duplexes_from_bindings(design: Design) -> List[Duplex]:
 
     out: List[Duplex] = []
     for i, b in enumerate(design.overhang_bindings):
-        res_a = sd_lookup.get(b.sub_domain_a_id)
-        res_b = sd_lookup.get(b.sub_domain_b_id)
-        if res_a is None or res_b is None:
-            continue
-        oid_a, sd_a = res_a
-        oid_b, sd_b = res_b
-        _, dom_a = _overhang_backing_domain(design, oid_a)
-        _, dom_b = _overhang_backing_domain(design, oid_b)
-        if dom_a is None or dom_b is None:
-            continue
-        length = min(sd_a.length_bp, sd_b.length_bp)
-        if length <= 0:
-            continue
-        out.append(
-            Duplex(
-                name=b.name or f"D{i + 1}",
-                created_at=b.created_at,
-                left=subdomain_end(dom_a, sd_a, length, oid_a),
-                right=subdomain_end(dom_b, sd_b, length, oid_b),
-                driver=_driver_side(b),
-                bound=b.bound,
-                binding_mode=b.binding_mode,
-                allow_n_wildcard=b.allow_n_wildcard,
-                target_joint_id=b.target_joint_id,
-                locked_angle_deg=b.locked_angle_deg,
-                connection_type=b.connection_type,
-            )
-        )
+        duplex = synthesize_duplex_from_binding(design, b, fallback_name=f"D{i + 1}",
+                                               subdomain_lookup=sd_lookup)
+        if duplex is not None:
+            out.append(duplex)
     return out
 
 
@@ -337,7 +357,7 @@ def _first_sub_domain_id(design: Design, overhang_id: str) -> Optional[str]:
     return ov.sub_domains[0].id if ov and ov.sub_domains else None
 
 
-def relocate_duplex(design: Design, duplex: Duplex) -> Design:
+def relocate_duplex(design: Design, duplex: Duplex, *, identity_seed: Optional[str] = None) -> Design:
     """Phase 4b geometry (#1): relocate the DRIVEN overhang's ENTIRE domain onto the
     DRIVER's helix at the duplex's PAIRED-WINDOW bp range — so a different-length
     duplex (no equal-length binding) forms the duplex in 3D + cadnano. Reuses the
@@ -348,12 +368,18 @@ def relocate_duplex(design: Design, duplex: Duplex) -> Design:
     Pure. Raises HTTPException(422) from the underlying compute on malformed input."""
     from backend.core.binding_relax import compute_bind_topology, apply_bind_topology
     from backend.core.models import OverhangBinding as _OB
+    from backend.core.feature_identity import identity_factory
+
+    identifier = identity_factory(identity_seed) if identity_seed is not None else None
+    identity = ({"id": identifier("duplex-transient", [duplex.id]), "created_at": duplex.created_at}
+                if identifier is not None else {})
 
     driver_end = duplex.left if duplex.driver == "left" else duplex.right
     driven_end = duplex.right if duplex.driver == "left" else duplex.left
     sd_a = _first_sub_domain_id(design, driver_end.overhang_id) or "a"
     sd_b = _first_sub_domain_id(design, driven_end.overhang_id) or "b"
     transient = _OB(
+        **identity,
         name="__duplex_reloc__",
         sub_domain_a_id=sd_a,
         sub_domain_b_id=sd_b,
@@ -370,6 +396,7 @@ def relocate_duplex(design: Design, duplex: Duplex) -> Design:
         # target_start = window 3' bp, target_end = window 5' bp).
         target_start_override=driver_end.end_bp,
         target_end_override=driver_end.start_bp,
+        forced_ligation_id=identifier("duplex-ligation", [duplex.id]) if identifier is not None else None,
     )
     out = apply_bind_topology(design, topo)
     new_dux = [
@@ -415,7 +442,8 @@ def relocate_duplex(design: Design, duplex: Duplex) -> Design:
                 ]
             }
         )
-    out, _cid = materialize_duplex_cluster(out, driver_oh)
+    out, _cid = materialize_duplex_cluster(out, driver_oh,
+        cluster_id=identifier("duplex-cluster", [duplex.id]) if identifier is not None else None)
     return out
 
 

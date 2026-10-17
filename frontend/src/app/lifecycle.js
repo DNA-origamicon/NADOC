@@ -232,7 +232,7 @@ export function initAutosaveSync({
       const _savedPaths = new Set([path])
       _selfSavedPaths.add(path)
       try {
-        const r = await api.saveAssemblyAs(path)
+        const r = await api.saveAssemblyAs(path, true, { suppressBusy: true })
         if (r?.path) { setAssemblyWorkspacePath(r.path); _selfSavedPaths.add(r.path); _savedPaths.add(r.path) }
         syncBadge.syncLog('info', 'SAVE', `assembly → ${r?.path}`)
         syncBadge.setSyncStatus('green', 'saved')

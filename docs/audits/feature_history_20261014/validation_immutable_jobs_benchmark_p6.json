@@ -1,0 +1,27 @@
+{
+  "date": "2026-10-15",
+  "scope": "Staged immutable source through actual strict HTTP start, worker, publication and independent cold verify; durable creation/restore excluded",
+  "initial_three": {"passed_cases": 2, "failed_cases": 2, "failure": "Harness counted top-level entries but immutable metadata counts routing children too", "report": "benchmark_immutable_part_jobs_initial.json"},
+  "corrected_three": {"passed_cases": 4, "publications": 12, "independent_cold_verified": 4, "report": "benchmark_immutable_part_jobs_corrected.json"},
+  "repeated_thirty": {
+    "passed_cases": 3,
+    "failed_cases": 1,
+    "publications": 105,
+    "independent_cold_verified": 4,
+    "failure": "32-gold case iteration 15 returned HTTP 413 during capture; error body was not retained by this harness version",
+    "capture_http_max_ms": 89.44,
+    "capture_lock_max_ms": 0.097,
+    "publication_http_max_ms": 71.48,
+    "publication_lock_max_ms": 0.715,
+    "concurrent_light_http_max_ms": 88.67,
+    "report": "benchmark_immutable_part_jobs_repeated.json"
+  },
+  "invariants": ["Exact immutable source remains undo", "One revision increment and no redo", "Complete expected authoring digest and history row count", "Independent cold regeneration after first publication in every case", "Concurrent revision requests must succeed", "All owned supervisors and sessions cleaned"],
+  "limits_unchanged": true,
+  "cleanup_all_runs": true,
+  "latency_qualified": false,
+  "public_gates_enabled": false,
+  "next": ["Retain typed HTTP refusal bodies", "Correlate GC and separately measure transient/retained memory", "Review redundant copying of exclusively owned decoded input without weakening ordinary capture bounds", "Qualify actual durable creation and recovery lifecycle separately"],
+  "app_status": "NOT VERIFIED IN APP",
+  "simulations_run": false
+}

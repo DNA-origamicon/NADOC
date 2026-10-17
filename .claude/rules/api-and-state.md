@@ -56,7 +56,7 @@ an error. The decision:
 | Topology mutation that may move cluster membership — crossover/nick/ligation, autostaple/autobreak, end-extend, slice-plane extrude, overhang/linker creation, helix CRUD | **`mutate_with_reconcile(fn)`** [:264](../../backend/api/state.py#L264) | Runs `reconcile_cluster_membership` + `_retry_pending_ligations` after `fn`. **Skipping this leaves clusters silently wrong.** |
 | Routes that *explicitly* edit `cluster_transforms` — cluster CRUD, feature-log replay, `relax_overhang_connection`, importers | **`mutate_and_validate(fn)`** [:244](../../backend/api/state.py#L244) | Reconciling would fight the route's own edit. The docstring at :277-283 states this exclusion — obey it. |
 | Whole-design replacement that still needs reconcile | `replace_with_reconcile` [:300](../../backend/api/state.py#L300) | |
-| Mutation that must appear in the feature log | `mutate_with_feature_log` [:421](../../backend/api/state.py#L421) / `mutate_with_minor_log` [:508](../../backend/api/state.py#L508) | Snapshot payloads, evicted against `MAX_SNAPSHOT_BUDGET_BYTES` (5 MB, [:64](../../backend/api/state.py#L64)) |
+| Mutation that must appear in the feature log | `mutate_with_feature_log` / `mutate_with_minor_log` in `state.py` | Delegate to failure-atomic `feature_recording.py`; canonical snapshots/diffs are retained, wire responses are slimmed separately |
 | Intermediate step inside a `snapshot()` bracket | `set_design_silent_reconciled(new, before, report)` [:740](../../backend/api/state.py#L740) — **preferred**; plain `set_design_silent` [:728](../../backend/api/state.py#L728) only when no topology moved | Callers named in its docstring: `place_crossover`, `forced_ligation`, `add_nick_batch` |
 
 Multi-step op = one Ctrl-Z:

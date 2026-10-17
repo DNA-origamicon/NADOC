@@ -92,7 +92,7 @@ def lattice_components(graph: dict[str, set[str]], ids: set[str]) -> list[list[s
 
 
 def cluster_unassigned_components(
-    design: Design, eligible: set[str] | None = None
+    design: Design, eligible: set[str] | None = None, *, identity_seed=None
 ) -> Design:
     """Append identity-pose clusters for unassigned lattice components.
 
@@ -124,7 +124,7 @@ def cluster_unassigned_components(
             number += 1
         name = f"Cluster {number}"
         names.add(name)
-        key = json.dumps([design.id, group])
+        key = json.dumps([str(identity_seed) if identity_seed else design.id, group])
         clusters.append(
             ClusterRigidTransform(
                 id=str(uuid5(NAMESPACE_URL, "nadoc:lattice-component:" + key)),

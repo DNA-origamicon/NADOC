@@ -1,0 +1,1539 @@
+{
+  "scope": "Native software display only; no physical validity, GPU or app qualification",
+  "transport_admission_passed": true,
+  "production_gate_unchanged": true,
+  "source_and_worker_limits_unchanged": true,
+  "session_and_catalog_cleanup_verified": true,
+  "process_children_max_rss_kib": 175608,
+  "notes": [
+    "The child RSS is the process-wide high-water child maximum on Linux, not a per-request measurement.",
+    "Warm projection has no worker deadline; production HTTP uses the unchanged hard five-second process deadline.",
+    "The HTTP recipe is prepared by the real repair evaluator outside measured time; each projection uses a fresh spawned worker.",
+    "Refused/capture-busy/over-budget rows are retained without retry. No admission ceiling is raised.",
+    "Revision sampling runs at 10 ms intervals until response completion or a five-second measurement deadline; count/mean/max and final sample time are reported without per-request arrays.",
+    "Concurrent revision samples and lock instrumentation add overhead; these fixtures do not prove a universal latency bound."
+  ],
+  "warm": [
+    {
+      "case": "straight",
+      "status_counts": {
+        "projected": 9
+      },
+      "capture": {
+        "count": 9,
+        "p50_ms": 1.5217530017253011,
+        "p95_ms": 3.3036230015568435,
+        "max_ms": 3.3036230015568435
+      },
+      "derive_two_panes": {
+        "count": 9,
+        "p50_ms": 6.217946000106167,
+        "p95_ms": 11.608819000684889,
+        "max_ms": 11.608819000684889
+      },
+      "encode": {
+        "count": 9,
+        "p50_ms": 0.758399000915233,
+        "p95_ms": 1.143815999967046,
+        "max_ms": 1.143815999967046
+      },
+      "samples": [
+        {
+          "capture_ms": 1.5217530017253011,
+          "worker_pickle_bytes": 3332,
+          "derive_two_panes_ms": 6.217946000106167,
+          "encode_ms": 1.081360001990106,
+          "prospective_result_bytes": 33146,
+          "full_object_result_bytes": 48266,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.443368000764167,
+          "worker_pickle_bytes": 3332,
+          "derive_two_panes_ms": 4.758259001391707,
+          "encode_ms": 0.758399000915233,
+          "prospective_result_bytes": 33146,
+          "full_object_result_bytes": 48266,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.2628010008484125,
+          "worker_pickle_bytes": 3332,
+          "derive_two_panes_ms": 6.639494000410195,
+          "encode_ms": 1.0390110001026187,
+          "prospective_result_bytes": 33146,
+          "full_object_result_bytes": 48266,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.7546740018588025,
+          "worker_pickle_bytes": 3332,
+          "derive_two_panes_ms": 7.926772999780951,
+          "encode_ms": 1.1222530010854825,
+          "prospective_result_bytes": 33146,
+          "full_object_result_bytes": 48266,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 3.3036230015568435,
+          "worker_pickle_bytes": 3332,
+          "derive_two_panes_ms": 11.608819000684889,
+          "encode_ms": 1.143815999967046,
+          "prospective_result_bytes": 33146,
+          "full_object_result_bytes": 48266,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.830921999498969,
+          "worker_pickle_bytes": 3332,
+          "derive_two_panes_ms": 6.091092000133358,
+          "encode_ms": 0.7312029993045144,
+          "prospective_result_bytes": 33146,
+          "full_object_result_bytes": 48266,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 2.4108920006256085,
+          "worker_pickle_bytes": 3332,
+          "derive_two_panes_ms": 8.953060001658741,
+          "encode_ms": 0.7352819993684534,
+          "prospective_result_bytes": 33146,
+          "full_object_result_bytes": 48266,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.2081170025339816,
+          "worker_pickle_bytes": 3332,
+          "derive_two_panes_ms": 4.710373999841977,
+          "encode_ms": 0.7128450015443377,
+          "prospective_result_bytes": 33146,
+          "full_object_result_bytes": 48266,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.3053450020379387,
+          "worker_pickle_bytes": 3332,
+          "derive_two_panes_ms": 4.641604002245003,
+          "encode_ms": 0.6984700012253597,
+          "prospective_result_bytes": 33146,
+          "full_object_result_bytes": 48266,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        }
+      ]
+    },
+    {
+      "case": "loops",
+      "status_counts": {
+        "projected": 9
+      },
+      "capture": {
+        "count": 9,
+        "p50_ms": 1.2575559994729701,
+        "p95_ms": 2.6417720000608824,
+        "max_ms": 2.6417720000608824
+      },
+      "derive_two_panes": {
+        "count": 9,
+        "p50_ms": 5.269363002298633,
+        "p95_ms": 7.48239799941075,
+        "max_ms": 7.48239799941075
+      },
+      "encode": {
+        "count": 9,
+        "p50_ms": 0.7011890011199284,
+        "p95_ms": 0.8872920006979257,
+        "max_ms": 0.8872920006979257
+      },
+      "samples": [
+        {
+          "capture_ms": 1.3373980000324082,
+          "worker_pickle_bytes": 3476,
+          "derive_two_panes_ms": 5.30675900154165,
+          "encode_ms": 0.6854550010757521,
+          "prospective_result_bytes": 33354,
+          "full_object_result_bytes": 48474,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.2575559994729701,
+          "worker_pickle_bytes": 3476,
+          "derive_two_panes_ms": 4.733976002171403,
+          "encode_ms": 0.7284829989657737,
+          "prospective_result_bytes": 33354,
+          "full_object_result_bytes": 48474,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.235216001077788,
+          "worker_pickle_bytes": 3476,
+          "derive_two_panes_ms": 4.757676000735955,
+          "encode_ms": 0.8872920006979257,
+          "prospective_result_bytes": 33354,
+          "full_object_result_bytes": 48474,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 2.6417720000608824,
+          "worker_pickle_bytes": 3476,
+          "derive_two_panes_ms": 5.422149999503745,
+          "encode_ms": 0.7007040003372822,
+          "prospective_result_bytes": 33354,
+          "full_object_result_bytes": 48474,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.2082139983249363,
+          "worker_pickle_bytes": 3476,
+          "derive_two_panes_ms": 4.730771001050016,
+          "encode_ms": 0.6917680002516136,
+          "prospective_result_bytes": 33354,
+          "full_object_result_bytes": 48474,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.7278659979638178,
+          "worker_pickle_bytes": 3476,
+          "derive_two_panes_ms": 7.48239799941075,
+          "encode_ms": 0.7066289981594309,
+          "prospective_result_bytes": 33354,
+          "full_object_result_bytes": 48474,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.2376449994917493,
+          "worker_pickle_bytes": 3476,
+          "derive_two_panes_ms": 5.945201002759859,
+          "encode_ms": 0.7244039989018347,
+          "prospective_result_bytes": 33354,
+          "full_object_result_bytes": 48474,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.4842609998595435,
+          "worker_pickle_bytes": 3476,
+          "derive_two_panes_ms": 5.269363002298633,
+          "encode_ms": 0.6986640000832267,
+          "prospective_result_bytes": 33354,
+          "full_object_result_bytes": 48474,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.1760630004573613,
+          "worker_pickle_bytes": 3476,
+          "derive_two_panes_ms": 4.82110300072236,
+          "encode_ms": 0.7011890011199284,
+          "prospective_result_bytes": 33354,
+          "full_object_result_bytes": 48474,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        }
+      ]
+    },
+    {
+      "case": "bend",
+      "status_counts": {
+        "projected": 9
+      },
+      "capture": {
+        "count": 9,
+        "p50_ms": 1.257070998690324,
+        "p95_ms": 1.8991079996339977,
+        "max_ms": 1.8991079996339977
+      },
+      "derive_two_panes": {
+        "count": 9,
+        "p50_ms": 6.754205998731777,
+        "p95_ms": 32.90937999918242,
+        "max_ms": 32.90937999918242
+      },
+      "encode": {
+        "count": 9,
+        "p50_ms": 0.8224089979194105,
+        "p95_ms": 1.268434996745782,
+        "max_ms": 1.268434996745782
+      },
+      "samples": [
+        {
+          "capture_ms": 1.1498379972181283,
+          "worker_pickle_bytes": 3797,
+          "derive_two_panes_ms": 32.90937999918242,
+          "encode_ms": 0.8674780001456384,
+          "prospective_result_bytes": 38910,
+          "full_object_result_bytes": 54030,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.3003919993934687,
+          "worker_pickle_bytes": 3797,
+          "derive_two_panes_ms": 6.355191999318777,
+          "encode_ms": 0.882823998836102,
+          "prospective_result_bytes": 38910,
+          "full_object_result_bytes": 54030,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.8991079996339977,
+          "worker_pickle_bytes": 3797,
+          "derive_two_panes_ms": 8.282661001430824,
+          "encode_ms": 0.8309570002893452,
+          "prospective_result_bytes": 38910,
+          "full_object_result_bytes": 54030,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.2597899985848926,
+          "worker_pickle_bytes": 3797,
+          "derive_two_panes_ms": 6.84997699863743,
+          "encode_ms": 0.8178440002666321,
+          "prospective_result_bytes": 38910,
+          "full_object_result_bytes": 54030,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.2305540003580973,
+          "worker_pickle_bytes": 3797,
+          "derive_two_panes_ms": 6.754205998731777,
+          "encode_ms": 0.8068679999269079,
+          "prospective_result_bytes": 38910,
+          "full_object_result_bytes": 54030,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.257070998690324,
+          "worker_pickle_bytes": 3797,
+          "derive_two_panes_ms": 6.546734002768062,
+          "encode_ms": 0.7968630015966482,
+          "prospective_result_bytes": 38910,
+          "full_object_result_bytes": 54030,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.2464829997043125,
+          "worker_pickle_bytes": 3797,
+          "derive_two_panes_ms": 6.182103999890387,
+          "encode_ms": 0.8007489996089134,
+          "prospective_result_bytes": 38910,
+          "full_object_result_bytes": 54030,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.2174410003353842,
+          "worker_pickle_bytes": 3797,
+          "derive_two_panes_ms": 6.545569001900731,
+          "encode_ms": 0.8224089979194105,
+          "prospective_result_bytes": 38910,
+          "full_object_result_bytes": 54030,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.7199010035255924,
+          "worker_pickle_bytes": 3797,
+          "derive_two_panes_ms": 14.975286998378579,
+          "encode_ms": 1.268434996745782,
+          "prospective_result_bytes": 38910,
+          "full_object_result_bytes": 54030,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        }
+      ]
+    },
+    {
+      "case": "sweep",
+      "status_counts": {
+        "projected": 9
+      },
+      "capture": {
+        "count": 9,
+        "p50_ms": 1.7417550006939564,
+        "p95_ms": 1.897456000733655,
+        "max_ms": 1.897456000733655
+      },
+      "derive_two_panes": {
+        "count": 9,
+        "p50_ms": 12.025608000840293,
+        "p95_ms": 23.1973369991465,
+        "max_ms": 23.1973369991465
+      },
+      "encode": {
+        "count": 9,
+        "p50_ms": 1.2212290021125227,
+        "p95_ms": 1.2853359985456336,
+        "max_ms": 1.2853359985456336
+      },
+      "samples": [
+        {
+          "capture_ms": 1.7817730004026089,
+          "worker_pickle_bytes": 4516,
+          "derive_two_panes_ms": 23.1973369991465,
+          "encode_ms": 1.222784001583932,
+          "prospective_result_bytes": 37760,
+          "full_object_result_bytes": 52880,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.7382589976477902,
+          "worker_pickle_bytes": 4516,
+          "derive_two_panes_ms": 10.92666700060363,
+          "encode_ms": 1.1979179980698973,
+          "prospective_result_bytes": 37760,
+          "full_object_result_bytes": 52880,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.7417550006939564,
+          "worker_pickle_bytes": 4516,
+          "derive_two_panes_ms": 12.204233000375098,
+          "encode_ms": 1.2696009980572853,
+          "prospective_result_bytes": 37760,
+          "full_object_result_bytes": 52880,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.875989997643046,
+          "worker_pickle_bytes": 4516,
+          "derive_two_panes_ms": 12.50465900011477,
+          "encode_ms": 1.2212290021125227,
+          "prospective_result_bytes": 37760,
+          "full_object_result_bytes": 52880,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.897456000733655,
+          "worker_pickle_bytes": 4516,
+          "derive_two_panes_ms": 12.025608000840293,
+          "encode_ms": 1.230456997291185,
+          "prospective_result_bytes": 37760,
+          "full_object_result_bytes": 52880,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.8233449991384987,
+          "worker_pickle_bytes": 4516,
+          "derive_two_panes_ms": 10.55786100187106,
+          "encode_ms": 0.8175530019798316,
+          "prospective_result_bytes": 37760,
+          "full_object_result_bytes": 52880,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.2766910003847443,
+          "worker_pickle_bytes": 4516,
+          "derive_two_panes_ms": 9.011824000481283,
+          "encode_ms": 0.8201750024454668,
+          "prospective_result_bytes": 37760,
+          "full_object_result_bytes": 52880,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.2605669980985112,
+          "worker_pickle_bytes": 4516,
+          "derive_two_panes_ms": 9.446972002479015,
+          "encode_ms": 0.8734030016057659,
+          "prospective_result_bytes": 37760,
+          "full_object_result_bytes": 52880,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.4406489972316194,
+          "worker_pickle_bytes": 4516,
+          "derive_two_panes_ms": 20.495052998739993,
+          "encode_ms": 1.2853359985456336,
+          "prospective_result_bytes": 37760,
+          "full_object_result_bytes": 52880,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        }
+      ]
+    },
+    {
+      "case": "overhang",
+      "status_counts": {
+        "projected": 9
+      },
+      "capture": {
+        "count": 9,
+        "p50_ms": 1.7181519979203586,
+        "p95_ms": 2.1724349971918855,
+        "max_ms": 2.1724349971918855
+      },
+      "derive_two_panes": {
+        "count": 9,
+        "p50_ms": 9.562461000314215,
+        "p95_ms": 20.027657999889925,
+        "max_ms": 20.027657999889925
+      },
+      "encode": {
+        "count": 9,
+        "p50_ms": 1.0601860012684483,
+        "p95_ms": 1.5892590017756447,
+        "max_ms": 1.5892590017756447
+      },
+      "samples": [
+        {
+          "capture_ms": 1.7181519979203586,
+          "worker_pickle_bytes": 4640,
+          "derive_two_panes_ms": 20.027657999889925,
+          "encode_ms": 1.5892590017756447,
+          "prospective_result_bytes": 43440,
+          "full_object_result_bytes": 62340,
+          "status": "projected",
+          "projected_sites_per_pane": 30
+        },
+        {
+          "capture_ms": 1.968264998140512,
+          "worker_pickle_bytes": 4640,
+          "derive_two_panes_ms": 10.714726999140112,
+          "encode_ms": 0.9671349980635568,
+          "prospective_result_bytes": 43440,
+          "full_object_result_bytes": 62340,
+          "status": "projected",
+          "projected_sites_per_pane": 30
+        },
+        {
+          "capture_ms": 1.784590000170283,
+          "worker_pickle_bytes": 4640,
+          "derive_two_panes_ms": 9.562461000314215,
+          "encode_ms": 1.0601860012684483,
+          "prospective_result_bytes": 43440,
+          "full_object_result_bytes": 62340,
+          "status": "projected",
+          "projected_sites_per_pane": 30
+        },
+        {
+          "capture_ms": 2.005660000577336,
+          "worker_pickle_bytes": 4640,
+          "derive_two_panes_ms": 9.232020998751977,
+          "encode_ms": 1.2033579987473786,
+          "prospective_result_bytes": 43440,
+          "full_object_result_bytes": 62340,
+          "status": "projected",
+          "projected_sites_per_pane": 30
+        },
+        {
+          "capture_ms": 1.3177779983379878,
+          "worker_pickle_bytes": 4640,
+          "derive_two_panes_ms": 7.171092998760287,
+          "encode_ms": 0.910506998479832,
+          "prospective_result_bytes": 43440,
+          "full_object_result_bytes": 62340,
+          "status": "projected",
+          "projected_sites_per_pane": 30
+        },
+        {
+          "capture_ms": 1.3094249989080708,
+          "worker_pickle_bytes": 4640,
+          "derive_two_panes_ms": 6.882517001940869,
+          "encode_ms": 0.9440169997105841,
+          "prospective_result_bytes": 43440,
+          "full_object_result_bytes": 62340,
+          "status": "projected",
+          "projected_sites_per_pane": 30
+        },
+        {
+          "capture_ms": 1.4558010007021949,
+          "worker_pickle_bytes": 4640,
+          "derive_two_panes_ms": 10.272781000821851,
+          "encode_ms": 1.5742040013719816,
+          "prospective_result_bytes": 43440,
+          "full_object_result_bytes": 62340,
+          "status": "projected",
+          "projected_sites_per_pane": 30
+        },
+        {
+          "capture_ms": 2.1724349971918855,
+          "worker_pickle_bytes": 4640,
+          "derive_two_panes_ms": 11.034969000320416,
+          "encode_ms": 1.5647820000594947,
+          "prospective_result_bytes": 43440,
+          "full_object_result_bytes": 62340,
+          "status": "projected",
+          "projected_sites_per_pane": 30
+        },
+        {
+          "capture_ms": 1.603439999598777,
+          "worker_pickle_bytes": 4640,
+          "derive_two_panes_ms": 7.477638999262126,
+          "encode_ms": 1.022304997604806,
+          "prospective_result_bytes": 43440,
+          "full_object_result_bytes": 62340,
+          "status": "projected",
+          "projected_sites_per_pane": 30
+        }
+      ]
+    },
+    {
+      "case": "child",
+      "status_counts": {
+        "projected": 9
+      },
+      "capture": {
+        "count": 9,
+        "p50_ms": 1.2083110013918485,
+        "p95_ms": 1.4910600002622232,
+        "max_ms": 1.4910600002622232
+      },
+      "derive_two_panes": {
+        "count": 9,
+        "p50_ms": 4.887346000032267,
+        "p95_ms": 5.436913997982629,
+        "max_ms": 5.436913997982629
+      },
+      "encode": {
+        "count": 9,
+        "p50_ms": 0.7102229974407237,
+        "p95_ms": 0.7478129991795868,
+        "max_ms": 0.7478129991795868
+      },
+      "samples": [
+        {
+          "capture_ms": 1.1584830026549753,
+          "worker_pickle_bytes": 4361,
+          "derive_two_panes_ms": 4.767972000990994,
+          "encode_ms": 0.7332429995585699,
+          "prospective_result_bytes": 33976,
+          "full_object_result_bytes": 49096,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.4910600002622232,
+          "worker_pickle_bytes": 4361,
+          "derive_two_panes_ms": 4.887346000032267,
+          "encode_ms": 0.7038119983917568,
+          "prospective_result_bytes": 33976,
+          "full_object_result_bytes": 49096,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.2083110013918485,
+          "worker_pickle_bytes": 4361,
+          "derive_two_panes_ms": 5.1150210019841325,
+          "encode_ms": 0.7411100013996474,
+          "prospective_result_bytes": 33976,
+          "full_object_result_bytes": 49096,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.3360379998630378,
+          "worker_pickle_bytes": 4361,
+          "derive_two_panes_ms": 5.436913997982629,
+          "encode_ms": 0.7478129991795868,
+          "prospective_result_bytes": 33976,
+          "full_object_result_bytes": 49096,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.2995170000067446,
+          "worker_pickle_bytes": 4361,
+          "derive_two_panes_ms": 5.417876000137767,
+          "encode_ms": 0.7211009979073424,
+          "prospective_result_bytes": 33976,
+          "full_object_result_bytes": 49096,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.3074819980829488,
+          "worker_pickle_bytes": 4361,
+          "derive_two_panes_ms": 5.118906999996398,
+          "encode_ms": 0.7102229974407237,
+          "prospective_result_bytes": 33976,
+          "full_object_result_bytes": 49096,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 1.1216700004297309,
+          "worker_pickle_bytes": 4361,
+          "derive_two_panes_ms": 4.519802001595963,
+          "encode_ms": 0.6983729981584474,
+          "prospective_result_bytes": 33976,
+          "full_object_result_bytes": 49096,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 0.9179859989671968,
+          "worker_pickle_bytes": 4361,
+          "derive_two_panes_ms": 4.243268998834537,
+          "encode_ms": 0.7059490017127246,
+          "prospective_result_bytes": 33976,
+          "full_object_result_bytes": 49096,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        },
+        {
+          "capture_ms": 0.9880179968604352,
+          "worker_pickle_bytes": 4361,
+          "derive_two_panes_ms": 4.274061000614893,
+          "encode_ms": 0.6999270008236635,
+          "prospective_result_bytes": 33976,
+          "full_object_result_bytes": 49096,
+          "status": "projected",
+          "projected_sites_per_pane": 24
+        }
+      ]
+    },
+    {
+      "case": "1024-prospective-slots",
+      "status_counts": {
+        "projected": 9
+      },
+      "capture": {
+        "count": 9,
+        "p50_ms": 1.227931999892462,
+        "p95_ms": 1.457063997804653,
+        "max_ms": 1.457063997804653
+      },
+      "derive_two_panes": {
+        "count": 9,
+        "p50_ms": 53.70301500079222,
+        "p95_ms": 105.57073699965258,
+        "max_ms": 105.57073699965258
+      },
+      "encode": {
+        "count": 9,
+        "p50_ms": 26.147694999963278,
+        "p95_ms": 28.342179000901524,
+        "max_ms": 28.342179000901524
+      },
+      "samples": [
+        {
+          "capture_ms": 0.8688380003150087,
+          "worker_pickle_bytes": 3338,
+          "derive_two_panes_ms": 100.18365100040683,
+          "encode_ms": 28.342179000901524,
+          "prospective_result_bytes": 1283326,
+          "full_object_result_bytes": 1928446,
+          "status": "projected",
+          "projected_sites_per_pane": 1024
+        },
+        {
+          "capture_ms": 1.2563909986056387,
+          "worker_pickle_bytes": 3338,
+          "derive_two_panes_ms": 53.90543600151432,
+          "encode_ms": 27.309286000672728,
+          "prospective_result_bytes": 1283326,
+          "full_object_result_bytes": 1928446,
+          "status": "projected",
+          "projected_sites_per_pane": 1024
+        },
+        {
+          "capture_ms": 1.1928670028282795,
+          "worker_pickle_bytes": 3338,
+          "derive_two_panes_ms": 45.19899200022337,
+          "encode_ms": 26.147694999963278,
+          "prospective_result_bytes": 1283326,
+          "full_object_result_bytes": 1928446,
+          "status": "projected",
+          "projected_sites_per_pane": 1024
+        },
+        {
+          "capture_ms": 1.457063997804653,
+          "worker_pickle_bytes": 3338,
+          "derive_two_panes_ms": 53.70301500079222,
+          "encode_ms": 26.37080600106856,
+          "prospective_result_bytes": 1283326,
+          "full_object_result_bytes": 1928446,
+          "status": "projected",
+          "projected_sites_per_pane": 1024
+        },
+        {
+          "capture_ms": 1.1769369993999135,
+          "worker_pickle_bytes": 3338,
+          "derive_two_panes_ms": 104.87537500011967,
+          "encode_ms": 26.154299997870112,
+          "prospective_result_bytes": 1283326,
+          "full_object_result_bytes": 1928446,
+          "status": "projected",
+          "projected_sites_per_pane": 1024
+        },
+        {
+          "capture_ms": 1.2610539997695014,
+          "worker_pickle_bytes": 3338,
+          "derive_two_panes_ms": 46.96988599971519,
+          "encode_ms": 25.797731999773532,
+          "prospective_result_bytes": 1283326,
+          "full_object_result_bytes": 1928446,
+          "status": "projected",
+          "projected_sites_per_pane": 1024
+        },
+        {
+          "capture_ms": 1.227931999892462,
+          "worker_pickle_bytes": 3338,
+          "derive_two_panes_ms": 44.00777599948924,
+          "encode_ms": 25.65096599937533,
+          "prospective_result_bytes": 1283326,
+          "full_object_result_bytes": 1928446,
+          "status": "projected",
+          "projected_sites_per_pane": 1024
+        },
+        {
+          "capture_ms": 1.1917990013898816,
+          "worker_pickle_bytes": 3338,
+          "derive_two_panes_ms": 47.121216000959976,
+          "encode_ms": 25.668450001830934,
+          "prospective_result_bytes": 1283326,
+          "full_object_result_bytes": 1928446,
+          "status": "projected",
+          "projected_sites_per_pane": 1024
+        },
+        {
+          "capture_ms": 1.2356049992376938,
+          "worker_pickle_bytes": 3338,
+          "derive_two_panes_ms": 105.57073699965258,
+          "encode_ms": 26.028806998510845,
+          "prospective_result_bytes": 1283326,
+          "full_object_result_bytes": 1928446,
+          "status": "projected",
+          "projected_sites_per_pane": 1024
+        }
+      ]
+    },
+    {
+      "case": "mixed-free-assets",
+      "status_counts": {
+        "projected": 9
+      },
+      "capture": {
+        "count": 9,
+        "p50_ms": 1.1194360013178084,
+        "p95_ms": 1.3018480021855794,
+        "max_ms": 1.3018480021855794
+      },
+      "derive_two_panes": {
+        "count": 9,
+        "p50_ms": 5.912759999773698,
+        "p95_ms": 6.161414999951376,
+        "max_ms": 6.161414999951376
+      },
+      "encode": {
+        "count": 9,
+        "p50_ms": 0.8770940003159922,
+        "p95_ms": 0.9297389988205396,
+        "max_ms": 0.9297389988205396
+      },
+      "samples": [
+        {
+          "capture_ms": 1.3018480021855794,
+          "worker_pickle_bytes": 6834,
+          "derive_two_panes_ms": 6.161414999951376,
+          "encode_ms": 0.8902070003387053,
+          "prospective_result_bytes": 44224,
+          "full_object_result_bytes": 63124,
+          "status": "projected",
+          "projected_sites_per_pane": 30
+        },
+        {
+          "capture_ms": 1.1990830025752075,
+          "worker_pickle_bytes": 6834,
+          "derive_two_panes_ms": 6.1103240004740655,
+          "encode_ms": 0.8730150002520531,
+          "prospective_result_bytes": 44224,
+          "full_object_result_bytes": 63124,
+          "status": "projected",
+          "projected_sites_per_pane": 30
+        },
+        {
+          "capture_ms": 1.1584829990169965,
+          "worker_pickle_bytes": 6834,
+          "derive_two_panes_ms": 5.857879998075077,
+          "encode_ms": 0.8535880006093066,
+          "prospective_result_bytes": 44224,
+          "full_object_result_bytes": 63124,
+          "status": "projected",
+          "projected_sites_per_pane": 30
+        },
+        {
+          "capture_ms": 1.0654309990059119,
+          "worker_pickle_bytes": 6834,
+          "derive_two_panes_ms": 5.785517998447176,
+          "encode_ms": 0.864175999595318,
+          "prospective_result_bytes": 44224,
+          "full_object_result_bytes": 63124,
+          "status": "projected",
+          "projected_sites_per_pane": 30
+        },
+        {
+          "capture_ms": 1.0752419984783046,
+          "worker_pickle_bytes": 6834,
+          "derive_two_panes_ms": 5.9247060016787145,
+          "encode_ms": 0.907982001081109,
+          "prospective_result_bytes": 44224,
+          "full_object_result_bytes": 63124,
+          "status": "projected",
+          "projected_sites_per_pane": 30
+        },
+        {
+          "capture_ms": 1.076406999345636,
+          "worker_pickle_bytes": 6834,
+          "derive_two_panes_ms": 5.833111001265934,
+          "encode_ms": 0.8853500003169756,
+          "prospective_result_bytes": 44224,
+          "full_object_result_bytes": 63124,
+          "status": "projected",
+          "projected_sites_per_pane": 30
+        },
+        {
+          "capture_ms": 1.1651849999907427,
+          "worker_pickle_bytes": 6834,
+          "derive_two_panes_ms": 5.831557002238696,
+          "encode_ms": 0.9297389988205396,
+          "prospective_result_bytes": 44224,
+          "full_object_result_bytes": 63124,
+          "status": "projected",
+          "projected_sites_per_pane": 30
+        },
+        {
+          "capture_ms": 1.1194360013178084,
+          "worker_pickle_bytes": 6834,
+          "derive_two_panes_ms": 5.912759999773698,
+          "encode_ms": 0.8770940003159922,
+          "prospective_result_bytes": 44224,
+          "full_object_result_bytes": 63124,
+          "status": "projected",
+          "projected_sites_per_pane": 30
+        },
+        {
+          "capture_ms": 1.11186000140151,
+          "worker_pickle_bytes": 6834,
+          "derive_two_panes_ms": 5.9146040002815425,
+          "encode_ms": 0.8769970008870587,
+          "prospective_result_bytes": 44224,
+          "full_object_result_bytes": 63124,
+          "status": "projected",
+          "projected_sites_per_pane": 30
+        }
+      ]
+    },
+    {
+      "case": "oversized-empty-helix-refusal",
+      "status_counts": {
+        "refused": 9
+      },
+      "capture": {
+        "count": 9,
+        "p50_ms": 0.8792309999989811,
+        "p95_ms": 1.4649320000899024,
+        "max_ms": 1.4649320000899024
+      },
+      "derive_two_panes": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "encode": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "samples": [
+        {
+          "capture_ms": 1.004723999358248,
+          "worker_pickle_bytes": 3804,
+          "status": "refused",
+          "code": "comparison_limit",
+          "detail": "DNA comparison helix span exceeds its display allowance"
+        },
+        {
+          "capture_ms": 0.8858350010996219,
+          "worker_pickle_bytes": 3804,
+          "status": "refused",
+          "code": "comparison_limit",
+          "detail": "DNA comparison helix span exceeds its display allowance"
+        },
+        {
+          "capture_ms": 0.878356000612257,
+          "worker_pickle_bytes": 3804,
+          "status": "refused",
+          "code": "comparison_limit",
+          "detail": "DNA comparison helix span exceeds its display allowance"
+        },
+        {
+          "capture_ms": 1.4649320000899024,
+          "worker_pickle_bytes": 3804,
+          "status": "refused",
+          "code": "comparison_limit",
+          "detail": "DNA comparison helix span exceeds its display allowance"
+        },
+        {
+          "capture_ms": 0.8606789997429587,
+          "worker_pickle_bytes": 3804,
+          "status": "refused",
+          "code": "comparison_limit",
+          "detail": "DNA comparison helix span exceeds its display allowance"
+        },
+        {
+          "capture_ms": 0.83221900058561,
+          "worker_pickle_bytes": 3804,
+          "status": "refused",
+          "code": "comparison_limit",
+          "detail": "DNA comparison helix span exceeds its display allowance"
+        },
+        {
+          "capture_ms": 0.8792309999989811,
+          "worker_pickle_bytes": 3804,
+          "status": "refused",
+          "code": "comparison_limit",
+          "detail": "DNA comparison helix span exceeds its display allowance"
+        },
+        {
+          "capture_ms": 0.8738889991946053,
+          "worker_pickle_bytes": 3804,
+          "status": "refused",
+          "code": "comparison_limit",
+          "detail": "DNA comparison helix span exceeds its display allowance"
+        },
+        {
+          "capture_ms": 0.9565469990775455,
+          "worker_pickle_bytes": 3804,
+          "status": "refused",
+          "code": "comparison_limit",
+          "detail": "DNA comparison helix span exceeds its display allowance"
+        }
+      ]
+    }
+  ],
+  "http": [
+    {
+      "case": "tiny_recipe",
+      "source_and_revision_unchanged": true,
+      "candidate_retained": true,
+      "actual_recipe_size": {
+        "case": "actual_recipe_size",
+        "status_counts": {
+          "projected": 1
+        },
+        "capture": {
+          "count": 1,
+          "p50_ms": 1.295728998229606,
+          "p95_ms": 1.295728998229606,
+          "max_ms": 1.295728998229606
+        },
+        "derive_two_panes": {
+          "count": 1,
+          "p50_ms": 4.426555999089032,
+          "p95_ms": 4.426555999089032,
+          "max_ms": 4.426555999089032
+        },
+        "encode": {
+          "count": 1,
+          "p50_ms": 0.6781699994462542,
+          "p95_ms": 0.6781699994462542,
+          "max_ms": 0.6781699994462542
+        },
+        "samples": [
+          {
+            "capture_ms": 1.295728998229606,
+            "worker_pickle_bytes": 5944,
+            "derive_two_panes_ms": 4.426555999089032,
+            "encode_ms": 0.6781699994462542,
+            "prospective_result_bytes": 37154,
+            "full_object_result_bytes": 52274,
+            "status": "projected",
+            "projected_sites_per_pane": 24
+          }
+        ]
+      },
+      "actual_candidate_result_bytes": 35763,
+      "status_counts": {
+        "200": 3
+      },
+      "samples": [
+        {
+          "status": 200,
+          "code": null,
+          "route_ms": 1340.5292040006316,
+          "response_bytes": 35808,
+          "light_request": {
+            "count": 114,
+            "total_ms": 182.28265898142126,
+            "max_ms": 8.642823002446676,
+            "last_completed_ms": 1327.5363639986608,
+            "deadline_reached": false,
+            "mean_ms": 1.5989706928194847
+          },
+          "light_status_counts": {
+            "200": 114
+          },
+          "light_errors": [],
+          "capture_lock": {
+            "count": 1,
+            "p50_ms": 1.8037240006378852,
+            "p95_ms": 1.8037240006378852,
+            "max_ms": 1.8037240006378852
+          },
+          "all_lock_holds": {
+            "count": 173,
+            "p50_ms": 0.010878000466618687,
+            "p95_ms": 0.02350600334466435,
+            "max_ms": 1.8037240006378852
+          },
+          "waits": {
+            "count": 173,
+            "p50_ms": 0.0016509984561707824,
+            "p95_ms": 0.0038849975680932403,
+            "max_ms": 0.010490002750884742
+          },
+          "site_counts": [
+            24,
+            22
+          ]
+        },
+        {
+          "status": 200,
+          "code": null,
+          "route_ms": 1312.8050710001844,
+          "response_bytes": 35808,
+          "light_request": {
+            "count": 114,
+            "total_ms": 153.39692299676244,
+            "max_ms": 3.9179769992188085,
+            "last_completed_ms": 1305.0000019975414,
+            "deadline_reached": false,
+            "mean_ms": 1.3455870438312494
+          },
+          "light_status_counts": {
+            "200": 114
+          },
+          "light_errors": [],
+          "capture_lock": {
+            "count": 1,
+            "p50_ms": 1.61461099924054,
+            "p95_ms": 1.61461099924054,
+            "max_ms": 1.61461099924054
+          },
+          "all_lock_holds": {
+            "count": 171,
+            "p50_ms": 0.010199000826105475,
+            "p95_ms": 0.02214599953731522,
+            "max_ms": 1.61461099924054
+          },
+          "waits": {
+            "count": 171,
+            "p50_ms": 0.0014569995983038098,
+            "p95_ms": 0.004467998223844916,
+            "max_ms": 0.01252999936696142
+          },
+          "site_counts": [
+            24,
+            22
+          ]
+        },
+        {
+          "status": 200,
+          "code": null,
+          "route_ms": 1283.6672520024877,
+          "response_bytes": 35808,
+          "light_request": {
+            "count": 112,
+            "total_ms": 149.63822301433538,
+            "max_ms": 4.973694998625433,
+            "last_completed_ms": 1273.9647700000205,
+            "deadline_reached": false,
+            "mean_ms": 1.3360555626279944
+          },
+          "light_status_counts": {
+            "200": 112
+          },
+          "light_errors": [],
+          "capture_lock": {
+            "count": 1,
+            "p50_ms": 1.5098060030140914,
+            "p95_ms": 1.5098060030140914,
+            "max_ms": 1.5098060030140914
+          },
+          "all_lock_holds": {
+            "count": 169,
+            "p50_ms": 0.009228002454619855,
+            "p95_ms": 0.02263200076413341,
+            "max_ms": 1.5098060030140914
+          },
+          "waits": {
+            "count": 169,
+            "p50_ms": 0.0013589997251983732,
+            "p95_ms": 0.0034959994081873447,
+            "max_ms": 0.00971999907051213
+          },
+          "site_counts": [
+            24,
+            22
+          ]
+        }
+      ]
+    },
+    {
+      "case": "boundary_recipe",
+      "source_and_revision_unchanged": true,
+      "candidate_retained": true,
+      "actual_recipe_size": {
+        "case": "actual_recipe_size",
+        "status_counts": {
+          "projected": 1
+        },
+        "capture": {
+          "count": 1,
+          "p50_ms": 1.1016809985449072,
+          "p95_ms": 1.1016809985449072,
+          "max_ms": 1.1016809985449072
+        },
+        "derive_two_panes": {
+          "count": 1,
+          "p50_ms": 46.62306699901819,
+          "p95_ms": 46.62306699901819,
+          "max_ms": 46.62306699901819
+        },
+        "encode": {
+          "count": 1,
+          "p50_ms": 26.96261500022956,
+          "p95_ms": 26.96261500022956,
+          "max_ms": 26.96261500022956
+        },
+        "samples": [
+          {
+            "capture_ms": 1.1016809985449072,
+            "worker_pickle_bytes": 5960,
+            "derive_two_panes_ms": 46.62306699901819,
+            "encode_ms": 26.96261500022956,
+            "prospective_result_bytes": 1416882,
+            "full_object_result_bytes": 2062002,
+            "status": "projected",
+            "projected_sites_per_pane": 1024
+          }
+        ]
+      },
+      "actual_candidate_result_bytes": 1415518,
+      "status_counts": {
+        "200": 3
+      },
+      "samples": [
+        {
+          "status": 200,
+          "code": null,
+          "route_ms": 1592.394110000896,
+          "response_bytes": 1415563,
+          "light_request": {
+            "count": 128,
+            "total_ms": 281.02350399058196,
+            "max_ms": 98.53894799744012,
+            "last_completed_ms": 1593.0269889977353,
+            "deadline_reached": false,
+            "mean_ms": 2.1954961249264215
+          },
+          "light_status_counts": {
+            "200": 128
+          },
+          "light_errors": [],
+          "capture_lock": {
+            "count": 1,
+            "p50_ms": 1.501178998296382,
+            "p95_ms": 1.501178998296382,
+            "max_ms": 1.501178998296382
+          },
+          "all_lock_holds": {
+            "count": 191,
+            "p50_ms": 0.01001199780148454,
+            "p95_ms": 0.02089800182147883,
+            "max_ms": 1.501178998296382
+          },
+          "waits": {
+            "count": 191,
+            "p50_ms": 0.0013610006135422736,
+            "p95_ms": 0.0033049982448574156,
+            "max_ms": 0.011469001037767157
+          },
+          "site_counts": [
+            1024,
+            1022
+          ]
+        },
+        {
+          "status": 200,
+          "code": null,
+          "route_ms": 1614.5162870016065,
+          "response_bytes": 1415563,
+          "light_request": {
+            "count": 130,
+            "total_ms": 285.6859689709381,
+            "max_ms": 102.90164099933463,
+            "last_completed_ms": 1615.1893109999946,
+            "deadline_reached": false,
+            "mean_ms": 2.197584376699524
+          },
+          "light_status_counts": {
+            "200": 130
+          },
+          "light_errors": [],
+          "capture_lock": {
+            "count": 1,
+            "p50_ms": 2.018679999309825,
+            "p95_ms": 2.018679999309825,
+            "max_ms": 2.018679999309825
+          },
+          "all_lock_holds": {
+            "count": 195,
+            "p50_ms": 0.010496998584130779,
+            "p95_ms": 0.020509000023594126,
+            "max_ms": 2.018679999309825
+          },
+          "waits": {
+            "count": 195,
+            "p50_ms": 0.0015549994714092463,
+            "p95_ms": 0.003692999598570168,
+            "max_ms": 0.032950996683212
+          },
+          "site_counts": [
+            1024,
+            1022
+          ]
+        },
+        {
+          "status": 200,
+          "code": null,
+          "route_ms": 1569.3653359994642,
+          "response_bytes": 1415563,
+          "light_request": {
+            "count": 126,
+            "total_ms": 278.856782028015,
+            "max_ms": 97.35678400102188,
+            "last_completed_ms": 1569.955057999323,
+            "deadline_reached": false,
+            "mean_ms": 2.213149063714405
+          },
+          "light_status_counts": {
+            "200": 126
+          },
+          "light_errors": [],
+          "capture_lock": {
+            "count": 1,
+            "p50_ms": 1.4675480015284847,
+            "p95_ms": 1.4675480015284847,
+            "max_ms": 1.4675480015284847
+          },
+          "all_lock_holds": {
+            "count": 189,
+            "p50_ms": 0.009817002137424424,
+            "p95_ms": 0.018468002963345498,
+            "max_ms": 1.4675480015284847
+          },
+          "waits": {
+            "count": 189,
+            "p50_ms": 0.0013610006135422736,
+            "p95_ms": 0.0027220012270845473,
+            "max_ms": 0.0072900002123788
+          },
+          "site_counts": [
+            1024,
+            1022
+          ]
+        }
+      ]
+    },
+    {
+      "case": "six_helices",
+      "source_and_revision_unchanged": true,
+      "candidate_retained": true,
+      "actual_recipe_size": {
+        "case": "actual_recipe_size",
+        "status_counts": {
+          "projected": 1
+        },
+        "capture": {
+          "count": 1,
+          "p50_ms": 1.7285329995502252,
+          "p95_ms": 1.7285329995502252,
+          "max_ms": 1.7285329995502252
+        },
+        "derive_two_panes": {
+          "count": 1,
+          "p50_ms": 103.19032999905176,
+          "p95_ms": 103.19032999905176,
+          "max_ms": 103.19032999905176
+        },
+        "encode": {
+          "count": 1,
+          "p50_ms": 26.40642899859813,
+          "p95_ms": 26.40642899859813,
+          "max_ms": 26.40642899859813
+        },
+        "samples": [
+          {
+            "capture_ms": 1.7285329995502252,
+            "worker_pickle_bytes": 12561,
+            "derive_two_panes_ms": 103.19032999905176,
+            "encode_ms": 26.40642899859813,
+            "prospective_result_bytes": 1396954,
+            "full_object_result_bytes": 2031994,
+            "status": "projected",
+            "projected_sites_per_pane": 1008
+          }
+        ]
+      },
+      "actual_candidate_result_bytes": 1395627,
+      "status_counts": {
+        "200": 3
+      },
+      "samples": [
+        {
+          "status": 200,
+          "code": null,
+          "route_ms": 1574.8017160003656,
+          "response_bytes": 1395672,
+          "light_request": {
+            "count": 129,
+            "total_ms": 277.93240199025604,
+            "max_ms": 96.13068500038935,
+            "last_completed_ms": 1575.3682059985294,
+            "deadline_reached": false,
+            "mean_ms": 2.154514744110512
+          },
+          "light_status_counts": {
+            "200": 129
+          },
+          "light_errors": [],
+          "capture_lock": {
+            "count": 1,
+            "p50_ms": 2.282485002069734,
+            "p95_ms": 2.282485002069734,
+            "max_ms": 2.282485002069734
+          },
+          "all_lock_holds": {
+            "count": 192,
+            "p50_ms": 0.008213501132559031,
+            "p95_ms": 0.01846799932536669,
+            "max_ms": 2.282485002069734
+          },
+          "waits": {
+            "count": 192,
+            "p50_ms": 0.0013600001693703234,
+            "p95_ms": 0.0031099989428184927,
+            "max_ms": 0.007776001439196989
+          },
+          "site_counts": [
+            1008,
+            1006
+          ]
+        },
+        {
+          "status": 200,
+          "code": null,
+          "route_ms": 1644.336632998602,
+          "response_bytes": 1395672,
+          "light_request": {
+            "count": 127,
+            "total_ms": 341.2653180239431,
+            "max_ms": 165.58280900062528,
+            "last_completed_ms": 1645.0852420020965,
+            "deadline_reached": false,
+            "mean_ms": 2.6871284883775046
+          },
+          "light_status_counts": {
+            "200": 127
+          },
+          "light_errors": [],
+          "capture_lock": {
+            "count": 1,
+            "p50_ms": 2.1976280004309956,
+            "p95_ms": 2.1976280004309956,
+            "max_ms": 2.1976280004309956
+          },
+          "all_lock_holds": {
+            "count": 190,
+            "p50_ms": 0.010076499165734276,
+            "p95_ms": 0.018041999283013865,
+            "max_ms": 2.1976280004309956
+          },
+          "waits": {
+            "count": 190,
+            "p50_ms": 0.00145800004247576,
+            "p95_ms": 0.00291600008495152,
+            "max_ms": 0.008094000804703683
+          },
+          "site_counts": [
+            1008,
+            1006
+          ]
+        },
+        {
+          "status": 200,
+          "code": null,
+          "route_ms": 1579.3326349994459,
+          "response_bytes": 1395672,
+          "light_request": {
+            "count": 128,
+            "total_ms": 268.3183979934256,
+            "max_ms": 98.57391300101881,
+            "last_completed_ms": 1579.993140003353,
+            "deadline_reached": false,
+            "mean_ms": 2.0962374843236375
+          },
+          "light_status_counts": {
+            "200": 128
+          },
+          "light_errors": [],
+          "capture_lock": {
+            "count": 1,
+            "p50_ms": 2.2576880000997335,
+            "p95_ms": 2.2576880000997335,
+            "max_ms": 2.2576880000997335
+          },
+          "all_lock_holds": {
+            "count": 191,
+            "p50_ms": 0.009848998161032796,
+            "p95_ms": 0.019893999706255272,
+            "max_ms": 2.2576880000997335
+          },
+          "waits": {
+            "count": 191,
+            "p50_ms": 0.0013659991964232177,
+            "p95_ms": 0.002925000444520265,
+            "max_ms": 0.0074119998316746205
+          },
+          "site_counts": [
+            1008,
+            1006
+          ]
+        }
+      ]
+    }
+  ],
+  "setup_errors": []
+}

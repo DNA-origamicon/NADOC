@@ -2,6 +2,7 @@
 
 Source revision: a03cf813c514bc3969735c68f364811f0e9c0268
 Do not import from production code or update this oracle to match an optimization.
+Response serialization is supplied by the benchmark adapter, not this oracle.
 Shared model/geometry helpers stay current; snapshot selection and replay loops
 are the original implementation, so shared dispatch overhead is measured too.
 """
@@ -11,10 +12,8 @@ from fastapi import HTTPException
 from backend.api import state as design_state
 from backend.api.crud import (
     Design, ClusterOpLogEntry, _topology_substitute, _rebase_joints_to_cts,
-    _compact_geometry_for_design, _replay_minor_op,
+    _replay_minor_op,
 )
-from backend.api.routes_feature_log import GeometryBatchBody, SurfaceBatchBody
-from backend.core.deformation import deformed_helix_axes
 
 def _state_at_child_boundary(entry, k: int) -> "Design":
     """Return the design state AFTER ``entry.children[0..k-1]`` of a Fine Routing
@@ -435,94 +434,3 @@ def _seek_feature_log(
         feature_log_cursor=cursor_val,
         feature_log_sub_cursor=sub_position,
     )
-
-def geometry_batch(body: GeometryBatchBody) -> dict:
-    """Return pre-computed geometry for multiple feature-log positions in one call.
-
-    Stateless — does NOT change the active design cursor or push to the undo stack.
-    Used by the animation player to pre-bake keyframe states before playback so that
-    all geometry interpolation is client-side and frame-accurate.
-
-    Geometry is shipped in COMPACT per-helix-per-direction parallel-array form
-    (``nucleotides_compact``) — ~50% smaller wire and ~50% faster to parse than
-    the legacy per-nuc dict list. Frontend ``animation_player`` re-materialises
-    the lookup maps it actually needs (posMap / bnMap / strandSet / helixSet).
-
-    Returns: { "<position>": { nucleotides_compact, helix_axes }, ... }
-    """
-    design = design_state.get_or_404()
-    result: dict[str, dict] = {}
-    for position in set(body.positions):
-        d = _seek_feature_log(design, position)
-        result[str(position)] = {
-            "nucleotides_compact": _compact_geometry_for_design(
-                d, junction_balance=True
-            ),
-            "helix_axes": deformed_helix_axes(d),
-        }
-    return result
-
-
-def atomistic_batch(body: GeometryBatchBody) -> dict:
-    """Return flat atom-position arrays for multiple feature-log positions in one call.
-
-    Stateless — does NOT change the active design cursor or push to the undo stack.
-    Used by the animation player to pre-bake atomistic states before playback.
-
-    Returns: { "<position>": [x0,y0,z0, x1,y1,z1, ...], ... }
-    Positions are indexed by atom serial (same order as GET /design/atomistic).
-    """
-    from backend.core.atomistic import build_atomistic_model, atomistic_positions_flat
-
-    design = design_state.get_or_404()
-    result: dict[str, list] = {}
-    for position in set(body.positions):
-        d = _seek_feature_log(design, position)
-        model = build_atomistic_model(d)
-        result[str(position)] = atomistic_positions_flat(model)
-    return result
-
-
-def surface_batch(body: SurfaceBatchBody) -> dict:
-    """Return full mesh data for multiple feature-log positions in one call.
-
-    Stateless — does NOT change the active design cursor or push to the undo stack.
-    Used by the animation player to pre-bake surface states before playback.
-
-    Returns { "<position>": { vertices, faces, vertex_colors? }, ... }.
-    Both vertices and faces are included because different feature-log positions can
-    produce different marching-cubes topologies (different vertex counts), so the
-    frontend needs to rebuild the geometry buffer when topology changes mid-animation.
-
-    When color_mode='strand', per-vertex RGB triples are included so the surface
-    mesh keeps its strand-coloured look through topology rebuilds during animation
-    playback — without this, _rebuildTopology has nothing to attach as a color
-    attribute and would fall back to uniform grey.
-    """
-    from backend.core.atomistic import build_atomistic_model
-    from backend.core.surface import compute_surface, smooth_mesh, surface_to_json
-
-    design = design_state.get_or_404()
-    result: dict[str, dict] = {}
-    for position in set(body.positions):
-        d = _seek_feature_log(design, position)
-        model = build_atomistic_model(d)
-        mesh = compute_surface(
-            model.atoms,
-            grid_spacing=body.grid_spacing,
-            probe_radius=body.probe_radius,
-            radius_scale=1.2 * body.radius_inflate,
-        )
-        mesh = smooth_mesh(mesh, iterations=body.smooth)
-        verts = [round(float(v), 5) for v in mesh.vertices.ravel()]
-        faces = [int(f) for f in mesh.faces.ravel()]
-        entry: dict = {"vertices": verts, "faces": faces}
-        if body.color_mode == "strand":
-            full = surface_to_json(mesh, d, color_mode="strand")
-            vc = full.get("vertex_colors")
-            if vc:
-                # 4 decimals is more than enough for 8-bit display precision and
-                # keeps the bake payload compact for many-keyframe animations.
-                entry["vertex_colors"] = [round(float(c), 4) for c in vc]
-        result[str(position)] = entry
-    return result

@@ -1,0 +1,24 @@
+{
+  "checkpoint": "Experimental original-source free protein import and saved-source repair regression",
+  "date": "2026-10-15",
+  "public_native_import_enabled": false,
+  "focused_tests": {
+    "tests/test_native_protein_free_import.py": 37,
+    "tests/test_protein.py": 76,
+    "tests/test_part_capture_copy.py": 26,
+    "tests/test_native_protein_input_proof.py": 16,
+    "tests/test_part_repair_draft_jobs.py": 17,
+    "tests/test_generated_native_proof.py::test_legacy_compound_output_is_explicitly_unverified": 1
+  },
+  "focused_total": 173,
+  "validation": "Focused files run serially with test-focused; final counts only. Changed Python Ruff and git diff --check passed.",
+  "performance": "Initial and optimized protein reports retain all refusals. Optimized retained-state run did not finish: setup of the final case refused capture. Ordinary route migration remains disabled; no budget/GC changes or automatic retries.",
+  "benchmark_changes_not_yet_run": "Host gate enable/restore, targeted --case, observational GC callbacks and corrected native_candidate_admission aggregation.",
+  "limitations": [
+    "No broad suite run; test-smart dry-run selected FAST with deferred FULL. Dry-run text saying fast suite ran is not an execution result.",
+    "Archive unavailable; no app/visual/headset validation or bulk output.",
+    "Original-source library transfer across documents and remaining P4/P5/P6 coverage are still open.",
+    "No molecular algorithm, pinned numerical implementation or main.js change."
+  ],
+  "test_smart_verbatim": "decision: FAST  (fast suite only)\nDEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending."
+}

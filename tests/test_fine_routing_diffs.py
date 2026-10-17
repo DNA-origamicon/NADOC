@@ -308,11 +308,10 @@ def test_entangled_delete_emits_warning():
 # ── Eviction + persistence ───────────────────────────────────────────────────
 
 
-def test_former_budget_does_not_clear_child_diffs(monkeypatch):
-    monkeypatch.setattr(design_state, "MAX_SNAPSHOT_BUDGET_BYTES", 100)
+def test_closed_cluster_retains_child_diffs():
     d0 = design_state.get_or_404()
     h0 = d0.helices[0].id
-    _nick(h0, 7)  # cluster 0 (to be evicted)
+    _nick(h0, 7)  # cluster 0 (retained)
     _post("/api/design/auto-break")  # snapshot closes cluster 0
     _nick(h0, 21)  # cluster 2 (newest, kept)
 

@@ -1,0 +1,1173 @@
+{
+  "scope": "Actual pending NP HTTP create/rename/delete; no application geometry",
+  "notes": [
+    "Compatibility baseline bypasses only the new native adapter; same current process and endpoints.",
+    "Native owner/target prefix and retained rows are built before measurement, never copied from candidate geometry.",
+    "The larger background is a 64-cell, 126bp native bundle plus 16 thiol handles and 16 retained candidate rows.",
+    "Every measured template must pass unchanged ordinary node/byte admission; no fixture shrinking or retries.",
+    "Common recovery and metadata reconciliation remain inside the existing recording lock.",
+    "No source proof is required for UI recording; fresh-worker proof is measured once per native case afterward.",
+    "No limits, GC policy, physics, retry behavior or production sessions are changed."
+  ],
+  "repeats": 3,
+  "all_cases_attempted": true,
+  "completed": false,
+  "qualified": false,
+  "failure": null,
+  "failed_cases": [
+    "native-16-handles-16-retained-64-cell-126bp"
+  ],
+  "session_cleanup_verified": true,
+  "cases": [
+    {
+      "case": "native-1-handles-0-retained-six-cell",
+      "handles": 1,
+      "retained_rows": 5,
+      "mode": "native",
+      "background": "six-cell",
+      "native_capture_node_byte_admission": true,
+      "helices": 8,
+      "strands": 13,
+      "domains": 14,
+      "declared_bp": 276,
+      "errors": [],
+      "recovery_bytes": 49724,
+      "cold_input_pickle_bytes": 12831,
+      "cold_result": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "verified",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 8,
+        "proof_coverage": "versioned_commands",
+        "native_editable": true,
+        "recipe_fingerprint": "2e8de110bd00de0c83f2c7e3e5b8fc5cf4171128fa8c1fd406e79a7f12ae7643",
+        "authoring_fingerprint": "006e3aab45511b1ed7b9c76c37672b98b67915711ab03e42d1ef728e9292d8a3",
+        "imported_sources": [],
+        "dependency_summary": {
+          "complete": true,
+          "features": 8
+        }
+      },
+      "cold_ms": 1244.3204110022634,
+      "create": {
+        "route": {
+          "count": 3,
+          "p50_ms": 8.786913997028023,
+          "p95_ms": 14.759260000573704,
+          "max_ms": 14.759260000573704
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 4.201070998533396,
+          "p95_ms": 5.476064998219954,
+          "max_ms": 5.476064998219954
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0008780007192399353,
+          "p95_ms": 0.001658001565374434,
+          "max_ms": 0.001658001565374434
+        },
+        "light_ms": {
+          "count": 8,
+          "p50_ms": 3.1371454988402547,
+          "p95_ms": 6.722181999066379,
+          "max_ms": 6.722181999066379
+        },
+        "light_lock_wait_ms": {
+          "count": 8,
+          "p50_ms": 0.0016095000319182873,
+          "p95_ms": 0.6618379993597046,
+          "max_ms": 0.6618379993597046
+        }
+      },
+      "rename": {
+        "route": {
+          "count": 3,
+          "p50_ms": 7.012615002167877,
+          "p95_ms": 9.977130001061596,
+          "max_ms": 9.977130001061596
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 3.720400000020163,
+          "p95_ms": 5.293631002132315,
+          "max_ms": 5.293631002132315
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0007800008461344987,
+          "p95_ms": 0.0015609984984621406,
+          "max_ms": 0.0015609984984621406
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 4.146097498960444,
+          "p95_ms": 6.6770129997166805,
+          "max_ms": 6.6770129997166805
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.001463498847442679,
+          "p95_ms": 1.5806459996383637,
+          "max_ms": 1.5806459996383637
+        }
+      },
+      "delete": {
+        "route": {
+          "count": 3,
+          "p50_ms": 7.323826997890137,
+          "p95_ms": 7.8247910023492295,
+          "max_ms": 7.8247910023492295
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 3.470161998848198,
+          "p95_ms": 3.705082999658771,
+          "max_ms": 3.705082999658771
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.001267999323317781,
+          "p95_ms": 0.0014639990695286542,
+          "max_ms": 0.0014639990695286542
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 3.9087370005290722,
+          "p95_ms": 5.3557760002149735,
+          "max_ms": 5.3557760002149735
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.0011225001799175516,
+          "p95_ms": 0.0015609984984621406,
+          "max_ms": 0.0015609984984621406
+        }
+      },
+      "completed": true,
+      "sample_count": 9,
+      "sample_errors": []
+    },
+    {
+      "case": "native-1-handles-16-retained-six-cell",
+      "handles": 1,
+      "retained_rows": 21,
+      "mode": "native",
+      "background": "six-cell",
+      "native_capture_node_byte_admission": true,
+      "helices": 8,
+      "strands": 13,
+      "domains": 14,
+      "declared_bp": 276,
+      "errors": [],
+      "recovery_bytes": 178036,
+      "cold_input_pickle_bytes": 17869,
+      "cold_result": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "verified",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 24,
+        "proof_coverage": "versioned_commands",
+        "native_editable": true,
+        "recipe_fingerprint": "0daf95a2d83e83bf84ea6e946b47df864ddad29bce2f2dfbde373b0015e42e8c",
+        "authoring_fingerprint": "cc6627293936a0fe77974f1156f9e2f213ecdce40383c704a11a82afe56ddf96",
+        "imported_sources": [],
+        "dependency_summary": {
+          "complete": true,
+          "features": 24
+        }
+      },
+      "cold_ms": 1236.6173740010709,
+      "create": {
+        "route": {
+          "count": 3,
+          "p50_ms": 6.306192000920419,
+          "p95_ms": 6.74969399915426,
+          "max_ms": 6.74969399915426
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 3.2773860002635047,
+          "p95_ms": 3.3476290009275544,
+          "max_ms": 3.3476290009275544
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0008780007192399353,
+          "p95_ms": 0.0008780007192399353,
+          "max_ms": 0.0008780007192399353
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 3.170266498273122,
+          "p95_ms": 5.459675998281455,
+          "max_ms": 5.459675998281455
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.0009754985512699932,
+          "p95_ms": 1.4296250010374933,
+          "max_ms": 1.4296250010374933
+        }
+      },
+      "rename": {
+        "route": {
+          "count": 3,
+          "p50_ms": 6.866568997793365,
+          "p95_ms": 7.566552998468978,
+          "max_ms": 7.566552998468978
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 3.2896779994189274,
+          "p95_ms": 4.087904002517462,
+          "max_ms": 4.087904002517462
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0008780007192399353,
+          "p95_ms": 0.0017560014384798706,
+          "max_ms": 0.0017560014384798706
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 3.4687959978327854,
+          "p95_ms": 5.652158997691004,
+          "max_ms": 5.652158997691004
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.0009750001481734216,
+          "p95_ms": 1.5388909996545408,
+          "max_ms": 1.5388909996545408
+        }
+      },
+      "delete": {
+        "route": {
+          "count": 3,
+          "p50_ms": 6.690183003229322,
+          "p95_ms": 6.973883999307873,
+          "max_ms": 6.973883999307873
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 3.4844050023821183,
+          "p95_ms": 3.578062001906801,
+          "max_ms": 3.578062001906801
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0010730000212788582,
+          "p95_ms": 0.0010740004654508084,
+          "max_ms": 0.0010740004654508084
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 3.4890879978775047,
+          "p95_ms": 4.630036997696152,
+          "max_ms": 4.630036997696152
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.0009759987733559683,
+          "p95_ms": 1.373626000713557,
+          "max_ms": 1.373626000713557
+        }
+      },
+      "completed": true,
+      "sample_count": 9,
+      "sample_errors": []
+    },
+    {
+      "case": "native-16-handles-0-retained-six-cell",
+      "handles": 16,
+      "retained_rows": 5,
+      "mode": "native",
+      "background": "six-cell",
+      "native_capture_node_byte_admission": true,
+      "helices": 23,
+      "strands": 28,
+      "domains": 29,
+      "declared_bp": 456,
+      "errors": [],
+      "recovery_bytes": 90004,
+      "cold_input_pickle_bytes": 32200,
+      "cold_result": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "verified",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 8,
+        "proof_coverage": "versioned_commands",
+        "native_editable": true,
+        "recipe_fingerprint": "3e6687d7021b0f81c24114934d03914e51eca3cedc86461271376820f05fb241",
+        "authoring_fingerprint": "e237d4db9d53a2064f916e1b593b35962f1b2e6a2b88559dede8b8f6904fdbc1",
+        "imported_sources": [],
+        "dependency_summary": {
+          "complete": true,
+          "features": 8
+        }
+      },
+      "cold_ms": 1194.7068529989338,
+      "create": {
+        "route": {
+          "count": 3,
+          "p50_ms": 8.535896002285881,
+          "p95_ms": 8.696085998963099,
+          "max_ms": 8.696085998963099
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 5.273046001093462,
+          "p95_ms": 5.492943000717787,
+          "max_ms": 5.492943000717787
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0008780007192399353,
+          "p95_ms": 0.0008780007192399353,
+          "max_ms": 0.0008780007192399353
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 4.430090000823839,
+          "p95_ms": 7.654159999219701,
+          "max_ms": 7.654159999219701
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 1.2422634990798542,
+          "p95_ms": 2.833688999089645,
+          "max_ms": 2.833688999089645
+        }
+      },
+      "rename": {
+        "route": {
+          "count": 3,
+          "p50_ms": 8.219121998990886,
+          "p95_ms": 8.454630002233898,
+          "max_ms": 8.454630002233898
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 4.975687003025087,
+          "p95_ms": 4.97617500150227,
+          "max_ms": 4.97617500150227
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0008779970812611282,
+          "p95_ms": 0.0008780007192399353,
+          "max_ms": 0.0008780007192399353
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 4.221510000206763,
+          "p95_ms": 7.161585999710951,
+          "max_ms": 7.161585999710951
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 1.252165500773117,
+          "p95_ms": 2.5608169999031816,
+          "max_ms": 2.5608169999031816
+        }
+      },
+      "delete": {
+        "route": {
+          "count": 3,
+          "p50_ms": 8.171514000423485,
+          "p95_ms": 8.784279998508282,
+          "max_ms": 8.784279998508282
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 5.274606999591924,
+          "p95_ms": 5.757913000707049,
+          "max_ms": 5.757913000707049
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0007810012903064489,
+          "p95_ms": 0.0019509971025399864,
+          "max_ms": 0.0019509971025399864
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 4.064098999151611,
+          "p95_ms": 6.72501200097031,
+          "max_ms": 6.72501200097031
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.0011219999578315765,
+          "p95_ms": 2.4496980004187208,
+          "max_ms": 2.4496980004187208
+        }
+      },
+      "completed": true,
+      "sample_count": 9,
+      "sample_errors": []
+    },
+    {
+      "case": "native-16-handles-16-retained-six-cell",
+      "handles": 16,
+      "retained_rows": 21,
+      "mode": "native",
+      "background": "six-cell",
+      "native_capture_node_byte_admission": true,
+      "helices": 23,
+      "strands": 28,
+      "domains": 29,
+      "declared_bp": 456,
+      "errors": [],
+      "recovery_bytes": 402688,
+      "cold_input_pickle_bytes": 37346,
+      "cold_result": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "verified",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity",
+          "repair_draft"
+        ],
+        "checked_commands": 24,
+        "proof_coverage": "versioned_commands",
+        "native_editable": true,
+        "recipe_fingerprint": "902d3b58b5a09faa6418e936b4b550232f6a41440ee4b97c68198b0115bcf675",
+        "authoring_fingerprint": "0a37beef00e1b70a8e26e827d251aa4a74d89fa764906b7422c81d13f518cb8f",
+        "imported_sources": [],
+        "dependency_summary": {
+          "complete": true,
+          "features": 24
+        }
+      },
+      "cold_ms": 1568.7649290011905,
+      "create": {
+        "route": {
+          "count": 3,
+          "p50_ms": 10.196538998570759,
+          "p95_ms": 10.527750997425755,
+          "max_ms": 10.527750997425755
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 6.1542929979623295,
+          "p95_ms": 6.4880419995461125,
+          "max_ms": 6.4880419995461125
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0008780007192399353,
+          "p95_ms": 0.0008780007192399353,
+          "max_ms": 0.0008780007192399353
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 4.780765000759857,
+          "p95_ms": 7.504310000513215,
+          "max_ms": 7.504310000513215
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.0011214997357456014,
+          "p95_ms": 0.0017559978005010635,
+          "max_ms": 0.0017559978005010635
+        }
+      },
+      "rename": {
+        "route": {
+          "count": 3,
+          "p50_ms": 11.328512002364732,
+          "p95_ms": 11.747624001145596,
+          "max_ms": 11.747624001145596
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 6.515260000014678,
+          "p95_ms": 7.09495399860316,
+          "max_ms": 7.09495399860316
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0008780007192399353,
+          "p95_ms": 0.0015610021364409477,
+          "max_ms": 0.0015610021364409477
+        },
+        "light_ms": {
+          "count": 8,
+          "p50_ms": 5.1857315011147875,
+          "p95_ms": 7.102173000021139,
+          "max_ms": 7.102173000021139
+        },
+        "light_lock_wait_ms": {
+          "count": 8,
+          "p50_ms": 0.0011709998943842947,
+          "p95_ms": 0.002243999915663153,
+          "max_ms": 0.002243999915663153
+        }
+      },
+      "delete": {
+        "route": {
+          "count": 3,
+          "p50_ms": 11.579920999793103,
+          "p95_ms": 15.393490000860766,
+          "max_ms": 15.393490000860766
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 6.960225997318048,
+          "p95_ms": 10.12541900126962,
+          "max_ms": 10.12541900126962
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0010730000212788582,
+          "p95_ms": 0.001658001565374434,
+          "max_ms": 0.001658001565374434
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 5.812350498672458,
+          "p95_ms": 10.724625000875676,
+          "max_ms": 10.724625000875676
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.0016590001905569807,
+          "p95_ms": 2.6331080007366836,
+          "max_ms": 2.6331080007366836
+        }
+      },
+      "completed": true,
+      "sample_count": 9,
+      "sample_errors": []
+    },
+    {
+      "case": "native-16-handles-16-retained-64-cell-126bp",
+      "handles": 16,
+      "retained_rows": 21,
+      "mode": "native",
+      "background": "64-cell-126bp",
+      "native_capture_node_byte_admission": true,
+      "helices": 81,
+      "strands": 144,
+      "domains": 145,
+      "declared_bp": 8268,
+      "errors": [
+        {
+          "exception": "CaptureLimit",
+          "detail": "Part verification capture budget exceeded"
+        }
+      ],
+      "recovery_bytes": 614360,
+      "completed": false,
+      "failure": {
+        "exception": "CaptureLimit",
+        "detail": "Part verification capture budget exceeded"
+      },
+      "sample_count": 9,
+      "sample_errors": []
+    },
+    {
+      "case": "legacy-1-handles-0-retained-six-cell",
+      "handles": 1,
+      "retained_rows": 5,
+      "mode": "legacy",
+      "background": "six-cell",
+      "native_capture_node_byte_admission": true,
+      "helices": 8,
+      "strands": 13,
+      "domains": 14,
+      "declared_bp": 276,
+      "errors": [],
+      "recovery_bytes": 49712,
+      "create": {
+        "route": {
+          "count": 3,
+          "p50_ms": 4.965150001225993,
+          "p95_ms": 5.07568499961053,
+          "max_ms": 5.07568499961053
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 2.024343000812223,
+          "p95_ms": 2.1835580009792466,
+          "max_ms": 2.1835580009792466
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0009750001481734216,
+          "p95_ms": 0.0009760005923453718,
+          "max_ms": 0.0009760005923453718
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 2.5456965013290755,
+          "p95_ms": 3.6716200011142064,
+          "max_ms": 3.6716200011142064
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.0012195014278404415,
+          "p95_ms": 1.0900230008701328,
+          "max_ms": 1.0900230008701328
+        }
+      },
+      "rename": {
+        "route": {
+          "count": 3,
+          "p50_ms": 4.749058000015793,
+          "p95_ms": 5.140171000675764,
+          "max_ms": 5.140171000675764
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 2.0261960016796365,
+          "p95_ms": 2.382383001531707,
+          "max_ms": 2.382383001531707
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0003900022420566529,
+          "p95_ms": 0.0004879984771832824,
+          "max_ms": 0.0004879984771832824
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 2.5399889982509194,
+          "p95_ms": 3.6522059999697376,
+          "max_ms": 3.6522059999697376
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.0009755003702593967,
+          "p95_ms": 0.9305149978899863,
+          "max_ms": 0.9305149978899863
+        }
+      },
+      "delete": {
+        "route": {
+          "count": 3,
+          "p50_ms": 5.017831997975009,
+          "p95_ms": 5.148074000317138,
+          "max_ms": 5.148074000317138
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 1.911370000016177,
+          "p95_ms": 2.1002430003136396,
+          "max_ms": 2.1002430003136396
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0003900022420566529,
+          "p95_ms": 0.00039099904824979603,
+          "max_ms": 0.00039099904824979603
+        },
+        "light_ms": {
+          "count": 7,
+          "p50_ms": 2.120631997968303,
+          "p95_ms": 4.093170999112772,
+          "max_ms": 4.093170999112772
+        },
+        "light_lock_wait_ms": {
+          "count": 7,
+          "p50_ms": 0.0009750001481734216,
+          "p95_ms": 1.1391920015739743,
+          "max_ms": 1.1391920015739743
+        }
+      },
+      "completed": true,
+      "sample_count": 9,
+      "sample_errors": []
+    },
+    {
+      "case": "legacy-1-handles-16-retained-six-cell",
+      "handles": 1,
+      "retained_rows": 21,
+      "mode": "legacy",
+      "background": "six-cell",
+      "native_capture_node_byte_admission": true,
+      "helices": 8,
+      "strands": 13,
+      "domains": 14,
+      "declared_bp": 276,
+      "errors": [],
+      "recovery_bytes": 178068,
+      "create": {
+        "route": {
+          "count": 3,
+          "p50_ms": 4.795787997863954,
+          "p95_ms": 5.593037996732164,
+          "max_ms": 5.593037996732164
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 2.05702500170446,
+          "p95_ms": 2.3999440018087626,
+          "max_ms": 2.3999440018087626
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0009750001481734216,
+          "p95_ms": 0.0010730000212788582,
+          "max_ms": 0.0010730000212788582
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 2.7875434989255155,
+          "p95_ms": 3.8886889997229446,
+          "max_ms": 3.8886889997229446
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.001024500306812115,
+          "p95_ms": 1.0039759981737006,
+          "max_ms": 1.0039759981737006
+        }
+      },
+      "rename": {
+        "route": {
+          "count": 3,
+          "p50_ms": 4.919688999507343,
+          "p95_ms": 5.712353002309101,
+          "max_ms": 5.712353002309101
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 1.9651239999802783,
+          "p95_ms": 2.4824779975460842,
+          "max_ms": 2.4824779975460842
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0003900022420566529,
+          "p95_ms": 0.00039099904824979603,
+          "max_ms": 0.00039099904824979603
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 2.761349500360666,
+          "p95_ms": 4.670328002248425,
+          "max_ms": 4.670328002248425
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.30301750120997895,
+          "p95_ms": 1.0953889977827203,
+          "max_ms": 1.0953889977827203
+        }
+      },
+      "delete": {
+        "route": {
+          "count": 3,
+          "p50_ms": 5.2852409971819725,
+          "p95_ms": 5.69791399902897,
+          "max_ms": 5.69791399902897
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 2.1094129988341592,
+          "p95_ms": 2.701008997973986,
+          "max_ms": 2.701008997973986
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.00039099904824979603,
+          "p95_ms": 0.0004879984771832824,
+          "max_ms": 0.0004879984771832824
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 2.906321000409662,
+          "p95_ms": 4.35150699922815,
+          "max_ms": 4.35150699922815
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.0010735002433648333,
+          "p95_ms": 1.1376319998817053,
+          "max_ms": 1.1376319998817053
+        }
+      },
+      "completed": true,
+      "sample_count": 9,
+      "sample_errors": []
+    },
+    {
+      "case": "legacy-16-handles-0-retained-six-cell",
+      "handles": 16,
+      "retained_rows": 5,
+      "mode": "legacy",
+      "background": "six-cell",
+      "native_capture_node_byte_admission": true,
+      "helices": 23,
+      "strands": 28,
+      "domains": 29,
+      "declared_bp": 456,
+      "errors": [],
+      "recovery_bytes": 90004,
+      "create": {
+        "route": {
+          "count": 3,
+          "p50_ms": 6.9616889995813835,
+          "p95_ms": 7.019541000772733,
+          "max_ms": 7.019541000772733
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 3.69874200259801,
+          "p95_ms": 3.843909002171131,
+          "max_ms": 3.843909002171131
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0009759969543665648,
+          "p95_ms": 0.0010740004654508084,
+          "max_ms": 0.0010740004654508084
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 3.453039500527666,
+          "p95_ms": 5.26338800045778,
+          "max_ms": 5.26338800045778
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.0009755003702593967,
+          "p95_ms": 1.5691339976910967,
+          "max_ms": 1.5691339976910967
+        }
+      },
+      "rename": {
+        "route": {
+          "count": 3,
+          "p50_ms": 6.524137999804225,
+          "p95_ms": 6.595745999220526,
+          "max_ms": 6.595745999220526
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 3.332312000566162,
+          "p95_ms": 3.547135002008872,
+          "max_ms": 3.547135002008872
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.00048699803301133215,
+          "p95_ms": 0.0004879984771832824,
+          "max_ms": 0.0004879984771832824
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 3.2263140001305146,
+          "p95_ms": 5.559672998060705,
+          "max_ms": 5.559672998060705
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.0009265004337066785,
+          "p95_ms": 1.6272789980575908,
+          "max_ms": 1.6272789980575908
+        }
+      },
+      "delete": {
+        "route": {
+          "count": 3,
+          "p50_ms": 6.473797999205999,
+          "p95_ms": 6.7738889993052,
+          "max_ms": 6.7738889993052
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 3.1792419977136888,
+          "p95_ms": 3.315238001960097,
+          "max_ms": 3.315238001960097
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.00039099904824979603,
+          "p95_ms": 0.0013659991964232177,
+          "max_ms": 0.0013659991964232177
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 3.3645544990577037,
+          "p95_ms": 5.6196719997387845,
+          "max_ms": 5.6196719997387845
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.775006501498865,
+          "p95_ms": 1.6397660001530312,
+          "max_ms": 1.6397660001530312
+        }
+      },
+      "completed": true,
+      "sample_count": 9,
+      "sample_errors": []
+    },
+    {
+      "case": "legacy-16-handles-16-retained-six-cell",
+      "handles": 16,
+      "retained_rows": 21,
+      "mode": "legacy",
+      "background": "six-cell",
+      "native_capture_node_byte_admission": true,
+      "helices": 23,
+      "strands": 28,
+      "domains": 29,
+      "declared_bp": 456,
+      "errors": [],
+      "recovery_bytes": 402632,
+      "create": {
+        "route": {
+          "count": 3,
+          "p50_ms": 8.037468000111403,
+          "p95_ms": 8.050931999605382,
+          "max_ms": 8.050931999605382
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 3.896297999745002,
+          "p95_ms": 4.279216002032626,
+          "max_ms": 4.279216002032626
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0011709998943842947,
+          "p95_ms": 0.0012680029612965882,
+          "max_ms": 0.0012680029612965882
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 4.1153170004690764,
+          "p95_ms": 6.6951580010936595,
+          "max_ms": 6.6951580010936595
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.0011219999578315765,
+          "p95_ms": 1.744545003020903,
+          "max_ms": 1.744545003020903
+        }
+      },
+      "rename": {
+        "route": {
+          "count": 3,
+          "p50_ms": 7.918641000287607,
+          "p95_ms": 8.15483100086567,
+          "max_ms": 8.15483100086567
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 3.6555229999066796,
+          "p95_ms": 3.9905399971758015,
+          "max_ms": 3.9905399971758015
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0003900022420566529,
+          "p95_ms": 0.00039099904824979603,
+          "max_ms": 0.00039099904824979603
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 4.194291497697122,
+          "p95_ms": 6.454579001001548,
+          "max_ms": 6.454579001001548
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.0013659991964232177,
+          "p95_ms": 2.0555610026349314,
+          "max_ms": 2.0555610026349314
+        }
+      },
+      "delete": {
+        "route": {
+          "count": 3,
+          "p50_ms": 7.310754001082387,
+          "p95_ms": 7.91230100003304,
+          "max_ms": 7.91230100003304
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 3.9180539970402606,
+          "p95_ms": 4.019027001049835,
+          "max_ms": 4.019027001049835
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0003899986040778458,
+          "p95_ms": 0.0003900022420566529,
+          "max_ms": 0.0003900022420566529
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 3.959857000154443,
+          "p95_ms": 6.639549999817973,
+          "max_ms": 6.639549999817973
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.0011219999578315765,
+          "p95_ms": 1.971659999981057,
+          "max_ms": 1.971659999981057
+        }
+      },
+      "completed": true,
+      "sample_count": 9,
+      "sample_errors": []
+    },
+    {
+      "case": "legacy-16-handles-16-retained-64-cell-126bp",
+      "handles": 16,
+      "retained_rows": 21,
+      "mode": "legacy",
+      "background": "64-cell-126bp",
+      "native_capture_node_byte_admission": true,
+      "helices": 81,
+      "strands": 144,
+      "domains": 145,
+      "declared_bp": 8268,
+      "errors": [],
+      "recovery_bytes": 614128,
+      "create": {
+        "route": {
+          "count": 3,
+          "p50_ms": 20.216534998326097,
+          "p95_ms": 20.72453199798474,
+          "max_ms": 20.72453199798474
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 12.941720000526402,
+          "p95_ms": 13.733086998399813,
+          "max_ms": 13.733086998399813
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0010740004654508084,
+          "p95_ms": 0.0012689997674897313,
+          "max_ms": 0.0012689997674897313
+        },
+        "light_ms": {
+          "count": 6,
+          "p50_ms": 10.33933500002604,
+          "p95_ms": 17.371421999996528,
+          "max_ms": 17.371421999996528
+        },
+        "light_lock_wait_ms": {
+          "count": 6,
+          "p50_ms": 0.0018534992705099285,
+          "p95_ms": 9.810310002649203,
+          "max_ms": 9.810310002649203
+        }
+      },
+      "rename": {
+        "route": {
+          "count": 3,
+          "p50_ms": 19.98654099952546,
+          "p95_ms": 20.599240000592545,
+          "max_ms": 20.599240000592545
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 13.325791998795466,
+          "p95_ms": 14.128185001027305,
+          "max_ms": 14.128185001027305
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.0003900022420566529,
+          "p95_ms": 0.00039099904824979603,
+          "max_ms": 0.00039099904824979603
+        },
+        "light_ms": {
+          "count": 8,
+          "p50_ms": 8.740696997847408,
+          "p95_ms": 15.651785000954987,
+          "max_ms": 15.651785000954987
+        },
+        "light_lock_wait_ms": {
+          "count": 8,
+          "p50_ms": 0.001561000317451544,
+          "p95_ms": 7.294525003089802,
+          "max_ms": 7.294525003089802
+        }
+      },
+      "delete": {
+        "route": {
+          "count": 3,
+          "p50_ms": 21.68197799983318,
+          "p95_ms": 80.00324900058331,
+          "max_ms": 80.00324900058331
+        },
+        "recording_lock_ms": {
+          "count": 3,
+          "p50_ms": 15.393785997730447,
+          "p95_ms": 73.20988900028169,
+          "max_ms": 73.20988900028169
+        },
+        "recording_wait_ms": {
+          "count": 3,
+          "p50_ms": 0.00039099904824979603,
+          "p95_ms": 0.0013660028344020247,
+          "max_ms": 0.0013660028344020247
+        },
+        "light_ms": {
+          "count": 8,
+          "p50_ms": 8.679368502271245,
+          "p95_ms": 69.94791800025268,
+          "max_ms": 69.94791800025268
+        },
+        "light_lock_wait_ms": {
+          "count": 8,
+          "p50_ms": 0.001463498847442679,
+          "p95_ms": 7.226416000776226,
+          "max_ms": 7.226416000776226
+        }
+      },
+      "completed": true,
+      "sample_count": 9,
+      "sample_errors": []
+    }
+  ],
+  "latency_qualified": false,
+  "qualification_scope": "Lifecycle correctness and independent native replay only; latency observations are not an acceptance gate.",
+  "evidence_retention": "Per-request samples and generated dependency identity maps pruned after summary review; per-case timings, bounds, cold statuses, errors and cleanup retained."
+}

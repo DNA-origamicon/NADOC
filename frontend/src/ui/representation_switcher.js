@@ -22,6 +22,7 @@ import { showConfirm } from './primitives/confirm.js'
 import { simulationRepresentationAllowed } from '../scene/simulation_representations.js'
 import { simulationViewActive } from '../scene/vr_simulations.js'
 import { registerShortcut } from '../input/shortcuts.js'
+import { createAssemblyRepresentationActions } from './assembly_representation_actions.js'
 
 // All representations are mutually exclusive. Exactly one is active at
 // a time; switching to any one deactivates all others.
@@ -143,6 +144,11 @@ export function initRepresentationSwitcher({
       if (dotEl) dotEl.style.display = ''
     }
   }
+
+  const assemblyRepresentations = createAssemblyRepresentationActions({
+    store, api, onDisplay: _syncAssemblyReprMenu,
+    onError: () => showToast('Could not save a representation change.', { severity: 'error' }),
+  })
 
   // Cycle to the next coloring mode supported by `repr` (supportedColoringSet +
   // nextColoringMode live in scene/coloring_modes.js). Invoked when an F-key is
@@ -298,6 +304,7 @@ export function initRepresentationSwitcher({
         }
         const instances = currentAssembly?.instances ?? []
         if (!instances.length) return
+        const assemblyContext = assemblyRepresentations.capture()
 
         // Every instance is already on this representation → the PATCH would rewrite
         // each one to the value it already holds and the renderer would rebuild for
@@ -323,17 +330,9 @@ export function initRepresentationSwitcher({
         if (detail) selectSurfaceDetail(detail)
         _updateReprRadio(assemblyRepr)
         _updateColoringMenuAvailability(repr)   // atomistic-in-assembly → cpk/strand/cluster/source
-        // Batch into a single PATCH so the renderer rebuilds once instead
-        // of once per instance. With 20 heavy origamis at 'cylinders' →
-        // 'full', the previous Promise.all-of-individual-PATCHes path took
-        // ~1.5 min as the renderer rebuilt each instance from a fresh
-        // network round-trip. The batched endpoint applies the rep change
-        // atomically and the renderer does an in-place LOD swap per entry
-        // (no fetch, no labels/arcs/xovers rebuild — see
-        // assembly_renderer._inPlaceHelixLodRebuild).
-        await api.batchPatchInstances(
-          instances.map(inst => ({ id: inst.id, representation: assemblyRepr })),
-        )
+        // Prepared CG tiers can change immediately. Saving stays ordered with
+        // heavy choices, which retain their normal acknowledged display path.
+        await assemblyRepresentations.choose(assemblyRepr, assemblyContext)
         return
       }
 
@@ -415,6 +414,6 @@ export function initRepresentationSwitcher({
     ensureSimulationRepresentation: () => simulationRepresentationAllowed(_appliedRepr) ? undefined : _setRepresentation("full"),
     updateReprRadio:      _updateReprRadio,
     syncAssemblyReprMenu: _syncAssemblyReprMenu,
-    dispose() { simulationObserver.disconnect(); window.removeEventListener("nadoc:simulation-display", syncSimulation); document.removeEventListener("change", syncSimulation) },
+    dispose() { assemblyRepresentations.dispose(); simulationObserver.disconnect(); window.removeEventListener("nadoc:simulation-display", syncSimulation); document.removeEventListener("change", syncSimulation) },
   }
 }

@@ -33,11 +33,20 @@ def validate_quantum_dot_diameter(spec: QuantumDotSpec, diameter_nm: float) -> N
 
 
 def create_quantum_dot(catalog_id: str, diameter_nm: float | None = None) -> Nanoparticle:
-    entry = catalog_entry(catalog_id)
+    return create_quantum_dot_from_entry(catalog_entry(catalog_id), diameter_nm)
+
+
+def create_quantum_dot_from_entry(
+    entry: dict, diameter_nm: float | None = None, *, nanoparticle_id: str | None = None,
+) -> Nanoparticle:
+    """Use a captured catalog entry without consulting the mutable library."""
     if not entry["import_enabled"]:
         raise ValueError("Functionalized quantum dots are catalog previews only; import is not enabled yet.")
     spec = QuantumDotSpec.model_validate(entry)
     if diameter_nm is None:
         diameter_nm = sum(spec.diameter_range_nm) / 2
     validate_quantum_dot_diameter(spec, diameter_nm)
-    return Nanoparticle(kind="quantum_dot", diameter_nm=diameter_nm, quantum_dot=spec)
+    values = {"kind": "quantum_dot", "diameter_nm": diameter_nm, "quantum_dot": spec}
+    if nanoparticle_id is not None:
+        values["id"] = nanoparticle_id
+    return Nanoparticle(**values)

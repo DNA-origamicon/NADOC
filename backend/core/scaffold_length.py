@@ -12,7 +12,7 @@ from backend.core.sequences import SCAFFOLD_LIBRARY, strand_nucleotide_count
 from backend.core.topology_integrity import forced_edge, half_slot, slot
 
 
-def scaffold_length_checks(design: Design) -> list[dict]:
+def scaffold_length_checks(design: Design, *, loop_skip_map=None) -> list[dict]:
     """Check each active scaffold, including its authored junction and tail bases.
 
     Domain counts use the native loop/skip contract. Junction inserts live outside
@@ -36,7 +36,7 @@ def scaffold_length_checks(design: Design) -> list[dict]:
     for strand in design.strands:
         if not strand.is_scaffold or strand.is_reference:
             continue
-        domain_nt = strand_nucleotide_count(strand, design)
+        domain_nt = strand_nucleotide_count(strand, design, loop_skip_map=loop_skip_map)
         junction_nt = sum(
             junction_lengths.get((
                 slot(a.helix_id, a.end_bp, a.direction),

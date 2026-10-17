@@ -198,32 +198,9 @@ def build_refined_design(
     base, so staples must be re-complemented or the design's sequences go non-Watson-Crick.  Clears
     existing loop/skips first, applies the converged set, re-sequences, and returns a detached copy.
 
-    Runs inside an isolated headless scratch document (its own doc id), so it never disturbs the
-    live design/document — the caller hands the returned design to ``mutate_with_feature_log`` as a
-    pure replacement (build OUTSIDE the mutate callback to avoid the state-lock self-deadlock).
-    Shared by the REST apply route and the autorefine JOB runner."""
-    from backend.api import headless_build as hb
-    from backend.api import state as ds
-    from backend.api.skip_twist_tuning import _select_scaffold
-    from backend.core.loop_skip_calculator import apply_loop_skips, clear_all_loop_skips
-    from backend.core.models import LoopSkip
-
-    with hb.scratch_session(base_design.lattice_type):
-        ds.set_design(base_design.model_copy(deep=True))
-        d = clear_all_loop_skips(ds.get_or_404())
-        mods = {
-            hid: [
-                LoopSkip(bp_index=int(bp), delta=int(dl))
-                for bp, dl in sorted(bps.items())
-            ]
-            for hid, bps in (marks_by_helix or {}).items()
-            if bps
-        }
-        if mods:
-            d = apply_loop_skips(d, mods)
-        ds.set_design(d)
-        hb.full_sequence(scaffold_name=_select_scaffold(ds.get_or_404(), None))
-        return ds.get_or_404().model_copy(deep=True)
+    Stateless native apply, shared by the REST route, job runner and recipe replay."""
+    from backend.api.part_refinement_commands import build
+    return build("cando-autorefine-marks", base_design, {"marks": marks_by_helix})
 
 
 def apply_marks(

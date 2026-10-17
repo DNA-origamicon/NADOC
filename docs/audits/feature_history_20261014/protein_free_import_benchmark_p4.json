@@ -1,0 +1,1285 @@
+{
+  "scope": "Actual ordinary free protein HTTP import; original bytes, native suffix, one undo/revision/library publication",
+  "repeats": 30,
+  "limits_unchanged": {
+    "capture_nodes": 30000,
+    "capture_bytes": 2000000,
+    "capture_seconds_cooperative": 0.025,
+    "recovery_bytes": 8000000
+  },
+  "notes": [
+    "Synthetic sources qualify size/work boundaries, not molecular realism.",
+    "Retained heavy physical/loadout state is outside this initial native ordinary-import slice.",
+    "No full-prefix proof is performed on import; cold proof is measured separately afterward.",
+    "Library remains a cache; no replay source is reconstructed from its atoms.",
+    "Publication lock instrumentation includes nested state helpers; only outermost spans are counted.",
+    "Legacy metadata formatting may infer zero bonds again; parser counts distinguish native parse repetition."
+  ],
+  "session_cleanup_verified": true,
+  "completed": true,
+  "run_failure": null,
+  "cases": [
+    {
+      "name": "small-original-source",
+      "source_bytes": 761,
+      "requested_atom_records": 9,
+      "expected_status": 200,
+      "correct_transactions": 30,
+      "errors": [],
+      "route": {
+        "count": 30,
+        "p50_ms": 9.242321999408887,
+        "p95_ms": 12.3750269995071,
+        "max_ms": 145.04538000255707
+      },
+      "capture_lock": {
+        "count": 30,
+        "p50_ms": 1.0328224998374935,
+        "p95_ms": 1.4373480007634498,
+        "max_ms": 3.5943570001109038
+      },
+      "publication_lock": {
+        "count": 30,
+        "p50_ms": 0.12244350000401028,
+        "p95_ms": 0.21814800129504874,
+        "max_ms": 0.39258800097741187
+      },
+      "light_requests": {
+        "count": 93,
+        "p50_ms": 3.7239039993437473,
+        "p95_ms": 9.549466001772089,
+        "max_ms": 62.3436940004467
+      },
+      "publication_overlap_count": 30,
+      "cold": {
+        "input_pickle_bytes": 6544,
+        "elapsed_ms": 1108.022414999141,
+        "result": {
+          "scope": "part",
+          "contract_version": 1,
+          "status": "reproduced_import",
+          "issues": [],
+          "verification_scope": "authoring_reproducibility",
+          "integrity_checked": false,
+          "excluded_roles": [
+            "presentation",
+            "physical",
+            "document_identity",
+            "repair_draft"
+          ],
+          "checked_commands": 2,
+          "proof_coverage": "versioned_commands",
+          "native_editable": false,
+          "dependencies": {
+            "complete": true,
+            "parents": {
+              "c384c566-b12a-50bd-9777-8f9e9d9155cb": [],
+              "def12ca9-2785-559f-a33d-aa316b505095": [
+                "c384c566-b12a-50bd-9777-8f9e9d9155cb"
+              ]
+            }
+          },
+          "recipe_fingerprint": "16f6f3e25d14ca607b4d1c77ada9dea3f02068ce9b3654b824132d807dde5685",
+          "authoring_fingerprint": "a2a373f185f8ce8e57dab0f4013b535971c75c929458c62d4383bb39d8d47798",
+          "imported_sources": [
+            {
+              "kind": "input_source",
+              "identity": "dd29f7942798ff57b81c6a07720a38b1d21fcc367d7c033f4c45291e8f1ee6dc"
+            }
+          ]
+        }
+      },
+      "sample_summary": {
+        "samples": 30,
+        "http_status_counts": {
+          "200": 30
+        },
+        "parser_call_counts": {
+          "1": 30
+        },
+        "undo_redo_exact_counts": {
+          "None": 30
+        },
+        "retention": "All unexpected outcomes and largest route/capture/publication/light samples retained; aggregates above include every original sample."
+      },
+      "retained_samples": [
+        {
+          "sample_index": 0,
+          "status": 200,
+          "correct": true,
+          "route_ms": 145.04538000255707,
+          "parser_calls": 1,
+          "recovery_bytes": 7860,
+          "atom_count": 9,
+          "bond_count": 0,
+          "stages_ms": {
+            "acquire": 0.012,
+            "classify": 0.969,
+            "native_capture": 3.669,
+            "native_import": 9.043,
+            "native_recovery": 1.356,
+            "native_placement": 1.242,
+            "native_candidate_admission": 1.599,
+            "native_response": 2.4,
+            "native_preparation_total": 134.769,
+            "parse_protein": 9.043,
+            "deduplicate": 0.333,
+            "commit": 0.651
+          },
+          "capture_ms": [
+            3.5943570001109038
+          ],
+          "publication_ms": [
+            0.39258800097741187
+          ],
+          "light_ms": [
+            9.549466001772089,
+            2.321383999515092,
+            2.9686250018130522,
+            62.3436940004467,
+            4.005591999884928,
+            12.672205000853864,
+            15.570876999845495,
+            4.448991003300762,
+            12.42297900171252,
+            3.351346000272315,
+            1.5891929979261477,
+            3.1472080008825287,
+            2.939421003247844,
+            5.3867009992245585,
+            2.2440310021920595
+          ],
+          "publication_overlaps": 1
+        }
+      ]
+    },
+    {
+      "name": "existing-rootless-DNA",
+      "source_bytes": 761,
+      "requested_atom_records": 9,
+      "expected_status": 200,
+      "correct_transactions": 30,
+      "errors": [],
+      "route": {
+        "count": 30,
+        "p50_ms": 9.407752999322838,
+        "p95_ms": 10.673142001905944,
+        "max_ms": 11.637686999165453
+      },
+      "capture_lock": {
+        "count": 30,
+        "p50_ms": 1.061478498741053,
+        "p95_ms": 1.1293320021650288,
+        "max_ms": 1.1677049988065846
+      },
+      "publication_lock": {
+        "count": 30,
+        "p50_ms": 0.12156699995102827,
+        "p95_ms": 0.2053600001090672,
+        "max_ms": 0.24663200019858778
+      },
+      "light_requests": {
+        "count": 82,
+        "p50_ms": 3.578616498998599,
+        "p95_ms": 5.564716000662884,
+        "max_ms": 6.636886999331182
+      },
+      "publication_overlap_count": 30,
+      "cold": null,
+      "sample_summary": {
+        "samples": 30,
+        "http_status_counts": {
+          "200": 30
+        },
+        "parser_call_counts": {
+          "1": 30
+        },
+        "undo_redo_exact_counts": {
+          "None": 30
+        },
+        "retention": "All unexpected outcomes and largest route/capture/publication/light samples retained; aggregates above include every original sample."
+      },
+      "retained_samples": [
+        {
+          "sample_index": 3,
+          "status": 200,
+          "correct": true,
+          "route_ms": 10.673142001905944,
+          "parser_calls": 1,
+          "recovery_bytes": 9460,
+          "atom_count": 9,
+          "bond_count": 0,
+          "stages_ms": {
+            "acquire": 0.004,
+            "classify": 0.557,
+            "native_capture": 1.074,
+            "native_import": 1.504,
+            "native_recovery": 1.08,
+            "native_placement": 0.115,
+            "native_candidate_admission": 1.775,
+            "native_response": 0.281,
+            "native_preparation_total": 5.696,
+            "parse_protein": 1.504,
+            "deduplicate": 1.038,
+            "commit": 0.472
+          },
+          "capture_ms": [
+            1.0461890014994424
+          ],
+          "publication_ms": [
+            0.24663200019858778
+          ],
+          "light_ms": [
+            2.8987290024815593,
+            2.492405998054892,
+            5.199864001042442
+          ],
+          "publication_overlaps": 1
+        },
+        {
+          "sample_index": 4,
+          "status": 200,
+          "correct": true,
+          "route_ms": 9.50353799998993,
+          "parser_calls": 1,
+          "recovery_bytes": 9444,
+          "atom_count": 9,
+          "bond_count": 0,
+          "stages_ms": {
+            "acquire": 0.008,
+            "classify": 0.584,
+            "native_capture": 1.199,
+            "native_import": 0.953,
+            "native_recovery": 1.034,
+            "native_placement": 0.128,
+            "native_candidate_admission": 1.724,
+            "native_response": 0.299,
+            "native_preparation_total": 4.879,
+            "parse_protein": 0.953,
+            "deduplicate": 0.823,
+            "commit": 0.256
+          },
+          "capture_ms": [
+            1.1677049988065846
+          ],
+          "publication_ms": [
+            0.12651399811147712
+          ],
+          "light_ms": [
+            3.173741999489721,
+            5.0854419969255105,
+            1.646180000534514
+          ],
+          "publication_overlaps": 1
+        },
+        {
+          "sample_index": 28,
+          "status": 200,
+          "correct": true,
+          "route_ms": 11.637686999165453,
+          "parser_calls": 1,
+          "recovery_bytes": 9452,
+          "atom_count": 9,
+          "bond_count": 0,
+          "stages_ms": {
+            "acquire": 0.004,
+            "classify": 0.563,
+            "native_capture": 1.034,
+            "native_import": 1.552,
+            "native_recovery": 1.333,
+            "native_placement": 0.137,
+            "native_candidate_admission": 2.48,
+            "native_response": 0.521,
+            "native_preparation_total": 7.297,
+            "parse_protein": 1.552,
+            "deduplicate": 0.493,
+            "commit": 0.504
+          },
+          "capture_ms": [
+            1.0085140020237304
+          ],
+          "publication_ms": [
+            0.2053600001090672
+          ],
+          "light_ms": [
+            2.9098209997755475,
+            6.636886999331182,
+            2.267957999720238
+          ],
+          "publication_overlaps": 1
+        }
+      ]
+    },
+    {
+      "name": "1000-atom-record-boundary",
+      "source_bytes": 79050,
+      "requested_atom_records": 1000,
+      "expected_status": 200,
+      "correct_transactions": 28,
+      "errors": [
+        {
+          "iteration": 4,
+          "status": 413,
+          "detail": "{\"detail\":{\"status\":\"unverified\",\"code\":\"protein_import_limit\",\"detail\":\"Part verification capture budget exceeded\"}}"
+        },
+        {
+          "iteration": 22,
+          "status": 413,
+          "detail": "{\"detail\":{\"status\":\"unverified\",\"code\":\"protein_import_limit\",\"detail\":\"Part verification capture budget exceeded\"}}"
+        }
+      ],
+      "route": {
+        "count": 30,
+        "p50_ms": 203.88570850082033,
+        "p95_ms": 263.4383639997395,
+        "max_ms": 269.57568999932846
+      },
+      "capture_lock": {
+        "count": 30,
+        "p50_ms": 1.170354000350926,
+        "p95_ms": 1.351781000266783,
+        "max_ms": 1.608506998309167
+      },
+      "publication_lock": {
+        "count": 28,
+        "p50_ms": 0.20571049935824703,
+        "p95_ms": 0.2790100006677676,
+        "max_ms": 0.3026949998456985
+      },
+      "light_requests": {
+        "count": 1645,
+        "p50_ms": 2.9709350019402336,
+        "p95_ms": 7.793600001605228,
+        "max_ms": 67.94100000115577
+      },
+      "publication_overlap_count": 28,
+      "cold": {
+        "input_pickle_bytes": 221542,
+        "elapsed_ms": 1168.8691550007206,
+        "result": {
+          "scope": "part",
+          "contract_version": 1,
+          "status": "reproduced_import",
+          "issues": [],
+          "verification_scope": "authoring_reproducibility",
+          "integrity_checked": false,
+          "excluded_roles": [
+            "presentation",
+            "physical",
+            "document_identity",
+            "repair_draft"
+          ],
+          "checked_commands": 2,
+          "proof_coverage": "versioned_commands",
+          "native_editable": false,
+          "dependencies": {
+            "complete": true,
+            "parents": {
+              "92607752-f753-57d3-9cb3-463d35e3f744": [],
+              "968cf1ea-5021-5034-8dc3-80f62545aee0": [
+                "92607752-f753-57d3-9cb3-463d35e3f744"
+              ]
+            }
+          },
+          "recipe_fingerprint": "802dd33259b32c5d6a8eb21456052b513f0aa041b2d1bd9e4470b4417b2cb54a",
+          "authoring_fingerprint": "8e55e290ec7a8dfc8efa2e128cfb0f13e57336167062f9364e6abe6e6fbb7f9b",
+          "imported_sources": [
+            {
+              "kind": "input_source",
+              "identity": "b5cb5f82d3246a7a5a470e2cf2926338eac3cc60709b75a0b455003ba87e706c"
+            }
+          ]
+        }
+      },
+      "sample_summary": {
+        "samples": 30,
+        "http_status_counts": {
+          "200": 28,
+          "413": 2
+        },
+        "parser_call_counts": {
+          "1": 30
+        },
+        "undo_redo_exact_counts": {
+          "None": 30
+        },
+        "retention": "All unexpected outcomes and largest route/capture/publication/light samples retained; aggregates above include every original sample."
+      },
+      "retained_samples": [
+        {
+          "sample_index": 4,
+          "status": 413,
+          "correct": false,
+          "route_ms": 181.3783629986574,
+          "parser_calls": 1,
+          "recovery_bytes": 0,
+          "atom_count": null,
+          "bond_count": null,
+          "stages_ms": {},
+          "capture_ms": [
+            1.1579120000533294
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            4.082823998032836,
+            8.499420000589453,
+            2.1284530012053438,
+            3.0716119981661905,
+            2.821981001034146,
+            5.209456998272799,
+            4.131391000555595,
+            3.2020219987316523,
+            2.2198900005605537,
+            2.779509999527363,
+            4.418395001266617,
+            2.5192870016326196,
+            3.0004589971213136,
+            3.2258059982268605,
+            2.079286001389846,
+            2.8929330001119524,
+            5.796058998384979,
+            2.3487030011892784,
+            2.6609900014591403,
+            4.179358002147637,
+            2.686673000425799,
+            3.0159489979268983,
+            2.2720550005033147,
+            2.8951309977856,
+            3.4055840005748905,
+            2.913319000072079,
+            3.0619179997302126,
+            3.024842997547239,
+            3.8159049981913995,
+            4.985710002074484,
+            6.678658002783777,
+            3.1960269989212975,
+            67.94100000115577
+          ],
+          "publication_overlaps": 0
+        },
+        {
+          "sample_index": 6,
+          "status": 200,
+          "correct": true,
+          "route_ms": 269.57568999932846,
+          "parser_calls": 1,
+          "recovery_bytes": 90644,
+          "atom_count": 1000,
+          "bond_count": 0,
+          "stages_ms": {
+            "acquire": 0.012,
+            "classify": 1.186,
+            "native_capture": 1.439,
+            "native_import": 118.685,
+            "native_recovery": 11.238,
+            "native_placement": 0.501,
+            "native_candidate_admission": 18.474,
+            "native_response": 108.849,
+            "native_preparation_total": 259.553,
+            "parse_protein": 118.685,
+            "deduplicate": 2.521,
+            "commit": 0.553
+          },
+          "capture_ms": [
+            1.221069000166608
+          ],
+          "publication_ms": [
+            0.3026949998456985
+          ],
+          "light_ms": [
+            4.262001999450149,
+            10.594396000669803,
+            10.397530000773259,
+            6.257144999835873,
+            3.4405609985697083,
+            3.0051569992792793,
+            2.874944999348372,
+            4.85869600015576,
+            2.2756530015612952,
+            2.5748489970283117,
+            5.8034540015796665,
+            3.528501001710538,
+            3.705380997416796,
+            3.7112760001036804,
+            3.4562500004540198,
+            2.8510609990917146,
+            2.450334002787713,
+            3.4727390011539683,
+            2.926110002590576,
+            3.0002599996805657,
+            3.46504400295089,
+            2.7786099999502767,
+            4.111005000595469,
+            3.2420949974039104,
+            3.370107999216998,
+            3.4777359978761524,
+            2.6064279991260264,
+            4.8375110018241685,
+            2.8426669996406417,
+            8.63372999810963,
+            6.48778799950378,
+            3.4801340007106774,
+            27.013330996851437,
+            2.922413001215318,
+            5.2687180032080505,
+            4.128791999391979,
+            4.806331999134272,
+            5.340069001249503,
+            3.90934200186166,
+            2.9014270003244746,
+            3.899647999787703,
+            4.321361000620527,
+            3.3820999997260515,
+            5.3859379986533895,
+            2.610824001749279,
+            5.354258999432204,
+            3.5218049997638445,
+            6.895910999446642,
+            6.573129998287186,
+            3.8834590013721026,
+            2.6194189995294437,
+            5.091138002171647,
+            7.091078001394635,
+            3.771035000681877,
+            3.41997400028049,
+            10.615680999762844
+          ],
+          "publication_overlaps": 1
+        },
+        {
+          "sample_index": 7,
+          "status": 200,
+          "correct": true,
+          "route_ms": 263.4383639997395,
+          "parser_calls": 1,
+          "recovery_bytes": 90664,
+          "atom_count": 1000,
+          "bond_count": 0,
+          "stages_ms": {
+            "acquire": 0.03,
+            "classify": 1.36,
+            "native_capture": 2.019,
+            "native_import": 147.899,
+            "native_recovery": 7.496,
+            "native_placement": 0.366,
+            "native_candidate_admission": 17.044,
+            "native_response": 78.352,
+            "native_preparation_total": 253.043,
+            "parse_protein": 147.899,
+            "deduplicate": 2.273,
+            "commit": 0.352
+          },
+          "capture_ms": [
+            1.608506998309167
+          ],
+          "publication_ms": [
+            0.22075000015320256
+          ],
+          "light_ms": [
+            5.787663998489734,
+            19.194447999325348,
+            2.0859819996985607,
+            7.658591999643249,
+            7.635508001840208,
+            5.8948910009348765,
+            3.4025859968096483,
+            5.037573999288725,
+            5.915677000302821,
+            5.725106999307172,
+            7.218392001959728,
+            3.20252199890092,
+            3.220710001187399,
+            3.5404929985816125,
+            2.928408997831866,
+            2.5232850020984188,
+            2.2553660019184463,
+            2.7506299993547145,
+            3.0386339967662934,
+            1.7907820001710206,
+            2.7248480000707787,
+            2.503798001271207,
+            1.991445999010466,
+            2.6736809995782096,
+            3.8844590017106384,
+            7.296538002265152,
+            4.753068002173677,
+            3.505315999063896,
+            4.011173001345014,
+            6.618698997044703,
+            3.356317996804137,
+            3.262581998569658,
+            7.938702001411002,
+            4.927449001115747,
+            22.952692001126707,
+            3.6578129984263796,
+            2.1761200005130377,
+            2.9022269991401117,
+            2.9088219998811837,
+            3.2618820005154703,
+            4.227724999509519,
+            3.2776709995232522,
+            3.163748999213567,
+            3.4520530025474727,
+            4.100910999113694,
+            2.7318419997754972,
+            3.5309989980305545,
+            3.771535000851145,
+            2.9448980021697935,
+            3.312946999358246,
+            2.851160999853164,
+            2.3753850000503007,
+            2.4963020005088765,
+            2.3597949984832667,
+            2.509892998205032,
+            1.885218000097666,
+            2.8161849986645393,
+            2.3820799979148433,
+            2.019425999606028,
+            2.0438100000319537,
+            6.4378220013168175
+          ],
+          "publication_overlaps": 1
+        },
+        {
+          "sample_index": 22,
+          "status": 413,
+          "correct": false,
+          "route_ms": 160.35456000099657,
+          "parser_calls": 1,
+          "recovery_bytes": 0,
+          "atom_count": null,
+          "bond_count": null,
+          "stages_ms": {},
+          "capture_ms": [
+            1.217672001075698
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            4.723088000901043,
+            9.03435700092814,
+            3.6617100013245363,
+            3.186732999893138,
+            1.757404999807477,
+            3.683694998471765,
+            3.2428939994133543,
+            4.447276001883438,
+            6.969261001358973,
+            3.5365959993214346,
+            5.750290001742542,
+            5.407523000030778,
+            3.5977540028397925,
+            2.949993999209255,
+            3.3965910006372724,
+            2.210996997746406,
+            2.0558019969030283,
+            2.9996599987498485,
+            2.0469080009206664,
+            4.408902001159731,
+            2.2411760000977665,
+            3.12507500348147,
+            4.642643001716351,
+            3.379800997208804,
+            4.756764999910956,
+            3.272074998676544,
+            56.1407249988406,
+            4.4063029999961145
+          ],
+          "publication_overlaps": 0
+        }
+      ]
+    },
+    {
+      "name": "250KB-source-boundary",
+      "source_bytes": 250000,
+      "requested_atom_records": 9,
+      "expected_status": 200,
+      "correct_transactions": 30,
+      "errors": [],
+      "route": {
+        "count": 30,
+        "p50_ms": 15.691750499172485,
+        "p95_ms": 17.51401799992891,
+        "max_ms": 17.909451999003068
+      },
+      "capture_lock": {
+        "count": 30,
+        "p50_ms": 1.0577905013633426,
+        "p95_ms": 1.209778001793893,
+        "max_ms": 1.563588000863092
+      },
+      "publication_lock": {
+        "count": 30,
+        "p50_ms": 0.12010949831164908,
+        "p95_ms": 0.14529200052493252,
+        "max_ms": 0.18544599879533052
+      },
+      "light_requests": {
+        "count": 156,
+        "p50_ms": 3.4100634984497447,
+        "p95_ms": 4.500683000514982,
+        "max_ms": 5.085484001028817
+      },
+      "publication_overlap_count": 30,
+      "cold": {
+        "input_pickle_bytes": 338875,
+        "elapsed_ms": 1191.0520189994713,
+        "result": {
+          "scope": "part",
+          "contract_version": 1,
+          "status": "reproduced_import",
+          "issues": [],
+          "verification_scope": "authoring_reproducibility",
+          "integrity_checked": false,
+          "excluded_roles": [
+            "presentation",
+            "physical",
+            "document_identity",
+            "repair_draft"
+          ],
+          "checked_commands": 2,
+          "proof_coverage": "versioned_commands",
+          "native_editable": false,
+          "dependencies": {
+            "complete": true,
+            "parents": {
+              "289ff09a-3c2f-572e-a516-1fcd546d1681": [],
+              "f5aa4642-4b7c-5754-9731-97918ecd7a3d": [
+                "289ff09a-3c2f-572e-a516-1fcd546d1681"
+              ]
+            }
+          },
+          "recipe_fingerprint": "7c96451b9c6d5cbbd253bfafe4db47ce6a19d70c2c7984abdb7589b3efcdce7b",
+          "authoring_fingerprint": "4c68aa96ed0f6e242ce9dade7a02184a491d54fd5427b6778577747c960bdefe",
+          "imported_sources": [
+            {
+              "kind": "input_source",
+              "identity": "be8ee4a6c5598814d60c7359e13c5903fdf74fa109e0a24d631ac74549adddb7"
+            }
+          ]
+        }
+      },
+      "sample_summary": {
+        "samples": 30,
+        "http_status_counts": {
+          "200": 30
+        },
+        "parser_call_counts": {
+          "1": 30
+        },
+        "undo_redo_exact_counts": {
+          "None": 30
+        },
+        "retention": "All unexpected outcomes and largest route/capture/publication/light samples retained; aggregates above include every original sample."
+      },
+      "retained_samples": [
+        {
+          "sample_index": 0,
+          "status": 200,
+          "correct": true,
+          "route_ms": 17.909451999003068,
+          "parser_calls": 1,
+          "recovery_bytes": 17836,
+          "atom_count": 9,
+          "bond_count": 0,
+          "stages_ms": {
+            "acquire": 0.015,
+            "classify": 0.776,
+            "native_capture": 1.295,
+            "native_import": 3.003,
+            "native_recovery": 4.57,
+            "native_placement": 0.144,
+            "native_candidate_admission": 1.813,
+            "native_response": 0.319,
+            "native_preparation_total": 11.543,
+            "parse_protein": 3.003,
+            "deduplicate": 0.596,
+            "commit": 0.322
+          },
+          "capture_ms": [
+            1.1443820003478322
+          ],
+          "publication_ms": [
+            0.14529200052493252
+          ],
+          "light_ms": [
+            4.290890999982366,
+            4.370982998807449,
+            1.8869189989345614,
+            1.867290000518551,
+            4.668569999921601
+          ],
+          "publication_overlaps": 1
+        },
+        {
+          "sample_index": 1,
+          "status": 200,
+          "correct": true,
+          "route_ms": 16.799789998913184,
+          "parser_calls": 1,
+          "recovery_bytes": 17832,
+          "atom_count": 9,
+          "bond_count": 0,
+          "stages_ms": {
+            "acquire": 0.014,
+            "classify": 0.603,
+            "native_capture": 1.714,
+            "native_import": 2.912,
+            "native_recovery": 3.999,
+            "native_placement": 0.119,
+            "native_candidate_admission": 1.436,
+            "native_response": 0.298,
+            "native_preparation_total": 10.399,
+            "parse_protein": 2.912,
+            "deduplicate": 0.438,
+            "commit": 0.326
+          },
+          "capture_ms": [
+            1.563588000863092
+          ],
+          "publication_ms": [
+            0.12152000272180885
+          ],
+          "light_ms": [
+            4.443579997314373,
+            4.384792999189813,
+            1.9537949992809445,
+            3.115930998319527,
+            2.167835998989176
+          ],
+          "publication_overlaps": 1
+        },
+        {
+          "sample_index": 13,
+          "status": 200,
+          "correct": true,
+          "route_ms": 15.778346001752652,
+          "parser_calls": 1,
+          "recovery_bytes": 17828,
+          "atom_count": 9,
+          "bond_count": 0,
+          "stages_ms": {
+            "acquire": 0.012,
+            "classify": 0.795,
+            "native_capture": 1.17,
+            "native_import": 2.714,
+            "native_recovery": 3.298,
+            "native_placement": 0.099,
+            "native_candidate_admission": 1.805,
+            "native_response": 0.334,
+            "native_preparation_total": 9.617,
+            "parse_protein": 2.714,
+            "deduplicate": 0.57,
+            "commit": 0.502
+          },
+          "capture_ms": [
+            1.0233550019620452
+          ],
+          "publication_ms": [
+            0.18544599879533052
+          ],
+          "light_ms": [
+            3.5372080019442365,
+            3.051341001992114,
+            2.057218000118155,
+            1.7478480003774166,
+            4.784231998200994
+          ],
+          "publication_overlaps": 1
+        },
+        {
+          "sample_index": 14,
+          "status": 200,
+          "correct": true,
+          "route_ms": 15.8080940018408,
+          "parser_calls": 1,
+          "recovery_bytes": 17840,
+          "atom_count": 9,
+          "bond_count": 0,
+          "stages_ms": {
+            "acquire": 0.013,
+            "classify": 0.584,
+            "native_capture": 1.22,
+            "native_import": 2.228,
+            "native_recovery": 3.792,
+            "native_placement": 0.104,
+            "native_candidate_admission": 1.976,
+            "native_response": 0.341,
+            "native_preparation_total": 9.982,
+            "parse_protein": 2.228,
+            "deduplicate": 0.266,
+            "commit": 0.313
+          },
+          "capture_ms": [
+            1.0743349994299933
+          ],
+          "publication_ms": [
+            0.13380300151766278
+          ],
+          "light_ms": [
+            3.9402379989041947,
+            3.6324319989944343,
+            1.646713000809541,
+            5.085484001028817,
+            1.1964979967160616
+          ],
+          "publication_overlaps": 1
+        }
+      ]
+    },
+    {
+      "name": "dense-100-atom-bond-refusal",
+      "source_bytes": 7950,
+      "requested_atom_records": 100,
+      "expected_status": 413,
+      "correct_transactions": 30,
+      "errors": [],
+      "route": {
+        "count": 30,
+        "p50_ms": 173.91867550031748,
+        "p95_ms": 204.32222800081945,
+        "max_ms": 209.37797800070257
+      },
+      "capture_lock": {
+        "count": 30,
+        "p50_ms": 1.1286184999335092,
+        "p95_ms": 1.2756260002788622,
+        "max_ms": 1.8694239988690242
+      },
+      "publication_lock": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "light_requests": {
+        "count": 2452,
+        "p50_ms": 1.9576485010475153,
+        "p95_ms": 3.1299879992729984,
+        "max_ms": 44.02082199885626
+      },
+      "publication_overlap_count": 0,
+      "cold": null,
+      "sample_summary": {
+        "samples": 30,
+        "http_status_counts": {
+          "413": 30
+        },
+        "parser_call_counts": {
+          "1": 30
+        },
+        "undo_redo_exact_counts": {
+          "None": 30
+        },
+        "retention": "All unexpected outcomes and largest route/capture/publication/light samples retained; aggregates above include every original sample."
+      },
+      "retained_samples": [
+        {
+          "sample_index": 0,
+          "status": 413,
+          "correct": true,
+          "route_ms": 187.54318300125306,
+          "parser_calls": 1,
+          "recovery_bytes": 0,
+          "atom_count": null,
+          "bond_count": null,
+          "stages_ms": {},
+          "capture_ms": [
+            1.1942480014113244
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            5.58470100077102,
+            1.6977700033748988,
+            4.047729999001604,
+            1.5941899982863106,
+            2.0936030014127027,
+            2.1302810018823948,
+            2.425176000542706,
+            2.516333002859028,
+            2.0683680013462435,
+            1.6525809987797402,
+            2.3708919979981147,
+            1.9616589997895062,
+            1.8668810007511638,
+            2.0087039993086364,
+            2.3051639982440975,
+            2.5014659986482,
+            1.9700699995155446,
+            2.6192279983661138,
+            2.5229849998140708,
+            1.513790000899462,
+            1.5147689991863444,
+            2.638202997331973,
+            1.735523997922428,
+            1.9802419992629439,
+            1.9626360008260235,
+            1.8579810021037702,
+            2.575703998445533,
+            3.5413730001891963,
+            4.85269900309504,
+            2.60465500105056,
+            1.3712830004806165,
+            2.1450500025821384,
+            1.552914000058081,
+            2.0260160017642193,
+            2.855730999726802,
+            1.9995099974039476,
+            1.4830789987172466,
+            1.4632230013376102,
+            1.659330002439674,
+            2.896713001973694,
+            2.234447998489486,
+            2.2932309984753374,
+            1.7111689994635526,
+            44.02082199885626,
+            1.6767400011303835,
+            1.9053200012422167,
+            3.2179180016100872,
+            2.281493998452788,
+            1.9954999988840427,
+            2.05320800159825,
+            1.7523470014566556,
+            1.9330979994265363,
+            2.9629300006490666,
+            2.5193649998982437,
+            1.671459001954645,
+            1.9821009991574101,
+            1.6058289984357543,
+            1.8267800005560275,
+            1.9830780001939274,
+            1.9332939991727471,
+            2.0389279998198617,
+            2.018289000261575,
+            2.822281003318494,
+            2.9319240020413417,
+            2.3234540021803696
+          ],
+          "publication_overlaps": 0
+        },
+        {
+          "sample_index": 8,
+          "status": 413,
+          "correct": true,
+          "route_ms": 209.37797800070257,
+          "parser_calls": 1,
+          "recovery_bytes": 0,
+          "atom_count": null,
+          "bond_count": null,
+          "stages_ms": {},
+          "capture_ms": [
+            1.1798699997598305
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            1.8324520024179947,
+            4.971536000084598,
+            1.809760000469396,
+            2.331376999791246,
+            1.8997450024471618,
+            1.6511139983776957,
+            1.5788339987921063,
+            1.6056330023275223,
+            1.8918230016424786,
+            1.5879300008236896,
+            1.5454810018127318,
+            1.7959699980565347,
+            1.5640649980923627,
+            1.693660997261759,
+            1.5723779979452956,
+            1.8254099995829165,
+            2.25958499868284,
+            1.6410399985034019,
+            2.5379489998158533,
+            2.517214001272805,
+            2.2525420026795473,
+            2.2905900004843716,
+            2.361991002544528,
+            1.8953440012410283,
+            2.5560440008121077,
+            1.6416270009358414,
+            1.9224370007577818,
+            1.6656879997754004,
+            1.4203829996404238,
+            2.218700999947032,
+            2.440042997477576,
+            1.8191499984823167,
+            1.6855439971550368,
+            1.6481809980177786,
+            1.5926239975669887,
+            1.8094679981004447,
+            1.816314001189312,
+            1.6650029974698555,
+            2.6121859991690144,
+            2.221635000751121,
+            1.4818080016993918,
+            1.974667000467889,
+            1.4633209975727368,
+            1.555163999000797,
+            1.7602690022613388,
+            2.356806999159744,
+            2.1092520000820514,
+            1.6068069999164436,
+            1.7946000007214025,
+            1.8294210021849722,
+            1.9952059992647264,
+            2.1740999982284848,
+            1.8825309998646844,
+            2.4936420013546012,
+            1.8574919995444361,
+            1.4254690031521022,
+            2.2565529980056453,
+            2.0757029997184873,
+            1.6256840026471764,
+            1.7055950011126697,
+            1.905124998302199,
+            2.141724999091821,
+            2.025527999649057,
+            1.9087429973296821,
+            2.256258998386329,
+            1.6915089981921483,
+            2.2940140006539878,
+            1.6684260008332785,
+            1.7864820001705084,
+            1.6324329990311526,
+            1.6068080003606156,
+            1.7269170020881575,
+            2.319248000276275,
+            1.6560049989493564,
+            1.621282997803064,
+            2.6329209977120627,
+            2.1999210002832115,
+            1.779440000973409,
+            1.7761140006768983,
+            1.7381649995513726,
+            1.6244130019913428,
+            1.9205790013074875,
+            1.4685050009575207,
+            1.5761930008011404,
+            2.3193460001493804,
+            1.398181000695331,
+            2.3639470018679276,
+            1.890551000542473,
+            1.6875000001164153,
+            1.7982190001930576,
+            1.8496669981686864,
+            1.8251169967697933,
+            1.8731409982137848,
+            1.8785200009006076,
+            2.1995300012349617,
+            1.6428989983978681,
+            1.868445997388335,
+            2.3411570000462234,
+            1.7941119986062404,
+            1.7822759982664138,
+            1.9202850016881712,
+            1.7424680008844007,
+            2.0064550008100923,
+            2.404929000476841,
+            2.8542640029627364,
+            1.631846000236692,
+            1.6158050020749215,
+            2.5181919991155155
+          ],
+          "publication_overlaps": 0
+        },
+        {
+          "sample_index": 28,
+          "status": 413,
+          "correct": true,
+          "route_ms": 171.4734490014962,
+          "parser_calls": 1,
+          "recovery_bytes": 0,
+          "atom_count": null,
+          "bond_count": null,
+          "stages_ms": {},
+          "capture_ms": [
+            1.8694239988690242
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            6.676445998891722,
+            3.789417001826223,
+            2.0463610017031897,
+            2.78442800117773,
+            2.8771510005753953,
+            2.778950998617802,
+            2.973787002702011,
+            2.4401410009886604,
+            3.8338220001605805,
+            2.6405509997857735,
+            1.7637910023040604,
+            1.7148859988083132,
+            1.4909029996488243,
+            2.003423000132898,
+            3.2990999970934354,
+            1.5223980008158833,
+            2.2743539993825834,
+            1.6158050020749215,
+            2.116588002536446,
+            1.553989997773897,
+            1.5966350001690444,
+            1.9353470015630592,
+            1.854752998042386,
+            1.6260759985016193,
+            1.7996859969571233,
+            1.944542000273941,
+            1.7635949989198707,
+            1.6517010008101352,
+            2.119717999448767,
+            1.9522690017765854,
+            2.1079800026200246,
+            1.7757229979906697,
+            2.0538930002658162,
+            1.824432001740206,
+            2.1156100010557566,
+            1.9216539985791314,
+            2.1326290006982163,
+            1.9301639986224473,
+            2.823942999384599,
+            1.9378910001250915,
+            2.1952269999019336,
+            2.48953299887944,
+            1.6497459982929286,
+            2.023474000452552,
+            2.2990990000835154,
+            1.866490001702914,
+            1.9018970015167724,
+            2.465473000484053,
+            2.6500380008656066,
+            2.2683880015392788,
+            5.057022000983125,
+            1.7748430000210647,
+            2.007725997827947,
+            1.931044000230031,
+            1.7551839991938323,
+            1.9128509993606713,
+            2.354362000914989,
+            1.3964190002297983,
+            1.762518997566076,
+            2.4347609978576656,
+            1.890745999844512,
+            1.7484349991718773,
+            2.4472799996146932,
+            1.9406300016271416,
+            1.9939359990530647,
+            1.9945220010413323,
+            1.8832150017260574,
+            1.9650819995149504,
+            1.5721829986432567,
+            2.104458999383496,
+            1.5463609997823369,
+            2.3530899998149835,
+            1.7589009985385928,
+            1.8038920024991967,
+            2.0519360004982445,
+            2.20950600123615,
+            2.761443000053987,
+            2.2032470005797222
+          ],
+          "publication_overlaps": 0
+        }
+      ]
+    }
+  ],
+  "sample_retention": "Successful repetitive sample rows pruned after aggregate validation. Failed outcomes and timing maxima retained; no outcome or percentile recomputed."
+}

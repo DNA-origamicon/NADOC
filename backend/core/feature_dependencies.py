@@ -23,30 +23,11 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 
-# Snapshot op_kinds whose builder can be replayed on an arbitrary base design
-# via crud._edit_dispatch_run. MUST stay in sync with that dispatcher.
-REPLAYABLE_SNAPSHOT_OPS = frozenset(
-    {
-        "sweep",
-        "bundle-create",
-        "extrude-segment",
-        "extrude-continuation",
-        "extrude-deformed-continuation",
-        "overhang-extrude",
-    }
-)
+from backend.core.feature_registry import PART_SNAPSHOT_COMMANDS
 
-# Delta / overlay feature_types — no baked topology; `_seek_feature_log` rebuilds
-# their visible effect from the surviving log every time, so they are always
-# reconstructable on a new base (as long as their target ids survive).
-_DELTA_FEATURE_TYPES = frozenset(
-    {
-        "deformation",
-        "cluster_op",
-        "cluster_create",
-        "overhang_rotation",
-    }
-)
+# Compatibility export for existing dependency/edit callers.
+REPLAYABLE_SNAPSHOT_OPS = frozenset(PART_SNAPSHOT_COMMANDS)
+
 
 # Collections on a Design whose members carry a stable `.id`. Used to diff two
 # design states into added / modified id sets.

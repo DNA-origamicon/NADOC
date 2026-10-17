@@ -1,0 +1,94 @@
+{
+  "date": "2026-10-15",
+  "checkpoint_base": "be20c4ec",
+  "scope": "P5b isolated replacement selection, P5c schema/fingerprint foundation, atomic replacement publication and explicit coating capture integration",
+  "focused": [
+    {
+      "target": "tests/test_part_replacement_transaction.py",
+      "passed": 8
+    },
+    {
+      "target": "tests/test_part_repair_jobs.py",
+      "passed": 15
+    },
+    {
+      "target": "tests/test_part_evaluation_capture.py",
+      "passed": 63
+    },
+    {
+      "target": "tests/test_part_selection_evaluation.py",
+      "passed": 25
+    },
+    {
+      "target": "tests/test_part_selection_jobs.py",
+      "passed": 16
+    },
+    {
+      "target": "tests/test_part_repair_evaluation.py",
+      "passed": 22
+    },
+    {
+      "target": "tests/test_part_evaluation_jobs.py",
+      "passed": 10
+    },
+    {
+      "target": "tests/test_part_evaluation.py",
+      "passed": 14
+    },
+    {
+      "target": "tests/test_feature_recording_transactions.py",
+      "passed": 41
+    },
+    {
+      "target": "tests/test_part_cadnano_routes.py",
+      "passed": 47
+    },
+    {
+      "target": "tests/test_part_repair_draft.py",
+      "passed": 31
+    },
+    {
+      "target": "tests/test_part_repair_fingerprint.py",
+      "passed": 26
+    },
+    {
+      "target": "tests/test_part_recipe_repair.py",
+      "passed": 58
+    },
+    {
+      "target": "tests/test_part_evaluation_capture_jobs.py",
+      "passed": 23
+    },
+    {
+      "target": "tests/test_part_feature_registry.py",
+      "passed": 24
+    }
+  ],
+  "focused_total_passed": 423,
+  "notes": [
+    "Existing selection/repair/evaluation job tests rerun after capture integration; listed once.",
+    "Initial new replacement tests had four teardown errors because cleanup invoked an injected revision failure; owned-session cleanup fixed the fixture. Final 8 passed.",
+    "caDNAno invalid-source parametrization now has short readable IDs; assertions unchanged."
+  ],
+  "lint": {
+    "global": "5 unchanged F401 findings (vr_prompts and four CPD tests)"
+  },
+  "broad": {
+    "executed": false,
+    "selector": "FAST  (fast suite only)",
+    "dry_run_only": true,
+    "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+    "clarification": "Selector wording is verbatim; --dry-run ran no suite. Archive unavailable; focused checks do not clear broad-suite debt."
+  },
+  "frontend_changes": false,
+  "main_js_loc_delta": 0,
+  "physical_simulation": false,
+  "molecular_algorithms_changed": false,
+  "assemblies": "deferred",
+  "qualification": {
+    "coating_live_latency": "pending; do not claim qualification from policy tests",
+    "draft_host_persistence": false,
+    "repair_ui": false,
+    "strict_automation": false
+  }
+}

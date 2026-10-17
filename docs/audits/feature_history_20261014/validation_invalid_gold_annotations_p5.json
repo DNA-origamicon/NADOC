@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-15",
+  "issue": "ISSUE-89",
+  "scope": "Recognized invalid unscoped gold inputs and inert generator execution annotations",
+  "red": {
+    "invalid_gold": {
+      "failed": 23,
+      "passed": 22,
+      "seconds": 2.81
+    },
+    "generator_annotations": {
+      "failed": 5,
+      "passed": 11,
+      "seconds": 3.68
+    }
+  },
+  "focused": {
+    "test_part_generator_annotations.py": 16,
+    "test_part_repair_invalid_gold.py": 48,
+    "test_part_repair_input_metadata.py": 26,
+    "test_part_repair_planning.py": 22,
+    "test_part_repair_draft.py": 35,
+    "test_part_repair_drafts_api.py": 18,
+    "test_part_repair_draft_host.py": 29,
+    "test_part_repair_draft_jobs.py": 17,
+    "test_part_repair_sources.py": 36,
+    "test_part_repair_source_host.py": 18,
+    "test_part_recipe_repair.py": 58,
+    "test_part_repair_expectation_transport.py": 8,
+    "test_generated_scope_references.py": 29,
+    "test_generated_scope_sources.py": 4,
+    "test_native_nanoparticle_proof.py": 29
+  },
+  "total_passed": 393,
+  "limits": [
+    "Gold recognition only; reference choices still require valid complete schema.",
+    "No molecular algorithm, source policy, scope/version or output identity relaxation.",
+    "No app/browser/native/scientific run; broad-suite debt unchanged."
+  ],
+  "execution": "Parent serialized all focused checks through validation guard; real spawned cold proof and HTTP draft/source roundtrips included."
+}

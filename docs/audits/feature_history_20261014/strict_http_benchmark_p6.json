@@ -1,0 +1,49 @@
+{
+  "scope": "in-memory TestClient dispatch/read overhead only",
+  "repeats": 100,
+  "gc_policy": "unchanged",
+  "model_execution": false,
+  "production_lifespan": false,
+  "completed": true,
+  "unexpected_results": [],
+  "cleanup_errors": [],
+  "cleanup_ok": true,
+  "cases": {
+    "compatibility_original": {
+      "count": 100,
+      "median_ms": 0.8947989990701899,
+      "p95_ms": 1.0916450009972323,
+      "max_ms": 1.2455379983293824
+    },
+    "compatibility_dispatched": {
+      "count": 100,
+      "median_ms": 0.9057704992301296,
+      "p95_ms": 1.0968370006594341,
+      "max_ms": 1.2282979987503495
+    },
+    "strict_revision": {
+      "count": 100,
+      "median_ms": 1.0758260013972176,
+      "p95_ms": 1.362109000183409,
+      "max_ms": 1.7304309985775035
+    },
+    "strict_policy": {
+      "count": 100,
+      "median_ms": 1.0741605001385324,
+      "p95_ms": 1.388654996844707,
+      "max_ms": 1.6347259988833684
+    },
+    "strict_unknown_refusal": {
+      "count": 100,
+      "median_ms": 0.583879502300988,
+      "p95_ms": 0.8137379991239868,
+      "max_ms": 0.9673370004747994
+    }
+  },
+  "paired_compatibility_overhead": {
+    "count": 100,
+    "median_ms": -0.006171498171170242,
+    "p95_ms": 0.18279000141774304,
+    "max_ms": 0.33854299908853136
+  }
+}

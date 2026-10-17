@@ -127,6 +127,8 @@ Format per entry: short title → one-paragraph what-went-wrong → "How to avoi
 - **J5** — Scaffold-router test flap is hash-seed order, not a state leak — a test flaps pass/fail across PYTHONHASHSEED. [detail](LESSONS_archive.md#j5)
 - **J6** — Autostaple starves crossovers at INTERIOR ssDNA loops (comb/"teeth") — unstapled scaffold is the design, not a hole; a staple's global coverage *span* is not a terminus test. Also: a manual crossover must not LOCK its staple (location = user intent, connectivity = autostaple's job). [detail](LESSONS_archive.md#j6)
 
+- **J7** — Linear history scans dominated by missing Pydantic attributes — discriminate feature variants before snapshot-only access. [detail](LESSONS_archive.md#j7)
+
 ## K. Environment / GPU / toolchain
 
 - **K13** — Vive lease/403/black mirror: recover the user-confirmed native left-eye path; separate authorization, display ownership, Steam GPU environment, and dummy framing before changing stacks. [detail](LESSONS_archive.md#k13)

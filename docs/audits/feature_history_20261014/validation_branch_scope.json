@@ -1,0 +1,99 @@
+{
+  "date": "2026-10-15",
+  "checkpoint_base": "9f6228d1",
+  "scope": "P3 typed scopes, branches, paths and independent section foundations; standard parts only",
+  "focused": [
+    {
+      "target": "tests/test_part_branch_commands.py",
+      "passed": 35,
+      "seconds": 2.95
+    },
+    {
+      "target": "tests/test_generated_branch_steps.py",
+      "passed": 6,
+      "seconds": 3.23
+    },
+    {
+      "target": "tests/test_native_path_proof.py",
+      "passed": 3,
+      "seconds": 5.9
+    },
+    {
+      "target": "tests/test_native_branch_proof.py",
+      "passed": 2,
+      "seconds": 5.93
+    },
+    {
+      "target": "tests/test_generated_fork_proof.py",
+      "passed": 1,
+      "seconds": 8.15
+    },
+    {
+      "target": "tests/test_part_section_commands.py",
+      "passed": 9,
+      "seconds": 2.48
+    },
+    {
+      "target": "tests/test_native_section_proof.py",
+      "passed": 2,
+      "seconds": 5.96
+    },
+    {
+      "target": "tests/test_generated_scope_references.py",
+      "passed": 29,
+      "seconds": 2.66
+    },
+    {
+      "target": "tests/test_generated_native_proof.py",
+      "passed": 4,
+      "seconds": 2.55
+    },
+    {
+      "target": "tests/test_generated_scope_aliases.py",
+      "passed": 3,
+      "seconds": 2.44
+    },
+    {
+      "target": "tests/test_part_path_commands.py",
+      "passed": 26,
+      "seconds": 3.3
+    },
+    {
+      "target": "tests/test_generated_commands.py",
+      "passed": 2,
+      "seconds": 20.34
+    }
+  ],
+  "focused_total_passed": 122,
+  "broad": {
+    "selector_dry_run": "FULL (FULL suite) [test-dedicated session OPEN]",
+    "executed": false,
+    "reason": "Required Archive mount unavailable; known broad tests generate bulk scratch. Previous FAST baseline is at afe9cb5d, not this increment."
+  },
+  "lint": {
+    "new_findings": 0,
+    "repository_baseline_unused_imports": 5,
+    "memory_baseline_errors": 6,
+    "memory_baseline_warnings": 60
+  },
+  "performance": "generated_scope_benchmark.json",
+  "slow_classification": {
+    "target": "tests/test_generated_fork_proof.py",
+    "call_seconds_before_shrinking": 7.21,
+    "call_seconds_after_shrinking": 5.85,
+    "area": "headless",
+    "reason": "Native routing/curvature and edited suffix plus two cold spawned proof workers",
+    "collection_verified": true
+  },
+  "frontend_changes": false,
+  "visual_check": false,
+  "molecular_algorithms_changed": false,
+  "remaining": [
+    "joined-generation full compiler",
+    "numeric crossbar path inputs",
+    "connectivity recipe compilation",
+    "explicit CPD source/engine and bounded long jobs",
+    "P4-P6",
+    "assembly deferred"
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "baseline_commit": "acad1d51",
+  "route_source_sha256": "8e5fc43e1313a94749432afca2d4c69de734c9b18a1aba571324e8983a855e7b",
+  "scope": "Exact seven historical route helper definitions in memory; same current unchanged generator/native algorithms; original random identity policy retained",
+  "exit_status": 1,
+  "reports": [
+    {
+      "nodeid": "tests/test_generator_connections.py::test_multiple_connections_close_without_moving_centers[platform-HONEYCOMB-3]",
+      "when": "setup",
+      "outcome": "passed",
+      "seconds": 1.5657588230023975,
+      "error": null
+    },
+    {
+      "nodeid": "tests/test_generator_connections.py::test_multiple_connections_close_without_moving_centers[platform-HONEYCOMB-3]",
+      "when": "call",
+      "outcome": "failed",
+      "seconds": 16.761891367001226,
+      "error": [
+        "E   ValueError: Fitted duplex intersects existing DNA or protein structure.",
+        "",
+        "The above exception was the direct cause of the following exception:",
+        "tests/test_generator_connections.py:64: in test_multiple_connections_close_without_moving_centers",
+        "    generated, report = build_recorded(source, candidate, settings)",
+        "                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "backend/api/generated_history.py:347: in build_recorded",
+        "    _, report = materialize(prepared, candidate, settings, history=history)",
+        "                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+        "backend/api/two_np_build.py:1114: in materialize",
+        "    raise ValueError(",
+        "E   ValueError: Connection 2/3 for nanoparticle 1: Fitted duplex intersects existing DNA or protein structure."
+      ]
+    },
+    {
+      "nodeid": "tests/test_generator_connections.py::test_multiple_connections_close_without_moving_centers[platform-HONEYCOMB-3]",
+      "when": "teardown",
+      "outcome": "passed",
+      "seconds": 0.00030853199859848246,
+      "error": null
+    }
+  ],
+  "output_tail": [
+    "    raise ValueError(failures[-1])",
+    "E   ValueError: Fitted duplex intersects existing DNA or protein structure.",
+    "",
+    "The above exception was the direct cause of the following exception:",
+    "tests/test_generator_connections.py:64: in test_multiple_connections_close_without_moving_centers",
+    "    generated, report = build_recorded(source, candidate, settings)",
+    "                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "backend/api/generated_history.py:347: in build_recorded",
+    "    _, report = materialize(prepared, candidate, settings, history=history)",
+    "                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+    "backend/api/two_np_build.py:1114: in materialize",
+    "    raise ValueError(",
+    "E   ValueError: Connection 2/3 for nanoparticle 1: Fitted duplex intersects existing DNA or protein structure.",
+    "=============================== warnings summary ===============================",
+    ".venv/lib/python3.12/site-packages/_pytest/config/__init__.py:1303",
+    "  /home/joshua/NADOC/.venv/lib/python3.12/site-packages/_pytest/config/__init__.py:1303: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; anyio",
+    "    self._mark_plugins_for_rewrite(hook, disable_autoload)",
+    "",
+    "-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html",
+    "=========================== short test summary info ============================",
+    "FAILED tests/test_generator_connections.py::test_multiple_connections_close_without_moving_centers[platform-HONEYCOMB-3]",
+    "1 failed, 1 warning in 18.64s"
+  ]
+}

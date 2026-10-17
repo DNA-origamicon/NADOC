@@ -1,0 +1,1370 @@
+{
+  "scope": "Actual ordinary free protein HTTP import; original bytes, native suffix, one undo/revision/library publication",
+  "repeats": 30,
+  "suite": "retained",
+  "case": "retained-1000-atoms-plus-1000",
+  "experimental_host_gate_enabled_for_run": true,
+  "gc_observation": {
+    "policy": {
+      "enabled": true,
+      "thresholds": [
+        700,
+        10,
+        10
+      ]
+    },
+    "dropped_events": 0,
+    "policy_unchanged": true,
+    "event_count": 1108,
+    "phase_generation_summary": [
+      {
+        "phase": "other",
+        "generation": 0,
+        "count": 284,
+        "total_ms": 26.535187989793485,
+        "max_ms": 0.36187599835102446
+      },
+      {
+        "phase": "source_capture",
+        "generation": 0,
+        "count": 127,
+        "total_ms": 10.11286100401776,
+        "max_ms": 0.38659200072288513
+      },
+      {
+        "phase": "native_preparation",
+        "generation": 0,
+        "count": 113,
+        "total_ms": 7.399273024930153,
+        "max_ms": 0.22726799943484366
+      },
+      {
+        "phase": "native_preparation",
+        "generation": 1,
+        "count": 16,
+        "total_ms": 10.147556000447366,
+        "max_ms": 1.8635390006238595
+      },
+      {
+        "phase": "native_preparation",
+        "generation": 2,
+        "count": 1,
+        "total_ms": 89.08543000143254,
+        "max_ms": 89.08543000143254
+      },
+      {
+        "phase": "native_parse",
+        "generation": 0,
+        "count": 432,
+        "total_ms": 28.68560500064632,
+        "max_ms": 0.4920530009258073
+      },
+      {
+        "phase": "native_parse",
+        "generation": 1,
+        "count": 38,
+        "total_ms": 14.306930992461275,
+        "max_ms": 0.8788649975031149
+      },
+      {
+        "phase": "source_capture",
+        "generation": 1,
+        "count": 19,
+        "total_ms": 5.5781600131012965,
+        "max_ms": 0.7051030006550718
+      },
+      {
+        "phase": "publication",
+        "generation": 0,
+        "count": 51,
+        "total_ms": 4.1464740243100096,
+        "max_ms": 0.1824389983084984
+      },
+      {
+        "phase": "other",
+        "generation": 1,
+        "count": 12,
+        "total_ms": 8.257809993665433,
+        "max_ms": 1.1404760007280856
+      },
+      {
+        "phase": "other",
+        "generation": 2,
+        "count": 6,
+        "total_ms": 275.9529979994113,
+        "max_ms": 47.85750399969402
+      },
+      {
+        "phase": "publication",
+        "generation": 1,
+        "count": 7,
+        "total_ms": 2.261007004562998,
+        "max_ms": 0.36616100260289386
+      },
+      {
+        "phase": "source_capture",
+        "generation": 2,
+        "count": 1,
+        "total_ms": 45.080183997924905,
+        "max_ms": 45.080183997924905
+      },
+      {
+        "phase": "native_parse",
+        "generation": 2,
+        "count": 1,
+        "total_ms": 46.187048999854596,
+        "max_ms": 46.187048999854596
+      }
+    ],
+    "retained_events": [
+      {
+        "thread": 130788508112576,
+        "generation": 0,
+        "phase": "native_preparation",
+        "start": 23274.44428343,
+        "end": 23274.444510698,
+        "elapsed_ms": 0.22726799943484366,
+        "collected": 98,
+        "uncollectable": 0
+      },
+      {
+        "thread": 130788508112576,
+        "generation": 1,
+        "phase": "native_preparation",
+        "start": 23274.457655909,
+        "end": 23274.459519448,
+        "elapsed_ms": 1.8635390006238595,
+        "collected": 0,
+        "uncollectable": 0
+      },
+      {
+        "thread": 130788508112576,
+        "generation": 2,
+        "phase": "native_preparation",
+        "start": 23274.467603317,
+        "end": 23274.556688747,
+        "elapsed_ms": 89.08543000143254,
+        "collected": 10,
+        "uncollectable": 0
+      },
+      {
+        "thread": 130789710483584,
+        "generation": 1,
+        "phase": "other",
+        "start": 23274.870140714,
+        "end": 23274.87128119,
+        "elapsed_ms": 1.1404760007280856,
+        "collected": 56,
+        "uncollectable": 0
+      },
+      {
+        "thread": 130788508112576,
+        "generation": 0,
+        "phase": "native_parse",
+        "start": 23275.194688836,
+        "end": 23275.195180889,
+        "elapsed_ms": 0.4920530009258073,
+        "collected": 0,
+        "uncollectable": 0
+      },
+      {
+        "thread": 130789710483584,
+        "generation": 2,
+        "phase": "other",
+        "start": 23275.453794397,
+        "end": 23275.497959037,
+        "elapsed_ms": 44.164639999507926,
+        "collected": 98,
+        "uncollectable": 0
+      },
+      {
+        "thread": 130789710483584,
+        "generation": 2,
+        "phase": "other",
+        "start": 23276.52851081,
+        "end": 23276.5734959,
+        "elapsed_ms": 44.9850900004094,
+        "collected": 276,
+        "uncollectable": 0
+      },
+      {
+        "thread": 130789710483584,
+        "generation": 0,
+        "phase": "other",
+        "start": 23277.137733034,
+        "end": 23277.13809491,
+        "elapsed_ms": 0.36187599835102446,
+        "collected": 0,
+        "uncollectable": 0
+      },
+      {
+        "thread": 130788516505280,
+        "generation": 0,
+        "phase": "source_capture",
+        "start": 23277.481113977,
+        "end": 23277.481500569,
+        "elapsed_ms": 0.38659200072288513,
+        "collected": 0,
+        "uncollectable": 0
+      },
+      {
+        "thread": 130788516505280,
+        "generation": 2,
+        "phase": "other",
+        "start": 23277.677251912,
+        "end": 23277.72411669,
+        "elapsed_ms": 46.864777999871876,
+        "collected": 566,
+        "uncollectable": 0
+      },
+      {
+        "thread": 130788516505280,
+        "generation": 2,
+        "phase": "other",
+        "start": 23278.805850054,
+        "end": 23278.851431477,
+        "elapsed_ms": 45.581423000840005,
+        "collected": 528,
+        "uncollectable": 0
+      },
+      {
+        "thread": 130788516505280,
+        "generation": 1,
+        "phase": "source_capture",
+        "start": 23279.755625828,
+        "end": 23279.756330931,
+        "elapsed_ms": 0.7051030006550718,
+        "collected": 7,
+        "uncollectable": 0
+      },
+      {
+        "thread": 130788508112576,
+        "generation": 2,
+        "phase": "other",
+        "start": 23279.947343605,
+        "end": 23279.993843168,
+        "elapsed_ms": 46.499562999088084,
+        "collected": 330,
+        "uncollectable": 0
+      },
+      {
+        "thread": 130788516505280,
+        "generation": 0,
+        "phase": "publication",
+        "start": 23279.99780802,
+        "end": 23279.997990459,
+        "elapsed_ms": 0.1824389983084984,
+        "collected": 0,
+        "uncollectable": 0
+      },
+      {
+        "thread": 130788508112576,
+        "generation": 1,
+        "phase": "native_parse",
+        "start": 23280.750983254,
+        "end": 23280.751862119,
+        "elapsed_ms": 0.8788649975031149,
+        "collected": 341,
+        "uncollectable": 0
+      },
+      {
+        "thread": 130788516505280,
+        "generation": 2,
+        "phase": "source_capture",
+        "start": 23280.923663924,
+        "end": 23280.968744108,
+        "elapsed_ms": 45.080183997924905,
+        "collected": 182,
+        "uncollectable": 0
+      },
+      {
+        "thread": 130788516505280,
+        "generation": 1,
+        "phase": "publication",
+        "start": 23281.24320486,
+        "end": 23281.243571021,
+        "elapsed_ms": 0.36616100260289386,
+        "collected": 70,
+        "uncollectable": 0
+      },
+      {
+        "thread": 130788263720640,
+        "generation": 2,
+        "phase": "native_parse",
+        "start": 23281.911216297,
+        "end": 23281.957403346,
+        "elapsed_ms": 46.187048999854596,
+        "collected": 197,
+        "uncollectable": 0
+      },
+      {
+        "thread": 130789710483584,
+        "generation": 2,
+        "phase": "other",
+        "start": 23283.030427791,
+        "end": 23283.078285295,
+        "elapsed_ms": 47.85750399969402,
+        "collected": 168,
+        "uncollectable": 0
+      }
+    ]
+  },
+  "limits_unchanged": {
+    "capture_nodes": 30000,
+    "capture_bytes": 2000000,
+    "capture_seconds_cooperative": 0.025,
+    "recovery_bytes": 8000000
+  },
+  "candidate_admission": {
+    "isolated_copy": false,
+    "same_node_byte_accounting": true,
+    "separate_deadline": false,
+    "private_input_only": true
+  },
+  "notes": [
+    "Synthetic sources qualify size/work boundaries, not molecular realism.",
+    "Retained heavy physical/loadout state is outside this initial native ordinary-import slice.",
+    "No full-prefix proof is performed on import; cold proof is measured separately afterward.",
+    "Experimental native import is explicitly enabled only in this harness and restored on exit.",
+    "GC callbacks observe intervals only; no collect(), disable(), threshold changes or retries are used.",
+    "Private candidate resource admission has no second isolation copy/deadline; source capture keeps its 25 ms allowance.",
+    "Library remains a cache; no replay source is reconstructed from its atoms.",
+    "Retained recipes are created by real HTTP imports before timing; all preparation failures stop qualification.",
+    "Repeated imports verify unchanged prefix/assets/proposals/source bytes and exact single undo/redo outside timing.",
+    "Aggregate atom-limit refusal preserves the existing design, history, revision and library.",
+    "Publication lock instrumentation includes nested state helpers; only outermost spans are counted.",
+    "Legacy metadata formatting may infer zero bonds again; parser counts distinguish native parse repetition."
+  ],
+  "session_cleanup_verified": true,
+  "completed": true,
+  "run_failure": null,
+  "cases": [
+    {
+      "name": "retained-1000-atoms-plus-1000",
+      "retained_profile": "retained-1000-atoms",
+      "source_bytes": 79050,
+      "requested_atom_records": 1000,
+      "expected_status": 200,
+      "correct_transactions": 29,
+      "errors": [
+        {
+          "iteration": 22,
+          "status": 413,
+          "detail": "{\"detail\":{\"code\":\"protein_import_capture_limit\",\"detail\":\"Part verification capture budget exceeded\",\"status\":\"unverified\"}}"
+        },
+        {
+          "cold_capture_or_transport_refused": "Part verification capture budget exceeded"
+        }
+      ],
+      "route": {
+        "count": 30,
+        "p50_ms": 212.13359750254313,
+        "p95_ms": 257.68818800133886,
+        "max_ms": 261.6969959999551
+      },
+      "capture_lock": {
+        "count": 60,
+        "p50_ms": 3.4152240004914347,
+        "p95_ms": 7.690975002333289,
+        "max_ms": 47.66609100261121
+      },
+      "publication_lock": {
+        "count": 29,
+        "p50_ms": 2.437785002257442,
+        "p95_ms": 2.785115997539833,
+        "max_ms": 2.9107640002621338
+      },
+      "candidate_admission": {
+        "count": 29,
+        "p50_ms": 4.782,
+        "p95_ms": 5.472,
+        "max_ms": 5.888
+      },
+      "candidate_admission_all_attempts": {
+        "count": 29,
+        "p50_ms": 4.775780002091778,
+        "p95_ms": 5.461741999170044,
+        "max_ms": 5.877853000129107
+      },
+      "gc_during_requests": {
+        "count": 564,
+        "p50_ms": 0.07973050196596887,
+        "p95_ms": 0.4914029996143654,
+        "max_ms": 46.864777999871876
+      },
+      "baseline_light_requests": {
+        "count": 30,
+        "p50_ms": 1.126390501667629,
+        "p95_ms": 1.6074189989012666,
+        "max_ms": 2.5474109970673453
+      },
+      "light_requests": {
+        "count": 1860,
+        "p50_ms": 2.6864725004998036,
+        "p95_ms": 8.194154997909209,
+        "max_ms": 59.65659999856143
+      },
+      "publication_overlap_count": 29,
+      "cold": null,
+      "sample_summary": {
+        "samples": 30,
+        "http_status_counts": {
+          "200": 29,
+          "413": 1
+        },
+        "parser_call_counts": {
+          "1": 29,
+          "0": 1
+        },
+        "retention": "All unexpected outcomes and timing maxima retained; distributions include every original sample."
+      },
+      "retained_samples": [
+        {
+          "sample_index": 0,
+          "status": 200,
+          "correct": true,
+          "route_ms": 185.99920099950396,
+          "baseline_light_ms": 2.5474109970673453,
+          "parser_calls": 1,
+          "recovery_bytes": 222820,
+          "atom_count": 1000,
+          "bond_count": 0,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 4,
+          "result_sources": 1,
+          "result_atom_count": 2000,
+          "retained_setup": [
+            {
+              "source_atom_records": 1000,
+              "feature_ids": [
+                "964725ef-be17-5fdc-9ae0-b3bef68592a2",
+                "cec8ff87-67f4-50c4-8236-32a4cf2e3f8d"
+              ]
+            }
+          ],
+          "error_detail": null,
+          "candidate_admission_spans": [
+            {
+              "phase": "candidate_admission",
+              "start": 23274.768371896,
+              "end": 23274.773011393,
+              "elapsed_ms": 4.639497001335258,
+              "completed": true
+            }
+          ],
+          "gc_collections": [
+            {
+              "thread": 130788516505280,
+              "generation": 1,
+              "phase": "source_capture",
+              "start": 23274.664601385,
+              "end": 23274.664925941,
+              "elapsed_ms": 0.32455600012326613,
+              "collected": 15,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": true,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788516505280,
+              "generation": 0,
+              "phase": "source_capture",
+              "start": 23274.666180051,
+              "end": 23274.666213925,
+              "elapsed_ms": 0.03387399920029566,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": true,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788516505280,
+              "generation": 0,
+              "phase": "source_capture",
+              "start": 23274.667512642,
+              "end": 23274.667542773,
+              "elapsed_ms": 0.03013099922100082,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": true,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788516505280,
+              "generation": 0,
+              "phase": "source_capture",
+              "start": 23274.669007608,
+              "end": 23274.669040103,
+              "elapsed_ms": 0.032494997867615893,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": true,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788516505280,
+              "generation": 0,
+              "phase": "source_capture",
+              "start": 23274.671325093,
+              "end": 23274.671376691,
+              "elapsed_ms": 0.05159799911780283,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": true,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788508112576,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23274.67624257,
+              "end": 23274.676537389,
+              "elapsed_ms": 0.29481900128303096,
+              "collected": 228,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788508112576,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23274.677809617,
+              "end": 23274.677847922,
+              "elapsed_ms": 0.03830500281765126,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788508112576,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23274.679106561,
+              "end": 23274.679143094,
+              "elapsed_ms": 0.03653299791039899,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788508112576,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23274.680709549,
+              "end": 23274.680750907,
+              "elapsed_ms": 0.04135799827054143,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788508112576,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23274.68150804,
+              "end": 23274.681538467,
+              "elapsed_ms": 0.03042699972866103,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788508112576,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23274.691956856,
+              "end": 23274.692101803,
+              "elapsed_ms": 0.1449470000807196,
+              "collected": 9,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788516505280,
+              "generation": 0,
+              "phase": "other",
+              "start": 23274.703152269,
+              "end": 23274.703208987,
+              "elapsed_ms": 0.05671799954143353,
+              "collected": 75,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788508112576,
+              "generation": 1,
+              "phase": "native_parse",
+              "start": 23274.7572011,
+              "end": 23274.757782859,
+              "elapsed_ms": 0.5817589990328997,
+              "collected": 403,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788508112576,
+              "generation": 0,
+              "phase": "native_preparation",
+              "start": 23274.774676319,
+              "end": 23274.774726145,
+              "elapsed_ms": 0.04982599784852937,
+              "collected": 53,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788508112576,
+              "generation": 0,
+              "phase": "native_preparation",
+              "start": 23274.775974642,
+              "end": 23274.776083549,
+              "elapsed_ms": 0.10890699923038483,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788516505280,
+              "generation": 0,
+              "phase": "other",
+              "start": 23274.821132349,
+              "end": 23274.821211421,
+              "elapsed_ms": 0.07907200051704422,
+              "collected": 317,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788508112576,
+              "generation": 0,
+              "phase": "other",
+              "start": 23274.839006174,
+              "end": 23274.839071459,
+              "elapsed_ms": 0.06528499943669885,
+              "collected": 75,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788516505280,
+              "generation": 0,
+              "phase": "publication",
+              "start": 23274.842010681,
+              "end": 23274.842041994,
+              "elapsed_ms": 0.03131300036329776,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": true,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788516505280,
+              "generation": 0,
+              "phase": "publication",
+              "start": 23274.843751034,
+              "end": 23274.84388899,
+              "elapsed_ms": 0.13795599807053804,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": true,
+                "candidate_admission": false
+              }
+            }
+          ],
+          "stages_ms": {
+            "acquire": 0.044,
+            "classify": 0.911,
+            "native_capture": 9.556,
+            "native_import": 84.471,
+            "native_recovery": 9.307,
+            "native_placement": 0.162,
+            "native_candidate_admission": 4.645,
+            "native_response": 65.49,
+            "native_preparation_total": 165.87,
+            "parse_protein": 84.471,
+            "deduplicate": 2.164,
+            "commit": 3.052
+          },
+          "capture_ms": [
+            0.009748000593390316,
+            9.245417000784073
+          ],
+          "publication_ms": [
+            2.9107640002621338
+          ],
+          "light_ms": [
+            12.785894999979064,
+            9.922297998855356,
+            2.403546001005452,
+            7.374297001661034,
+            1.873286997579271,
+            1.8197200006397907,
+            2.7899419983441476,
+            2.2203929984243587,
+            2.3592350007675122,
+            3.0790489981882274,
+            3.3802670004661195,
+            4.4512239983305335,
+            2.779898000881076,
+            3.8512479986820836,
+            1.6262270000879653,
+            1.6746740002417937,
+            1.9169100014551077,
+            2.970732999528991,
+            2.098093998938566,
+            5.583428999671014,
+            1.8039640017377678,
+            2.838881999196019,
+            2.799493999191327,
+            2.060083999822382,
+            2.3426919979101513,
+            3.3854870016511995,
+            7.271198999660555,
+            2.7103779975732323,
+            2.8713760002574418,
+            2.3913359982543625,
+            9.653181001340272,
+            3.1074079997779336,
+            2.069538000796456,
+            2.8291320013522636,
+            3.030208001291612,
+            2.832283000316238,
+            2.261554000142496,
+            2.31009900016943,
+            2.5380560000485275,
+            2.57143699855078,
+            1.9690000008267816,
+            5.083398998976918,
+            1.9660459984152112,
+            3.52334399940446,
+            2.9292760009411722,
+            2.766998000879539,
+            2.6369200022600126,
+            2.7392289994168095,
+            4.512767001870088,
+            3.7054149979667272,
+            2.339540998946177,
+            4.912652999337297,
+            6.330518001050223
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        },
+        {
+          "sample_index": 22,
+          "status": 413,
+          "correct": false,
+          "route_ms": 51.01232500237529,
+          "baseline_light_ms": 1.0225480000372045,
+          "parser_calls": 0,
+          "recovery_bytes": 90628,
+          "atom_count": null,
+          "bond_count": null,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 2,
+          "result_sources": 1,
+          "result_atom_count": 1000,
+          "retained_setup": [
+            {
+              "source_atom_records": 1000,
+              "feature_ids": [
+                "81212451-1192-5f72-a6f7-b1e05d2317de",
+                "e0d39dbe-59e4-5b74-8b93-874bc71db451"
+              ]
+            }
+          ],
+          "error_detail": {
+            "code": "protein_import_capture_limit",
+            "detail": "Part verification capture budget exceeded",
+            "status": "unverified"
+          },
+          "candidate_admission_spans": [],
+          "gc_collections": [
+            {
+              "thread": 130788516505280,
+              "generation": 1,
+              "phase": "source_capture",
+              "start": 23280.922180642,
+              "end": 23280.922548874,
+              "elapsed_ms": 0.3682320020743646,
+              "collected": 15,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": true,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788516505280,
+              "generation": 2,
+              "phase": "source_capture",
+              "start": 23280.923663924,
+              "end": 23280.968744108,
+              "elapsed_ms": 45.080183997924905,
+              "collected": 182,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": true,
+                "publication": false,
+                "candidate_admission": false
+              }
+            }
+          ],
+          "stages_ms": {},
+          "capture_ms": [
+            0.007495000318158418,
+            47.66609100261121
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            50.90088899669354
+          ],
+          "publication_overlaps": 0
+        },
+        {
+          "sample_index": 26,
+          "status": 200,
+          "correct": true,
+          "route_ms": 261.6969959999551,
+          "baseline_light_ms": 1.1009480003849603,
+          "parser_calls": 1,
+          "recovery_bytes": 222852,
+          "atom_count": 1000,
+          "bond_count": 0,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 4,
+          "result_sources": 1,
+          "result_atom_count": 2000,
+          "retained_setup": [
+            {
+              "source_atom_records": 1000,
+              "feature_ids": [
+                "658d3ca3-215f-5e55-876d-bb80943c0814",
+                "39603f8a-347b-595c-84c7-aa3a02993965"
+              ]
+            }
+          ],
+          "error_detail": null,
+          "candidate_admission_spans": [
+            {
+              "phase": "candidate_admission",
+              "start": 23282.081117379,
+              "end": 23282.085859127,
+              "elapsed_ms": 4.741748001833912,
+              "completed": true
+            }
+          ],
+          "gc_collections": [
+            {
+              "thread": 130788516505280,
+              "generation": 0,
+              "phase": "source_capture",
+              "start": 23281.900644377,
+              "end": 23281.900730864,
+              "elapsed_ms": 0.08648699804325588,
+              "collected": 8,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": true,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788516505280,
+              "generation": 0,
+              "phase": "source_capture",
+              "start": 23281.901827275,
+              "end": 23281.901858438,
+              "elapsed_ms": 0.031162999221123755,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": true,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788516505280,
+              "generation": 0,
+              "phase": "source_capture",
+              "start": 23281.90297191,
+              "end": 23281.903003467,
+              "elapsed_ms": 0.0315569996018894,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": true,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788516505280,
+              "generation": 0,
+              "phase": "source_capture",
+              "start": 23281.904130055,
+              "end": 23281.904161119,
+              "elapsed_ms": 0.031063998903846368,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": true,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788516505280,
+              "generation": 0,
+              "phase": "source_capture",
+              "start": 23281.906542594,
+              "end": 23281.906747419,
+              "elapsed_ms": 0.2048250025836751,
+              "collected": 208,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": true,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788263720640,
+              "generation": 1,
+              "phase": "native_parse",
+              "start": 23281.90962651,
+              "end": 23281.910078368,
+              "elapsed_ms": 0.45185799899627455,
+              "collected": 33,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788263720640,
+              "generation": 2,
+              "phase": "native_parse",
+              "start": 23281.911216297,
+              "end": 23281.957403346,
+              "elapsed_ms": 46.187048999854596,
+              "collected": 197,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788263720640,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23281.958118312,
+              "end": 23281.958162886,
+              "elapsed_ms": 0.04457400063984096,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788263720640,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23281.959083268,
+              "end": 23281.959111965,
+              "elapsed_ms": 0.028696998924715444,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788263720640,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23281.959993394,
+              "end": 23281.96003432,
+              "elapsed_ms": 0.04092599920113571,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788263720640,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23281.960406792,
+              "end": 23281.960432333,
+              "elapsed_ms": 0.025540997739881277,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788263720640,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23281.99514286,
+              "end": 23281.995233488,
+              "elapsed_ms": 0.09062800018000416,
+              "collected": 97,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788263720640,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23281.995835932,
+              "end": 23281.995858811,
+              "elapsed_ms": 0.022878997697262093,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788263720640,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23281.996184835,
+              "end": 23281.996199233,
+              "elapsed_ms": 0.014397999620996416,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788263720640,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23281.996472695,
+              "end": 23281.996485318,
+              "elapsed_ms": 0.012623000657185912,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788516505280,
+              "generation": 0,
+              "phase": "other",
+              "start": 23282.027172316,
+              "end": 23282.027245193,
+              "elapsed_ms": 0.07287699918379076,
+              "collected": 251,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788263720640,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23282.069893411,
+              "end": 23282.070002085,
+              "elapsed_ms": 0.10867400123970583,
+              "collected": 339,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788263720640,
+              "generation": 0,
+              "phase": "native_preparation",
+              "start": 23282.087736872,
+              "end": 23282.087796732,
+              "elapsed_ms": 0.059860001783818007,
+              "collected": 31,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788263720640,
+              "generation": 1,
+              "phase": "native_preparation",
+              "start": 23282.089198852,
+              "end": 23282.089452493,
+              "elapsed_ms": 0.253640999289928,
+              "collected": 42,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788516505280,
+              "generation": 0,
+              "phase": "other",
+              "start": 23282.130894441,
+              "end": 23282.131022247,
+              "elapsed_ms": 0.1278059971809853,
+              "collected": 317,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788508112576,
+              "generation": 0,
+              "phase": "other",
+              "start": 23282.151837695,
+              "end": 23282.151928521,
+              "elapsed_ms": 0.09082600081455894,
+              "collected": 119,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788516505280,
+              "generation": 0,
+              "phase": "publication",
+              "start": 23282.154828321,
+              "end": 23282.154864612,
+              "elapsed_ms": 0.03629099956015125,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": true,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 130788516505280,
+              "generation": 0,
+              "phase": "publication",
+              "start": 23282.156085476,
+              "end": 23282.156226201,
+              "elapsed_ms": 0.14072500198381022,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": true,
+                "candidate_admission": false
+              }
+            }
+          ],
+          "stages_ms": {
+            "acquire": 0.011,
+            "classify": 0.81,
+            "native_capture": 7.518,
+            "native_import": 163.573,
+            "native_recovery": 9.584,
+            "native_placement": 0.173,
+            "native_candidate_admission": 4.748,
+            "native_response": 65.105,
+            "native_preparation_total": 244.398,
+            "parse_protein": 163.573,
+            "deduplicate": 2.434,
+            "commit": 2.668
+          },
+          "capture_ms": [
+            0.006016001862008125,
+            7.285742001840845
+          ],
+          "publication_ms": [
+            2.5310759992862586
+          ],
+          "light_ms": [
+            7.605554001202108,
+            59.65659999856143,
+            1.6533950001758058,
+            8.167565996700432,
+            2.133358000719454,
+            7.2284460002265405,
+            6.342381999274949,
+            8.285214000352426,
+            1.9835599996440578,
+            2.1269470016704872,
+            2.4804860004223883,
+            1.5765720017952845,
+            2.9076889986754395,
+            2.6525699977355544,
+            1.8247879997943528,
+            2.70207499852404,
+            1.9758679991355166,
+            2.627522000693716,
+            2.4450820019410457,
+            2.564801998232724,
+            2.074681000522105,
+            2.6163780021306593,
+            2.0288240011723246,
+            2.469636998284841,
+            2.802465998684056,
+            2.3324629983108025,
+            1.8823809987225104,
+            2.8552260009746533,
+            1.6626639990136027,
+            2.7796859976660926,
+            2.5754529997357167,
+            2.085824999085162,
+            4.04285699914908,
+            3.029185001651058,
+            2.1305970003595576,
+            2.262248999613803,
+            2.537584001402138,
+            6.577481999556767,
+            3.085199001361616,
+            2.3927169968374074,
+            10.021348000009311,
+            2.6707149991125334,
+            2.4132289981935173,
+            1.6677919993526302,
+            2.638961999764433,
+            3.203438998752972,
+            2.2101789982116316,
+            1.8016139983956236,
+            2.3783200012985617,
+            4.568183998344466,
+            3.1991979994927533,
+            1.6180899983737618,
+            1.8862260003515985,
+            4.040489999169949,
+            2.5736770003277343,
+            2.3091900002327748,
+            3.273948997957632,
+            2.6967500016326085,
+            2.0517029988695867,
+            4.305176000343636,
+            3.734583999175811,
+            2.3075130011420697,
+            3.4288749993720558,
+            7.343135999690276
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        }
+      ]
+    }
+  ],
+  "sample_retention": "Repetitive successes and small GC event details pruned; every major collection, phase/generation maximum, unexpected outcome and timing maximum retained; existing outcome aggregates unchanged."
+}

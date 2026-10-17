@@ -10,12 +10,20 @@ One reason to change: the set of correctness checks run against an assembly
 
 from __future__ import annotations
 
-from backend.core.models import Assembly
+from backend.core.models import Assembly, Design
 
 
 def validate_assembly_report(assembly: Assembly) -> dict:
+    """Run all assembly checks, returning only their structured report."""
+    return validate_and_flatten_assembly(assembly)[0]
+
+
+def validate_and_flatten_assembly(assembly: Assembly) -> tuple[dict, Design | None]:
     """
-    Run all validation checks on an assembly and return a structured report.
+    Run all assembly checks and retain the exact projection used by the ID check.
+
+    Readiness needs this same canonical projection; returning it avoids a second
+    full flatten. Failed flattening retains the existing report and returns None.
     """
     from backend.core.assembly_flatten import flatten_assembly, _load_design
 
@@ -70,8 +78,9 @@ def validate_assembly_report(assembly: Assembly) -> dict:
     results.append({"check": "instance_ids_unique", "ok": ids_unique})
 
     # 5. Flattened IDs unique
+    flattened = None
     try:
-        flatten_assembly(assembly)
+        flattened = flatten_assembly(assembly)
         results.append({"check": "flattened_ids_unique", "ok": True})
     except ValueError as exc:
         results.append(
@@ -94,4 +103,4 @@ def validate_assembly_report(assembly: Assembly) -> dict:
             seen_ok[key] = True
 
     passed = all(r["ok"] for r in deduped)
-    return {"passed": passed, "results": deduped}
+    return {"passed": passed, "results": deduped}, flattened

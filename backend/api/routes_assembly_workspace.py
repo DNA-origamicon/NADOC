@@ -314,9 +314,12 @@ def _reconcile_nadoc_file(
     if path.suffix.lower() != ".nadoc" or not path.is_file():
         return None, None
     from backend.core.design_identity import reconcile_open_identity
+    from backend.core.part_document_io import DocumentLimit, read_file
 
     try:
-        design = Design.from_json(path.read_text(encoding="utf-8"))
+        design = Design.from_json(read_file(path).decode("utf-8"))
+    except DocumentLimit as error:
+        raise HTTPException(413, detail=error.as_issue()) from error
     except Exception:
         return None, None
     resolved, disposition, previous = reconcile_open_identity(

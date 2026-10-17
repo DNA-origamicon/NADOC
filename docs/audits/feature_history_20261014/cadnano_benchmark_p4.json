@@ -1,0 +1,565 @@
+{
+  "scope": "Pinned topology import, capture, registered cold proof, recovery, validation and existing load boundary; no rendering or physics",
+  "repeats": 9,
+  "live_route_enabled": false,
+  "limits_provisional": true,
+  "limits": {
+    "MAX_SOURCE_BYTES": 100000,
+    "MAX_HELICES": 32,
+    "MAX_ARRAY_WIDTH": 2048,
+    "MAX_ARRAY_SLOTS": 8192,
+    "MAX_NUCLEOTIDES": 16384,
+    "MAX_STRANDS": 128,
+    "MAX_DOMAINS": 512,
+    "MAX_JSON_DEPTH": 16
+  },
+  "limits_unchanged": {
+    "capture_nodes": 30000,
+    "capture_bytes": 2000000,
+    "capture_cooperative_seconds": 0.025,
+    "worker_input_bytes": 2000000,
+    "candidate_bytes": 16000000,
+    "cumulative_recovery_bytes": 8000000
+  },
+  "cases": [
+    {
+      "case": "Honeycomb_6hb_test1.json",
+      "source_bytes": 7780,
+      "source_base64_characters": 10376,
+      "preflight_work": {
+        "helices": 6,
+        "array_slots": 252,
+        "active_bases": 504,
+        "declared_nucleotides": 504,
+        "strands": 12,
+        "domain_bound": 36
+      },
+      "preflight_ms": 2.975781999339233,
+      "build_ms": 10.429267000290565,
+      "authoring_nodes": 431,
+      "output_helices": 6,
+      "output_strands": 12,
+      "output_domains": 12,
+      "recovery_encoded_bytes": 12328,
+      "recovery_encode_total_ms": 0.6763050023437245,
+      "candidate_json_bytes": 32241,
+      "validation_ms": 0.1427570005034795,
+      "private_prepare_total_ms": 11.24832900313777,
+      "reload_authoring_equal": true,
+      "capture_median_ms": 1.4215299997886177,
+      "capture_max_ms": 1.5289570001186803,
+      "capture_refusals": 0,
+      "pickle_bytes_max": 18918,
+      "proof_median_ms": 5.528924999453011,
+      "proof_max_ms": 5.738862000725931,
+      "statuses": [
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        }
+      ],
+      "cold_worker": {
+        "status": "reproduced_import",
+        "issues": [],
+        "spawn_and_proof_ms": 975.0382829988666
+      },
+      "existing_load_boundary_median_ms": 0.0016320009308401495,
+      "existing_load_boundary_max_ms": 0.03304799975012429,
+      "live_route_qualification": "pending"
+    },
+    {
+      "case": "6hb_cadnano_native_test1.json",
+      "source_bytes": 87248,
+      "source_base64_characters": 116332,
+      "preflight_work": {
+        "helices": 6,
+        "array_slots": 2772,
+        "active_bases": 5292,
+        "declared_nucleotides": 5292,
+        "strands": 9,
+        "domain_bound": 277
+      },
+      "preflight_ms": 26.64178700069897,
+      "build_ms": 86.80671299953246,
+      "authoring_nodes": 4989,
+      "output_helices": 6,
+      "output_strands": 9,
+      "output_domains": 259,
+      "recovery_encoded_bytes": 105156,
+      "recovery_encode_total_ms": 4.2447470004844945,
+      "candidate_json_bytes": 338206,
+      "validation_ms": 2.8653949993895367,
+      "private_prepare_total_ms": 93.9168549994065,
+      "reload_authoring_equal": true,
+      "capture_median_ms": 7.756007000352838,
+      "capture_max_ms": 8.819871000014246,
+      "capture_refusals": 0,
+      "pickle_bytes_max": 222350,
+      "proof_median_ms": 57.59268100155168,
+      "proof_max_ms": 91.85083599913924,
+      "statuses": [
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        }
+      ],
+      "cold_worker": {
+        "status": "reproduced_import",
+        "issues": [],
+        "spawn_and_proof_ms": 972.103464000611
+      },
+      "existing_load_boundary_median_ms": 0.001219999830937013,
+      "existing_load_boundary_max_ms": 0.014635999832535163,
+      "live_route_qualification": "pending"
+    },
+    {
+      "case": "source-byte-boundary",
+      "source_bytes": 100000,
+      "source_base64_characters": 133336,
+      "preflight_work": {
+        "helices": 2,
+        "array_slots": 42,
+        "active_bases": 84,
+        "declared_nucleotides": 84,
+        "strands": 4,
+        "domain_bound": 12
+      },
+      "preflight_ms": 4.156300999966334,
+      "build_ms": 5.6514749994676095,
+      "authoring_nodes": 191,
+      "output_helices": 2,
+      "output_strands": 4,
+      "output_domains": 4,
+      "recovery_encoded_bytes": 7200,
+      "recovery_encode_total_ms": 0.7199409992608707,
+      "candidate_json_bytes": 145613,
+      "validation_ms": 0.06129099892859813,
+      "private_prepare_total_ms": 6.432706997657078,
+      "reload_authoring_equal": true,
+      "capture_median_ms": 1.046318000589963,
+      "capture_max_ms": 1.2832480006181868,
+      "capture_refusals": 0,
+      "pickle_bytes_max": 138609,
+      "proof_median_ms": 5.9912689994234825,
+      "proof_max_ms": 6.557118000273476,
+      "statuses": [
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        }
+      ],
+      "cold_worker": {
+        "status": "reproduced_import",
+        "issues": [],
+        "spawn_and_proof_ms": 906.4396250014397
+      },
+      "existing_load_boundary_median_ms": 0.0012159998732386157,
+      "existing_load_boundary_max_ms": 0.014389001080417074,
+      "live_route_qualification": "pending"
+    },
+    {
+      "case": "helix-boundary",
+      "source_bytes": 22097,
+      "source_base64_characters": 29464,
+      "preflight_work": {
+        "helices": 32,
+        "array_slots": 672,
+        "active_bases": 1344,
+        "declared_nucleotides": 1344,
+        "strands": 64,
+        "domain_bound": 192
+      },
+      "preflight_ms": 7.0981389999360545,
+      "build_ms": 14.95190400055435,
+      "authoring_nodes": 1991,
+      "output_helices": 32,
+      "output_strands": 64,
+      "output_domains": 64,
+      "recovery_encoded_bytes": 29344,
+      "recovery_encode_total_ms": 1.316392001172062,
+      "candidate_json_bytes": 98151,
+      "validation_ms": 0.4524429987213807,
+      "private_prepare_total_ms": 16.720739000447793,
+      "reload_authoring_equal": true,
+      "capture_median_ms": 3.5179219994461164,
+      "capture_max_ms": 3.77154200032237,
+      "capture_refusals": 0,
+      "pickle_bytes_max": 63847,
+      "proof_median_ms": 16.46650000111549,
+      "proof_max_ms": 17.369866000080947,
+      "statuses": [
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        }
+      ],
+      "cold_worker": {
+        "status": "reproduced_import",
+        "issues": [],
+        "spawn_and_proof_ms": 949.911311001415
+      },
+      "existing_load_boundary_median_ms": 0.0011110005289083347,
+      "existing_load_boundary_max_ms": 0.015259000065270811,
+      "live_route_qualification": "pending"
+    },
+    {
+      "case": "array-width-boundary",
+      "source_bytes": 65544,
+      "source_base64_characters": 87392,
+      "preflight_work": {
+        "helices": 1,
+        "array_slots": 2048,
+        "active_bases": 42,
+        "declared_nucleotides": 42,
+        "strands": 2,
+        "domain_bound": 6
+      },
+      "preflight_ms": 13.97204700151633,
+      "build_ms": 20.3205940015323,
+      "authoring_nodes": 131,
+      "output_helices": 1,
+      "output_strands": 2,
+      "output_domains": 2,
+      "recovery_encoded_bytes": 6372,
+      "recovery_encode_total_ms": 0.6324349997157697,
+      "candidate_json_bytes": 97657,
+      "validation_ms": 0.04829200042877346,
+      "private_prepare_total_ms": 21.001321001676843,
+      "reload_authoring_equal": true,
+      "capture_median_ms": 0.9825779998209327,
+      "capture_max_ms": 1.2521669996203855,
+      "capture_refusals": 0,
+      "pickle_bytes_max": 91872,
+      "proof_median_ms": 19.559312999263057,
+      "proof_max_ms": 50.817818999348674,
+      "statuses": [
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        }
+      ],
+      "cold_worker": {
+        "status": "reproduced_import",
+        "issues": [],
+        "spawn_and_proof_ms": 932.2731100000965
+      },
+      "existing_load_boundary_median_ms": 0.0011070005712099373,
+      "existing_load_boundary_max_ms": 0.018008999177254736,
+      "live_route_qualification": "pending"
+    },
+    {
+      "case": "strand-fragment-boundary",
+      "source_bytes": 4002,
+      "source_base64_characters": 5336,
+      "preflight_work": {
+        "helices": 1,
+        "array_slots": 128,
+        "active_bases": 256,
+        "declared_nucleotides": 256,
+        "strands": 128,
+        "domain_bound": 384
+      },
+      "preflight_ms": 1.138293999247253,
+      "build_ms": 8.75633400028164,
+      "authoring_nodes": 2399,
+      "output_helices": 1,
+      "output_strands": 128,
+      "output_domains": 128,
+      "recovery_encoded_bytes": 12056,
+      "recovery_encode_total_ms": 0.7491359974665102,
+      "candidate_json_bytes": 65539,
+      "validation_ms": 0.7002409984124824,
+      "private_prepare_total_ms": 10.205710996160633,
+      "reload_authoring_equal": true,
+      "capture_median_ms": 4.608209999787505,
+      "capture_max_ms": 6.4372880005976185,
+      "capture_refusals": 0,
+      "pickle_bytes_max": 37819,
+      "proof_median_ms": 9.47508700119215,
+      "proof_max_ms": 11.477816999104107,
+      "statuses": [
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        }
+      ],
+      "cold_worker": {
+        "status": "reproduced_import",
+        "issues": [],
+        "spawn_and_proof_ms": 943.7190230000851
+      },
+      "existing_load_boundary_median_ms": 0.001104999682866037,
+      "existing_load_boundary_max_ms": 0.015959001757437363,
+      "live_route_qualification": "pending"
+    },
+    {
+      "case": "nucleotide-loop-boundary-software-only",
+      "source_bytes": 683,
+      "source_base64_characters": 912,
+      "preflight_work": {
+        "helices": 1,
+        "array_slots": 21,
+        "active_bases": 42,
+        "declared_nucleotides": 16384,
+        "strands": 2,
+        "domain_bound": 6
+      },
+      "preflight_ms": 0.2614639997773338,
+      "build_ms": 1.1503420009830734,
+      "authoring_nodes": 134,
+      "output_helices": 1,
+      "output_strands": 2,
+      "output_domains": 2,
+      "recovery_encoded_bytes": 4064,
+      "recovery_encode_total_ms": 0.24229300106526352,
+      "candidate_json_bytes": 8908,
+      "validation_ms": 0.07949399878270924,
+      "private_prepare_total_ms": 1.4721290008310461,
+      "reload_authoring_equal": true,
+      "capture_median_ms": 1.0151429996767547,
+      "capture_max_ms": 1.2881500006187707,
+      "capture_refusals": 0,
+      "pickle_bytes_max": 5461,
+      "proof_median_ms": 1.1817579998023575,
+      "proof_max_ms": 1.6845119989739032,
+      "statuses": [
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        },
+        {
+          "status": "reproduced_import",
+          "issues": []
+        }
+      ],
+      "cold_worker": {
+        "status": "reproduced_import",
+        "issues": [],
+        "spawn_and_proof_ms": 927.9559639999206
+      },
+      "existing_load_boundary_median_ms": 0.0012029995559714735,
+      "existing_load_boundary_max_ms": 0.015132000044104643,
+      "live_route_qualification": "pending"
+    }
+  ]
+}

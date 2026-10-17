@@ -7,6 +7,7 @@ const key = n => `${n.helix_id}:${n.bp_index}:${n.direction}`
 
 /** Only periodic connections have continuation previews, never ordinary free ends. */
 export function polymerizationPreviewEnds(design, entries, slabs = []) {
+  if (!design?.forced_ligations?.some(seam => seam.is_periodic_seam)) return []
   const beads = new Map(entries.map(e => [key(e.nuc), e]))
   const plates = new Map(slabs.map(e => [key(e.nuc), e]))
   const ends = [], seen = new Set()

@@ -1,0 +1,17 @@
+{
+  "date": "2026-10-15",
+  "focused_tests": {
+    "tests/test_part_repair_input_metadata.py": 27,
+    "tests/test_part_repair_sources.py": 36
+  },
+  "focused_total": 63,
+  "changed_python_ruff": "passed",
+  "git_diff_check": "passed",
+  "scope": "Explicit bounded metadata read; no proof/geometry/source hashing or mutation.",
+  "limitations": [
+    "Schema-invalid old definitions still need a separate safe recognition adapter.",
+    "No app/visual/headset validation; Archive unavailable.",
+    "Broad-suite debt unchanged: FAST/deferred FULL was only a test-smart dry-run.",
+    "P4/P5/P6 remain incomplete."
+  ]
+}
