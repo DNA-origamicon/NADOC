@@ -7,6 +7,25 @@ beads, binding cylinders — are CLOSED, and the suspected photo-export bug was 
 photo-mode/override interaction, per-region extra bases, a test gap, and in-app verification —
 real, but none of them silently wrong geometry.
 
+## Crossover extras in view volumes (2026-10-16)
+
+Full and Beads volume layers now build the shared crossover-extra meshes alongside
+helix geometry (`view_volume_extras.js`). Previously the native extras yielded to
+the volume's column mask, while its independent CG layer omitted their replacement.
+The same layer builder serves assembly volumes. Full shows beads, slabs and rods;
+Beads shows the backbone beads/connectors. Both endpoints must belong to the layer,
+matching the existing crossover visibility policy. Local colors, opacity, cluster
+alpha and hidden/reference endpoints are applied to the independent meshes.
+Cylinders still omit individual residues by design. VDW, Ball & Stick, Stick and
+Surface already retain extra atoms via their source-column metadata.
+Validation: 52 focused tests pass. Full frontend suite: 7,961 passed, 1 skipped,
+6 failures in unchanged viewer disposal (`_savedInner` is undefined). The browser
+regression is retained in `frontend/e2e/view_volume_extras.spec.js`, but its run
+was blocked before rendering by the persistent placement-integrity review gate.
+**Not verified in app**; pixel/representation-matrix assertions have not executed.
+Logs: `.development-artifacts/volume-extras/`. This change covers spatial view
+volumes; legacy per-domain overrides and physical headset verification are separate.
+
 ## Independent volume display (2026-09-24)
 
 Each volume persists its own `coloring` scheme (legacy records default to strand).
