@@ -17,15 +17,8 @@ ACTION = 'connection-version-apply-direct'
 _Id = linker._Id
 
 
-class ApplyRequest(BaseModel):
+class DirectSelection(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
-    proof_version: Annotated[StrictInt, Field(ge=1, le=1)] = Field(alias='_proof_version')
-    direct_application_version: Annotated[StrictInt, Field(ge=1, le=1)]
-    action: Literal['connection-version-apply-direct']
-    version_id: _Id
-    overhang_a_id: _Id
-    overhang_b_id: _Id
-    connection_type: Literal['root-to-root', 'end-to-root']
     history_seed: _Id
     created_at: float = Field(ge=0, allow_inf_nan=False)
     conflict_connection_ids: list[_Id] = Field(max_length=linker.MAX_CONFLICTS)
@@ -46,6 +39,15 @@ class ApplyRequest(BaseModel):
             raise ValueError('Direct conflict selections must be unique')
         return value
 
+
+class ApplyRequest(DirectSelection):
+    proof_version: Annotated[StrictInt, Field(ge=1, le=1)] = Field(alias='_proof_version')
+    direct_application_version: Annotated[StrictInt, Field(ge=1, le=1)]
+    action: Literal['connection-version-apply-direct']
+    version_id: _Id
+    overhang_a_id: _Id
+    overhang_b_id: _Id
+    connection_type: Literal['root-to-root', 'end-to-root']
 
 def parse_command(params):
     validate_operation_input(params)

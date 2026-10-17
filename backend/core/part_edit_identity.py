@@ -68,4 +68,8 @@ def preserve_proof_identity(previous, updated, *, kind=None):
     if (kind == "overhang-bulk" and previous.get("direct_application_version") == 1
             and previous.get("action") == "connection-version-apply-direct"):
         keys += ("action", "direct_application_version", "history_seed", "created_at")
+    if (kind == "overhang-bulk" and previous.get("direct_composition_version") == 1
+            and previous.get("action") == "connection-version-connect-direct"):
+        keys += ("action", "connection_version_contract", "direct_composition_version",
+                 "version_id", "history_seed", "created_at")
     return {**result, **{key: previous[key] for key in keys if key in previous}}

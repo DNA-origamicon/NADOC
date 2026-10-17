@@ -41,6 +41,7 @@ OWNED_FINITE_CONNECTION_APPLY_ENABLED = False
 OWNED_COMBINED_CONNECTION_APPLY_ENABLED = False
 NATIVE_LINKER_V2_ENABLED = False
 NATIVE_DIRECT_APPLY_ENABLED = False
+NATIVE_DIRECT_CONNECT_ENABLED = False
 
 
 @router.post("/design/connection-versions", status_code=201)
@@ -386,6 +387,12 @@ def apply_connection_version(version_id: str) -> dict:
 
 def create_and_apply_connection_version(body: ConnectionVersionCreateRequest) -> dict:
     """Create and materialize a first-time connection as one undoable action."""
+    if NATIVE_DIRECT_CONNECT_ENABLED:
+        from backend.api.part_connection_direct_recording import try_record_connect
+        recorded = try_record_connect(body.model_dump())
+        if recorded is not None:
+            source, updated, report, _entry = recorded
+            return _connection_apply_response(source, updated, report)
     if OWNED_COMBINED_CONNECTION_APPLY_ENABLED or NATIVE_LINKER_V2_ENABLED:
         from backend.api.part_connection_composition_commands import try_record
         recorded = try_record(body.model_dump(), contract_version=2 if NATIVE_LINKER_V2_ENABLED else 1)

@@ -508,3 +508,66 @@ and0regular files/bytes. No readable same-user cwd/fd/maps references were found
 persistent systemd/PAM435/436 remain uninspectable. Removed only those completed
 task directories/links; pytest root and `/dev/shm` are empty. No user designs,
 managed jobs, historical evidence or caches were removed.
+
+
+## U34 — closed first-time direct Connect
+
+`connection-version-connect-direct` v1 is registered as one closed compound
+recipe under `overhang-bulk`. It carries the strict pending-definition inputs,
+creator version ID/time, identity namespace and exact prior conflict selections.
+Pending version creation and native direct application share one candidate and
+one canonical reconciliation/retry. No arbitrary nested command batch or output
+snapshot is accepted. The strict `DirectSelection` fields/validators and bounded
+conflict-table extraction are now shared with Apply; its saved v1 meaning stays
+unchanged. The new version is a dependency write, not an impossible prefix read.
+Generated scopes remain explicitly unqualified. History edits protect all creator
+identity/time/contract slots while retaining editable sequence/type/reference inputs.
+
+The ordinary adapter stages against an exact locked source and records once;
+source/session/policy/revision acquisition reuses ConnectRoute. Loadout/latest
+cursor guards precede preparation. Unsupported source scope may fall back only
+before materialization; admitted failures never retry legacy. The separate
+`NATIVE_DIRECT_CONNECT_ENABLED` flag defaults false, as does direct Apply rollout.
+This adds no full proof to an ordinary edit or viewport frame. Native scientific
+helpers, work/metadata limits, model pins, constants and goldens are unchanged.
+
+Evidence: all six direct type/length cases (12/12,12/8,12/16) match separate
+pending+Apply execution and the actual ordinary legacy callback's complete
+authoring output. Compound replacement checks exact prior ownership. Tests cover
+one postprocessing pass, malformed definitions, protected creator identities,
+sequence/type history edits followed by a spawned verifier, HTTP Connect, one
+undo/redo, source isolation, validation/materialization rollback without retry,
+source-change acquisition and loadout/cursor guards. Eight initial cases failed
+on the unimplemented composition; the first paired contract run passed51cases.
+Expanded contract/recording validation passed82. Final17-file run:
+
+`just test-affected tests/test_part_connection_direct_compose.py tests/test_connection_direct_connect_route.py tests/test_part_connection_direct.py tests/test_connection_direct_recording.py tests/test_connection_direct_identity.py tests/test_connection_direct_replacement.py tests/test_direct_connection_unified.py tests/test_duplex_length_preserve.py tests/test_overhang_binder_rotation.py tests/test_connection_composition_contract.py tests/test_connection_versions.py tests/test_part_connection_application_commands.py tests/test_part_connection_indirect.py tests/test_part_connection_compose.py tests/test_native_connection_application_proof.py tests/test_part_pending_connection_versions.py tests/test_connection_version_owned_apply_route.py --tb=short`
+
+**408passed,33existing FastAPI warnings,20.98s**, including34new compound/route
+cases. Changed Python Ruff passes; full lint retains5baseline F401 findings.
+`main.js`7350lines,delta0; no frontend change or frontend rerun.
+
+`just test-smart --dry-run` selects FAST after deferring the historical
+foundational FULL diff (5763files); **zero broad tests ran**. Literal notice:
+
+```text
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+Only request `just test-session` when a broad/full sweep is actually needed.
+```
+
+NOT VERIFIED IN APP: Archive remains absent; no visual/latency qualification or
+bulk artifacts. Direct-to-linker registered replay remains the next gap in the
+fixed replacement matrix. Applied metadata, organized integration, history/repair
+controls and full qualification remain open; shared-host and ISSUE-126 scientific
+correctness debts are unchanged. This is not FH-25 closure or a rollout. Counts
+21/38complete,17remaining;+0total,+0completed;34engineering checkpoints since B1.
+FH-25 remains growth-flagged after7; no exit or denominator change.
+
+Hygiene: memory lint retains6baseline errors/59warnings; current project head
+remains200lines. Task pytest roots1/2/3 contained544empty directories,4symlinks,
+0regular files/bytes. No readable same-user cwd/fd/maps references were present;
+persistent systemd/PAM435/436 remain uninspectable. Removed only those completed
+task directories/links. Pytest root and `/dev/shm` are empty. No user designs,
+managed jobs, historical evidence or caches were removed.

@@ -17,7 +17,8 @@ class ConnectRoute(SourceBoundRoute):
 
     def enabled(self):
         from backend.api import routes_connection_versions as routes
-        return routes.OWNED_COMBINED_CONNECTION_APPLY_ENABLED or routes.NATIVE_LINKER_V2_ENABLED
+        return (routes.OWNED_COMBINED_CONNECTION_APPLY_ENABLED or routes.NATIVE_LINKER_V2_ENABLED
+                or routes.NATIVE_DIRECT_CONNECT_ENABLED)
 
     def get_route_handler(self):
         owned = super().get_route_handler()
