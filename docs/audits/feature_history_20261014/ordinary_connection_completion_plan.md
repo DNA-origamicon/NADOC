@@ -428,3 +428,83 @@ remains200lines. Completed task pytest roots1/2/3 contained407empty directories,
 were found; persistent systemd/PAM435/436 remain uninspectable. Removed only
 those task-created empty directories/links; pytest root and `/dev/shm` are empty.
 No user designs, managed jobs, historical evidence or caches were removed.
+
+
+## U33 — registered direct Apply and owned recording
+
+`connection-version-apply-direct` v1 is now registered under `overhang-bulk`.
+Strict inputs contain the saved version/endpoint selection, both direct types,
+UUID namespace, creation time and exact ordered connection/binding/Duplex/version
+conflict IDs. No authoring geometry or saved restoration state is accepted as a
+command input. Dependency reads name selected owners; writes reserve common and
+conditional output slots plus a whole-topology barrier for prefix-derived
+relocation. Conditional binding/ligation slots remain reserved across upstream
+length edits. Generated scopes are explicitly unqualified. History edits preserve
+contract, seed and creation time while allowing consumer reference/input edits.
+
+Admission reuses existing4096base,10k-node and256k-byte limits. The shared bounded
+source walker accepts explicit extra collections only for this new contract;
+finite/indirect v1/v2 defaults remain unchanged. Direct admission classifies live
+references and native saved-topology ownership, protects historical output IDs,
+requires exact conflicts, rejects edited/missing ligation or placement ownership,
+checks driver/driven consistency and retained references after restoration, and
+uses existing dedicated-host/complement ownership checks before geometry. Unknown
+organization integration remains refused, not removed from the exit. No full
+feature proof runs in ordinary Apply or viewport frames.
+
+`part_connection_direct_recording` prepares under the existing document lock,
+then invokes the shared materializer inside one recording callback. Source,
+session/policy and revision acquisition use the existing owned Apply route.
+Protected loadout/latest-cursor guards precede preparation. One native build,
+one reconciliation/retry, one undo and detached source history are retained.
+Only unsupported source profiles may fall back before recording; admitted
+failures never retry legacy. `NATIVE_DIRECT_APPLY_ENABLED` defaults false.
+
+Coverage: equal12/12, A-longer12/8 and B-longer12/16; both direct types; complete
+ordinary-callback authoring parity; direct-to-direct and finite/indirect-to-direct
+replacement; poisoned recovery bodies; exact conflict/collision/stale-owner
+refusal; repairable missing endpoint paths; input identity preservation; an
+upstream edit switching the native driver followed by a spawned verification
+worker; actual HTTP Apply/reapply, undo/redo, failed publication/materialization,
+body refusal and source-change acquisition. Documented limits remain important:
+first-time combined direct Connect and direct-to-linker registered replay are not
+yet implemented. Shared-host, applied metadata and organization integration,
+ISSUE-126 scientific correctness and full qualification remain in the fixed exit.
+
+Validation progression:23tests first failed on the absent contract/protection.
+The first implementation passed17 with6 test-expectation failures comparing raw
+builder output against reconciled executor output; corrected to apply existing
+canonical postprocessing. Expanded35passed. A worker-edit fixture initially used
+an incorrect `prepare_change` signature; corrected to the existing index/checkpoint
+API, yielding41passed. Recording added6cases, yielding47passed. Added driver/
+length ownership corruption and stale HTTP acquisition coverage. Final command:
+
+`just test-affected tests/test_part_connection_direct.py tests/test_connection_direct_recording.py tests/test_connection_direct_identity.py tests/test_connection_direct_replacement.py tests/test_direct_connection_unified.py tests/test_duplex_length_preserve.py tests/test_overhang_binder_rotation.py tests/test_connection_composition_contract.py tests/test_connection_versions.py tests/test_part_connection_application_commands.py tests/test_part_connection_indirect.py tests/test_part_connection_compose.py tests/test_native_connection_application_proof.py tests/test_part_pending_connection_versions.py tests/test_connection_version_owned_apply_route.py --tb=short`
+
+**374passed,33existing FastAPI warnings,18.07s**, including50new direct contract/
+recording cases. Changed Python Ruff passes; full lint retains5baseline F401
+findings. `main.js`7350lines,delta0. No molecular kernel/model/constants/pins/golden
+changes; no frontend behavior or frontend test rerun.
+
+`just test-smart --dry-run` selected FAST after deferring the historical
+foundational FULL diff (5758files); **zero broad tests ran**. Literal notice:
+
+```text
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+Only request `just test-session` when a broad/full sweep is actually needed.
+```
+
+NOT VERIFIED IN APP: Archive mount absent; no browser/visual/latency acceptance or
+bulk artifacts. Existing source/work limits are admission bounds, not a measured
+latency claim. All rollout gates remain false. Counts21/38complete,17remaining;
++0total,+0completed;33engineering checkpoints since B1. FH-25 remains growth-flagged
+after6. No narrowed exit, new milestone or estimate change.
+
+Hygiene: memory lint retains6baseline errors/59warnings; current project head
+remains200lines. Task pytest roots4/5/6 contained465empty directories,4symlinks
+and0regular files/bytes. No readable same-user cwd/fd/maps references were found;
+persistent systemd/PAM435/436 remain uninspectable. Removed only those completed
+task directories/links; pytest root and `/dev/shm` are empty. No user designs,
+managed jobs, historical evidence or caches were removed.

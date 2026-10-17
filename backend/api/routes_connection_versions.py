@@ -40,6 +40,7 @@ router = APIRouter()
 OWNED_FINITE_CONNECTION_APPLY_ENABLED = False
 OWNED_COMBINED_CONNECTION_APPLY_ENABLED = False
 NATIVE_LINKER_V2_ENABLED = False
+NATIVE_DIRECT_APPLY_ENABLED = False
 
 
 @router.post("/design/connection-versions", status_code=201)
@@ -199,6 +200,12 @@ def _cv_linker_type(t: str) -> str:
 def _apply_connection_version_impl(
     version_id: str, *, new_version: ConnectionVersion | None = None
 ) -> dict:
+    if NATIVE_DIRECT_APPLY_ENABLED and new_version is None:
+        from backend.api.part_connection_direct_recording import try_record as try_direct
+        recorded = try_direct(version_id)
+        if recorded is not None:
+            source, updated, report, _entry = recorded
+            return _connection_apply_response(source, updated, report)
     if (OWNED_FINITE_CONNECTION_APPLY_ENABLED or NATIVE_LINKER_V2_ENABLED) and new_version is None:
         from backend.api.part_connection_application_commands import try_record
         recorded = try_record(version_id, contract_version=2 if NATIVE_LINKER_V2_ENABLED else 1)

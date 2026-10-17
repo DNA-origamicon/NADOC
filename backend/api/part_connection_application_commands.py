@@ -121,7 +121,7 @@ def _resolve(index, kind, identity, path):
     return value
 
 
-def _bounded_source(design):
+def _bounded_source(design, *, extra_fields=frozenset()):
     """Bound declared source work before indexing references or building arrays.
 
     Unlike command JSON, these are typed model records. Visit only the admitted
@@ -131,13 +131,14 @@ def _bounded_source(design):
     """
     if sum(len(getattr(design, field)) for field in COLLECTIONS) > MAX_OPERATION_NODES:
         _unsupported("Linker application exceeds its source record allowance")
-    for field in COLLECTIONS.keys() - _SOURCE_FIELDS:
+    source_fields = _SOURCE_FIELDS | extra_fields
+    for field in COLLECTIONS.keys() - source_fields:
         if getattr(design, field):
             _unsupported(f"Finite linker application does not yet admit {field}")
     for helix in design.helices:
         if helix.native_residues or helix.native_source:
             _unsupported("Finite linker application requires native DNA hosts")
-    pending = [(getattr(design, field), 0) for field in _SOURCE_FIELDS]
+    pending = [(getattr(design, field), 0) for field in source_fields]
     nodes, size = 0, 0
     while pending:
         item, depth = pending.pop()

@@ -45,5 +45,5 @@ class ApplyRoute(ConnectRoute):
     body_reader = staticmethod(lambda *args, **kwargs: _no_apply_inputs(*args, **kwargs))
 
     def enabled(self):
-        from backend.api.routes_connection_versions import NATIVE_LINKER_V2_ENABLED
-        return NATIVE_LINKER_V2_ENABLED
+        from backend.api.routes_connection_versions import NATIVE_LINKER_V2_ENABLED, NATIVE_DIRECT_APPLY_ENABLED
+        return NATIVE_LINKER_V2_ENABLED or NATIVE_DIRECT_APPLY_ENABLED
