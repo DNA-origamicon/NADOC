@@ -22,28 +22,27 @@ decrement completed if an exit reopens. Flag three major checkpoints spent on
 any still-open milestone (cumulative even across alternating work), or total
 growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
-Effort is separate: U1–U23 are **23 engineering checkpoints** since B1, closing
+Effort is separate: U1–U24 are **24 engineering checkpoints** since B1, closing
 **three milestones** (FH-19/FH-21/FH-22). FH-18 remains open after13 checkpoints;
-FH-23 after6. Both are **task-growth flagged**. Current counts: **20/38 complete,
-18 remaining (9 core,9 parked); U23 +0 completed,+0 total**. Fixed exits remain.
-U23 integrates numerical Prepare AND full-proof Apply into the existing catalog,
-with bounded polling, exact origin/role/sequence checks and visible Cancel/Escape.
-Computing has a180s ceiling; ready inputs and scalar receipts each have fixed60s
-windows. Polls never renew them. Ordinary1s/5s budgets remain unchanged.
-Selected-only evaluation never reruns the solver. One shared publication path
-keeps one undo and exact source/session/policy guards; no second job registry.
-Frontend lease timing uses the final local read and charges display validation.
-Unknown Apply/Status transport outcomes cannot authorize automatic recommit.
-ISSUE-133 closes sequence, admission, timer and result-recovery races.
-ISSUE-132 still holds proof admission until actual child/buffer cleanup succeeds.
-No native math, molecular pins, constants, goldens or source manifests changed.
+FH-23 after7. Both are **task-growth flagged**. Current counts: **20/38 complete,
+18 remaining (9 core,9 parked); U24 +0 completed,+0 total**. Fixed exits remain.
+U24 qualifies actual CPD free motion and relaxed-duplex root/taut/joint gestures
+through explicit single-row upgrade, selected-only evaluation, asynchronous
+Apply, one undo/redo, save/reload and independent cold proof. Ordinary gesture
+coverage remains. No production behavior, molecular inputs or rollout changes.
+U23's existing catalog owns numerical Prepare/Apply, cancellation and receipts;
+computation180s, ready inputs60s and receipts60s remain distinct fixed windows.
+Polling never renews them; ordinary1s/5s paths and selected-only evaluation remain.
+Exact-source publication and unknown-result recovery prevent repeat Apply.
 See [movement contract](../docs/audits/feature_history_20261014/transform_history_editor_plan.md)
-and [U23 evidence](../docs/audits/feature_history_20261014/validation_transform_numerical_lifecycle.json).
-FH-23 remains open: numerical native gestures and arbitrary new-group integration;
-post-conversion extension upsert stays unqualified. No milestone split or credit.
-Both transform gates stay false. NOT VERIFIED IN APP: Archive unavailable; MV-52/FH-27 remains open.
-Broad pytest requires mounted Archive scratch; selector-only earns no suite credit.
-ISSUE-125 remains until rollout; ISSUE-126 remains. `main.js` is7350; U23 delta0.
+and [U24 evidence](../docs/audits/feature_history_20261014/validation_transform_numerical_gestures.json).
+FH-23 remains open: arbitrary new-group movement and organized extension upsert.
+The audit fixes their complete matrices; neither proposed integration is implemented.
+Next deliver the extension-only v2 contract/owned transaction, preserving v1;
+new member motion first needs the plan's isolated consumer/geometry comparison.
+Both transform gates stay false. NOT VERIFIED IN APP: Archive unavailable;
+MV-52/FH-27 desktop/performance and broad backend regression remain open.
+ISSUE-125 remains until rollout; ISSUE-126/130 remain. `main.js`7350; U24 delta0.
 FH-18 retains separate Groups/Placements, native lineage, named deformation
 preview/repair/creation, persistent visibility and organized pattern integration.
 Its original movement/generated/qualification exits remain open; rollout stays off.
@@ -134,7 +133,7 @@ finished tool: recording, preview/cancel/Apply, downstream editing, undo/reload
 and ordinary controls must agree. Nanoparticle/protein/assets and their remaining
 benchmarks are parked; ordinary DNA connections are core. Assemblies and VR
 remain separately deferred. The persistent P3–P6 goal stays active.
-U23 sequencing: qualify numerical gestures, then FH-23/FH-18 new-group movement;
+U24 sequencing: organized extension upserts, then FH-23/FH-18 new-group movement;
 generated compatibility retains the existing B–E exits. U13 completes the
 private ordinary Bend/Twist creation adapter: same owned prefix, controller,
 renderer and lease as history editing, no provisional canonical operation.

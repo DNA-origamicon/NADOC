@@ -45,7 +45,7 @@ const { createTransformHistoryTool } = await import('./frontend/src/scene/transf
 const { initClusterGizmo } = await import('./frontend/src/scene/cluster_gizmo.js');
 const { store } = await import('./frontend/src/state/store.js');
 let raw = ''; for await (const chunk of process.stdin) raw += chunk;
-const { packet, gesture, ids, cancel = false } = JSON.parse(raw), original = JSON.stringify(packet);
+const { packet, gesture, ids, cancel = false, joint_limit = 25 } = JSON.parse(raw), original = JSON.stringify(packet);
 validateTransformPreviewDisplay(packet, { prepare: true, requireEnvelope: true });
 store.getState = () => { throw new Error('Canonical store read during private gesture'); };
 store.setState = () => { throw new Error('Canonical mutation during private gesture'); };
@@ -62,8 +62,10 @@ const panel = { bindHistorySession(value) { callbacks = value; return {
 }; } };
 const tick = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 const pose = value => ({ cluster_id: value.clusterId, translation: value.translation, rotation: value.rotation, pivot: value.pivot });
-const primary = packet.control_context.inputs.primary_cluster_id;
-let result, constraintEvidence = null, jointError = null;
+const primary = packet.control_context.inputs.primary_cluster_id ?? packet.control_context.inputs.cluster_id;
+const definition = draft => draft.definition ?? draft;
+let initialDrafts = 0;
+let result, constraintEvidence = null, jointError = null, rootPivot = null;
 try {
   preview.open(packet);
   tool = createTransformHistoryTool({ scene, camera, canvas, controls, panel, preview,
@@ -71,6 +73,13 @@ try {
     onChange: draft => drafts.push(structuredClone(draft)), onReset() {}, onApply() { applied++; },
     onCancel() { cancelled = true; tool.dispose(); }, onError: error => errors.push(error.message) });
   tool.open(packet);
+  if (packet.command_kind === 'cluster_op') {
+    callbacks.onUpgrade(); await tick();
+    const descriptor = packet.control_context.placement_upgrade;
+    if (!descriptor || drafts.length !== 1 || Object.entries(descriptor).some(([key, value]) => drafts[0][key] !== value))
+      throw new Error('Native explicit upgrade did not retain the original definition guard');
+    initialDrafts = drafts.length;
+  }
   const nativeGeometry = preview.candidateGeometry();
   const nativeAnchor = anchor => {
     const value = nativeGeometry.backboneEntries.find(entry => entry.nuc.helix_id === anchor.helix_id
@@ -88,14 +97,30 @@ try {
     const ring = scene.children.find(node => node.geometry?.type === 'TorusGeometry');
     if (!ring) throw new Error('Actual native joint ring was not created');
     const baseline = packet.control_state.cluster_transforms.find(owner => owner.id === primary);
-    if (baseline.parent_cluster_id !== null || baseline.rotation.some((n, i) => n !== [0, 0, 0, 1][i]) || joint.max_angle_deg !== 25)
-      throw new Error('The independent joint oracle requires this fixture\'s identity root pose and historical 25 degree limit');
+    if (baseline.parent_cluster_id !== null || joint.max_angle_deg !== joint_limit || !(joint_limit > 0 && joint_limit < 90))
+      throw new Error('The independent joint oracle requires the exact historical limit and a root placement');
+    const baseQ = new THREE.Quaternion(...baseline.rotation);
+    const proposedQ = new THREE.Quaternion().setFromAxisAngle(axis, Math.PI / 2).multiply(baseQ);
+    // Expected orientation: preserve the requested swing and bound its twist.
+    // The separate world-point oracle below checks pivot and translation as well.
+    const axial = new THREE.Vector3(proposedQ.x, proposedQ.y, proposedQ.z).dot(axis);
+    let proposedAngle = 2 * Math.atan2(axial, proposedQ.w);
+    while (proposedAngle > Math.PI) proposedAngle -= 2 * Math.PI;
+    while (proposedAngle <= -Math.PI) proposedAngle += 2 * Math.PI;
+    const boundedAngle = Math.max(joint.min_angle_deg * Math.PI / 180,
+      Math.min(joint.max_angle_deg * Math.PI / 180, proposedAngle));
+    if (Math.abs(boundedAngle - proposedAngle) < 1e-3)
+      throw new Error('Joint fixture did not exercise its historical angular limit');
+    const expectedQ = proposedQ.clone().multiply(new THREE.Quaternion().setFromAxisAngle(axis, boundedAngle - proposedAngle));
+    const worldDelta = expectedQ.clone().multiply(baseQ.clone().invert());
     const probes = nativeGeometry.backboneEntries.filter(entry => baseline.helix_ids.includes(entry.nuc.helix_id));
     if (probes.length < 2) throw new Error('Native joint oracle needs two real backbone probes');
     const worldError = draft => {
-      const written = draft.poses.find(owner => owner.cluster_id === primary);
+      const written = definition(draft).poses.find(owner => owner.cluster_id === primary);
+      if (new THREE.Quaternion(...written.rotation).angleTo(expectedQ) > 1e-7)
+        throw new Error('Joint draft lost the expected bounded orientation');
       return Math.max(...[probes[0], probes.at(-1)].map(entry => {
-        const expected = entry.pos.clone().sub(origin).applyAxisAngle(axis, 25 * Math.PI / 180).add(origin);
+        const expected = entry.pos.clone().sub(origin).applyQuaternion(worldDelta).add(origin);
         // Independent original-world -> stored-rest -> authored-world check.
         const actual = entry.pos.clone().sub(new THREE.Vector3(...baseline.translation))
           .sub(new THREE.Vector3(...baseline.pivot)).applyQuaternion(new THREE.Quaternion(...baseline.rotation).invert())
@@ -122,6 +147,13 @@ try {
     callbacks.onPivot(gesture === 'free' ? 'centroid' : gesture === 'duplex-root' ? `dup:root:${ids.driver}`
       : gesture === 'duplex-taut' ? 'dup:taut' : 'ssdna');
     await tick();
+    if (gesture === 'duplex-root') {
+      const owner = packet.control_state.cluster_transforms.find(value => value.id === primary);
+      rootPivot = packet.control_state.placement_constraints.find(value => value.cluster_id === primary)
+        ?.rotation_points.find(value => value.kind === 'overhang_root' && value.overhang_id === ids.driver)?.point;
+      if (owner.overhang_duplex_driver_id !== ids.driver || !rootPivot || JSON.stringify(gizmo.getPivot()) !== JSON.stringify(rootPivot))
+        throw new Error('Duplex gesture did not select the exact native driver root pivot');
+    }
     const tc = scene.children.find(node => node.controls)?.controls;
     if (!tc?.object) throw new Error('Actual native TransformControls was not attached');
     let delta = new THREE.Vector3(-1, 1, .25);
@@ -170,15 +202,18 @@ try {
   }
   if (errors.length) throw new Error(errors.join('\n'));
   if (cancel) {
-    if (!cancelled || drafts.length) throw new Error('Cancelled native gesture emitted a late draft');
+    if (!cancelled || drafts.length !== initialDrafts) throw new Error('Cancelled native gesture emitted a late draft');
     result = { cancelled: true };
   } else {
-    if (!drafts.length) throw new Error('Native gesture produced no owned draft');
+    if (drafts.length <= initialDrafts) throw new Error('Native gesture produced no owned draft');
     callbacks.onApply(); await tick();
     if (applied !== 1 || errors.length) throw new Error('Native draft did not reach the owned Apply callback');
     const pending = gizmo.getAllPendingTransforms().map(pose), patch = drafts.at(-1);
+    if (rootPivot && (definition(patch).authoring.pivot_id !== `dup:root:${ids.driver}`
+      || JSON.stringify(definition(patch).poses.find(row => row.cluster_id === primary)?.pivot) !== JSON.stringify(rootPivot)))
+      throw new Error('Duplex draft lost the exact root pivot or its recorded identity');
     for (const value of pending) {
-      const emitted = patch.poses.find(row => row.cluster_id === value.cluster_id);
+      const emitted = definition(patch).poses.find(row => row.cluster_id === value.cluster_id);
       if (!emitted || ['translation','rotation','pivot'].some(key => JSON.stringify(emitted[key]) !== JSON.stringify(value[key])))
         throw new Error('Emitted complete pose lost the actual native pending transform');
     }
@@ -195,11 +230,12 @@ process.stdout.write('\n' + JSON.stringify(result));
 """
 
 
-def gesture_draft(packet, gesture, identities, *, cancel=False):
+def gesture_draft(packet, gesture, identities, *, cancel=False, joint_limit=25):
     """Return only the real tool's emitted definition and observed native poses."""
     result = subprocess.run(["node", "--input-type=module", "-e", SCRIPT],
         cwd=Path(__file__).resolve().parents[1],
-        input=json.dumps({"packet": packet, "gesture": gesture, "ids": identities, "cancel": cancel}, allow_nan=False),
+        input=json.dumps({"packet": packet, "gesture": gesture, "ids": identities, "cancel": cancel,
+                         "joint_limit": joint_limit}, allow_nan=False),
         capture_output=True, text=True, timeout=15)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout.splitlines()[-1])

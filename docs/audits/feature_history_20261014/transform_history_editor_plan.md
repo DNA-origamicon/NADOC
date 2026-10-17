@@ -373,6 +373,118 @@ unchanged native builders still resolve identities and topology.
 | Arbitrary organizational groups — OPEN | Retain original shared FH-18/FH-23 movement/frame/generated exits. Extension creation before conversion and delete after conversion replay; upsert after conversion remains refused pending conserved lineage and actual placement-owner qualification. Whole-helix tests cannot certify arbitrary domain ownership under legacy reconciliation. |
 | Qualification — OPEN | Existing FH-27/MV-52 app, complete HTTP/render/lock/memory acceptance and broad regression debt remain. Archive is absent; no browser/bulk scratch fallback or rollout. |
 
+### ISSUE-130 proposed extension-upsert v2 integration — NOT IMPLEMENTED
+
+This is a finite proposal for the existing FH-18/FH-23 terminal-extension exit,
+not another milestone, an enabled route, or a claim that arbitrary group motion
+is solved. The post-conversion upsert refusal remains in force. No completion
+count changes follow from this plan.
+
+The current implementation separates the extension builder from its surrounding
+postprocessing:
+
+- `backend/api/part_extension_commands.py::build` changes only `extensions`.
+  It already validates complete entries, explicit create/update intent, unique
+  identities/termini and live strand references. Updates retain the original
+  strand/end; output IDs survive historical input edits through
+  `backend/core/part_edit_identity.py`.
+- `backend/api/feature_recording.py::_run` and
+  `backend/api/part_proof_commands.py::execute` nevertheless reconcile placement
+  membership and retry pending ligations for v1 upsert. The v1 dependency contract
+  therefore correctly remains a conservative barrier.
+- `backend/core/cluster_reconcile.py::_compute_domain_membership` rebuilds domain
+  owners using direction-blind interval overlap, selecting one winning owner.
+  Overlapping or opposite-direction placement memberships can change even when
+  the extension builder leaves the strand topology unchanged. Native
+  `lattice.retry_pending_ligations` can subsequently rename/coalesce domains;
+  `_ligate` also migrates or removes extensions at the affected termini.
+- `backend/core/part_group_lineage.py` transports organizational selections, not
+  ordered numerical placement ownership. Adding upsert to its admitted kinds
+  alone cannot establish unchanged placement or terminal coordinates. The
+  current generic extension recorder is also rejected by the active-organization
+  publication gate; native replay admission alone would not complete ordinary
+  CRUD.
+- `backend/core/design_geometry.py::_strand_extension_geometry` already obtains
+  the tail from the native cluster/deformation terminal position, base normal and
+  tangent. Its anchor map is populated before the later per-residue geometry
+  transform pass; this is not evidence that an independently moved terminal
+  residue carries its extension with it. Preserve and characterize that existing
+  boundary rather than silently repairing it in the upsert adapter.
+  `frontend/src/scene/part_group_display.js` already makes extension display
+  membership follow the exact terminal domain, or its whole helix when the group
+  has no domain selectors. Neither mechanism needs a new geometric formula.
+
+The proposed semantic decision is **extension-upsert proof v2 owns extension
+annotations only**: create/update/batch changes the declared extensions without
+reconciling placements or retrying unrelated ligations. Every other authoring
+field, including domain ordinals, ordered owner memberships/poses, parent/driver
+references, empty frame owners and organization, stays unchanged. This is an
+explicit command-contract choice, not a conclusion supplied by a CAD vendor's
+grouping semantics. It requires acceptance tests before admission. Existing
+native tail, atomistic/export placement, polarity, contour, constants and solvers
+remain authoritative and unchanged. If those tests reveal a molecular discrepancy,
+keep the refusal and use the existing isolated A/B authorization procedure; do
+not reinterpret ownership or change native geometry to make the adapter pass.
+
+Preserve v1 byte-defined inputs and replay behavior, including its global
+postprocessing and barrier; v1 remains refused after conversion. Do not silently
+upgrade saved rows or let a generic version field change their meaning. New
+post-conversion authoring can emit v2 in the existing `extension-upsert` Snapshot
+kind. `extension-delete` retains its existing synthetic-only behavior. This needs
+no new model field or operation literal, and proposes no numerical manifest/pin
+change. Legacy/rootless documents gain no fabricated root or native certificate.
+
+The finite implementation and acceptance sequence is:
+
+1. **Versioned native contract.** Extend the existing parser, dependency function,
+   local `proof_version_supported` override and advertised capabilities to
+   distinguish v1/v2. Dispatch v2 through the existing pure builder before the
+   reconcile/retry path; admit exactly v2 after conversion. Preserve v1 execution
+   and deletion. Reuse current operation-input and prospective extension/site
+   bounds, charging aggregate batch/output growth before native display work.
+   There is no domain ancestry to infer for v2 because topology cannot change.
+2. **Owned ordinary transaction.** Reuse the existing bounded capture, recovery
+   budgeting, private preparation, registered publication permit and exact CAS
+   mechanics for a closed extension operation. Its authority must explicitly
+   cover extensions plus one input row/recovery pair, not be mislabeled as a
+   group edit or a full recipe proof. Do not open generic callbacks or bypass
+   strict policy. Bind document, session incarnation, source object, revision,
+   policy generation and request; preserve current physical/presentation data
+   when merging only owned fields. Keep latest-cursor/loadout/CPD guards, one
+   undo, and cancellation/failure rollback. The existing legacy recorder must
+   not rewrite the v2 marker back to its default v1. Keep rollout disabled.
+3. **Complete ordinary and history acceptance.** Cover single/batch create,
+   update, omitted values, explicit clearing, repeated valid termini, invalid
+   earlier duplicates, and single/batch delete through ordinary controls. A
+   source-bound complete candidate response must not fetch replacement geometry
+   after a document/reset race. Retain normal saved-output identity preservation,
+   downstream reconstruction and missing-reference diagnostics. The dedicated
+   earlier-row terminal editor/reference-picker remains its already allocated
+   FH-24/FH-26 work, not something earned by this backend admission.
+
+The test matrix must include both ends/directions and sequence-only,
+modification-only and combined tails; overlapping nonidentity domain owners,
+opposite-direction owners, parent/driver placements and empty frame owners;
+overlapping named groups and terminal-domain visibility/style precedence; and an
+actually pending ligation which stays pending under v2 while the v1 control
+retains its established retry. Compare all non-extension authoring exactly and
+native coordinates of existing material independently, then compare emitted
+tails against the unchanged native geometry. Test actual input producers through
+conversion, v2, a later transform/suffix, one undo, save/reload and independent
+cold proof with unusable recovery payloads. Denied/stale/ABA/policy/cancelled or
+failed publication must leave source, stacks and request metadata unchanged.
+
+Reuse `tests/test_part_extension_commands.py`,
+`tests/test_part_extension_history.py`, `tests/test_part_group_lineage.py`,
+the existing organization recording transaction tests and transform recipe/DTO
+fixtures. `tests/test_design_geometry_core.py` supplies terminal/compact geometry
+oracles. The existing extension rigid-rotation test in
+`tests/test_oxdna_extensions.py` rotates helix axes; it is not by itself evidence
+for overlapping placement-owner preservation. No new test execution or molecular
+qualification is claimed by this proposal. Completion requires the finite native,
+transaction and ordinary-control matrix; partial whole-helix success cannot close
+the arbitrary-domain extension exit.
+
 Pruning replaces duplicated extension route mutations with the shared recorder
 and updates the two existing fast-delete tests to actual recorded routes and
 partial synthetic geometry assertions. The scientific/native movement helpers,
@@ -518,7 +630,7 @@ lock/heap acceptance, arbitrary new-group movement and post-conversion extension
 upsert remain required. Both rollout gates stay false; FH-23 is still open after
 six engineering checkpoints. No milestone exit is weakened or moved to parked work.
 
-Next numerical gesture check reuses `test_part_transform_numerical_host.py`'s
+The U23 handoff specified that the next numerical gesture check reuse `test_part_transform_numerical_host.py`'s
 real recipe/supervisor helpers and `test_part_transform_gesture_contract.py`'s
 `gesture_draft` bridge. That bridge already drives the private renderer, tool,
 gizmo and native events. Its current fixture assumes `placement-poses`; numerical
@@ -527,3 +639,36 @@ and submit its actual emitted definition. Do not fabricate pending poses. The
 joint oracle must bind the numerical fixture's real relaxed pose and30-degree
 limit instead of inheriting the bridge's identity-pose/25-degree assumptions.
 This is the remaining acceptance substep, not a new fixture framework or milestone.
+
+
+## U24 — real numerical-prefix gesture qualification
+
+The existing native bridge now opens a real numerical host packet, explicitly
+upgrades its single-owner feature through the actual control, and submits only
+the native gizmo's emitted definition. CPD free motion and relaxed-duplex root,
+taut and joint gestures pass through selected-only evaluation, asynchronous
+full-proof Apply, one undo/redo, save/reload and independent spawned cold proof.
+A separate duplex case retains the original same-kind single-owner host Apply.
+CPD Escape cancels the private gesture after upgrade without a late motion draft.
+
+Joint expectations pin the ordinary historical25-degree and numerical30-degree
+limits independently of the packet. The world-point oracle handles the real
+nonidentity relaxed baseline and checks both intermediate and released poses.
+Duplex-root checks the actual driver's exact native rest-frame pivot and its
+recorded identity. Taut movement deliberately exceeds contour and requires a
+native correction. These are software/constraint-use checks, not molecular
+validity or convergence claims. Every child, shared-memory buffer, supervisor
+thread, timer and admission is checked at teardown, including failed bodies.
+
+[U24 evidence](validation_transform_numerical_gestures.json) records executed
+checks and fixture corrections. No production code, scientific manifests, pins,
+constants, goldens or rollout settings change. Ordinary native gesture regression
+remains; app/HTTP/render/lock/heap qualification stays FH-27/MV-52.
+
+**20/38 complete;18 remaining (9 core,9 parked);+0 completed,+0 total.** FH-23
+remains open after7 checkpoints and FH-18 after13. The finite extension proposal
+above and member-motion consumer matrix in the organization plan describe the
+remaining integration; neither is implemented by this qualification checkpoint.
+Next implement the complete extension-only v2 contract/owned transaction, then
+resolve arbitrary member motion through its isolated native-consumer comparison.
+No milestone split, exclusion or new completion credit.

@@ -1281,6 +1281,9 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   comparison-view transitions. Check restored camera/panel ownership and focus.
   Measure representative HTTP/render/drag responsiveness, memory retention and
   lock costs; bounded data/tests do not establish interactive performance.
+  U24 qualifies CPD free motion and relaxed-duplex root/taut/joint gestures through
+  the real private tool and numerical host, including upgrade and cold proof.
+  This headless native evidence does not close the desktop/performance debt.
   U23 integrates the numerical worker pair into the gated host/controller.
   Test long CPD/duplex preparation and Apply with visible
   Cancel, separate computing/ready/receipt expiry, result retrieval after network

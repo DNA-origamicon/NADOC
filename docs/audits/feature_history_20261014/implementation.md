@@ -2104,3 +2104,34 @@ previous broad regression debt remains. Both transform rollout gates stay false.
 Numerical native gestures, arbitrary new-group movement and post-conversion
 extension upsert remain existing FH-23/FH-18 work. Desktop acceptance remains
 FH-27/MV-52. No completed milestone is added for this integration checkpoint.
+
+
+## U24 — numerical movement gesture qualification and remaining integration audit
+
+**20/38 complete;18 remaining (9 core,9 parked);+0 completed,+0 total.**
+U1–U24 are24 engineering checkpoints closing three milestones since B1; unfinished
+FH-23 has7 and FH-18 has13. Both task-growth flags remain. The existing native
+gesture bridge now drives explicit linked-pose upgrade and real CPD free motion
+or relaxed-duplex root/taut/joint controls, through host Apply, undo/redo,
+save/reload and independent cold proof. Same-kind single-owner Apply remains
+covered. Historical joint limits and root pivot identities have independent
+expectations; final poses match the native pending transforms. This checkpoint
+changes tests and plans, not production behavior or numerical geometry.
+
+The audit identifies two concrete remaining operations: a named selected-material
+move distinct from editing an existing placement, and versioned extension-only
+upsert avoiding legacy global membership reconciliation. The finite matrices and
+software/scientific boundaries are recorded in the
+[movement plan](group_placement_migration_plan.md#post-u23-remaining-member-movement--finite-completion-sequence)
+and [extension proposal](transform_history_editor_plan.md#issue-130-proposed-extension-upsert-v2-integration--not-implemented).
+Neither is implemented. CAD named-selection evidence informs prefix/reference
+semantics; it does not decide NADOC molecular ownership or frame composition.
+
+[U24 evidence](validation_transform_numerical_gestures.json) records focused
+software validation and cleanup. Main.js remains7350 lines (delta0). No frontend
+production change or new full-frontend run is claimed; U23's full frontend result
+remains the latest such evidence. NOT VERIFIED IN APP: Archive is absent, public
+gates remain false, and FH-27/MV-52 desktop/performance plus broad-backend debt
+remain. Assemblies and machine-specific VR stay deferred. Next deliver the full
+versioned extension transaction while the arbitrary-member movement comparison
+retains its required scientific boundary. The fixed denominator/exits stay intact.

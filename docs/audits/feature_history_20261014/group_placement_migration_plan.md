@@ -836,3 +836,141 @@ matrix above remains required. Any molecular placement change needs the separate
 isolated A/B authorization path. Ordinary patterns do not close that exit.
 U15 adds no milestone or denominator; the existing task-growth flag remains.
 See [software evidence](validation_group_patterns.json) and MV-48 for acceptance.
+
+## Post-U23 remaining member movement — finite completion sequence
+
+This is a plan against `f225fe59`, not implemented movement or new validation
+evidence. The ledger remains **20/38 complete**, with 18 remaining (9 core,
+9 parked). FH-18 has 13 engineering checkpoints and FH-23 has 6; both task-growth
+flags remain. The five original batches and their full exits are unchanged.
+Numerical gesture qualification and organized extension upserts are connected
+work already under way; neither substitutes for arbitrary new-group movement.
+The steps below earn no additional milestone, denominator, or completion credit.
+
+### What exists, and the missing operation
+
+The separate organization model, prefix-relative named deformation selection,
+membership lineage, explicit placement transactions, private native transform
+renderer, complete linked-owner history edits, and cancellable numerical
+Prepare/Apply machinery are reusable. They do not implement **Move selected
+members**. `translate_rotate_tool.js` still explicitly refuses a named-group
+selection; `placement-poses` validates and edits pre-existing placement owners.
+Its `selected_cluster_ids` cannot express a new partial or overlapping material
+selection. Removing the UI guard or finding an equal-text placement ID would
+silently change the requested operation.
+
+Keep two visible actions: **Edit placement** changes an existing numerical owner;
+**Move selected members** authors a new feature referencing the selected named
+groups. A group remains selection/style metadata. Movement must not add a hidden
+backup group, modify unrelated owners' membership, bake displayed coordinates,
+or expand the selection into one saved transform per residue.
+
+[Onshape Query Variables](https://cad.onshape.com/help/Content/PartStudio/query_variable.htm)
+provide an explicit named selection for downstream features, including Transform;
+editing that selection updates downstream consumers. Its separate “Evaluate on
+use” option distinguishes later reevaluation from the entities selected earlier.
+[FeatureScript tracking](https://cad.onshape.com/FsDoc/library.html#makeRobustQueriesBatched-Context-Query-boolean)
+also distinguishes identity tracking from following splits/merges. These support
+an explicit reference contract, not a DNA placement algorithm. NADOC's proposed
+rule is to resolve each referenced group on the move's **replay prefix**, retain
+that named provenance, and record bounded resolved material ownership. Later
+features must not retroactively widen an earlier move merely because a matching
+text ID or domain ordinal remains present. Earlier membership edits do change
+the later move when replay reaches it. Missing/empty selected scope must give an
+actionable diagnostic, never the legacy empty-list-means-all interpretation.
+
+### Concrete consumer boundary
+
+The following is the finite production inventory that prevents treating a new
+ordinary `ClusterRigidTransform` as a complete movement implementation.
+
+| Existing seam | Current behavior and required disposition |
+|---|---|
+| [part_group_selection.py](../../../backend/core/part_group_selection.py), [part_group_lineage.py](../../../backend/core/part_group_lineage.py) | Reuse bounded typed group lookup, domain precedence, exact union and observed topology ancestry. The current resolver describes deformation ranges; extra-base and terminal companion ownership still needs an explicit movement contract. No lookup in placement IDs for named groups. |
+| [part_placement_pose_commands.py](../../../backend/api/part_placement_pose_commands.py), [placement_commit.js](../../../frontend/src/scene/placement_commit.js) | Complete absolute poses address existing owners with exact parent/driver bindings. Preserve this operation and its native owner-list replay order. A new member-motion feature needs its own typed input/output identity rather than pretending to be an existing owner edit. |
+| [deformation.py](../../../backend/core/deformation.py): `_arm_filter_cluster`, `_apply_cluster_transforms_domain_aware` | First nondefault owner influences deformation-arm scope. Poses are partitioned child, whole-helix and domain ownership; a domain mask miss can use the legacy whole-helix fallback. New motion must not become an inferred arm/frame owner or use this fallback. Existing rows retain their exact semantics. |
+| Same module: `_apply_clusters_to_seg_point`, `deformed_helix_axes` | Axis segments combine overlapping domain ownership. Moving only one direction/domain cannot silently move its unselected partner's frame or leave a misleading single shared axis. The candidate must represent the selected frame explicitly and show what downstream frame queries receive. |
+| Same module: `deform_extended_arrays`, `deformed_frame_at_bp` | Out-of-span scaffold-loop material and continuation frame queries currently use a first matching placement in their respective paths. These are separate from `StrandExtension` tails; appending a placement does not make their composition complete. Preserve existing frame owners and expose an explicit continuation/reference-frame choice where the moved selection has multiple frames. |
+| [design_geometry.py](../../../backend/core/design_geometry.py), [native_full_placement.py](../../../backend/core/native_full_placement.py), [atomistic.py](../../../backend/core/atomistic.py) | Canonical site frames, full/slab and atomistic poses must derive from one placement contract. Saved per-residue transforms run after cluster/deformation placement; inserting a new group pose before them is not generally the requested final-world delta. No bead fitting, phase changes or independently reconstructed atom frames. |
+| `design_geometry._strand_extension_geometry`, bridge and flexible companion builders | StrandExtension tails use terminal frames from native arrays, already including cluster/deformation placement. Their anchor map is built before the later per-residue transform pass. Bridge/flexible geometry uses its own endpoint rules. Qualify each companion's exact ownership/order; do not rigidly transform a newly derived connector twice or claim all terminal paths already share one ordering. |
+| [cluster_reconcile.py](../../../backend/core/cluster_reconcile.py) and actual extension publication/replay | Named-group lineage does not repair legacy placement membership. The current single-winner reconciliation can alter overlapping/directional owners even when a command only changes extensions. Organized extension admission must preserve the intended placement contract; bypassing or changing reconciliation needs its own before/after evidence. |
+| [part_transform_inputs.py](../../../backend/api/part_transform_inputs.py), [part_deformation_preview_sessions.py](../../../backend/api/part_deformation_preview_sessions.py), [part_transform_preview_computation.py](../../../backend/api/part_transform_preview_computation.py), [transform_history_editor.js](../../../frontend/src/app/transform_history_editor.js) | Reuse strict inputs/references, fixed-prefix work, private display, numerical worker lane and exact-source publication. Add explicit creation/append and history roles to this owner; no second lease registry, automatic Apply retry, or live canonical preview. |
+
+### Proposed implementation sequence within A–E
+
+1. **Close the movement contract and isolated evidence (A/C).** Keep the existing
+   ordered placement authority; investigate a separately identified, visible
+   member-motion role within it, rather than an ordinary inferred arm owner or a
+   second pose array. This is a candidate representation, not an approved schema
+   or production geometry change. Define typed named inputs, exact union once,
+   resolved material ancestry, explicit pivot/frame, deterministic feature/output
+   IDs and composition order relative to legacy owners and saved residue poses.
+   Existing owner records, order, parent/driver roles and absence-of-new-role
+   behavior must remain exact. Show the complete matrix below in an isolated
+   current/candidate comparison before choosing the production representation.
+   If the candidate cannot meet a row, report that concrete contradiction; do
+   not replace the exit with identity-only or whole-owner-only support.
+2. **Implement the authorized native command and all consumers together (B/C).**
+   After the molecular gate, add the closed versioned command and typed placement
+   role, bounded prefix resolution, shared source/reference/dependency inventories,
+   structural checks, lineage, repair and independent replay. Update every
+   affected consumer in the table with one explicit composition contract. Reuse
+   native rigid-transform arithmetic; preserve physical state separation. Add
+   exact manifest transitions for actual changed sources after review. A changed
+   placement consumer is not a schema-only transition, even if constants and
+   matrix arithmetic are unchanged. No old pins, locks or goldens are silently
+   regenerated and no budget increases are implied.
+3. **Connect create and historical edit through the existing owned host (B/D).**
+   Creation fixes named source references and a future feature identity before
+   private preview; edit uses the feature's owned prefix. Reuse the existing
+   transform family/controller, native component projection and ordinary versus
+   numerical work lanes. Controls expose translation, rotation, local/world
+   frame and pivot; constrained movement must list every linked/fixed write
+   explicitly. A named selection is not automatically a joint/driver owner.
+   Apply independently proves/rebuilds the source and suffix, publishes once,
+   and preserves unknown-result recovery. Cancel/reset/context change remains
+   local plus exact-lease cancellation. Complete sidebar, context-menu and
+   history entry points in the same connected workflow.
+4. **Prove the full matrix, including downstream edits (C/E).** Use independent
+   expected rigid-delta/native-frame oracles, unchanged-unselected-output checks,
+   real native gestures and Python → browser → host Apply where applicable.
+   Exercise poisoned/evicted recovery, upstream member edits, missing-reference
+   repair, undo/reload and cold proof. Retain numerical source/policy/cancellation
+   coverage, output bounds and same-ID document reset. Desktop/latency
+   qualification remains explicit when Archive or the app cannot be exercised;
+   unit/native checks cannot substitute for it.
+5. **Close the original exits, then remove replaced paths (D/E).** Require the
+   complete movement workflow and existing generated-core compatibility/
+   qualification obligations before marking FH-18/FH-23 complete. Do not move
+   unresolved core cases to parked NP/assembly/VR work. Prune superseded canonical
+   mutation/selection heuristics only after all real callers use the qualified
+   path; inactive rollout-gated legacy paths are not yet dead code.
+
+### Required acceptance matrix
+
+| Family | Exit evidence |
+|---|---|
+| Existing owner and a newly created group with identical members | Both visible actions work with explicit identities; no automatic conversion of one action into the other. Identity transform is a control, not the admission boundary. |
+| Whole helices, one domain/direction, partial domains, overlapping/multiple groups | Exact selected union moves once, domain precedence is retained, and unselected material/owners remain unchanged. Equal-text group/placement IDs never alias. |
+| Multiple posed owners, nonzero pivots, parent/child and repeated moves | Ordered composition is recorded and reproducible; no first-owner approximation, new hidden carrier, membership rewrite or double transform. |
+| Bend/Twist/Sweep and prior residue/CPD/duplex poses | Selected native site/atom frames follow the demonstrated composition; prior deformation arm ownership is unchanged. Incompatible rigid-unit selections are explicit scientific decisions, not silently expanded selections. |
+| Joint, tether, flexible/taut linker and duplex driver gestures | Native constraints produce the complete selected/linked/fixed-owner result. No dropped auxiliary pose, implicit propagation to unselected owners, or stolen driver/frame ownership. |
+| StrandExtension, out-of-span scaffold loops, crossover insertions and derived bridges | Each actual endpoint/material rule is tested separately in full and atomistic output; moved terminal frames and untouched endpoints agree, with no stale tails or double-moved companions. |
+| Shared axes, lattice frames and continuation after partial motion | Frame/axis ownership is explicit and reproducible; an ambiguous multi-frame section cannot silently return the old first-owner frame. Existing saved lattice owner references remain valid. |
+| Upstream group edit, nick/ligation/split/merge, later fresh material, group dissolve | Replay resolves named references at the move's prefix; later ancestry is explicit. Stale ordinals do not retarget material. Live consumers block dissolve or enter explicit repair/cascade; no global fallback. |
+| Creation/edit preview, Apply failure/cancel/expiry, numerical computation and unknown response | Private panes agree with accepted native output; active source is untouched until one guarded commit. Status recovery never republishes. Undo/reload/cold proof reproduces the complete authored result. |
+
+Typed namespaces, exact union, stable IDs, prefix resolution and reuse of the
+owned host are software decisions supported by the existing task. DNA polarity,
+partial rigid-unit motion, incompatible endpoint constraints and a genuinely
+ambiguous physical/frame interpretation require user review when encountered.
+That review must follow [the molecular authorization rule](../../../memory/feedback_geometry_change_authorization.md):
+isolated current/candidate/displacement views in one frame, highlighted relevant
+atoms/bonds/rings and per-junction deltas, including representative 2HB and phase
+coverage. No ordinary rendering, saved `.nadoc`, export or simulation can consume
+the candidate before authorization. Producing this evidence is the next concrete
+step if the native-role investigation requires changed molecular placement; a
+prose-only request for permission is not a completed prerequisite.
+
+This appendix records a read-only audit and proposed sequence. It adds no test
+pass, app validation, rollout enablement or milestone completion.

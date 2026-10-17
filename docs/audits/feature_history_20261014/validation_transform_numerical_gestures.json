@@ -1,0 +1,204 @@
+{
+  "checkpoint": "U24",
+  "date": "2026-10-16",
+  "base_commit": "f225fe59",
+  "status": "Native numerical gesture acceptance; tests and plans only; NOT VERIFIED IN APP",
+  "progress": {
+    "completed": 20,
+    "estimated_total": 38,
+    "remaining": 18,
+    "core_remaining": 9,
+    "parked_remaining": 9,
+    "delta_completed": 0,
+    "delta_total": 0,
+    "engineering_checkpoints_since_B1": 24,
+    "closed_since_B1": 3,
+    "FH18_checkpoints": 13,
+    "FH23_checkpoints": 7,
+    "task_growth_flagged": [
+      "FH-18",
+      "FH-23"
+    ]
+  },
+  "qualified": [
+    "Actual private renderer/tool/gizmo emits explicit cluster_op-to-placement-poses upgrade, retaining exact original definition guard.",
+    "Native empty-root CPD free gesture and relaxed-duplex root, taut and joint gestures cross selected-only evaluation, asynchronous host Apply, undo/redo, reload and independent spawned input-only proof.",
+    "Retained same-kind cluster_op host Apply variant; neighboring rows, original provenance, physical display and source ownership remain exact.",
+    "Independent fixture limits: ordinary historical25 degrees versus later75; numerical30 degrees. Generalized joint world-point oracle checks nonidentity relaxed baseline before and after release.",
+    "Duplex root binds actual native driver placement, exact rest pivot and recorded pivot identity; taut test requires native correction of deliberately excessive contour.",
+    "CPD Escape after explicit upgrade emits no late motion draft; private scene/store/network/broadcast ownership and worker cleanup assertions remain."
+  ],
+  "remaining": [
+    "Complete organized extension-upsert v2 proposal/owned transaction; old v1 reconciliation/retry semantics must remain unchanged.",
+    "Arbitrary named-member movement requires explicit scope, placement/frame composition and full native-consumer matrix; editing existing owners does not implement it.",
+    "FH27/MV52 desktop, HTTP, render, latency, retained-memory, lock and broad regression qualification; rollout gates remain false.",
+    "Existing generated compatibility and later Fine Routing/repair exits remain; no milestone split or narrowed completion criteria."
+  ],
+  "validation": {
+    "distinct_backend_cases": 14,
+    "backend_files": 2,
+    "runs": [
+      {
+        "scope": "initial ordinary gesture bridge",
+        "passed": 9,
+        "seconds": 12.19
+      },
+      {
+        "scope": "initial numerical duplex gestures",
+        "passed": 1,
+        "failed": 2,
+        "deselected": 1,
+        "seconds": 17.5,
+        "reason": "Root/taut fixture selected driven arm instead of actual duplex driver placement. Production correctly refused absent pivot/tether. Corrected authored selected owner."
+      },
+      {
+        "scope": "filtered command invocation",
+        "executed_tests": false,
+        "reason": "just test-focused did not preserve a spaced -k expression; reran simple -k duplex without bypassing guard."
+      },
+      {
+        "scope": "duplex after fixture correction",
+        "passed": 3,
+        "deselected": 1,
+        "seconds": 22.67
+      },
+      {
+        "scope": "native CPD free gesture, Escape, host Apply and cold proof",
+        "passed": 1,
+        "deselected": 3,
+        "seconds": 194.39,
+        "note": "Subsequent changes only added same-kind duplex variant, pinned joint limits/root assertions and conditional wrapping; CPD free path behavior unchanged. No redundant expensive rerun."
+      },
+      {
+        "scope": "final ordinary bridge with exact root and historical limit assertions",
+        "passed": 9,
+        "seconds": 11.97
+      },
+      {
+        "scope": "final numerical duplex gestures and retained same-kind Apply",
+        "passed": 4,
+        "deselected": 1,
+        "seconds": 28.49
+      }
+    ],
+    "frontend": "No production frontend change; native JS is driven by the focused Node/JSDOM bridge. No new full frontend/browser pass; U23 remains latest full frontend evidence.",
+    "review": "Independent review identified same-kind host coverage loss and weak pivot/limit assertions; all corrected before final checks."
+  },
+  "measurements_seconds": {
+    "cpd_free": {
+      "create": 22.26385981900239,
+      "relax": 41.04770521900355,
+      "host_prepare": 42.33638460200018,
+      "host_apply": 41.22052938500565,
+      "independent_cold_proof": 43.297487980998994,
+      "selected_evaluations": [
+        0.011972724998486228,
+        0.003618369002651889,
+        0.011387984006432816
+      ]
+    },
+    "duplex_root": {
+      "relax": 1.2162258020034642,
+      "host_prepare": 1.6072530600067694,
+      "host_apply": 1.2664307070008363,
+      "independent_cold_proof": 1.1377389410044998,
+      "selected_evaluations": [
+        0.07482114199956413,
+        0.15034820200526156,
+        0.07720010900084162
+      ]
+    },
+    "duplex_taut": {
+      "relax": 1.1595704540013685,
+      "host_prepare": 1.5996977240065462,
+      "host_apply": 1.3180621799983783,
+      "independent_cold_proof": 1.1964780900016194,
+      "selected_evaluations": [
+        0.07641323399730027,
+        0.01844519800215494,
+        0.07436117500037653
+      ]
+    },
+    "duplex_joint": {
+      "relax": 1.2453895910002757,
+      "host_prepare": 1.7742212079974706,
+      "host_apply": 1.3181342749958276,
+      "independent_cold_proof": 1.2448699319938896,
+      "selected_evaluations": [
+        0.07579644799989183,
+        0.018633130996022373,
+        0.07494747800228652
+      ]
+    },
+    "duplex_single_owner": {
+      "relax": 1.2290197289985372,
+      "host_prepare": 1.6461860230047023,
+      "host_apply": 1.3174508299998706,
+      "independent_cold_proof": 1.4806841370009352,
+      "selected_evaluations": [
+        0.07571823000034783,
+        0.14605310300248675,
+        0.07924856000317959
+      ]
+    },
+    "limits": "Tiny in-memory software probes, not representative desktop performance or molecular validity. Three selected samples per case do not establish a statistical performance result; controls-only timings also vary."
+  },
+  "research": {
+    "official_sources": [
+      "https://cad.onshape.com/help/Content/PartStudio/query_variable.htm",
+      "https://cad.onshape.com/FsDoc/library.html#makeRobustQueriesBatched-Context-Query-boolean",
+      "https://help.solidworks.com/2025/English/SolidWorks/sldworks/c_selection_sets.htm",
+      "https://help.solidworks.com/2023/english/solidworks/sldworks/t_Move_Copy_Body_PM_features.htm",
+      "https://cad.onshape.com/help/Content/PartStudio/composite_part.htm",
+      "https://cad.onshape.com/help/Content/Document/repairing.htm"
+    ],
+    "inference": "Named selection may drive explicit downstream motion; resolve at feature prefix, preserve distinct frame ownership and require explicit missing-reference repair. Vendor workflow evidence does not decide NADOC molecular ownership/math."
+  },
+  "unchanged": [
+    "All production code",
+    "Molecular math, constants, locks, goldens and numerical source manifests/pins",
+    "Rollout gates",
+    "Fixed milestone exits and denominator"
+  ],
+  "main_js": {
+    "lines": 7350,
+    "delta": 0
+  },
+  "static_checks": {
+    "changed_python_ruff": "pass (2 files)",
+    "repository_ruff": "5 existing F401; no delta",
+    "memory_lint": "6 existing errors,59 warnings; no delta",
+    "memory_head_lines": 199,
+    "git_diff_check": "pass"
+  },
+  "broad_regression": {
+    "selector_command": "just test-smart --dry-run",
+    "executed_suite": false,
+    "result": "FAST  (fast suite only)",
+    "deferred_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\nThis is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\nOnly request `just test-session` when a broad/full sweep is actually needed.",
+    "clarification": "Selector-only executes neither FAST nor FULL. Broad FAST also deferred until Archive provides TMPDIR/basetemp; prior debt retained. Initial selector invocation during focused CPD was correctly refused by serialization guard; it started no concurrent test."
+  },
+  "cleanup": {
+    "status": "complete",
+    "path": "/tmp/pytest-of-joshua",
+    "inventory": {
+      "child_directories": 17,
+      "symlinks": 4,
+      "regular_files": 0,
+      "logical_bytes": 0,
+      "allocated_bytes": 0,
+      "active_readers": [],
+      "shared_memory_names": []
+    },
+    "removed": {
+      "directories": 17,
+      "symlinks": 4,
+      "regular_files": 0,
+      "bytes": 0
+    },
+    "pytest_root_empty": true,
+    "bulk_outputs_created": false,
+    "workers": "Failure-safe fixture checks child close/reap, SharedMemory unlink, joined supervisors/timers and released admission.",
+    "preserved": "User designs/jobs, active runtimes, caches and historical evidence untouched. Compact tracked report retained."
+  }
+}

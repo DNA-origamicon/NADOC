@@ -1,7 +1,7 @@
 """Real numerical producer recipes through the owned asynchronous editor host.
 
 No imported root, saved output, disk fixture or native scratch supplies a result.
-These two focused cases exercise real spawned computation and its supervisor;
+These focused cases exercise real spawned computation and its supervisor;
 they are software lifecycle checks, not molecular validity or latency claims.
 """
 
@@ -27,6 +27,7 @@ from tests.test_part_transform_numerical_history import (
     native_cpd_prefix, native_duplex_prefix, poison_recovery, selected_transform,
 )
 from tests.test_part_transform_preview import FEATURE
+from tests.test_part_transform_gesture_contract import gesture_draft
 from tests import test_part_transform_preview_sessions as preview_sessions
 from tests.test_part_transform_preview_sessions import opening, update
 
@@ -69,7 +70,7 @@ def _evaluation(source, request, identity):
         _unlinked(names)
 
 
-def _recipe(family, timings):
+def _recipe(family, timings, gesture):
     if family == "cpd":
         source, ids = native_cpd_prefix()
         created, timings["cpd_create"] = _evaluation(source, {
@@ -86,10 +87,16 @@ def _recipe(family, timings):
     relaxed, timings[kind] = _evaluation(source, {
         "operation": "append", "kind": kind, "params": params,
     }, _seed(41))
-    source = poison_recovery(selected_transform(_candidate(relaxed), cluster_id=cluster_id))
+    source = _candidate(relaxed)
+    if gesture in {"duplex-root", "duplex-taut"}:
+        # The duplex placement owns these controls; the original fixture's
+        # primary is the driven arm, which instead owns the revolute joint.
+        cluster_id = next(owner.id for owner in source.cluster_transforms
+                          if owner.overhang_duplex_driver_id == ids["driver"])
+    source = poison_recovery(selected_transform(source, cluster_id=cluster_id))
     assert source.recipe_root.kind == "empty" and source.recipe_root.source_json is None
     assert not source.input_sources
-    return source
+    return source, {**ids, "joint": ids.get("joint_id")}
 
 
 @pytest.fixture
@@ -181,18 +188,21 @@ def _ready(ack, operation, lane):
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("family", [
-    pytest.param("cpd", marks=pytest.mark.atomistic),
-    pytest.param("duplex", marks=pytest.mark.headless),
+@pytest.mark.parametrize("family,gesture", [
+    pytest.param("cpd", "free", marks=pytest.mark.atomistic),
+    pytest.param("duplex", "duplex-root", marks=pytest.mark.headless),
+    pytest.param("duplex", "duplex-taut", marks=pytest.mark.headless),
+    pytest.param("duplex", "joint", marks=pytest.mark.headless),
+    pytest.param("duplex", None, marks=pytest.mark.headless, id="duplex-single-owner"),
 ])
 def test_real_numerical_host_prepare_evaluate_apply_undo_reload_and_cold_proof(
-        real_supervision, monkeypatch, family, record_property, capsys):
+        real_supervision, monkeypatch, family, gesture, record_property, capsys):
     from backend.api import part_transform_preview as transform
     from backend.core import cpd_design, direct_relax, part_cpd_contract, part_duplex_relax_contract
 
     lane, timings = real_supervision, {}
     try:
-        source = _recipe(family, timings)
+        source, ids = _recipe(family, timings, gesture)
         source.atomistic_reference = m.AtomisticReference(
             source="ignored physical display", notes="Never numerical authoring input")
         state.load_design(source)
@@ -243,8 +253,34 @@ def test_real_numerical_host_prepare_evaluate_apply_undo_reload_and_cold_proof(
                 unchanged(before)
             timings["host_selected_evaluations"] = durations
         assert observed == ["cluster_op"] * 3 and len(lane["workers"]) == 1
+        if gesture is not None:
+            # Reuse the real private renderer/tool/gizmo and explicit Upgrade control.
+            # No fabricated pending pose or replacement command enters this path.
+            if family == "cpd":
+                assert gesture_draft(opened, "free", ids, cancel=True) == {"cancelled": True}
+                unchanged(before)
+            native_gesture = gesture_draft(opened, gesture, ids, joint_limit=30)
+            patch = native_gesture["patch"]
+            assert native_gesture["pending"] and native_gesture["draft_count"] >= 2
+            assert {key: patch[key] for key in ("upgrade_to", "expected_definition_sha256")} == opened[
+                "control_context"]["placement_upgrade"]
+            if gesture == "joint":
+                assert native_gesture["joint_world_error"] < 1e-8
+            if gesture == "duplex-taut":
+                evidence = native_gesture["constraint_evidence"]
+                assert evidence["proposed_distance"] > evidence["contour_nm"] + 3
+                assert evidence["correction"] > 1e-6
+            with monkeypatch.context() as guards:
+                guards.setattr(prefix_service, "_replay_prefix", no_parent_solver)
+                guards.setattr(transform, "_replay_prefix", no_parent_solver)
+                guards.setattr(host, "prepare_change", no_parent_solver)
+                evaluated = host.evaluate(update(opened, sequence=4, params=patch), family="transform")
+            assert evaluated["evaluated_command_kind"] == "placement-poses"
+            assert not evaluated["source_equivalence_checked"] and not evaluated["downstream_evaluated"]
+            assert len(lane["workers"]) == 1
+            unchanged(before)
         started = perf_counter()
-        applying = host.apply(update(opened, sequence=4, params=patch), family="transform")
+        applying = host.apply(update(opened, sequence=5, params=patch), family="transform")
         receipt = _ready(applying, "apply", lane)
         timings["host_apply"] = perf_counter() - started
         assert receipt["status"] == "applied" and receipt["revision"] == before["revision"] + 1
@@ -257,9 +293,14 @@ def test_real_numerical_host_prepare_evaluate_apply_undo_reload_and_cold_proof(
         assert doc_context.current_request_revision() == before["request_revision"]
         assert doc_context.current_request_feature_log_entry_id() == before["request_entry"]
         old_rows, new_rows = list(command_rows(source, 64)), list(command_rows(candidate, 64))
-        assert [(i, k) for i, k, _ in new_rows] == [(i, k) for i, k, _ in old_rows]
+        assert [(i, k) for i, k, _ in new_rows] == [
+            (i, "placement-poses" if i == FEATURE and gesture is not None else k) for i, k, _ in old_rows]
         for (identity, _kind, old), (_new_id, _new_kind, new) in zip(old_rows, new_rows, strict=True):
-            assert new == ({**old, **patch} if identity == FEATURE else old)
+            if identity == FEATURE and gesture is not None:
+                assert new == {**patch["definition"], "primary_authored_fields": selected.authored_fields,
+                               "legacy_source": selected.source}
+            else:
+                assert new == ({**old, **patch} if identity == FEATURE else old)
         assert [row.id for row in candidate.feature_log[-2:]] == [FEATURE, "numerical-history-suffix"]
         assert host._entries[lane["doc"]].prepared is None
         assert host.cancel(cancellation(opened), family="transform")["status"] == "applied"
@@ -277,7 +318,7 @@ def test_real_numerical_host_prepare_evaluate_apply_undo_reload_and_cold_proof(
         assert proof["status"] == "verified" and proof["native_editable"], proof
         assert proof["checked_commands"] == len(new_rows) and "physical" in proof["excluded_roles"]
     finally:
-        report = json.dumps({"family": family, "seconds": timings}, sort_keys=True)
+        report = json.dumps({"family": family, "gesture": gesture, "seconds": timings}, sort_keys=True)
         record_property("numerical_host_timings", report)
         with capsys.disabled():
             print(f"\nnative-transform-numerical-host {report}", flush=True)
