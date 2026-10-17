@@ -22,28 +22,29 @@ decrement completed if an exit reopens. Flag three major checkpoints spent on
 any still-open milestone (cumulative even across alternating work), or total
 growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
-Effort is separate: U1–U25 are **25 engineering checkpoints** since B1, closing
+Effort is separate: U1–U26 are **26 engineering checkpoints** since B1, closing
 **three milestones** (FH-19/FH-21/FH-22). FH-18 remains open after13 checkpoints;
-FH-23 after8. Both are **task-growth flagged**. Current counts: **20/38 complete,
-18 remaining (9 core,9 parked); U25 +0 completed,+0 total**. Fixed exits remain.
-U25 implements organized extension-upsert v2: extension-only native inputs,
-bounded owned transaction, exact-source geometry and shared ordinary 2D/3D UI.
-Legacy v1 keeps global reconciliation/retry. Conservative extension-inventory
-ordering preserves delete/recreate dependencies without a topology barrier.
-Non-extension fields/placement owners retain exact identities; one changed edit
-adds one row/undo. Explicit no-op receipts preserve unchanged Apply behavior.
-The five existing URLs bind revision/session/source/policy through acquisition
-and publication; null/stale replies preserve dialog inputs and newer selection.
-No whole-history proof runs during these edits; native response work is admitted,
-not latency-qualified. See [U25 evidence](../docs/audits/feature_history_20261014/validation_organized_extensions.json).
-U24 qualifies real CPD/duplex gestures through the existing numerical host;
-computation180s, ready inputs60s and receipts60s stay distinct. Gates remain false.
+FH-23 after9. Both are **task-growth flagged**. Current counts: **20/38 complete,
+18 remaining (9 core,9 parked); U26 +0 completed,+0 total**. Fixed exits remain.
+U26 adds isolated native ordering/terminal-tail characterizations, no production
+geometry. Ordinary owner insertion and an unconditional final pass fail the
+chronological movement examples. Later tails already use their moved construction
+frame. ISSUE-135 confirms Full tail/atomistic tail disagreement after terminal
+residue poses, both ends/directions. Neither policy is approved as the correction.
+See [U26 evidence](../docs/audits/feature_history_20261014/validation_member_motion_order.json).
+Prefer a disposable derived placement program with bounded prefix material/birth/
+frame provenance; this remains an unimplemented hypothesis, not a second saved
+pose authority or an approved schema. No per-frame full history proof. Full
+companion/constraint/axis matrix and inspectable molecular authorization remain.
+U25's extension-only v2/owned transaction/shared 2D/3D UI remains implemented;
+legacy v1 retains global reconciliation/retry. Native work is not latency-qualified.
+U24's native CPD/duplex gesture qualification remains; gates stay false.
 FH-23 remains open: arbitrary new-group movement and qualification are unfinished.
-Next use the plan's isolated consumer/geometry comparison for selected-material
-motion, then Fine Routing. No new molecular math, pins or golden changes.
+Next implement the [22-kind Fine Routing contract](../docs/audits/feature_history_20261014/fine_routing_history_editor_plan.md)
+while the full selected-material motion exit remains required. No math/pin changes.
 NOT VERIFIED IN APP: Archive unavailable; MV-52/FH-27 desktop/performance and
 broad backend regression remain open. ISSUE-125/126 remain until their exits;
-ISSUE-130 is corrected privately. `main.js`7350; U25 delta0.
+ISSUE-130 is corrected privately; ISSUE-135 is open. `main.js`7350; U26 delta0.
 FH-18 retains separate Groups/Placements, native lineage, named deformation
 preview/repair/creation, persistent visibility and organized pattern integration.
 Its original movement/generated/qualification exits remain open; rollout stays off.
@@ -54,8 +55,7 @@ preserve that list as the sole numerical authority and expose its owners as
 editable placement features. No hidden replacement group, per-residue expansion
 or coordinate baking. New-group move/frame semantics remain a required integration exit;
 U25 qualifies extension-only ordinary authoring against existing placements. Recorded conversion → posed dissolve → regroup is implemented;
-retain remaining ordinary consumer/movement obligations while finishing core
-editors (FH-23 move/rotate active, then FH-24 Fine Routing). Do not
+retain remaining consumer/movement obligations; implement FH-24 Fine Routing next. Do not
 inflate counts by splitting batches or accumulate more identity-only subsets.
 No total-growth trigger or estimate change; the full original FH-18 exit stands.
 **FH-18 consumer status:** batch A is implemented privately; B/C/D advance,
@@ -134,7 +134,7 @@ finished tool: recording, preview/cancel/Apply, downstream editing, undo/reload
 and ordinary controls must agree. Nanoparticle/protein/assets and their remaining
 benchmarks are parked; ordinary DNA connections are core. Assemblies and VR
 remain separately deferred. The persistent P3–P6 goal stays active.
-U25 sequencing: FH-23/FH-18 new-group movement, then complete Fine Routing;
+U26 containment: complete FH-24 Fine Routing; retain full FH-23/FH-18 movement;
 generated compatibility retains the existing B–E exits. U13 completes the
 private ordinary Bend/Twist creation adapter: same owned prefix, controller,
 renderer and lease as history editing, no provisional canonical operation.

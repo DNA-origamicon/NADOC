@@ -20,6 +20,17 @@ or asset expansion. The older P3–P6 rows below are retained architectural cont
 not an asset-first execution order. Assemblies and machine-specific VR validation
 remain deferred.
 
+U26 revises execution order within that priority: advance the finite
+[FH-24 Fine Routing contract](fine_routing_history_editor_plan.md) while retaining
+the full FH-18/FH-23 member-motion exit. Native counterexamples now prove that
+ordinary owner insertion or an unconditional final transform cannot implement
+the proposed chronological movement semantics. The
+[provisional derived-program contract](group_placement_migration_plan.md#u26--native-ordering-counterexamples-and-implementation-boundary)
+preserves one authored authority and requires material/birth/frame provenance;
+it is not implemented or molecularly authorized. This unresolved geometry
+architecture does not invalidate input proof, owned publication or dependency
+repair, and does not justify adding full replay to interaction frames.
+
 ## Findings that change the order of work
 
 1. Dependency edges are mostly conservative whole-part barriers. They identify

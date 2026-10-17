@@ -2937,3 +2937,26 @@ and this issue are not declared resolved.
   require native-work admission. The bounded host validates closed input before
   snapshots/publication. U25 evidence retains regression failures and corrections;
   desktop behavior and representative latency remain unverified.
+
+## ISSUE-135 — Saved terminal-nucleotide pose moves atomistic tail but not Full tail (2026-10-16, OPEN)
+
+- Native empty-root 8-bp duplex → two extension-upsert v2 sequence tails → one
+  terminal nucleotide rotation/translation reproduces the disagreement at both
+  5′/3′ ends and in both directions. The selected terminal moves in both outputs;
+  the Full tail moves 0 nm, while its atomistic counterpart moves 3.01685–6.71209 nm
+  in these examples. Unselected atoms/Full records, atom identities and bonds
+  remain exact. This is not a comparison between coarse and atomic coordinates;
+  it is a comparison of each representation's response to the same saved pose.
+- Cause: extension atoms retain the terminal helix/bp/direction and fall through
+  `atomistic.apply_nucleotide_transforms`' ordinary-base lookup. Full extension
+  records have synthetic helix IDs, and their construction anchors precede the
+  later nucleotide-pose pass. They therefore miss the same transform.
+- Reproduction: `just test-affected tests/test_part_motion_native_characterization.py --tb=short -s`.
+  Four passing characterization cases describe the bug, not desired semantics.
+  Replace their discrepancy expectation when an explicitly demonstrated common
+  molecular policy is authorized; do not silently make either representation
+  the oracle or update a geometry golden.
+- No production correction is made in U26. The full member-motion companion/frame
+  matrix and inspectable molecular authorization remain required. This issue is
+  within existing FH-18/FH-23 scope and adds no milestone. See
+  [U26 evidence](docs/audits/feature_history_20261014/validation_member_motion_order.json).

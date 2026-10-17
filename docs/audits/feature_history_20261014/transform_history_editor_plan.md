@@ -6,6 +6,15 @@ credit. The fixed exit remains complete parameter controls, guarded publication,
 downstream editing and undo/persistence parity. Desktop and measured interaction
 qualification remain FH-27. Assemblies and machine-specific VR are deferred.
 
+U26: FH-23 remains open after nine checkpoints. The
+[native ordering experiments](group_placement_migration_plan.md#u26--native-ordering-counterexamples-and-implementation-boundary)
+reject ordinary owner insertion and an unconditional final-pass shortcut for
+arbitrary member motion; ISSUE-135 characterizes existing terminal-tail display
+disagreement. Production geometry is unchanged. Advance the bounded
+[FH-24 editor implementation](fine_routing_history_editor_plan.md) next while the
+complete member-motion contract/comparison remains required. This changes only
+execution order: **20/38 complete,18 remaining,+0 completed,+0 total**.
+
 The first checkpoint (U18, `909f2de5`) delivered a backend primitive across four existing
 roles: `cluster_op`, `nucleotide-transform`, `nucleotide-transform-batch` and
 `nucleotide-transform-delete`. It provides strict input normalization, protected

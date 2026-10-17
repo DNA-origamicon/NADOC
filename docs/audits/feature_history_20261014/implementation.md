@@ -2190,3 +2190,47 @@ FAST/FULL pass credit. Existing5 Ruff and6 memory errors/59 warnings remain;
 changed Python lint passes. `main.js` remains7350 lines (delta0), project head200.
 No numerical models, manifests, pins, constants or goldens change. All rollout
 gates remain false; assembly and machine-specific VR work stay deferred.
+
+## U26 — native movement counterexamples and finite routing implementation scope
+
+**20/38 complete;18 remaining (9 core,9 parked);+0 completed,+0 total.**
+U1–U26 are26 engineering checkpoints closing three milestones since B1. FH-23
+remains open after9 and FH-18 after13; both task-growth flags remain. This is
+diagnostic progress, not a delivered movement feature or completed milestone.
+
+Five new native 2HB cases reject ordinary owner insertion and an unconditional
+final transform as implementations of chronological world-space member motion.
+They establish native placement-before-residue ordering, a noncommuting later
+delta counterexample and the already-moved frame used for later tail construction.
+Four additional native cases reproduce ISSUE-135: saved terminal-nucleotide poses
+move atomistic tails while leaving the corresponding Full tails unchanged.
+Independent rigid oracles, unchanged controls, exact atom identities/bonds and
+unmodified source serialization make these executable architecture evidence.
+No production evaluator, schema, model, molecular constant, pin or golden changes.
+
+The [movement contract](group_placement_migration_plan.md#u26--native-ordering-counterexamples-and-implementation-boundary)
+now requires explicit event, material-birth and construction-frame provenance.
+A disposable placement program derived from authored inputs is provisional; the
+tests do not establish its full implementation, companion/constraint/axis policy
+or molecular authorization. Existing placement edits cannot substitute for the
+full arbitrary-group movement exit. No per-frame history scan is proposed.
+
+To contain further partial movement adapters, implement the bounded
+[FH-24 contract](fine_routing_history_editor_plan.md) next:22 existing kinds across
+resize/shift, nick, ligation, crossovers and loop/skips. Reuse native algorithms
+and the owned host, add exact parent/child identity and pre-child prefix binding,
+distinguish creator outputs from editable references, qualify missing organized
+roles and connect all five ordinary editor families. The inventory is an audit,
+not implementation or extra credit. Full FH-18/FH-23 exits remain required.
+
+[U26 evidence](validation_member_motion_order.json) records110 focused passes:
+9 new characterizations plus101 existing selection/resize tests. No new frontend
+or broad-suite pass is claimed. NOT VERIFIED IN APP: Archive remains unavailable;
+the scalar experiments do not satisfy the required inspectable molecular review.
+Existing desktop/performance and broad-backend debt remains. `main.js`7350
+(delta0); all rollout flags stay false. No obsolete production path can yet be
+pruned safely. Test scratch cleanup leaves its root empty and no named shared
+memory. The persistent goal remains active; no user decision is needed to begin
+the independent routing implementation.
+Changed Python lint passes; memory lint retains the existing6 errors/59 warnings,
+with the edited project head at200 lines. No unrelated cleanup is included.

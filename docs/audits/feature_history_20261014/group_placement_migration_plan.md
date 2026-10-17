@@ -997,3 +997,79 @@ The member-motion sequence and acceptance matrix above remain proposed, not
 implemented. The separately identified extension-v2 boundary has
 software validation evidence; neither it nor this appendix adds app
 validation, rollout enablement or milestone completion.
+
+### U26 — native ordering counterexamples and implementation boundary
+
+The isolated experiments in
+[test_part_member_motion_order.py](../../../tests/test_part_member_motion_order.py)
+reject two proposed shortcuts using actual empty-root native 2HB histories,
+nonzero pivots and noncommuting transforms. They change no production geometry.
+
+| Experiment | Observed result | Consequence |
+|---|---|---|
+| Saved nucleotide pose N, then a newly appended ordinary domain placement M | Native Full backbone differs from M applied to the displayed nucleotide by 6.935091655 nm forward / 6.336679237 nm reverse. The old residue pose still runs after the new owner. | List insertion order is not chronological world-motion order. An ordinary placement owner cannot implement the selected-material action. |
+| Saved N, proposed M, then native composed world translation D | A final M pass yields M·D·N rather than D·M·N. The independently predicted difference is [1,-5,0] nm (norm 5.099019514) for backbone, base and slab points in both directions. | A new final pass alone is insufficient. Later compose, replacement and reset need explicit frame/event semantics. |
+| Native sequence tail created after its terminal's existing whole-helix placement | Native tail points already equal the moved construction-frame result. Reapplying M displaces them another 3.396175550–4.056438217 nm. | Exclusion from an earlier target receipt does not imply construction in the original world frame. Material birth and construction-frame provenance are separate. |
+
+The companion experiment
+[test_part_motion_native_characterization.py](../../../tests/test_part_motion_native_characterization.py)
+also reproduces **ISSUE-135**: a saved terminal-nucleotide pose moves tail atoms,
+while the corresponding Full tail remains at its prior positions. Four cases
+cover both ends and directions, exact atom identities/bonds, selected terminal
+points/vectors and unchanged controls. This is a pre-existing discrepancy;
+neither behavior is approved as the new policy. These passing characterization
+tests deliberately describe the discrepancy and must be replaced with the
+authorized common behavior when it is corrected, not preserved as a desired lock.
+
+Existing selection and resize tests separately confirm that deformation ranges
+include unoccupied helix directions and organization lineage can grow with an
+extended domain. Reuse that evidence; do not mistake either representation for
+an exact receipt of material that existed when a move executed. A later loop
+copy, regrowth, or companion needs its own birth/ancestry decision.
+
+**Representation conclusion:** preserve authored legacy owner inputs and their
+exact v1 semantics. A visible typed member-motion role in the existing placement
+list remains a candidate authored representation, not an approved schema. Its
+execution needs chronological event/frame provenance absent from today's final
+materialized owner/residue arrays. Prefer a disposable placement program derived
+from feature inputs and native prefix results, with references to those authored
+inputs; do not add another persisted pose array or expand saved selections into
+one transform per residue. The experiments disprove the two shortcuts, but do
+not prove that this proposed compiler satisfies the complete matrix above.
+
+The next isolated implementation must settle all of these finite contracts:
+
+- Exact selected-material union and native descendants, distinct from current
+  named-group membership and from later fresh material at reused addresses.
+- Event order and explicit local/world frame for mixed group, owner and residue
+  edits, including replacement/reset; never reinterpret saved v1 composition.
+- Construction frame at material birth and subsequent motion, so later tails,
+  continuation and loop copies neither remain stale nor receive a delta twice.
+- Full and atomistic companions, CPD rigid units, linked/fixed constraints, and
+  shared-axis ambiguity under independently moved directional material.
+
+Compile/admit the derived program once per owned prefix, with explicit work and
+memory limits. Slider/drag samples must reuse it and transform bounded native
+components; no full feature-history scan per frame. Apply still independently
+proves the current source and rebuilds the suffix once. Existing work bounds
+must not be raised to make the prototype pass. FH-27 must measure complete
+interaction/HTTP/heap costs; these tiny tests are not performance qualification.
+
+[Onshape Query Variables](https://cad.onshape.com/help/Content/PartStudio/query_variable.htm)
+explicitly distinguish a captured selection from optional reevaluation on use,
+and propagate upstream selection edits to downstream features. This supports
+making NADOC's prefix selection policy explicit; it does not prescribe DNA
+material birth, companion ownership or physical constraints. Onshape's
+[reference repair](https://cad.onshape.com/help/Content/Document/repairing.htm)
+also supports explicit replacement of failed references, not a silent fallback
+to an entire owner. Both sources were checked October 16, 2026.
+
+**Containment:** FH-23 has now consumed nine checkpoints and FH-18 thirteen;
+both remain growth-flagged. Stop adding partial owner adapters to this unresolved
+movement architecture. Advance the bounded
+[FH-24 Fine Routing implementation](fine_routing_history_editor_plan.md) next,
+while the full original member-motion exit remains open and required. This is
+an execution-order adjustment, not parking core work or reducing its exit.
+The isolated compiler and complete inspectable molecular comparison still
+precede any production promotion. No user decision is requested from this
+scalar evidence; it is not the required four-panel/phase-sweep artifact.

@@ -1,0 +1,97 @@
+{
+  "checkpoint": "U26",
+  "date": "2026-10-16",
+  "base_commit": "3fb2c61d",
+  "status": "Isolated native architectural counterexamples and terminal-tail characterization; production unchanged; NOT VERIFIED IN APP",
+  "progress": {
+    "completed": 20,
+    "estimated_total": 38,
+    "remaining": 18,
+    "core_remaining": 9,
+    "parked_remaining": 9,
+    "delta_completed": 0,
+    "delta_total": 0,
+    "engineering_checkpoints_since_B1": 26,
+    "closed_since_B1": 3,
+    "FH18_checkpoints": 13,
+    "FH23_checkpoints": 9,
+    "task_growth_flagged": ["FH-18", "FH-23"],
+    "fixed_exits_unchanged": true
+  },
+  "findings": {
+    "owner_order_backbone_discrepancy_nm": {
+      "FORWARD": 6.935091655,
+      "REVERSE": 6.336679237
+    },
+    "unconditional_final_pass_discrepancy": {
+      "vector_nm": [1, -5, 0],
+      "norm_nm": 5.099019514,
+      "fields": ["backbone_position", "base_position", "slab_position"],
+      "directions": ["FORWARD", "REVERSE"],
+      "reason": "M D N differs from D M N; native D composition is independently checked before candidate arithmetic."
+    },
+    "later_native_tail_double_application_nm": [3.396175550, 4.056438217],
+    "terminal_tail_issue": {
+      "id": "ISSUE-135",
+      "status": "open; characterized, not corrected",
+      "full_tail_displacement_nm": 0,
+      "atomistic_tail_min_max_nm": {
+        "five_prime/FORWARD": [3.01685, 3.49854],
+        "three_prime/FORWARD": [4.39722, 5.84293],
+        "five_prime/REVERSE": [3.56907, 4.41573],
+        "three_prime/REVERSE": [5.28153, 6.71209]
+      },
+      "per_case_selected_terminal_atoms": 20,
+      "per_case_selected_tail_atoms": 40,
+      "controls": "Exact atom identity and bonds, unchanged unselected atoms/Full records, selected terminal points/vectors and source serialization; no CG-versus-atom coordinate equivalence assumed."
+    }
+  },
+  "validation": {
+    "distinct_passed": 110,
+    "new_characterizations": 9,
+    "failures": 0,
+    "runs": [
+      {
+        "command": "just test-affected tests/test_part_member_motion_order.py --tb=short -s",
+        "passed": 5,
+        "seconds": 2.59
+      },
+      {
+        "command": "just test-affected tests/test_part_motion_native_characterization.py --tb=short -s",
+        "passed": 4,
+        "seconds": 2.66
+      },
+      {
+        "command": "just test-affected tests/test_part_group_selection.py tests/test_group_lineage_resize.py tests/test_group_lineage_resize_pipeline.py --tb=short",
+        "passed": 101,
+        "seconds": 3.34
+      }
+    ],
+    "static": "Both new Python files pass Ruff; git diff --check passes. Memory lint retains the pre-existing 6 errors and 59 warnings; the edited project head remains 200 lines.",
+    "not_run": [
+      "No production backend/frontend behavior changed; no new full frontend or test-smart suite result claimed.",
+      "Archive mount unavailable; no bulk/native disk scratch, browser, screenshot or scientific simulation run.",
+      "Full companion/constraint/axis/phase-sweep molecular comparison remains required before authorization.",
+      "Prior broad backend and FH-27 desktop/performance debt remains."
+    ]
+  },
+  "decisions": [
+    "Ordinary owner insertion and unconditional final-pass shortcuts fail the proposed chronological contract. This does not rule out a correctly compiled final-stage representation.",
+    "Prefer a disposable derived placement program with bounded material/birth/frame provenance and one authored authority; provisional and unimplemented, not a second persisted pose array.",
+    "Advance the finite FH-24 22-kind ordinary editor contract next while retaining the complete required FH-18/FH-23 movement exits.",
+    "No per-frame full recipe proof, limit increases, public rollout, molecular correction, pin or golden updates. No approval requested from scalar diagnostics."
+  ],
+  "cleanup": {
+    "path": "/tmp/pytest-of-joshua",
+    "readers_or_runtime_references": [],
+    "removed_empty_directories": 113,
+    "removed_symlinks": 4,
+    "removed_files": 0,
+    "removed_bytes": 0,
+    "root_empty_after": true,
+    "nadoc_named_shared_memory_after": [],
+    "retained": "Only reusable test code, plans and compact scalar evidence; no coordinate dumps or bulk captures."
+  },
+  "main_js_lines": 7350,
+  "main_js_delta": 0
+}
