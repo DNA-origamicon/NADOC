@@ -22,7 +22,7 @@ NOTE: ``_ensure_default_cluster`` stays in crud.py — it calls
 from backend.core.models import Design, StrandType
 
 
-def _cluster_bundle_regions(design: Design) -> Design:
+def _cluster_bundle_regions(design: Design, *, identity_factory=None) -> Design:
     """Assign one cluster per lattice-connected region of a freshly-built bundle.
 
     Onshape-style "extrude disjoint sketches → separate part bodies": when a
@@ -74,6 +74,7 @@ def _cluster_bundle_regions(design: Design) -> Design:
     components.sort(key=lambda c: c[0])
     clusters = [
         ClusterRigidTransform(
+            **({"id": identity_factory("cluster", hids)} if identity_factory else {}),
             name=f"Cluster {n}", is_default=False, auto_created=True, helix_ids=hids
         )
         for n, hids in enumerate(components, start=1)
@@ -688,12 +689,14 @@ def repair_empty_auto_clusters(design: Design) -> Design:
     return design.copy_with(cluster_transforms=repaired)
 
 
-def with_default_cluster(design: Design) -> Design:
+def with_default_cluster(design: Design, *, identity_factory=None) -> Design:
     """Pure default-placement bootstrap shared by authoring and response adapters."""
     if design.cluster_transforms or not design.helices:
         return design
     from backend.core.models import ClusterRigidTransform
     reference_ids = design.reference_helix_ids()
+    members = [h.id for h in design.helices if h.id not in reference_ids]
     return design.copy_with(cluster_transforms=[ClusterRigidTransform(
+        **({"id": identity_factory("cluster", members)} if identity_factory else {}),
         name='Cluster 1', is_default=True, auto_created=True,
-        helix_ids=[h.id for h in design.helices if h.id not in reference_ids])])
+        helix_ids=members)])

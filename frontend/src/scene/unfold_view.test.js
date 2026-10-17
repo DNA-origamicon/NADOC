@@ -1,17 +1,8 @@
 /**
- * unfold_view.test.js — structural pins for the crossover-arc colour buffer.
- *
- * `initUnfoldView` builds a live Three.js scene graph inside one closure and reads
- * the store, so its internals are not unit-testable without a WebGL harness — this
- * file previously had NO tests at all (`.claude/rules/unfold.md` says so).
- *
- * What IS worth pinning is the buffer contract, because it changed: arc vertex
- * colours went from RGB to RGBA so that per-cluster opacity has somewhere to live
- * (all arcs of a strand type share ONE merged LineSegments and therefore one
- * material, so a 4-component colour attribute — three's USE_COLOR_ALPHA — is the
- * only per-arc alpha channel available). A stride-3 write into an RGBA buffer does
- * not throw; it silently smears each arc's colour into its neighbour's alpha.
- * Source-text assertions are the only thing that catches that.
+ * Remaining live-unfold integration/source pins. Pure merged buffer allocation,
+ * RGBA channels/material and exact quadratic samples now have behavioral tests
+ * in native_connection_lines.test.js; constructor-text pins were pruned after
+ * extracting the shared native implementation.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -28,23 +19,7 @@ describe('arc selection restoration', () => {
   })
 })
 
-describe('arc colour buffer is RGBA', () => {
-  it('allocates 4 floats per vertex', () => {
-    expect(SRC).toMatch(/const colors\s*=\s*new Float32Array\(vertCount \* 4\)/)
-  })
-
-  it('declares the colour attribute with itemSize 4', () => {
-    // 3 here means three never defines USE_COLOR_ALPHA and the alpha is ignored —
-    // the fade would silently do nothing.
-    expect(SRC).toMatch(/setAttribute\('color',\s*new THREE\.BufferAttribute\(colors,\s*4\)\)/)
-  })
-
-  it('keeps positions at 3 floats per vertex', () => {
-    // Guards against a copy-paste that "fixes" the position stride to match.
-    expect(SRC).toMatch(/const positions\s*=\s*new Float32Array\(vertCount \* 3\)/)
-    expect(SRC).toMatch(/setAttribute\('position',\s*new THREE\.BufferAttribute\(positions,\s*3\)\)/)
-  })
-
+describe('remaining live arc repaint', () => {
   it('indexes the colour buffer with stride 4 everywhere, never 3', () => {
     // Every write must be `(<vert>) * 4`. A leftover `* 3` writes arc N's blue
     // channel into arc N-1's alpha.
@@ -53,16 +28,6 @@ describe('arc colour buffer is RGBA', () => {
     expect(strides.every(s => s === '4')).toBe(true)
   })
 
-  it('writes all four channels at every colour-write site', () => {
-    const writes = [...SRC.matchAll(/colors\[ci \+ 3\]/g)]
-    // one in _buildMerged, one in _setArcColor
-    expect(writes.length).toBeGreaterThanOrEqual(2)
-  })
-
-  it('keeps the material transparent — alpha < 1 is a no-op otherwise', () => {
-    expect(SRC).toMatch(/new THREE\.LineBasicMaterial\(\{[^}]*vertexColors:\s*true/)
-    expect(SRC).toMatch(/new THREE\.LineBasicMaterial\(\{[^}]*transparent:\s*true/)
-  })
 })
 
 describe('arc cluster display', () => {

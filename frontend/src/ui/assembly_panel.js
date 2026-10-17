@@ -18,6 +18,10 @@ import { openFileBrowser } from './file_browser.js'
 import { getSectionCollapsed, setSectionCollapsed } from './section_collapse_state.js'
 import { showConfirm } from './primitives/confirm.js'
 import { getDocId } from '../shared/doc_id.js'
+import { initAssemblyPartContext } from './assembly_part_context.js'
+import { paintAssemblyPanelSelection } from './assembly_panel_selection.js'
+import { initAssemblyPanelRows } from './assembly_panel_rows.js'
+import { createAssemblyConnectorSection } from './assembly_connector_section.js'
 
 const _REPR_OPTIONS = [
   { value: 'full',       label: 'Full (CG)' },
@@ -98,59 +102,9 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
 
   // ── Part context — fetch instance design and notify sidebar panels ────────────
 
-  let _partCacheInstanceId = null   // last fetched instance id
-  let _partCacheDesign     = null   // last fetched Design object
-  let _partPatchFn         = null   // patch function for the current instance
   let _partLastRebuildId   = null   // detect activeInstanceId changes in _rebuild
-  let _lastAssemblyRef     = null
-
-  function _makePatchFn(instanceId) {
-    return async (modifier) => {
-      if (!_partCacheDesign || _partCacheInstanceId !== instanceId) return
-      beforePatchDesign?.(instanceId)   // e.g. invalidate geometry cache
-      const design = JSON.parse(JSON.stringify(_partCacheDesign))
-      modifier(design)
-      _partCacheDesign = design
-      // Optimistic notification so panels update immediately
-      onPartContextChange?.(instanceId, _partCacheDesign, _partPatchFn)
-      await api.patchInstanceDesign(instanceId, JSON.stringify(design))
-      // Re-fetch server-canonical design and notify again
-      try {
-        const fresh = await api.getInstanceDesign(instanceId)
-        if (fresh?.design && _partCacheInstanceId === instanceId) {
-          _partCacheDesign = fresh.design
-          onPartContextChange?.(instanceId, _partCacheDesign, _partPatchFn)
-        }
-      } catch { /* keep optimistic */ }
-    }
-  }
-
-  async function _onPartInstanceChanged(instanceId, { force = false } = {}) {
-    if (!instanceId) {
-      _partCacheInstanceId = null
-      _partCacheDesign     = null
-      _partPatchFn         = null
-      onPartContextChange?.(null, null, null)
-      return
-    }
-    if (!force && instanceId === _partCacheInstanceId && _partCacheDesign) {
-      // Same instance — re-notify panels (design may have changed)
-      onPartContextChange?.(instanceId, _partCacheDesign, _partPatchFn)
-      return
-    }
-    _partCacheInstanceId = instanceId
-    _partCacheDesign     = null
-    _partPatchFn         = null
-    try {
-      const result = await api.getInstanceDesign(instanceId)
-      if (!result?.design || _partCacheInstanceId !== instanceId) return  // stale
-      _partCacheDesign = result.design
-      _partPatchFn     = _makePatchFn(instanceId)
-      onPartContextChange?.(instanceId, _partCacheDesign, _partPatchFn)
-    } catch {
-      onPartContextChange?.(null, null, null)
-    }
-  }
+  const _rows = initAssemblyPanelRows()
+  const _partContext = initAssemblyPartContext({ api, onChange: onPartContextChange, beforePatch: beforePatchDesign })
 
   // ── Library picker modal ──────────────────────────────────────────────────────
 
@@ -179,86 +133,6 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
   }
 
   // ── Connector sub-section under each instance row ─────────────────────────────
-
-  function _buildConnectorSection(inst, joints) {
-    const connectors = inst.interface_points ?? []
-
-    const section = document.createElement('div')
-    section.style.cssText = 'padding:0 6px 4px 26px'
-
-    const headerRow = document.createElement('div')
-    headerRow.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;padding:2px 0'
-
-    const arrowSpan = document.createElement('span')
-    arrowSpan.textContent = '▶'
-    arrowSpan.style.cssText = 'font-size:8px;color:#484f58;flex-shrink:0'
-
-    const titleSpan = document.createElement('span')
-    titleSpan.style.cssText = 'font-size:var(--text-xs);color:#6e7681'
-    titleSpan.textContent = `Connectors (${connectors.length})`
-
-    headerRow.append(arrowSpan, titleSpan)
-
-    const listEl = document.createElement('div')
-    listEl.style.display = 'none'
-    let _expanded = false
-
-    headerRow.addEventListener('click', () => {
-      _expanded = !_expanded
-      listEl.style.display = _expanded ? '' : 'none'
-      arrowSpan.textContent = _expanded ? '▼' : '▶'
-    })
-
-    for (const ip of connectors) {
-      const usedCount = joints.filter(j =>
-        (j.instance_b_id === inst.id && j.connector_b_label === ip.label) ||
-        (j.instance_a_id === inst.id && j.connector_a_label === ip.label),
-      ).length
-
-      const row = document.createElement('div')
-      row.style.cssText = 'display:flex;align-items:center;gap:4px;padding:2px 0 2px 8px'
-
-      const lbl = document.createElement('span')
-      lbl.textContent = ip.label
-      lbl.style.cssText = 'flex:1;font-size:var(--text-xs);color:#8b949e'
-
-      const delBtn = document.createElement('button')
-      delBtn.textContent = '×'
-      delBtn.title = 'Delete connector'
-      delBtn.style.cssText = [
-        'background:none;border:none;cursor:pointer;padding:0 2px',
-        'color:#6e7681;font-size:12px;line-height:1',
-      ].join(';')
-      delBtn.addEventListener('pointerenter', () => { delBtn.style.color = '#f85149' })
-      delBtn.addEventListener('pointerleave', () => { delBtn.style.color = '#6e7681' })
-      delBtn.addEventListener('click', async (e) => {
-        e.stopPropagation()
-        if (usedCount > 0) {
-          const ok = await showConfirm({
-            title: 'Delete connector in use',
-            message: `Connector "${ip.label}" is used in ${usedCount} mate(s). Delete anyway?`,
-            danger: true,
-            confirmLabel: 'Delete',
-          })
-          if (!ok) return
-        }
-        await api.deleteInstanceConnector(inst.id, ip.label)
-      })
-
-      row.append(lbl, delBtn)
-      listEl.appendChild(row)
-    }
-
-    if (!connectors.length) {
-      const empty = document.createElement('div')
-      empty.textContent = 'No connectors defined'
-      empty.style.cssText = 'font-size:var(--text-xs);color:#484f58;padding:2px 0 2px 8px'
-      listEl.appendChild(empty)
-    }
-
-    section.append(headerRow, listEl)
-    return section
-  }
 
   // ── Eye SVG ───────────────────────────────────────────────────────────────────
 
@@ -406,6 +280,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     reprLabel.style.cssText = 'font-size:var(--text-xs);color:#484f58;flex-shrink:0'
 
     const reprSel = document.createElement('select')
+    _rows.register(inst.id, reprSel)
     reprSel.style.cssText = [
       'flex:1;background:#0d1117;color:#c9d1d9;border:1px solid #30363d',
       'border-radius:3px;font-size:var(--text-xs);padding:3px 2px;cursor:pointer',
@@ -428,7 +303,8 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
           confirmLabel: 'Apply',
         })
         if (!ok) {
-          reprSel.value = inst.representation ?? 'full'
+          const current = store.getState().currentAssembly?.instances?.find(i => i.id === inst.id)
+          reprSel.value = current?.representation ?? 'full'
           return
         }
       }
@@ -757,7 +633,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
       irRepr.style.paddingLeft = `${26 + (level + 1) * 12}px`
       instanceEl.appendChild(ir)
       instanceEl.appendChild(irRepr)
-      instanceEl.appendChild(_buildConnectorSection(inst, joints))
+      instanceEl.appendChild(createAssemblyConnectorSection(inst, joints, { api }))
       if (inst.id === activeId) activeRow = ir
     }
     return activeRow
@@ -789,7 +665,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     for (const inst of instances) {
       if (index.parent.has(inst.id) || rendered.has(inst.id)) continue
       const { row, reprRow } = _buildInstanceRow(inst, activeId, joints)
-      const connSection = _buildConnectorSection(inst, joints)
+      const connSection = createAssemblyConnectorSection(inst, joints, { api })
       instanceEl.appendChild(row)
       instanceEl.appendChild(reprRow)
       instanceEl.appendChild(connSection)
@@ -1658,8 +1534,16 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
   function _rebuild(state) {
     if (_collapsed) return
     _syncActionButtons(state)
-    const assemblyChanged = state.currentAssembly !== _lastAssemblyRef
-    _lastAssemblyRef = state.currentAssembly
+    const assemblyChanged = _rows.update(state.currentAssembly)
+    if (!assemblyChanged) {
+      const activeRow = paintAssemblyPanelSelection(instanceEl, state)
+      if (activeRow && state.activeInstanceId !== _partLastRebuildId) activeRow.scrollIntoView?.({ block: 'nearest' })
+      if (state.activeInstanceId !== _partLastRebuildId) {
+        _partLastRebuildId = state.activeInstanceId
+        void _partContext.select(state.activeInstanceId)
+      }
+      return
+    }
     if (nameEl) {
       const asmName = state.currentAssembly?.metadata?.name
       nameEl.textContent = asmName ? asmName : ''
@@ -1703,7 +1587,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     const prevPartId = _partLastRebuildId
     _partLastRebuildId = state.activeInstanceId
     if (state.activeInstanceId !== prevPartId || assemblyChanged) {
-      _onPartInstanceChanged(state.activeInstanceId, { force: assemblyChanged })
+      void _partContext.select(state.activeInstanceId, { force: assemblyChanged })
     }
   }
 
@@ -1717,7 +1601,7 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     _syncActionButtons()
   }
 
-  store.subscribeSlice('assembly', (newState) => {
+  const unsubscribe = store.subscribeSlice('assembly', (newState) => {
     if (!panelEl || panelEl.style.display === 'none') return
     _rebuild(newState)
   })
@@ -1730,5 +1614,8 @@ export function initAssemblyPanel(store, { api, onInstanceSelect, onPartContextC
     _solveStatus = solveStatus
     _rebuildMates(store.getState().currentAssembly)
   }
-  return { show, hide, rebuild: _rebuild, openPicker: _openLibraryPicker, applySolveStatus }
+  return {
+    show, hide, rebuild: _rebuild, openPicker: _openLibraryPicker, applySolveStatus,
+    dispose() { unsubscribe(); _rows.dispose() },
+  }
 }

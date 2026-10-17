@@ -325,13 +325,15 @@ def preflight_photoproduct(
 
 
 def create_photoproduct_from_preflight(
-    design: Design, report: dict[str, Any]
+    design: Design, report: dict[str, Any], *, identity=None
 ) -> tuple[Design, PhotoproductJunction]:
     if not report.get("eligible"):
         messages = "; ".join(item["message"] for item in report.get("errors") or [])
         raise ValueError(messages or "Photoproduct preflight failed.")
     orientation = report["orientation"]
+    from uuid import uuid4
     lesion = PhotoproductJunction(
+        id=identity or str(uuid4()),
         base_key_1=orientation["base_key_1"],
         base_key_2=orientation["base_key_2"],
         product=PRODUCT,

@@ -70,7 +70,8 @@ def test_batch_apply_token_history_and_stale_rejection(wide_join, monkeypatch):
     monkeypatch.setattr(state, '_sessions', {})
     design, original = wide_join
     state.set_design(design.model_copy(deep=True))
-    client = TestClient(app)
+    # Native poses are asserted from state below; response geometry is unused.
+    client = TestClient(app, headers={"X-NADOC-Skip-Geometry": "1"})
     body = {**original, "expected_revision": state.revision()}
     before = state.get_or_404().model_copy(deep=True)
     response = client.post('/api/design/cluster-join/preview', json=body)

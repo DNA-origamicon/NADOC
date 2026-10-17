@@ -1,0 +1,2041 @@
+{
+  "scope": "Staged immutable actual strict HTTP batch/verify/commit; persistence excluded",
+  "repeats": 3,
+  "completed": true,
+  "failure": null,
+  "diagnostics": true,
+  "allocation_tracing": false,
+  "rss_sampling": true,
+  "retention_stress": false,
+  "result_retention_scope": "Two occupied native result slots report actual sizes; this does not qualify two maximum-size 16 MB results.",
+  "latency_qualified": false,
+  "memory_scope": "Traced parent Python allocations exclude native/worker allocations. Linux RSS high-water includes fixture creation and all prior cases; not an incremental or hard memory bound.",
+  "lifecycle_rss_scope": "Optional Linux /proc sampling starts after retained source/undo installation and ends after commit, before cold proof. Stress includes preparation of a retained ready result and streaming result-size measurement. Only explicitly hooked direct worker PIDs with matching birth ticks count; unrelated descendants and multiprocessing resource trackers are excluded. The baseline includes all already retained benchmark fixtures. Sequential parent+child RSS reads double-count shared pages and may miss short peaks or GIL-blocked intervals; actual maximum gaps are reported. The +256 MiB allowance is an observed engineering target, not a heap guarantee.",
+  "rss_high_water_kib": {
+    "parent": 132840,
+    "children": 132632
+  },
+  "sample_retention": "All aggregate metrics plus refusals, incomplete publications, gen-2 GC samples and phase HTTP/lock/light maxima; other successful per-request arrays are omitted.",
+  "session_cleanup_verified": true,
+  "cleanup_errors": [],
+  "cases": [
+    {
+      "name": "32-gold-commands",
+      "completed": true,
+      "samples": [
+        {
+          "iteration": 0,
+          "capture": {
+            "http_ms": 7.591494999360293,
+            "baseline_revision_http_ms": 2.60259799688356,
+            "revision_http_ms": [
+              4.8591970007692,
+              3.57909700323944
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.027000001864507794,
+              0.08990000060293823
+            ],
+            "capture_lock_wait_ms": [
+              0.0011999982234556228,
+              0.0007999988156370819
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.008499999239575118,
+              0.012699998478638008,
+              0.046299999667098746,
+              0.010600000678095967
+            ],
+            "light_request_lock_wait_ms": [
+              0.0010000003385357559,
+              0.0008999995770864189,
+              0.0010000003385357559,
+              0.0008999995770864189
+            ],
+            "gc": {
+              "overlap_ms": 0.09259999933419749,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1287.791537000885,
+          "publication": {
+            "http_ms": 24.326083999767434,
+            "baseline_revision_http_ms": 1.6974989994196221,
+            "revision_http_ms": [
+              2.598999002657365,
+              21.953085000859573
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.004300000000512227,
+              0.4802999974344857
+            ],
+            "publication_lock_wait_ms": [
+              0.0010999974620062858,
+              0.0015000005078036338
+            ],
+            "light_request_lock_hold_ms": [
+              0.006199999916134402,
+              0.01049999991664663,
+              0.008800001523923129,
+              0.009700001101009548
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008999995770864189,
+              0.0008999995770864189,
+              0.3424989990890026,
+              0.0007999988156370819
+            ],
+            "gc": {
+              "overlap_ms": 0.23670000155107118,
+              "events": 3,
+              "dropped_events": 0,
+              "generations": {
+                "0": 3,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 453892,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        }
+      ],
+      "errors": [],
+      "source_sealing_ms": 7.604495000123279,
+      "source_bytes": 141274,
+      "source_rows": 32,
+      "source_recovery_bytes": 113552,
+      "retained_source_and_undo_bytes": 141274,
+      "retention_stress": null,
+      "expected_candidate_rows": 64,
+      "lifecycle_rss": [
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 17.297188998782076,
+          "max_sample_duration_ms": 15.82539000082761,
+          "sample_count": 247,
+          "samples_with_children": 241,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 1,
+          "errors": {},
+          "baseline_parent_bytes": 127971328,
+          "peak_parent_bytes": 131248128,
+          "peak_owned_children_bytes": 126898176,
+          "peak_combined_bytes": 255262720,
+          "increase_over_idle_bytes": 127291392,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 127971328
+            },
+            "start": {
+              "samples": 2,
+              "peak_combined_bytes": 128364544
+            },
+            "worker": {
+              "samples": 241,
+              "peak_combined_bytes": 255262720
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 131248128
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 17.786980999517255,
+          "max_sample_duration_ms": 16.72891999987769,
+          "sample_count": 243,
+          "samples_with_children": 238,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 1,
+          "errors": {},
+          "baseline_parent_bytes": 131256320,
+          "peak_parent_bytes": 133615616,
+          "peak_owned_children_bytes": 126697472,
+          "peak_combined_bytes": 258215936,
+          "increase_over_idle_bytes": 126959616,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 131256320
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 131256320
+            },
+            "worker": {
+              "samples": 238,
+              "peak_combined_bytes": 258215936
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 133615616
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 17.294502002187073,
+          "max_sample_duration_ms": 2.909424001700245,
+          "sample_count": 242,
+          "samples_with_children": 236,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 1,
+          "errors": {},
+          "baseline_parent_bytes": 133615616,
+          "peak_parent_bytes": 133746688,
+          "peak_owned_children_bytes": 126853120,
+          "peak_combined_bytes": 260599808,
+          "increase_over_idle_bytes": 126984192,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 133615616
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 133746688
+            },
+            "worker": {
+              "samples": 237,
+              "peak_combined_bytes": 260599808
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 133738496
+            }
+          }
+        }
+      ],
+      "candidate_bytes": 312618,
+      "candidate_rows": 64,
+      "cold_verification": {
+        "status": "verified",
+        "native_editable": true,
+        "issues": []
+      },
+      "capture": {
+        "http": {
+          "count": 3,
+          "p50_ms": 5.648009999276837,
+          "p95_ms": 7.591494999360293,
+          "max_ms": 7.591494999360293
+        },
+        "baseline_revision_http": {
+          "count": 3,
+          "p50_ms": 1.16947800052003,
+          "p95_ms": 2.60259799688356,
+          "max_ms": 2.60259799688356
+        },
+        "revision_http": {
+          "count": 6,
+          "p50_ms": 3.891939502864261,
+          "p95_ms": 4.8591970007692,
+          "max_ms": 4.8591970007692
+        },
+        "capture_lock_hold": {
+          "count": 6,
+          "p50_ms": 0.02425050115562044,
+          "p95_ms": 0.08990000060293823,
+          "max_ms": 0.08990000060293823
+        },
+        "capture_lock_wait": {
+          "count": 6,
+          "p50_ms": 0.0009999985195463523,
+          "p95_ms": 0.0014659999578725547,
+          "max_ms": 0.0014659999578725547
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 12,
+          "p50_ms": 0.010018000466516241,
+          "p95_ms": 0.046299999667098746,
+          "max_ms": 0.046299999667098746
+        },
+        "light_request_lock_wait": {
+          "count": 12,
+          "p50_ms": 0.0009385003068018705,
+          "p95_ms": 0.0017599995771888644,
+          "max_ms": 0.0017599995771888644
+        },
+        "overlapping_revision_requests": 4,
+        "gc_overlap": {
+          "count": 3,
+          "p50_ms": 0.09259999933419749,
+          "p95_ms": 0.11122099749627523,
+          "max_ms": 0.11122099749627523
+        },
+        "dropped_gc_events": 0
+      },
+      "publication": {
+        "http": {
+          "count": 3,
+          "p50_ms": 22.46010000089882,
+          "p95_ms": 24.326083999767434,
+          "max_ms": 24.326083999767434
+        },
+        "baseline_revision_http": {
+          "count": 3,
+          "p50_ms": 1.5793709972058423,
+          "p95_ms": 1.6974989994196221,
+          "max_ms": 1.6974989994196221
+        },
+        "revision_http": {
+          "count": 6,
+          "p50_ms": 11.126061997856596,
+          "p95_ms": 21.953085000859573,
+          "max_ms": 21.953085000859573
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 6,
+          "p50_ms": 0.024286500774906017,
+          "p95_ms": 0.4802999974344857,
+          "max_ms": 0.4802999974344857
+        },
+        "publication_lock_wait": {
+          "count": 6,
+          "p50_ms": 0.0011854990589199588,
+          "p95_ms": 0.0015000005078036338,
+          "max_ms": 0.0015000005078036338
+        },
+        "light_request_lock_hold": {
+          "count": 12,
+          "p50_ms": 0.008993500159704126,
+          "p95_ms": 0.011240001185797155,
+          "max_ms": 0.011240001185797155
+        },
+        "light_request_lock_wait": {
+          "count": 12,
+          "p50_ms": 0.0008900005923351273,
+          "p95_ms": 0.3424989990890026,
+          "max_ms": 0.3424989990890026
+        },
+        "overlapping_revision_requests": 5,
+        "gc_overlap": {
+          "count": 3,
+          "p50_ms": 0.3230090005672537,
+          "p95_ms": 0.8158780037774704,
+          "max_ms": 0.8158780037774704
+        },
+        "dropped_gc_events": 0
+      },
+      "private_materialization": {
+        "count": 3,
+        "p50_ms": 2.9190019995439798,
+        "p95_ms": 3.111926998826675,
+        "max_ms": 3.111926998826675
+      },
+      "private_sealing": {
+        "count": 3,
+        "p50_ms": 12.373432000458706,
+        "p95_ms": 12.481591998948716,
+        "max_ms": 12.481591998948716
+      },
+      "job_completion": {
+        "count": 3,
+        "p50_ms": 1260.8836279978277,
+        "p95_ms": 1287.791537000885,
+        "max_ms": 1287.791537000885
+      },
+      "sample_count": 3,
+      "successful_publications": 3
+    },
+    {
+      "name": "mixed-prefix-37-rows-plus-27-commands",
+      "completed": true,
+      "samples": [
+        {
+          "iteration": 0,
+          "capture": {
+            "http_ms": 4.736450999189401,
+            "baseline_revision_http_ms": 1.2922310015710536,
+            "revision_http_ms": [
+              4.9227310009882785
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.023650998627999797,
+              0.028635000489884987
+            ],
+            "capture_lock_wait_ms": [
+              0.001368000084767118,
+              0.0003910026862286031
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.005863999831490219,
+              0.010749998182291165
+            ],
+            "light_request_lock_wait_ms": [
+              0.000976997398538515,
+              0.0009780014806892723
+            ],
+            "gc": {
+              "overlap_ms": 0.0980260010692291,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1239.089481998235,
+          "publication": {
+            "http_ms": 21.13679100148147,
+            "baseline_revision_http_ms": 1.1112290012533776,
+            "revision_http_ms": [
+              2.9339550019358285,
+              18.751119998341892
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.003615998139139265,
+              0.04945300315739587
+            ],
+            "publication_lock_wait_ms": [
+              0.0010750009096227586,
+              0.000976997398538515
+            ],
+            "light_request_lock_hold_ms": [
+              0.0060589991335291415,
+              0.01006700040306896,
+              0.006744001439074054,
+              0.013487999240169302
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008800016075838357,
+              0.0008799979696050286,
+              0.0014659999578725547,
+              0.0010750009096227586
+            ],
+            "gc": {
+              "overlap_ms": 0.4387250046420377,
+              "events": 4,
+              "dropped_events": 0,
+              "generations": {
+                "0": 3,
+                "1": 1,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 358782,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 1,
+          "capture": {
+            "http_ms": 5.37826599975233,
+            "baseline_revision_http_ms": 1.1246170033700764,
+            "revision_http_ms": [
+              4.298997002479155,
+              2.518295998015674
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.024531000235583633,
+              0.01847100065788254
+            ],
+            "capture_lock_wait_ms": [
+              0.001368000084767118,
+              0.00039099904824979603
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.006352998752845451,
+              0.01006700040306896,
+              0.006156999006634578,
+              0.01035999957821332
+            ],
+            "light_request_lock_wait_ms": [
+              0.0010750009096227586,
+              0.0008799979696050286,
+              0.0009780014806892723,
+              0.0008790011634118855
+            ],
+            "gc": {
+              "overlap_ms": 0.10867899982258677,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1244.8456290003378,
+          "publication": {
+            "http_ms": 27.140782000060426,
+            "baseline_revision_http_ms": 2.044798999122577,
+            "revision_http_ms": [
+              12.616390999028226,
+              14.736090000951663
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.010100000508828089,
+              0.07640000330866314
+            ],
+            "publication_lock_wait_ms": [
+              0.0018999999156221747,
+              0.0015999976312741637
+            ],
+            "light_request_lock_hold_ms": [
+              0.013799999578623101,
+              0.022399999579647556,
+              0.018599999748403206,
+              0.023199998395284638
+            ],
+            "light_request_lock_wait_ms": [
+              0.0020999978005420417,
+              0.0013000026228837669,
+              0.0026999987312592566,
+              0.0017000020307023078
+            ],
+            "gc": {
+              "overlap_ms": 0.5863000005774666,
+              "events": 4,
+              "dropped_events": 0,
+              "generations": {
+                "0": 4,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 358782,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 2,
+          "capture": {
+            "http_ms": 6.338595001579961,
+            "baseline_revision_http_ms": 1.564999001857359,
+            "revision_http_ms": [
+              5.729597000026843,
+              2.469398001267109
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.02930000118794851,
+              0.03270000161137432
+            ],
+            "capture_lock_wait_ms": [
+              0.0015000005078036338,
+              0.00039999940781854093
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.007000002369750291,
+              0.04400000034365803,
+              0.006199999916134402,
+              0.011800002539530396
+            ],
+            "light_request_lock_wait_ms": [
+              0.0017999991541728377,
+              0.0010999974620062858,
+              0.0011000010999850929,
+              0.0010000003385357559
+            ],
+            "gc": {
+              "overlap_ms": 0.10750000001280569,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1291.9437550008297,
+          "publication": {
+            "http_ms": 20.983565002097748,
+            "baseline_revision_http_ms": 1.1144070012960583,
+            "revision_http_ms": [
+              4.990828998415964,
+              16.90177999989828
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.003820998244918883,
+              0.0628039997536689
+            ],
+            "publication_lock_wait_ms": [
+              0.0009800023690331727,
+              0.0021560008462984115
+            ],
+            "light_request_lock_hold_ms": [
+              0.005976002285024151,
+              0.00989600084722042,
+              0.00695699782227166,
+              0.012639000487979501
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008819988579489291,
+              0.0008819988579489291,
+              0.0014690012903884053,
+              0.0008819988579489291
+            ],
+            "gc": {
+              "overlap_ms": 0.5428010008472484,
+              "events": 4,
+              "dropped_events": 0,
+              "generations": {
+                "0": 3,
+                "1": 1,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 358782,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        }
+      ],
+      "errors": [],
+      "source_sealing_ms": 7.485006000933936,
+      "source_bytes": 102682,
+      "source_rows": 37,
+      "source_recovery_bytes": 77220,
+      "retained_source_and_undo_bytes": 102682,
+      "retention_stress": null,
+      "expected_candidate_rows": 64,
+      "lifecycle_rss": [
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 18.31132000006619,
+          "max_sample_duration_ms": 3.203796997695463,
+          "sample_count": 242,
+          "samples_with_children": 236,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 1,
+          "errors": {},
+          "baseline_parent_bytes": 133738496,
+          "peak_parent_bytes": 133738496,
+          "peak_owned_children_bytes": 126521344,
+          "peak_combined_bytes": 260259840,
+          "increase_over_idle_bytes": 126521344,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 133738496
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 133738496
+            },
+            "worker": {
+              "samples": 237,
+              "peak_combined_bytes": 260259840
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 133738496
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 21.002085999498377,
+          "max_sample_duration_ms": 11.322792997816578,
+          "sample_count": 242,
+          "samples_with_children": 236,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 1,
+          "errors": {},
+          "baseline_parent_bytes": 133738496,
+          "peak_parent_bytes": 133869568,
+          "peak_owned_children_bytes": 126398464,
+          "peak_combined_bytes": 260136960,
+          "increase_over_idle_bytes": 126398464,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 133738496
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 133738496
+            },
+            "worker": {
+              "samples": 237,
+              "peak_combined_bytes": 260136960
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 133869568
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 17.5790080029401,
+          "max_sample_duration_ms": 3.9596050010004546,
+          "sample_count": 249,
+          "samples_with_children": 243,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 1,
+          "errors": {},
+          "baseline_parent_bytes": 133869568,
+          "peak_parent_bytes": 133869568,
+          "peak_owned_children_bytes": 126730240,
+          "peak_combined_bytes": 260599808,
+          "increase_over_idle_bytes": 126730240,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 133869568
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 133869568
+            },
+            "worker": {
+              "samples": 244,
+              "peak_combined_bytes": 260599808
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 133869568
+            }
+          }
+        }
+      ],
+      "candidate_bytes": 256100,
+      "candidate_rows": 64,
+      "cold_verification": {
+        "status": "verified",
+        "native_editable": true,
+        "issues": []
+      },
+      "capture": {
+        "http": {
+          "count": 3,
+          "p50_ms": 5.37826599975233,
+          "p95_ms": 6.338595001579961,
+          "max_ms": 6.338595001579961
+        },
+        "baseline_revision_http": {
+          "count": 3,
+          "p50_ms": 1.2922310015710536,
+          "p95_ms": 1.564999001857359,
+          "max_ms": 1.564999001857359
+        },
+        "revision_http": {
+          "count": 5,
+          "p50_ms": 4.298997002479155,
+          "p95_ms": 5.729597000026843,
+          "max_ms": 5.729597000026843
+        },
+        "capture_lock_hold": {
+          "count": 6,
+          "p50_ms": 0.02658300036273431,
+          "p95_ms": 0.03270000161137432,
+          "max_ms": 0.03270000161137432
+        },
+        "capture_lock_wait": {
+          "count": 6,
+          "p50_ms": 0.0008839997462928295,
+          "p95_ms": 0.0015000005078036338,
+          "max_ms": 0.0015000005078036338
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 10,
+          "p50_ms": 0.008533501386409625,
+          "p95_ms": 0.04400000034365803,
+          "max_ms": 0.04400000034365803
+        },
+        "light_request_lock_wait": {
+          "count": 10,
+          "p50_ms": 0.000989000909612514,
+          "p95_ms": 0.0017999991541728377,
+          "max_ms": 0.0017999991541728377
+        },
+        "overlapping_revision_requests": 3,
+        "gc_overlap": {
+          "count": 3,
+          "p50_ms": 0.10750000001280569,
+          "p95_ms": 0.10867899982258677,
+          "max_ms": 0.10867899982258677
+        },
+        "dropped_gc_events": 0
+      },
+      "publication": {
+        "http": {
+          "count": 3,
+          "p50_ms": 21.13679100148147,
+          "p95_ms": 27.140782000060426,
+          "max_ms": 27.140782000060426
+        },
+        "baseline_revision_http": {
+          "count": 3,
+          "p50_ms": 1.1144070012960583,
+          "p95_ms": 2.044798999122577,
+          "max_ms": 2.044798999122577
+        },
+        "revision_http": {
+          "count": 6,
+          "p50_ms": 13.676240499989945,
+          "p95_ms": 18.751119998341892,
+          "max_ms": 18.751119998341892
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 6,
+          "p50_ms": 0.02977650183311198,
+          "p95_ms": 0.07640000330866314,
+          "max_ms": 0.07640000330866314
+        },
+        "publication_lock_wait": {
+          "count": 6,
+          "p50_ms": 0.0013374992704484612,
+          "p95_ms": 0.0021560008462984115,
+          "max_ms": 0.0021560008462984115
+        },
+        "light_request_lock_hold": {
+          "count": 12,
+          "p50_ms": 0.01135300044552423,
+          "p95_ms": 0.023199998395284638,
+          "max_ms": 0.023199998395284638
+        },
+        "light_request_lock_wait": {
+          "count": 12,
+          "p50_ms": 0.0011875017662532628,
+          "p95_ms": 0.0026999987312592566,
+          "max_ms": 0.0026999987312592566
+        },
+        "overlapping_revision_requests": 6,
+        "gc_overlap": {
+          "count": 3,
+          "p50_ms": 0.5428010008472484,
+          "p95_ms": 0.5863000005774666,
+          "max_ms": 0.5863000005774666
+        },
+        "dropped_gc_events": 0
+      },
+      "private_materialization": {
+        "count": 3,
+        "p50_ms": 3.082606999669224,
+        "p95_ms": 3.256097999837948,
+        "max_ms": 3.256097999837948
+      },
+      "private_sealing": {
+        "count": 3,
+        "p50_ms": 11.249400999076897,
+        "p95_ms": 15.587989997584373,
+        "max_ms": 15.587989997584373
+      },
+      "job_completion": {
+        "count": 3,
+        "p50_ms": 1244.8456290003378,
+        "p95_ms": 1291.9437550008297,
+        "max_ms": 1291.9437550008297
+      },
+      "sample_count": 3,
+      "successful_publications": 3
+    },
+    {
+      "name": "public-50000-authored-residues",
+      "completed": true,
+      "samples": [
+        {
+          "iteration": 0,
+          "capture": {
+            "http_ms": 6.383004998497199,
+            "baseline_revision_http_ms": 1.2139530008425936,
+            "revision_http_ms": [
+              5.416937001427868,
+              2.4306500017701183
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.02645399945322424,
+              0.017832000594353303
+            ],
+            "capture_lock_wait_ms": [
+              0.001372001861454919,
+              0.00039199949242174625
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.005975998647045344,
+              0.011170002835569903,
+              0.0058779987739399076,
+              0.009013998351292685
+            ],
+            "light_request_lock_wait_ms": [
+              0.0011760021152440459,
+              0.001272997906198725,
+              0.0008820024959277362,
+              0.0005879992386326194
+            ],
+            "gc": {
+              "overlap_ms": 0.07828500019968487,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1268.3990330006054,
+          "publication": {
+            "http_ms": 25.124920000962447,
+            "baseline_revision_http_ms": 1.046508001309121,
+            "revision_http_ms": [
+              12.243687000591308,
+              13.55375699858996
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.006662001396762207,
+              0.04536399865173735
+            ],
+            "publication_lock_wait_ms": [
+              0.002058000973192975,
+              0.001372001861454919
+            ],
+            "light_request_lock_hold_ms": [
+              0.005977002729196101,
+              0.010288000339642167,
+              0.006369002221617848,
+              0.009406001481693238
+            ],
+            "light_request_lock_wait_ms": [
+              0.001076998159987852,
+              0.0008810020517557859,
+              0.0008819988579489291,
+              0.0006859991117380559
+            ],
+            "gc": {
+              "overlap_ms": 0.33400799657101743,
+              "events": 5,
+              "dropped_events": 0,
+              "generations": {
+                "0": 5,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 128708,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 1,
+          "capture": {
+            "http_ms": 6.424842002161313,
+            "baseline_revision_http_ms": 1.103433001844678,
+            "revision_http_ms": [
+              5.198837003263179,
+              2.638169000420021
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.02645399945322424,
+              0.01626399898668751
+            ],
+            "capture_lock_wait_ms": [
+              0.0014699980965815485,
+              0.0004899993655271828
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.006466998456744477,
+              0.010288000339642167,
+              0.0061729988374281675,
+              0.010288000339642167
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009800023690331727,
+              0.0009799987310543656,
+              0.0009790019248612225,
+              0.0009799987310543656
+            ],
+            "gc": {
+              "overlap_ms": 0.10924600064754486,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1384.1476919988054,
+          "publication": {
+            "http_ms": 24.41604499836103,
+            "baseline_revision_http_ms": 1.086092001060024,
+            "revision_http_ms": [
+              2.7044020025641657,
+              21.7104669973196
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.0037229983718134463,
+              0.04173900015302934
+            ],
+            "publication_lock_wait_ms": [
+              0.0010780022421386093,
+              0.0005879992386326194
+            ],
+            "light_request_lock_hold_ms": [
+              0.006270998710533604,
+              0.02312300057383254,
+              0.006075002602301538,
+              0.013324999599717557
+            ],
+            "light_request_lock_wait_ms": [
+              0.001077001797966659,
+              0.0009799987310543656,
+              0.0008819988579489291,
+              0.0012739983503706753
+            ],
+            "gc": {
+              "overlap_ms": 0.4444309997779783,
+              "events": 5,
+              "dropped_events": 0,
+              "generations": {
+                "0": 4,
+                "1": 1,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 128708,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 2,
+          "capture": {
+            "http_ms": 6.907580998813501,
+            "baseline_revision_http_ms": 1.285967999137938,
+            "revision_http_ms": [
+              5.339044000720605,
+              3.1152260016824584
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.022829000954516232,
+              0.016949998098425567
+            ],
+            "capture_lock_wait_ms": [
+              0.0014699980965815485,
+              0.0004899993655271828
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.005878999218111858,
+              0.009994000720325857,
+              0.01156200232799165,
+              0.013618999219033867
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009789982868824154,
+              0.0008819988579489291,
+              0.0013719982234761119,
+              0.0008809984137769789
+            ],
+            "gc": {
+              "overlap_ms": 0.09797899838304147,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 1,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1250.5272650014376,
+          "publication": {
+            "http_ms": 24.55360599924461,
+            "baseline_revision_http_ms": 1.6404540001531132,
+            "revision_http_ms": [
+              3.56631899921922,
+              19.41953399727936,
+              2.1801190014230087
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.00382200232706964,
+              0.04506999903242104
+            ],
+            "publication_lock_wait_ms": [
+              0.0009789982868824154,
+              0.0012740019883494824
+            ],
+            "light_request_lock_hold_ms": [
+              0.006369002221617848,
+              0.00989600084722042,
+              0.006074998964322731,
+              0.012933000107295811,
+              0.005878999218111858,
+              0.009405997843714431
+            ],
+            "light_request_lock_wait_ms": [
+              0.0009789982868824154,
+              0.0008819988579489291,
+              0.0008820024959277362,
+              0.0014700017345603555,
+              0.0008809984137769789,
+              0.0007839989848434925
+            ],
+            "gc": {
+              "overlap_ms": 0.3429239986871835,
+              "events": 5,
+              "dropped_events": 0,
+              "generations": {
+                "0": 5,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 128708,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        }
+      ],
+      "errors": [],
+      "source_sealing_ms": 7.99886700042407,
+      "source_bytes": 41562,
+      "source_rows": 32,
+      "source_recovery_bytes": 14296,
+      "retained_source_and_undo_bytes": 41562,
+      "retention_stress": null,
+      "expected_candidate_rows": 64,
+      "lifecycle_rss": [
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 15.074874001584249,
+          "max_sample_duration_ms": 6.849773999419995,
+          "sample_count": 246,
+          "samples_with_children": 240,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 1,
+          "errors": {},
+          "baseline_parent_bytes": 133869568,
+          "peak_parent_bytes": 134393856,
+          "peak_owned_children_bytes": 125628416,
+          "peak_combined_bytes": 259497984,
+          "increase_over_idle_bytes": 125628416,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 133869568
+            },
+            "start": {
+              "samples": 2,
+              "peak_combined_bytes": 137584640
+            },
+            "worker": {
+              "samples": 240,
+              "peak_combined_bytes": 259497984
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 134393856
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 14.822871999058407,
+          "max_sample_duration_ms": 5.738503001339268,
+          "sample_count": 265,
+          "samples_with_children": 259,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 1,
+          "errors": {},
+          "baseline_parent_bytes": 134393856,
+          "peak_parent_bytes": 134524928,
+          "peak_owned_children_bytes": 125874176,
+          "peak_combined_bytes": 260268032,
+          "increase_over_idle_bytes": 125874176,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 134393856
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 134393856
+            },
+            "worker": {
+              "samples": 260,
+              "peak_combined_bytes": 260268032
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 134524928
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 19.624014999862993,
+          "max_sample_duration_ms": 13.890901002014289,
+          "sample_count": 243,
+          "samples_with_children": 237,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 1,
+          "errors": {},
+          "baseline_parent_bytes": 134524928,
+          "peak_parent_bytes": 134598656,
+          "peak_owned_children_bytes": 125612032,
+          "peak_combined_bytes": 260210688,
+          "increase_over_idle_bytes": 125685760,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 134524928
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 134524928
+            },
+            "worker": {
+              "samples": 237,
+              "peak_combined_bytes": 260210688
+            },
+            "commit": {
+              "samples": 4,
+              "peak_combined_bytes": 134578176
+            }
+          }
+        }
+      ],
+      "candidate_bytes": 87146,
+      "candidate_rows": 64,
+      "cold_verification": {
+        "status": "verified",
+        "native_editable": true,
+        "issues": []
+      },
+      "capture": {
+        "http": {
+          "count": 3,
+          "p50_ms": 6.424842002161313,
+          "p95_ms": 6.907580998813501,
+          "max_ms": 6.907580998813501
+        },
+        "baseline_revision_http": {
+          "count": 3,
+          "p50_ms": 1.2139530008425936,
+          "p95_ms": 1.285967999137938,
+          "max_ms": 1.285967999137938
+        },
+        "revision_http": {
+          "count": 6,
+          "p50_ms": 4.157031502472819,
+          "p95_ms": 5.416937001427868,
+          "max_ms": 5.416937001427868
+        },
+        "capture_lock_hold": {
+          "count": 6,
+          "p50_ms": 0.020330500774434768,
+          "p95_ms": 0.02645399945322424,
+          "max_ms": 0.02645399945322424
+        },
+        "capture_lock_wait": {
+          "count": 6,
+          "p50_ms": 0.0009310006134910509,
+          "p95_ms": 0.0014699980965815485,
+          "max_ms": 0.0014699980965815485
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 12,
+          "p50_ms": 0.009503999535809271,
+          "p95_ms": 0.013618999219033867,
+          "max_ms": 0.013618999219033867
+        },
+        "light_request_lock_wait": {
+          "count": 12,
+          "p50_ms": 0.000979500327957794,
+          "p95_ms": 0.0013719982234761119,
+          "max_ms": 0.0013719982234761119
+        },
+        "overlapping_revision_requests": 3,
+        "gc_overlap": {
+          "count": 3,
+          "p50_ms": 0.09797899838304147,
+          "p95_ms": 0.10924600064754486,
+          "max_ms": 0.10924600064754486
+        },
+        "dropped_gc_events": 0
+      },
+      "publication": {
+        "http": {
+          "count": 3,
+          "p50_ms": 24.55360599924461,
+          "p95_ms": 25.124920000962447,
+          "max_ms": 25.124920000962447
+        },
+        "baseline_revision_http": {
+          "count": 3,
+          "p50_ms": 1.086092001060024,
+          "p95_ms": 1.6404540001531132,
+          "max_ms": 1.6404540001531132
+        },
+        "revision_http": {
+          "count": 7,
+          "p50_ms": 12.243687000591308,
+          "p95_ms": 21.7104669973196,
+          "max_ms": 21.7104669973196
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 6,
+          "p50_ms": 0.024200500774895772,
+          "p95_ms": 0.04536399865173735,
+          "max_ms": 0.04536399865173735
+        },
+        "publication_lock_wait": {
+          "count": 6,
+          "p50_ms": 0.0011760021152440459,
+          "p95_ms": 0.002058000973192975,
+          "max_ms": 0.002058000973192975
+        },
+        "light_request_lock_hold": {
+          "count": 14,
+          "p50_ms": 0.00788750003266614,
+          "p95_ms": 0.02312300057383254,
+          "max_ms": 0.02312300057383254
+        },
+        "light_request_lock_wait": {
+          "count": 14,
+          "p50_ms": 0.0008820006769383326,
+          "p95_ms": 0.0014700017345603555,
+          "max_ms": 0.0014700017345603555
+        },
+        "overlapping_revision_requests": 6,
+        "gc_overlap": {
+          "count": 3,
+          "p50_ms": 0.3429239986871835,
+          "p95_ms": 0.4444309997779783,
+          "max_ms": 0.4444309997779783
+        },
+        "dropped_gc_events": 0
+      },
+      "private_materialization": {
+        "count": 3,
+        "p50_ms": 2.9827590005879756,
+        "p95_ms": 3.0830899995635264,
+        "max_ms": 3.0830899995635264
+      },
+      "private_sealing": {
+        "count": 3,
+        "p50_ms": 14.987671998824226,
+        "p95_ms": 15.3421579998394,
+        "max_ms": 15.3421579998394
+      },
+      "job_completion": {
+        "count": 3,
+        "p50_ms": 1268.3990330006054,
+        "p95_ms": 1384.1476919988054,
+        "max_ms": 1384.1476919988054
+      },
+      "sample_count": 3,
+      "successful_publications": 3
+    },
+    {
+      "name": "public-63-source-rows-plus-one",
+      "completed": true,
+      "samples": [
+        {
+          "iteration": 1,
+          "capture": {
+            "http_ms": 4.661396000301465,
+            "baseline_revision_http_ms": 1.6597610010649078,
+            "revision_http_ms": [
+              3.219943999283714,
+              3.446208000241313
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.02180099909310229,
+              0.018855000234907493
+            ],
+            "capture_lock_wait_ms": [
+              0.0006880000000819564,
+              0.0003929999365936965
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.012177002645330504,
+              0.014338002074509859,
+              0.01237399919773452,
+              0.02592599776107818
+            ],
+            "light_request_lock_wait_ms": [
+              0.0015709993022028357,
+              0.0011779993656091392,
+              0.0014729994290973991,
+              0.001277003320865333
+            ],
+            "gc": {
+              "overlap_ms": 0,
+              "events": 0,
+              "dropped_events": 0,
+              "generations": {
+                "0": 0,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1487.6711229990178,
+          "publication": {
+            "http_ms": 31.30351499930839,
+            "baseline_revision_http_ms": 1.3028849971306045,
+            "revision_http_ms": [
+              4.0873879988794215,
+              27.472736001072917
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.008052997145568952,
+              0.052735998906427994
+            ],
+            "publication_lock_wait_ms": [
+              0.001767002686392516,
+              0.0013750031939707696
+            ],
+            "light_request_lock_hold_ms": [
+              0.006482001481344923,
+              0.016792997485026717,
+              0.022586998966289684,
+              0.011587999324547127
+            ],
+            "light_request_lock_wait_ms": [
+              0.000981999619398266,
+              0.0013750031939707696,
+              0.003535002178978175,
+              0.0009820032573770732
+            ],
+            "gc": {
+              "overlap_ms": 0.4333789984229952,
+              "events": 3,
+              "dropped_events": 0,
+              "generations": {
+                "0": 3,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 619184,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 2,
+          "capture": {
+            "http_ms": 5.628617000184022,
+            "baseline_revision_http_ms": 1.3970630025141872,
+            "revision_http_ms": [
+              4.101529997569742,
+              4.254041999956826
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.026908001018455252,
+              0.02808700082823634
+            ],
+            "capture_lock_wait_ms": [
+              0.0010809999366756529,
+              0.0007849994290154427
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.008543000149074942,
+              0.015320001693908125,
+              0.012569998943945393,
+              0.018168000678997487
+            ],
+            "light_request_lock_wait_ms": [
+              0.0014729994290973991,
+              0.0011789998097810894,
+              0.002258999302284792,
+              0.000981999619398266
+            ],
+            "gc": {
+              "overlap_ms": 0,
+              "events": 0,
+              "dropped_events": 0,
+              "generations": {
+                "0": 0,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1367.7025819997652,
+          "publication": {
+            "http_ms": 24.831120997987455,
+            "baseline_revision_http_ms": 1.4671819990326185,
+            "revision_http_ms": [
+              4.532060000201454,
+              20.51570199910202
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.0038299986044876277,
+              0.052441999287111685
+            ],
+            "publication_lock_wait_ms": [
+              0.0010799994925037026,
+              0.0008839997462928295
+            ],
+            "light_request_lock_hold_ms": [
+              0.0063829975260887295,
+              0.010802999895531684,
+              0.015614001313224435,
+              0.020524999854387715
+            ],
+            "light_request_lock_wait_ms": [
+              0.000981999619398266,
+              0.000981999619398266,
+              0.002454999048495665,
+              0.0018659993656910956
+            ],
+            "gc": {
+              "overlap_ms": 0.6988269997236785,
+              "events": 3,
+              "dropped_events": 0,
+              "generations": {
+                "0": 2,
+                "1": 1,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 619184,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        }
+      ],
+      "errors": [],
+      "source_sealing_ms": 11.604867002461106,
+      "source_bytes": 306930,
+      "source_rows": 63,
+      "source_recovery_bytes": 261600,
+      "retained_source_and_undo_bytes": 306930,
+      "retention_stress": null,
+      "expected_candidate_rows": 64,
+      "lifecycle_rss": [
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 16.648288001306355,
+          "max_sample_duration_ms": 1.0999999976775143,
+          "sample_count": 245,
+          "samples_with_children": 239,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 1,
+          "errors": {},
+          "baseline_parent_bytes": 135102464,
+          "peak_parent_bytes": 135311360,
+          "peak_owned_children_bytes": 126738432,
+          "peak_combined_bytes": 261971968,
+          "increase_over_idle_bytes": 126869504,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 135102464
+            },
+            "worker": {
+              "samples": 241,
+              "peak_combined_bytes": 261971968
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 135311360
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 18.08071000050404,
+          "max_sample_duration_ms": 17.503854000096908,
+          "sample_count": 284,
+          "samples_with_children": 278,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 1,
+          "errors": {},
+          "baseline_parent_bytes": 135311360,
+          "peak_parent_bytes": 135573504,
+          "peak_owned_children_bytes": 126898176,
+          "peak_combined_bytes": 262389760,
+          "increase_over_idle_bytes": 127078400,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 135311360
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 135311360
+            },
+            "worker": {
+              "samples": 279,
+              "peak_combined_bytes": 262389760
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 135573504
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 17.408104002242908,
+          "max_sample_duration_ms": 6.602712001040345,
+          "sample_count": 261,
+          "samples_with_children": 255,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 1,
+          "errors": {},
+          "baseline_parent_bytes": 135573504,
+          "peak_parent_bytes": 135704576,
+          "peak_owned_children_bytes": 126631936,
+          "peak_combined_bytes": 262336512,
+          "increase_over_idle_bytes": 126763008,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 135573504
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 135573504
+            },
+            "worker": {
+              "samples": 255,
+              "peak_combined_bytes": 262336512
+            },
+            "commit": {
+              "samples": 4,
+              "peak_combined_bytes": 135704576
+            }
+          }
+        }
+      ],
+      "candidate_bytes": 312254,
+      "candidate_rows": 64,
+      "cold_verification": {
+        "status": "verified",
+        "native_editable": true,
+        "issues": []
+      },
+      "capture": {
+        "http": {
+          "count": 3,
+          "p50_ms": 4.661396000301465,
+          "p95_ms": 5.628617000184022,
+          "max_ms": 5.628617000184022
+        },
+        "baseline_revision_http": {
+          "count": 3,
+          "p50_ms": 1.3970630025141872,
+          "p95_ms": 1.6597610010649078,
+          "max_ms": 1.6597610010649078
+        },
+        "revision_http": {
+          "count": 5,
+          "p50_ms": 3.446208000241313,
+          "p95_ms": 4.254041999956826,
+          "max_ms": 4.254041999956826
+        },
+        "capture_lock_hold": {
+          "count": 6,
+          "p50_ms": 0.020327999664004892,
+          "p95_ms": 0.02808700082823634,
+          "max_ms": 0.02808700082823634
+        },
+        "capture_lock_wait": {
+          "count": 6,
+          "p50_ms": 0.0006869995559100062,
+          "p95_ms": 0.0010809999366756529,
+          "max_ms": 0.0010809999366756529
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 10,
+          "p50_ms": 0.012471999070839956,
+          "p95_ms": 0.02592599776107818,
+          "max_ms": 0.02592599776107818
+        },
+        "light_request_lock_wait": {
+          "count": 10,
+          "p50_ms": 0.0012280015653232113,
+          "p95_ms": 0.002258999302284792,
+          "max_ms": 0.002258999302284792
+        },
+        "overlapping_revision_requests": 3,
+        "gc_overlap": {
+          "count": 3,
+          "p50_ms": 0,
+          "p95_ms": 0,
+          "max_ms": 0
+        },
+        "dropped_gc_events": 0
+      },
+      "publication": {
+        "http": {
+          "count": 3,
+          "p50_ms": 24.831120997987455,
+          "p95_ms": 31.30351499930839,
+          "max_ms": 31.30351499930839
+        },
+        "baseline_revision_http": {
+          "count": 3,
+          "p50_ms": 1.3028849971306045,
+          "p95_ms": 1.4671819990326185,
+          "max_ms": 1.4671819990326185
+        },
+        "revision_http": {
+          "count": 6,
+          "p50_ms": 11.692492000292987,
+          "p95_ms": 27.472736001072917,
+          "max_ms": 27.472736001072917
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 6,
+          "p50_ms": 0.025526498575345613,
+          "p95_ms": 0.052735998906427994,
+          "max_ms": 0.052735998906427994
+        },
+        "publication_lock_wait": {
+          "count": 6,
+          "p50_ms": 0.0010399999155197293,
+          "p95_ms": 0.001767002686392516,
+          "max_ms": 0.001767002686392516
+        },
+        "light_request_lock_hold": {
+          "count": 12,
+          "p50_ms": 0.010751500667538494,
+          "p95_ms": 0.022586998966289684,
+          "max_ms": 0.022586998966289684
+        },
+        "light_request_lock_wait": {
+          "count": 12,
+          "p50_ms": 0.0009910017979564145,
+          "p95_ms": 0.003535002178978175,
+          "max_ms": 0.003535002178978175
+        },
+        "overlapping_revision_requests": 6,
+        "gc_overlap": {
+          "count": 3,
+          "p50_ms": 0.4333789984229952,
+          "p95_ms": 0.6988269997236785,
+          "max_ms": 0.6988269997236785
+        },
+        "dropped_gc_events": 0
+      },
+      "private_materialization": {
+        "count": 3,
+        "p50_ms": 4.171898002823582,
+        "p95_ms": 4.500831000768812,
+        "max_ms": 4.500831000768812
+      },
+      "private_sealing": {
+        "count": 3,
+        "p50_ms": 14.10173999829567,
+        "p95_ms": 18.02404499903787,
+        "max_ms": 18.02404499903787
+      },
+      "job_completion": {
+        "count": 3,
+        "p50_ms": 1367.7025819997652,
+        "p95_ms": 1487.6711229990178,
+        "max_ms": 1487.6711229990178
+      },
+      "sample_count": 3,
+      "successful_publications": 3
+    }
+  ]
+}

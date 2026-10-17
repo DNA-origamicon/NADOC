@@ -54,6 +54,16 @@ it('does not authorize a subsequently replaced custom shader', () => {
   expect(bakePreparedAssemblyInstances(mesh)).toBe(mesh)
   expect(() => prepareScene({ scene })).toThrow('Custom shader')
 })
+it('omits Full-only primitives from Beads rows in mixed prepared assemblies', () => {
+  const { mesh, spec } = fixture()
+  spec.visibility.value.image.data[16] = 1
+  spec.visibility.value.image.data[1] = 0
+  spec.visibility.value.image.data[17] = 1
+  registerPreparedAssemblyMaterial(mesh.material, { ...spec, visibilityChannel: 1 })
+  const frozen = bakePreparedAssemblyInstances(mesh)
+  expect(frozen.count).toBe(2)
+  expect([...frozen.instanceMatrix.array]).toEqual([...matrix(32), ...matrix(34)])
+})
 it('streams texture-backed assembly motion and detects a changed visible instance count', async () => {
   const { createLiveFrameCapture } = await import('../viewer/live_frame_capture.js')
   const { createClipApplier } = await import('../viewer/trajectory_clip.js')

@@ -40,6 +40,8 @@ equals the whole part length. ``test_polymer_router`` pins this via the
 
 from __future__ import annotations
 
+from backend.core.routing_identity import forced_ligation as routing_ligation
+
 from dataclasses import dataclass, field
 
 from backend.core.flexible_segments import unpaired_bead_keys
@@ -153,7 +155,8 @@ def _complement_strand(
     # 5'→3' traversal: FORWARD runs low→high, REVERSE runs high→low.
     start, end = (lo, hi) if cdir == Direction.FORWARD else (hi, lo)
     dom = Domain(helix_id=helix_id, start_bp=start, end_bp=end, direction=cdir)
-    return Strand(
+    from backend.core.routing_identity import connector_strand
+    return connector_strand(
         domains=[dom],
         strand_type=StrandType.STAPLE,
         color=_CONNECTOR_COLOR,
@@ -208,7 +211,7 @@ def _bridge(
 
     three_dom = tp_strand.domains[-1]
     five_dom = fp_strand.domains[0]
-    fl = ForcedLigation(
+    fl = routing_ligation(
         three_prime_helix_id=three_dom.helix_id,
         three_prime_bp=three_dom.end_bp,
         three_prime_direction=three_dom.direction,

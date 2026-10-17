@@ -1,0 +1,24 @@
+{
+  "date": "2026-10-15",
+  "focused_passed": 315,
+  "focused_files": {
+    "tests/test_part_repair_planning.py": 22,
+    "tests/test_part_repair_capture.py": 11,
+    "tests/test_part_repair_draft_host.py": 29,
+    "tests/test_part_recipe_repair.py": 58,
+    "tests/test_part_repair_evaluation.py": 22,
+    "tests/test_part_repair_jobs.py": 15,
+    "tests/test_part_repair_draft.py": 31,
+    "tests/test_part_repair_fingerprint.py": 26,
+    "tests/test_part_registered_batch.py": 71,
+    "tests/test_native_registered_batch_proof.py": 2,
+    "tests/test_part_capture_copy.py": 14,
+    "tests/test_part_proof_engine.py": 14
+  },
+  "test_note": "Batch file first passed 69 cases; two newly added cancellation cases passed separately. Counts are unique current cases. Temporary duplicate-planner equivalence tests were replaced by direct shared-planner behavior tests.",
+  "capture_evidence": "coating_jobs_benchmark_atom_records_p4.json",
+  "capture_result": "Active p50 36–37 ms, p95 96–99 ms; 2/120 capture refusals. 150 prepared publications and five real complete jobs passed. Both real cancel/stale cases reaped and refused commit. Public append stays disabled pending retained-history/recovery qualification.",
+  "checks": "Changed Python Ruff and git diff --check pass; broad runs not launched with Archive unavailable. Prior global lint debt remains five unrelated F401 findings.",
+  "remote_integration": "Preserved unrelated origin/master Alpine continuation/progress fix through clean merge 2d8b3e2d; no task-file conflicts.",
+  "limits": "No numerical implementation manifest, molecular formula, ordinary budget or GC policy changed. No new frontend code, production physical simulation or visual/headset validation. Pure batch has no public host policy; drafts have no Design field or persistence yet. P4/P5/P6 and broader selection coverage remain open; assemblies deferred."
+}

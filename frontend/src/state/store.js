@@ -19,6 +19,9 @@ const _initialState = {
   /** The full Design object from the API, or null if not loaded. */
   currentDesign: null,
 
+  /** Compact server draft summary only; never job readiness or proposal actions. */
+  repairMetadata: null,
+
   /** True only while the expanded Simulations tab is active. Reference backdrop
    * geometry is forcibly hidden for this view without changing the user's View toggle. */
   simulationTabActive: false, // Legacy scene policy; panel visibility no longer writes this.
@@ -386,6 +389,9 @@ const _SLICES = {
 
   /** Tool panel toggles and error state */
   ui:        new Set(['toolFilters', 'lastError']),
+
+  /** Repair metadata changes do not invalidate displayed geometry. */
+  repair:    new Set(['repairMetadata']),
 
   /** Assembly layer: active assembly, mode flag, selected instance, groups */
   assembly:  new Set(['currentAssembly', 'assemblyActive', 'activeInstanceId',

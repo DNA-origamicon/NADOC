@@ -484,8 +484,15 @@ def test_np_connection_rejects_noncomplementary_and_non_target_endpoints():
     rejected = client.post(base, json={
         "strand_id": handles[0], "overhang_id": auxiliary,
     })
-    assert rejected.status_code == 400
-    assert "non-nanoparticle" in rejected.text
+    # This closed source uses the native pending-connection contract, whose
+    # invalid endpoint diagnostic identifies the precise authored selector.
+    assert rejected.status_code == 422
+    assert rejected.json()["detail"] == {
+        "code": "invalid_selection",
+        "detail": "Target must be an ordinary non-nanoparticle overhang",
+        "references": [{"kind": "overhang", "identity": auxiliary,
+                        "parameter_path": ["overhang_id"]}],
+    }
     version_id = client.post(base, json={
         "strand_id": handles[0], "overhang_id": "bad-target-oh_3p",
     }).json()["version_id"]

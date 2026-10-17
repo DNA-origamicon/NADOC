@@ -185,6 +185,6 @@ def test_rejected_route_does_not_commit_feature_history(monkeypatch):
     state.load_design(d)
     before = state.get_or_404().model_dump()
     with pytest.raises(HTTPException) as exc:
-        _run_auto_scaffold_with_feature_log("auto-scaffold-seamed", "test", {}, auto_scaffold_seamed)
+        _run_auto_scaffold_with_feature_log("auto-scaffold-seamed", "test", {})
     assert exc.value.status_code == 422
     assert state.get_or_404().model_dump() == before

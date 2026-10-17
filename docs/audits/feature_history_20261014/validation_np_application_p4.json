@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-15",
+  "scope": "Private native single-owner source-free gold NP application contract; ordinary live application route migration pending",
+  "initial_contract_red": {
+    "passed": 42,
+    "failed": 6,
+    "seconds": 4.36,
+    "reason": "Pending shared typed dependencies and protected identities"
+  },
+  "first_regression": {
+    "passed": 289,
+    "failed": 1,
+    "seconds": 247.99,
+    "warnings": 35,
+    "failure": "Existing platform-HONEYCOMB-3 generator fitted-duplex collision"
+  },
+  "baseline_reproduction": {
+    "commit": "acad1d51",
+    "seconds": 18.64,
+    "failed": 1,
+    "evidence": "np_application_generator_baseline.json",
+    "scope": "Exact historical seven route helpers in memory; same current generator/native algorithms; no complete historical binary claim"
+  },
+  "review_red": {
+    "failed": 2,
+    "seconds": 2.81,
+    "reason": "Aggregate loop descriptors reached unadmitted traversal; shared radial carrier reached fitting"
+  },
+  "corrected_regression": {
+    "passed": 231,
+    "seconds": 14.26,
+    "warnings": 35,
+    "new_cases": 52,
+    "targets": [
+      "part_np_application_admission",
+      "part_np_application_commands",
+      "native_np_application_proof",
+      "part_pending_np_connections",
+      "part_pending_np_preparation",
+      "part_thiol_pending_motion",
+      "part_edit_identity",
+      "np_applied_lifecycle_ownership",
+      "nanoparticles",
+      "nanoparticle_attachment",
+      "part_recipe_edit",
+      "part_repair_document_boundaries"
+    ]
+  },
+  "distinct_green": 291,
+  "molecular_algorithms_or_pins_changed": false,
+  "ordinary_applied_route_migrated": false,
+  "latency_qualified": false,
+  "app_status": "NOT VERIFIED IN APP",
+  "remaining": [
+    "Metadata-only applied-version rename",
+    "Pure bounded application timing",
+    "Ordinary route migration and interactive latency",
+    "Unequal-length cases that would shorten the NP handle remain explicit refusals",
+    "Generated multi-anchor history compiler and existing platform collision debt"
+  ]
+}

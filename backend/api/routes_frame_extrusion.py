@@ -3,6 +3,7 @@
 The caller resolves the source plane and converts tracking coordinates to part
 coordinates. This endpoint never treats headset metres as molecular coordinates.
 """
+from uuid import UUID, uuid4
 from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
@@ -14,6 +15,7 @@ router = APIRouter()
 
 class FrameExtrusionRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
+    history_seed: UUID | None = None
     expected_design_id: str = Field(min_length=1)
     expected_revision: int = Field(ge=0, strict=True)
     cells: list[list[StrictInt]] = Field(min_length=1, max_length=16641)
@@ -49,10 +51,10 @@ def _legacy_candidate(design, body):
             if body.translation_nm != [0, 0, 0] or body.rotation_xyzw != [0, 0, 0, 1]:
                 raise ValueError('source frame already supplies rigid placement')
             return append_frame_bundle(design, body.source_frame_id, body.cells,
-                body.length_bp, plane=body.plane, name=body.name)
+                body.length_bp, plane=body.plane, name=body.name, identity_seed=body.history_seed)
         return append_independent_bundle(design, body.cells, body.length_bp,
             plane=body.plane, translation_nm=body.translation_nm,
-            rotation_xyzw=body.rotation_xyzw, name=body.name)
+            rotation_xyzw=body.rotation_xyzw, name=body.name, identity_seed=body.history_seed)
     except ValueError as error:
         raise HTTPException(422, detail=str(error)) from error
 
@@ -62,7 +64,7 @@ def _candidate_result(design, body):
     updated = _legacy_candidate(design, body)
     if body.separate_fresh_extrusions and (body.source_frame_id or body.source_legacy_plane):
         from backend.core.extrusion_clusters import extrusion_clusters
-        return extrusion_clusters(design, updated, {})
+        return extrusion_clusters(design, updated, {}, identity_seed=body.history_seed)
     old_ids = {h.id for h in design.helices}
     return updated, MutationReport(new_helix_origins={
         h.id: None for h in updated.helices if h.id not in old_ids
@@ -90,6 +92,7 @@ def validate_frame_extrusion(body: FrameExtrusionRequest):
 @router.post('/design/frame-extrusion', status_code=201)
 def commit_frame_extrusion(body: FrameExtrusionRequest):
     from backend.api.crud import _design_response
+    body = body.model_copy(update={"history_seed": body.history_seed or uuid4()})
     updated, report, entry = state.mutate_with_feature_log(
         op_kind='extrude-frame', label=f'Extrude frame: {len(body.cells)} cells × {body.length_bp} bp',
         params=body.model_dump(mode='json'), fn=lambda design: _candidate_result(design, body),

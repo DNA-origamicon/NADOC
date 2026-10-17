@@ -25,9 +25,19 @@ from backend.core.project_revisions import (
     SCHEMA_VERSION,
     _atomic_json,
 )
+from backend.core.part_document_io import (
+    MAX_COMPRESSED_BYTES, MAX_DOCUMENT_BYTES, MAX_METADATA_BYTES, read_async_bounded,
+)
 
 
 CONFIG_DIR = ".nadoc-collaboration"
+
+
+async def _bounded_peer_bytes(client, path, headers, *, limit, label):
+    async with client.stream("GET", path, headers=headers) as response:
+        response.raise_for_status()
+        return await read_async_bounded(response.aiter_bytes(chunk_size=min(limit + 1, 1024 * 1024)),
+                                        limit=limit, label=label)
 
 
 @dataclass(frozen=True)
@@ -140,31 +150,28 @@ class PeerSyncClient:
         local = ProjectRevisionStore(self.workspace)
         client, owned = await self._client()
         try:
-            response = await client.get(
+            manifest_bytes = await _bounded_peer_bytes(client,
                 f"/api/collaboration/projects/{project_id}/manifest",
-                headers=self._headers(),
+                self._headers(), limit=MAX_METADATA_BYTES, label="Peer project manifest",
             )
-            response.raise_for_status()
-            remote = response.json()
+            remote = json.loads(manifest_bytes)
             if remote.get("project_id") != project_id:
                 raise ValueError("peer returned the wrong project identity")
             if remote.get("schema_version") != SCHEMA_VERSION:
                 raise ValueError("peer project schema is not compatible")
             local_manifest = local.project_manifest(project_id)
             for checksum in sorted(set(remote["snapshots"]) - set(local_manifest["snapshots"])):
-                blob = await client.get(
+                blob = await _bounded_peer_bytes(client,
                     f"/api/collaboration/projects/{project_id}/snapshots/{checksum}",
-                    headers=self._headers(),
+                    self._headers(), limit=MAX_COMPRESSED_BYTES, label="Peer project snapshot",
                 )
-                blob.raise_for_status()
-                local.ingest_snapshot(project_id, checksum, blob.content)
+                local.ingest_snapshot(project_id, checksum, blob)
             for revision_id in sorted(set(remote["objects"]) - set(local_manifest["objects"])):
-                obj = await client.get(
+                obj = await _bounded_peer_bytes(client,
                     f"/api/collaboration/projects/{project_id}/revisions/{revision_id}",
-                    headers=self._headers(),
+                    self._headers(), limit=MAX_DOCUMENT_BYTES, label="Peer project revision",
                 )
-                obj.raise_for_status()
-                local.ingest_revision(obj.json())
+                local.ingest_revision(json.loads(obj))
             artifacts = ProjectArtifactCatalog(self.workspace)
             for metadata in remote.get("jobs", []):
                 artifacts.merge(metadata)

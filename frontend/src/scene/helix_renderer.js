@@ -29,6 +29,7 @@ import * as THREE from 'three'
 import { baseKey } from './base_ref.js'
 import { createPolymerizationPreview } from './polymerization_preview.js'
 import { selfClosingPolymerSeam } from './polymer_seams.js'
+import { LazyMap } from './lazy_map.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import {
   impostorsEnabled,
@@ -1206,7 +1207,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     for (const nuc of assignedGeometry) {
       // Extension beads have no base-pair slabs.
       if (nuc.helix_id.startsWith('__ext_')) continue
-      validateNativePlacement(nuc)
+      // The complete input was validated before any scene objects were added.
       const bnDir = new THREE.Vector3(...nuc.base_normal)
       const color = nucSlabColor(nuc, stapleColorMap, customColors, loopSet)
       const bbPos = new THREE.Vector3(...nuc.backbone_position)
@@ -2130,34 +2131,38 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
   // Fast lookup: nuc object → backboneEntry, and key string → backboneEntry.
   const _nucToEntry = new Map()
-  const _keyToEntry = new Map()
+  const _keyToEntry = new LazyMap(map => {
+    for (const entry of backboneEntries) map.set(`${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`, entry)
+  })
   // Loop insertions put several nucleotides at one (helix,bp,dir); they collapse in
   // _keyToEntry (last wins). _copyKeyToEntry keys each one by its loop-copy index
   // ("helix:bp:dir:copy", copy = appearance order = geometry emission order) so a
   // sim/scalar update carrying a copy index can address the RIGHT bead instead of
   // only the last copy. Non-loop beads are copy 0. See applyFemPositions/applyScalarColors.
-  const _copyKeyToEntry = new Map()
+  const _copyKeyToEntry = new LazyMap(map => {
+    for (const entry of backboneEntries) map.set(`${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}:${entry._copy}`, entry)
+  })
   // Simulation overlays address the active design only. Reference geometry can
   // coexist in the editor but is never part of an MD job and must remain fixed.
-  const _simKeyToEntry = new Map()
-  const _simCopyKeyToEntry = new Map()
+  const _simKeyToEntry = new LazyMap(map => {
+    for (const entry of backboneEntries) if (!entry.nuc.is_reference) map.set(`${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`, entry)
+  })
+  const _simCopyKeyToEntry = new LazyMap(map => {
+    for (const entry of backboneEntries) if (!entry.nuc.is_reference) map.set(`${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}:${entry._simCopy}`, entry)
+  })
   const _copySeenBB = new Map()
   const _simCopySeenBB = new Map()
   for (const entry of backboneEntries) {
     _nucToEntry.set(entry.nuc, entry)
     const n = entry.nuc
     const bk = `${n.helix_id}:${n.bp_index}:${n.direction}`
-    _keyToEntry.set(bk, entry)
     const ci = n.copy_k ?? _copySeenBB.get(bk) ?? 0
     _copySeenBB.set(bk, ci + 1)
     entry._copy = ci
-    _copyKeyToEntry.set(`${bk}:${ci}`, entry)
     if (!n.is_reference) {
-      _simKeyToEntry.set(bk, entry)
       const sci = _simCopySeenBB.get(bk) ?? 0
       _simCopySeenBB.set(bk, sci + 1)
       entry._simCopy = sci
-      _simCopyKeyToEntry.set(`${bk}:${sci}`, entry)
     }
   }
 
@@ -2220,32 +2225,36 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   }
   // key string → slab entry (for surgical per-bead overrides, e.g. overhang
   // unzip animation that moves only a handful of beads each frame).
-  const _keyToSlab = new Map()
-  const _copyKeyToSlab = new Map()
-  const _slabByNuc = new Map()
+  const _keyToSlab = new LazyMap(map => {
+    for (const slab of slabEntries) map.set(`${slab.nuc.helix_id}:${slab.nuc.bp_index}:${slab.nuc.direction}`, slab)
+  })
+  const _copyKeyToSlab = new LazyMap(map => {
+    for (const slab of slabEntries) map.set(`${slab.nuc.helix_id}:${slab.nuc.bp_index}:${slab.nuc.direction}:${slab._copy}`, slab)
+  })
+  const _slabByNuc = new LazyMap(map => {
+    for (const slab of slabEntries) map.set(slab.nuc, slab)
+  })
   const _copySeenSlab = new Map()
   for (const slab of slabEntries) {
     const n = slab.nuc
     const sk = `${n.helix_id}:${n.bp_index}:${n.direction}`
-    _keyToSlab.set(sk, slab)
     // Loop-copy index (geometry emission order) so a per-copy sim normal reaches the
     // right slab — see the normalMap lookup in applyFemPositions.
     const ci = n.copy_k ?? _copySeenSlab.get(sk) ?? 0
     _copySeenSlab.set(sk, ci + 1)
     slab._copy = ci
-    _slabByNuc.set(n, slab)
-    _copyKeyToSlab.set(`${sk}:${ci}`, slab)
   }
   // key string → connector cones touching that bead (from OR to), so a surgical
   // per-bead move (setBeadOverrides) can recompose only the affected cones.
-  const _keyToCones = new Map()
-  for (const cone of coneEntries) {
-    for (const n of [cone.fromNuc, cone.toNuc]) {
-      const k = `${n.helix_id}:${n.bp_index}:${n.direction}`
-      let arr = _keyToCones.get(k); if (!arr) { arr = []; _keyToCones.set(k, arr) }
-      arr.push(cone)
+  const _keyToCones = new LazyMap(map => {
+    for (const cone of coneEntries) {
+      for (const n of [cone.fromNuc, cone.toNuc]) {
+        const k = `${n.helix_id}:${n.bp_index}:${n.direction}`
+        let arr = map.get(k); if (!arr) { arr = []; map.set(k, arr) }
+        arr.push(cone)
+      }
     }
-  }
+  })
   /** Recompose one connector cone from its endpoints' CURRENT bead positions. */
   function _recomposeCone(cone) {
     const fe = _nucToEntry.get(cone.fromNuc)

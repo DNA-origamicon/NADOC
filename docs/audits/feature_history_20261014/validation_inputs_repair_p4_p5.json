@@ -1,0 +1,141 @@
+{
+  "date": "2026-10-15",
+  "checkpoint_base": "28def718",
+  "scope": "P4 bounded caDNAno import, pinned pure coating replay and P5a explicit repair jobs",
+  "focused": [
+    {
+      "target": "tests/test_part_cadnano_commands.py",
+      "passed": 44
+    },
+    {
+      "target": "tests/test_native_cadnano_proof.py",
+      "passed": 10
+    },
+    {
+      "target": "tests/test_part_cadnano_routes.py",
+      "passed": 47
+    },
+    {
+      "target": "tests/test_part_recipe_repair.py",
+      "passed": 54
+    },
+    {
+      "target": "tests/test_part_repair_evaluation.py",
+      "passed": 22
+    },
+    {
+      "target": "tests/test_part_repair_jobs.py",
+      "passed": 13
+    },
+    {
+      "target": "tests/test_part_streptavidin_commands.py",
+      "passed": 60
+    },
+    {
+      "target": "tests/test_native_streptavidin_proof.py",
+      "passed": 19
+    },
+    {
+      "target": "tests/test_cadnano.py",
+      "passed": 20
+    },
+    {
+      "target": "tests/test_cadnano_roundtrip.py",
+      "passed": 30
+    },
+    {
+      "target": "tests/test_conversion_integrity.py",
+      "passed": 27
+    },
+    {
+      "target": "tests/test_scadnano.py",
+      "passed": 13
+    },
+    {
+      "target": "tests/test_streptavidin.py",
+      "passed": 10
+    },
+    {
+      "target": "tests/test_part_input_sources.py",
+      "passed": 32
+    },
+    {
+      "target": "tests/test_part_source_audit.py",
+      "passed": 14
+    },
+    {
+      "target": "tests/test_part_document_io.py",
+      "passed": 22
+    },
+    {
+      "target": "tests/test_part_feature_registry.py",
+      "passed": 24
+    },
+    {
+      "target": "tests/test_part_recipe_edit.py",
+      "passed": 8
+    },
+    {
+      "target": "tests/test_part_history_verification.py",
+      "passed": 26
+    },
+    {
+      "target": "tests/test_native_recipe_determinism.py",
+      "passed": 2
+    },
+    {
+      "target": "tests/test_part_cpd_contract.py",
+      "passed": 61
+    },
+    {
+      "target": "tests/test_part_duplex_relax_contract.py",
+      "passed": 34
+    },
+    {
+      "target": "tests/test_native_cpd_proof.py",
+      "passed": 3
+    },
+    {
+      "target": "tests/test_native_duplex_relax_proof.py",
+      "passed": 3
+    },
+    {
+      "target": "tests/test_part_evaluation.py",
+      "passed": 14
+    },
+    {
+      "target": "tests/test_part_evaluation_jobs.py",
+      "passed": 10
+    }
+  ],
+  "focused_total_passed": 622,
+  "split_run": "test_part_repair_evaluation: first 21 tests, then added real duplex upgrade node passed separately. Initial 54 coating tests superseded by final 60 with pins.",
+  "benchmarks": {
+    "cadnano": "cadnano_benchmark_p4.json: 63 warm plus 7 cold replays reproduced_import; no capture refusals; live HTTP latency still pending",
+    "coating": "coating_contract_benchmark_initial_p4.json: 24 same-process proofs reproduced; all 24 cold workers refused runtime_mismatch after NumPy initialized during script spawn bootstrap. This is a failed qualification, retained for worker fix.",
+    "ordinary_capture_limits_changed": false,
+    "coating_live_profile_enabled": false
+  },
+  "lint": {
+    "changed_python": "Ruff passed",
+    "whitespace": "git diff --check passed",
+    "global": "5 unchanged F401 findings (vr_prompts and four CPD tests)",
+    "memory": "6 existing errors/60 warnings at preceding checkpoint"
+  },
+  "broad": {
+    "executed": false,
+    "selector": "FULL  (FULL suite)  [test-dedicated session OPEN]",
+    "reason": "Archive unavailable; focused validation does not clear broad-suite debt"
+  },
+  "frontend_changes": false,
+  "main_js_loc_delta": 0,
+  "visual_check": false,
+  "physical_simulation": false,
+  "molecular_algorithms_changed": false,
+  "limits": [
+    "P4 remains incomplete: further sources/attachments and large assets unqualified.",
+    "Coating explicit large-capture/public-append support and runtime-bootstrap fix remain open.",
+    "P5 replacement discovery, persisted drafts and visual comparison/UI remain open.",
+    "P6 strict registered automation remains open; assemblies deferred."
+  ]
+}

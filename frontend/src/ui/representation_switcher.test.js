@@ -39,7 +39,12 @@ DOM['menu-view-repr-mixed-dot'] = 'div'
 function makeDeps(initialState = {}) {
   const store = createMockStore({ coloringMode: 'strand', ...initialState })
   const api = {
-    batchPatchInstances: vi.fn().mockResolvedValue({}),
+    batchPatchInstances: vi.fn(async patches => ({ assembly: {
+      ...store.getState().currentAssembly,
+      instances: store.getState().currentAssembly.instances.map(row => ({ ...row,
+        representation: patches.find(patch => patch.id === row.id)?.representation ?? row.representation })),
+    } })),
+    _syncFromAssemblyResponse: vi.fn(json => { store.setState({ currentAssembly: json.assembly }); return json }),
     clearRepresentationOverrides: vi.fn().mockResolvedValue({}),
     saveRepresentationOverrides: vi.fn().mockResolvedValue({}),
   }
@@ -366,6 +371,23 @@ describe('menu click — design mode', () => {
 })
 
 describe('menu click — assembly mode', () => {
+  it('shows prepared CG detail before the batch acknowledgement arrives', async () => {
+    mountIds(DOM)
+    const deps = makeDeps({ assemblyActive: true, currentAssembly: {
+      id: 'assembly', instances: [{ id: 'a', representation: 'cylinders' }],
+    } })
+    let finish
+    deps.api.batchPatchInstances.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const ui = initRepresentationSwitcher(deps)
+    document.getElementById('menu-view-detail-full').click()
+    expect(deps.store.getState().currentAssembly.instances[0].representation).toBe('full')
+    expect(deps.api._syncFromAssemblyResponse).not.toHaveBeenCalled()
+    finish({ assembly: deps.store.getState().currentAssembly })
+    await Promise.resolve(); await Promise.resolve()
+    expect(deps.api._syncFromAssemblyResponse).toHaveBeenCalledOnce()
+    ui.dispose()
+  })
+
   it('no instances → bails without a PATCH', async () => {
     mountIds(DOM)
     const deps = makeDeps({ assemblyActive: true, currentAssembly: { instances: [] } })
@@ -410,7 +432,7 @@ describe('menu click — assembly mode', () => {
     expect(deps.api.batchPatchInstances).toHaveBeenCalledWith([
       { id: 'a', representation: 'cylinders' },
       { id: 'b', representation: 'cylinders' },
-    ])
+    ], { skipSync: true, suppressBusy: true })
   })
 
   it('cheap repr → batch-PATCHes every instance to that repr (no confirm)', async () => {
@@ -425,7 +447,7 @@ describe('menu click — assembly mode', () => {
     expect(deps.api.batchPatchInstances).toHaveBeenCalledWith([
       { id: 'a', representation: 'cylinders' },
       { id: 'b', representation: 'cylinders' },
-    ])
+    ], { skipSync: true, suppressBusy: true })
   })
 })
 
@@ -546,7 +568,7 @@ it('awaits the controller decision before applying a heavy representation to an 
     await new Promise(r => setTimeout(r, 0))
     expect(deps.api.batchPatchInstances).toHaveBeenCalledWith([
       { id: 'a', representation: 'surface' }, { id: 'b', representation: 'surface' },
-    ])
+    ], { skipSync: true, suppressBusy: false })
   } finally { setNativePromptHandler(null) }
 })
 

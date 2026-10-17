@@ -27,6 +27,7 @@ import {
   deleteAssemblyOverhangConnection, deleteAssemblyOverhangBinding, patchInstanceOverhang,
 } from '../api/client.js'
 import { initInstanceDesignCache } from './assembly_instance_designs.js'
+import { assemblyOverhangPanelVisible, assemblyOverhangPanelInputs, sameAssemblyOverhangInputs } from './assembly_overhang_panel_state.js'
 import { groupOverhangs } from './assembly_overhang_list_panel.js'
 
 const _STORAGE = 'nadoc.assemblyOverhangConnections.connectionType'
@@ -77,11 +78,19 @@ function _escape(s) {
 
 // ── Factory ───────────────────────────────────────────────────────────────────
 
-export function initAssemblyOverhangConnectionsPanel({ store, getInstanceDesign, fetchInstanceDesign } = {}) {
-  const _designs = initInstanceDesignCache({ getInstanceDesign, fetchInstanceDesign })
+export function initAssemblyOverhangConnectionsPanel({ store, getInstanceDesign, fetchInstanceDesign, waitForAssemblyReady } = {}) {
+  const _designs = initInstanceDesignCache({ getInstanceDesign, fetchInstanceDesign, waitForAssemblyReady })
   let _variant = (() => { try { return localStorage.getItem(_STORAGE) || 'end-to-root' } catch { return 'end-to-root' } })()
   let _prevAssembly = undefined
   let _prevSel = undefined
+  let _renderedInputs = null
+  let _renderedLinks = null
+  const _listeners = []
+  const _listen = (element, type, handler) => {
+    if (!element) return
+    element.addEventListener(type, handler)
+    _listeners.push(() => element.removeEventListener(type, handler))
+  }
 
   const $ = (id) => document.getElementById(id)
   const _assembly = () => store?.getState()?.currentAssembly ?? null
@@ -105,11 +114,10 @@ export function initAssemblyOverhangConnectionsPanel({ store, getInstanceDesign,
   }
 
   // ── Dropdowns ───────────────────────────────────────────────────────────────
-  function _buildSelect(side) {
+  function _buildSelect(side, groups) {
     const sel = $(`asm-oconn-select-${side}`)
     if (!sel) return
     const cur = side === 'a' ? _sideA() : _sideB()
-    const groups = groupOverhangs(_assembly(), (inst) => _designs.resolve(inst))
     let html = `<option value="">— none —</option>`
     for (const g of groups) {
       if (!g.overhangs.length) continue
@@ -142,7 +150,7 @@ export function initAssemblyOverhangConnectionsPanel({ store, getInstanceDesign,
       opt.dataset.variant = v.id
       opt.title = v.label
       opt.innerHTML = `<div class="ct-tile">${ctTileSvg(v.id, null, null, false, false, false)}</div>`
-      opt.addEventListener('click', (e) => {
+      _listen(opt, 'click', (e) => {
         e.stopPropagation()
         _variant = v.id
         try { localStorage.setItem(_STORAGE, v.id) } catch { /* ignore */ }
@@ -151,7 +159,7 @@ export function initAssemblyOverhangConnectionsPanel({ store, getInstanceDesign,
       })
       pop.appendChild(opt)
     }
-    box.addEventListener('click', (e) => {
+    _listen(box, 'click', (e) => {
       e.stopPropagation()
       if (pop.hidden) {
         const r = box.getBoundingClientRect()
@@ -161,7 +169,7 @@ export function initAssemblyOverhangConnectionsPanel({ store, getInstanceDesign,
         pop.hidden = false
       } else { pop.hidden = true }
     })
-    document.addEventListener('click', (e) => {
+    _listen(document, 'click', (e) => {
       if (pop.hidden) return
       if (pop.contains(e.target) || box.contains(e.target)) return
       pop.hidden = true
@@ -300,28 +308,46 @@ export function initAssemblyOverhangConnectionsPanel({ store, getInstanceDesign,
 
   // ── Render orchestration ─────────────────────────────────────────────────────
   function _refresh() {
-    _buildSelect('a')
-    _buildSelect('b')
+    if (!assemblyOverhangPanelVisible($('asm-oconn-select-a'))) return
+    for (const side of ['a', 'b']) {
+      const sel = $(`asm-oconn-select-${side}`)
+      const cur = side === 'a' ? _sideA() : _sideB()
+      if (sel) sel.value = cur ? encodeOption(cur.instanceId, cur.overhangId) : ''
+    }
     _refreshIcon()
     _refreshControls()
   }
 
   function rebuild() {
+    if (!assemblyOverhangPanelVisible($('asm-oconn-select-a'))) return
     const assembly = _assembly()
+    const inputs = assemblyOverhangPanelInputs(assembly, inst => _designs.resolve(inst))
     _designs.ensure(assembly, () => { if (assembly === _assembly()) rebuild() })
+    const changed = !sameAssemblyOverhangInputs(_renderedInputs, inputs)
+    if (changed) {
+      _renderedInputs = inputs
+      const byId = new Map(inputs.rows.map(row => [row.id, row.design]))
+      const groups = groupOverhangs(assembly, inst => byId.get(inst.id))
+      _buildSelect('a', groups)
+      _buildSelect('b', groups)
+    }
     _refresh()
-    _rebuildList()
+    const links = JSON.stringify([assembly?.overhang_connections, assembly?.overhang_bindings])
+    if (changed || links !== _renderedLinks) {
+      _renderedLinks = links
+      _rebuildList()
+    }
   }
 
   // ── Wiring ────────────────────────────────────────────────────────────────────
   _initVariantPicker()
-  $('asm-oconn-select-a')?.addEventListener('change', (e) => _onSelectChange('a', e))
-  $('asm-oconn-select-b')?.addEventListener('change', (e) => _onSelectChange('b', e))
-  $('asm-oconn-length')?.addEventListener('input', _refreshControls)
-  $('asm-oconn-generate')?.addEventListener('click', _onGenerate)
-  $('asm-oconn-list')?.addEventListener('click', _onListClick)
+  _listen($('asm-oconn-select-a'), 'change', (e) => _onSelectChange('a', e))
+  _listen($('asm-oconn-select-b'), 'change', (e) => _onSelectChange('b', e))
+  _listen($('asm-oconn-length'), 'input', _refreshControls)
+  _listen($('asm-oconn-generate'), 'click', _onGenerate)
+  _listen($('asm-oconn-list'), 'click', _onListClick)
 
-  store?.subscribe?.((s) => {
+  const unsubscribe = store?.subscribe?.((s) => {
     if (s.currentAssembly !== _prevAssembly) {
       _designs.prune((s.currentAssembly?.instances ?? []).map(i => i.id))
       _prevAssembly = s.currentAssembly
@@ -332,6 +358,12 @@ export function initAssemblyOverhangConnectionsPanel({ store, getInstanceDesign,
       _refresh()   // dropdown values + icon + button follow the 3D-tool selection
     }
   })
+  const onSidebar = () => rebuild()
+  _listen(window, 'nadoc:right-tab-change', onSidebar)
 
-  return { rebuild }
+  return { rebuild, destroy() {
+    unsubscribe?.()
+    _listeners.forEach(remove => remove())
+    _designs.prune([])
+  } }
 }

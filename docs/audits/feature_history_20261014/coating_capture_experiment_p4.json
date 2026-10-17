@@ -1,0 +1,730 @@
+{
+  "scope": "Native software geometry, source/capture/transport/recovery only; no physics or proof",
+  "fixture_is_recipe": false,
+  "production_limits_unchanged": true,
+  "default_capture": {
+    "max_nodes": 30000,
+    "max_bytes": 2000000,
+    "seconds": 0.025
+  },
+  "prospective_job_only_profile_not_production": {
+    "max_nodes": 100000,
+    "max_bytes": 4000000,
+    "seconds": 0.1
+  },
+  "worker_input_bytes": 2000000,
+  "candidate_result_bytes": 16000000,
+  "recovery_budget_bytes": 8000000,
+  "repeats": 3,
+  "sources": [
+    {
+      "name": "1STP-assembly1.pdb",
+      "raw_bytes": 329994,
+      "sha256": "892478b3fbec8bb38fe9a2c5de12ad2b923b42327a43b61d2884d6c3fc59f3f9",
+      "embedded_base64_bytes": 439992,
+      "capture_string_byte_charge": 1759968,
+      "models": 4,
+      "atom_records": 3604,
+      "hetatm_records": 400
+    },
+    {
+      "name": "streptavidin_coverage.json",
+      "raw_bytes": 846,
+      "sha256": "c1f82e7a1b32049dbc66ccfec907a772e2df79b9ee2b3c1d27f48d1f982fb59a",
+      "embedded_base64_bytes": 1128,
+      "capture_string_byte_charge": 4512
+    },
+    {
+      "name": "biotin_pockets.json",
+      "raw_bytes": 16060,
+      "sha256": "6bdbde26f85581c159110627316aeb81232571c69e78b40c3e5565734329ed20",
+      "embedded_base64_bytes": 21416,
+      "capture_string_byte_charge": 85664
+    }
+  ],
+  "native_assets": [
+    {
+      "mode": "adsorption",
+      "cold_native_asset_ms": 109.08447000110755,
+      "atoms": 3604,
+      "bonds": 3692,
+      "asset_accounting": {
+        "nodes": 47160,
+        "string_byte_charge": 101068
+      },
+      "asset_json_bytes": 537378
+    },
+    {
+      "mode": "biotin_tether",
+      "cold_native_asset_ms": 150.15405300073326,
+      "atoms": 3620,
+      "bonds": 3709,
+      "asset_accounting": {
+        "nodes": 47371,
+        "string_byte_charge": 101544
+      },
+      "asset_json_bytes": 539752
+    }
+  ],
+  "cases": [
+    {
+      "case": "empty",
+      "mode": "adsorption",
+      "particles": 0,
+      "requested_placements_per_particle": 1,
+      "actual_placements": [],
+      "atoms_per_asset": [],
+      "pins": [],
+      "capture_accounting": {
+        "total": {
+          "nodes": 56,
+          "string_byte_charge": 436
+        },
+        "authoring": {
+          "nodes": 47,
+          "string_byte_charge": 136
+        },
+        "input_sources": {
+          "nodes": 1,
+          "string_byte_charge": 0
+        }
+      },
+      "native_build_ms": [],
+      "native_build_total_ms": 0,
+      "fixture_pickle_bytes_not_admitted": 1895,
+      "candidate_design_json_bytes_without_history_or_envelope": 1653,
+      "modeled_recovery_pairs": 0,
+      "recovery_base64_bytes_cumulative": 0,
+      "recovery_uncompressed_bytes_cumulative": 0,
+      "recovery_encode_ms_total": 0,
+      "recovery_fits_existing_8MB_budget": true,
+      "candidate_plus_recovery_bytes_lower_bound": 1653,
+      "default_capture": {
+        "median_ms": 0.9547419995215023,
+        "max_ms": 0.9571259997755988,
+        "statuses": [
+          {
+            "status": "captured_not_verified"
+          },
+          {
+            "status": "captured_not_verified"
+          },
+          {
+            "status": "captured_not_verified"
+          }
+        ],
+        "admitted_pickle_bytes_max": 1959,
+        "admitted_pickle_fits_existing_2MB_worker": true
+      },
+      "prospective_job_only_capture": {
+        "median_ms": 0.710816999344388,
+        "max_ms": 0.7617669998580823,
+        "statuses": [
+          {
+            "status": "captured_not_verified"
+          },
+          {
+            "status": "captured_not_verified"
+          },
+          {
+            "status": "captured_not_verified"
+          }
+        ],
+        "admitted_pickle_bytes_max": 1959,
+        "admitted_pickle_fits_existing_2MB_worker": true
+      }
+    },
+    {
+      "case": "source_only_all_pins",
+      "mode": "adsorption",
+      "particles": 0,
+      "requested_placements_per_particle": 1,
+      "actual_placements": [],
+      "atoms_per_asset": [],
+      "pins": [
+        "1STP-assembly1.pdb",
+        "streptavidin_coverage.json",
+        "biotin_pockets.json"
+      ],
+      "capture_accounting": {
+        "total": {
+          "nodes": 65,
+          "string_byte_charge": 1851348
+        },
+        "authoring": {
+          "nodes": 47,
+          "string_byte_charge": 136
+        },
+        "input_sources": {
+          "nodes": 10,
+          "string_byte_charge": 1850912
+        }
+      },
+      "native_build_ms": [],
+      "native_build_total_ms": 0,
+      "fixture_pickle_bytes_not_admitted": 464813,
+      "candidate_design_json_bytes_without_history_or_envelope": 464437,
+      "modeled_recovery_pairs": 0,
+      "recovery_base64_bytes_cumulative": 0,
+      "recovery_uncompressed_bytes_cumulative": 0,
+      "recovery_encode_ms_total": 0,
+      "recovery_fits_existing_8MB_budget": true,
+      "candidate_plus_recovery_bytes_lower_bound": 464437,
+      "default_capture": {
+        "median_ms": 0.7481600005121436,
+        "max_ms": 1.0354869991715532,
+        "statuses": [
+          {
+            "status": "captured_not_verified"
+          },
+          {
+            "status": "captured_not_verified"
+          },
+          {
+            "status": "captured_not_verified"
+          }
+        ],
+        "admitted_pickle_bytes_max": 464877,
+        "admitted_pickle_fits_existing_2MB_worker": true
+      },
+      "prospective_job_only_capture": {
+        "median_ms": 0.6960190003155731,
+        "max_ms": 0.8093409996945411,
+        "statuses": [
+          {
+            "status": "captured_not_verified"
+          },
+          {
+            "status": "captured_not_verified"
+          },
+          {
+            "status": "captured_not_verified"
+          }
+        ],
+        "admitted_pickle_bytes_max": 464877,
+        "admitted_pickle_fits_existing_2MB_worker": true
+      }
+    },
+    {
+      "case": "one_adsorption_pdb",
+      "mode": "adsorption",
+      "particles": 1,
+      "requested_placements_per_particle": 1,
+      "actual_placements": [
+        1
+      ],
+      "atoms_per_asset": [
+        3604
+      ],
+      "pins": [
+        "1STP-assembly1.pdb"
+      ],
+      "capture_accounting": {
+        "total": {
+          "nodes": 47275,
+          "string_byte_charge": 1863368
+        },
+        "authoring": {
+          "nodes": 47263,
+          "string_byte_charge": 102844
+        },
+        "input_sources": {
+          "nodes": 4,
+          "string_byte_charge": 1760224
+        }
+      },
+      "native_build_ms": [
+        34.61591499944916
+      ],
+      "native_build_total_ms": 34.61591499944916,
+      "fixture_pickle_bytes_not_admitted": 882143,
+      "candidate_design_json_bytes_without_history_or_envelope": 980138,
+      "modeled_recovery_pairs": 1,
+      "recovery_base64_bytes_cumulative": 421284,
+      "recovery_uncompressed_bytes_cumulative": 1421865,
+      "recovery_encode_ms_total": 20.221096001478145,
+      "recovery_fits_existing_8MB_budget": true,
+      "candidate_plus_recovery_bytes_lower_bound": 1401422,
+      "default_capture": {
+        "median_ms": 11.589986001126817,
+        "max_ms": 11.67599500149663,
+        "statuses": [
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          },
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          },
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          }
+        ],
+        "admitted_pickle_bytes_max": null,
+        "admitted_pickle_fits_existing_2MB_worker": null
+      },
+      "prospective_job_only_capture": {
+        "median_ms": 52.90766399957647,
+        "max_ms": 54.75020599988056,
+        "statuses": [
+          {
+            "status": "captured_not_verified"
+          },
+          {
+            "status": "captured_not_verified"
+          },
+          {
+            "status": "captured_not_verified"
+          }
+        ],
+        "admitted_pickle_bytes_max": 882241,
+        "admitted_pickle_fits_existing_2MB_worker": true
+      }
+    },
+    {
+      "case": "one_adsorption_coverage",
+      "mode": "adsorption",
+      "particles": 1,
+      "requested_placements_per_particle": 1,
+      "actual_placements": [
+        1
+      ],
+      "atoms_per_asset": [
+        3604
+      ],
+      "pins": [
+        "1STP-assembly1.pdb",
+        "streptavidin_coverage.json"
+      ],
+      "capture_accounting": {
+        "total": {
+          "nodes": 47278,
+          "string_byte_charge": 1868172
+        },
+        "authoring": {
+          "nodes": 47263,
+          "string_byte_charge": 102880
+        },
+        "input_sources": {
+          "nodes": 7,
+          "string_byte_charge": 1764992
+        }
+      },
+      "native_build_ms": [
+        66.39293000080215
+      ],
+      "native_build_total_ms": 66.39293000080215,
+      "fixture_pickle_bytes_not_admitted": 883387,
+      "candidate_design_json_bytes_without_history_or_envelope": 981356,
+      "modeled_recovery_pairs": 1,
+      "recovery_base64_bytes_cumulative": 424132,
+      "recovery_uncompressed_bytes_cumulative": 1424294,
+      "recovery_encode_ms_total": 21.19778699852759,
+      "recovery_fits_existing_8MB_budget": true,
+      "candidate_plus_recovery_bytes_lower_bound": 1405488,
+      "default_capture": {
+        "median_ms": 13.470665999193443,
+        "max_ms": 15.633906999937608,
+        "statuses": [
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          },
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          },
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          }
+        ],
+        "admitted_pickle_bytes_max": null,
+        "admitted_pickle_fits_existing_2MB_worker": null
+      },
+      "prospective_job_only_capture": {
+        "median_ms": 49.691234999045264,
+        "max_ms": 51.31272000107856,
+        "statuses": [
+          {
+            "status": "captured_not_verified"
+          },
+          {
+            "status": "captured_not_verified"
+          },
+          {
+            "status": "captured_not_verified"
+          }
+        ],
+        "admitted_pickle_bytes_max": 883485,
+        "admitted_pickle_fits_existing_2MB_worker": true
+      }
+    },
+    {
+      "case": "one_tether_pdb",
+      "mode": "biotin_tether",
+      "particles": 1,
+      "requested_placements_per_particle": 1,
+      "actual_placements": [
+        1
+      ],
+      "atoms_per_asset": [
+        3620
+      ],
+      "pins": [
+        "1STP-assembly1.pdb"
+      ],
+      "capture_accounting": {
+        "total": {
+          "nodes": 47486,
+          "string_byte_charge": 1863856
+        },
+        "authoring": {
+          "nodes": 47474,
+          "string_byte_charge": 103332
+        },
+        "input_sources": {
+          "nodes": 4,
+          "string_byte_charge": 1760224
+        }
+      },
+      "native_build_ms": [
+        32.691124000848504
+      ],
+      "native_build_total_ms": 32.691124000848504,
+      "fixture_pickle_bytes_not_admitted": 884113,
+      "candidate_design_json_bytes_without_history_or_envelope": 982545,
+      "modeled_recovery_pairs": 1,
+      "recovery_base64_bytes_cumulative": 421984,
+      "recovery_uncompressed_bytes_cumulative": 1424272,
+      "recovery_encode_ms_total": 20.53816499937966,
+      "recovery_fits_existing_8MB_budget": true,
+      "candidate_plus_recovery_bytes_lower_bound": 1404529,
+      "default_capture": {
+        "median_ms": 11.290145999737433,
+        "max_ms": 11.416766999900574,
+        "statuses": [
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          },
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          },
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          }
+        ],
+        "admitted_pickle_bytes_max": null,
+        "admitted_pickle_fits_existing_2MB_worker": null
+      },
+      "prospective_job_only_capture": {
+        "median_ms": 52.24104700027965,
+        "max_ms": 86.4668200010783,
+        "statuses": [
+          {
+            "status": "captured_not_verified"
+          },
+          {
+            "status": "captured_not_verified"
+          },
+          {
+            "status": "captured_not_verified"
+          }
+        ],
+        "admitted_pickle_bytes_max": 884211,
+        "admitted_pickle_fits_existing_2MB_worker": true
+      }
+    },
+    {
+      "case": "one_tether_all_pins",
+      "mode": "biotin_tether",
+      "particles": 1,
+      "requested_placements_per_particle": 1,
+      "actual_placements": [
+        1
+      ],
+      "atoms_per_asset": [
+        3620
+      ],
+      "pins": [
+        "1STP-assembly1.pdb",
+        "streptavidin_coverage.json",
+        "biotin_pockets.json"
+      ],
+      "capture_accounting": {
+        "total": {
+          "nodes": 47492,
+          "string_byte_charge": 1954580
+        },
+        "authoring": {
+          "nodes": 47474,
+          "string_byte_charge": 103368
+        },
+        "input_sources": {
+          "nodes": 10,
+          "string_byte_charge": 1850912
+        }
+      },
+      "native_build_ms": [
+        32.076191000669496
+      ],
+      "native_build_total_ms": 32.076191000669496,
+      "fixture_pickle_bytes_not_admitted": 906886,
+      "candidate_design_json_bytes_without_history_or_envelope": 1005262,
+      "modeled_recovery_pairs": 1,
+      "recovery_base64_bytes_cumulative": 434988,
+      "recovery_uncompressed_bytes_cumulative": 1469699,
+      "recovery_encode_ms_total": 20.869366000624723,
+      "recovery_fits_existing_8MB_budget": true,
+      "candidate_plus_recovery_bytes_lower_bound": 1440250,
+      "default_capture": {
+        "median_ms": 11.247741000261158,
+        "max_ms": 11.313782999422983,
+        "statuses": [
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          },
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          },
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          }
+        ],
+        "admitted_pickle_bytes_max": null,
+        "admitted_pickle_fits_existing_2MB_worker": null
+      },
+      "prospective_job_only_capture": {
+        "median_ms": 49.534828000105335,
+        "max_ms": 49.87893999896187,
+        "statuses": [
+          {
+            "status": "captured_not_verified"
+          },
+          {
+            "status": "captured_not_verified"
+          },
+          {
+            "status": "captured_not_verified"
+          }
+        ],
+        "admitted_pickle_bytes_max": 906984,
+        "admitted_pickle_fits_existing_2MB_worker": true
+      }
+    },
+    {
+      "case": "one_particle_16_requested_sites",
+      "mode": "adsorption",
+      "particles": 1,
+      "requested_placements_per_particle": 16,
+      "actual_placements": [
+        16
+      ],
+      "atoms_per_asset": [
+        3604
+      ],
+      "pins": [
+        "1STP-assembly1.pdb",
+        "streptavidin_coverage.json"
+      ],
+      "capture_accounting": {
+        "total": {
+          "nodes": 47548,
+          "string_byte_charge": 1868172
+        },
+        "authoring": {
+          "nodes": 47533,
+          "string_byte_charge": 102880
+        },
+        "input_sources": {
+          "nodes": 7,
+          "string_byte_charge": 1764992
+        }
+      },
+      "native_build_ms": [
+        82.39497800059326
+      ],
+      "native_build_total_ms": 82.39497800059326,
+      "fixture_pickle_bytes_not_admitted": 886073,
+      "candidate_design_json_bytes_without_history_or_envelope": 985310,
+      "modeled_recovery_pairs": 1,
+      "recovery_base64_bytes_cumulative": 426984,
+      "recovery_uncompressed_bytes_cumulative": 1428248,
+      "recovery_encode_ms_total": 20.939777001331095,
+      "recovery_fits_existing_8MB_budget": true,
+      "candidate_plus_recovery_bytes_lower_bound": 1412294,
+      "default_capture": {
+        "median_ms": 11.039486000299803,
+        "max_ms": 11.326592999466811,
+        "statuses": [
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          },
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          },
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          }
+        ],
+        "admitted_pickle_bytes_max": null,
+        "admitted_pickle_fits_existing_2MB_worker": null
+      },
+      "prospective_job_only_capture": {
+        "median_ms": 49.79859800005215,
+        "max_ms": 50.10021900125139,
+        "statuses": [
+          {
+            "status": "captured_not_verified"
+          },
+          {
+            "status": "captured_not_verified"
+          },
+          {
+            "status": "captured_not_verified"
+          }
+        ],
+        "admitted_pickle_bytes_max": 886171,
+        "admitted_pickle_fits_existing_2MB_worker": true
+      }
+    },
+    {
+      "case": "sixteen_independent_coatings",
+      "mode": "adsorption",
+      "particles": 16,
+      "requested_placements_per_particle": 1,
+      "actual_placements": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "atoms_per_asset": [
+        3604,
+        3604,
+        3604,
+        3604,
+        3604,
+        3604,
+        3604,
+        3604,
+        3604,
+        3604,
+        3604,
+        3604,
+        3604,
+        3604,
+        3604,
+        3604
+      ],
+      "pins": [
+        "1STP-assembly1.pdb",
+        "streptavidin_coverage.json"
+      ],
+      "capture_accounting": {
+        "total": {
+          "nodes": 644758,
+          "string_byte_charge": 3409356
+        },
+        "authoring": {
+          "nodes": 644743,
+          "string_byte_charge": 1644064
+        },
+        "input_sources": {
+          "nodes": 7,
+          "string_byte_charge": 1764992
+        }
+      },
+      "native_build_ms": [
+        32.271041000058176,
+        32.70142799919995,
+        32.303414000125485,
+        77.51454999925045,
+        34.95375700003933,
+        34.95822600052634,
+        33.47719599878474,
+        35.51115400114213,
+        37.13830299966503,
+        101.09538599863299,
+        35.89476599881891,
+        35.16647099968395,
+        35.14139700018859,
+        35.35603999989689,
+        34.9649630006752,
+        34.68330100076855
+      ],
+      "native_build_total_ms": 663.1313929974567,
+      "fixture_pickle_bytes_not_admitted": 7292291,
+      "candidate_design_json_bytes_without_history_or_envelope": 9057647,
+      "modeled_recovery_pairs": 16,
+      "recovery_base64_bytes_cumulative": 38889072,
+      "recovery_uncompressed_bytes_cumulative": 152009285,
+      "recovery_encode_ms_total": 2414.1431779917184,
+      "recovery_fits_existing_8MB_budget": false,
+      "candidate_plus_recovery_bytes_lower_bound": 47946719,
+      "default_capture": {
+        "median_ms": 13.045949999650475,
+        "max_ms": 13.682503999007167,
+        "statuses": [
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          },
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          },
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          }
+        ],
+        "admitted_pickle_bytes_max": null,
+        "admitted_pickle_fits_existing_2MB_worker": null
+      },
+      "prospective_job_only_capture": {
+        "median_ms": 40.23189200052002,
+        "max_ms": 46.9975069991051,
+        "statuses": [
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          },
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          },
+          {
+            "status": "capture_limit",
+            "detail": "Part verification capture node budget exceeded"
+          }
+        ],
+        "admitted_pickle_bytes_max": null,
+        "admitted_pickle_fits_existing_2MB_worker": null
+      }
+    }
+  ]
+}

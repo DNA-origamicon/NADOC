@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-15",
+  "executor": "root, serialized focused validation",
+  "runs": [
+    {
+      "targets": ["tests/test_part_immutable_persistence.py"],
+      "passed": 27,
+      "failed": 0,
+      "seconds": 2.87
+    },
+    {
+      "targets": [
+        "tests/test_session_cache_identity.py",
+        "tests/test_session_cache_prune.py",
+        "tests/test_part_immutable_cache.py"
+      ],
+      "passed": 109,
+      "failed": 0,
+      "seconds": 3.51
+    }
+  ],
+  "total_passed": 136,
+  "static": {"changed_python_ruff": "passed", "git_diff_check": "passed"},
+  "scope": "Typed immutable autosave ownership and legacy-cache preservation; explicit cold restore and public immutable creation remain disabled",
+  "properties": [
+    "Constant-size capture retains exact immutable source, session incarnation and revision without materialization",
+    "Durable writes run outside the state lock; bounded bindings retain weak source references and exact file leases",
+    "Stale captures cannot overwrite newer durable revisions; bookkeeping records only the successfully captured revision",
+    "Transient write refusal stays pending while unrelated documents and assembly autosave continue",
+    "Pending, corrupt or unavailable typed records shadow old part restore, prune and close cleanup without touching their bytes",
+    "Pending typed records also refuse compatibility part and workspace-head writes or unlink while retaining independent assembly autosave",
+    "First durable bytes survive a later failed or closed host publication; saved records confer no host authority"
+  ],
+  "remaining": [
+    "Explicit recovery status and cold restore through the existing bounded job owner",
+    "Host-only restore admission and exact candidate publication permit",
+    "Durable first creation serialized against an already-admitted compatibility autosave",
+    "Full durable create, restart, restore, edit and flush lifecycle qualification before the public storage switch",
+    "No assertion that moving decode and I/O outside the shared lock eliminates Python/GIL latency"
+  ],
+  "artifacts": "Only pytest-owned temporary directories and small sentinel files; no application lifespan, background cache thread or user workspace"
+}

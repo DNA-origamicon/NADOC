@@ -241,6 +241,8 @@ def test_rejected_join_is_transactionally_empty_and_preserves_redo(editor, chang
 
 
 def test_repeated_join_uses_remaining_host_route_without_moving_previous_donor(editor):
+    # Native poses are asserted from state below; response geometry is unused.
+    editor.headers["X-NADOC-Skip-Geometry"] = "1"
     original = state.get_or_404().model_copy(deep=True)
     body, preview1 = prepare(editor, join_request(editor))
     apply(editor, body)

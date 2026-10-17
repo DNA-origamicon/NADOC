@@ -1,0 +1,106 @@
+{
+  "scope": "Warm explicit admission/build/capture/full recipe replay; excludes HTTP/rendering/chemical validity",
+  "repeats": 9,
+  "capture_limits_unchanged": true,
+  "cases": [
+    {
+      "handles": 1,
+      "bases": 8,
+      "statuses": [
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified"
+      ],
+      "timings_ms": {
+        "eligibility": {
+          "median": 0.055844000598881394,
+          "max": 0.08160900142684113
+        },
+        "build": {
+          "median": 0.21314699915819801,
+          "max": 0.3911030016752193
+        },
+        "capture": {
+          "median": 1.076962000297499,
+          "max": 1.7194079991895705
+        },
+        "proof": {
+          "median": 0.8240129991463618,
+          "max": 1.329206999798771
+        }
+      }
+    },
+    {
+      "handles": 128,
+      "bases": 1024,
+      "statuses": [
+        "verified",
+        "capture_limit",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified"
+      ],
+      "timings_ms": {
+        "eligibility": {
+          "median": 2.951668000605423,
+          "max": 4.645711000193842
+        },
+        "build": {
+          "median": 4.434168000443606,
+          "max": 5.576998000833555
+        },
+        "capture": {
+          "median": 14.478822000455693,
+          "max": 43.524388998775976
+        },
+        "proof": {
+          "median": 18.417769999359734,
+          "max": 90.06812000006903
+        }
+      }
+    },
+    {
+      "handles": 100,
+      "bases": 50000,
+      "statuses": [
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified",
+        "verified"
+      ],
+      "timings_ms": {
+        "eligibility": {
+          "median": 2.251171999887447,
+          "max": 2.5586600004317006
+        },
+        "build": {
+          "median": 3.3030690010491526,
+          "max": 3.7147740004002117
+        },
+        "capture": {
+          "median": 11.354311000104644,
+          "max": 12.224341000546701
+        },
+        "proof": {
+          "median": 14.366953999342513,
+          "max": 46.37237300084962
+        }
+      }
+    }
+  ]
+}

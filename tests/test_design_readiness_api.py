@@ -128,6 +128,75 @@ def test_assembly_integrity_penalty_is_once_per_design(host):
     assert report['state'] == 'incomplete'
 
 
+def test_representation_revisions_reuse_assessment_but_refresh_simulation_jobs(host, tmp_path, monkeypatch):
+    host['assembly'] = Assembly(instances=[instance(sequenced_design())])
+    calls = {'report': 0, 'semantic': 0, 'fingerprint': 0}
+    for attribute, label in (('_assembly_report', 'report'),
+                             ('assembly_readiness_fingerprint', 'semantic'),
+                             ('design_build_fingerprint', 'fingerprint')):
+        original = getattr(routes, attribute)
+        def counted(*args, _original=original, _label=label, **kwargs):
+            calls[_label] += 1
+            return _original(*args, **kwargs)
+        monkeypatch.setattr(routes, attribute, counted)
+    first = routes.get_design_readiness(assembly=True)
+    assert routes.get_design_readiness(assembly=True) == first
+    assert calls == {'report': 1, 'semantic': 1, 'fingerprint': 1}
+    for representation in ('beads', 'cylinders', 'full'):
+        host['assembly'] = host['assembly'].model_copy(deep=True)
+        host['assembly'].instances[0].representation = representation
+        host['revision'] += 1
+        assert routes.get_design_readiness(assembly=True) == first
+    assert calls == {'report': 1, 'semantic': 4, 'fingerprint': 1}
+    flat = Design.from_json(flatten_assembly(host['assembly']).to_json())
+    save_job(tmp_path, flat, job_id='after-representation-change')
+    assert routes.get_design_readiness(assembly=True)['state'] == 'ready'
+    assert calls == {'report': 1, 'semantic': 4, 'fingerprint': 1}
+
+
+@pytest.mark.parametrize('changed', ['visibility', 'name', 'pose', 'joint_state', 'source', 'owned_dna', 'configuration'])
+def test_semantic_assembly_cache_retains_all_assessment_inputs(host, monkeypatch, changed):
+    host['assembly'] = Assembly(instances=[instance(sequenced_design())])
+    reports = []
+    original = routes._assembly_report
+    def counted(assembly):
+        reports.append(assembly.id)
+        return original(assembly)
+    monkeypatch.setattr(routes, '_assembly_report', counted)
+    routes.get_design_readiness(assembly=True)
+    host['assembly'] = host['assembly'].model_copy(deep=True)
+    current = host['assembly']
+    part = current.instances[0]
+    if changed == 'visibility':
+        part.visible = False
+    elif changed == 'name':
+        part.name = 'Renamed part'
+    elif changed == 'pose':
+        part.transform.values[3] = 7
+    elif changed == 'joint_state':
+        part.joint_states['test-joint'] = .4
+    elif changed == 'source':
+        part.source.design.strands[0].sequence = 'C' + part.source.design.strands[0].sequence[1:]
+    elif changed == 'owned_dna':
+        current.assembly_helices.append(part.source.design.helices[0].model_copy(update={'id': 'owned'}))
+    else:
+        current.configuration_cursor = 'other-configuration'
+    host['revision'] += 1
+    routes.get_design_readiness(assembly=True)
+    assert len(reports) == 2
+
+
+def test_semantic_fingerprint_does_not_alias_distinct_inline_designs_with_same_id():
+    from backend.core.readiness_cache import assembly_readiness_fingerprint
+
+    original = sequenced_design()
+    other = original.model_copy(deep=True)
+    assembly = Assembly(instances=[instance(original), instance(other)])
+    before = assembly_readiness_fingerprint(assembly)
+    other.strands[0].sequence = 'C' + other.strands[0].sequence[1:]
+    assert assembly_readiness_fingerprint(assembly) != before
+
+
 @pytest.mark.parametrize(("length", "complete"), [(7203, False), (7249, True), (7250, False), (7560, True), (8064, True)])
 def test_api_reports_exact_scaffold_length_without_mutating_design(host, length, complete):
     from tests.conftest import make_minimal_design

@@ -506,7 +506,7 @@ def _validate_moving_cluster(design, host, donor, second):
     return dfirst, dlast
 
 
-def propose_cluster_join(design: Design, body: ClusterJoinRequest | dict):
+def propose_cluster_join(design: Design, body: ClusterJoinRequest | dict, *, identity_seed=None):
     if isinstance(body, dict):
         body = ClusterJoinRequest.model_validate(body)
     if body.expected_design_id != design.id:
@@ -575,7 +575,7 @@ def propose_cluster_join(design: Design, body: ClusterJoinRequest | dict):
         free_body = FreeClusterJoinRequest(moving_cluster_id=second.id, fixed_cluster_id=first.id,
             world_translation=translation.tolist(), world_rotation=Rotation.from_matrix(rot).as_quat().tolist(),
             reach_nm=10, expected_design_id=body.expected_design_id, expected_revision=body.expected_revision)
-        result, report = propose_free_cluster_join(design, free_body, selected_ports=(p, q))
+        result, report = propose_free_cluster_join(design, free_body, selected_ports=(p, q), identity_seed=identity_seed)
         report.update(token=join_preview_token(design, body), preview_token=join_preview_token(design, body), mode="manual")
         return result, report
     result = design.model_copy(deep=True)
@@ -616,6 +616,7 @@ def propose_cluster_join(design: Design, body: ClusterJoinRequest | dict):
         ):
             rotated[i - 1 : i + 1] = [x.model_copy(update={"end_bp": y.end_bp})]
     token = join_preview_token(design, body)
+    bridge_identity = identity_seed or token[:14]
     bridges = []
     linkdomains = []
     addedids = []
@@ -629,7 +630,7 @@ def propose_cluster_join(design: Design, body: ClusterJoinRequest | dict):
             raise ValueError(
                 "Connector exceeds 64 nucleotides; choose a closer attachment."
             )
-        hid = f"join_ss_{token[:14]}_{j}"
+        hid = f"join_ss_{bridge_identity}_{j}"
         addedids.append(hid)
         # The native flexible resolver uses these real particles and seats them
         # on its contour-length arc between the already posed attachment bases.
@@ -648,7 +649,7 @@ def propose_cluster_join(design: Design, body: ClusterJoinRequest | dict):
         for k, (u, v) in enumerate(((start, _key(dm, 0)), (_key(dm, n - 1), end))):
             result.forced_ligations.append(
                 ForcedLigation(
-                    id=f"join_bond_{token[:14]}_{j}_{k}",
+                    id=f"join_bond_{bridge_identity}_{j}_{k}",
                     three_prime_helix_id=u[0],
                     three_prime_bp=u[1],
                     three_prime_direction=u[2],

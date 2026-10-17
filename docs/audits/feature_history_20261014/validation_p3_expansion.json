@@ -1,0 +1,381 @@
+{
+  "date": "2026-10-15",
+  "base_checkpoint": "6336d1fe",
+  "phase": "P3 expansion; not complete",
+  "registered_kinds": 83,
+  "overhang_bulk_actions": 16,
+  "decision": "FAST (fast suite only)",
+  "broad": {
+    "passed": 11227,
+    "failed": 24,
+    "errors": 8,
+    "skipped": 21,
+    "pytest_seconds": 181.0,
+    "guard_seconds": 197,
+    "failed_nodes": [
+      "tests/test_vr_capture_launch.py::test_normal_route_enables_coherent_final_recording[off-inspect]",
+      "tests/test_vr_capture_launch.py::test_normal_route_enables_coherent_final_recording[transactions-transactions]",
+      "tests/test_vr_representation_loading.py::test_full_only_does_not_construct_atoms_or_extra_representations",
+      "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[full]",
+      "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[cylinders]",
+      "tests/test_vr_join.py::test_join_feedback_publication_is_private_atomic_ordered_and_document_bound",
+      "tests/test_junction_balance.py::test_the_square_full_rep_draws_both_arcs_of_a_dx_junction_equally",
+      "tests/test_junction_balance.py::test_the_honeycomb_full_rep_stays_balanced_and_unrolled",
+      "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[ballstick]",
+      "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[stick]",
+      "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[surface]",
+      "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[hull-prism]",
+      "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[mrdna-coarse]",
+      "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[mrdna-fine]",
+      "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[oxdna]",
+      "tests/test_photoproduct_review.py::test_review_catalog_revalidates_sources_and_marks_focus_geometry",
+      "tests/test_photoproduct_review.py::test_definition_decision_for_old_embedding_is_marked_stale",
+      "tests/test_photoproduct_review.py::test_visual_decision_is_atomic_gate_neutral_and_revision_stays_unresolved",
+      "tests/test_photoproduct_review.py::test_conformer_approval_requires_partition_and_source_hashes_are_immutable",
+      "tests/test_photoproduct_review.py::test_boundary_review_is_hash_pinned_without_fit_partition",
+      "tests/test_photoproduct_review.py::test_complete_visual_conformer_decisions_materialize_audited_plans",
+      "tests/test_photoproduct_review.py::test_scientific_review_api_serves_geometry_and_records_gate_neutral_decisions",
+      "tests/test_vr_startup.py::test_launch_starts_viewer_before_scheduling_export",
+      "tests/test_native_join_proof.py::test_join_from_native_root_and_parameter_regeneration"
+    ],
+    "error_nodes": [
+      "tests/test_cpd_gpu_npt_context_v4.py",
+      "tests/test_cpd_gpu_npt_context_v4.py",
+      "tests/test_cpd_gpu_npt_context_v4.py",
+      "tests/test_cpd_gpu_npt_context_v4.py",
+      "tests/test_cpd_preview.py::test_all_eight_identities_and_crosslinks_match_registered_chemistry",
+      "tests/test_cpd_preview.py::test_estimated_sugars_preserve_reference_geometry_and_handedness",
+      "tests/test_cpd_preview.py::test_core_distances_preserved_and_current_cis_syn_template_used",
+      "tests/test_cpd_preview.py::test_snapshot_refresh_preserves_evidence_and_release_registry"
+    ],
+    "matches_prior_failed_nodes": [
+      "tests/test_junction_balance.py::test_the_honeycomb_full_rep_stays_balanced_and_unrolled",
+      "tests/test_junction_balance.py::test_the_square_full_rep_draws_both_arcs_of_a_dx_junction_equally",
+      "tests/test_photoproduct_review.py::test_boundary_review_is_hash_pinned_without_fit_partition",
+      "tests/test_photoproduct_review.py::test_complete_visual_conformer_decisions_materialize_audited_plans",
+      "tests/test_photoproduct_review.py::test_conformer_approval_requires_partition_and_source_hashes_are_immutable",
+      "tests/test_photoproduct_review.py::test_definition_decision_for_old_embedding_is_marked_stale",
+      "tests/test_photoproduct_review.py::test_review_catalog_revalidates_sources_and_marks_focus_geometry",
+      "tests/test_photoproduct_review.py::test_scientific_review_api_serves_geometry_and_records_gate_neutral_decisions",
+      "tests/test_photoproduct_review.py::test_visual_decision_is_atomic_gate_neutral_and_revision_stays_unresolved",
+      "tests/test_vr_capture_launch.py::test_normal_route_enables_coherent_final_recording[off-inspect]",
+      "tests/test_vr_capture_launch.py::test_normal_route_enables_coherent_final_recording[transactions-transactions]",
+      "tests/test_vr_join.py::test_join_feedback_publication_is_private_atomic_ordered_and_document_bound",
+      "tests/test_vr_representation_loading.py::test_full_only_does_not_construct_atoms_or_extra_representations",
+      "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[ballstick]",
+      "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[cylinders]",
+      "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[full]",
+      "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[hull-prism]",
+      "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[mrdna-coarse]",
+      "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[mrdna-fine]",
+      "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[oxdna]",
+      "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[stick]",
+      "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[surface]",
+      "tests/test_vr_startup.py::test_launch_starts_viewer_before_scheduling_export"
+    ],
+    "new_failed_nodes": [
+      "tests/test_native_join_proof.py::test_join_from_native_root_and_parameter_regeneration"
+    ],
+    "resolved_after_broad": {
+      "tests/test_native_join_proof.py::test_join_from_native_root_and_parameter_regeneration": "Real proof exceeded sync 0.5 s under parallel load. Test now exercises the existing 5 s worker; focused pass. No production deadline changed."
+    },
+    "error_nodes_match_previous_run": true
+  },
+  "focused": {
+    "native_generated": "4 passed, 4 warnings in 2.62s",
+    "generator_compatibility": "2 passed in 20.44s",
+    "join_worker": "1 passed, 1 warning in 4.11s",
+    "annotations": "10 passed, 10 warnings in 3.97s",
+    "overhang_binding_linker_and_recovery": "8 passed, 20 warnings in 3.31s",
+    "routing": "34 passed, 41 warnings in 3.40s",
+    "refinement": "4 passed, 5 warnings in 2.77s",
+    "determinism": "2 passed in 4.28s",
+    "recipe_edits": "7 passed, 7 warnings in 2.64s",
+    "legacy_binding": "27 passed, 18 warnings in 3.09s",
+    "legacy_linker": "67 passed, 50 warnings in 3.91s",
+    "legacy_subdomain": "11 passed, 9 warnings in 2.72s",
+    "cadnano": "26 passed, 27 warnings in 2.73s"
+  },
+  "performance": {
+    "recording_gates": {
+      "passed": 6,
+      "total": 6
+    },
+    "evaluation_gates": {
+      "passed": 14,
+      "total": 14
+    },
+    "prefix_reuse_gates": {
+      "passed": 2,
+      "total": 2
+    },
+    "scope": "Warm in-memory recording, recovery and selected recipe edits; no browser/end-to-end guarantee. Original thresholds unchanged."
+  },
+  "timing": {
+    "violators": [],
+    "aggregate_warning": true,
+    "triage": "No individual over-budget test. Largest aggregate costs are existing oxDNA mock orchestration, cluster joins and headless oxDNA. No guard/marker changes."
+  },
+  "lint": {
+    "changed_python": "passed",
+    "whitespace": "passed",
+    "repository_ruff": "5 existing unused-import errors in unchanged files",
+    "memory": "6 existing errors in unchanged files; updated history head still has its pre-existing >200-line warning"
+  },
+  "limitations": [
+    "Compound branch construction remains unverified; P3 not marked complete.",
+    "CPD conversion method rejected before native placement on proof paths. Conversion-plus-replay test took 70.70 s and exceeded sync deadline; native preflight/delete remain supported.",
+    "Part-local assets are P4; unified history/repair UI is P5; strict agent enforcement is P6; assemblies deferred.",
+    "No frontend changes or browser/headset check; main.js delta 0; Archive mount unavailable for bulk artifacts.",
+    "No scientific simulations or user-design migrations."
+  ],
+  "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+  "cleanup": {
+    "task_temporary_files": [
+      {
+        "name": "nadoc-p3-annotations-bounded.log",
+        "bytes": 2346,
+        "sha256": "1dfa58081c8173ed72945360797ddb506d1c3fa2046ce1fe4477578f40af416f"
+      },
+      {
+        "name": "nadoc-p3-annotations-final.log",
+        "bytes": 5520,
+        "sha256": "57774449ac692e49da7f657fd2e3686309c8f188594f8803ce0bc5365662b0c9"
+      },
+      {
+        "name": "nadoc-p3-annotations.log",
+        "bytes": 2765,
+        "sha256": "39c73abf2f7d33d8da0b1a7f1d1a727b98d46fbd1f7c87cc00fe3059fc31b168"
+      },
+      {
+        "name": "nadoc-p3-binding.log",
+        "bytes": 1965,
+        "sha256": "5f18ffde53796bf4d4792b551b4e0467e466f0d1eb70597c19a930b1d88b6c56"
+      },
+      {
+        "name": "nadoc-p3-cadnano.log",
+        "bytes": 2647,
+        "sha256": "6abb3d86c24a1c5b23f45df8dd7ba30c6e90b026568fb989d8b9645714dd14be"
+      },
+      {
+        "name": "nadoc-p3-completion-smart.log",
+        "bytes": 512693,
+        "sha256": "ff422f7e9cbac9efbe51bfe8a8302ec2138962ee4c7553fa31db2b1a17aaae03"
+      },
+      {
+        "name": "nadoc-p3-completion-smart2.log",
+        "bytes": 266357,
+        "sha256": "499779a64891be6a1631a464c5a446c1666ba61ef2a6d712b0c223ea897944ae"
+      },
+      {
+        "name": "nadoc-p3-determinism-final.log",
+        "bytes": 879,
+        "sha256": "d3cdcfa2b95dad985016d076fc062ab9b1b831e6bb797447b54f00563b7c38b4"
+      },
+      {
+        "name": "nadoc-p3-determinism.log",
+        "bytes": 556,
+        "sha256": "62f82d46b87114042f393cca87341d534745eb4b4147a5b0567c83281103126e"
+      },
+      {
+        "name": "nadoc-p3-evaluation-final.log",
+        "bytes": 750,
+        "sha256": "53fbce811aa75779311202514966306527a4efbff3afc7a14b1cc36226f85a3c"
+      },
+      {
+        "name": "nadoc-p3-evaluation-post-recovery.log",
+        "bytes": 750,
+        "sha256": "e3bfd88b04dca7fcd3501059234afcf72199b71e6d11a88e7056306c0727848c"
+      },
+      {
+        "name": "nadoc-p3-evaluation.log",
+        "bytes": 457,
+        "sha256": "aeb8139eaf9a52bda8ec5f84ac54e7f52e1ad7a3cee3196db9a15bb388ef572b"
+      },
+      {
+        "name": "nadoc-p3-generated-certified.log",
+        "bytes": 924,
+        "sha256": "e8e5f612b7a291544212fe769909d67145b1943ec6a8f8170e971fa615508b31"
+      },
+      {
+        "name": "nadoc-p3-generated-debug.log",
+        "bytes": 236,
+        "sha256": "ddf84938d18270df693a4e6396ffda1e97ee5e6ee44f55a972242aa27a71e895"
+      },
+      {
+        "name": "nadoc-p3-generated-debug2.log",
+        "bytes": 239,
+        "sha256": "81c4c5201aeb1cfa79acbf07d8e040f4231dbfb71b53a77661d92270e0ac7237"
+      },
+      {
+        "name": "nadoc-p3-generated-debug3.log",
+        "bytes": 266,
+        "sha256": "fedc55b8ecb6e59aa7b68fea2720fec673c9583383ec8a898663ba1e5884740e"
+      },
+      {
+        "name": "nadoc-p3-generated-debug4.log",
+        "bytes": 266,
+        "sha256": "fedc55b8ecb6e59aa7b68fea2720fec673c9583383ec8a898663ba1e5884740e"
+      },
+      {
+        "name": "nadoc-p3-generated-final.log",
+        "bytes": 924,
+        "sha256": "f990781b251180ee325fcad76525ef53dd3cdf942a5bb7d5ff1b68d6606c6a89"
+      },
+      {
+        "name": "nadoc-p3-generated-final2.log",
+        "bytes": 924,
+        "sha256": "8f09dce7c8ae37200971e36acdfd966826f230646211dcfe9d61f9581ef71ae0"
+      },
+      {
+        "name": "nadoc-p3-generated-native.log",
+        "bytes": 924,
+        "sha256": "4f7575f7adda3ad6f3a7a61a8bdd85faf702a20a678b6e0d6c3dc7cd9bb490d9"
+      },
+      {
+        "name": "nadoc-p3-generated-native2.log",
+        "bytes": 20054,
+        "sha256": "1ee044eae9a96b8fe6122d26afd81e9e6d81351cd6632efb535203071e865380"
+      },
+      {
+        "name": "nadoc-p3-generated-native3.log",
+        "bytes": 69496,
+        "sha256": "718762769bc2159a34b7800e74e95ef4f283e93b75b8a944d9cde2b8f495adc8"
+      },
+      {
+        "name": "nadoc-p3-generated-native4.log",
+        "bytes": 5653,
+        "sha256": "52c0e6f8acfa391bb3d792ccc0c92eaa83cb83f948d096bb9c19fd952cafc90b"
+      },
+      {
+        "name": "nadoc-p3-generated-proof-final.log",
+        "bytes": 1982,
+        "sha256": "02693689027974b31e0c77398a7e635313623ada9d114db430dad724d571f8e3"
+      },
+      {
+        "name": "nadoc-p3-generated-proof-final2.log",
+        "bytes": 2026,
+        "sha256": "3105f0e376c87ab038f29947491582312c0678988cf0c0321897adc29a3c9fd2"
+      },
+      {
+        "name": "nadoc-p3-generated-proof.log",
+        "bytes": 3508,
+        "sha256": "70b547596213b2fe143e9fd4d021e23dd11f14de384bdf7748dfe0732aaf0559"
+      },
+      {
+        "name": "nadoc-p3-generated-proof2.log",
+        "bytes": 1891,
+        "sha256": "bca3587110caba25416665e1434184a11b69b6a79d1cdf30b3d35bf64edf1e6f"
+      },
+      {
+        "name": "nadoc-p3-generated.log",
+        "bytes": 602,
+        "sha256": "47da3597ad1ff32257d99b5cd8ec693a577cf768c9569ffbe1831e5f49ff7ec9"
+      },
+      {
+        "name": "nadoc-p3-history-repair.log",
+        "bytes": 3780,
+        "sha256": "e4c5e225431826c3b4dcc7d579ba938167b3ecf3324374f5a2880f59bd340870"
+      },
+      {
+        "name": "nadoc-p3-join-async.log",
+        "bytes": 1561,
+        "sha256": "e0fb102ec22517960324177da4cd3c4952ceb1cbaccdfc763cec0cbdce5eb57d"
+      },
+      {
+        "name": "nadoc-p3-linker.log",
+        "bytes": 2980,
+        "sha256": "4a1a797719a58e90bf9197b3bb75c24ae98389ca7b1d334c7557181e1f95bcab"
+      },
+      {
+        "name": "nadoc-p3-lint.log",
+        "bytes": 1543,
+        "sha256": "433cb43674a7f53ef894dc362a5a0e0d545d758efc6ad12446ab0c20c9013b3b"
+      },
+      {
+        "name": "nadoc-p3-memory-lint.log",
+        "bytes": 6029,
+        "sha256": "fe73e80971aeb7f1fc671aa103f583292b64a6d3debb8ee42fb4b69e6baf323d"
+      },
+      {
+        "name": "nadoc-p3-native-refinement-final.log",
+        "bytes": 3133,
+        "sha256": "5792056b032a37492846c06e583cc64158ad4db05a1967d47fa9cfc80c395066"
+      },
+      {
+        "name": "nadoc-p3-native-refinement.log",
+        "bytes": 7420,
+        "sha256": "f11619aa4e71f2b6345cfa73d20e079192d22040b497b6d13c2d71dc85f35aa8"
+      },
+      {
+        "name": "nadoc-p3-overhang-recovery.log",
+        "bytes": 5462,
+        "sha256": "1faa753f0dee563bca0b774a9e3bf4c21fa92c3b7a9c9e4a3dda0e5e50cd8615"
+      },
+      {
+        "name": "nadoc-p3-overhangs-extra.log",
+        "bytes": 21433,
+        "sha256": "4b246000381767a7228faf4a1bc4d15b34947a56e620ec6d57132bba12331956"
+      },
+      {
+        "name": "nadoc-p3-overhangs-extra2.log",
+        "bytes": 4706,
+        "sha256": "280e060231cbc9c0c785213eed6f450b4467646d1f3d5e97715227ce1ae58277"
+      },
+      {
+        "name": "nadoc-p3-overhangs.log",
+        "bytes": 3053,
+        "sha256": "b4e8236c2e8cf793fc48b55890dd4c290608eb538d89f5f5ec3f2fa36a411bdd"
+      },
+      {
+        "name": "nadoc-p3-overlays-final.log",
+        "bytes": 3057,
+        "sha256": "4bd5303cc1411f843598c46edc8ab268cff753af4998374124bf3c45df63c178"
+      },
+      {
+        "name": "nadoc-p3-prefix.log",
+        "bytes": 2193,
+        "sha256": "8c6311689aabd814282fe7784a48028b2756dfaba27a27a1a0bccc005865305d"
+      },
+      {
+        "name": "nadoc-p3-refinement.log",
+        "bytes": 1955,
+        "sha256": "c3f37665d99b0b54035b979d76414aa4b8613321ba2f6731f6956ce186096dc1"
+      },
+      {
+        "name": "nadoc-p3-repair-focused.log",
+        "bytes": 47357,
+        "sha256": "caf71d7cc4bd72adaac472ad5a7670eb66b9f910fcd6027bc2918f9f24a31fb6"
+      },
+      {
+        "name": "nadoc-p3-routing-extra.log",
+        "bytes": 5104,
+        "sha256": "0b79ee652b644c016eb25e47c2eb7e4e24471813ec976d7c6e70a7daa35d24e8"
+      },
+      {
+        "name": "nadoc-p3-smart-final.log",
+        "bytes": 243720,
+        "sha256": "6270ef59fac8fa9046ca499a6e057c2ab92c2ce23dfb431ba508351bfdef8125"
+      },
+      {
+        "name": "nadoc-p3-subdomains.log",
+        "bytes": 2805,
+        "sha256": "c776eef6a543d1de858d5c009f7f3e0e890d77a6360224d8c0865e5dad805097"
+      },
+      {
+        "name": "nadoc_p3_generated_debug.py",
+        "bytes": 2362,
+        "sha256": "32e8e04c70a3a2be4a981027cde7a1dc153478f88a60cfd1d5a64f7ce14fccd7"
+      },
+      {
+        "name": "nadoc_p3_tests.py",
+        "bytes": 3732,
+        "sha256": "2a0458847aace4026aec84a49d61d28e4bec3c03cb7b53ca9904565b1a7a15e3"
+      }
+    ],
+    "retained": "Compact validation JSON, benchmarks, reusable code/tests and audit notes. No user design or runtime data removed.",
+    "deleted_files": 48,
+    "deleted_bytes": 1280985,
+    "verified_absent": true
+  }
+}

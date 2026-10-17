@@ -16,6 +16,8 @@ for the added nucleotides.
 
 from __future__ import annotations
 
+from backend.core.routing_identity import crossover as routing_crossover
+
 import math
 from dataclasses import dataclass, field
 
@@ -423,7 +425,7 @@ def _place_xover(
     if err:
         warnings.append(f"skip {ha.helix_id}↔{hb.helix_id} bp={ha.index}: {err}")
         return original, None
-    xo = Crossover(half_a=ha, half_b=hb, process_id=process_id)
+    xo = routing_crossover(half_a=ha, half_b=hb, process_id=process_id)
     design = design.copy_with(crossovers=list(design.crossovers) + [xo])
     design = _ligate_xover(design, xo)
     return design, xo

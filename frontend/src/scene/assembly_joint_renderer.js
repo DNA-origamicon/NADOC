@@ -23,6 +23,7 @@
  */
 
 import * as THREE from 'three'
+import { initAssemblyJointRebuildGate } from './assembly_joint_inputs.js'
 import {
   ringPlaneHit as _ringPlaneHitUtil,
   angleInRing  as _angleInRingUtil,
@@ -232,6 +233,7 @@ function _buildConnectorIndicator(worldPos, worldNorm, color = CONN_COLOUR, mark
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export function initAssemblyJointRenderer(scene, camera, canvas, store, api, controls) {
+  const _rebuildGate = initAssemblyJointRebuildGate()
   // ── Phase 3e gate (mirrors createAssemblyRenderer's useShared toggle) ────
   // When window.NADOC_SHARED_RENDERER === true, joint indicators are drawn as
   // three shared InstancedMesh objects (shaft + cone + ring) instead of
@@ -2071,7 +2073,12 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
   }
 
   // ── Public: rebuild ──────────────────────────────────────────────────────
-  function rebuild(assembly) {
+  function rebuild(assembly, options) {
+    if (_rebuildGate.disposed) return
+    const ticket = _rebuildGate.begin(assembly, options)
+    if (!ticket) { _applyActiveVisibility(); return }
+    // Frames from a different source or pose must not seed the fallback pass.
+    _connectorFramesCache = null
     // ── Joint indicators ─────────────────────────────────────────────────
     // Legacy per-joint Group path: dispose old groups before rebuild.
     for (const grp of _jointMeshes.values()) {
@@ -2157,33 +2164,26 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
       _resetConnectorColors()
     }
 
-    // Kick off a fresh fetch of cluster-aware frames and re-render the
-    // connector layer when it arrives. Cached for the next synchronous
-    // rebuild (so subsequent rebuilds within the same assembly state render
-    // correctly on the first frame).
-    _refreshConnectorFrames(assembly)
+    // Representation-only snapshots keep these meshes and the pending request.
+    _refreshConnectorFrames(assembly, ticket)
     _applyActiveVisibility()
   }
 
   // ── Cluster-aware connector position cache ────────────────────────────
   let _connectorFramesCache = null
-  let _connectorFramesReqId = 0
-  function _refreshConnectorFrames(assembly) {
-    if (!assembly?.instances?.length) {
-      _connectorFramesCache = null
-      return
-    }
-    const reqId = ++_connectorFramesReqId
+  function _refreshConnectorFrames(assembly, ticket) {
+    if (!assembly?.instances?.some(inst => inst.interface_points?.length)) return
     api.getAllConnectorFrames().then(frames => {
-      // Drop stale responses if the user moved on to another rebuild.
-      if (reqId !== _connectorFramesReqId) return
-      _connectorFramesCache = frames ?? {}
-      // Re-run the connector indicator pass with the cluster-aware frames
-      // by re-invoking rebuild on the current assembly. The cache is now
-      // populated so the second pass picks them up.
       const cur = store.getState().currentAssembly
-      if (cur) _rebuildConnectorsOnly(cur)
+      // A newer rebuild, live drag, document replacement or disposal retires
+      // the request. Representation-only changes still accept its frames.
+      if (!_rebuildGate.isCurrent(ticket, cur)) return
+      if (frames == null) { _rebuildGate.invalidate(); return }
+      _connectorFramesCache = frames
+      _rebuildConnectorsOnly(cur)
     }).catch(err => {
+      if (!_rebuildGate.isCurrent(ticket, store.getState().currentAssembly)) return
+      _rebuildGate.invalidate()
       console.warn('[assembly_joint_renderer] connector-frames fetch failed:', err)
     })
   }
@@ -2513,6 +2513,8 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     if (!assembly) return
     const parentInst = assembly.instances?.find(i => i.id === instanceId)
     if (!parentInst?.transform?.values) return
+    // Rebuilding the unchanged committed snapshot must undo a cancelled drag.
+    _rebuildGate.invalidate()
     const committedMat = new THREE.Matrix4().fromArray(parentInst.transform.values).transpose()
     const delta = newMatrix4.clone().multiply(committedMat.clone().invert())
 
@@ -2594,6 +2596,8 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
   }
 
   function dispose() {
+    _rebuildGate.dispose()
+    _connectorFramesCache = null
     exitConnectorDefineMode()
     exitMateDefineMode()
     exitBeltDefineMode()
@@ -2634,6 +2638,7 @@ export function initAssemblyJointRenderer(scene, camera, canvas, store, api, con
     })
     _connectorGroup.clear()
     _connectorMeshes.length = 0
+    _connectorDataMap.clear()
     _bluntConnGroup.traverse(o => {
       o.geometry?.dispose()
       if (o.material) { o.material.map?.dispose(); o.material.dispose() }

@@ -1,0 +1,75 @@
+{
+  "date": "2026-10-15",
+  "checkpoint_base": "60d3ea52",
+  "scope": "Isolated numerical runtime fix, explicit coating upgrade, pure reference-selection foundation, caDNAno HTTP qualification",
+  "focused": [
+    {
+      "target": "tests/test_part_evaluation_runtime.py",
+      "passed": 1
+    },
+    {
+      "target": "tests/test_part_recipe_repair.py",
+      "passed": 58
+    },
+    {
+      "target": "tests/test_part_repair_evaluation.py",
+      "passed": 22
+    },
+    {
+      "target": "tests/test_part_evaluation.py",
+      "passed": 14
+    },
+    {
+      "target": "tests/test_part_evaluation_jobs.py",
+      "passed": 10
+    },
+    {
+      "target": "tests/test_native_duplex_relax_proof.py",
+      "passed": 3
+    },
+    {
+      "target": "tests/test_native_cpd_proof.py",
+      "passed": 3
+    },
+    {
+      "target": "tests/test_part_repair_selection.py",
+      "passed": 62
+    },
+    {
+      "target": "tests/test_native_streptavidin_proof.py::test_explicit_coating_upgrade_rebuilds_old_pin_even_after_coating_removal",
+      "passed": 1
+    },
+    {
+      "target": "tests/test_part_feature_registry.py",
+      "passed": 24
+    }
+  ],
+  "focused_total_passed": 198,
+  "benchmarks": {
+    "coating": "coating_contract_benchmark_p4.json: 24 warm and 24 cold reproduced_import; 215/216 experimental captures admitted, one 147.52 ms refusal",
+    "cadnano_http": "cadnano_route_benchmark_p4.json: 27 successful isolated publications, session cleanup verified; concurrent lightweight latency overhead retained"
+  },
+  "limits": {
+    "ordinary_capture_changed": false,
+    "coating_live_profile_enabled": false,
+    "selection_jobs_enabled": false,
+    "molecular_algorithms_changed": false,
+    "assemblies": "deferred"
+  },
+  "broad": {
+    "executed": false,
+    "reason": "Archive unavailable; focused validation does not clear broad-suite debt",
+    "selector": "FAST  (fast suite only)",
+    "dry_run_only": true,
+    "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+    "clarification": "Selector wording above is verbatim; --dry-run ran no suite. The earlier test-dedicated session is no longer open."
+  },
+  "frontend_changes": false,
+  "main_js_loc_delta": 0,
+  "physical_simulation": false,
+  "lint": {
+    "changed_python": "Ruff passed",
+    "whitespace": "git diff --check passed",
+    "global": "five unchanged F401 findings at preceding checkpoint"
+  }
+}

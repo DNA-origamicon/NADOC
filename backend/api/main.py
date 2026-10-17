@@ -26,6 +26,7 @@ from backend.api.assembly import _WORKSPACE_DIR
 from backend.api.assembly import router as assembly_router
 from backend.api.crud import router as crud_router
 from backend.api.doc_context import DocContextMiddleware
+from backend.api.part_strict_http import StrictPartDispatch
 from backend.api.routes_placement_integrity import router as placement_integrity_router, native_placement_exception_handler
 from backend.core.native_full_placement import NativePlacementError
 from backend.api.surface_progress import (
@@ -76,6 +77,8 @@ from backend.api.routes_export_md import router as export_md_router
 from backend.api.routes_export_structure import router as export_structure_router
 from backend.api.routes_extensions import router as extensions_router
 from backend.api.routes_feature_log import router as feature_log_router
+from backend.api.routes_part_element_copy import router as part_element_copy_router
+from backend.api.routes_part_cadnano_import import router as part_cadnano_import_router
 from backend.api.routes_sequences import router as sequences_router
 from backend.api.routes_benchmark import router as benchmark_router
 from backend.api.routes_engines import router as engines_router
@@ -119,6 +122,7 @@ from backend.api.routes_frame_extrusion import router as frame_extrusion_router
 from backend.api.routes_simulate import router as simulate_router
 from backend.api.routes_primitives import router as primitives_router
 from backend.api.routes_protein import router as protein_router
+from backend.api.routes_part_inputs import router as part_inputs_router
 from backend.api.routes_photoproducts import router as photoproducts_router
 from backend.api.routes_nanoparticles import router as nanoparticles_router
 from backend.api.routes_generate_design import router as generate_design_router
@@ -409,6 +413,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Outermost user middleware: strict unknown routes must not reach CORS preflight
+# or compatibility handlers. The host default remains compatibility.
+app.add_middleware(StrictPartDispatch)
 
 app.add_exception_handler(NativePlacementError, native_placement_exception_handler)
 app.include_router(placement_integrity_router, prefix="/api")
@@ -439,6 +446,8 @@ app.include_router(chain_sim_router, prefix="/api")
 app.include_router(simulate_router, prefix="/api")
 app.include_router(extensions_router, prefix="/api")
 app.include_router(feature_log_router, prefix="/api")
+app.include_router(part_element_copy_router, prefix="/api")
+app.include_router(part_cadnano_import_router, prefix="/api")
 app.include_router(deformation_router, prefix="/api")
 app.include_router(display_geometry_router, prefix="/api")
 app.include_router(vr_router, prefix="/api")
@@ -510,6 +519,7 @@ app.include_router(engines_router, prefix="/api")
 app.include_router(primitives_router, prefix="/api")
 app.include_router(fs_router, prefix="/api")
 app.include_router(protein_router, prefix="/api")
+app.include_router(part_inputs_router, prefix="/api")
 app.include_router(photoproducts_router, prefix="/api")
 app.include_router(nanoparticles_router, prefix="/api")
 from backend.api.routes_nanoparticle_attachment import router as nanoparticle_attachment_router

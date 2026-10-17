@@ -1,0 +1,37 @@
+{
+  "date": "2026-10-15",
+  "focused_passed": 331,
+  "focused_files": {
+    "tests/test_part_evaluation_session.py": 21,
+    "tests/test_part_evaluation_admission.py": 24,
+    "tests/test_part_evaluation_jobs.py": 10,
+    "tests/test_part_verification_jobs.py": 14,
+    "tests/test_part_batch_jobs.py": 17,
+    "tests/test_part_repair_jobs.py": 15,
+    "tests/test_part_selection_jobs.py": 16,
+    "tests/test_part_evaluation_capture_jobs.py": 23,
+    "tests/test_part_repair_sources.py": 36,
+    "tests/test_part_repair_source_host.py": 18,
+    "tests/test_part_repair_source_transport.py": 23,
+    "tests/test_part_repair_draft_transaction.py": 35,
+    "tests/test_part_repair_draft_evaluation.py": 26,
+    "tests/test_part_repair_draft_jobs.py": 16,
+    "tests/test_part_repair_source_routes.py": 3,
+    "tests/test_part_repair_drafts_api.py": 18,
+    "tests/test_part_repair_persistence.py": 16
+  },
+  "execution": "Files ran serially through just test-focused. Counts use the final passing run per file, not repeated intermediate runs. The saved-proposal HTTP regression evaluates a real spawned repair, commits once and verifies in a second fresh process with poisoned recovery. No scientific simulation.",
+  "corrections": [
+    "Initial source collection rejected an invalid lone-surrogate Pydantic fixture; persisted corruption now uses valid Unicode, with intentional in-memory poisoning separately constructed.",
+    "A synthetic positive routing-child source fixture used a snapshot as a minor child. It was replaced with a valid Design JSON roundtrip that rejects an undeclared source slot on an actual helix-update minor child. Its initial expected code was corrected from missing_proof_contract to the more precise source_binding_conflict. Current source-bearing commands are snapshot-only.",
+    "Review extended session guards to refuse closed documents without recreating a session. All 21 final session cases pass."
+  ],
+  "test_smart": {
+    "command": "just test-smart --dry-run",
+    "decision_verbatim": "decision: FAST  (fast suite only)",
+    "deferred_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+    "actual_execution": "Dry-run only: neither FAST nor FULL executed despite the selector's canned past-tense wording. Archive remains unavailable; focused checks do not clear broad-suite debt."
+  },
+  "scope": "Named original-byte staging/restoration, metadata-only atomic publication, explicit saved-draft evaluation and host session incarnation. No new worker/planner, persisted readiness, automatic rebase, source healing from saved outputs or strict automation policy.",
+  "limitations": "Broader selector families, desktop/part-VR repair UI, remaining P4 contracts and P6 policy remain open. No frontend/main.js change or app/visual/headset validation. Ordinary capture, transport and recovery limits unchanged. Assemblies deferred."
+}
