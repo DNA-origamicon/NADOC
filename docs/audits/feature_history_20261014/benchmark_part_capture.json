@@ -1,0 +1,1890 @@
+{
+  "diagnostic": "ordinary-part-capture",
+  "limits": {
+    "seconds": 0.025,
+    "nodes": 30000,
+    "bytes": 2000000
+  },
+  "gc_enabled": true,
+  "gc_threshold": [
+    700,
+    10,
+    10
+  ],
+  "qualified": false,
+  "cases": [
+    {
+      "helices": 1,
+      "pose_features": 0,
+      "strands": 2,
+      "domains": 2,
+      "samples": [
+        {
+          "elapsed_ms": 1.9647349981823936,
+          "copy_ms": 0.1917140034493059,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.18343199917580932
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 1.2845029996242374,
+          "copy_ms": 0.16905898519326001,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": []
+        },
+        {
+          "elapsed_ms": 1.353610998194199,
+          "copy_ms": 0.1447870017727837,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": []
+        },
+        {
+          "elapsed_ms": 1.697154002613388,
+          "copy_ms": 0.1562070392537862,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.3399260021978989
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 0.9921720047714189,
+          "copy_ms": 0.14697502047056332,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": []
+        },
+        {
+          "elapsed_ms": 0.9750380049808882,
+          "copy_ms": 0.1444049848942086,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": []
+        },
+        {
+          "elapsed_ms": 1.0333899990655482,
+          "copy_ms": 0.14545000158250332,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": []
+        },
+        {
+          "elapsed_ms": 1.66202900436474,
+          "copy_ms": 0.15497100685024634,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.41550699825165793
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 1.0987849964294583,
+          "copy_ms": 0.14773299335502088,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": []
+        },
+        {
+          "elapsed_ms": 1.025583995215129,
+          "copy_ms": 0.16306098405038938,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": []
+        },
+        {
+          "elapsed_ms": 1.0011199992732145,
+          "copy_ms": 0.16715500532882288,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": []
+        },
+        {
+          "elapsed_ms": 1.041290001012385,
+          "copy_ms": 0.14345296222018078,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": []
+        },
+        {
+          "elapsed_ms": 1.6233810019912198,
+          "copy_ms": 0.1460230050724931,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.454249995527789
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 1.1504750000312924,
+          "copy_ms": 0.23007600248092785,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": []
+        },
+        {
+          "elapsed_ms": 1.1111610001535155,
+          "copy_ms": 0.14355000166688114,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": []
+        },
+        {
+          "elapsed_ms": 1.006546001008246,
+          "copy_ms": 0.14535599621012807,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": []
+        },
+        {
+          "elapsed_ms": 1.7337079989374615,
+          "copy_ms": 0.1443110013497062,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.4898509941995144
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 1.0165410058107227,
+          "copy_ms": 0.14535500667989254,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": []
+        },
+        {
+          "elapsed_ms": 0.9754189959494397,
+          "copy_ms": 0.14212100359145552,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": []
+        },
+        {
+          "elapsed_ms": 1.0691819989006035,
+          "copy_ms": 0.14345498493639752,
+          "copy_calls": 34,
+          "status": "captured",
+          "gc": []
+        }
+      ]
+    },
+    {
+      "helices": 24,
+      "pose_features": 25,
+      "strands": 48,
+      "domains": 48,
+      "samples": [
+        {
+          "elapsed_ms": 5.572936999669764,
+          "copy_ms": 3.083512026933022,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 1,
+              "overlap_ms": 0.764952004828956
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 3.9803969993954524,
+          "copy_ms": 1.7607430054340512,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.15573199925711378
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 4.107191001821775,
+          "copy_ms": 1.7882560132420622,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.16020499606383964
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 4.387337001389824,
+          "copy_ms": 1.9042860003537498,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.29242599703138694
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 4.054550001455937,
+          "copy_ms": 1.7912979383254424,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.1662980066612363
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 3.9328019993263297,
+          "copy_ms": 1.7699739837553352,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.15992100088624284
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 4.131274996325374,
+          "copy_ms": 1.838514013797976,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.20922900148434564
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 4.386765998788178,
+          "copy_ms": 1.8525979830883443,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.22550700668944046
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 3.9445100046577863,
+          "copy_ms": 1.739322986395564,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.2272199999424629
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 3.8415130038629286,
+          "copy_ms": 1.7181920484290458,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.15954000264173374
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 4.281198998796754,
+          "copy_ms": 1.7559840125613846,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.22141299996292219
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 4.715648996352684,
+          "copy_ms": 2.042409985733684,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.24920899886637926
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 3.937750996556133,
+          "copy_ms": 1.8108150325133465,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 1,
+              "overlap_ms": 0.17695900169201195
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 3.9646899967920035,
+          "copy_ms": 1.7890170420287177,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.21084800391690806
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 4.322036002122331,
+          "copy_ms": 1.8117619765689597,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.31260600371751934
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 4.022280998469796,
+          "copy_ms": 1.7853980098152533,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.18466999608790502
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 3.905862002284266,
+          "copy_ms": 1.7275220016017556,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.15839700063224882
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 3.982205002103001,
+          "copy_ms": 1.7581710199010558,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.1540180019219406
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 5.298120995576028,
+          "copy_ms": 2.0494510390562937,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.2926160013885237
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 4.88261399732437,
+          "copy_ms": 2.1909069691901095,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.17762600327841938
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "helices": 96,
+      "pose_features": 25,
+      "strands": 192,
+      "domains": 192,
+      "samples": [
+        {
+          "elapsed_ms": 11.092280998127535,
+          "copy_ms": 6.219942988536786,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.1256520044989884
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.04302599700167775
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03065099735977128
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.028176000341773033
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.10356699931435287
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 11.366620994522236,
+          "copy_ms": 6.262783972488251,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.21132400433998555
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.07082199590513483
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029890004952903837
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.02941399725386873
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.12060700100846589
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 11.650287997326814,
+          "copy_ms": 6.788426006096415,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 1,
+              "overlap_ms": 0.15868199989199638
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.04235900269122794
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03864699829136953
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029508999432437122
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.12098700244678184
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 10.68762600334594,
+          "copy_ms": 6.0406039920053445,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.12384300498524681
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03798100078711286
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029032999009359628
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03474499681033194
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.12374800280667841
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 11.17395500477869,
+          "copy_ms": 6.552635059051681,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.21103800099808723
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.054448995797429234
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.25358700077049434
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029032999009359628
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.11251499381614849
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 11.29018299980089,
+          "copy_ms": 6.450596993090585,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.12155799777247012
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.06625200330745429
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030841001716908067
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030365998100023717
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.13069700071355328
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 11.46019299631007,
+          "copy_ms": 6.143227015854791,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.11365699901944026
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.037790996429976076
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.02931900235125795
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03008000203408301
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.5447759976959787
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 10.87105800252175,
+          "copy_ms": 6.152459049189929,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.17638799909036607
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.039123005990404636
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029604998417198658
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.028747999749612063
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.11975000234087929
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 11.596504999033641,
+          "copy_ms": 6.216898975253571,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.1471639989176765
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.05721000343328342
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029984999855514616
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029604998417198658
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.12298700312385336
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 11.341584999172483,
+          "copy_ms": 6.418427998141851,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.11061200348194689
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.25415900017833337
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.040837003325577825
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029318995075300336
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.12984099885215983
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 11.609260996920057,
+          "copy_ms": 6.505138961074408,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.14687899965792894
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03883799945469946
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.0314130011247471
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03055599518120289
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.127650004287716
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 11.207176001335029,
+          "copy_ms": 6.543688003148418,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.22331800573738292
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03931399987777695
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03046100027859211
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.2157970011467114
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.10927800030913204
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 11.494652004330419,
+          "copy_ms": 6.288202006544452,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.2012330005527474
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.05768600385636091
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030651004635728896
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.028937996830791235
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.11489500320749357
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 11.67046900081914,
+          "copy_ms": 6.440889002988115,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.11146799806738272
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.039695005398243666
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.02979499549837783
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029604001611005515
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.1242239959537983
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 10.90761100203963,
+          "copy_ms": 6.198059003509115,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 1,
+              "overlap_ms": 0.165632001881022
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03769499744521454
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.02941399725386873
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029605005693156272
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.1439280022168532
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 11.07200600381475,
+          "copy_ms": 6.264209026994649,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.20351800048956648
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.04492999869398773
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029889997676946223
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029414004529826343
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.12650799908442423
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 11.465618998045102,
+          "copy_ms": 6.698755016259383,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.11698900198098272
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.04997499490855262
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.34839800355257466
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.04150300082983449
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.13279099948704243
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 10.575967004115228,
+          "copy_ms": 5.931897008849774,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.0982369965640828
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.037790996429976076
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03046100027859211
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029223003366496414
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.12612700083991513
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 11.450863996287808,
+          "copy_ms": 6.323226982203778,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.1943789975484833
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03998000465799123
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.10232900240225717
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03122299676761031
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.29747100052190945
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 11.287516994343605,
+          "copy_ms": 6.250696016650181,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.2012330005527474
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.05406800482887775
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03065099735977128
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.0292229960905388
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.11480000102892518
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "helices": 192,
+      "pose_features": 25,
+      "strands": 384,
+      "domains": 384,
+      "samples": [
+        {
+          "elapsed_ms": 21.133467002073303,
+          "copy_ms": 12.717856028757524,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.20932399638695642
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030175004212651402
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.04255000385455787
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030937000701669604
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030745999538339674
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029604001611005515
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030365001293830574
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.538968997716438
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03198399645043537
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 20.731190998048987,
+          "copy_ms": 12.548599945148453,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.28024100174661726
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03207899862900376
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03303099947515875
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03131700213998556
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03445900074439123
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030365998100023717
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03065200144192204
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.057018994993995875
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03331700281705707
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 20.124825998209417,
+          "copy_ms": 11.949566986004356,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.18790600006468594
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.09690399747341871
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.06948900409042835
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03265100531280041
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03331700281705707
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030080998840276152
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030174996936693788
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.037885001802351326
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03188899427186698
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 20.671600999776274,
+          "copy_ms": 12.419140985002741,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.25929899857146665
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03836199903162196
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.05597199924523011
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030365001293830574
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.2528260010876693
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029317998269107193
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030079994758125395
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030651004635728896
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03522000042721629
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 21.010955999372527,
+          "copy_ms": 12.92327001283411,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.2979459968628362
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03379300324013457
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03255499905208126
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03150800330331549
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03122299676761031
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03065200144192204
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.04302599700167775
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.6934639968676493
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.0317939993692562
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 19.764624994422775,
+          "copy_ms": 11.826390960777644,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.17495999782113358
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.031317998946178705
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.08538599649909884
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.031317998946178705
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.043312000343576074
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029318995075300336
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03122199996141717
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029223003366496414
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03122199996141717
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 20.122160996834282,
+          "copy_ms": 12.030575991957448,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.2635830023791641
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.10651900083757937
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.04616699879989028
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030365001293830574
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03065099735977128
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.028556998586282134
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029128997994121164
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.0392179936170578
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.031223004043567926
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 20.60096999775851,
+          "copy_ms": 12.630751043616328,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.32755100255599245
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03407800249988213
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03541100159054622
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029223003366496414
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.2146539991372265
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.028366994229145348
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.02970000059576705
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03455499972915277
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03864700556732714
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 21.806274002301507,
+          "copy_ms": 13.440921029541641,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.19685400184243917
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.043501997424755245
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.07139300578273833
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03360299888299778
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03579199983505532
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03046100027859211
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030556999263353646
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.44882299698656425
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.032840995118021965
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 20.312827997258864,
+          "copy_ms": 12.201348967209924,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.2485430013621226
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03417299740249291
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.0761519986554049
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03293600457254797
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03046100027859211
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.02865299757104367
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.02941399725386873
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.02951000351458788
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03084199852310121
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 20.50701699772617,
+          "copy_ms": 12.520996016974095,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.32345799991162494
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.10299599671270698
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.033603006158955395
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.032365001970902085
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029605005693156272
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.02874700294341892
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.028652000764850527
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.02979499549837783
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.05349700222723186
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 20.00812300684629,
+          "copy_ms": 12.242470009368844,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.19409399828873575
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.031128001864999533
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.055115000577643514
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03026999911526218
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.36724499659612775
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.032459996873512864
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029889997676946223
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.02941399725386873
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.032746000215411186
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 20.61125099862693,
+          "copy_ms": 12.38268499582773,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.18866799655370414
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.0317939993692562
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.06549200043082237
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030556002457160503
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030271003197412938
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.02931900235125795
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030365001293830574
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.3965639989473857
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.044262997107580304
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 20.82504900317872,
+          "copy_ms": 12.676347956585232,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.3044199984287843
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.033506999898236245
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03331699554109946
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03112700505880639
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.047881003411021084
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.032556003134232014
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.0317939993692562
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.031032002880237997
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.054829994041938335
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 64.37420000293059,
+          "copy_ms": 57.72323100245558,
+          "copy_calls": 6,
+          "status": "Part verification capture budget exceeded",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.189619000593666
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.0928109948290512
+            },
+            {
+              "generation": 2,
+              "overlap_ms": 46.27569700096501
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03122299676761031
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.033506999898236245
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030651994165964425
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030271003197412938
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029317998269107193
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 20.708155003376305,
+          "copy_ms": 12.39667896879837,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.04997499490855262
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.031507996027357876
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.08481500117341056
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03274499613326043
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.032365001970902085
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.04312199598643929
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.39351799932774156
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029318995075300336
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03265000123064965
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 20.47170099831419,
+          "copy_ms": 12.38192398159299,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.284144000033848
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03664799442049116
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.04911900032311678
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030176001018844545
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030937000701669604
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.0321749976137653
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030556002457160503
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030174996936693788
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03331699554109946
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 21.505661999981385,
+          "copy_ms": 13.320031015609857,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 1,
+              "overlap_ms": 0.28728599863825366
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03522100450936705
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.034173004678450525
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03026999911526218
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03150800330331549
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.05987499753246084
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.04492999869398773
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03322200063848868
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03817200195044279
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 20.283890000428073,
+          "copy_ms": 12.422092993801925,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.17838699568528682
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03207899862900376
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.11736999294953421
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.38771099934820086
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030079994758125395
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029508999432437122
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030270995921455324
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.030270006391219795
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.033412004995625466
+            }
+          ]
+        },
+        {
+          "elapsed_ms": 20.826761996431742,
+          "copy_ms": 12.572405001264997,
+          "copy_calls": 59,
+          "status": "captured",
+          "gc": [
+            {
+              "generation": 0,
+              "overlap_ms": 0.2907129965024069
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03540999750839546
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.04740500298794359
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03341199771966785
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.03160299820592627
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.029889997676946223
+            },
+            {
+              "generation": 1,
+              "overlap_ms": 0.34344799496466294
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.031032002880237997
+            },
+            {
+              "generation": 0,
+              "overlap_ms": 0.04435899609234184
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
