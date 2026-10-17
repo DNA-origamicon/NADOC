@@ -285,7 +285,6 @@ validation; see [scope and documentation](README.md#feature-overview).
   - Extra-base spacing
   - Staple visibility
   - 2D unfold
-  - Cadnano mode
 - **Selection and Navigation**
   - Hierarchical selection
   - Selection-level filters

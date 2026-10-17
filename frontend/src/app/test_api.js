@@ -47,7 +47,7 @@ export function installTestApi({
 }) {
   window.__nadocTest = {
     clusterJoin: clusterJoinTool?.testApi,
-    viewerFrameState: () => ({ rendered: renderer.info.render.frame, callbacks: window._cnFrame,
+    viewerFrameState: () => ({ rendered: renderer.info.render.frame, callbacks: window._viewerFrame,
       focused: document.hasFocus(), hidden: document.hidden }),
     pauseViewerRenderingForTest: () => renderer.setAnimationLoop(null),
     scrywrite,

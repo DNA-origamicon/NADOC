@@ -609,7 +609,7 @@ describe('initTranslateRotateTool — rotateJoint + misc', () => {
 })
 
 describe('decideSelectionAction (selection→tool bridge)', () => {
-  const PARTS = { assemblyActive: false, cadnanoActive: false, unfoldActive: false }
+  const PARTS = { assemblyActive: false, unfoldActive: false }
   const cluster = id => ({ kind: 'cluster', id })
 
   it('does not open the tool when a cluster is selected', () => {
@@ -621,7 +621,6 @@ describe('decideSelectionAction (selection→tool bridge)', () => {
   it('does NOT open in assembly / cadnano / unfold modes', () => {
     for (const mode of [
       { ...PARTS, assemblyActive: true },
-      { ...PARTS, cadnanoActive: true },
       { ...PARTS, unfoldActive: true },
     ]) {
       expect(decideSelectionAction({

@@ -82,7 +82,6 @@ function makeDeps(overrides = {}) {
     frameSelectionOrAll: vi.fn(),
     setMenuToggle: vi.fn(),
     toggleUnfold: vi.fn(),
-    toggleCadnano: vi.fn(),
     toggleHelicalAxisLines: vi.fn(),
     savePartToAssembly: vi.fn(),
     saveAssemblyAsGuarded: vi.fn(),
@@ -145,13 +144,11 @@ describe('initKeyboardShortcuts — Group 1 toggles', () => {
     })
   })
 
-  it("'u' toggles unfold; 'k' toggles cadnano", async () => {
+  it("'u' toggles unfold", async () => {
     const d = makeDeps()
     initKeyboardShortcuts(d)
     await press('u')
-    await press('k')
     expect(d.toggleUnfold).toHaveBeenCalledTimes(1)
-    expect(d.toggleCadnano).toHaveBeenCalledTimes(1)
   })
 
   it("'u' is blocked while focus is in an INPUT (blockedInInput)", async () => {

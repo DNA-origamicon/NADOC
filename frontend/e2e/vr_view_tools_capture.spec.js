@@ -24,7 +24,7 @@ test('Desktop 2D layouts stay out of VR snapshots',async({page},info)=>{
     await api.getDesign()
   })
 
- for(const key of ['deform','unfold','cadnano2d']){
+ for(const key of ['deform','unfold']){
    await page.locator(`[data-vt="${key}"]`).first().evaluate(b=>b.click())
    await page.waitForTimeout(1200)
  }

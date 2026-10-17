@@ -13,7 +13,7 @@ const MAX_VERTICES = 4000000
 const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve))
 
 function displayFlags(doc) {
-  const desktopOnlyLayout=['expanded','unfold','cadnano2d'].some(key=>doc.querySelector(`[data-vt="${key}"]`)?.classList.contains('active'))
+  const desktopOnlyLayout=['expanded','unfold'].some(key=>doc.querySelector(`[data-vt="${key}"]`)?.classList.contains('active'))
   return desktopOnlyLayout ? 256 : VR_VIEW_KEYS.reduce((v,k,i)=>v|(doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?viewBit(i):0),0) | (simulationViewActive(doc)?2048:0)
 }
 
@@ -41,7 +41,7 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
   c.fillStyle='#e0eaff';c.font='bold 28px sans-serif';c.fillText('VIEW TOOLS',24,40)
   c.strokeStyle='#6e7681';c.strokeRect(620,8,124,44)
   c.fillStyle='#e0eaff';c.font='bold 20px sans-serif';c.fillText('CLOSE',647,37)
-  const desktopOnlyLayout=['expanded','unfold','cadnano2d'].some(key=>doc.querySelector(`[data-vt="${key}"]`)?.classList.contains('active'))
+  const desktopOnlyLayout=['expanded','unfold'].some(key=>doc.querySelector(`[data-vt="${key}"]`)?.classList.contains('active'))
   const flags=displayFlags(doc)
   for(let i=0;i<VR_VIEW_KEYS.length;i++) {
     const b=doc.querySelector(`[data-vt="${VR_VIEW_KEYS[i]}"]`),px=16+(i%2)*376,py=62+Math.floor(i/2)*112
@@ -77,7 +77,7 @@ export async function captureVRView(scene, doc = document, message = '', panelOn
 
 async function captureVRGeometry(scene, doc, atlasState, panelOnly = false) {
   const { mapUV, menu } = atlasState
-  const flags=displayFlags(doc), desktopOnlyLayout=['expanded','unfold','cadnano2d'].some(key=>doc.querySelector(`[data-vt="${key}"]`)?.classList.contains('active'))
+  const flags=displayFlags(doc), desktopOnlyLayout=['expanded','unfold'].some(key=>doc.querySelector(`[data-vt="${key}"]`)?.classList.contains('active'))
   const triangles=[],lines=[],sprites=[],batches=[]
   const pos=new THREE.Vector3(),m=new THREE.Matrix4(),inst=new THREE.Matrix4(),col=new THREE.Color(),scale=new THREE.Vector3(),quat=new THREE.Quaternion()
   const sphere=new THREE.SphereGeometry(1,24,16)
@@ -115,7 +115,7 @@ async function captureVRGeometry(scene, doc, atlasState, panelOnly = false) {
             const alpha=original.attributes.instanceAlpha?.getX(i)??1
             if(alpha<=0)continue
             o.getMatrixAt(i,inst);m.copy(o.matrixWorld).multiply(inst)
-            // Cadnano suppresses some connector instances with degenerate poses.
+            // Hidden connector instances can have degenerate poses.
             // They produce no desktop pixels and must not poison the binary feed.
             if(!m.elements.every(Number.isFinite)||Math.abs(m.determinant())<1e-14)continue
             if(spec)m.scale(new THREE.Vector3(spec.radius,spec.radius,spec.radius))
@@ -171,7 +171,7 @@ export function encodeVRView(view,version,requestSequence=0) {
 }
 export function createVRViewTools({scene,getState,onError=console.error,doc=document}) {
   let busy=false,dirty=true,version=Math.floor(Math.random()*1e9)+1,last='',settle=0,stamp='',lastStampAt=0,message='',epoch=0,appliedSequence=0,lastGood=null,lastError=''
-  const fingerprint=()=>[...VR_VIEW_KEYS,'expanded','unfold','cadnano2d'].map(k=>doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?'1':'0').join('')
+  const fingerprint=()=>[...VR_VIEW_KEYS,'expanded','unfold'].map(k=>doc.querySelector(`[data-vt="${k}"]`)?.classList.contains('active')?'1':'0').join('')
   const refresh = () => { dirty=true; settle=0 }
   for (const event of ["nadoc:representation-change", "nadoc:simulation-display", "nadoc:md-heavy-status", "nadoc:oxdna-heavy-status"]) doc.defaultView?.addEventListener(event, refresh)
   let geometry,design
@@ -233,7 +233,7 @@ export function viewToolUnavailable(key,state) {
   const design=state.currentDesign
   const posed=!!design?.deformations?.length || !!design?.cluster_transforms?.some(c=>
     c.translation?.some(v=>Math.abs(v)>1e-9) || c.rotation?.some((v,i)=>Math.abs(v-(i===3?1:0))>1e-9))
-  if(state.unfoldActive||state.cadnanoActive)return 'Exit the desktop 2D layout before changing Deform.'
+  if(state.unfoldActive)return 'Exit the desktop 2D layout before changing Deform.'
   if(!posed)return 'This design is already straight; there is no deformation to toggle.'
   return ''
 }

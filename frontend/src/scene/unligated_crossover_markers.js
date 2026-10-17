@@ -15,7 +15,7 @@
  *   - refreshPositions(helixCtrl)               — runs every render frame.
  *     Re-reads live bead positions via helixCtrl.lookupEntry and updates
  *     each sprite. This makes the markers track their crossovers through
- *     unfold view, cadnano view, expanded helix spacing, deform tool,
+ *     unfold view, expanded helix spacing, deform tool,
  *     cluster transform, and any other view/transform that mutates bead
  *     positions in place.
  *

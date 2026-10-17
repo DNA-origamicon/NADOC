@@ -38,7 +38,7 @@ describe('buildLengthHeatmapColors (pure)', () => {
 })
 
 const VT = ['lengthHeatmap', 'sequences', 'undefinedBases', 'grid', 'overhangNames',
-            'expanded', 'deform', 'unfold', 'cadnano2d']
+            'expanded', 'deform', 'unfold']
 
 function mountVtDom() {
   document.body.innerHTML = ''
@@ -60,7 +60,7 @@ function mountVtDom() {
 function makeDeps(initialState = {}) {
   const store = createMockStore({
     showSequences: false, showOverhangNames: false,
-    unfoldActive: false, cadnanoActive: false, deformVisuActive: false,
+    unfoldActive: false, deformVisuActive: false,
     currentDesign: null,
     ...initialState,
   })
@@ -82,7 +82,6 @@ function makeDeps(initialState = {}) {
     setUndefinedHighlightOn: vi.fn((v) => { _undef = v }),
     toggleDeformView: vi.fn(),
     toggleUnfold: vi.fn(),
-    toggleCadnano: vi.fn(),
   }
   return deps
 }
@@ -231,7 +230,7 @@ describe('initViewToolButtons', () => {
     expect(deps.setMenuToggle).toHaveBeenCalledWith('menu-view-overhang-names', true)
   })
 
-  it('expanded / deform / unfold / cadnano2d clicks delegate to their callbacks', () => {
+  it('expanded / deform / unfold clicks delegate to their callbacks', () => {
     const { buttons } = mountVtDom()
     const deps = makeDeps()
     initViewToolButtons(deps)
@@ -241,8 +240,6 @@ describe('initViewToolButtons', () => {
     expect(deps.toggleDeformView).toHaveBeenCalledTimes(1)
     buttons.unfold.click()
     expect(deps.toggleUnfold).toHaveBeenCalledTimes(1)
-    buttons.cadnano2d.click()
-    expect(deps.toggleCadnano).toHaveBeenCalledTimes(1)
   })
 
   it('store change re-syncs the active classes from state', () => {

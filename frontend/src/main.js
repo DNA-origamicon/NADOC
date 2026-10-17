@@ -161,7 +161,6 @@ import { openQuantumDotDialog } from './ui/quantum_dot_dialog.js'
 import { initConjugateManager }    from './ui/conjugate_manager.js'
 import { initNanoparticleConjugateManager } from './ui/nanoparticle_conjugate_manager.js'
 import { initUnfoldView }          from './scene/unfold_view.js'
-import { initCadnanoView }         from './scene/cadnano_view.js'
 import { initDeformView }          from './scene/deform_view.js'
 import { initLoopSkipHighlight }   from './scene/loop_skip_highlight.js'
 import { initOverhangSceneSync } from './scene/overhang_scene_sync.js'
@@ -358,10 +357,9 @@ async function main() {
   const {
     scene, camera, renderer, controls,
     switchOrbitMode, setNavScaleProvider, captureCurrentCamera, animateCameraTo,
-    setRenderCamera, restoreRenderCamera, getRenderCamera,
+    getRenderCamera,
     getActiveControls,
     setResizeCallback, clearResizeCallback,
-    pushControls, popControls,
     addFrameCallback, removeFrameCallback,
     setRenderFn, resetRenderFn, isStandardRender,
     setNativeVRActive, setNativeVRDesktopEnabled,
@@ -376,8 +374,8 @@ async function main() {
   initSectionView({ scene, camera, renderer, controls, addFrameCallback, removeFrameCallback, getRenderCamera,
     getPartCentroid: fallback => multiViewDesignCentroid(store.getState(), fallback), document })
 
-  // Bundle scene context for cadnano_view (and future modules that need camera/renderer switching).
-  const sceneCtx = { scene, camera, renderer, controls, setRenderCamera, restoreRenderCamera, getRenderCamera, getActiveControls, setResizeCallback, clearResizeCallback, pushControls, popControls, captureCurrentCamera, animateCameraTo, setRenderFn, resetRenderFn }
+  // Bundle shared scene context for camera and renderer access.
+  const sceneCtx = { scene, camera, renderer, controls, getRenderCamera, getActiveControls, setResizeCallback, clearResizeCallback, captureCurrentCamera, animateCameraTo, setRenderFn, resetRenderFn }
 
   // ── World-origin axes (toggleable via View > Toggle Origin Axes). On by
   // default for an EMPTY part: a new/empty file shows the XYZ origin triad as an
@@ -759,7 +757,7 @@ async function main() {
     getRegionSurfaceRenderer:   () => _atomSurface.getRegionSurfaceRenderer(),
     getDomainEndTable: () => {
       const state = store.getState()
-      const displayOnlyPose = state.cadnanoActive || state.unfoldActive ||
+      const displayOnlyPose = state.unfoldActive ||
         state.deformVisuActive === false
       return displayOnlyPose
         ? bluntEnds?.getVRToolEndTable?.() ?? []
@@ -975,7 +973,7 @@ async function main() {
   _showOverhangLengthDialog = overhangDialog.show
 
   // Circular (loop) staples are flagged purely by the warning highlight in the 3D
-  // + cadnano views (driven by store.loopStrandIds). There is intentionally no
+  // + the separate 2D editor (driven by store.loopStrandIds). There is intentionally no
   // auto-nick suggestion UI — the user linearizes manually via the generic
   // "Nick here" context-menu action.
 
@@ -1031,9 +1029,6 @@ async function main() {
   designRenderer.setFemArcUpdater?.((updates) => unfoldView.applyFemArcs(updates))
   // …and follow the RMSF scalar recolour (oxDNA flexibility map).
   designRenderer.setScalarArcUpdater?.((colorByKey) => unfoldView.applyFemArcColors(colorByKey))
-
-  // ── Cadnano mode ─────────────────────────────────────────────────────────
-  const cadnanoView = initCadnanoView(sceneCtx, designRenderer, () => unfoldView, () => sequenceOverlay, null, () => slicePlane, () => bluntEnds, () => loopSkipHighlight)
 
   // ── Expanded helix spacing (Q) ───────────────────────────────────────────
   const expandedSpacing = initExpandedSpacing(
@@ -1209,16 +1204,6 @@ async function main() {
     })
   }, { capture: true }), { capture: true })
 
-
-  // ── Cadnano-active watchdog ──────────────────────────────────────────────────
-  // Logs whenever cadnanoActive unexpectedly transitions while debugging.
-  store.subscribe((newState, prevState) => {
-    if (!window._cnDebug) return
-    if (newState.cadnanoActive !== prevState.cadnanoActive) {
-      console.warn(`[CN f${window._cnFrame}] cadnanoActive changed: ${prevState.cadnanoActive} → ${newState.cadnanoActive}`,
-        new Error().stack.split('\n').slice(2, 6).join('\n'))
-    }
-  })
 
   // ── Overhang Name overlay ────────────────────────────────────────────────────
   // Subscription is handled inside initOverhangNameOverlay via store.subscribe.
@@ -2154,43 +2139,6 @@ async function main() {
 
   const sequenceOverlay = initSequenceOverlay(scene, store)
 
-  // ── Cadnano position reapply on geometry or design change ───────────────────
-  // Registered here — after initSequenceOverlay — so that this fires AFTER the
-  // sequence overlay's subscriber, which rebuilds letter sprites at raw 3D
-  // positions whenever geometry/design change.  Firing last ensures cadnano
-  // positions are applied on top of both the unfold-view offsets (applied by
-  // unfold_view's subscriber, registered much earlier) and the sequence overlay
-  // rebuild.  It fires on design change too because API responses sometimes
-  // deliver currentDesign and currentGeometry in two separate store.setState
-  // calls (design first, geometry fetched async).
-  store.subscribe((newState, prevState) => {
-    if (!cadnanoView.isActive()) return
-    const geoChg = newState.currentGeometry !== prevState.currentGeometry
-    const desChg = newState.currentDesign   !== prevState.currentDesign
-    if (geoChg || desChg) {
-      if (window._cnDebug)
-        console.log(`[CN f${window._cnFrame}] cadnanoView reapply subscriber fired (geo:${geoChg} des:${desChg})`)
-      cadnanoView.reapplyPositions()
-    }
-  })
-
-  // ── Cadnano compensator for async deform_view straightGeometry fetch ────────
-  // When a design has deformations/cluster_transforms, deform_view.js fires an
-  // async getStraightGeometry() fetch on currentGeometry change.  Once the fetch
-  // resolves it calls store.setState({ straightGeometry, straightHelixAxes }),
-  // which would normally trigger deform_view's own subscriber to reapply 3D
-  // positions — but that subscriber is now guarded against cadnanoActive.
-  // This subscriber fires instead and restores the cadnano layout.
-  store.subscribe((newState, prevState) => {
-    if (!cadnanoView.isActive()) return
-    if (newState.straightGeometry  !== prevState.straightGeometry ||
-        newState.straightHelixAxes !== prevState.straightHelixAxes) {
-      if (window._cnDebug)
-        console.log(`[CN f${window._cnFrame}] cadnanoView reapply — straightGeometry updated`)
-      cadnanoView.reapplyPositions()
-    }
-  })
-
   // ── Browser dev-tools debug helpers (window._nadocDebug) — see scene/debug/devtools_helpers.js ──
   window._nadocDebug = initDevtoolsDebug({ designRenderer, store, api, overhangLinkArcs, selectionManager, scene })
   window._nadocDebug.cpdWeld = cpdWeldOverlay   // await _nadocDebug.cpdWeld.loadForJob(...)
@@ -2214,20 +2162,6 @@ async function main() {
     // Atomistic representation has no 2D-unfold layout — block entering and explain.
     if (!unfoldView.isActive() && store.getState().atomisticMode !== 'off') {
       showToast('Unfold view is not available in atomistic representation — exit atomistic first')
-      return
-    }
-
-    // U key while cadnano is active: exit cadnano but stay in unfold view,
-    // rather than toggling unfold off (which would break cadnano's internal state).
-    if (cadnanoView.isActive()) {
-      await cadnanoView.deactivate({ keepUnfold: true })
-      if (!slicePlane.isVisible()) {
-        crossSectionMinimap.clearSlice()
-        crossSectionMinimap.hide()
-        sliceHighlighter.clear()
-      }
-      document.getElementById('mode-indicator').textContent =
-        '2D UNFOLD — helices stacked by label order · [U] to return to 3D'
       return
     }
 
@@ -2273,61 +2207,11 @@ async function main() {
       : 'NADOC · WORKSPACE'
   }
 
-  async function _toggleCadnano() {
-    const { currentDesign } = store.getState()
-    if (!currentDesign?.helices?.length) return
-    if (isDeformActive()) return
-
-    // Atomistic representation has no 2D-cadnano layout — block entering and explain.
-    if (!cadnanoView.isActive() && store.getState().atomisticMode !== 'off') {
-      showToast('Cadnano view is not available in atomistic representation — exit atomistic first')
-      return
-    }
-
-    // Same deformation guard as unfold view.
-    if (!cadnanoView.isActive()) {
-      const hasDeformations       = !!(currentDesign?.deformations?.length)
-      const hasEffectiveTransform = currentDesign?.cluster_transforms?.some(ct => {
-        const [x, y, z, w] = ct.rotation
-        const [tx, ty, tz] = ct.translation
-        return Math.abs(x) > 1e-9 || Math.abs(y) > 1e-9 || Math.abs(z) > 1e-9 || Math.abs(w - 1) > 1e-9
-            || Math.abs(tx) > 1e-9 || Math.abs(ty) > 1e-9 || Math.abs(tz) > 1e-9
-      }) ?? false
-      const { deformVisuActive } = store.getState()
-      if ((hasDeformations || hasEffectiveTransform) && deformVisuActive) {
-        showToast('Deformations are active — turn off Deformed View in the View menu, then enter cadnano mode')
-        return
-      }
-      expandedSpacing.forceOff()
-    }
-    await cadnanoView.toggle()
-    const active = cadnanoView.isActive()
-    if (!active && !slicePlane.isVisible()) {
-      // Cadnano slice indicator was hidden — clear minimap and base highlights.
-      crossSectionMinimap.clearSlice()
-      crossSectionMinimap.hide()
-      sliceHighlighter.clear()
-    }
-    document.getElementById('mode-indicator').textContent = active
-      ? 'CADNANO MODE — two-track 2D view · [K] to exit'
-      : unfoldView.isActive()
-        ? '2D UNFOLD — helices stacked by label order · [U] to return to 3D'
-        : 'NADOC · WORKSPACE'
-  }
-
   // _toggleAssembly removed — assembly mode is entered by opening/creating a .nass file,
   // not by a toggle. _enterAssemblyMode / _exitAssemblyMode are used instead.
 
   async function _toggleDeformView() {
     if (isDeformActive()) return
-    // Geometry in cadnano / unfold mode is at straight positions already (both
-    // views require deform to be off). Toggling deform from inside those views
-    // is meaningless and racy — the lerp would fight whichever overlay owns
-    // bead positions. Surface the rule with a toast and return.
-    if (cadnanoView.isActive()) {
-      showToast('Exit cadnano mode (K) before toggling deformed view')
-      return
-    }
     if (unfoldView.isActive()) {
       showToast('Exit unfold view (U) before toggling deformed view')
       return
@@ -2414,14 +2298,8 @@ async function main() {
     getDesign:      () => store.getState().currentDesign,
     getHelixAxes:   () => store.getState().currentHelixAxes,
     onOffsetChange: (offsetNm, plane) => {
-      // In cadnano mode the slice plane is in YZ orientation but offsetNm encodes
-      // bp_index × RISE on the cadnano X-axis.  The minimap and highlight logic
-      // both assume XY (Z-axis bundles), so we remap the plane to 'XY' here.
-      // The BP formula  bp = round(bp_start + (offsetNm − axis_start.z) / RISE)
-      // then gives the correct result because axis_start.z ≈ bp_start × RISE.
-      const effectivePlane = store.getState().cadnanoActive ? 'XY' : plane
-      crossSectionMinimap.update(offsetNm, effectivePlane, designRenderer.getBackboneEntries())
-      sliceHighlighter.update(offsetNm, effectivePlane)
+      crossSectionMinimap.update(offsetNm, plane, designRenderer.getBackboneEntries())
+      sliceHighlighter.update(offsetNm, plane)
     },
     onPreviewToggle: (enabled) => {
       // "Show preview" checkbox in the slice extrude popup → persist + sync overhang ghost.
@@ -3208,9 +3086,6 @@ async function main() {
     _lastDetailLevel = -1     // force LOD re-evaluation on first tick after new design
     _clearScaffoldChecks()
     _clearStapleChecks()
-    // Hard-exit cadnano mode if active or mid-transition — synchronously restores
-    // ortho camera/controls and axis arrows before the design state is cleared.
-    cadnanoView.forceExit()
     deformExitTool()
     jointRenderer?.exitDefineMode()
     if (_translateRotateActive) {
@@ -3257,7 +3132,7 @@ async function main() {
     store.setState({
       currentDesign: null, currentGeometry: null, currentHelixAxes: null,
       validationReport: null, currentPlane: null, strandColors: {},
-      unfoldHelixOrder: null, unfoldActive: false, cadnanoActive: false,
+      unfoldHelixOrder: null, unfoldActive: false,
       straightGeometry: null, straightHelixAxes: null,
       isolatedStrandId: null,
       strandGroups: [],
@@ -3312,7 +3187,6 @@ async function main() {
     '#view-tools [data-vt="undefinedBases"]',
     '#view-tools [data-vt="deform"]',
     '#view-tools [data-vt="unfold"]',
-    '#view-tools [data-vt="cadnano2d"]',
   ]
   let _hiddenStripEls = []
 
@@ -3978,7 +3852,6 @@ async function main() {
 
   document.getElementById('menu-view-unfold')?.addEventListener('click', _toggleUnfold)
 
-  document.getElementById('menu-view-cadnano')?.addEventListener('click', _toggleCadnano)
 
   document.getElementById('btn-open-editor')?.addEventListener('click', () => {
     // Editor must edit the SAME backend document as this 3D tab → carry our doc id.
@@ -4094,7 +3967,6 @@ async function main() {
       dimensionsTool?.close?.()
       jointRenderer.exitDefineMode()
       selectionManager.clearSelection()
-      cadnanoView.forceExit()
       if (_isUnfoldActive()) await _toggleUnfold()
       expandedSpacing.forceOff()
       if (!deformView.isActive()) await deformView.activate()
@@ -4172,7 +4044,6 @@ async function main() {
     setUndefinedHighlightOn: (v) => _undefinedHighlight.setOn(v),
     toggleDeformView: () => _toggleDeformView(),
     toggleUnfold: () => _toggleUnfold(),
-    toggleCadnano: () => _toggleCadnano(),
     toggleClashes: () => clashOverlay.toggle(),
     getClashesOn: () => clashOverlay.isOn(),
   })
@@ -4334,7 +4205,6 @@ async function main() {
     frameSelectionOrAll:      _frameSelectionOrAll,
     setMenuToggle:            _setMenuToggle,
     toggleUnfold:             _toggleUnfold,
-    toggleCadnano:            _toggleCadnano,
     toggleHelicalAxisLines:   _toggleHelicalAxisLines,
     savePartToAssembly:       (opts) => _fileIo.savePartToAssembly(opts),
     saveAssemblyAsGuarded:    () => _fileSave.saveAssemblyAsGuarded(),
@@ -4543,58 +4413,6 @@ async function main() {
     return rows
   }
 
-  window.nadocHelixLabelDrift = function nadocHelixLabelDrift(opts = {}) {
-    const rows = window.nadocHelixLabelTable(opts)
-    const isCadnano = !!store.getState().cadnanoActive
-    const drift = rows.map(row => {
-      const [rx, ry, rz] = row.ringPos3d ?? [null, null, null]
-      const [lx, ly, lz] = row.labelPos3d ?? [null, null, null]
-      const dx = lx - rx
-      const dy = ly - ry
-      const dz = lz - rz
-      const gapNm = Math.sqrt(dx*dx + dy*dy + dz*dz)
-      const gapBpZ = dz / 0.334
-      const ringBpFromZ = rz / 0.334
-      const labelBpFromZ = lz / 0.334
-      const ringBpError = isCadnano ? ringBpFromZ - row.ringBp : null
-      const labelGapError = isCadnano ? Math.abs(gapBpZ) - 1 : null
-      return {
-        helix: row.helixLabel,
-        helixId: row.helixId,
-        domainBp: row.domainBp,
-        ringBp: row.ringBp,
-        side: row.openSide,
-        ovhg: row.overhangId,
-        ringBpFromZ: isCadnano ? +ringBpFromZ.toFixed(3) : null,
-        labelBpFromZ: isCadnano ? +labelBpFromZ.toFixed(3) : null,
-        ringBpError: isCadnano ? +ringBpError.toFixed(3) : null,
-        labelGapBpZ: isCadnano ? +gapBpZ.toFixed(3) : null,
-        labelGapError: isCadnano ? +labelGapError.toFixed(3) : null,
-        sideOk: isCadnano ? Math.sign(gapBpZ) === Math.sign(row.openSide) : null,
-        gapNm: +gapNm.toFixed(3),
-        ringPos: row.ringPos3d?.map(v => +v.toFixed(3)).join(','),
-        labelPos: row.labelPos3d?.map(v => +v.toFixed(3)).join(','),
-      }
-    }).sort((a, b) =>
-      Number(a.helix) - Number(b.helix) ||
-      a.ringBp - b.ringBp ||
-      String(a.ovhg ?? '').localeCompare(String(b.ovhg ?? ''))
-    )
-    const mismatches = drift.filter(row => {
-      if (!isCadnano) return false
-      return Math.abs(row.ringBpError) > 0.01 ||
-        Math.abs(row.labelGapError) > 0.01 ||
-        row.sideOk === false
-    })
-    console.table(drift)
-    if (mismatches.length) {
-      console.warn(`nadocHelixLabelDrift: ${mismatches.length} mismatch(es)`)
-      console.table(mismatches)
-    } else {
-      console.log(`nadocHelixLabelDrift: no caDNAno bp/gap mismatches in ${drift.length} label(s)`)
-    }
-    return { rows: drift, mismatches }
-  }
 
   // ── Assembly helix label debug ────────────────────────────────────────────
   // Usage: nadocAssemblyLabelTable()           — all instances
@@ -7139,7 +6957,7 @@ async function main() {
     fretChecker.refreshIfFret()
 
     // Pin unligated-crossover ⚠ markers to live bead midpoints so they
-    // track the crossover through unfold view, cadnano view, expanded
+    // track the crossover through unfold view, expanded
     // helix spacing, the deform tool, and cluster move/rotate. Cheap —
     // at most a few sprites per design. Cursor (when over the canvas)
     // drives the hover-fade so the user can see through markers to the

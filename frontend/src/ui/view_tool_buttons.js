@@ -1,6 +1,6 @@
 // View tool buttons — the right-panel `.vt-btn` row: length heatmap, sequences,
 // undefined-base highlight, grid, overhang names, expanded spacing, deform,
-// unfold, cadnano2d.
+// unfold.
 //
 // Extracted verbatim from main.js (banner `// ── View tool buttons`). The block
 // owns its own state (length-heatmap on/off + legend, the scene grid helper);
@@ -38,7 +38,6 @@ export function initViewToolButtons({
   setUndefinedHighlightOn,
   toggleDeformView,
   toggleUnfold,
-  toggleCadnano,
   toggleClashes,
   getClashesOn,
 }) {
@@ -150,7 +149,7 @@ export function initViewToolButtons({
   }
 
   function _syncVtButtons() {
-    const { showSequences, showOverhangNames, showLoopSkips, unfoldActive, cadnanoActive, deformVisuActive } = store.getState()
+    const { showSequences, showOverhangNames, showLoopSkips, unfoldActive, deformVisuActive } = store.getState()
     document.querySelector('.vt-btn[data-vt="lengthHeatmap"]')?.classList.toggle('active', _lengthHeatmapOn)
     document.querySelector('.vt-btn[data-vt="sequences"]')?.classList.toggle('active', showSequences)
     document.querySelector('.vt-btn[data-vt="undefinedBases"]')?.classList.toggle('active', getUndefinedHighlightOn())
@@ -161,7 +160,6 @@ export function initViewToolButtons({
     document.querySelector('.vt-btn[data-vt="expanded"]')?.classList.toggle('active', expandedSpacing.isRequestedActive?.() ?? expandedSpacing.isActive())
     document.querySelector('.vt-btn[data-vt="deform"]')?.classList.toggle('active', deformVisuActive)
     document.querySelector('.vt-btn[data-vt="unfold"]')?.classList.toggle('active', unfoldActive)
-    document.querySelector('.vt-btn[data-vt="cadnano2d"]')?.classList.toggle('active', cadnanoActive)
   }
 
   document.querySelector('.vt-btn[data-vt="lengthHeatmap"]')?.addEventListener('click', () => {
@@ -221,17 +219,12 @@ export function initViewToolButtons({
     toggleUnfold()
   })
 
-  document.querySelector('.vt-btn[data-vt="cadnano2d"]')?.addEventListener('click', () => {
-    toggleCadnano()
-  })
-
   // Keep vt buttons in sync when store changes (menu or other code toggling them)
   store.subscribe((newState, prevState) => {
     if (newState.showSequences !== prevState.showSequences ||
         newState.showOverhangNames !== prevState.showOverhangNames ||
         newState.showLoopSkips !== prevState.showLoopSkips ||
         newState.unfoldActive !== prevState.unfoldActive ||
-        newState.cadnanoActive !== prevState.cadnanoActive ||
         newState.deformVisuActive !== prevState.deformVisuActive) {
       _syncVtButtons()
     }

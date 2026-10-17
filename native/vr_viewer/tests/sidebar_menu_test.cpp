@@ -18,6 +18,11 @@ int main() {
         require(shown==assembly,"Assembly tab must match the document context");
         require(menu.tab().key=="properties","Default Properties tab changed with Assembly visibility");
     }
+    for (const auto& tab : nadoc_vr::kSidebarTabs) {
+        require(tab.key != "photo" && tab.key != "plates", "Desktop-only tab exposed in VR");
+        for (const auto& row : tab.rows)
+            require(!row.id.starts_with("photo-") && !row.id.starts_with("plates-"), "Desktop-only control exposed in VR");
+    }
     // All selected/hover pairs must reveal full names without widening tabs or enlarging the panel.
     for(int side=0;side<2;++side){
         nadoc_vr::SidebarMenu m(side,true);m.open=true;m.placement.openDocked({0,0,0},{1,0,0,0});

@@ -324,7 +324,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
       const outwardSign = ((endRole === '3p') !== (nuc.direction === 'REVERSE')) ? 1 : -1
       const beadPos = bead.entry.pos
       const resizeAxis = createEndResizeAxis(helix, currentHelixAxes?.[nuc.helix_id],
-        nuc.bp_index, beadPos, store.getState().cadnanoActive)
+        nuc.bp_index, beadPos)
       const outward = resizeAxis.tangent(nuc.bp_index).multiplyScalar(outwardSign)
       const strand = strandById.get(nuc.strand_id)
       const terminalLen = strand ? terminalRunLength(strand, endRole === '5p') : 1
@@ -427,7 +427,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     if (!result) throw new Error("End resize failed")
 
     // After the API resolves, store has new geometry and all bead positions have
-    // been updated (including cadnano reapply).  If the selection was on one of
+    // been updated (including display overlays).  If the selection was on one of
     // the resized end beads, re-select it at its new bp position so the bead
     // highlight and arrow both move to where the strand now ends.
     const state = store.getState()
@@ -554,7 +554,7 @@ export function initEndExtrudeArrows(scene, camera, canvas, selectionManager, de
     const state = store.getState()
     const metas = _arrowGroups.map(ag => ag.userData.dragMeta)
     const limits = _computeDragLimits(metas, state.currentDesign)
-    const handles = !_group.visible || state.cadnanoActive || vrBusy ? [] : _arrowGroups.map(ag => ({
+    const handles = !_group.visible || vrBusy ? [] : _arrowGroups.map(ag => ({
       position: ag.userData.dragMeta.bead.nuc.backbone_position ?? ag.position.toArray(),
       direction: new THREE.Vector3(0, 1, 0).applyQuaternion(ag.quaternion).toArray(),
     }))

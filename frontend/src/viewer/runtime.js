@@ -218,17 +218,11 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
   fill.position.set(-6, -4, -8)
   scene.add(fill)
 
-  // Active render camera — normally the perspective camera, but can be swapped
-  // by cadnano_view to an OrthographicCamera.
-  let _renderCamera = camera
+  const _renderCamera = camera
 
-  /** Replace the camera used by the render loop. */
-  function setRenderCamera(cam) { _renderCamera = cam }
-  /** Restore the render loop to the default perspective camera. */
-  function restoreRenderCamera() { _renderCamera = camera }
-  /** Return the camera currently used for rendering (may be ortho in cadnano mode). */
+  /** Return the camera currently used for rendering. */
   function getRenderCamera() { return _renderCamera }
-  /** Return the controls currently handling input (may be ortho controls in cadnano mode). */
+  /** Return the controls currently handling input. */
   function getActiveControls() { return _inner }
 
   // Photo-mode render override — replaces renderer.render() in the animation loop.
@@ -240,35 +234,10 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
   function resetRenderFn() { _renderFn = _defaultRenderFn }
 
   // Optional callback invoked on every resize, registered by external modules
-  // that own the active camera (e.g. cadnano_view updates ortho frustum here).
+  // that own the active camera.
   let _onResize = null
   function setResizeCallback(fn) { _onResize = fn }
   function clearResizeCallback()  { _onResize = null }
-
-  // Controls stack — allows cadnano_view to push an ortho-controls instance
-  // and pop it back on exit, restoring the perspective controls.
-  let _savedInner = null
-
-  /**
-   * Disable the current controls and replace them with newCtrls.
-   * Call popControls() to restore the previous controls.
-   */
-  function pushControls(newCtrls) {
-    _savedInner = _inner
-    _savedInner.enabled = false
-    _inner = newCtrls
-  }
-
-  /**
-   * Dispose the pushed controls and restore the previously saved controls.
-   */
-  function popControls() {
-    if (!_savedInner) return
-    _inner.dispose()
-    _inner = _savedInner
-    _inner.enabled = true
-    _savedInner = null
-  }
 
   // Per-frame callbacks registered by external modules (e.g. VR session grab update).
   const _frameCallbacks = new Set()
@@ -285,16 +254,16 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
   function setNativeVRDesktopEnabled(enabled) { nativeVRDesktopEnabled = Boolean(enabled) }
 
   // Render loop — setAnimationLoop works in both normal and WebXR modes.
-  // _cnFrame is a global frame counter used by the cadnano debug logger.
-  let _cnFrame = 0
+  // _viewerFrame is a global frame counter used by diagnostics and render tests.
+  let _viewerFrame = 0
   const trajectoryClock = attachTrajectoryRenderClock()
-  window._cnFrame = 0
+  window._viewerFrame = 0
   renderer.setAnimationLoop(() => {
     if (placementGuard.blocked()) return
     if (pauseWhenHidden && canvas.ownerDocument.hidden && !renderer.xr.isPresenting) return
     trajectoryClock.tick()
-    _cnFrame++
-    window._cnFrame = _cnFrame
+    _viewerFrame++
+    window._viewerFrame = _viewerFrame
     if (!renderer.xr.isPresenting) _inner.update()
     for (const fn of _frameCallbacks) {
       if (placementGuard.blocked()) return
@@ -351,10 +320,9 @@ export function initScene(canvas, { pixelRatioCap = 2, pauseWhenHidden = false, 
     dispose,
     scene, camera, renderer, controls,
     switchOrbitMode, setNavScaleProvider, captureCurrentCamera, animateCameraTo,
-    setRenderCamera, restoreRenderCamera, getRenderCamera,
+    getRenderCamera,
     getActiveControls,
     setResizeCallback, clearResizeCallback,
-    pushControls, popControls,
     addFrameCallback, removeFrameCallback,
     setNativeVRActive, setNativeVRDesktopEnabled,
     setRenderFn, resetRenderFn, renderNow: () => { assertPlacementExportSafe(scene); return _renderFn() },

@@ -301,7 +301,7 @@ test.describe('Console-error gate', () => {
 // how #34's `_assemblyMultiBox = null`-on-a-const TypeError shipped and threw on
 // every assembly exit. This leg drives the design close-session path
 // (`_closeSession` → `_resetForNewDesign` → `api.closeSession`), which disposes
-// ~20 scene modules (photo mode, cadnano, deform, slice plane, blunt ends, legends,
+// ~20 scene modules (photo mode, deform, slice plane, blunt ends, legends,
 // representation reset, store-clear) and is otherwise never exercised by the suite.
 //
 // The sibling assembly-exit teardown (the #34 path itself) is covered by

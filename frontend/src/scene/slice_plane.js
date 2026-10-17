@@ -144,8 +144,7 @@ function _freeColor(row, col) { return isForwardCell(row, col) ? C_FWD : C_REV }
  * @param {{ onExtrude: Function, getDesign: Function }} opts
  */
 export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, getDesign, getHelixAxes, onOffsetChange, onPreviewToggle, onCancel, onPlace, onPlacePaste, getBluntEnds } = {}) {
-  // Mutable camera ref — replaced by setCamera() when an ortho camera takes over (cadnano mode).
-  let _camera = camera
+  const _camera = camera
 
   // ── Scene graph ─────────────────────────────────────────────────────────────
 
@@ -431,7 +430,6 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   let _refHelixId       = null   // helix that opened the deformed frame (for cluster membership)
   let _deformedSourceBp = null   // bp where the deformed frame was sampled (lets the backend re-place this segment after an upstream bend/twist edit/delete)
   let _readOnly         = false  // when true: no lattice, no extrude — display + snap only
-  let _cadnanoDims      = null   // when set, overrides _computeLerpedDimensions in _resizePlane
   let _planeW           = 40    // current plane width  (nm) — updated by _resizePlane
   let _planeH           = 40    // current plane height (nm)
   let _unfoldT          = 0     // lerp factor from 3D cross-section (0) to unfold cross-section (1)
@@ -565,7 +563,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
   }
 
   function _resizePlane() {
-    const { width, height, cx, cy } = _cadnanoDims ?? _computeLerpedDimensions(_unfoldT)
+    const { width, height, cx, cy } = _computeLerpedDimensions(_unfoldT)
     _planeW = width
     _planeH = height
     // Set lateral center: centroid of all helix positions in the plane's two tangent axes.
@@ -1978,7 +1976,7 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _bpLabelRight.visible = false
       // Reset plane mesh to constructor default (40×40) so any subsequent show()
       // starts from the same baseline. Without this, a prior readOnly call (e.g.
-      // cadnano view's tiny indicator) leaves the mesh shrunk for the next show.
+      // read-only indicator) leaves the mesh shrunk for the next show.
       _planeW = 40
       _planeH = 40
       _planeMesh.geometry.dispose()
@@ -2181,13 +2179,6 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       _setLegendVisible(true)   // forward/reverse polarity key for cell picking
     },
 
-    /** Replace the camera used for raycasting (called by cadnano_view when switching to ortho). */
-    setCamera(cam) { _camera = cam },
-
-    /** Current plane and offset getters (used by cadnano_view to save/restore state). */
-    getPlane()  { return _plane },
-    getPlaneOffset() { return _offset },
-
     /**
      * World-space unit normal of the current lattice grid (deformed-aware).
      * For axis-aligned planes this is the plane's ±X/±Y/±Z; in a deformed bundle
@@ -2206,21 +2197,6 @@ export function initSlicePlane(scene, camera, canvas, controls, { onExtrude, get
       return Math.abs(PLANE_CFG[_plane].normal.y) > 0.5
         ? new THREE.Vector3(0, 0, 1)
         : new THREE.Vector3(0, 1, 0)
-    },
-
-    /**
-     * Override plane dimensions for cadnano mode.
-     * dims = { width, height, cx, cy } in the same coordinate system as _computeLerpedDimensions.
-     * Call clearCadnanoDimensions() on exit to restore normal behaviour.
-     */
-    setCadnanoDimensions(dims) {
-      _cadnanoDims = dims
-      if (_visible && _readOnly) { _resizePlane(); _updatePosition() }
-    },
-
-    clearCadnanoDimensions() {
-      _cadnanoDims = null
-      if (_visible && _readOnly) { _resizePlane(); _updatePosition() }
     },
 
     /** Debug: call window.SLICE.debug() in browser console to inspect internal state. */

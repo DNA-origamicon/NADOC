@@ -172,13 +172,6 @@ const _initialState = {
   unfoldSpacing: 2.5,
 
   /**
-   * When true, cadnano mode is active: beads are displayed as two flat tracks
-   * per helix row (scaffold / staple), orthographic camera is used, and
-   * the BP ruler + row-band overlays are visible.
-   */
-  cadnanoActive: false,
-
-  /**
    * Whether helix axis number labels are visible.
    * Toggled via View > Toggle Helix Labels.  Default: hidden.
    */
@@ -370,7 +363,7 @@ const _SLICES = {
   physics:   new Set(['cgRelaxPositions', 'cgRelaxStats']),
 
   /** Visual display toggles: unfold, deform, surface, atomistic, labels */
-  viz:       new Set(['unfoldActive', 'unfoldHelixOrder', 'unfoldSpacing', 'cadnanoActive',
+  viz:       new Set(['unfoldActive', 'unfoldHelixOrder', 'unfoldSpacing',
                       'deformVisuActive', 'straightGeometry', 'straightHelixAxes',
                       'showHelixLabels', 'atomisticMode', 'surfaceMode',
                       'surfaceColorMode', 'surfaceOpacity', 'coloringMode',

@@ -1697,7 +1697,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   _onEditStrandSequence = onEditStrandSequence ?? null
   _onHideSelection = onHideSelection ?? null
 
-  // Use the active render camera (ortho in cadnano mode, perspective otherwise).
+  // Use the active render camera.
   const _cam = () => getCamera?.() ?? camera
 
   // Reference instances remain in the scene with alpha=0 while Simulate is open.
@@ -2781,7 +2781,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
   }
 
   function _highlightBead(entry) {
-    const otherScale = store.getState().cadnanoActive ? 1.0 : 1.2
+    const otherScale = 1.2
     for (const e of _strandEntries) {
       designRenderer.setBeadScale(e, e === entry ? 1.6 : otherScale)
     }

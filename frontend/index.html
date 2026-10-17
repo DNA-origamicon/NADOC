@@ -422,7 +422,6 @@
     .vt-btn.active[data-vt="expanded"]       { color: #22d3ee; border-color: #0891b2; background: rgba(34,211,238,0.10); }
     .vt-btn.active[data-vt="deform"]         { color: #f97316; border-color: #c2410c; background: rgba(249,115,22,0.10); }
     .vt-btn.active[data-vt="unfold"]         { color: #86efac; border-color: #16a34a; background: rgba(134,239,172,0.10); }
-    .vt-btn.active[data-vt="cadnano2d"]      { color: #818cf8; border-color: #4338ca; background: rgba(129,140,248,0.10); }
     /* Length heatmap screen-space legend — mirrors cadnano editor style */
     #length-heatmap-legend {
       display: none;
@@ -4193,7 +4192,6 @@
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-extra-base-spacing" title="Widen the lattice to the interhelical spacing this design actually relaxes to in MD. A structure with bases between crossovers ends up less dense; the widest junction sets the pitch for the whole bundle. Display only — the design is unchanged.">Adjust for Extra Bases<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable is-on" id="menu-view-deform">Deformed View<span class="menu-toggle-pill"></span></button>
           <button class="dropdown-item dropdown-item--toggleable" id="menu-view-unfold" title="Stack helices into a flat 2D overview. Available for non-atomistic single-part views when deformations are suppressed; entering this view turns off expanded spacing.">2D Unfold <span style="color:#484f58;font-size:var(--text-xs)">[U]</span><span class="menu-toggle-pill"></span></button>
-          <button class="dropdown-item dropdown-item--toggleable" id="menu-view-cadnano">Cadnano Mode <span style="color:#484f58;font-size:var(--text-xs)">[K]</span><span class="menu-toggle-pill"></span></button>
           <div class="dropdown-item" style="display:flex;align-items:center;gap:6px;padding:4px 12px">
             <label for="unfold-spacing-input" style="font-size:11px;color:#8b949e;white-space:nowrap">Unfold spacing</label>
             <input id="unfold-spacing-input" type="number" min="1" max="10" step="0.5" value="2.5"
@@ -4341,7 +4339,6 @@
             <div class="hk-row"><span class="hk-desc">Capture camera pose</span><span class="hk-key">V</span></div>
             <div class="hk-row"><span class="hk-desc">Expanded helix spacing</span><span class="hk-key">Q</span></div>
             <div class="hk-row"><span class="hk-desc">2D Unfold</span><span class="hk-key">U</span></div>
-            <div class="hk-row"><span class="hk-desc">caDNAno mode</span><span class="hk-key">K</span></div>
             <div class="hk-row"><span class="hk-desc">Helical axis lines</span><span class="hk-key">/</span></div>
             <div class="hk-row"><span class="hk-desc">Helix labels</span><span class="hk-key">L</span></div>
           </div>
@@ -7617,10 +7614,6 @@
             <button class="sf-btn vt-btn" data-vt="unfold" title="Unfolded view — lay helices flat in 2D">
               <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="1" y="2" width="4" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1"/><rect x="6" y="2" width="4" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1"/><rect x="11" y="2" width="4" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1"/></svg>
               <span class="sf-label-text">unfold</span>
-            </button>
-            <button class="sf-btn vt-btn" data-vt="cadnano2d" title="Cadnano 2D view — switch to cadnano path view">
-              <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><circle cx="3.5" cy="3" r="2" fill="none" stroke="currentColor" stroke-width="1"/><circle cx="8" cy="3" r="2" fill="none" stroke="currentColor" stroke-width="1"/><circle cx="12.5" cy="3" r="2" fill="none" stroke="currentColor" stroke-width="1"/><circle cx="5.75" cy="7.5" r="2" fill="none" stroke="currentColor" stroke-width="1"/><circle cx="10.25" cy="7.5" r="2" fill="none" stroke="currentColor" stroke-width="1"/></svg>
-              <span class="sf-label-text">2D</span>
             </button>
           </div>
         </div>

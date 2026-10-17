@@ -1,8 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 // Verifies: (1) connected overhangs appear in the sidebar Overhangs section with
-// their sequences; (2) "show base sequences" renders base letters in BOTH 3D and
-// the cadnano 2D editor. Fixture = two extruded overhangs + a ds linker + set
+// their sequences; (2) "show base sequences" renders base letters in 3D. Fixture = two extruded overhangs + a ds linker + set
 // sequences + assigned scaffold (built by the headless probe).
 const FIXTURE = '/home/joshua/NADOC/workspace/playwright_tests/connected_overhangs_seq.nadoc'
 
@@ -20,7 +19,7 @@ async function letterInstanceCount(page) {
   })
 }
 
-test('connected overhang sequences: sidebar + 3D + cadnano base labels', async ({ page }) => {
+test('connected overhang sequences: sidebar + 3D base labels', async ({ page }) => {
   const errors = []
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
 
@@ -61,19 +60,6 @@ test('connected overhang sequences: sidebar + 3D + cadnano base labels', async (
   const count3d = await letterInstanceCount(page)
   await page.screenshot({ path: 'e2e/screenshots/seq_overhang_3d.png', fullPage: true })
   expect(count3d).toBeGreaterThan(0)
-
-  // ── 3. Cadnano editor base-sequence overlay ───────────────────────────────
-  await page.evaluate(() => { document.getElementById('canvas')?.focus() })
-  await page.keyboard.press('k')
-  await page.waitForTimeout(2500)
-  const cadnanoActive = await page.evaluate(async () => {
-    const { store } = await import('/src/state/store.js')
-    return store.getState().cadnanoActive
-  })
-  expect(cadnanoActive).toBe(true)
-  const countCad = await letterInstanceCount(page)
-  await page.screenshot({ path: 'e2e/screenshots/seq_overhang_cadnano.png', fullPage: true })
-  expect(countCad).toBeGreaterThan(0)   // sequences now render in cadnano too
 
   expect(errors, `console errors:\n${errors.join('\n')}`).toEqual([])
 })

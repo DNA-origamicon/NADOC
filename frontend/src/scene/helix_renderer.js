@@ -600,9 +600,9 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
   const _AY = new THREE.Vector3(0, 1, 0)
 
   const axisArrows = []   // each: see push() below
-  let _axisArrowsVisible = true  // set false by cadnano mode; respected by setDetailLevel
+  let _axisArrowsVisible = true  // global axis visibility; respected by setDetailLevel
   // Cached value of the last `setAxisShaftMode()` call. Used by
-  // setAxisArrowsVisible(true) so cadnano exit restores the correct
+  // setAxisArrowsVisible(true) to restore the correct
   // mutually-exclusive shaft visibility rather than turning every shaft on
   // (which would render both the deformed curve and the straight chord
   // simultaneously for single-segment curved helices). Matches the deform
@@ -2868,7 +2868,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     if (!_hasReference) return
     // Helical axis arrows of reference-only helices: hard-hide when reference is
     // hidden; restore via the normal shaft-mode logic when shown (respecting the
-    // cadnano global axis gate).
+    // global axis gate).
     if (_refHidden && _refOnlyHelixIds.size) {
       for (const arrow of axisArrows) {
         if (!_refOnlyHelixIds.has(arrow.helixId)) continue
@@ -3336,7 +3336,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
      *  both shaft and straightShaft on simultaneously. */
     setAxisShaftMode(mode) {
       _currentShaftMode = mode
-      if (!_axisArrowsVisible) return  // cadnano has the global toggle off — defer.
+      if (!_axisArrowsVisible) return  // the global toggle is off — defer.
       _applyShaftModeVisibility(mode)
     },
 
@@ -3986,8 +3986,7 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
 
     /**
      * Returns a snapshot of every backbone bead's current rendered position,
-     * keyed by "helix_id:bp_index:direction".  Used by cadnano_view to capture
-     * the unfold-layout positions before starting the cadnano lerp animation.
+     * keyed by "helix_id:bp_index:direction", for position diagnostics.
      * @returns {Map<string, THREE.Vector3>}
      */
     snapshotPositions() {
@@ -3998,67 +3997,6 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
         map.set(key, entry.pos.clone())
       }
       return map
-    },
-
-    /**
-     * Lerp bead positions from unfold-layout positions toward cadnano flat
-     * two-track positions.  Called by cadnano_view on each animation frame.
-     *
-     * @param {Map<string, THREE.Vector3>} cadnanoPosMap
-     *   Target positions keyed by "helix_id:bp_index:direction".
-     * @param {number} t  Lerp factor [0, 1]; 0 = unfold layout, 1 = cadnano flat.
-     * @param {Map<string, THREE.Vector3>} unfoldPosMap
-     *   Current positions at t=0 (unfold layout), same key format.
-     *   Typically the cadnano_view's snapshot of entry.pos at unfold-activation time.
-     */
-    applyCadnanoPositions(cadnanoPosMap, t, unfoldPosMap) {
-      // 1. Backbone beads.
-      for (const entry of backboneEntries) {
-        if (entry.nuc.helix_id.startsWith('__ext_')) continue
-        const key = `${entry.nuc.helix_id}:${entry.nuc.bp_index}:${entry.nuc.direction}`
-        const cp = cadnanoPosMap.get(key)
-        const up = unfoldPosMap.get(key)
-        if (!cp || !up) continue
-
-        entry.pos.set(
-          up.x + (cp.x - up.x) * t,
-          up.y + (cp.y - up.y) * t,
-          up.z + (cp.z - up.z) * t,
-        )
-        _tMatrix.compose(entry.pos, ID_QUAT, _tScale.set(_beadScale, _beadScale, _beadScale))
-        entry.instMesh.setMatrixAt(entry.id, _tMatrix)
-      }
-      iSpheres.instanceMatrix.needsUpdate = true
-      iCubes.instanceMatrix.needsUpdate   = true
-
-      // 2. Cones — cross-helix cones remain hidden (same as unfold mode).
-      for (const cone of coneEntries) {
-        const fe = _nucToEntry.get(cone.fromNuc)
-        const te = _nucToEntry.get(cone.toNuc)
-        if (!fe || !te) continue
-
-        const isCrossHelix = cone.isCrossHelix
-        _physDir.copy(te.pos).sub(fe.pos)
-        const dist = _physDir.length()
-        const h    = Math.max(0.001, dist)
-        _physDir.divideScalar(dist || 1)
-        cone.midPos.copy(fe.pos).addScaledVector(_physDir, dist * 0.5)
-        cone.quat.setFromUnitVectors(Y_HAT, _physDir)
-        cone.coneHeight = h
-
-        const r = isCrossHelix ? 0 : cone.coneRadius
-        _tMatrix.compose(cone.midPos, cone.quat, _tScale.set(r, h, r))
-        iCones.setMatrixAt(cone.id, _tMatrix)
-      }
-      iCones.instanceMatrix.needsUpdate = true
-
-      // 3. Slabs — hide in cadnano mode (beads are flat, orientation meaningless).
-      for (const slab of slabEntries) {
-        _tMatrix.compose(_tPos.set(0, 0, 0), ID_QUAT, _tScale.set(0, 0, 0))
-        iSlabs.setMatrixAt(slab.id, _tMatrix)
-      }
-      iSlabs.instanceMatrix.needsUpdate = true
-      _refreshSlabConnectors()
     },
 
     /**
@@ -5284,9 +5222,8 @@ export function buildHelixObjects(geometry, design, scene, customColors = {}, lo
     /** Show or hide all axis sticks (per-domain segments + curved tube shaft). Persists across LOD changes.
      *
      *  When making visible, re-applies the current shaft mode (`_currentShaftMode`)
-     *  rather than flipping every mesh to visible. This matters on cadnano exit:
-     *  if the user toggled to straight view before entering cadnano, we want to
-     *  restore straightShaft-only visibility on exit, not show BOTH the
+     *  rather than flipping every mesh to visible. In straight view, restore
+     *  straightShaft-only visibility without showing both the
      *  deformed curve and the straight chord for single-segment curved helices. */
     setAxisArrowsVisible(visible) {
       _axisArrowsVisible = visible

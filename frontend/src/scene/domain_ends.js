@@ -20,7 +20,7 @@
 import * as THREE from 'three'
 import { deferrableContextMenu } from './right_click_menu.js'
 import { store }  from '../state/store.js'
-import { BDNA_RISE_PER_BP, CADNANO_TRACK_OFFSET } from '../constants.js'
+import { BDNA_RISE_PER_BP } from '../constants.js'
 
 const RING_INNER    = 0.35
 const RING_OUTER    = 1.15
@@ -31,7 +31,6 @@ const RING_OPACITY  = 0.45
 const LABEL_OPACITY   = 0.72
 const LABEL_OPACITY_H = 1.00
 const LABEL_GAP_NM    = 1.0
-const CADNANO_LABEL_GAP_BP = 1
 const _Z_HAT        = new THREE.Vector3(0, 0, 1)
 const _clusterV     = new THREE.Vector3()
 const _clusterQ     = new THREE.Quaternion()
@@ -159,14 +158,6 @@ function _axisDir(h, axDef, diskBp) {
   return new THREE.Vector3(ex - sx, ey - sy, ez - sz).normalize()
 }
 
-function _cadnanoTrackOffset(strandType, scaffoldDir) {
-  const isScaffold = strandType === 'scaffold'
-  const scaffoldIsForward = (scaffoldDir ?? 'FORWARD') === 'FORWARD'
-  return (isScaffold === scaffoldIsForward)
-    ? CADNANO_TRACK_OFFSET
-    : -CADNANO_TRACK_OFFSET
-}
-
 function _domainEndPose3d(rec, h, axDef) {
   const ovhgAx = rec.overhangId ? (axDef?.ovhgAxes?.[rec.overhangId] ?? null) : null
   const diskPos = ovhgAx ? _axisPointOvhg(ovhgAx, rec.diskBp) : _axisPoint(h, axDef, rec.diskBp)
@@ -175,21 +166,6 @@ function _domainEndPose3d(rec, h, axDef) {
   const quat    = new THREE.Quaternion().setFromUnitVectors(_Z_HAT, dir)
   const labelPos = diskPos.clone().addScaledVector(dir, rec.openSide * LABEL_GAP_NM)
   return { diskPos, endPos, dir, quat, labelPos, ovhgAx }
-}
-
-function _domainEndPoseCadnano(rec, rowMap, spacing, midX) {
-  const row = rowMap.get(rec.helixId)
-  if (row == null) return null
-  const y = -row * spacing + _cadnanoTrackOffset(rec.strandType, rec.scaffoldDir)
-  const z = rec.diskBp * BDNA_RISE_PER_BP
-  const diskPos = new THREE.Vector3(midX, y, z)
-  const endPos = new THREE.Vector3(midX, y, rec.bp * BDNA_RISE_PER_BP)
-  const labelPos = new THREE.Vector3(
-    midX,
-    y,
-    z + rec.openSide * CADNANO_LABEL_GAP_BP * BDNA_RISE_PER_BP,
-  )
-  return { diskPos, endPos, labelPos }
 }
 
 function _applyDomainEndPose(end, pose) {
@@ -387,7 +363,6 @@ export function initDomainEnds(scene, camera, canvas, {
   let _pendingPos   = null
   let _pendingRightIdx = -1
   let _pendingRightPos = null
-  let _lastCadnanoParams = null
 
   const _raycaster = new THREE.Raycaster()
   const _ndc       = new THREE.Vector2()
@@ -609,10 +584,7 @@ export function initDomainEnds(scene, camera, canvas, {
             })) return
       }
       _rebuild(newState.currentDesign, newState.currentHelixAxes)
-      if (store.getState().cadnanoActive && _lastCadnanoParams) {
-        _applyCadnanoPositions(_lastCadnanoParams.rowMap, _lastCadnanoParams.spacing, _lastCadnanoParams.midX)
-      }
-      if (!store.getState().cadnanoActive) getUnfoldView?.()?.reapplyIfActive()
+      getUnfoldView?.()?.reapplyIfActive()
     } else if (
       newState.toolFilters     !== prevState.toolFilters ||
       newState.showHelixLabels !== prevState.showHelixLabels
@@ -639,16 +611,6 @@ export function initDomainEnds(scene, camera, canvas, {
     if (!domainKeySet) return true
     if (entry.strandId == null || entry.domainIndex == null) return false
     return domainKeySet.has(`${entry.strandId}:${entry.domainIndex}`)
-  }
-
-  // ── Cadnano positions (internal) ────────────────────────────────────────────
-
-  function _applyCadnanoPositions(rowMap, spacing, midX) {
-    _lastCadnanoParams = { rowMap, spacing, midX }
-    for (const end of _ends) {
-      const pose = _domainEndPoseCadnano(end, rowMap, spacing, midX)
-      if (pose) _applyDomainEndPose(end, pose)
-    }
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────────
@@ -774,10 +736,6 @@ export function initDomainEnds(scene, camera, canvas, {
       }
     },
 
-    applyCadnanoPositions(rowMap, spacing, midX) {
-      _applyCadnanoPositions(rowMap, spacing, midX)
-    },
-
     revertPhysics() {
       for (const end of _ends) {
         end.ringMesh.position.copy(end.basePos)
@@ -875,7 +833,7 @@ export function initDomainEnds(scene, camera, canvas, {
       }))
     },
 
-    /** Canonical 3-D rows for native VR tool adapters. Display-only cadnano/
+    /** Canonical 3-D rows for native VR tool adapters. Display-only
      * unfold/deform-view lerps must not move a locator away from the immutable
      * native scene snapshot. Committed geometry rebuilds refresh these bases. */
     getVRToolEndTable() {

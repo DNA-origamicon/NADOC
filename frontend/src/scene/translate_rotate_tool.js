@@ -29,7 +29,7 @@ import { armToolClusterSelection } from '../ui/tool_cluster_selection.js'
  * @returns {{ action: 'retarget'|'none', clusterId: string|null }}
  */
 export function decideSelectionAction({ newSel, toolActive, activeClusterId, mode }) {
-  const partsEditor = !!mode && !mode.assemblyActive && !mode.cadnanoActive && !mode.unfoldActive
+  const partsEditor = !!mode && !mode.assemblyActive && !mode.unfoldActive
   const newCid = newSel?.kind === 'cluster' ? newSel.id ?? null : null
   // Selection never arms or closes the tool. Once explicitly armed, a cluster click
   // may still retarget the live gizmo; this keeps selection and tool activation as
@@ -759,7 +759,6 @@ export function initTranslateRotateTool(deps) {
       activeClusterId: newState.activeClusterId,
       mode: {
         assemblyActive: newState.assemblyActive,
-        cadnanoActive:  newState.cadnanoActive,
         unfoldActive:   newState.unfoldActive,
       },
     })
@@ -779,7 +778,7 @@ export function initTranslateRotateTool(deps) {
     if (newState.selection === prevState.selection) return
     if (await _consumeSelectionChangeDuringVRPreview(newState)) return
     if (!getActive()) return
-    if (newState.assemblyActive || newState.cadnanoActive || newState.unfoldActive) return
+    if (newState.assemblyActive || newState.unfoldActive) return
     const clusters = newState.currentDesign?.cluster_transforms ?? []
     const groupIds = selectedClusterIds(newState).filter(id => clusters.some(c => c.id === id))
     if (groupIds.length >= 2) {

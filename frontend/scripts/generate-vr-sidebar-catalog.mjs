@@ -40,6 +40,8 @@ const tabs = []
 for (const side of ['left', 'right']) {
   for (const button of document.querySelectorAll(`#${side}-tab-strip [data-tab]`)) {
     const key = button.dataset.tab
+    // These desktop workflows have no useful VR controls.
+    if (side === 'left' && ['photo', 'plates'].includes(key)) continue
     const pane = document.getElementById(`${side === 'left' ? '' : 'right-'}tab-content-${key}`)
     const tab = { side, key, label: clean(button.textContent), rows: [] }
     const seen = new Set()
@@ -108,10 +110,6 @@ add('left','dynamics','Job entries','frontend/src/ui/jobs_panel_base.js', [
 add('left', 'dynamics', 'Simulations', 'frontend/src/ui/engine_selector.js', [
   ['engine-cando','CanDo FEM'],['engine-oxdna','oxDNA'],['engine-mrdna','mrDNA'],['engine-blade','BLaDE'],['engine-snupi','SNUPI'],['engine-namd','NAMD'],
   ['vr-jobs','VR job list','jobs'],['vr-trajectory','Trajectory playback','trajectory'],
-])
-add('left','plates','Plates & tubes','frontend/src/ui/plate_view.js', [
-  ['plates-auto-fill','Auto-fill'],['plates-orientation','8x12 / 12x8'],['plates-mode','Mode: Staple / Color / Group'],['plates-reset','Reset view'],
-  ['plates-well','Select / move well'],['plates-tubes','Send to tubes / plates'],['plates-copy-all','Copy all (TSV)'],['plates-copy','Copy sequence'],['plates-warning','Hairpin / dimer structure'],
 ])
 add('right','annotations','Annotations','frontend/src/ui/annotation_panel.js', [
   ['anno-add','+ Add'],['anno-enabled','Show annotations in the viewport'],['anno-text','Text'],['anno-icon','Icon'],['anno-calloutType','Callout type'],

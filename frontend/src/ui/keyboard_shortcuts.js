@@ -26,7 +26,7 @@
  * @param {Function} deps.isUnfoldActive / deps.isDeformActive
  * @param {Function} deps.captureCurrentCamera / deps.frameSelectionOrAll
  * @param {Function} deps.setMenuToggle
- * @param {Function} deps.toggleUnfold / deps.toggleCadnano / deps.toggleHelicalAxisLines
+ * @param {Function} deps.toggleUnfold / deps.toggleHelicalAxisLines
  * @param {Function} deps.savePartToAssembly / deps.saveAssemblyAsGuarded / deps.setAssemblyWorkspacePath
  * @param {Function} deps.showWelcome / deps.ooClose / deps.cancelTranslateRotateTool
  * @param {Function} deps.watchDeformState / deps.deformEscape / deps.popGroupUndo
@@ -54,7 +54,7 @@ export function initKeyboardShortcuts(deps) {
     isUnfoldActive, isDeformActive,
     captureCurrentCamera, frameSelectionOrAll,
     setMenuToggle,
-    toggleUnfold, toggleCadnano, toggleHelicalAxisLines,
+    toggleUnfold, toggleHelicalAxisLines,
     savePartToAssembly, saveAssemblyAsGuarded, setAssemblyWorkspacePath,
     showWelcome, ooClose, cancelTranslateRotateTool,
     watchDeformState, deformEscape, popGroupUndo, popVisibilityUndo, popVisibilityRedo,
@@ -277,13 +277,6 @@ export function initKeyboardShortcuts(deps) {
     description: 'Toggle 2D unfold view',
     blockedInInput: true,
     handler() { toggleUnfold() },
-  })
-
-  registerShortcut({
-    key: 'k', ctrl: false,
-    description: 'Toggle cadnano mode',
-    blockedInInput: true,
-    handler() { toggleCadnano() },
   })
 
   registerShortcut({

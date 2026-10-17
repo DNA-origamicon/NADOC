@@ -100,7 +100,6 @@ test('View menu toolbar toggles follow toolbar order', async ({ page }) => {
     'menu-view-extra-base-spacing',
     'menu-view-deform',
     'menu-view-unfold',
-    'menu-view-cadnano',
   ]
   for (const group of [viewOrder, modeOrder]) {
     expect(group.map(id => positions[id])).toEqual([...group.map(id => positions[id])].sort((a, b) => a - b))

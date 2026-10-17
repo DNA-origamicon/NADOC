@@ -626,7 +626,7 @@ export function initDesignRenderer(scene, storeRef) {
     // Each connection is a line between the backbone beads of the two linked nucleotides.
     // Extra-base beads + slabs for crossovers with extra bases.
     // Line rendering (straight + arc) is handled exclusively by unfold_view.js.
-    // Hidden when unfold or cadnano view is active.
+    // Hidden when unfold view is active.
     const colorMap    = buildStapleColorMap(geometry, design)
     const effectiveCols = _effectiveColors(strandColors, strandGroups)
     const xoverResult = buildCrossoverConnections(design, geometry, colorMap, effectiveCols)
@@ -1163,10 +1163,6 @@ export function initDesignRenderer(scene, storeRef) {
       }
     }
 
-    if (window._cnDebug && storeRef.getState().cadnanoActive) {
-      console.warn(`[CN f${window._cnFrame}] design_renderer._rebuild() geo:${geoChanged} des:${designChanged} loop:${loopChanged}`,
-        new Error().stack.split('\n').slice(2, 8).join('\n'))
-    }
     markOperationTiming('scene-rebuild-trigger', {
       geoChanged, designChanged, loopChanged,
       nucleotides: newState.currentGeometry?.length ?? 0,
@@ -1202,7 +1198,7 @@ export function initDesignRenderer(scene, storeRef) {
     }
 
     // Extra-base beads+slabs now track arc positions during all transitions
-    // (unfold, cadnano, deform) via updateExtraBaseArc() — no need to hide.
+    // (unfold, deform) via updateExtraBaseArc() — no need to hide.
   })
 
   // Build immediately if the store already has data (e.g. on hot reload).
@@ -1846,12 +1842,12 @@ export function initDesignRenderer(scene, storeRef) {
 
     /**
      * Remove the mrDNA relaxed-position overlay: revert beads to design geometry.
-     * Skip revertToGeometry when cadnano or unfold modes own bead positions —
-     * those modes will restore positions themselves on deactivation.
+     * Skip revertToGeometry when unfold owns bead positions —
+     * unfold will restore positions themselves on deactivation.
      */
     clearFemOverlay() {
-      const { cadnanoActive, unfoldActive } = storeRef.getState()
-      if (!cadnanoActive && !unfoldActive) {
+      const { unfoldActive } = storeRef.getState()
+      if (!unfoldActive) {
         _helixCtrl?.revertToGeometry()
       }
     },
@@ -1870,10 +1866,6 @@ export function initDesignRenderer(scene, storeRef) {
 
     applyUnfoldOffsetsExtensions(extArcMap, t, straightPosMap = null) {
       _helixCtrl?.applyUnfoldOffsetsExtensions(extArcMap, t, straightPosMap)
-    },
-
-    applyCadnanoPositions(cadnanoPosMap, t, unfoldPosMap) {
-      _helixCtrl?.applyCadnanoPositions(cadnanoPosMap, t, unfoldPosMap)
     },
 
     snapshotPositions() {

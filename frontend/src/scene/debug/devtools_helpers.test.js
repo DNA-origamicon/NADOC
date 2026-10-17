@@ -3,7 +3,7 @@ import { initDevtoolsDebug } from './devtools_helpers.js'
 import { createMockStore } from '../../test-helpers/mock_store.js'
 
 function makeDeps(overrides = {}) {
-  const store = overrides.store ?? createMockStore({ currentDesign: null, currentGeometry: null, cadnanoActive: false })
+  const store = overrides.store ?? createMockStore({ currentDesign: null, currentGeometry: null, unfoldActive: false })
   return {
     store,
     designRenderer: {
@@ -11,7 +11,6 @@ function makeDeps(overrides = {}) {
       getHelixCtrl: vi.fn(() => null),
       applyUnfoldOffsets: vi.fn(),
       applyDeformLerp: vi.fn(),
-      applyCadnanoPositions: vi.fn(),
       ...overrides.designRenderer,
     },
     api: { getDesign: vi.fn(async () => {}), getGeometry: vi.fn(async () => {}), ...overrides.api },
@@ -137,13 +136,13 @@ describe('storeTrace', () => {
     const store = createMockStore({})
     const orig = store.setState
     const dbg = initDevtoolsDebug(makeDeps({ store }))
-    const stop = dbg.storeTrace(['cadnanoActive'])
+    const stop = dbg.storeTrace(['unfoldActive'])
     const patched = store.setState
     expect(patched).not.toBe(orig)        // setState is now wrapped
     stop()
     expect(store.setState).not.toBe(patched) // wrapper removed (restores a bound copy)
-    store.setState({ cadnanoActive: true })  // un-patched path still mutates real state
-    expect(store.getState().cadnanoActive).toBe(true)
+    store.setState({ unfoldActive: true })  // un-patched path still mutates real state
+    expect(store.getState().unfoldActive).toBe(true)
   })
 })
 
@@ -166,7 +165,7 @@ describe('factory shape', () => {
   it('exposes the debug API plus the test-only module handles', () => {
     const deps = makeDeps()
     const dbg = initDevtoolsDebug(deps)
-    for (const m of ['posTrace', 'snapPos', 'diffPos', 'storeTrace', 'subTrace', 'linkers', 'forceRebuild', 'refetch', 'help'])
+    for (const m of ['posTrace', 'snapPos', 'diffPos', 'storeTrace', 'linkers', 'forceRebuild', 'refetch', 'help'])
       expect(typeof dbg[m]).toBe('function')
     expect(dbg.selectionManager).toBe(deps.selectionManager)
     expect(dbg.overhangLinkArcs).toBe(deps.overhangLinkArcs)

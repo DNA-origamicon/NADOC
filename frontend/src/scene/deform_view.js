@@ -49,9 +49,6 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
   // don't sweep into position; the destination mode is set in the onDone
   // callback after the lerp completes.
   let _shaftMode = 'deformed'
-  // True when a getStraightGeometry() fetch was skipped because cadnano was
-  // active at the time.  Triggers a deferred fetch on cadnano exit.
-  let _straightGeomStale = false
 
   // Map<"helix_id:bp_index:direction", THREE.Vector3> — straight nucleotide positions.
   let _straightPosMap  = new Map()
@@ -251,9 +248,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
     if (axesChanged) _straightAxesMap = _buildStraightAxesMap(newState.straightHelixAxes)
 
     // Re-apply lerp at the current t so the view stays in sync.
-    // Skip when cadnano is active — cadnano_view manages bead positions there;
-    // a compensating reapplyPositions() subscriber in main.js handles this case.
-    if (!store.getState().cadnanoActive) _applyLerp(_currentT)
+    _applyLerp(_currentT)
   })
 
   // When currentGeometry changes (undo/redo, topology mutation, new deformation):
@@ -272,12 +267,6 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
       // Build maps directly to avoid a redundant round-trip.
       _buildStraightNucleotideMaps(newState.currentGeometry)
       _straightAxesMap = _buildStraightAxesMap(newState.currentHelixAxes)
-    } else if (store.getState().cadnanoActive) {
-      // Cadnano is active: the fetch is not needed right now (cadnano positions
-      // override whatever deformView would place).  Defer until cadnano exits.
-      _currentT = _active ? 1 : 0
-      _straightGeomStale = true
-      return
     } else if (newState.straightGeometry !== prevState.straightGeometry
                && newState.straightGeometry) {
       // The current setState batch ALSO updated straightGeometry (the backend
@@ -305,14 +294,8 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
       await getStraightGeometry()
     }
 
-    // Update _currentT unconditionally so state is correct after cadnano exits.
+    // Keep the interpolation state in sync with the toggle.
     _currentT = _active ? 1 : 0
-
-    if (store.getState().cadnanoActive) {
-      // cadnanoActive became true while getStraightGeometry() was in-flight
-      // (extremely unlikely, but guard anyway).
-      return
-    }
 
     _applyLerp(_currentT)
     // If the unfold view is active, _applyLerp above will have reset helix positions
@@ -340,9 +323,9 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
   // Fires after delete-feature-log-entry, undo/redo, or any other path that
   // removes the last deformation/transform.
   //
-  // Skipped while cadnano or unfold is active — both modes require deform
-  // OFF as a precondition and own their own bead positions. activate() while
-  // they're active would fight for control of the lerp.
+  // Skipped while unfold is active — it requires deform
+  // OFF as a precondition and owns bead positions. activate() while
+  // it is active would fight for control of the lerp.
   function _hasEffectiveTransform(design) {
     return !!(design?.cluster_transforms?.some(ct => {
       const [x, y, z, w] = ct.rotation
@@ -354,7 +337,7 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
   subscribe(async (newState, prevState) => {
     if (newState.currentDesign === prevState.currentDesign) return
     if (_active) return  // already on — nothing to do
-    if (newState.cadnanoActive || newState.unfoldActive) return
+    if (newState.unfoldActive) return
     const prevHadDef = (prevState.currentDesign?.deformations?.length ?? 0) > 0
     const prevHadXf  = _hasEffectiveTransform(prevState.currentDesign)
     const nowHasDef  = (newState.currentDesign?.deformations?.length ?? 0) > 0
@@ -364,16 +347,6 @@ export function initDeformView(designRenderer, getBluntEnds, _getCrossoverMarker
     // mutations while deform-off is the user's intentional state.
     if ((prevHadDef || prevHadXf) && !nowHasDef && !nowHasXf) {
       await activate()
-    }
-  })
-
-  // When cadnano exits, fetch the straight geometry that was deferred during the session.
-  // The fetch completes → straightGeometry subscriber above fires → _applyLerp(_currentT).
-  subscribe(async (newState, prevState) => {
-    if (newState.cadnanoActive === prevState.cadnanoActive) return
-    if (!newState.cadnanoActive && _straightGeomStale) {
-      _straightGeomStale = false
-      await getStraightGeometry()
     }
   })
 
