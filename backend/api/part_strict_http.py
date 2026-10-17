@@ -206,7 +206,7 @@ class StrictPartDispatch:
         if path.startswith(geometry.PREFIX + '/'):
             try:
                 geometry_context = geometry.capture_context(doc, selected.generation,
-                    recovering=path == geometry.PREFIX + '/recovery/jobs')
+                    recovering=path in {geometry.PREFIX + '/recovery/jobs', geometry.PREFIX + '/empty'})
             except HTTPException as error:
                 await JSONResponse({'detail': error.detail}, status_code=error.status_code)(scope, receive, send)
                 return

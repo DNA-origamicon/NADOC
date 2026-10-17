@@ -294,6 +294,14 @@ def prepare_empty_creation(doc_id, session, *, name, lattice_type):
 
 
 def admit_empty_creation(doc_id, session):
+    return _admit_empty_creation(doc_id, session, geometry=False)
+
+
+def admit_geometry_empty_creation(doc_id, session):
+    return _admit_empty_creation(doc_id, session, geometry=True)
+
+
+def _admit_empty_creation(doc_id, session, *, geometry):
     """Lock-owned reservation for host-built immutable empty content only."""
     from backend.api.part_immutable_storage import require_empty_session
 
@@ -301,8 +309,11 @@ def admit_empty_creation(doc_id, session):
     current = policy.resolve(doc_id)
     if not current.strict:
         _refusal("Immutable empty admission requires strict host policy", code="immutable_publication_scope")
+    if geometry:
+        from backend.api.part_immutable_geometry_publication import require_policy
+        require_policy(doc_id=doc_id)
     context = AdmissionContext(doc_id, session.identity, lambda: None, session.revision,
-        current.generation, "create_empty", "", "empty_root_v1")
+        current.generation, "create_empty", "", "geometry_empty_root_v1" if geometry else "empty_root_v1")
     return _register(_admissions, EvaluationAdmission(), context)
 
 
@@ -357,15 +368,21 @@ def issue_recovery_permit(admission, candidate, *, qualification, expires, cance
 
 def prepare_admitted_empty(admission, *, name, lattice_type):
     """Build/seal outside state lock; this API accepts no authored model/bytes."""
-    from backend.api.part_immutable_revision import prepare_revision
+    from backend.api.part_immutable_revision import prepare_revision, prepare_geometry_revision
     from backend.core.part_history_contract import create_empty_part
 
     context = admission_context(admission)
-    if context is None or context.operation != "create_empty" or context.scope_tag != "empty_root_v1":
+    if context is None or context.operation != "create_empty" or context.scope_tag not in {"empty_root_v1", "geometry_empty_root_v1"}:
         _refusal("Empty preparation needs its original private creation admission")
     if type(name) is not str or not name.strip() or len(name) > 1024 or lattice_type not in {"HONEYCOMB", "SQUARE"}:
         raise ValueError("Empty part creation requires a bounded name and supported lattice")
-    candidate = prepare_revision(create_empty_part(name, lattice_type))
+    if context.scope_tag == "geometry_empty_root_v1":
+        from backend.api.part_immutable_geometry_publication import require_policy
+        require_policy(context)
+        prepare = prepare_geometry_revision
+    else:
+        prepare = prepare_revision
+    candidate = prepare(create_empty_part(name, lattice_type))
     permit = _register(_permits, PublicationPermit(), _PermitContext(context, ref(candidate),
         None, None, "explicit_empty_root", monotonic() + MAX_LIFETIME, None))
     return candidate, permit
@@ -431,6 +448,12 @@ def check_publication(permit, *, doc_id, session, candidate):
                 or metadata.authoring_sha256 != context.authoring_sha256
                 or metadata.recipe_sha256 != context.recipe_sha256):
             _refusal("Recovery lost its checked candidate binding", code="immutable_publication_scope")
+    elif context.admission.scope_tag == "geometry_empty_root_v1":
+        from backend.api.part_immutable_geometry_publication import source_metadata
+        source_metadata(candidate)
+        require_empty_session(session)
+        if context.evidence_class != "explicit_empty_root" or context.admission.operation != "create_empty":
+            _refusal("Geometry creation requires its original empty-root authority")
     elif context.admission.scope_tag == "empty_root_v1":
         if is_immutable(candidate):
             require_sealed(candidate)
@@ -447,7 +470,7 @@ def check_liveness(context):
     if context.admission.scope_tag == "geometry_recovery_v1":
         from backend.api.part_immutable_recovery_scope import require_scope
         require_scope(context.admission)
-    elif context.admission.scope_tag == "immutable_extrusion_edit_v1":
+    elif context.admission.scope_tag in {"immutable_extrusion_edit_v1", "geometry_empty_root_v1"}:
         from backend.api.part_immutable_geometry_publication import require_policy
         require_policy(context.admission)
     elif context.admission.scope_tag == "extensions_v1":

@@ -16,7 +16,7 @@ from backend.api.part_async_work import thread_call
 from backend.api.part_immutable_recovery_inputs import RestoreRequest
 from backend.api.part_immutable_persistence import PersistenceCapture, StrictPersistence
 from backend.api.part_immutable_storage import require_empty_session
-from backend.api.part_strict_reads import require_context
+from backend.api.part_strict_reads import require_context, EmptyPartRequest
 from backend.core.part_command_errors import CommandContractError
 
 PREFIX = '/api/design/geometry-history'
@@ -85,6 +85,17 @@ class EditRequest(SourceRequest):
     params: dict
 
 
+def create(body: EmptyPartRequest, request: Request):
+    from backend.api.part_immutable_creation import create_durable_geometry_empty
+    context = _context(request)
+    candidate, revision = create_durable_geometry_empty(body.name, body.lattice_type,
+        expected_policy_generation=context.generation, expected_empty_session=context.session)
+    metadata = publication.source_metadata(candidate)
+    return {'status': 'created', 'doc_id': context.doc, 'design_id': metadata.design_id,
+            'revision': revision, 'name': metadata.name, 'lattice_type': metadata.lattice_type,
+            'recipe_root': {'kind': 'empty', 'version': 1}}
+
+
 def restore(body: RestoreRequest, request: Request):
     from backend.api.part_immutable_recovery import start_geometry
     context = _context(request)
@@ -143,6 +154,7 @@ def save(body: SourceRequest, request: Request):
 def definitions():
     from backend.core.part_operation_input import MAX_OPERATION_BYTES
     return (
+        (PREFIX + '/empty', 'POST', create, 201, 8192),
         (PREFIX + '/recovery/jobs', 'POST', restore, 202, 8192),
         (PREFIX + '/features/{index}/edit', 'POST', edit, 200, MAX_OPERATION_BYTES),
         (PREFIX + '/history/{action}', 'POST', history, 200, 8192),
