@@ -891,3 +891,101 @@ current contained989empty directories,4symlinks,0regular files/bytes. No readabl
 same-user cwd/fd/maps references remained; systemd/PAM435/436 remain uninspectable.
 Removed only those completed artifacts; pytest root and `/dev/shm` are empty.
 User designs, managed jobs, caches and historical evidence remain untouched.
+
+## U39 — organized connection migration evidence (FH-25 checkpoint 12)
+
+Based on3097cb70. This is an executable architecture audit, **not implemented
+organized connection support**. The current restriction remains necessary.
+`tests/test_connection_organization_characterization.py` builds native six-helix
+recipes, both direct types and all three endpoint-length branches, then adds real
+organization conversion and whole-host/domain groups. It separately invokes the
+unchanged native builder on an isolated copy with organization removed to observe
+its effects; no production gate or molecular validation is bypassed.
+
+Observed counterexamples:
+
+1. Direct binding preserves the driven domain's strand/ordinal and length but
+   changes its helix/direction/address; its former dedicated host is removed.
+   Merely retaining the old organization fails structural validation because
+   whole-host selectors dangle. Same-address overlap cannot follow that material.
+2. Native unapply restores the driven domain to its original address/host.
+   Mapping only the final Apply result is insufficient for cross-family
+   replacement: restoration and new construction must be composed in order.
+3. Finite ssDNA/dsDNA and indirect linkers add complement domains on existing
+   overhang hosts. They are tagged with `binds_overhang_id`, not generic extension
+   metadata. Reusing the existing Sweep lineage adapter fails for this new
+   directional material even when no old material moved.
+4. `PartGroup` gives nonempty domain selectors precedence over helix selectors.
+   A naive union of retained whole hosts with transported domain refs would
+   silently narrow the whole-host portion. Filtering deleted helix IDs would
+   silently lose a user's group. This selection conversion must be explicit and
+   tested; it is not permission to drop whole-host support from the exit.
+5. The ordinary `record_feature` path is intentionally closed to organized live
+   designs. Pure lineage support alone cannot qualify the live route. Publication
+   must use the existing owned recipe/permit host, with exact source expectations,
+   cancellation/recovery and one undo, rather than widening generic compatibility
+   writes or running complete historical proof on every ordinary click.
+
+Research: Onshape's [tracking queries](https://cad.onshape.com/FsDoc/library.html#startTracking-Context-map)
+explicitly distinguish identity-preserving changes from tracking derived entities,
+including partial dependency and optional split/merge following. Our engineering
+inference is to record a bounded, inspectable material-ancestry relation and
+validate actual current descendants, rather than infer membership by spatial
+proximity or silently reuse stale ordinals.
+
+### Concrete continuation and containment
+
+Use one shared connection lineage adapter across Apply, Connect, replacement and
+Unapply/delete. Do not add a separate algorithm for each type/length branch.
+Capture bounded scalar source group selections and directional material, then
+compose validated native stages: old-owner restoration → sequence normalization
+→ new connection construction → common reconciliation/ligation retry. Saved
+native restoration state belongs to the rebuilt producer prefix and can describe
+that stage's movement; it must never become command-supplied geometry authority.
+New linker material comes from declared output namespaces and endpoint complement
+ownership. Observe actual native addresses; do not recompute molecular placement.
+
+Preserve whole-host entity selection where its identity survives. When a selected
+host is removed but its material survives, define an explicit material-following
+conversion for the entire affected group, accounting for domain precedence and
+other retained hosts. Never silently broaden selection to the full destination
+helix. The candidate must expose the resulting selection and retain names/styles;
+ambiguous/unrepresentable lineage must fail with actionable group references and
+leave the source intact. Test later growth, restoration and downstream named
+Bend/Twist consumers before treating conversion semantics as qualified.
+
+Prefer one versioned, closed organization-lineage context at the shared command
+boundary over further per-family version proliferation. Its exact schema and
+membership conversion require tests before admission; it is **not shipped** by
+this checkpoint. Existing literal contracts, identity rules and saved grouping
+semantics remain unchanged. Keep ordinary grouped mutation gates closed until
+both pure replay and owned publication are qualified.
+
+Remaining work stays in three bounded packages within FH-25's original exit:
+(A) material transport/selection conversion and the complete native family matrix;
+(B) owned ordinary/history/repair publication and controls using that adapter;
+(C) full source profiles, shared-host/ISSUE-126 correctness and desktop/performance
+qualification. No package is a new milestone or permission to park unfinished
+core work. FH-18/FH-23 movement qualification also remains open.
+
+Validation: first15-case diagnostic had12passes and3test errors from using a
+nonexistent `Domain.is_extension` field. Inspection identified the actual native
+`binds_overhang_id` tag; corrected assertions preserve the original new-material
+requirement. Final characterization plus existing group/extrusion lineage:
+**117passed,4.36s** (15new cases). Changed-file Ruff and diff whitespace checks
+pass. No production behavior changed and no backend/frontend broad suite, app,
+solver, geometry or latency qualification is claimed. `main.js` delta0.
+
+Counts:21/38complete,17remaining(8core,9parked);+0completed,+0total;
+39engineering checkpoints since B1. **FH-25 growth remains flagged at12**.
+The evidence rules out two unsafe reuse shortcuts and identifies the owned-host
+work; it does not close a milestone or justify a smaller completion criterion.
+
+U39 cleanup/limits: Archive remains absent; NOT VERIFIED IN APP. Current memory
+head stays200lines; memory lint retains6baseline errors/59warnings. Completed
+pytest roots0/1/current contained134empty directories,3symlinks and0regular files/
+bytes. No readable same-user cwd/fd/maps references remained; systemd/PAM435/436
+remain uninspectable. Removed only those completed artifacts; pytest root and
+`/dev/shm` are empty. No user designs, jobs, caches or historical evidence changed.
+No production backend behavior changed, so this audit did not rerun the broad
+selector or frontend suite; existing broad backend/app qualification debt remains.
