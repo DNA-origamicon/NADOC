@@ -58,6 +58,8 @@ def immutable_pair(source, candidate):
     if not is_immutable(source) and not is_immutable(candidate):
         return False
     before, after = require_sealed(source), require_sealed(candidate)
+    if before.scope_tag != after.scope_tag:
+        _refuse("Immutable replacement must preserve the admitted storage scope")
     if before.design_id != after.design_id:
         _refuse("Immutable replacement must preserve the captured part identity")
     return True

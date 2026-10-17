@@ -14,6 +14,7 @@ from weakref import ref
 from backend.api.part_batch_publication_scope import MAX_PUBLIC_HISTORY_ROWS, admit_batch_source
 from backend.api.part_evaluation_worker import MAX_CANDIDATE_BYTES
 from backend.api.part_immutable_preservation import PRESERVATION_VERSION, preservation_digest
+from backend.api.part_immutable_geometry_scope import SCOPE as _GEOMETRY_SCOPE
 from backend.api.part_recovery_budget import retained_recovery_bytes
 from backend.core.models import Design, Helix
 from backend.core.part_command_errors import CommandContractError
@@ -83,7 +84,7 @@ def is_prepared_revision(value):
         return (type(seal) is _ScopeSeal and seal.token is _TOKEN and seal.owner() is value
             and type(value.payload) is bytes and seal.payload is value.payload
             and type(metadata) is RevisionMetadata and seal.metadata is metadata
-            and metadata.storage_version == 1 and metadata.scope_tag == _SCOPE
+            and metadata.storage_version == 1 and metadata.scope_tag in {_SCOPE, _GEOMETRY_SCOPE}
             and type(metadata.annotations_enabled) is bool
             and type(metadata.preservation_version) is int
             and metadata.preservation_version == PRESERVATION_VERSION
@@ -162,6 +163,16 @@ def _decoded_exact(payload, checkpoint):
 
 
 def prepare_revision(candidate, *, checkpoint=lambda: None):
+    """Prepare the existing registered-batch scope; never infer a broader scope."""
+    return _prepare_revision(candidate, checkpoint=checkpoint, scope_tag=_SCOPE)
+
+
+def prepare_geometry_revision(candidate, *, checkpoint=lambda: None):
+    """Private extrusion bytes only; existing batch/recovery hosts reject this scope."""
+    return _prepare_revision(candidate, checkpoint=checkpoint, scope_tag=_GEOMETRY_SCOPE)
+
+
+def _prepare_revision(candidate, *, checkpoint, scope_tag):
     """Seal a private host candidate's storage scope, never its reproducibility.
 
     No mutable alias may be shared with an active writer during this function.
@@ -174,7 +185,13 @@ def prepare_revision(candidate, *, checkpoint=lambda: None):
     _model_schema(candidate)
     _scalar_metadata(candidate)
     preservation_digest(candidate)
-    admit_batch_source(candidate)
+    if scope_tag == _SCOPE:
+        admit_batch_source(candidate)
+    elif scope_tag == _GEOMETRY_SCOPE:
+        from backend.api.part_immutable_geometry_scope import admit_source
+        admit_source(candidate)
+    else:
+        _reject("Unknown private revision scope")
     admit(candidate)  # Existing ordinary authoring node/byte bounds, unchanged.
     _check_structure(candidate, checkpoint)
     # Reuse the batch's existing aggregate authored work contract, with no new
@@ -202,6 +219,7 @@ def prepare_revision(candidate, *, checkpoint=lambda: None):
         recovery_bytes=retained_recovery_bytes(decoded.feature_log, max_rows=MAX_PUBLIC_HISTORY_ROWS),
         annotations_enabled=decoded.annotations_enabled, preservation_version=PRESERVATION_VERSION,
         preserved_document_sha256=preservation_digest(decoded),
+        scope_tag=scope_tag,
     )
     checkpoint()
     revision = object.__new__(StrictPartRevision)

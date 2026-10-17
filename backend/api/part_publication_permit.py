@@ -266,7 +266,8 @@ def issue_batch_permit(admission, candidate, *, request_sha256, authoring_sha256
 
     if immutable_pair(source, candidate):
         meta = require_sealed(candidate)
-        if (meta.authoring_sha256 != authoring_sha256 or meta.recipe_sha256 != recipe_sha256
+        if (meta.scope_tag != "registered_batch_v1"
+                or meta.authoring_sha256 != authoring_sha256 or meta.recipe_sha256 != recipe_sha256
                 or not policy.resolve(context.doc_id).strict):
             _refusal("Immutable candidate does not match its checked transport or strict policy",
                      code="immutable_publication_scope")
@@ -395,7 +396,8 @@ def check_publication(permit, *, doc_id, session, candidate):
         try:
             if immutable_pair(session.design, candidate):
                 meta = require_sealed(candidate)
-                if (not policy.resolve(doc_id).strict or meta.authoring_sha256 != context.authoring_sha256
+                if (meta.scope_tag != "registered_batch_v1" or not policy.resolve(doc_id).strict
+                        or meta.authoring_sha256 != context.authoring_sha256
                         or meta.recipe_sha256 != context.recipe_sha256):
                     _refusal("Immutable publication lost its checked transport binding", code="immutable_publication_scope")
             else:

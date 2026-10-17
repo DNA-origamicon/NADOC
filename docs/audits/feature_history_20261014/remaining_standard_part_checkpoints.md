@@ -14,8 +14,8 @@ agreed; do not invent historical estimate deltas. This is a milestone estimate,
 not a count of messages/commits or a percentage of time or user-ready features.
 Core estimates have moderate confidence; parked work has lower confidence.
 
-Keep delivery and effort visible separately: **44 engineering checkpoints have
-been delivered since B1 (U1–U44), closing four additional milestones**. Thirteen of
+Keep delivery and effort visible separately: **45 engineering checkpoints have
+been delivered since B1 (U1–U45), closing four additional milestones**. Thirteen of
 those checkpoints were spent on still-open FH-18. The 38 is an estimate of
 deliverable milestones, not a promise of 38 commits or assistant responses;
 the thirteen-checkpoint effort must not disappear behind the unchanged denominator.
@@ -68,7 +68,7 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 | FH-25 | In progress · 16 checkpoints; task growth flagged | Ordinary DNA connection completion: explicit supported core matrix including required combined/direct/indirect paths, recorded and qualified. [Fixed matrix and implementation order](ordinary_connection_completion_plan.md); finite/indirect Apply and compound Connect have versioned native recipes, exact zero-bridge replacement, guarded ordinary HTTP/recording, input editing and cold replay. Direct/finite/indirect Apply+Connect and cross-family restoration have private recipes; branch-stable creator selection is implemented privately; applied metadata CRUD is recorded privately. Atomic Unapply/delete is implemented privately (ISSUE-142). Explicit organized material lineage, owned HTTP/history publication and prefix-derived endpoint/version repair are implemented privately; exact-definition legacy owner migration is implemented privately; complete controls/full profiles, ISSUE-126/143 corrections and qualification remain open. |
 | FH-26 | Remaining | Core dependency repair: earliest failure/blocked descendants, reviewed input/reference replacement or explicit cascade, candidate review, Apply/undo/reload. |
 | FH-27 | In progress · 1 checkpoint | Integrated desktop geometry acceptance: representative full workflows, measured latency/memory and broad regression exits; relevant app debt and proven-unused legacy paths closed. Test reruns alone do not close this. |
-| FH-28 | Remaining | Qualify existing immutable host lifecycle: durable creation/recovery/publication on actual paths, cancellation and retained-state limits accepted. |
+| FH-28 | In progress · 1 checkpoint | Qualify existing immutable host lifecycle: durable creation/recovery/publication on actual paths, cancellation and retained-state limits accepted. |
 | FH-29 | Remaining | Core registered automation release: complete geometry catalog under trusted policy, editable UI/script equivalence, bypass/stale/tamper closure and qualified public gates. |
 
 ### Parked milestones still included in the estimate
@@ -180,6 +180,7 @@ bound their matrices before implementation rather than expanding them indefinite
 | U42 · 2026-10-17 | FH-25 checkpoint 15: connection endpoint/version repair candidate catalog, full suffix rebuild and owned repair publication | None; compound creator migration, native defects and qualification remain open | 21 | 38 | 8 | 9 | +0 completed, +0 total; **task growth flagged at 15 checkpoints**. Existing repair UI consumes the reviewed descriptors; no arbitrary reference or schema promotion. |
 | U43 · 2026-10-17 | FH-25 checkpoint 16: explicit exact-definition owner migration, repair-panel proposal and native repair publication | None; native defects, complete controls/profiles and qualification remain open | 21 | 38 | 8 | 9 | +0 completed, +0 total; **task growth flagged at 16 checkpoints**. Literal contracts remain unchanged unless the reviewed migration is requested. |
 | U44 · 2026-10-17 | FH-27 checkpoint 1: reusable native capture diagnostic and immutable-host ownership audit; [evidence](ordinary_capture_responsiveness.md) | None; 79/80 captures succeed, GC-linked refusal reproduced; production fix and app acceptance remain | 21 | 38 | 8 | 9 | +0 completed, +0 total; measured diagnostic checkpoint, no new scope or rollout. |
+| U45 · 2026-10-17 | FH-28 checkpoint 1: exact private extrusion storage scope, shared envelope and explicit old-host refusal; [evidence](immutable_geometry_scope.md) | None; geometry worker/editor/publication and complete durable lifecycle remain | 21 | 38 | 8 | 9 | +0 completed, +0 total; prerequisite exposed by ownership audit, not new scope or a performance fix. |
 
 ### U35 inverse replacement and branch-reference audit
 

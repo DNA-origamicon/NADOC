@@ -19,7 +19,8 @@ from backend.core.part_command_errors import CommandContractError
 def check_request(source, request, revision, configuration):
     """Constant-size source checks before any full private materialization."""
     metadata = require_sealed(source)
-    if not configuration.strict or request.operation not in {"batch", "verify"}:
+    if (metadata.scope_tag != "registered_batch_v1" or not configuration.strict
+            or request.operation not in {"batch", "verify"}):
         raise HTTPException(409, detail={"code": "immutable_publication_scope",
             "detail": "Immutable evaluation requires the admitted strict host operation"})
     if request.expected_revision is not None and request.expected_revision != revision:

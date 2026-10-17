@@ -44,7 +44,12 @@ def _native_row(row):
 
 
 def admit_batch_source(design, commands=()):
-    """Caller owns the source lock; fixed lengths precede bounded traversal.
+    """Keep the registered batch catalog fixed while sharing envelope checks."""
+    return _admit_source(design, commands, authoring_fields=_AUTHORING_FIELDS, row_check=_native_row)
+
+
+def _admit_source(design, commands, *, authoring_fields, row_check):
+    """Caller owns private input or its source lock; lengths precede traversal.
 
     Command parameters and current authoring are admitted by ordinary capture
     and validated by the existing worker. A matching envelope is not proof.
@@ -61,7 +66,7 @@ def admit_batch_source(design, commands=()):
         _reject("Batch publication initially excludes imported source tables and pending repair proposals")
     baseline = Design()
     for name, role in FIELD_ROLES.items():
-        if ((role == "authoring" and name not in _AUTHORING_FIELDS)
+        if ((role == "authoring" and name not in authoring_fields)
                 or role == "physical" or (role == "presentation" and name != "annotations_enabled")):
             if getattr(design, name) != getattr(baseline, name):
                 _reject(f"Batch publication initially requires default {name}")
@@ -73,9 +78,9 @@ def admit_batch_source(design, commands=()):
             for child in entry.children:
                 if type(child) is not MinorMutationLogEntry:
                     _reject("Batch publication requires ordinary minor routing children")
-                _native_row(child)
+                row_check(child)
         else:
-            _native_row(entry)
+            row_check(entry)
     admit_prospective_rows(rows, commands)
 
 

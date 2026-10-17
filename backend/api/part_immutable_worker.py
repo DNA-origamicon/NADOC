@@ -40,6 +40,8 @@ class ImmutableInput:
 
 def reserve_input(source):
     metadata = require_sealed(source)
+    if metadata.scope_tag != "registered_batch_v1":
+        raise ValueError("This worker admits only the registered batch storage scope")
     value = object.__new__(ImmutableInput)
     for key, item in (("source", source), ("id", metadata.design_id), ("_token", _TOKEN)):
         object.__setattr__(value, key, item)
