@@ -78,10 +78,18 @@ class SourceRequest(BaseModel):
     expected_revision: StrictInt = Field(ge=0)
 
 
+ExtrusionKind = Literal['bundle-create', 'extrude-segment', 'extrude-continuation',
+    'extrude-deformed-continuation', 'extrude-frame', 'circle-segment', 'overhang-extrude']
+
+
 class EditRequest(SourceRequest):
     expected_feature_id: StrictStr = Field(min_length=1, max_length=512)
-    expected_kind: Literal['bundle-create', 'extrude-segment', 'extrude-continuation',
-        'extrude-deformed-continuation', 'extrude-frame', 'circle-segment', 'overhang-extrude']
+    expected_kind: ExtrusionKind
+    params: dict
+
+
+class AppendRequest(SourceRequest):
+    kind: ExtrusionKind
     params: dict
 
 
@@ -104,15 +112,23 @@ def restore(body: RestoreRequest, request: Request):
 
 
 async def edit(index: int, body: EditRequest, request: Request):
+    return await _change(request, host.edit, index, body.params, expected_kind=body.expected_kind,
+        expected_feature_id=body.expected_feature_id, expected_design_id=body.expected_design_id,
+        expected_revision=body.expected_revision)
+
+
+async def append(body: AppendRequest, request: Request):
+    return await _change(request, host.append, body.kind, body.params,
+        expected_design_id=body.expected_design_id, expected_revision=body.expected_revision)
+
+
+async def _change(request, function, *args, **kwargs):
     context = _context(request)
     cancelled = Event()
-    # Reuse the existing bounded disconnect monitor; it publishes no state.
     from backend.api.part_recipe_file_transport import _watch_disconnect
     watcher = asyncio.create_task(_watch_disconnect(request, cancelled))
     try:
-        work = partial(host.edit, index, body.params, expected_kind=body.expected_kind,
-            expected_feature_id=body.expected_feature_id, expected_design_id=body.expected_design_id,
-            expected_revision=body.expected_revision, cancelled=cancelled,
+        work = partial(function, *args, **kwargs, cancelled=cancelled,
             expected_source=context.source, expected_session_identity=context.session_identity)
         return await thread_call(work, cancelled=cancelled)
     finally:
@@ -156,6 +172,7 @@ def definitions():
     return (
         (PREFIX + '/empty', 'POST', create, 201, 8192),
         (PREFIX + '/recovery/jobs', 'POST', restore, 202, 8192),
+        (PREFIX + '/features', 'POST', append, 200, MAX_OPERATION_BYTES),
         (PREFIX + '/features/{index}/edit', 'POST', edit, 200, MAX_OPERATION_BYTES),
         (PREFIX + '/history/{action}', 'POST', history, 200, 8192),
         (PREFIX + '/save', 'POST', save, 200, 8192),

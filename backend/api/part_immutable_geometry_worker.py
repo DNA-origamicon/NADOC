@@ -6,7 +6,7 @@ from time import monotonic
 from backend.api import part_immutable_worker as transport
 from backend.api.part_evaluation import EvaluationRequest
 from backend.api.part_evaluation_worker import MAX_CANDIDATE_BYTES, evaluate_native
-from backend.api.part_extrusion_edit_inputs import KINDS, normalize
+from backend.api.part_extrusion_edit_inputs import KINDS, normalize, normalize_creation
 from backend.api.part_immutable_geometry_scope import SCOPE, admit_source
 from backend.api.part_immutable_revision import _decoded_exact
 from backend.api.part_verification_worker import failure
@@ -38,7 +38,7 @@ def _project(source_bytes, operation_bytes):
         raise ValueError('Invalid geometry worker operation envelope')
     header = operation['header']
     request = EvaluationRequest.model_validate(operation['request'])
-    if (request.operation != 'edit' or request.sub_index is not None
+    if (request.operation not in {'edit', 'append'} or request.sub_index is not None
             or type(request.expected_revision) is not int
             or type(header['source_revision']) is not int
             or request.expected_revision != header['source_revision']
@@ -49,16 +49,23 @@ def _project(source_bytes, operation_bytes):
                    ('identity', 'timestamp', 'source_design_id', 'expected_feature_id'))):
         raise ValueError('Invalid geometry worker captured context')
     private = _decoded_exact(source_bytes, lambda: None)
-    if private.id != header['source_design_id'] or request.index >= len(private.feature_log):
+    if private.id != header['source_design_id']:
         raise CommandContractError('The selected extrusion source changed', code='source_changed')
-    entry = private.feature_log[request.index]
-    if (type(entry) is not SnapshotLogEntry or entry.id != header['expected_feature_id']
-            or entry.op_kind != header['expected_kind']):
-        raise CommandContractError('The selected extrusion feature changed', code='source_changed')
-    # The caller supplies an edit patch. Complete parameters and guarded output
-    # identities come only from this exact source, never parent materialization.
-    values = normalize(entry.op_kind, entry.params, request.params)
-    operation['request'] = request.model_copy(update={'params': values}).model_dump(mode='json')
+    if request.operation == 'append':
+        if request.kind != header['expected_kind'] or header['expected_feature_id'] != header['identity']:
+            raise ValueError('Invalid extrusion append identity')
+        # Validate before native evaluation, but keep public inputs: the append
+        # evaluator derives receipts from the independently regenerated prefix.
+        normalize_creation(request.kind, request.params, identity=header['identity'])
+    else:
+        if request.index >= len(private.feature_log):
+            raise CommandContractError('The selected extrusion source changed', code='source_changed')
+        entry = private.feature_log[request.index]
+        if (type(entry) is not SnapshotLogEntry or entry.id != header['expected_feature_id']
+                or entry.op_kind != header['expected_kind']):
+            raise CommandContractError('The selected extrusion feature changed', code='source_changed')
+        values = normalize(entry.op_kind, entry.params, request.params)
+        operation['request'] = request.model_copy(update={'params': values}).model_dump(mode='json')
     deadline = monotonic() + .025
     admit_source(private)
     captured = visit_inputs(private, max_nodes=30_000, max_bytes=2_000_000,

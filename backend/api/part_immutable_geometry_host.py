@@ -65,6 +65,20 @@ def _current(context, session, deadline, cancelled):
 
 def edit(index, params, *, expected_kind, expected_feature_id, expected_design_id,
          expected_revision, cancelled=None, expected_source=None, expected_session_identity=None):
+    return _change('edit', index, params, expected_kind=expected_kind, expected_feature_id=expected_feature_id,
+        expected_design_id=expected_design_id, expected_revision=expected_revision, cancelled=cancelled,
+        expected_source=expected_source, expected_session_identity=expected_session_identity)
+
+
+def append(kind, params, *, expected_design_id, expected_revision, cancelled=None,
+           expected_source=None, expected_session_identity=None):
+    return _change('append', None, params, expected_kind=kind, expected_feature_id=str(uuid4()),
+        expected_design_id=expected_design_id, expected_revision=expected_revision, cancelled=cancelled,
+        expected_source=expected_source, expected_session_identity=expected_session_identity)
+
+
+def _change(action, index, params, *, expected_kind, expected_feature_id, expected_design_id,
+            expected_revision, cancelled, expected_source, expected_session_identity):
     """Regenerate off-lock, then atomically replace one immutable revision."""
     if (type(expected_kind) is not str or expected_kind not in KINDS
             or type(expected_feature_id) is not str or not 1 <= len(expected_feature_id) <= 512
@@ -76,12 +90,13 @@ def edit(index, params, *, expected_kind, expected_feature_id, expected_design_i
     deadline = monotonic() + TIME_BUDGET
     cancelled = cancelled if cancelled is not None else Event()
     try:
-        request = EvaluationRequest(operation='edit', index=index, params=params,
+        request = EvaluationRequest(operation=action, index=index, params=params,
+                                    kind=expected_kind if action == 'append' else None,
                                     expected_revision=expected_revision)
         # Own JSON-valued input before admission. No caller alias survives.
         request = EvaluationRequest.model_validate_json(request.model_dump_json())
         operation = {'request': request.model_dump(mode='json'), 'header': {
-            'identity': str(uuid4()), 'timestamp': datetime.now(timezone.utc).isoformat(),
+            'identity': expected_feature_id if action == 'append' else str(uuid4()), 'timestamp': datetime.now(timezone.utc).isoformat(),
             'source_revision': expected_revision, 'source_design_id': expected_design_id,
             'expected_feature_id': expected_feature_id, 'expected_kind': expected_kind,
             'extrusion_recording_version': 1}}
@@ -91,12 +106,13 @@ def edit(index, params, *, expected_kind, expected_feature_id, expected_design_i
             doc, session, source_metadata = _source(expected_design_id, expected_revision,
                 expected_source=expected_source, expected_session_identity=expected_session_identity)
             source = session.design
-            admission = publication.admit(doc, session, request_sha256=request_hash)
+            admission = publication.admit(doc, session, request_sha256=request_hash,
+                operation="extrusion_append" if action == "append" else "extrusion_edit")
             context = permits.admission_context(admission)
             ticket = worker.reserve_input(source)
             _current(context, session, deadline, cancelled)
             job = EvaluationJob(doc, ref(source), expected_revision, cancelled=cancelled,
-                admitted_operation='extrusion_edit', session_identity=session.identity,
+                admitted_operation=context.operation, session_identity=session.identity,
                 admission=admission, request_sha256=request_hash)
         slot_owned = False
         result = supervise(job, ticket, lambda captured: worker.GeometryEvaluationWorker(captured, operation),

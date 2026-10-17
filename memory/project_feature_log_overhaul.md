@@ -22,10 +22,10 @@ decrement completed if an exit reopens. Flag three major checkpoints spent on
 any still-open milestone (cumulative even across alternating work), or total
 growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
-Effort is separate: U1–U50 are **50 engineering checkpoints** since B1, closing
+Effort is separate: U1–U51 are **51 engineering checkpoints** since B1, closing
 **four milestones** (FH-19/FH-21/FH-22/FH-24). FH-18 remains open after13 checkpoints;
 FH-23 after9. Both are **task-growth flagged**. Current counts: **21/38 complete,
-17 remaining (8 core,9 parked); U50 +0 completed,+0 total**. Fixed exits remain.
+17 remaining (8 core,9 parked); U51 +0 completed,+0 total**. Fixed exits remain.
 U27 implements the complete [22-kind Fine Routing editor](../docs/audits/feature_history_20261014/fine_routing_history_editor_plan.md):
 pre-child native references, closed inputs/identities, stable batch add/remove/
 reorder, original-source proof and full sibling/downstream regeneration.
@@ -44,7 +44,7 @@ FH-25 checkpoint16: exact-definition native owner migration joins repair proposa
 ISSUE-126/143, complete controls and GC tails remain. **Task growth flagged.**
 [Matrix/evidence](../docs/audits/feature_history_20261014/ordinary_connection_completion_plan.md): next complete controls, molecular review/defects, profiles and qualification;
 U44 FH-27 diagnostic: 79/80 captures pass; 192-helix GC refusal64ms. See [ownership audit](../docs/audits/feature_history_20261014/ordinary_capture_responsiveness.md). Fix/app qualification open.
-U50 FH-28 checkpoint6, growth flagged: [durable empty creation](../docs/audits/feature_history_20261014/immutable_geometry_creation.md) joins gated HTTP recovery/edit/save; geometry append, full editor wiring, qualification and FH-18/FH-23 remain open.
+U51 FH-28 checkpoint7, growth flagged: [seven-family extrusion append](../docs/audits/feature_history_20261014/immutable_geometry_append.md), real create/append/edit/save/recover; remaining core tools, full editor wiring, qualification and FH-18/FH-23 stay open.
 U26 rejects ordinary owner insertion/unconditional final passes for chronological
 movement. Later tails already use moved construction frames. ISSUE-135 Full/
 atomistic tail disagreement remains open, without molecularly approved correction.

@@ -20,7 +20,9 @@ class EvaluationRequest(BaseModel):
 
     operation: Literal["verify", "append", "edit", "delete", "repair", "selection", "batch"]
     kind: Literal["photoproduct-create", "photoproduct-relax", "duplex-relax", "streptavidin-coating",
-                  "linear-pattern", "circular-pattern", "overhang-bulk"] | None = None
+                  "linear-pattern", "circular-pattern", "overhang-bulk",
+                  "bundle-create", "extrude-segment", "extrude-continuation",
+                  "extrude-deformed-continuation", "extrude-frame", "circle-segment", "overhang-extrude"] | None = None
     params: dict | None = None
     index: StrictInt | None = Field(default=None, ge=0)
     sub_index: StrictInt | None = Field(default=None, ge=0)
@@ -57,6 +59,9 @@ class EvaluationRequest(BaseModel):
         elif self.operation == "append":
             if self.kind is None or self.params is None or self.index is not None or self.sub_index is not None or self.cascade:
                 raise ValueError("Append needs a supported long-operation kind and authored inputs only")
+            from backend.api.part_extrusion_edit_inputs import KINDS as EXTRUSIONS
+            if self.kind in EXTRUSIONS and self.expected_revision is None:
+                raise ValueError("Extrusion append requires expected_revision")
             if self.kind == "streptavidin-coating":
                 from backend.api.part_coating_append import parse_request
                 if self.expected_revision is None:
@@ -153,6 +158,11 @@ def _evaluate_extrusion(source, operation, *, executor=None, dependency_resolver
                 or header.get("source_design_id") != source.id):
             raise CommandContractError("Extrusion edit lacks its exact captured context",
                                        code="invalid_capture_context")
+        if request.operation == "append":
+            if (request.kind not in KINDS or header.get("expected_kind") != request.kind
+                    or header.get("expected_feature_id") != header.get("identity")):
+                raise CommandContractError("Extrusion append lacks its owned identity", code="invalid_capture_context")
+            return _evaluate(source, operation, executor=executor, dependency_resolver=dependency_resolver)
         if (request.operation != "edit" or request.sub_index is not None
                 or request.index >= len(source.feature_log)):
             raise CommandContractError("Unknown owned extrusion operation",
@@ -230,6 +240,11 @@ def _evaluate(source, operation, *, executor=None, dependency_resolver=None, inp
             if isinstance(candidate, dict):
                 return candidate
             validation = validate_design(candidate)
+            from backend.api.part_extrusion_edit_inputs import KINDS as EXTRUSIONS
+            if request.kind in EXTRUSIONS:
+                proof = assess_part_history(candidate, execute=executor, dependencies=dependency_resolver)
+                if proof["status"] != "verified":
+                    return proof
         else:
             result = prepare_change(
                 source, source, request.index, lambda: None,

@@ -3,6 +3,7 @@
 from backend.api import state
 from backend.api.part_recipe_prefix import ReplayPrefix
 from backend.api.part_native_commands import PATTERN_COMMANDS
+from backend.api.part_extrusion_edit_inputs import KINDS as EXTRUSIONS, normalize_creation, bind_prefix
 from backend.core.models import SnapshotLogEntry
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_history_contract import assess_part_history
@@ -46,6 +47,16 @@ def append_features(source, request, header, executor, dependencies, *, metadata
     Combined coating creation/deletion publishes no intermediate state. Existing
     prefix execution and new rows share one cumulative recovery budget.
     """
+    if request.kind in EXTRUSIONS:
+        if (type(header.get("extrusion_recording_version")) is not int
+                or header["extrusion_recording_version"] != 1
+                or type(header.get("source_revision")) is not int
+                or header["source_revision"] != request.expected_revision
+                or header.get("source_design_id") != source.id
+                or header.get("expected_kind") != request.kind
+                or header.get("expected_feature_id") != header.get("identity")):
+            raise CommandContractError("Extrusion append requires its owned context", code="invalid_capture_context")
+        inputs = normalize_creation(request.kind, request.params, identity=header["identity"])
     if request.kind == COATING_KIND:
         if (type(header.get("source_revision")) is not int or header["source_revision"] < 0
                 or header.get("source_design_id") != source.id):
@@ -101,6 +112,9 @@ def append_features(source, request, header, executor, dependencies, *, metadata
         compiled = compile_steps(current, request.params, prepared, history_seed=header["identity"])
         current = current.copy_with(input_sources=compiled.input_sources)
         definitions = [(step.identity, step.kind, step.label, step.params) for step in compiled.steps]
+    elif request.kind in EXTRUSIONS:
+        params = bind_prefix(request.kind, inputs, current)
+        definitions = [(header["identity"], request.kind, request.kind, params)]
     elif request.kind in PATTERN_COMMANDS:
         from backend.api.pattern_features import pattern_label
 
@@ -116,6 +130,8 @@ def append_features(source, request, header, executor, dependencies, *, metadata
     log = list(prefix.log)
     for identity, kind, label, params in definitions:
         updated = executor(kind, current, params)
+        if request.kind in EXTRUSIONS:
+            updated = updated.copy_with(id=source.id)
         pre, pre_size = state.encode_design_snapshot(current)
         post, post_size = state.encode_design_snapshot(updated)
         prefix.budget.charge(pre, post)
@@ -135,4 +151,7 @@ def append_features(source, request, header, executor, dependencies, *, metadata
 
         admit(current, preserve_entry_types=True)
         require_valid_structure(current)
+    if request.kind in EXTRUSIONS:
+        from backend.core.part_recipe_publication import preserve_document_state
+        current = preserve_document_state(source, current)
     return current

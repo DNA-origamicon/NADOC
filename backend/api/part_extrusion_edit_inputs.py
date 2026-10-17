@@ -206,6 +206,28 @@ def normalize(kind, previous, patch):
     return result
 
 
+def normalize_creation(kind, params, *, identity):
+    """Own public construction inputs; host owns output seeds and receipts."""
+    if type(kind) is not str or kind not in KINDS or type(params) is not dict:
+        _invalid("Choose a native extrusion definition.")
+    _json(params)
+    if params.keys() - EDIT_FIELDS[kind]:
+        _invalid("Creation accepts editable inputs only, not output identities or receipts.")
+    native = dict(params)
+    if kind == "extrude-frame":
+        native.update(expected_design_id="owned-prefix", expected_revision=0)
+    try:
+        values = _schema(kind).model_validate(native).model_dump(mode="json")
+    except ValidationError as error:
+        _invalid(str(error))
+    values = {key: value for key, value in values.items() if key in EDIT_FIELDS[kind]}
+    # Retain original types until strict validation, rather than accepting legacy
+    # request-model coercion (such as True -> 1 or strings -> numbers).
+    values.update(params)
+    values.update(history_seed=identity, _proof_version=1)
+    return normalize(kind, values, {})
+
+
 def _source_reference(prefix, collection, identity, kind, path):
     items = getattr(prefix, collection)
     if type(items) is not list or len(items) > MAX_SOURCE_ITEMS:
