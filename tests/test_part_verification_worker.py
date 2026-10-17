@@ -169,27 +169,28 @@ def test_reaped_process_handle_failure_still_unlinks_buffers(monkeypatch):
         worker.close()
 
 
-def test_supervisor_retries_buffer_unlink_after_child_is_reaped(monkeypatch):
+@pytest.mark.parametrize("failures", [1, 5])
+def test_supervisor_retries_buffer_unlink_after_child_is_reaped(monkeypatch, failures):
     from backend.api.part_verification_jobs import _dispose
 
     worker = workers.VerificationWorker(create_empty_part("Unlink retry", "SQUARE"))
     names = [buffer.name for buffer in worker._buffers]
     unlink = SharedMemory.unlink
-    failed = False
+    failed = 0
 
-    def fail_once(buffer):
+    def fail_unlink(buffer):
         nonlocal failed
-        if buffer.name == names[0] and not failed:
-            failed = True
-            raise OSError("Injected first unlink failure")
+        if buffer.name == names[0] and failed < failures:
+            failed += 1
+            raise OSError("Injected repeated unlink failure")
         return unlink(buffer)
 
-    monkeypatch.setattr(SharedMemory, "unlink", fail_once)
+    monkeypatch.setattr(SharedMemory, "unlink", fail_unlink)
     job = SimpleNamespace(revision=1, result=None, status="running")
     try:
         problem = _dispose(job, worker, "source")
         assert problem["issues"][0]["code"] == "worker_cleanup_error"
-        assert failed and worker._closed
+        assert failed == failures and worker._closed
         _assert_unlinked(names)
     finally:
         worker.close()

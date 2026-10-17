@@ -1,0 +1,255 @@
+{
+  "checkpoint": "U22",
+  "date": "2026-10-16",
+  "base_commit": "f1d53889",
+  "status": "Private worker boundary qualified; live numerical editor integration OPEN; NOT VERIFIED IN APP",
+  "progress": {
+    "completed": 20,
+    "estimated_total": 38,
+    "remaining": 18,
+    "core_remaining": 9,
+    "parked_remaining": 9,
+    "delta_completed": 0,
+    "delta_total": 0,
+    "engineering_checkpoints_since_B1": 22,
+    "closed_since_B1": 3,
+    "FH18_checkpoints": 13,
+    "FH23_checkpoints": 5,
+    "task_growth_flagged": [
+      "FH-18",
+      "FH-23"
+    ]
+  },
+  "delivered": [
+    "Closed private transform Prepare and Apply worker operations; no live lease/HTTP dispatch cutover.",
+    "Prepare reconstructs only prefix; Apply independently proves full original source and regenerates edited feature plus suffix.",
+    "Exact captured-source, original selected definition and request hashes; independent prefix binding and candidate decode parity.",
+    "Existing native thread cap and bounded memory-only transport; only CPD create/relax and duplex-relax numerical kinds admitted.",
+    "Existing occurrence-based serialization admission before capture hash, prefix/candidate output and prefix decode; no new JSON walker.",
+    "Typed numerical prefix reference and engine errors retain producer feature ID; Apply retains HTTP status, feature and parameter paths.",
+    "ISSUE-132: supervisor retains shared worker admission until process and buffers close/unlink; obsolete three-dead-child-retry escape removed."
+  ],
+  "bounds": {
+    "ordinary_prepare_seconds": 1,
+    "ordinary_apply_seconds": 5,
+    "live_lease_seconds": 60,
+    "changed_live_timeouts": false,
+    "worker_input_bytes": 2000000,
+    "private_prepare_result_bytes": 2000000,
+    "private_apply_result_bytes": 16000000,
+    "prefix_serialization_nodes": 30000,
+    "native_sites": 1024,
+    "helices": 16,
+    "operations": 64,
+    "history_commands": 128,
+    "native_test_worker_ceiling_seconds": 180,
+    "ceiling_note": "Existing numerical evaluation safety ceiling, not an adopted interactive deadline or latency guarantee."
+  },
+  "validation": {
+    "distinct_passing_backend_cases": 446,
+    "distinct_files": 18,
+    "runs": [
+      {
+        "scope": "cleanup regression initial harness edit",
+        "passed": 12,
+        "failed": 2,
+        "seconds": 3.27,
+        "note": "One failure was missing counter initialization in the test double; corrected before valid red reproduction."
+      },
+      {
+        "scope": "cleanup regression corrected harness",
+        "passed": 13,
+        "failed": 1,
+        "seconds": 3.22,
+        "note": "Reproduced premature return after three failures; test requires eventual successful cleanup after five failed attempts."
+      },
+      {
+        "scope": "shared preview/worker initial regression",
+        "passed": 128,
+        "seconds": 6.47
+      },
+      {
+        "scope": "initial four native numerical histories",
+        "passed": 3,
+        "failed": 1,
+        "seconds": 222.34,
+        "note": "Both numerical round trips passed. One nonnumerical control incorrectly required legacy OverhangBinding for direct Duplex relocation; corrected to actual bound/prior_driven_topology contract."
+      },
+      {
+        "scope": "private worker boundary before expanded-model guard",
+        "passed": 46,
+        "failed": 1,
+        "seconds": 5.87,
+        "note": "Aliased source reached model_dump; regression established need for occurrence-based admission."
+      },
+      {
+        "scope": "post-guard focused subset",
+        "passed": 100,
+        "failed": 1,
+        "deselected": 2,
+        "seconds": 9.2,
+        "note": "Raw alias fixture held only ~1 MB ASCII under shared accounting; changed fixture to >4 MB expanded text, preserving production 2 MB allowance."
+      },
+      {
+        "scope": "18-file focused shared regression",
+        "passed": 442,
+        "deselected": 2,
+        "warnings": 14,
+        "seconds": 20.27
+      },
+      {
+        "scope": "native numerical complete rerun after serialization guard",
+        "passed": 4,
+        "seconds": 200.23,
+        "note": "Two long numerical cases explicitly slow-marked; focused execution authorized and serialized. Repeated because production serialization admission changed."
+      },
+      {
+        "scope": "final diagnostic feature-attribution wrapper and two new native negative controls",
+        "passed": 191,
+        "seconds": 7.23,
+        "note": "Includes 49 private worker cases and ordinary deformation/transform/sweep prefix paths. Two additional distinct cases above the 18-file run."
+      },
+      {
+        "scope": "real numerical path after diagnostic-only wrapper",
+        "passed": 2,
+        "deselected": 2,
+        "seconds": 7.84,
+        "note": "Duplex control and complete native worker round trip. CPD was not redundantly rerun after error-attribution-only change; scientific executor and numerical admission unchanged."
+      }
+    ],
+    "frontend": "No frontend behavior/code change; full frontend suite not rerun. Existing U21 evidence remains historical.",
+    "app": "Not exercised: Archive mount unavailable; no browser or bulk scratch fallback. Gates remain false.",
+    "tests_note": "Repeated/overlapping cases counted once; imported-root fixtures do not substitute for the new empty-root producer chains."
+  },
+  "timings_seconds": {
+    "initial_cpd": {
+      "create_append": 24.716806,
+      "relax_append": 47.646014,
+      "transform_prepare": 46.59025,
+      "selected_evaluations": [
+        0.001282827,
+        0.001068747,
+        0.00087511
+      ],
+      "transform_apply": 46.012512,
+      "edited_suffix_cold_proof": 48.511384
+    },
+    "after_serialization_cpd": {
+      "create_append": 21.941667,
+      "relax_append": 42.49062,
+      "transform_prepare": 42.1858,
+      "selected_evaluations": [
+        0.001269394,
+        0.000955595,
+        0.000844253
+      ],
+      "transform_apply": 42.56304,
+      "edited_suffix_cold_proof": 43.414247
+    },
+    "after_serialization_duplex": {
+      "relax_append": 1.164815,
+      "transform_prepare": 1.193015,
+      "selected_evaluations": [
+        0.00132948,
+        0.00135279,
+        0.00122391
+      ],
+      "transform_apply": 1.237851,
+      "edited_suffix_cold_proof": 1.235035
+    },
+    "after_diagnostic_wrapper_duplex": {
+      "relax_append": 1.249518,
+      "transform_prepare": 1.340454,
+      "selected_evaluations": [
+        0.00183931,
+        0.001770918,
+        0.001522087
+      ],
+      "transform_apply": 1.282084,
+      "edited_suffix_cold_proof": 1.209144
+    },
+    "qualification": "Tiny fixture worker wall times include spawn/native work/result transport. Evaluate times cover selected-only Python operation, not HTTP/geometry projection/render/gesture. No representative latency/heap or scientific qualification."
+  },
+  "retained_open": [
+    "Live asynchronous computing/ready/receipt lifecycle, pending-result retrieval and visible Cancel in existing lease catalog.",
+    "Cancel/expiry/supersession events, exact source/session/policy/sequence checks and one proof-slot ownership transfer through supervisor cleanup.",
+    "Unknown transport outcomes and retained published receipts without automatic recommit.",
+    "Native numerical histories through actual host publication, gestures, undo/redo and complete HTTP/display/lock/memory qualification.",
+    "Original shared FH18/FH23 arbitrary new-group movement, generated consumers and post-conversion extension-upsert lineage; no scope relocation.",
+    "FH24/FH26 terminal history/repair controls; FH27/MV52 desktop/performance. Assemblies/VR remain deferred."
+  ],
+  "research": [
+    {
+      "url": "https://cad.onshape.com/help/Content/Home/dialogs.htm",
+      "supports": "Historical feature-stage preview and separate Final downstream display."
+    },
+    {
+      "url": "https://cad.onshape.com/help/Content/Home/performance_panel.htm",
+      "supports": "Regeneration timings and slow-feature warning over ten seconds, not execution cutoff."
+    },
+    {
+      "url": "https://help.solidworks.com/2026/english/SolidWorks/sldworks/c_Interrupt_Regeneration_of_Parts.htm",
+      "supports": "Interrupt regeneration; general rebuild stops after current feature, supported command cancellation retains pre-OK controls."
+    }
+  ],
+  "scope_decision": "Separate bounded numerical computation, fresh ready lease and scalar published-receipt recovery. Existing 180s numerical ceiling is proposed, not silently installed; ordinary1s/5s unchanged. No new registry or milestone.",
+  "scientific_changes": {
+    "source_manifest_changes": false,
+    "pins_rewritten": false,
+    "constants_or_goldens_changed": false,
+    "native_math_changed": false,
+    "physical_simulations_run": false,
+    "checked_manifest_intersections": {
+      "backend.core.part_cpd_contract": [],
+      "backend.core.part_duplex_relax_contract": [],
+      "backend.core.part_streptavidin_contract": []
+    }
+  },
+  "main_js": {
+    "lines": 7350,
+    "delta": 0
+  },
+  "static_checks": {
+    "changed_python_ruff": "pass (9 files, final)",
+    "git_diff_check": "pass",
+    "memory_head_lines": 200,
+    "repository_ruff": "5 existing F401 findings; no delta",
+    "memory_lint": "6 existing errors / 59 existing warnings; no delta; current head200 lines",
+    "ledger_verified": {
+      "unique_milestones": 38,
+      "done": 20,
+      "parked": 9
+    }
+  },
+  "broad_regression": {
+    "selector_command": "just test-smart --dry-run",
+    "decision": "FAST  (fast suite only)",
+    "executed_suite": false,
+    "deferred_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\nThis is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\nOnly request `just test-session` when a broad/full sweep is actually needed.",
+    "clarification": "That emitted wording is selector-only here; dry-run ran no FAST or FULL suite. Broad FAST additionally deferred until Archive-mounted TMPDIR/basetemp. U20 debt remains."
+  },
+  "cleanup": {
+    "status": "complete; owned empty pytest directories/links removed after reader scan, pytest root verified empty",
+    "pytest_inventory": {
+      "paths": [
+        "/tmp/pytest-of-joshua/pytest-7",
+        "/tmp/pytest-of-joshua/pytest-8",
+        "/tmp/pytest-of-joshua/pytest-9"
+      ],
+      "regular_files": 0,
+      "logical_bytes": 0,
+      "allocated_file_bytes": 0
+    },
+    "workers": "Each native direct worker asserts process close/reap and both SharedMemory names unlinked in finally. Five real unlink failures also recover under supervisor ownership.",
+    "bulk_outputs_created": false,
+    "removed": {
+      "directories": 200,
+      "symlinks": 4,
+      "files": 0,
+      "logical_bytes": 0,
+      "allocated_file_bytes": 0,
+      "active_readers": []
+    },
+    "preserved": "User designs/jobs, active runtimes, shared caches and historical evidence untouched."
+  }
+}

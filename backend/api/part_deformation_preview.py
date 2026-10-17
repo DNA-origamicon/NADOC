@@ -495,7 +495,7 @@ def _prefix_rows(captured, check, *, reserved=0, future_feature=None, future_ope
     return rows, by_id
 
 
-def _replay_prefix(captured, rows, check, *, stop=None):
+def _replay_prefix(captured, rows, check, *, stop=None, runner=None):
     try:
         current = root_design(captured.recipe_root).copy_with(id=captured.id)
     except (ValueError, TypeError) as error:
@@ -503,7 +503,9 @@ def _replay_prefix(captured, rows, check, *, stop=None):
     for identity, kind, params in rows:
         if identity == stop:
             break
-        current = _run(kind, current, params, check).copy_with(
+        updated = (_run(kind, current, params, check) if runner is None
+                   else runner(identity, kind, current, params, check))
+        current = updated.copy_with(
             id=captured.id, recipe_root=captured.recipe_root,
         )
     return current

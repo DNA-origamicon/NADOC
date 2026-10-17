@@ -21,7 +21,6 @@ _jobs = OrderedDict()
 MAX_RESULTS = 8
 TIME_BUDGET = 5.0
 POLL_SECONDS = 0.05
-REAPED_CLEANUP_ATTEMPTS = 3
 
 
 @dataclass
@@ -39,9 +38,8 @@ class Stopped(Exception):
 
 
 def _dispose(job, worker, design_id, *, status_lock=None):
-    """Retry cleanup without allowing another worker to overlap a live child."""
+    """Retain admission until the child AND its shared buffers are released."""
     problem = None
-    reaped_attempts = 0
     status_lock = status_lock or _lock
     while True:
         try:
@@ -52,15 +50,8 @@ def _dispose(job, worker, design_id, *, status_lock=None):
             with status_lock:
                 job.result = {**problem, "source_revision": job.revision, "design_id": design_id}
                 job.status = "stopping"
-            try:
-                if not worker.is_alive():
-                    reaped_attempts += 1
-                    if reaped_attempts >= REAPED_CLEANUP_ATTEMPTS:
-                        return problem
-                    continue
-            except Exception:
-                # A broken process handle cannot justify freeing admission.
-                pass
+            # A dead process can still retain mappings or named shared memory.
+            # Do not admit another allocation until close/unlink really succeeds.
             Event().wait(POLL_SECONDS)
 
 

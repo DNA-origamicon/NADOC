@@ -1281,6 +1281,11 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   comparison-view transitions. Check restored camera/panel ownership and focus.
   Measure representative HTTP/render/drag responsiveness, memory retention and
   lock costs; bounded data/tests do not establish interactive performance.
+  U22 adds a private numerical worker pair, not a live editor cutover. After its
+  planned integration, test long CPD/duplex preparation and Apply with visible
+  Cancel, separate computing/ready/receipt expiry, result retrieval after network
+  loss and no automatic recommit. Confirm ordinary edits keep their existing
+  responsiveness and selected-only evaluation does not rerun the solvers.
   Complete historical-prefix and arbitrary organizational-group movement exits
   remain FH-23/FH-18; desktop qualification is the existing FH-27 exit. Both
   transform gates remain false. No assembly or machine-specific VR claim.

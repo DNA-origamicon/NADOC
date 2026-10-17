@@ -401,3 +401,76 @@ alone does not authorize replacing ordinary budgets with that allowance. First
 measure genuine tiny native histories; if they cannot fit, choose and research an
 explicit asynchronous interaction with a revertible checkpoint, rather than
 silently block the normal editor or weaken its timing tests.
+
+## U22 numerical worker boundary and researched lifecycle decision
+
+The private worker pair now implements both prefix Prepare and full-proof Apply.
+It is intentionally not routed through the live lease host yet. Both native
+empty-root numerical families have exercised the pair, including CPD conversion
+and subsequent relaxation, and actual duplex relocation followed by relaxation.
+The original capture, selected definition and explicit patch each bind a result;
+typed reference failures retain their feature IDs and paths. Prepare carries no
+source-equivalence certificate. Apply proves the original source independently
+and rebuilds the suffix. Repeated Evaluate executes only the selected transform.
+
+The child reuses the existing memory-only bounded transport and one-thread native
+policy. Numerical execution is limited to CPD create/relax and duplex-relax;
+ordinary prefix commands retain their prospective admission. Existing site,
+helix, operation and command bounds remain. Capture graph limits cannot bound
+expanded JSON aliases, so the existing occurrence-based serialization guard now
+runs before capture hashing, output dumping and prefix decoding. Exact candidate
+decode checks remain shared. No numerical manifest, pin, formula or golden changes.
+
+Initial real worker measurements, including startup and transport, were CPD
+Prepare46.59s/Apply46.01s, duplex Prepare1.42s/Apply1.46s; repeated selected-only
+evaluations were roughly0.9–1.5ms. These are tiny-fixture measurements, not complete
+HTTP/display/lock/heap latency or representative-design performance guarantees.
+Final rerun measurements and all red/green outcomes are in
+[U22 evidence](validation_transform_numerical_workers.json).
+
+These measurements rule out reusing the ordinary1s/5s deadlines. They also expose
+a concrete lifecycle incompatibility: the current client conservatively subtracts
+the entire request time from the remaining60s lease, which is already measured
+after server preparation. Long Prepare would expire prematurely. A successful
+commit near lease expiry can also lose its scalar recovery receipt. Raising only
+an HTTP timeout or TTL is not an acceptable integration.
+
+Onshape normally previews the edited feature at its historical stage and offers
+a separate Final result including downstream work. Its Performance Panel reports
+regeneration timings and identifies features exceeding10s; that is a warning,
+not a documented execution cutoff. SOLIDWORKS permits stopping regeneration,
+with general rebuild cancellation taking effect after the current feature;
+supported command cancellation returns to prior controls. These are interaction
+precedents, not vendor evidence for NADOC's internal worker design or deadlines.
+[Onshape dialogs](https://cad.onshape.com/help/Content/Home/dialogs.htm),
+[Performance Panel](https://cad.onshape.com/help/Content/Home/performance_panel.htm),
+[SOLIDWORKS interruption](https://help.solidworks.com/2026/english/SolidWorks/sldworks/c_Interrupt_Regeneration_of_Parts.htm)
+(reviewed October16,2026).
+
+The next integration decision is an explicitly cancellable numerical computation
+within the existing lease catalog, with three distinct bounded lifetimes:
+
+1. Computing: a pending operation with its own declared deadline and phase/elapsed
+   status; the existing180s numerical ceiling is the proposed maximum. No invented
+   percentage or silent extension of ordinary edits. Cancellation must reap the
+   child and unlink buffers before releasing admission.
+2. Ready: a fresh60s editable prefix lease after successful preparation, with
+   bounded pending-result retrieval. No indefinite heartbeat renewal. Dragging
+   remains selected-only. Apply independently enters a bounded computing phase.
+3. Published: a separate bounded scalar-receipt recovery window after successful
+   one-undo publication. A transport loss must never trigger automatic recommit.
+
+Connect removal, expiry and sequence supersession to child cancellation; keep
+source/session/revision/policy/request checks through final adoption/publication.
+The existing supervisor owns the proof slot through cleanup; the host must
+transfer ownership exactly once and retain its private work ownership until
+decode/adoption finishes. Preserve the two-entry/nonqueued admission boundaries;
+do not add another job registry or assume that async alone qualifies responsiveness.
+ISSUE-132 fixes the shared supervisor's premature release after repeated dead-child
+buffer cleanup failures. Persistent cleanup failure visibly retains admission.
+
+This is containment of the existing numerical-prefix integration batch, not a new
+milestone or a finished editor. Real pending Prepare/Apply cancellation, stale
+policy/session/source rejection, result/receipt retrieval, unknown-engine refusal
+through the host, native gestures and FH-27/MV-52 app/performance qualification
+remain required. New-group movement stays the same shared FH-18/FH-23 exit.

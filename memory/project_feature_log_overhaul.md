@@ -22,26 +22,28 @@ decrement completed if an exit reopens. Flag three major checkpoints spent on
 any still-open milestone (cumulative even across alternating work), or total
 growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
-Effort is separate: U1–U21 are **21 engineering checkpoints** since B1, closing
+Effort is separate: U1–U22 are **22 engineering checkpoints** since B1, closing
 **three milestones** (FH-19/FH-21/FH-22). FH-18 remains open after13 checkpoints;
-FH-23 after4. Both are **task-growth flagged**. Current counts: **20/38 complete,
-18 remaining (9 core,9 parked); U21 +0 completed,+0 total**. Fixed exits remain.
-U21 qualifies actual empty-root histories and real native gestures through owned
-Apply, suffix, undo/reload and cold proof. Joint interim/final pose and baseline
-races and flexible-junction display accounting are fixed. OH/linker/duplex gain bounded
-admission; long numerical prefixes still need owned-worker Prepare/Apply integration.
-Terminal CRUD/batch records closed input commands with stable IDs. Delete
-preserves its synthetic-only/no-reconcile fast path;
-upsert retains global postprocessing and a conservative dependency barrier.
-Creation before group conversion and later delete replay; post-conversion upsert
-remains refused until its existing FH-18 lineage/placement exit qualifies.
-Two model literals require23 exact schema edges; numerical pins/math stay unchanged.
+FH-23 after5. Both are **task-growth flagged**. Current counts: **20/38 complete,
+18 remaining (9 core,9 parked); U22 +0 completed,+0 total**. Fixed exits remain.
+U22 implements a private numerical worker Prepare AND full-proof Apply pair;
+native-empty-root CPD create/relax and duplex-relax replay with poisoned recovery,
+selected-only evaluation, suffix, save/reload and cold proof. No live host cutover.
+Initial CPD Prepare/Apply were46.59/46.01s; duplex1.42/1.46s; selected-only~1ms.
+These are tiny worker measurements, not HTTP/display/heap qualification.
+Keep ordinary1s/5s budgets. Next: explicit cancellable computing, fresh60s ready
+lease and separate scalar-receipt recovery in the existing catalog. Current client
+elapsed-time accounting and receipt expiry cannot support long work unchanged.
+Shared serialization admission bounds expanded aliases before dumps/hashes/decode.
+ISSUE-132 retains worker admission through actual buffer cleanup after child death.
+U21 native gestures, recorded terminal CRUD and bounded OH/linker/duplex remain;
+post-conversion upsert/new-group movement stay open.23 schema edges/pins unchanged.
 See [movement contract](../docs/audits/feature_history_20261014/transform_history_editor_plan.md)
-and [U21 evidence](../docs/audits/feature_history_20261014/validation_transform_native_prefix_constraints.json).
-FH-23 remains open: numerical producer-prefix and arbitrary new-group integration;
+and [U22 evidence](../docs/audits/feature_history_20261014/validation_transform_numerical_workers.json).
+FH-23 remains open: numerical lifecycle and arbitrary new-group integration;
 No milestone split; both transform gates stay false. NOT VERIFIED IN APP: Archive unavailable; MV-52/FH-27 desktop/latency stays open.
-Broad pytest wrote system-temp scratch; require mounted Archive before another broad run. U21 reports selector-only and focused checks separately.
-ISSUE-125 remains until rollout; ISSUE-126 remains. `main.js` is7350; U21 delta0.
+Broad pytest wrote system-temp scratch; require mounted Archive before another broad run. Selector-only is not suite credit.
+ISSUE-125 remains until rollout; ISSUE-126 remains. `main.js` is7350; U22 delta0.
 FH-18 retains separate Groups/Placements, native lineage, named deformation
 preview/repair/creation, persistent visibility and organized pattern integration.
 Its original movement/generated/qualification exits remain open; rollout stays off.
@@ -121,10 +123,8 @@ addresses plus exact current group metadata. Selected scope is returned even
 without geometry so private guides update from the native result. Current group
 references/axis ownership stay live; prior intervals never re-resolve implicitly.
 Capture does no group serialization. Existing node/byte/selector budgets remain.
-**967 focused / 8,601 frontend passes, one skip**; [U11 evidence](../docs/audits/feature_history_20261014/validation_named_deformation_lifecycle.json).
-`main.js` delta 0. Archive is unmounted; app acceptance remains open. Selector
-dry-run runs no suite; aggregate fast/FULL debt remains. Existing gzip inflation
-precedes decoded-wrapper admission, not a whole-payload memory bound.
+U11 validation remains in [its evidence](../docs/audits/feature_history_20261014/validation_named_deformation_lifecycle.json).
+Existing gzip inflation precedes decoded-wrapper admission, not a whole-payload memory bound.
 
 ## Working boundaries and next step
 
@@ -134,7 +134,7 @@ finished tool: recording, preview/cancel/Apply, downstream editing, undo/reload
 and ordinary controls must agree. Nanoparticle/protein/assets and their remaining
 benchmarks are parked; ordinary DNA connections are core. Assemblies and VR
 remain separately deferred. The persistent P3–P6 goal stays active.
-U21 sequencing: finish FH-23's numerical worker prefixes, then new-group movement;
+U22 sequencing: integrate FH-23's numerical worker lifecycle, then new-group movement;
 generated compatibility retains the existing B–E exits. U13 completes the
 private ordinary Bend/Twist creation adapter: same owned prefix, controller,
 renderer and lease as history editing, no provisional canonical operation.

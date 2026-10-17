@@ -44,6 +44,15 @@ def evaluate_native(source, operation):
 
 
 def _evaluate(input_name, input_size, output_name):
+    run_operation(input_name, input_size, output_name, evaluate_native, MAX_CANDIDATE_BYTES)
+
+
+def run_operation(input_name, input_size, output_name, evaluate, result_limit):
+    """Shared bounded transport for fixed internal child entry points only.
+
+    Neither evaluator nor output capacity comes from a document/request. The
+    spawning class and its fixed target must use the same result capacity.
+    """
     for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
                  "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
         os.environ[name] = "1"
@@ -53,10 +62,10 @@ def _evaluate(input_name, input_size, output_name):
         try:
             source = SharedMemory(name=input_name)
             request = pickle.loads(source.buf[:input_size])
-            result = evaluate_native(**request)
+            result = evaluate(**request)
         except BaseException as exc:
             result = failure("evaluation_error", exc)
-        encoded = _result_bytes(result, limit=MAX_CANDIDATE_BYTES)
+        encoded = _result_bytes(result, limit=result_limit)
         output.buf[RESULT_HEADER_BYTES:RESULT_HEADER_BYTES + len(encoded)] = encoded
         struct.pack_into("!I", output.buf, 0, len(encoded))
     finally:

@@ -2012,3 +2012,49 @@ scratch was removed:26 policy files,223,850 logical/303,104 allocated bytes,
 asserted process/shared-memory cleanup and Node gesture harnesses closed their
 private scenes/browser resources without network, broadcast or file output.
 User designs/jobs, runtimes, shared caches and historical evidence remain intact.
+
+## U22 — private numerical movement workers and cleanup ownership
+
+**20/38 complete;18 remaining (9 core,9 parked);+0 completed,+0 total.**
+U1–U22 are22 engineering checkpoints closing three milestones since B1. FH-23
+remains task-growth flagged after five checkpoints; FH-18 remains open after13.
+No milestone exit, priority or denominator changes. See the
+[fixed delivery map](remaining_standard_part_checkpoints.md#u22-containment-and-remaining-acceptance).
+
+The closed private worker pair reconstructs transform prefixes with native CPD
+create/relax or duplex-relax and independently proves/rebuilds the entire edited
+recipe on Apply. Both use the existing bounded shared-memory transport and native
+thread policy. Original capture, selected definition and explicit draft bind
+results; prepared inputs are cheaply rebound on the decoded prefix. Shared
+occurrence-based admission bounds serialization before hashes/dumps/decoding,
+including expanded aliases. Native builders, engine pins and numerical manifests
+remain unchanged. Typed failures preserve the relevant feature and input path.
+
+Actual empty-root producers, poisoned recovery, repeated selected-only evaluation,
+edited suffix, save/reload and independent cold proof pass. New live host/gesture
+publication and undo qualification are not claimed. The first CPD measurement was
+about47s Prepare/46s Apply; the final serialization-guard run measured42.19s/42.56s.
+Duplex measured roughly1.2–1.4s and selected-only evaluations roughly1ms. These are
+small worker probes, not end-to-end responsiveness or physical qualification.
+
+Consequently the worker is not wired into the existing short-lived lease yet.
+The [researched lifecycle decision](transform_history_editor_plan.md#u22-numerical-worker-boundary-and-researched-lifecycle-decision)
+requires separate bounded computation, fresh ready editing, and published receipt
+recovery inside the same catalog, with visible cancellation and exact source
+guards. Ordinary1s/5s limits remain unchanged. No new job registry is planned.
+
+ISSUE-132 removes the shared supervisor's obsolete three-retry escape after child
+death. Admission remains held until buffers also close/unlink; a persistent OS
+cleanup failure stays visibly stopping. Tests cover repeated failures and actual
+shared-memory cleanup, replacing the prior premature-release expectation.
+
+[Validation evidence](validation_transform_numerical_workers.json) records446
+distinct focused backend cases across18 files:442 in the shared regression run,
+two additional native negative controls and two slow numerical chains. Later
+targeted reruns validate diagnostic feature attribution and actual numerical
+transport. Red failures, corrected fixture assumptions and overlap are explicit.
+No frontend code changes; `main.js` remains7350 lines (delta0). The required selector
+dry-run selects FAST and declares FULL deferred but executes no suite. Broad FAST
+also awaits mounted Archive scratch; prior broad debt remains. NOT VERIFIED IN APP:
+Archive is unavailable, all rollout gates remain false, and MV-52/FH-27 desktop,
+HTTP/render/lock/heap qualification remains open. Assemblies and VR stay deferred.

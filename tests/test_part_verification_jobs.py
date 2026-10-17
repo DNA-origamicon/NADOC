@@ -167,22 +167,17 @@ def test_live_cleanup_failure_is_visible_and_retried(controlled_job, monkeypatch
     attempted, retry_allowed = Event(), Event()
     failed = Event()
     original_close = job.worker_type.close
-    original_alive = job.worker_type.is_alive
 
     def failing_close(worker):
         if not retry_allowed.is_set():
+            if failed.is_set():
+                # A retry begins only after the first failure is published.
+                attempted.set()
             failed.set()
             raise OSError("Injected process cleanup failure")
         original_close(worker)
 
-    def observed_alive(worker):
-        # Cleanup checks liveness only after publishing its failure status.
-        if failed.is_set():
-            attempted.set()
-        return original_alive(worker)
-
     monkeypatch.setattr(job.worker_type, "close", failing_close)
-    monkeypatch.setattr(job.worker_type, "is_alive", observed_alive)
     try:
         jobs.inspect(job.id, cancel=True)
         assert attempted.wait(5)
@@ -235,7 +230,7 @@ def test_worker_failure_after_construction_finishes_and_releases_slot(immediate_
 
     class FailingWorker:
         def __init__(self, design):
-            pass
+            self.cleanup_attempts = 0
 
         def start(self):
             if stage == "start":
@@ -252,7 +247,11 @@ def test_worker_failure_after_construction_finishes_and_releases_slot(immediate_
 
         def close(self):
             closed.append(True)
-            if stage == "close":
+            self.cleanup_attempts += 1
+            if stage == "close" and self.cleanup_attempts <= 5:
+                # Process death does not establish buffer cleanup. A repeated
+                # failure must retain admission until close actually succeeds.
+                assert not jobs._slot.acquire(blocking=False)
                 raise RuntimeError("Injected cleanup failure after exit")
 
     monkeypatch.setattr(jobs, "VerificationWorker", FailingWorker)
@@ -262,7 +261,7 @@ def test_worker_failure_after_construction_finishes_and_releases_slot(immediate_
         assert result["result"]["status"] == "unverified"
         expected = "worker_cleanup_error" if stage == "close" else "verification_error"
         assert result["result"]["issues"][0]["code"] == expected
-    assert len(closed) == 2 * (jobs.REAPED_CLEANUP_ATTEMPTS if stage == "close" else 1)
+    assert len(closed) == 2 * (6 if stage == "close" else 1)
 
 
 def test_worker_failure_releases_admission_and_results_are_bounded(monkeypatch):

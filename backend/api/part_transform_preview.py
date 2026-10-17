@@ -41,8 +41,8 @@ class EvaluatedTransform:
     downstream_evaluated: bool = False
 
 
-def prepare_from_capture(captured, feature_id):
-    check = _checkpoint()
+def select_from_capture(captured, feature_id, check):
+    """Bind the exact typed selection before either bounded execution lane."""
     feature_id = _identity(feature_id)
     rows, entries = _prefix_rows(captured, check)
     selected = entries.get(feature_id)
@@ -55,13 +55,24 @@ def prepare_from_capture(captured, feature_id):
                                    code="unsupported_transform_scope")
     kind, params = command_input(selected)
     normalize(kind, params, {})
-    current = _replay_prefix(captured, rows, check, stop=feature_id)
+    return feature_id, rows, selected, kind
+
+
+def bind_prepared(captured, feature_id, kind, selected, current, check):
+    """Resolve original inputs on an owned prefix, with no replay authority."""
     _admit(current, check)
-    # Resolve the original definition without executing it or retaining aliases
-    # from the caller's captured history graph.
     entry = edit_transform_entry(selected, {}, current)
     check()
     return PreparedTransform(feature_id, captured.id, kind, current, entry)
+
+
+def prepare_from_capture(captured, feature_id):
+    check = _checkpoint()
+    feature_id, rows, selected, kind = select_from_capture(captured, feature_id, check)
+    current = _replay_prefix(captured, rows, check, stop=feature_id)
+    # Resolve the original definition without executing it or retaining aliases
+    # from the caller's captured history graph.
+    return bind_prepared(captured, feature_id, kind, selected, current, check)
 
 
 def evaluate(prepared, patch):

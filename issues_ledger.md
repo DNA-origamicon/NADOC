@@ -2879,3 +2879,18 @@ and this issue are not declared resolved.
   reuses the ordinary display's suppression of duplicate anchor-to-anchor chords.
   Do not weaken junction completeness, alter authored topology or replace native
   flexible coordinates. Real source→renderer→gesture→Apply proof is the exit.
+
+## ISSUE-132 — Reaped verification workers could release admission before buffer cleanup (2026-10-16, CORRECTED)
+
+- The shared supervisor treated three cleanup failures after process death as
+  sufficient to release its single worker slot. Process death does not prove
+  that shared-memory mappings have closed or named buffers have been unlinked.
+  Repeated failures could therefore admit further allocations while leaking old
+  transport. This matters before reusing the supervisor for numerical previews.
+- Keep the job visibly stopping and retain admission until `close()` succeeds,
+  with the existing polling interval. Remove the obsolete three-retry constant;
+  the file-recovery supervisor already follows this stronger ownership rule.
+- A failing regression reproduced the premature release. Coverage includes five
+  repeated close failures, real shared-memory unlink retries, live-child cleanup,
+  cancellation and source changes. A persistent OS cleanup failure deliberately
+  leaves admission occupied; the service must not pretend that resources are free.
