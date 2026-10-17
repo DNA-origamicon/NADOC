@@ -93,6 +93,7 @@ SelectionKind = Literal[
     "overhang",
     "extension",
     "protein",
+    "nanoparticle",
 ]
 
 
@@ -1488,6 +1489,8 @@ def _serialize_scene(
             transform_owners=transform_owners,
         )
 
+    from backend.core.vr_rigid_geometry import append_rigid_elements
+
     lines = _SceneLineEmitter(line_writer, representations)
     from backend.core.extrude_plane import extrude_plane_record
     from backend.core.vr_lattice_context import lattice_context_records
@@ -1526,6 +1529,7 @@ def _serialize_scene(
     declared_owner_tokens.clear()
     lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
     append_tool_handles()
+    append_rigid_elements(design, nucleotides, rotation, emit, owner_tokens)
     assigned = [
         (index, nucleotide)
         for index, nucleotide in enumerate(nucleotides)
@@ -2087,6 +2091,7 @@ def _serialize_scene(
         declared_owner_tokens.clear()
         lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
         append_tool_handles()
+        append_rigid_elements(design, nucleotides, rotation, emit, owner_tokens)
         direct_overhang_ids: set[str] = set()
         for binding in getattr(design, "overhang_bindings", []):
             if getattr(binding, "bound", True) is False or getattr(
@@ -2463,6 +2468,7 @@ def _serialize_scene(
         declared_owner_tokens.clear()
         lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
         append_tool_handles()
+        append_rigid_elements(design, nucleotides, rotation, emit, owner_tokens)
         # Atom handles are needed even in stick-only mode: the live visualization
         # feed addresses each bond endpoint by its real trajectory atom position.
         append_tool_handles(atom_tool_handles)
@@ -2589,6 +2595,7 @@ def _serialize_scene(
             declared_owner_tokens.clear()
             lines.extend(f"K {token} {nums(*center)}" for token, center in cluster_handles)
             append_tool_handles()
+            append_rigid_elements(design, nucleotides, rotation, emit, owner_tokens)
         append_records(extra_geometry, nucleotides, rotation, begin_extra, emit, lines,
                        nucleotide_owner_tokens, base_key, palette_for_index, progress=work_progress)
 
@@ -3544,7 +3551,7 @@ def _event_payload(state: dict | None) -> dict:
             **({"prompt": value} if (value := parse_prompt_event(event.get("prompt"))) else {}),
             **({"routing": value} if (value := parse_routing_event(event.get("routing"))) else {}),
             **({"view_tool": view_tool} if (view_tool := parse_view_tool_event(event.get("view_tool"))) else {}),
-            **({"ligation": ligation} if (ligation := parse_ligation_event(event.get("ligation"))) else {}),
+            **({"ligation": ligation} if (ligation := parse_ligation_event(event.get("ligation"), basis)) else {}),
             **({"end_resize": resize} if (resize := _parse_end_resize(event.get("end_resize"))) else {}),
             "hover_identity": hover_identity,
             "select_sequence": select_sequence,

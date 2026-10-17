@@ -5580,3 +5580,12 @@ export async function createSweep(body, { onCommitted } = {}) {
   if (json?.design && Number.isSafeInteger(json.revision)) onCommitted?.(json)
   return _syncFromDesignResponse(json)
 }
+
+export const validateVRClipboard = body => _request('POST', '/vr/clipboard/validate', body, { suppressBusy: true })
+export async function pasteVRClipboard(body, { onCommitted } = {}) {
+  const response = await _request('POST', '/vr/clipboard/paste', body)
+  if (!response) throw new Error(store.getState().lastError?.message || 'Paste failed')
+  onCommitted?.(response)
+  await _syncFromDesignResponse(response)
+  return response
+}

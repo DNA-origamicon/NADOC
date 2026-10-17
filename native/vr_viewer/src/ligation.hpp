@@ -9,8 +9,8 @@
 #include <chrono>
 
 namespace nadoc_vr {
-inline constexpr std::array<const char*,4> kRadialEditLabels{"LIGATE","NICK","UNDO","REDO"};
-inline constexpr bool radialEditEnabled(size_t item) { return item<4; }
+inline constexpr std::array<const char*,6> kRadialEditLabels{"LIGATE","NICK","UNDO","REDO","COPY","PASTE"};
+inline constexpr bool radialEditEnabled(size_t item) { return item<6; }
 
 class Ligation {
  public:
@@ -21,6 +21,7 @@ class Ligation {
     };
     struct Bond { glm::vec3 a{},b{},offsetA{},offsetB{}; };
     std::vector<Bond> bonds;
+    std::vector<std::pair<glm::vec3,glm::vec3>> clipboardPreview;
     bool nickActive=false;
     std::array<std::optional<size_t>,2> nickHover{};
     std::array<float,2> squeeze{};
@@ -44,6 +45,7 @@ class Ligation {
         std::string status;
         std::vector<End> ends;
         std::vector<Bond> bonds;
+        std::vector<std::pair<glm::vec3,glm::vec3>> clipboardPreview;
     };
     struct Context {
         std::string path;
@@ -86,7 +88,18 @@ class Ligation {
                 b.offsetA*=scale;b.offsetB*=scale;newBonds.push_back(b);
             }
         }
-        return Targets{next,std::move(nextStatus),std::move(loaded),std::move(newBonds)};
+        std::vector<std::pair<glm::vec3,glm::vec3>> preview;
+        std::string previewMagic;size_t previewCount=0;
+        if(input>>previewMagic>>previewCount) {
+            if(previewMagic!="CLIPBOARD" || previewCount>8192)return std::nullopt;
+            for(size_t i=0;i<previewCount;++i) {
+                glm::vec3 a,b;
+                if(!(input>>a.x>>a.y>>a.z>>b.x>>b.y>>b.z))return std::nullopt;
+                for(int j=0;j<3;++j)if(!std::isfinite(a[j])||!std::isfinite(b[j]))return std::nullopt;
+                preview.emplace_back(a,b);
+            }
+        }
+        return Targets{next,std::move(nextStatus),std::move(loaded),std::move(newBonds),std::move(preview)};
     }
  public:
     Ligation():targetsWorker_([this] {
@@ -131,6 +144,7 @@ class Ligation {
             requested_=Context{path,center,origin,scale};
         if(!ready_ || retired_ || ready_->context!=requested_)return;
         auto& loaded=ready_->targets;
+        clipboardPreview.swap(loaded.clipboardPreview);
         bonds.swap(loaded.bonds);ends.swap(loaded.ends);status.swap(loaded.status);
         cancel();waiting=false;version=loaded.version;
         retired_=std::move(ready_);

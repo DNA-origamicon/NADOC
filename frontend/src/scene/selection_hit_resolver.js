@@ -56,6 +56,12 @@ export function vrPrimitiveOwner(identity, { geometry = [], design = null } = {}
   const decoded = decodedIdentity(identity)
   if (!decoded) return null
 
+  const rigid = semanticIdentityPayload(decoded, 'rigid-ref:')
+  if (Array.isArray(rigid) && rigid.length === 3 && ['protein','nanoparticle'].includes(rigid[0])) {
+    const items = rigid[0] === 'protein' ? design?.protein_attachments : design?.nanoparticles
+    return items?.some(item => item.id === rigid[1])
+      ? { kind: rigid[0], ref: { kind: rigid[0], id: rigid[1] } } : null
+  }
   const semanticExtra = semanticIdentityPayload(decoded, 'extra-base-ref:')
   if (Array.isArray(semanticExtra) && semanticExtra.length === 2 &&
       typeof semanticExtra[0] === 'string') {
@@ -335,6 +341,12 @@ export function vrOwnerTokens({ selected = false, selectedRef = null, owner = nu
 export function vrInitialSelectionOwnerTokens(selectedRef) {
   const token = selectionRefKey(selectedRef)
   return token ? [encodeURIComponent(token)] : []
+}
+
+/** Keep the primary tool target first while transporting the complete copy set. */
+export function vrCommittedSelectionOwnerTokens({ items = [], primary = null } = {}) {
+  const ordered = primary ? [primary, ...items] : items
+  return [...new Set(ordered.flatMap(vrInitialSelectionOwnerTokens))]
 }
 
 /** Validate one native tool intent's action-time target against the current

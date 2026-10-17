@@ -12,10 +12,10 @@ struct SelectionWheelSpec {
 };
 struct EditWheelSpec {
     static constexpr size_t hand=1;
-    // Preserve the established compass: Ligate right, Nick up, Undo left, Redo down.
+    // Six evenly spaced actions, starting with Ligate on the right.
     static constexpr float phase=glm::half_pi<float>(), winding=-1;
-    static constexpr std::array<const char*,4> levels{"ligate","nick","undo","redo"};
-    static constexpr std::array<const char*,4> labels{"LIGATE","NICK","UNDO","REDO"};
+    static constexpr std::array<const char*,6> levels{"ligate","nick","undo","redo","copy","paste"};
+    static constexpr std::array<const char*,6> labels{"LIGATE","NICK","UNDO","REDO","COPY","PASTE"};
 };
 // Both controllers use the same thumb-driven gesture and drawing implementation.
 template<class Spec> class TouchpadWheel {

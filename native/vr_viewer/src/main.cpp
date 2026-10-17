@@ -29,6 +29,7 @@
 
 #include "interaction.hpp"
 #include "selection_wheel.hpp"
+#include "clipboard.hpp"
 #include "controller_prompt.hpp"
 #include "browser_prompt.hpp"
 #include "selection_owner_index.hpp"
@@ -2782,6 +2783,8 @@ class GlScene {
         out << ']';return out.str();
     }
 
+    #include "clipboard_geometry.inc"
+
     struct BendCluster {
         std::string token, identity;
         std::vector<std::pair<glm::vec3,glm::vec3>> segments;
@@ -5198,6 +5201,7 @@ class Viewer {
             representationSourceIndex(sceneData_.initialRepresentation)];
         const auto identity = nadoc_vr::resolveOwnerIdentity(
             initial.ownerAliases, selectedOwnerTokens);
+        committedSelectionOwnerTokens_=selectedOwnerTokens;
         if(selectedSelectionKind=="selection" && selectedOwnerTokens.size()>2) {
             selectedIdentity_=selectedOwnerTokens.front();selectedOwnerTokens_={selectedIdentity_};selectedSelectionKind_="selection";
             committedSelectionOwnerTokens_={selectedOwnerTokens.begin()+1,selectedOwnerTokens.end()};
@@ -5207,7 +5211,7 @@ class Viewer {
             selectedSelectionKind_ = std::move(selectedSelectionKind);
             committedSelectionIdentities_ = {selectedIdentity_};
             if (!selectedOwnerTokens_.empty()) {
-                committedSelectionOwnerTokens_ = {selectedOwnerTokens_.front()};
+                committedSelectionOwnerTokens_ = selectedOwnerTokens_;
             }
         }
     }
@@ -5235,6 +5239,7 @@ class Viewer {
                 latticeContext_=scene.latticeContext;
                 const auto identity=nadoc_vr::resolveOwnerIdentity(
                     scene.representations[representationSourceIndex(scene.initialRepresentation)].ownerAliases,startupOwners_);
+                committedSelectionOwnerTokens_=startupOwners_;
                 if(startupKind_=="selection" && startupOwners_.size()>2) {
                     selectedIdentity_=startupOwners_.front();selectedOwnerTokens_={selectedIdentity_};selectedSelectionKind_="selection";
                     committedSelectionOwnerTokens_={startupOwners_.begin()+1,startupOwners_.end()};
@@ -6636,6 +6641,8 @@ class Viewer {
 
     void appendRadialToolGuides() {
         referenceModels_.wheel.draw([&](auto a,auto b,auto color){controllerGuides_.push_back({a,color,1});controllerGuides_.push_back({b,color,1});},"",glfwGetTime());
+        clipboard_.update(hands_[1]);
+        clipboard_.draw([&](auto a,auto b,auto color){controllerGuides_.push_back({a,color,1});controllerGuides_.push_back({b,color,1});});
         radialToolMenu_.draw([&](auto a,auto b,auto color){controllerGuides_.push_back({a,color,1});controllerGuides_.push_back({b,color,1});},"",glfwGetTime());
     }
 
@@ -6826,8 +6833,11 @@ class Viewer {
 
     // Shoulder access has fixed semantics; only the radial wheel remaps its
     // entries to Bend/Sweep actions while those tools are active.
+    #include "clipboard_runtime.inc"
+
     void activateEditTool(size_t item) {
         if(!nadoc_vr::radialEditEnabled(item) || toolShell_.executionPending() || ligation_.waiting || endResize_.waitingVersion)return;
+        if(item>=4) { activateClipboard(item); return; }
         if(item>=2) {
             if(!ligation_.version)return;
             if(movePanel_.active)cancelMove();
@@ -7730,7 +7740,9 @@ class Viewer {
                << ",\"action\":\"" << ligation_.committedAction << "\""
                << ",\"version\":" << ligation_.committedVersion
                << ",\"source\":" << ligation_.committedSource
-               << ",\"target\":" << ligation_.committedTarget << '}';
+               << ",\"target\":" << ligation_.committedTarget;
+        if(ligation_.committedAction=="copy" || ligation_.committedAction=="paste")clipboard_.event(output);
+        output << '}';
         output << ",\"end_resize\":{\"sequence\":" << endResize_.sequence
                << ",\"version\":" << endResize_.committedVersion
                << ",\"delta\":" << endResize_.committedDelta << '}';
@@ -8450,6 +8462,7 @@ class Viewer {
             << ",\"frame_index\":" << trajectoryState_.frameIndex << ",\"frame_count\":" << trajectoryState_.frameCount
             << ",\"request_sequence\":" << trajectoryRequestSequence_ << '}';
         selectionWheel_.writeJson(out,selectionLevel_);
+        clipboard_.observe(out);
         out << ",\"radial_edit\":{\"open\":" << (radialToolMenu_.open()?"true":"false")
             << ",\"pending\":" << (radialToolMenu_.pending()?std::to_string(*radialToolMenu_.pending()):"null")
             << ",\"hovered\":" << (radialToolMenu_.hovered()?std::to_string(*radialToolMenu_.hovered()):"null") << ",\"items\":[";
@@ -9354,6 +9367,8 @@ class Viewer {
         if(viewTools_.inspectionLayout()) menuControlTargeted.fill(true);
         frameAudit_.mark("feeds_view_tools");
         ligation_.poll(eventPath_,normalizationCenter_,normalizationScale_,{0,0,-kViewDistanceMeters});
+        if(!ligation_.waiting && ligation_.status=="created")clipboard_.confirm(ligation_.clipboardPreview,hands_[1]);
+        clipboard_.acknowledge(ligation_.waiting,ligation_.status);
         if(!ligation_.waiting)radialToolMenu_.setPending(std::nullopt);
         ligation_.input(hands_,{selectionVolumeCenter(0),selectionVolumeCenter(1)},
             {selectionVolumes_[0].radius(),selectionVolumes_[1].radius()},triggerClicked_,triggerPressed_,
@@ -11436,6 +11451,7 @@ class Viewer {
     std::optional<nadoc_vr::PickHit> sceneHover_;
     nadoc_vr::ReferenceModels referenceModels_;
     nadoc_vr::EditWheel radialToolMenu_;
+    nadoc_vr::ClipboardPreview clipboard_;
     nadoc_vr::SelectionWheel selectionWheel_;
     bool latticeOpen_ = false;
     nadoc_vr::MenuPlacement latticePlacement_;
@@ -11779,9 +11795,9 @@ int main(int argc, char** argv) {
                      "0.05-20, and orientation offsets finite within +/-360 degrees\n";
         return 2;
     }
-    const std::array<std::string, 12> validSelectionKinds = {
+    const std::array<std::string, 13> validSelectionKinds = {
         "none", "selection", "cluster", "strand", "domain", "base", "end", "bond",
-        "crossover", "overhang", "extension", "protein",
+        "crossover", "overhang", "extension", "protein", "nanoparticle",
     };
     if (std::find(validSelectionKinds.begin(), validSelectionKinds.end(),
                   selectedSelectionKind) == validSelectionKinds.end() ||
