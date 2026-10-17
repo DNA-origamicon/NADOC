@@ -33,6 +33,10 @@ def _enabled(family="deformation"):
         from backend.api.routes_part_sweep_preview import SWEEP_PREVIEW_ENABLED
 
         enabled = SWEEP_PREVIEW_ENABLED
+    elif family == "transform":
+        from backend.api.routes_part_transform_preview import TRANSFORM_PREVIEW_ENABLED
+
+        enabled = TRANSFORM_PREVIEW_ENABLED
     elif family == "deformation":
         enabled = DEFORMATION_PREVIEW_ENABLED
     else:

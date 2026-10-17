@@ -2661,7 +2661,7 @@ def test_add_cluster_default_records_replayable_grouping():
         after = design_state.get_or_404()
         cid = after.cluster_transforms[-1].id
         entry = assert_cluster_in_feature_log(after, cid, expect_helix_ids=cluster_helix_ids)
-        assert entry.proof_version == 1
+        assert entry.proof_version == 2
         assert entry.cluster_snapshot.id == cid
 
 

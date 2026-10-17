@@ -1,4 +1,4 @@
-"""Private mutable-part leases shared by closed deformation and Sweep editors.
+"""Private mutable-part leases shared by three closed native editor families.
 
 One prepared prefix per document, two globally; one nonqueued computation at a
 time. Native work and proof run without state/catalog locks. Apply reserves the
@@ -24,14 +24,9 @@ from backend.api import doc_context, state
 from backend.api import part_group_organization_gate as group_gate
 from backend.api import part_publication_permit as permits
 from backend.api import part_publication_policy as construction_policy
+from backend.api import part_preview_family_work as family_work
 from backend.api.part_deformation_preview import (
-    PreparedCreation, evaluate as local_evaluate, prepare_creation_append,
-    prepare_creation_from_capture, prepare_from_capture,
-)
-from backend.api.part_deformation_preview_dto import (
-    evaluate_display,
-    prepare_creation_display,
-    prepare_display,
+    PreparedCreation, prepare_creation_append,
 )
 from backend.api.part_recipe_edit import prepare_change
 from backend.api.part_replacement_transaction import publish_replacement
@@ -119,7 +114,7 @@ class _Entry:
     sequence: int = 0
     phase: str = "preparing"
     expired_during_commit: bool = False
-    deformation_id: str | None = None
+    identity: dict | None = None  # closed scalar family identity, retained with receipts
     publication: dict | None = None  # bounded scalar receipt; never a model/report
     applying_sequence: int | None = None
     family: str = "deformation"
@@ -130,7 +125,7 @@ def _conflict(detail, code="preview_conflict"):
 
 
 def _family(value):
-    if type(value) is not str or value not in {"deformation", "sweep"}:
+    if type(value) is not str or value not in family_work.FAMILIES:
         raise HTTPException(422, detail={"code": "invalid_preview_family", "detail": "Unknown preview family"})
     return value
 
@@ -250,11 +245,13 @@ def _current(entry, sequence=None):
         return session.revision
 
 
-def _envelope(entry, sequence, deformation_id):
+def _envelope(entry, sequence, *, prepared=None):
     # Measure before projection; the caller conservatively charges lease time
     # from request start. The final origin check still refuses actual expiry.
+    identity = (family_work.identity_fields(entry.family, prepared) if prepared is not None
+                else entry.identity or family_work.identity_fields(entry.family))
     return {**entry.request.model_dump(), "lease_id": entry.lease_id,
-            "doc_id": entry.doc, "deformation_id": deformation_id,
+            "doc_id": entry.doc, **identity,
             "request_sequence": sequence,
             "remaining_seconds": max(0, entry.expires - monotonic())}
 
@@ -267,7 +264,7 @@ def _finish(entry, sequence, payload, *, prepared=None):
             _catalog_current(entry, sequence)
             if prepared is not None:
                 entry.prepared, entry.phase = prepared, "ready"
-                entry.deformation_id = prepared.deformation_id
+                entry.identity = family_work.identity_fields(entry.family, prepared)
             return payload
 
 
@@ -347,28 +344,14 @@ def _prepare(request, *, family="deformation"):
                 _catalog_current(entry)
                 entry.timer = timer
             timer.start()
-            if family == "sweep":
-                from backend.api import part_sweep_preview as sweep
-                from backend.api import part_sweep_preview_dto as sweep_display
-
-                prepared = sweep.prepare_from_capture(captured, request.feature_id)
-                del captured
-                original = sweep.evaluate(prepared, {})
-                payload = sweep_display.prepare_display(prepared.copy_prefix(), original,
-                    envelope=_envelope(entry, 0, prepared.deformation_id))
-            elif type(request) is Creation:
-                prepared = prepare_creation_from_capture(captured, feature_id=request.feature_id,
-                    deformation_id=str(uuid4()), kind=request.type,
-                    targets=request.targets, cluster_ids=request.cluster_ids)
-                del captured
-                payload = prepare_creation_display(prepared.copy_prefix(), prepared,
-                    envelope=_envelope(entry, 0, prepared.deformation_id))
-            else:
-                prepared = prepare_from_capture(captured, request.feature_id)
-                del captured
-                original = local_evaluate(prepared, {})
-                payload = prepare_display(prepared.copy_prefix(), original,
-                                          envelope=_envelope(entry, 0, prepared.deformation_id))
+            creation = ({"deformation_id": str(uuid4()), "kind": request.type,
+                         "targets": request.targets, "cluster_ids": request.cluster_ids}
+                        if type(request) is Creation else None)
+            prepared = family_work.prepare(family, captured, request.feature_id, creation=creation)
+            del captured
+            evaluated = family_work.evaluate_original(family, prepared)
+            payload = family_work.prepare_display(family, prepared, evaluated,
+                envelope=_envelope(entry, 0, prepared=prepared))
             return _finish(entry, 0, payload, prepared=prepared)
     except BaseException:
         if entry is not None:
@@ -386,20 +369,10 @@ def evaluate(value, *, family="deformation"):
     try:
         with _mapped_errors():
             _current(entry, request.request_sequence)
-            if family == "sweep":
-                from backend.api import part_sweep_preview as sweep
-                from backend.api import part_sweep_preview_dto as sweep_display
-
-                evaluated = sweep.evaluate(prepared, request.params)
-                payload = sweep_display.evaluate_display(prepared.copy_prefix(), evaluated,
-                    include_geometry=request.include_geometry,
-                    envelope=_envelope(entry, request.request_sequence, prepared.deformation_id))
-            else:
-                evaluated = local_evaluate(prepared, request.params)
-                payload = evaluate_display(prepared.copy_prefix(), evaluated,
-                                           include_geometry=request.include_geometry,
-                                           creation=type(prepared) is PreparedCreation,
-                                           envelope=_envelope(entry, request.request_sequence, prepared.deformation_id))
+            evaluated = family_work.evaluate(family, prepared, request.params)
+            payload = family_work.evaluate_display(family, prepared, evaluated,
+                include_geometry=request.include_geometry,
+                envelope=_envelope(entry, request.request_sequence))
             return _finish(entry, request.request_sequence, payload)
     finally:
         _work_slot.release()
@@ -449,7 +422,7 @@ def status(value, *, family="deformation"):
             phase = entry.phase
             if phase == "ready" and entry.applying_sequence == entry.sequence:
                 phase = "applying"
-            result = {**_envelope(entry, entry.sequence, entry.deformation_id), "status": phase}
+            result = {**_envelope(entry, entry.sequence), "status": phase}
             if entry.publication is not None:
                 result.update(entry.publication)
             return result
@@ -480,13 +453,7 @@ def apply(value, *, family="deformation"):
             check()
             # Reuse the exact local parameter/scope contract; this does not
             # replace the fresh full source proof in prepare_change below.
-            if family == "sweep":
-                from backend.api.part_sweep_preview import evaluate as evaluate_sweep
-
-                params = evaluate_sweep(prepared, request.params).params
-            else:
-                local_evaluate(prepared, request.params)
-                params = request.params
+            params = family_work.apply_params(family, prepared, request.params)
             with state._lock:
                 session = _source_current(entry)
                 if monotonic() > deadline:
@@ -533,7 +500,7 @@ def apply(value, *, family="deformation"):
                             if permit is not None else publish_replacement(session, candidate))
                 receipt = {**entry.request.model_dump(), "status": "applied",
                            "lease_id": entry.lease_id, "design_id": candidate.id,
-                           "revision": revision, "deformation_id": prepared.deformation_id,
+                           "revision": revision, **entry.identity,
                            "doc_id": entry.doc, "request_sequence": request.request_sequence}
                 with _lock:
                     entry.source = ref(candidate)

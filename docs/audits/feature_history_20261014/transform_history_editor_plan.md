@@ -6,7 +6,7 @@ credit. The fixed exit remains complete parameter controls, guarded publication,
 downstream editing and undo/persistence parity. Desktop and measured interaction
 qualification remain FH-27. Assemblies and machine-specific VR are deferred.
 
-The first checkpoint now underway is a backend primitive across four existing
+The first checkpoint (U18, `909f2de5`) delivered a backend primitive across four existing
 roles: `cluster_op`, `nucleotide-transform`, `nucleotide-transform-batch` and
 `nucleotide-transform-delete`. It provides strict input normalization, protected
 identity binding, reference checks and owned feature-stage preview. The existing
@@ -15,6 +15,70 @@ receipts and explicit placement target replacement. It does not deliver a displa
 DTO, preview host lifecycle, new HTTP route or UI, and cannot close FH-23.
 No molecular builder, constant or numerical manifest change is authorized by
 that checkpoint.
+
+### U19 audit decisions — retained full movement scope
+
+The shared host remains the sole session catalog, work slot and publication owner.
+A closed family-work adapter selects deformation, Sweep or transform preparation,
+evaluation and projection; it does not register arbitrary callbacks. Transform
+identity is the stable feature plus its command kind. A batch or reset has no
+single deformation output, so its wire contract must not invent `deformation_id`.
+Existing deformation/Sweep envelopes retain their established shape.
+
+The transform projection needs its own versioned ordinary-DNA inventory. Existing
+comparison and deformation projection contracts deliberately exclude extensions,
+flexible strands, CPD display fields, duplex drivers and inserted-base poses.
+Weakening those schemas or emitting only their accepted subset would silently
+omit geometry. The complete transform component must carry native records and
+the topology needed by the existing companion renderers. Projection tests on
+an owned model are distinct from actual historical-prefix admission: a family
+with no input-defined replay command is not made regenerable by displaying it.
+The extension/connection/CPD replay matrix remains explicit integration work.
+
+The native mixed-end root-to-root DS linker fixture has duplicate directional
+bridge occupancy (ISSUE-126), already recorded by prior connection-route evidence.
+The transform projection must refuse that whole display. Compatible native DS
+inputs retain positive parity coverage; do not weaken the inventory or modify
+scientific topology to make the invalid example pass. Connection admission/repair
+remains FH-25's existing exit.
+
+The audit also found **ISSUE-125**: `_paintLinks` queues additional placement
+poses, but the old history Apply branch edits/clears only `editCtx.clusterId`.
+Displayed linked movement can therefore be absent from the edited feature and
+leave pending state behind. The separate flexible-relax snapshot records only
+cluster IDs, so it cannot supply an input-only coupled-movement contract either.
+
+The implementation direction is an explicit, versioned **multi-owner pose
+feature**: distinguish the primary selected owner from all solver-assisted
+affected owners, retain every accepted absolute pose with its original native
+frame, and publish the complete operation atomically. Replay applies those
+authored poses through unchanged native placement mechanics. This is not a
+claim that a persistent constraint solver reruns on every upstream edit. Such
+behavior would need its own driver/constraint inputs and versioned contract.
+
+Old single-owner rows keep their recorded meaning. An edit that acquires linked
+owners needs an explicit replacement/upgrade definition; never infer historical
+transaction membership from neighboring rows, timestamps or proximity. Until
+that definition is implemented and tested, linked controls must refuse the
+unsupported write rather than paint it and commit only the primary owner. This
+temporary refusal does not close FH-23 or transfer the work to assemblies/assets.
+Required acceptance covers selected, linked and fixed owners, parent-local frames,
+joint bounds, missing anchors, complete cancellation, atomic failure, downstream
+edits and cold regeneration. New organizational-group motion remains the separate
+existing FH-18/FH-23 integration exit below.
+
+CAD evidence supports the distinction between explicit transform outputs and
+constraint inputs. SOLIDWORKS Move/Copy Body separates Translate/Rotate from
+Constraints and explicitly selects bodies allowed to move. Onshape Mates and
+Named Positions describe constraint degrees of freedom versus absolute placement;
+these are assembly precedents, not evidence of Part Studio implementation details.
+Onshape's manipulator origin does not by itself create a persistent mate. NADOC's
+multi-owner contract above is an engineering inference, not a copied CAD API.
+Sources retrieved October 16, 2026:
+[SOLIDWORKS Move/Copy Body](https://help.solidworks.com/2023/english/solidworks/sldworks/t_Move_Copy_Body_PM_features.htm),
+[Onshape Mates](https://cad.onshape.com/help/Content/Assembly/mates.htm),
+[Onshape Named Positions](https://cad.onshape.com/help/Content/Assembly/named_positions.htm),
+[Onshape manipulator](https://cad.onshape.com/help/Content/Home/triad_manipulator.htm).
 
 ## Complete existing control and role matrix
 

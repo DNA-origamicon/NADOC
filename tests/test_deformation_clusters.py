@@ -113,15 +113,42 @@ def test_empty_cluster_ids_is_unscoped(_design):
     assert len(op.affected_helix_ids) == 6
 
 
-def test_unknown_cluster_id_is_dropped(_design):
-    """A non-existent cluster_id is silently dropped from the resolved scope."""
+def test_unknown_cluster_id_refuses_authored_scope_without_mutation(_design, request):
+    """An invalid authored scope must not silently become a different selection."""
     cluster_a = _design.cluster_transforms[0]
-    _post_bend(cluster_ids=[cluster_a.id, "does-not-exist"])
+    source = design_state.get_or_404()
+    session = design_state._session()
+    original_redo = list(session.redo)
 
-    design = design_state.get_or_404()
-    op = design.deformations[0]
-    assert op.cluster_ids == [cluster_a.id]
-    assert set(op.affected_helix_ids).issubset(set(cluster_a.helix_ids))
+    def restore_redo():
+        session.redo.clear()
+        session.redo.extend(original_redo)
+
+    request.addfinalizer(restore_redo)
+    # A rejected edit must preserve an existing redo branch, not merely leave
+    # an already empty stack empty.
+    session.redo.append(source.model_copy(deep=True))
+    content = source.model_dump_json()
+    revision = design_state.revision()
+    history, redo = list(session.history), list(session.redo)
+    stack_contents = [[item.model_dump_json() for item in stack] for stack in (history, redo)]
+
+    response = client.post("/api/design/deformation", json={
+        "type": "bend", "plane_a_bp": 100, "plane_b_bp": 200,
+        "params": {"angle_deg": 30.0, "direction_deg": 0.0},
+        "cluster_ids": [cluster_a.id, "does-not-exist"],
+    })
+
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "invalid_selection"
+    assert design_state.get_or_404() is source
+    assert source.model_dump_json() == content  # Includes the complete feature log.
+    assert design_state.revision() == revision
+    assert len(session.history) == len(history) and len(session.redo) == len(redo)
+    assert all(current is previous for current, previous in zip(session.history, history, strict=True))
+    assert all(current is previous for current, previous in zip(session.redo, redo, strict=True))
+    assert [[item.model_dump_json() for item in stack]
+            for stack in (session.history, session.redo)] == stack_contents
 
 
 def test_unaffected_cluster_does_not_translate_when_other_cluster_bent():

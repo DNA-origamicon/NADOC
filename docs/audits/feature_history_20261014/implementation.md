@@ -1829,3 +1829,53 @@ started without Archive. Cleanup verified513 empty task directories and4 symlink
 removed,0 files/bytes; active runtimes, user workspace and historical data preserved.
 ISSUE-123/124 record the input/receipt and test-collection corrections. Still-used
 legacy UI paths remain until their complete replacement is qualified.
+
+## U19 — owned movement host and native display data, FH-23 remains open
+
+Four movement roles now share the existing session catalog, work slot, source
+guards, Apply proof and atomic publication lifecycle. A closed family-work module
+replaces repeated deformation/Sweep branches. Transform packets identify their
+stable feature and command kind; batch/reset operations have no invented single
+deformation identity. Legacy wire shape and post-evaluation lease timing remain.
+
+The versioned transform component preserves complete admitted native Full records
+and axes, including slabless extensions and explicit extra-base/CPD/flexible/linker
+companion requirements. Native controls carry joint axes, pivot choices, tethers,
+movable links and exact source inputs with frame provenance. Repeated helper
+traversals are charged before work; graph/byte/time limits remain provisional
+admission, not measured interaction latency. Wire/admission modules live in API,
+without new core-to-API dependencies or changes to comparison schemas.
+
+Historical joint/flexible commands now replay in the bounded prefix. All three
+nucleotide roles qualify existing conserved-material organization lineage,
+retaining native builder/reconcile/retry order. Tests prove preview limit25 versus
+latest limit90, downstream reconstruction, one undo, normal reload and cold proof.
+Compatible DS linkers project through unchanged native helpers; the existing
+mixed-end duplicate-occupancy output refuses as a whole (ISSUE-126). Scientific
+polarity/formulas and numerical source pins/goldens are unchanged.
+
+**20/38 complete;18 remaining (9 core,9 parked);+0 completed,+0 total.** Nineteen
+engineering checkpoints since B1 close three milestones. FH-23 remains open after
+two; FH-18 stays growth-flagged after thirteen. Full private renderer/controls,
+explicit complete linked-owner pose recording (ISSUE-125), remaining producer
+prefix contracts and arbitrary new-group motion keep their original exits.
+Projected owned-model coverage does not imply input-only historical replay for
+extensions/CPD/duplex/linker producers. Transform rollout remains disabled.
+
+[Checkpoint evidence](validation_transform_history_host.json) records **656 distinct
+focused backend passes**,25 warnings across26 files. The actual standard FAST run
+has **17,489 passes,27 failures,9 errors,21 skips** (250.37s); FULL remains deferred.
+Four stale expectations now pass with exact dependency/source/undo checks. The
+remaining23 failure nodes and4 CPD preview errors have historical reproduction;
+current exact causes are not all proven. Four Archive collection errors remain.
+One repair-job setup error did not reproduce in its8-case focused file and remains
+unresolved. No subsequent broad-pass claim is made.
+
+Timing triage found zero individual5s violators; aggregate work was888.6 test-seconds
+across4 workers. The260s guard overrun does not justify arbitrary slow marking,
+threshold changes or an interactive latency claim. No frontend/app exercise or
+machine-specific VR validation; Archive remains unavailable. `main.js` delta0.
+Cleanup verified63 empty task directories and4 symlinks removed,0 files/bytes;
+user workspace, runtimes, caches and historical evidence were preserved. The
+shared-host branch cleanup is complete; used legacy UI paths remain until their
+full replacement is qualified.

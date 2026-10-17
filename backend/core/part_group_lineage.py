@@ -36,7 +36,12 @@ KINDS = frozenset({
     "circle-segment", "extrude-frame", "crossover-place", "crossover-place-batch",
     "crossover-move", "crossover-move-batch",
     "strand-end-resize", "domain-shift",
+    "nucleotide-transform", "nucleotide-transform-batch", "nucleotide-transform-delete",
 })
+# Residue pose builders leave directional material unchanged. They still use
+# this conserved-material plan because native execution always reconciles and
+# retries pending ligations before publishing the final organization. Do not
+# bypass that postprocessing or reuse a stale domain-ordinal membership list.
 # Patterns declare their copied groups during native extraction. Capture that
 # raw result before global reconciliation/retry can merge domain identities.
 POSTPROCESS_KINDS = frozenset({"linear-pattern", "circular-pattern"})

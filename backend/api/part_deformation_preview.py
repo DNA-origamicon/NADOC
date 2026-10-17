@@ -46,7 +46,9 @@ ROUTING = frozenset({
 })
 TRANSFORMS = frozenset({"nucleotide-transform", "nucleotide-transform-batch", "nucleotide-transform-delete"})
 EXTRA_BASES = frozenset({"crossover-extra-bases", "crossover-extra-bases-batch", "forced-ligation-extra-bases"})
-PREFIX_KINDS = EXTRUSIONS | ROUTING | ORGANIZATION_KINDS | TRANSFORMS | EXTRA_BASES | frozenset({
+CONSTRAINTS = frozenset({"joint-place", "joint-update", "joint-delete",
+                         "flexible-segment-mark", "flexible-segment-unmark"})
+PREFIX_KINDS = EXTRUSIONS | ROUTING | ORGANIZATION_KINDS | TRANSFORMS | EXTRA_BASES | CONSTRAINTS | frozenset({
     "bundle-create", "sweep", "deformation", "cluster_create", "cluster_op",
 })
 PATCH_FIELDS = frozenset({"type", "plane_a_bp", "plane_b_bp", "params", "cluster_ids", "targets"})
@@ -256,6 +258,9 @@ def _work(design, check):
     slots = _extra_slots(design)
     if slots > MAX_SLOTS or len(design.nucleotide_transforms) > MAX_SLOTS:
         _reject("Residue poses or inserted material exceed the preview site allowance", "preview_limit")
+    if sum(len(getattr(design, field)) for field in (
+            "cluster_joints", "flexible_segment_marks", "flexible_connections")) > MAX_SLOTS:
+        _reject("Constraint context exceeds the preview work allowance", "preview_limit")
     for helix in design.helices:
         check()
         if type(helix.length_bp) is not int or helix.length_bp < 1:
@@ -278,7 +283,15 @@ def _before_command(kind, params, design):
         _reject(f"Private deformation preview does not yet replay prefix command {kind!r}")
     # Match the shared dispatcher: provenance annotation is not builder input.
     params = {key: value for key, value in params.items() if key != "_generator"}
-    if kind in EXTRA_BASES:
+    if kind == "flexible-segment-mark":
+        marks = params.get("marks")
+        retained = 0 if params.get("replace") else len(design.flexible_segment_marks)
+        if type(marks) is not list or retained + len(marks) > MAX_SLOTS:
+            _reject("Flexible marks exceed the preview work allowance", "preview_limit")
+        # The unchanged native builder derives unpaired sites/connections from
+        # the bounded current topology. Batch deduplication can only reduce
+        # this conservative prospective count.
+    elif kind in EXTRA_BASES:
         _extra_growth(kind, design, params)
     elif kind == "nucleotide-transform-batch":
         bodies = params.get("transforms")

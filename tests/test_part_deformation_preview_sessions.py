@@ -6,6 +6,8 @@ from uuid import uuid4
 from weakref import ref
 
 import pytest
+
+from backend.api import part_deformation_preview as native_preview
 from fastapi import HTTPException
 
 from backend.api import doc_context, state
@@ -247,7 +249,7 @@ def test_late_evaluation_after_cancel_never_returns_a_preview(document, monkeypa
     host, identity = document
     opened = host.prepare(opening())
     started, release = Event(), Event()
-    original = host.local_evaluate
+    original = native_preview.evaluate
     result = []
 
     def held(*args, **kwargs):
@@ -267,7 +269,7 @@ def test_late_evaluation_after_cancel_never_returns_a_preview(document, monkeypa
             doc_context.reset_current_doc(token)
 
     before = checkpoint()
-    monkeypatch.setattr(host, "local_evaluate", held)
+    monkeypatch.setattr(native_preview, "evaluate", held)
     thread = Thread(target=run)
     thread.start()
     try:
@@ -367,7 +369,7 @@ def test_newer_busy_request_supersedes_inflight_result_without_queueing(document
     host, identity = document
     opened = host.prepare(opening())
     started, release = Event(), Event()
-    original = host.local_evaluate
+    original = native_preview.evaluate
     results = []
 
     def held(*args, **kwargs):
@@ -385,7 +387,7 @@ def test_newer_busy_request_supersedes_inflight_result_without_queueing(document
             doc_context.reset_current_doc(token)
 
     with monkeypatch.context() as scoped:
-        scoped.setattr(host, "local_evaluate", held)
+        scoped.setattr(native_preview, "evaluate", held)
         thread = Thread(target=run)
         thread.start()
         try:
@@ -447,7 +449,7 @@ def test_cancel_during_prepare_rejects_late_result(document, monkeypatch):
     host, identity = document
     request = opening()
     started, release = Event(), Event()
-    original = host.prepare_from_capture
+    original = native_preview.prepare_from_capture
     results = []
 
     def held(*args, **kwargs):
@@ -466,7 +468,7 @@ def test_cancel_during_prepare_rejects_late_result(document, monkeypatch):
             doc_context.reset_current_doc(token)
 
     before = checkpoint()
-    monkeypatch.setattr(host, "prepare_from_capture", held)
+    monkeypatch.setattr(native_preview, "prepare_from_capture", held)
     thread = Thread(target=run)
     thread.start()
     try:
@@ -577,3 +579,21 @@ def test_apply_deadline_rechecked_at_final_publication_lock(document, monkeypatc
     assert caught.value.status_code == 408
     unchanged(before)
     assert host.evaluate(update(opened, sequence=2))["candidate"]
+
+
+@pytest.mark.parametrize("phase", ["prepare", "evaluate"])
+def test_lease_duration_is_sampled_after_native_evaluation(document, monkeypatch, phase):
+    host, _ = document
+    clock = [100.0]
+    monkeypatch.setattr(host, "monotonic", lambda: clock[0])
+    opened = host.prepare(opening()) if phase == "evaluate" else None
+    original = native_preview.evaluate
+
+    def elapsed(*args, **kwargs):
+        result = original(*args, **kwargs)
+        clock[0] += 7.0
+        return result
+
+    monkeypatch.setattr(native_preview, "evaluate", elapsed)
+    packet = host.prepare(opening()) if opened is None else host.evaluate(update(opened))
+    assert packet["remaining_seconds"] == host.TTL_SECONDS - 7.0

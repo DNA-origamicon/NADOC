@@ -6,6 +6,8 @@ Tiny memory-only native fixtures; no scientific runtime, files or browser state.
 from uuid import uuid4
 
 import pytest
+
+from backend.api import part_deformation_preview as native_preview
 from fastapi import HTTPException
 
 from backend.api import doc_context, state
@@ -246,7 +248,7 @@ def test_creation_current_source_and_lease_guards_precede_evaluation(document, m
     else:
         host._entries[document].expires = 0
     before = checkpoint()
-    monkeypatch.setattr(host, "local_evaluate", lambda *_a, **_k: pytest.fail("Retired create reached native work"))
+    monkeypatch.setattr(native_preview, "evaluate", lambda *_a, **_k: pytest.fail("Retired create reached native work"))
     with pytest.raises(HTTPException):
         host.apply(update(opened, params=draft()))
     unchanged(before)

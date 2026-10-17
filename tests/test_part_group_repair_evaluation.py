@@ -94,10 +94,12 @@ def test_group_upgrade_retains_downstream_missing_dependency_failure():
     result = repair(source)
     assert result["status"] == "failed", result
     assert result["issues"][0]["feature_id"] == "move-feature"
-    # This existing overlay builder reports its missing owner through ValueError;
-    # repair must retain its feature-specific failure rather than skip the row.
-    assert result["issues"][0]["code"] == "invalid_command_inputs"
-    assert result["issues"][0]["detail"] == "Missing pose cluster"
+    # Native input resolution reports the authored placement reference before
+    # execution; repair must retain that exact failure and stop at this row.
+    assert result["issues"][0]["code"] == "missing_reference"
+    assert result["issues"][0]["references"] == [{
+        "kind": "cluster", "identity": "missing-owner", "parameter_path": ["cluster_id"],
+    }]
     assert "candidate" not in result
     assert result["repair"]["completed_prefix"] == [source.feature_log[0].id, "group-feature"]
     assert result["repair"]["not_evaluated"] == ["deform-feature"]

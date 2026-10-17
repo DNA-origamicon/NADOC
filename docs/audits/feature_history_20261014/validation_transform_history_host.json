@@ -1,0 +1,288 @@
+{
+  "checkpoint": "U19 \u2014 FH-23 checkpoint 2; owned movement host and display contract",
+  "source_checkpoint": "909f2de5",
+  "date": "2026-10-16",
+  "status": "IMPLEMENTED AND FOCUSED-VALIDATED: FH23 remains open; standard-suite and desktop qualification debt retained",
+  "runs": {
+    "constraint_prefix_red": {
+      "failed": 6,
+      "seconds": 2.69
+    },
+    "host_routes_red": {
+      "failed": 28,
+      "errors": 8,
+      "seconds": 3.64,
+      "note": "Missing transform family/route before implementation. Oversized request parameter later given a concise test ID to prevent huge pytest failure output."
+    },
+    "group_lineage_red": {
+      "failed": 14,
+      "passed": 2,
+      "seconds": 3.1
+    },
+    "projection_dto_red": {
+      "failed": 41,
+      "seconds": 3.21
+    },
+    "constraint_prefix_green": {
+      "passed": 27,
+      "seconds": 2.92,
+      "files": [
+        "tests/test_part_transform_preview_constraints.py",
+        "tests/test_part_transform_preview.py"
+      ]
+    },
+    "shared_pure_preview_regression": {
+      "passed": 167,
+      "seconds": 5.42,
+      "files": [
+        "tests/test_part_deformation_preview.py",
+        "tests/test_part_deformation_preview_dto.py",
+        "tests/test_part_sweep_preview.py"
+      ]
+    },
+    "group_lineage_green": {
+      "passed": 110,
+      "seconds": 3.48,
+      "files": [
+        "tests/test_group_lineage_transforms.py",
+        "tests/test_part_group_lineage.py",
+        "tests/test_group_organization_execution.py",
+        "tests/test_group_organization_public_gate.py"
+      ]
+    },
+    "host_extraction_initial": {
+      "passed": 200,
+      "warnings": 11,
+      "seconds": 10.51
+    },
+    "lease_timing_red": {
+      "failed": 2,
+      "seconds": 2.9
+    },
+    "shared_host_final": {
+      "passed": 202,
+      "warnings": 11,
+      "seconds": 11.03,
+      "files": [
+        "tests/test_part_deformation_preview_sessions.py",
+        "tests/test_part_deformation_preview_receipts.py",
+        "tests/test_part_deformation_preview_routes.py",
+        "tests/test_part_sweep_preview_sessions.py",
+        "tests/test_part_sweep_preview_routes.py",
+        "tests/test_deformation_creation_preview.py",
+        "tests/test_named_deformation_preview_sessions.py",
+        "tests/test_organized_recipe_permit.py",
+        "tests/test_part_publication_permit.py"
+      ]
+    },
+    "transform_integration_initial": {
+      "failed": 3,
+      "passed": 81,
+      "warnings": 4,
+      "seconds": 4.95,
+      "note": "Two native slabless extension records carried null slab fields; projection bounds incorrectly used null as a point. A real flexible tether uses native axes excluding flexible intervals, requiring exact companion-aware coverage. All39 transform host/route cases passed."
+    },
+    "nonruns": [
+      "just test-focused with --tb=short was rejected before collection; rerun without that unsupported flag produced the two timing regressions."
+    ],
+    "transform_integration_second": {
+      "failed": 1,
+      "passed": 87,
+      "warnings": 4,
+      "seconds": 5.06,
+      "note": "Native mixed-end root-to-root DS source has duplicate directional occupancy, confirmed in prior evidence and unchanged builder. Positive native compatible DS inputs qualified separately; ambiguous source remains whole-scope refusal (ISSUE-126)."
+    },
+    "transform_integration_final": {
+      "passed": 91,
+      "warnings": 4,
+      "seconds": 5.04,
+      "files": [
+        "tests/test_part_transform_preview_dto.py",
+        "tests/test_part_transform_preview_sessions.py",
+        "tests/test_part_transform_preview_routes.py"
+      ]
+    },
+    "distinct_final": {
+      "passed": 656,
+      "warnings": 25,
+      "files": 26,
+      "note": "Disjoint final focused selections; headless_build is one exact node, not its whole file. Broad passes are not added to this count."
+    },
+    "recovery_triage_red": {
+      "passed": 46,
+      "failed": 2,
+      "seconds": 10.7,
+      "files": [
+        "tests/test_part_recipe_file_recovery.py",
+        "tests/test_part_group_repair_evaluation.py",
+        "tests/test_part_deformation_repair_jobs.py"
+      ],
+      "note": "Both failures assert an obsolete generic missing-owner error. All8 repair-job cases pass; the broad-run setup error is not reproduced and remains unresolved."
+    },
+    "headless_group_red": {
+      "failed": 1,
+      "warnings": 1,
+      "seconds": 2.83,
+      "node": "tests/test_headless_build.py::test_add_cluster_default_records_replayable_grouping",
+      "note": "Stale v1 proof pin; current recorded group contract is v2."
+    },
+    "authored_scope_red": {
+      "failed": 1,
+      "seconds": 2.74,
+      "node": "tests/test_deformation_clusters.py::test_unknown_cluster_id_is_dropped",
+      "note": "Stale silent-drop expectation; authored missing group selection now returns409 invalid_selection."
+    },
+    "recovery_and_scope_final": {
+      "passed": 58,
+      "warnings": 9,
+      "seconds": 9.88,
+      "files": [
+        "tests/test_part_recipe_file_recovery.py",
+        "tests/test_part_group_repair_evaluation.py",
+        "tests/test_part_deformation_repair_jobs.py",
+        "tests/test_deformation_clusters.py"
+      ],
+      "note": "Structured reference paths, partial-replay refusal and source/undo/redo preservation retained. Repair-job setup error did not recur."
+    },
+    "headless_group_final": {
+      "passed": 1,
+      "warnings": 1,
+      "seconds": 2.74,
+      "node": "tests/test_headless_build.py::test_add_cluster_default_records_replayable_grouping"
+    }
+  },
+  "limits": [
+    "FH23 remains open; no completed milestone credit from host/projection alone.",
+    "Full control/renderer integration, explicit multi-owner pose recording, remaining prefix contracts and FH18/FH23 new-group movement remain required.",
+    "Native projection of an independently owned model does not establish historical replay support for its authoring family.",
+    "Archive remains unavailable; no app, browser, bulk capture, native build or simulation was started.",
+    "Transform HTTP gate remains false. No frontend files changed; no new visible editor is enabled.",
+    "Native full display emits explicit extra-base, CPD, flexible-arc and ss-linker companion requirements; their private renderer integration remains required.",
+    "Historical extension/overhang/duplex/CPD producer contracts remain distinct from directly projected owned-model coverage.",
+    "ISSUE-125 linked historical pose writes and ISSUE-126 mixed-end DS connection admission remain open in original FH23/FH25 scope.",
+    "Joint axes use unchanged owner-only native transformation with parent_composed:false; duplex pivot choices retain native rest-frame provenance.",
+    "Controls-only evaluation can derive native duplex pivot geometry; no zero-geometry or representative latency claim.",
+    "No molecular constants, builders, numerical source pins, model schema or goldens changed.",
+    "Broad FAST has documented failures/errors; four stale expectations are corrected in focused reruns, while one repair-job setup error remains unreproduced. Focused passes do not clear broad or deferred FULL debt."
+  ],
+  "progress": {
+    "completed": 20,
+    "estimated_total": 38,
+    "remaining": 18,
+    "remaining_core": 9,
+    "remaining_parked": 9,
+    "completed_delta": 0,
+    "total_delta": 0,
+    "engineering_checkpoints_since_B1": 19,
+    "milestones_closed_since_B1": 3,
+    "FH18_checkpoints": 13,
+    "FH18_growth_flag": true,
+    "FH23_checkpoints": 2,
+    "milestone_exit_changed": false
+  },
+  "implemented": [
+    "Closed family-work adapter reuses one bounded session catalog, work slot, source checks and publication authority; transform identity is feature+command kind, not a fabricated deformation ID.",
+    "Four existing movement roles have native Prepare/Evaluate/Apply/Cancel/Status with exact-origin guards, independent full proof/suffix rebuild, lost-response receipts and one undo/reload.",
+    "Version1 transform display retains complete admitted native record/axis variants, explicit companion renderer requirements, exact input/context, joint/constraint/pivot helpers and frame provenance.",
+    "Prospective geometry, cumulative helper traversal, output graph/byte and cooperative time admission; new wire/admission modules live in API layer, unchanged comparison schemas and native core.",
+    "Recorded joint and flexible annotations replay in historical prefixes; complete host example previews limit25 then Apply rebuilds later limit90.",
+    "Three nucleotide-transform roles use existing conserved-material organization lineage and unchanged native reconciliation/retry order; source/cold proof, regrouped membership and actual pending retry are covered.",
+    "Legacy duplicate host family branches removed; existing monkeypatch tests intercept real work. Lease remaining time retains post-evaluation sampling, caught by two observed red regressions."
+  ],
+  "main_js": {
+    "lines": 7349,
+    "delta": 0
+  },
+  "standard_suite": {
+    "command": "just test-smart",
+    "decision": "FAST",
+    "exit_code": 1,
+    "passed": 17489,
+    "failed": 27,
+    "errors": 9,
+    "skipped": 21,
+    "warnings": 2978,
+    "pytest_seconds": 250.37,
+    "guard_seconds": 260,
+    "workers": 4,
+    "deferred_message": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\n  This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\n  Only request `just test-session` when a broad/full sweep is actually needed.",
+    "triage": {
+      "stale_expectations": {
+        "count": 4,
+        "action": "Update the existing tests to the explicit v2 grouping/typed dependency/refused authored-scope contracts, retaining source, undo and partial-replay assertions. No production change for these failures."
+      },
+      "historically_reproduced_failure_nodes": {
+        "count": 23,
+        "vr_native_platform": 4,
+        "vr_missing_executable": 10,
+        "photoproduct_missing_review_packet": 7,
+        "junction_geometry_assertions": 2,
+        "evidence": [
+          "baseline_failure_check.json",
+          "validation_p3_continuation.json"
+        ],
+        "limits": "Same nodes were recorded previously; reviewed source/tests are unchanged from909f2de5. WSL2, absent VR executable and absent Archive review packet are currently verified. Exact current tracebacks/deltas were not retained, so identical current causes are not proven. Historical baseline harness restored selected modules, not a complete checkout."
+      },
+      "archive_collection_errors": {
+        "count": 4,
+        "file": "tests/test_cpd_gpu_npt_context_v4.py",
+        "reason": "Imported gpu_longbox_validation_v3 reads missing Archive cpd-anti-gpu-longbox-v3/assembly.json during collection. Other tests still executed."
+      },
+      "cpd_preview_fixture_errors": {
+        "count": 4,
+        "file": "tests/test_cpd_preview.py",
+        "historical_reason": "Incorrect preview stereochemistry: cis-anti-I",
+        "evidence": "baseline_failure_check.json",
+        "limits": "Current exact trace not retained; do not label these as Archive failures or change scientific fixtures/math without the separate authorization process."
+      },
+      "repair_job_setup_error": {
+        "count": 1,
+        "node": "tests/test_part_deformation_repair_jobs.py::test_committed_draft_remains_pending_and_requires_explicit_new_expectation",
+        "limits": "Focused file passes all8 cases; broad-run setup error was not reproduced. Exact current cause unresolved; no broad pass claim."
+      }
+    },
+    "timing": {
+      "skill": ".claude/skills/triage-slow-tests/SKILL.md",
+      "per_test_budget_seconds": 5,
+      "violators": 0,
+      "slowest_test_seconds": 4.02,
+      "recorded_nodes": 17542,
+      "summed_test_seconds": 888.6,
+      "ideal_four_worker_floor_seconds": 222.15,
+      "interpretation": "Aggregate work explains much of elapsed time. No evidence of one over-budget test or demonstrated accidental shared stall. No arbitrary slow marking, threshold changes or additional broad rerun. Timing summary captured before focused runs replaced the transient report."
+    },
+    "limits": "Full raw tool output was truncated; retain exact footer counts and separately observed focused failures. Broad suite was not rerun after assertion updates and is not green."
+  },
+  "cleanup": {
+    "paths": [
+      "/tmp/pytest-of-joshua/pytest-16",
+      "/tmp/pytest-of-joshua/pytest-17",
+      "/tmp/pytest-of-joshua/pytest-18",
+      "/tmp/pytest-of-joshua/pytest-current"
+    ],
+    "regular_files_removed": 0,
+    "regular_file_bytes_removed": 0,
+    "empty_directories_removed": 63,
+    "symlinks_removed": 4,
+    "active_references": 0,
+    "inaccessible_processes": 31,
+    "verified_absent": true,
+    "preserved": "Shared caches, user workspace/runtime state, native binaries, managed jobs and historical evidence. No browser/bulk artifacts created.",
+    "reference_check": "Checked readable process cwd/root/fd links and maps;31 other process inventories were inaccessible. All own test sessions had completed; only verified empty task directories and task symlinks were removed."
+  },
+  "static_checks": {
+    "changed_python_files": 24,
+    "changed_python_ruff": "pass",
+    "repository_lint": "5 existing F401 findings; unchanged baseline",
+    "memory_lint": {
+      "errors": 6,
+      "warnings": 59,
+      "current_project_lines": 200,
+      "baseline_unchanged": true
+    },
+    "diff_whitespace": "pass",
+    "frontend_main_lines": 7349,
+    "frontend_main_delta": 0,
+    "numerical_manifests_and_goldens_changed": false
+  }
+}

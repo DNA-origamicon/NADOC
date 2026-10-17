@@ -3,6 +3,8 @@
 from uuid import uuid4
 
 import pytest
+
+from backend.api import part_deformation_preview as native_preview
 from fastapi import HTTPException
 
 from backend.api import doc_context, state
@@ -117,7 +119,7 @@ def test_named_lease_guards_remain_live_before_native_work(document, monkeypatch
     else:
         monkeypatch.setattr(policy, "_configuration", (policy.HostPolicyConfiguration(), 20))
     before = checkpoint()
-    monkeypatch.setattr(host, "local_evaluate", lambda *_a, **_k: pytest.fail("Stale source reached native work"))
+    monkeypatch.setattr(native_preview, "evaluate", lambda *_a, **_k: pytest.fail("Stale source reached native work"))
     with pytest.raises(HTTPException) as error:
         getattr(host, operation)(change(opened))
     assert error.value.status_code == 409

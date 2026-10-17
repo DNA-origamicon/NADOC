@@ -14,8 +14,8 @@ agreed; do not invent historical estimate deltas. This is a milestone estimate,
 not a count of messages/commits or a percentage of time or user-ready features.
 Core estimates have moderate confidence; parked work has lower confidence.
 
-Keep delivery and effort visible separately: **18 engineering checkpoints have
-been delivered since B1 (U1–U18), closing three additional milestones**. Thirteen of
+Keep delivery and effort visible separately: **19 engineering checkpoints have
+been delivered since B1 (U1–U19), closing three additional milestones**. Thirteen of
 those checkpoints were spent on still-open FH-18. The 38 is an estimate of
 deliverable milestones, not a promise of 38 commits or assistant responses;
 the thirteen-checkpoint effort must not disappear behind the unchanged denominator.
@@ -63,7 +63,7 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 |---|---|---|
 | FH-18 | In progress · 13 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Owned organization transactions, named deformation preview/repair/comparison, qualified final-topology lineage including extrusion/crossover and resize/domain-shift edits and matching Fine Routing recovery are implemented; Groups/Placements UI, explicit placement Apply and ordinary owned Bend/Twist creation are integrated privately; persistent group visibility follows current identity membership and saves after queued writes; ordinary explicit-placement patterns now copy declared named groups through owned create/edit/replay; generated consumers, new-group movement and qualification stay open. |
 | FH-20 | Remaining | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
-| FH-23 | In progress · 1 checkpoint | Move/rotate history editing: complete parameter controls, guarded commit, downstream edits and undo/persistence parity. Four-role native input binding, prefix evaluation and typed reference diagnostics are implemented; owned display/host/UI and the existing FH-18/FH-23 new-group integration exit remain open. |
+| FH-23 | In progress · 2 checkpoints | Move/rotate history editing: complete parameter controls, guarded commit, downstream edits and undo/persistence parity. Four-role inputs/references, shared owned host and bounded native display/control data are implemented. Complete private rendering/controls, linked-owner recording, remaining prefix contracts and the existing FH-18/FH-23 new-group integration exit remain open. |
 | FH-24 | Remaining | Fine Routing child editors: resize, ligate, nick, crossovers and loop/skips editable through ordinary UI with downstream replay. |
 | FH-25 | Remaining | Ordinary DNA connection completion: explicit supported core matrix including required combined/direct/indirect paths, recorded and qualified. |
 | FH-26 | Remaining | Core dependency repair: earliest failure/blocked descendants, reviewed input/reference replacement or explicit cascade, candidate review, Apply/undo/reload. |
@@ -95,7 +95,7 @@ memory, and include this line in the user-facing final report even when no
 milestone closed:
 
 > Overhaul: **20 / 38 complete**; **18 remaining** (9 core, 9 parked).
-> Change this update: **+1 completed, +0 total**. Baseline total: **38**.
+> Change this update: **+0 completed, +0 total**. Baseline total: **38**.
 
 Replace the numbers with current counts, name the milestone worked/closed, and
 explain every total or scope change. Counts are whole milestones, not fractional
@@ -144,6 +144,47 @@ bound their matrices before implementation rather than expanding them indefinite
 | U16 · 2026-10-16 | FH-21 checkpoint 1: complete seven-family native extrusion input editor, source-prefix binding, isolated downstream rebuild, shared owned host and source-bound full-geometry adoption; [evidence](validation_extrusion_history_editor.json) | FH-21 implementation exit closed; existing FH-27 desktop/performance exit remains | 19 | 38 | 10 | 9 | +0 total, +1 completed. Sixteen checkpoints since B1 close two milestones. FH-18 stays open after thirteen checkpoints; no exit/scope/denominator changes. |
 | U17 · 2026-10-16 | FH-22 checkpoint 1: complete native Sweep controls, historical-prefix private display/picker, shared owned lifecycle, source proof and downstream rebuild; [evidence](validation_sweep_history_editor.json) | FH-22 implementation exit closed; existing FH-27 desktop/performance exit remains | 20 | 38 | 9 | 9 | +0 total, +1 completed. Seventeen checkpoints since B1 close three milestones. FH-18 stays open after thirteen checkpoints; no scope/exit/denominator changes. |
 | U18 · 2026-10-16 | FH-23 checkpoint 1: four-role native movement input binding, owned prefix evaluation, exact reference diagnostics and existing history API integration; [contract](transform_history_editor_plan.md), [evidence](validation_transform_history_primitives.json) | None; complete display/control/host and the existing new-group integration exit remain | 20 | 38 | 9 | 9 | +0 total, +0 completed. Eighteen engineering checkpoints since B1 close three milestones. FH-23 remains open after one; FH-18 remains growth-flagged after thirteen. No narrowed exits or estimate changes. |
+| U19 · 2026-10-16 | FH-23 checkpoint 2: shared owned transform host, bounded complete admitted native display/control packets, historical constraint prefix and organized nucleotide replay; [evidence](validation_transform_history_host.json) | None; private companion rendering/controls, explicit linked-owner recording, remaining prefix contracts and new-group integration remain | 20 | 38 | 9 | 9 | +0 total, +0 completed. Nineteen engineering checkpoints since B1 close three milestones. FH-23 remains open after two; FH-18 remains growth-flagged after thirteen. Original exits and estimate unchanged. |
+
+### U19 progress — shared movement host and complete admitted display data
+
+Four existing movement roles now use the same bounded session catalog, work slot,
+source checks and atomic publication host as Bend/Twist and Sweep. Family work is
+extracted into a closed adapter; no additional registry or callback authority.
+Feature identity and command kind identify batches/resets without a fictional
+single deformation output. Apply still independently proves the full source and
+regenerates later inputs; preview never changes canonical geometry or undo.
+
+The new versioned transform display carries unchanged native DNA records/axes,
+exact authored inputs and native joint/pivot/tether/link context. Explicit companion
+requirements preserve extra bases, CPD, flexible arcs and ss linkers. Parent-local
+joint and rest-frame pivot provenance is explicit. Work admission counts repeated
+native helper traversals; output/deadline bounds are not measured latency evidence.
+Existing comparison schemas and numerical builders/pins/goldens remain unchanged.
+
+Recorded joint/flexible prefix context and all three organized nucleotide roles
+are covered. A later joint limit90 is absent from historical preview25, rebuilt
+on Apply, and restored by undo. An existing invalid mixed-end DS linker is refused
+for duplicate occupancy; compatible DS inputs have positive native parity checks.
+ISSUE-125 linked-history omissions and ISSUE-126 connection admission remain open.
+
+**20/38 complete;18 remaining (9 core,9 parked);+0 completed,+0 total.** U1–U19
+are nineteen engineering checkpoints, closing three milestones. FH-23 has spent
+two. Its third unfinished checkpoint triggers the existing containment review;
+FH-18 remains flagged after thirteen. The remaining complete UI, compound linked
+pose definition, producer-prefix coverage and arbitrary new-group motion retain
+the original exits. Projection of owned extensions/CPD/duplex/linker models is
+not historical replay support for those producers. No route/editor rollout or
+assembly/VR scope change. Continue the finite movement contract before Fine Routing.
+
+The final disjoint focused runs pass **656 backend cases** across26 files. Standard
+FAST ran **17,489 passes,27 failures,9 errors,21 skips**. Four stale test expectations
+are corrected and pass focused checks; historical environment/scientific failures
+and one unreproduced repair-job setup error remain explicit debt. FULL is deferred.
+Zero individual tests exceeded5s, but the260s aggregate exceeded90s; no arbitrary
+slow marking or threshold change. Exact limits and cleanup are in the
+[evidence](validation_transform_history_host.json). No new frontend files or app
+exercise; `main.js` delta0. The transform route defaults to disabled.
 
 ### U18 progress — ordinary movement roles, full exit retained
 

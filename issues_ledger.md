@@ -2777,3 +2777,49 @@ milestone because FH-18 remains open. App qualification remains MV-48/FH-27.
 - The standard run also encountered the separately unavailable Archive-backed
   CPD fixture during collection. Fixing the test ID does not clear that environment
   failure or deferred FULL-suite debt; focused multiworker validation is separate.
+
+## ISSUE-125 — Historical constrained movement omits linked owner writes (2026-10-16, OPEN)
+
+- Code audit: `cluster_gizmo._paintLinks` queues solved absolute poses for linked
+  owners, while `translate_rotate_tool`'s history branch edits and clears only
+  `editCtx.clusterId`. Detach does not discard the other pending owner transforms.
+  This is an audited mismatch; no application reproduction is claimed yet.
+- The existing flexible-relax snapshot also records only the cluster ID list,
+  not accepted poses or complete solver inputs, so it is not a replay substitute.
+- The complete FH-23 contract retains all linked/joint/tether controls. Implement
+  an explicit complete multi-owner input operation and atomic private ownership;
+  preserve old single-row meaning and never infer coupled historical rows by
+  proximity or adjacency. Do not call the ordinary single-owner host a fix.
+- Required regression: selected + linked + fixed owners through actual control
+  solve, failed Apply/cancel, downstream edits and cold proof. Archive-dependent
+  app qualification remains FH-27. This issue is existing scope, not a new milestone.
+
+## ISSUE-126 — Connection-version DS application can retain duplicate bridge occupancy (2026-10-16, OPEN)
+
+- The native mixed-end fixture with `root-to-root-dsdna-linker` produces two
+  FORWARD bridge domains on the same virtual helix. This is existing output,
+  already visible as duplicate-occupancy warnings in
+  `benchmark_finite_connection_apply_route_warning_diagnostic.json` in the
+  feature-history audit. U19's complete transform inventory detects it again.
+- `overhang_ops._check_linker_compatibility` has a DS mixed-polarity check, but
+  the legacy/finite connection-version application path does not call it. This
+  audit does not authorize changing native strand polarity or existing outputs.
+- Retain a native-output characterization and whole-display refusal regression.
+  Qualify positive DS display using an existing compatible authored connection
+  type, not edited strands or relaxed occupancy checks. Complete application
+  admission/repair remains the original ordinary-connection milestone FH-25;
+  no new milestone or completed credit is created.
+
+## ISSUE-127 — Four regression expectations lagged grouping and dependency contracts (2026-10-16, CORRECTED TESTS)
+
+- Standard FAST exposed a v1 grouping pin after the v2 recorder change, two
+  generic missing-owner expectations after typed reference resolution, and an
+  authored Bend scope test still expecting silent removal of a missing group.
+- Update those existing tests to exact v2/structured-reference/409 contracts.
+  Keep no-partial-candidate and feature attribution checks; strengthen rejected
+  scope checks to preserve source, revision and undo/redo contents and identities.
+  A finalizer removes the test's synthetic redo branch even after assertion failure.
+- Observed red cases pass in focused reruns. No production behavior is relaxed.
+  The broad run also reported a repair-job setup error that did not reproduce in
+  its eight-case file; retain it as unresolved broad-suite debt. Other recorded
+  environment/scientific failures and deferred FULL validation remain separate.

@@ -215,8 +215,10 @@ def test_missing_downstream_owner_keeps_first_failure_and_no_partial_candidate()
     result = service().recover_recipe_file(data, request(data, group_actions(source)))
     refused(result)
     assert result["issues"][0]["feature_id"] == "move-feature"
-    assert result["issues"][0]["code"] == "invalid_command_inputs"
-    assert result["issues"][0]["detail"] == "Missing pose cluster"
+    assert result["issues"][0]["code"] == "missing_reference"
+    assert result["issues"][0]["references"] == [{
+        "kind": "cluster", "identity": "missing-pose-owner", "parameter_path": ["cluster_id"],
+    }]
 
 
 class CancelledRecovery(RuntimeError):

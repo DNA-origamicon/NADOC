@@ -22,23 +22,24 @@ decrement completed if an exit reopens. Flag three major checkpoints spent on
 any still-open milestone (cumulative even across alternating work), or total
 growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
-Effort is separate: U1–U18 are **18 engineering checkpoints** since B1, closing
+Effort is separate: U1–U19 are **19 engineering checkpoints** since B1, closing
 **three additional milestones**: FH-19 in two checkpoints; FH-21/FH-22 in one each.
-Thirteen checkpoints went to still-open FH-18. The unchanged 38 is not an
-estimate of commits/messages. Audits alone earn no credit.
-Current counts: **20 / 38 complete, 18 remaining (9 core, 9 parked)**.
-Latest U18 delta: **+0 completed, +0 total**. FH-23 has one checkpoint: four-role
-placement/nucleotide/batch/reset strict inputs, owned prefix evaluation, typed
-references and existing native history API integration. Reset receipts derive
-from exact prefix targets; requested contradictory receipts refuse. Successful
-native replay adds no duplicate occupancy scan. Source proof, suffix rebuild and
-undo/reload share existing machinery; no native placement/pin changes.
-See [the full movement contract](../docs/audits/feature_history_20261014/transform_history_editor_plan.md)
-and [U18 evidence](../docs/audits/feature_history_20261014/validation_transform_history_primitives.json).
-FH-23 remains open: complete DTO/host/controls and FH-18 new-group integration.
-FH-21/FH-22 remain implemented; U16/U17 retain their evidence and closed gates.
-U18 fixes U17's randomized Sweep test collection ID. Standard FAST collection
-still lacks Archive-backed CPD evidence; FULL debt remains. main.js delta0.
+Thirteen checkpoints went to still-open FH-18. Audits/commits alone earn no credit.
+Current counts: **20 / 38 complete,18 remaining (9 core,9 parked)**.
+Latest U19 delta: **+0 completed,+0 total**. FH-23 has two checkpoints: four-role
+inputs/references plus shared owned host and bounded native display/control data.
+No duplicate session registry; Apply independently proves source/rebuilds suffix,
+with exact feature/command identity, source checks, one undo and receipt recovery.
+Historical joint/flexible context and three organized nucleotide roles replay;
+complete admitted records retain extra/CPD/flexible/linker companion requirements.
+Native math/pins remain unchanged; frame provenance and cumulative work are explicit.
+See [movement contract](../docs/audits/feature_history_20261014/transform_history_editor_plan.md)
+and [U19 evidence](../docs/audits/feature_history_20261014/validation_transform_history_host.json).
+FH-23 remains open: complete renderer/controls, linked-pose operation, remaining
+producer-prefix contracts and FH-18 new-group integration. Route stays disabled.
+656 focused passes; FAST17489 passed/27 failed/9 errors, FULL deferred. Four stale
+expectations corrected; other debt retained. No app change; main.js delta0.
+ISSUE-125 linked writes and ISSUE-126 DS occupancy remain existing-scope debt.
 FH-18 retains separate Groups/Placements, native lineage, named deformation
 preview/repair/creation, persistent visibility and organized pattern integration.
 Its original movement/generated/qualification exits remain open; rollout stays off.
@@ -60,7 +61,7 @@ into existing frozen ranges, independently of explicit placement `cluster_ids`.
 Upstream edits re-resolve the named selection during replay; later topology/group
 edits retain already evaluated ranges. Missing references diagnose; dissolution
 with a live named deformation consumer refuses. Legacy selector grammar is unchanged.
-The 25-kind lineage adapter preserves actual contributors through native retry
+The 31-kind lineage adapter preserves actual contributors through native retry
 and resize/shift merge/re-split, without reviving removed tails or selecting
 unrelated new material; ambiguity refuses. See the [U10 contract](../docs/audits/feature_history_20261014/group_placement_migration_plan.md#u10-passive-resizedomain-shift-contributors).
 Owned transactions retain source/session/revision/policy checks and one undo.
@@ -80,7 +81,7 @@ carry bounded complete PRE/POST organization replacements with exact baseline ch
 Typed identity/remap/structure inventories include organization; legacy None adds
 no strand walk. The exact oxDNA archive schema still admits legacy documents and
 explicitly refuses active organization. Unadapted generated composition/removal
-and native authoring refuse; named deformation, the 25-kind lineage subset,
+and native authoring refuse; named deformation, the 31-kind lineage subset,
 pose-only placement and three numerical families work privately. Explicit load/startup restore,
 branch/save/undo/redo paths admit the mode only under the disabled host rollout
 flag. Generic writes and unrelated permits remain refused even with that flag.
@@ -133,7 +134,7 @@ and ordinary controls must agree. Nanoparticle/protein/assets and their remainin
 benchmarks are parked; ordinary DNA connections are core. Assemblies and VR
 remain separately deferred. The persistent P3–P6 goal stays active.
 
-U18 sequencing: complete FH-23's owned display/host/controls next; new-group movement
+U19 sequencing: finish FH-23's complete private renderer/controls and linked poses; new-group movement
 and generated compatibility retain the existing B–E exits. U13 completes the
 private ordinary Bend/Twist creation adapter: same owned prefix, controller,
 renderer and lease as history editing, no provisional canonical operation.
@@ -155,7 +156,7 @@ placement editing remains gated until FH-23.
 The [caller audit](../docs/audits/feature_history_20261014/group_placement_migration_plan.md#post-u11-caller-audit-and-next-delivery)
 found no ordinary core caller needing a new generic scope compiler first.
 Generated compatibility remains FH-18, not silently transferred to FH-36.
-No fixed exit changed; FH-18 remains at checkpoint13 after U17. Full redraw for structural partial
+No fixed exit changed; FH-18 remains at checkpoint13 after U19. Full redraw for structural partial
 updates and full undo copying under lock remain performance debt. No per-frame
 history proof is introduced. Shared prefix admission and editor setup are reused;
 live legacy authoring cannot be pruned until qualified rollout.
