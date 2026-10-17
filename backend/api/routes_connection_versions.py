@@ -5,6 +5,10 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 
 from backend.api import state as design_state
+from backend.api.connection_version_direct import (
+    create_bound_binding,
+    materialize_direct,
+)
 from backend.api.crud import (
     _design_response,
     _design_response_with_geometry,
@@ -22,12 +26,13 @@ from backend.core.connection_versions import (
 from backend.core.models import (
     ConnectionVersion,
     Design,
-    Duplex,
-    OverhangBinding,
     OverhangConnection,
 )
 from backend.core.overhang_ops import _ovhg_backing_length
 from backend.core.render_diff import _local_changed_helices, _strand_occupancy
+
+# Compatibility for existing headless Python callers.
+_cv_create_bound_binding = create_bound_binding
 
 router = APIRouter()
 
@@ -191,117 +196,6 @@ def _cv_linker_type(t: str) -> str:
     return "ds" if (isinstance(t, str) and "dsdna" in t) else "ss"
 
 
-def _cv_sub_domain_at_attach(d: Design, ovhg_id: str, attach: str):
-    ov = next((o for o in d.overhangs if o.id == ovhg_id), None)
-    if ov is None or not ov.sub_domains:
-        return None
-    ordered = sorted(ov.sub_domains, key=lambda sd: sd.start_bp_offset or 0)
-    return (ordered[0] if attach == "root" else ordered[-1]).id
-
-
-def _cv_create_bound_binding(
-    d: Design, a_id: str, b_id: str, attach_a: str, attach_b: str, connection_type: str
-) -> Design:
-    """Materialize a DIRECT connection (root-to-root OR end-to-root) as a single
-    non-consuming `OverhangBinding`, relocated on apply so the duplex renders
-    immediately and overhang B's embedded-strand bond is left stretched.
-
-    Unified path (2026-06-30, replaces the end-to-root binder splice): A is the
-    driver (its helix HOSTS the duplex), B is the driven side (its tip domain is
-    relocated onto A's helix, antiparallel — `compute_bind_topology`/`apply_bind_topology`).
-    Neither overhang is consumed; both stay in `design.overhangs`. The bound flag is
-    set but NO cluster relax runs, so the cross-helix root↔tip bond is visibly
-    stretched until the user hits Relax.
-    """
-    from backend.core.binding_relax import apply_bind_topology, compute_bind_topology
-
-    sd_a = _cv_sub_domain_at_attach(d, a_id, attach_a)
-    sd_b = _cv_sub_domain_at_attach(d, b_id, attach_b)
-    if not (sd_a and sd_b):
-        return d  # no sub-domains → can't bind (mirrors the old direct silent-skip)
-
-    # Length-preservation: a direct binding relocates one WHOLE tip domain onto the
-    # other, so it requires equal-length attach sub-domains. DIFFERENT-length
-    # overhangs are represented by the Duplex (paired window + toehold) — skip the
-    # binding here (its unequal-length record would fail validation anyway; the
-    # binding-based geometry for different lengths is deferred). The duplex is
-    # created separately by the frontend's _ensureDuplexForPair.
-    def _sd_len(sd_id: str) -> Optional[int]:
-        for o in d.overhangs:
-            for sd in o.sub_domains or []:
-                if sd.id == sd_id:
-                    return sd.length_bp
-        return None
-
-    if _sd_len(sd_a) != _sd_len(sd_b):
-        return d
-
-    used = {b.name for b in d.overhang_bindings}
-    n = 1
-    while f"B{n}" in used:
-        n += 1
-    binding = OverhangBinding(
-        name=f"B{n}",
-        sub_domain_a_id=sd_a,
-        sub_domain_b_id=sd_b,
-        overhang_a_id=a_id,
-        overhang_b_id=b_id,
-        driver_oh_id=a_id,
-        driven_oh_id=b_id,
-        connection_type=connection_type,
-        bound=True,
-    )
-    topology = compute_bind_topology(d, binding, driver_side="a")
-    binding = binding.model_copy(update={"prior_driven_topology": topology.snapshot})
-    d = d.model_copy(update={"overhang_bindings": [*d.overhang_bindings, binding]})
-    d = apply_bind_topology(d, topology)
-
-    # Re-seat the relocated duplex like a linker bridge: ORIENTED along and CENTERED
-    # on the chord between its two embedded-staple connections (A's root junction and
-    # B's root junction), so both root bonds share the stretch symmetrically and are
-    # minimized. Persisted as the DRIVER's OverhangSpec.rotation + translation so the
-    # whole duplex (driver overhang + co-moving driven tip partner) transforms rigidly
-    # at geometry time. Zero both first so the placement is measured against the
-    # freshly-relocated (un-seated, identity) geometry, then store the result.
-    from backend.core.direct_relax import duplex_midpoint_placement
-
-    d = d.model_copy(
-        update={
-            "overhangs": [
-                o.model_copy(
-                    update={
-                        "rotation": [0.0, 0.0, 0.0, 1.0],
-                        "translation": [0.0, 0.0, 0.0],
-                    }
-                )
-                if o.id == a_id
-                else o
-                for o in d.overhangs
-            ]
-        }
-    )
-    placement = duplex_midpoint_placement(d, a_id, b_id)
-    if placement is not None:
-        rot, trans = placement
-        d = d.model_copy(
-            update={
-                "overhangs": [
-                    o.model_copy(update={"rotation": rot, "translation": trans})
-                    if o.id == a_id
-                    else o
-                    for o in d.overhangs
-                ]
-            }
-        )
-    # Promote the just-placed pose onto a first-class child DUPLEX cluster (sidebar-listed,
-    # gizmo-movable, drift-free) — geometry+axis neutral (proven on 2x2_OH_test).
-    # [[overhang-duplex-cluster]] P1b.
-    from backend.core.duplex_cluster import materialize_duplex_cluster
-
-    d, _cid = materialize_duplex_cluster(d, a_id)
-    return d
-
-
 def _apply_connection_version_impl(
     version_id: str, *, new_version: ConnectionVersion | None = None
 ) -> dict:
@@ -390,44 +284,7 @@ def _apply_connection_version_legacy(
         report = None
         bridge_helix_ids: list[str] = []
         if direct:
-            # BOTH root-to-root and end-to-root: one non-consuming bound binding,
-            # relocated on apply (duplex forms now; B's embedded-strand bond left
-            # stretched). The only per-type difference is the attach pair. (Replaces
-            # the end-to-root binder splice that consumed B — removed 2026-06-30.)
-            d = _cv_create_bound_binding(d, a_id, b_id, attach_a, attach_b, vtype)
-            # A display Duplex is part of the connection itself. Keep it inside
-            # this snapshot so one Undo removes both the binding and the entry
-            # shown by the Linkers/Bindings UI. The old frontend follow-up POST
-            # was outside the feature log and therefore survived undo.
-            pair = {a_id, b_id}
-            if not any(
-                {dx.left.overhang_id, dx.right.overhang_id} == pair
-                for dx in d.duplexes
-            ):
-                from backend.core.duplex import (
-                    connect_register,
-                    longest_driver,
-                    relocate_duplex,
-                    smallest_unused_duplex_name,
-                )
-
-                left, right = connect_register(d, a_id, attach_a, b_id, attach_b)
-                dx = Duplex(
-                    name=smallest_unused_duplex_name(d),
-                    left=left,
-                    right=right,
-                    driver=longest_driver(d, left, right),
-                    allow_n_wildcard=True,
-                    connection_type=vtype,
-                )
-                d = d.model_copy(update={"duplexes": [*d.duplexes, dx]}, deep=True)
-                # Different-length pairs have no legacy OverhangBinding; their
-                # driven-domain relocation belongs to this same atomic action.
-                if not any(
-                    {b.overhang_a_id, b.overhang_b_id} == pair
-                    for b in d.overhang_bindings
-                ):
-                    d = relocate_duplex(d, dx)
+            d = materialize_direct(d, a_id, b_id, attach_a, attach_b, vtype)
         else:
             conn = OverhangConnection(
                 overhang_a_id=a_id,

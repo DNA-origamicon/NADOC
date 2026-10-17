@@ -14,8 +14,8 @@ agreed; do not invent historical estimate deltas. This is a milestone estimate,
 not a count of messages/commits or a percentage of time or user-ready features.
 Core estimates have moderate confidence; parked work has lower confidence.
 
-Keep delivery and effort visible separately: **31 engineering checkpoints have
-been delivered since B1 (U1–U31), closing four additional milestones**. Thirteen of
+Keep delivery and effort visible separately: **32 engineering checkpoints have
+been delivered since B1 (U1–U32), closing four additional milestones**. Thirteen of
 those checkpoints were spent on still-open FH-18. The 38 is an estimate of
 deliverable milestones, not a promise of 38 commits or assistant responses;
 the thirteen-checkpoint effort must not disappear behind the unchanged denominator.
@@ -65,7 +65,7 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 | FH-18 | In progress · 13 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Owned organization transactions, named deformation preview/repair/comparison, qualified final-topology lineage including extrusion/crossover and resize/domain-shift edits and matching Fine Routing recovery are implemented; Groups/Placements UI, explicit placement Apply and ordinary owned Bend/Twist creation are integrated privately; persistent group visibility follows current identity membership and saves after queued writes; ordinary explicit-placement patterns now copy declared named groups through owned create/edit/replay; generated consumers, new-group movement and qualification stay open. |
 | FH-20 | Remaining | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
 | FH-23 | In progress · 9 checkpoints; task growth flagged | Move/rotate history editing: complete parameter controls, guarded commit, downstream edits and undo/persistence parity. Owned transport, native private rendering/controls and explicit complete linked-owner pose recording are integrated. Actual native tether/joint/linker gestures now cross through host Apply and cold replay; bounded ordinary producer-prefix admission is extended. Numerical Prepare/Apply now use the same private host with bounded asynchronous computation, cancellation and receipt recovery; native CPD free-motion and relaxed-duplex root/taut/joint gestures are qualified through the host, organized extension-only v2 upserts now use the bounded ordinary transaction and shared 2D/3D controls. U26 native counterexamples reject ordinary owner insertion and unconditional final-pass shortcuts; arbitrary new-group movement and its complete comparison/qualification remain open. Paired rollout gates stay false. |
-| FH-25 | In progress · 4 checkpoints; task growth flagged | Ordinary DNA connection completion: explicit supported core matrix including required combined/direct/indirect paths, recorded and qualified. [Fixed matrix and implementation order](ordinary_connection_completion_plan.md); finite/indirect Apply and compound Connect have versioned native recipes, exact zero-bridge replacement, guarded ordinary HTTP/recording, input editing and cold replay. Direct contracts, applied metadata lifecycle, organized integration and qualification remain open. |
+| FH-25 | In progress · 5 checkpoints; task growth flagged | Ordinary DNA connection completion: explicit supported core matrix including required combined/direct/indirect paths, recorded and qualified. [Fixed matrix and implementation order](ordinary_connection_completion_plan.md); finite/indirect Apply and compound Connect have versioned native recipes, exact zero-bridge replacement, guarded ordinary HTTP/recording, input editing and cold replay. Direct contracts, applied metadata lifecycle, organized integration and qualification remain open. |
 | FH-26 | Remaining | Core dependency repair: earliest failure/blocked descendants, reviewed input/reference replacement or explicit cascade, candidate review, Apply/undo/reload. |
 | FH-27 | Remaining | Integrated desktop geometry acceptance: representative full workflows, measured latency/memory and broad regression exits; relevant app debt and proven-unused legacy paths closed. Test reruns alone do not close this. |
 | FH-28 | Remaining | Qualify existing immutable host lifecycle: durable creation/recovery/publication on actual paths, cancellation and retained-state limits accepted. |
@@ -159,6 +159,19 @@ bound their matrices before implementation rather than expanding them indefinite
 
 
 | U31 · 2026-10-16 | FH-25 checkpoint 4: native equal/unequal direct replacement regression and complete binding/Duplex restoration before new sequence edits; [evidence](ordinary_connection_completion_plan.md#u31--direct-replacement-restoration) | None; direct replay contracts, applied metadata, organized ownership and qualification remain | 21 | 38 | 8 | 9 | +0 total,+0 completed. Thirty-one engineering checkpoints close four milestones since B1. FH-25 remains growth-flagged after four; FH-18/FH-23 remain13/9. |
+
+
+| U32 · 2026-10-16 | FH-25 checkpoint 5: shared native direct materializer, explicit stable identity/time and complete equal/A-longer/B-longer parity/restoration; [evidence](ordinary_connection_completion_plan.md#u32--deterministic-shared-direct-materialization) | None; direct admission/dependency/recording contracts and remaining lifecycle/qualification exits remain | 21 | 38 | 8 | 9 | +0 total,+0 completed. Thirty-two engineering checkpoints close four milestones since B1. FH-25 remains growth-flagged after five; FH-18/FH-23 remain13/9. |
+
+### U32 shared deterministic direct materializer
+
+**21/38 complete;17 remaining (8 core,9 parked);+0 completed,+0 total.**
+Both direct paths now share native construction between ordinary Apply and the
+future replay adapter. Explicit seed/time produce repeatable complete authoring
+output; common output identities survive attachment and length edits. Existing
+Python helper callers keep their import. Nine-file regression188passed. This is
+not source admission, dependency validation, command registration or rollout;
+these remain next within the same FH-25 exit. No new milestone credit.
 
 ### U31 direct replacement restoration
 

@@ -16,7 +16,7 @@ from tests.test_part_pending_connection_versions import (
 )
 
 
-@pytest.fixture(params=[12, 8], ids=['equal', 'unequal'])
+@pytest.fixture(params=[12, 8, 16], ids=['equal', 'a-longer', 'b-longer'])
 def direct_source(application_prefix, request):
     source = create_empty_part('Direct replacement', 'HONEYCOMB')
     for entry in application_prefix.feature_log:

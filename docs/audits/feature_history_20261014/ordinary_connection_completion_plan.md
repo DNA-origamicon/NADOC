@@ -366,3 +366,65 @@ same-user cwd/fd/maps references were present; persistent systemd/PAM435/436
 remain uninspectable. Removed only those empty directories/links; pytest root
 and `/dev/shm` are empty. No user designs, managed jobs, caches or scientific
 artifacts were removed. No bulk artifacts were created.
+
+
+## U32 — deterministic shared direct materialization
+
+`connection_version_direct` extracts existing equal-length binding construction
+and display Duplex creation into one shared native materializer. Ordinary Apply
+calls it; the old `_cv_create_bound_binding` import remains a compatibility alias
+for existing headless callers. This removes143net lines from the route, preserving
+its one-recording transaction. No placement arithmetic, numerical kernel, model,
+source pin, phase constant or golden changed.
+
+An optional UUID seed plus explicit finite nonnegative creation time supplies
+binding and Duplex identities/times, native forced-ligation identity and child
+cluster identity. Both must be supplied together. Unequal-length construction
+passes the seed into existing `relocate_duplex`; equal construction passes the
+same output namespace into existing `compute_bind_topology` and
+`materialize_duplex_cluster`. Common cluster/ligation/Duplex identities therefore
+survive equal-to-unequal edits and either endpoint becoming the longer driver.
+No global UUID/time monkeypatch or output-snapshot replay is used.
+
+Nine initial tests failed on the absent module. The first three-file pass was
+41cases in4.12s. After strict identity/time and length-edit controls, the nine-file
+run passed175cases. Expanding native prefix inputs to12/12,12/8 and12/16 tests
+both unequal driver choices; the final run passed188cases/33existing FastAPI
+warnings in9.00s. Command:
+
+`just test-affected tests/test_connection_direct_identity.py tests/test_connection_direct_replacement.py tests/test_direct_connection_unified.py tests/test_duplex_length_preserve.py tests/test_overhang_binder_rotation.py tests/test_connection_composition_contract.py tests/test_connection_versions.py tests/test_part_connection_application_commands.py tests/test_part_connection_indirect.py --tb=short`.
+
+New identity tests compare complete authored output to ordinary construction,
+normalizing only generated identities/creation times and excluding the separately
+created saved alternative. They assert repeated exact output, complete native
+restoration, held-source immutability and stable common identities across length/
+attachment edits. Existing visual-geometry numerical regressions remain green.
+Changed Python Ruff passes; full lint retains5baseline F401 findings. `main.js`
+remains7350lines,delta0; no frontend changes or frontend rerun.
+
+`just test-smart --dry-run` selects FAST after deferring the historical
+foundational FULL diff (5756files); **zero broad tests ran**. Literal notice:
+
+```text
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+Only request `just test-session` when a broad/full sweep is actually needed.
+```
+
+NOT VERIFIED IN APP: Archive mount is still absent; no visual/latency acceptance
+or bulk artifacts. This helper deliberately is not a registered command and does
+not certify source admission, collision/incoming-reference safety or generated
+scopes. Next, wrap this native construction in the bounded complete direct
+selection/ownership/dependency contract and shared recorder; retain both driver
+branches, restoration and all fixed replacement exits. Applied metadata,
+organization and qualification remain. All public gates stay false. Counts are
+21/38complete,17remaining;+0total,+0completed;32engineering checkpoints since B1.
+FH-25 remains task-growth flagged after5; original exit/estimate unchanged.
+
+Hygiene: memory lint retains6baseline errors/59warnings; current project head
+remains200lines. Completed task pytest roots1/2/3 contained407empty directories,
+4symlinks and0regular files/bytes. No readable same-user cwd/fd/maps references
+were found; persistent systemd/PAM435/436 remain uninspectable. Removed only
+those task-created empty directories/links; pytest root and `/dev/shm` are empty.
+No user designs, managed jobs, historical evidence or caches were removed.
