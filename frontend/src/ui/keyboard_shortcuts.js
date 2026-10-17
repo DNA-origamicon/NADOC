@@ -580,8 +580,17 @@ export function initKeyboardShortcuts(deps) {
 
       const extensionIds = refs.filter(ref => ref.kind === 'extension').map(ref => ref.id)
       if (extensionIds.length > 0) {
-        selectionManager.clearMultiExtensionSelection?.()
-        await api.deleteStrandExtensionsBatch(extensionIds)
+        try {
+          const result = await api.deleteStrandExtensionsBatch(extensionIds)
+          if (!result) {
+            showToast(store.getState().lastError?.message || 'The extension deletion was not confirmed.')
+            return
+          }
+          const currentState = store.getState(), current = canonicalSelection(currentState).items
+          if (currentState.selection === state.selection && current.length === refs.length
+              && current.every((ref, i) => ref.kind === refs[i].kind && ref.id === refs[i].id))
+            selectionManager.clearMultiExtensionSelection?.()
+        } catch (error) { showToast(error?.message || 'The extension deletion failed.') }
         return
       }
 

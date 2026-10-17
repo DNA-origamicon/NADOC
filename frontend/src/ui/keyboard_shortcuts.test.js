@@ -603,6 +603,27 @@ describe('initKeyboardShortcuts — Group 2 file/edit + Delete/Escape', () => {
     expect(d.api.deleteStrandExtensionsBatch).toHaveBeenCalledWith(['e1', 'e2'])
   })
 
+  it.each(['null', 'throw'])('Delete: preserves extension selection on %s refusal', async kind => {
+    const d = makeDeps()
+    d.store.setState({ selection: { items: [{ kind: 'extension', id: 'e1' }] } })
+    if (kind === 'null') d.api.deleteStrandExtensionsBatch.mockResolvedValue(null)
+    else d.api.deleteStrandExtensionsBatch.mockRejectedValue(new Error('Refused'))
+    initKeyboardShortcuts(d)
+    await press('Delete')
+    expect(d.selectionManager.clearMultiExtensionSelection).not.toHaveBeenCalled()
+  })
+
+  it('Delete: a completed extension delete does not clear a newer selection', async () => {
+    const d = makeDeps(); let finish
+    d.store.setState({ selection: { items: [{ kind: 'extension', id: 'e1' }] } })
+    d.api.deleteStrandExtensionsBatch.mockReturnValue(new Promise(resolve => { finish = resolve }))
+    initKeyboardShortcuts(d)
+    const pending = press('Delete')
+    d.store.setState({ selection: { items: [{ kind: 'extension', id: 'e2' }] } })
+    finish({ design: {} }); await pending
+    expect(d.selectionManager.clearMultiExtensionSelection).not.toHaveBeenCalled()
+  })
+
   it('Delete: canonical backbone bond nicks at its from-base identity', async () => {
     const d = makeDeps()
     d.store.setState({ selection: { items: [{

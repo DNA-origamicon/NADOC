@@ -27,7 +27,7 @@ import {
   patchStrand, getStrandSequenceContext,
   patchStrandsColor, patchStrandsReference, patchOverhang, undoDesign, redoDesign, placeCrossover, moveCrossover, batchMoveCrossovers,
   deleteCrossover, batchDeleteCrossovers, patchCrossoverExtraBases, batchCrossoverExtraBases, patchForcedLigationExtraBases,
-  upsertStrandExtensionsBatch, deleteStrandExtensionsBatch, savePlateLayout, convertStrandToBinder, generateBinderForOverhang, convertBinderToScaffold,
+  captureExtensionContext, upsertStrandExtensionsBatch, deleteStrandExtensionsBatch, savePlateLayout, convertStrandToBinder, generateBinderForOverhang, convertBinderToScaffold,
   resizeStrandEnds, shiftDomains, insertLoopSkip, clearAllLoopSkips, generateAllOverhangSequences,
   checkHairpinDimer, onOverhangSequencesGenerated,
   // menu bar operations
@@ -54,6 +54,7 @@ import { createHairpinDimerIndexCache, hairpinDimerMarkers, hairpinDimerStrandWa
 import { openStrandHairpinDimerWindow } from '../ui/hairpin_dimer_window.js'
 import { initStrandSequenceDialog } from '../ui/strand_sequence_dialog.js'
 import { buildStrandMenuItems } from '../ui/strand_menu_items.js'
+import { openStrandExtensionDialog } from '../ui/strand_extension_dialog.js'
 import { createContextMenu } from '../ui/primitives/context_menu.js'
 import { ensureStapleColors, stapleColorOf, EXT_MOD_NAMES } from './pathview/palette.js'
 
@@ -1571,6 +1572,7 @@ function _showStrandCtxMenu(strand, clientX, clientY) {
   const allRef = sel.length > 0 &&
     sel.every(id => design?.strands?.find(s => s.id === id)?.is_reference)
   const anyRef = sel.some(id => design?.strands?.find(s => s.id === id)?.is_reference)
+  const extensionContext = captureExtensionContext()
 
   const items = buildStrandMenuItems(
     { strandIds: sel, strandType: strand.strand_type, allReference: allRef, anyReference: anyRef },
@@ -1580,7 +1582,7 @@ function _showStrandCtxMenu(strand, clientX, clientY) {
       onConvertToScaffold: (id) => convertBinderToScaffold(id),
       onAssignScaffoldSequence: (id) => _openScaffoldModal(id),
       onEditSequence: (id) => _strandSequenceDialog.open(id),
-      onEditExtensions: () => _openStrandExtDialog(strand, clientX, clientY),
+      onEditExtensions: ids => _openStrandExtDialog(ids, clientX, clientY, extensionContext),
     },
   )
   if (!items.length) return
@@ -1592,175 +1594,16 @@ function _showStrandCtxMenu(strand, clientX, clientY) {
 
 // ── Strand extension dialog (cadnano editor) ──────────────────────────────────
 
-const _MODIFICATION_NAMES = {
-  cy3: 'Cy3', cy5: 'Cy5', fam: 'FAM', tamra: 'TAMRA',
-  bhq1: 'BHQ-1', bhq2: 'BHQ-2', atto488: 'ATTO 488', atto550: 'ATTO 550', biotin: 'Biotin',
-}
-
-function _openStrandExtDialog(strand, clientX, clientY) {
-  document.getElementById('__cadnano-ext-dialog')?.remove()
-
-  const design = editorStore.getState().design
-  const ext5   = (design?.extensions ?? []).find(e => e.strand_id === strand.id && e.end === 'five_prime')  ?? null
-  const ext3   = (design?.extensions ?? []).find(e => e.strand_id === strand.id && e.end === 'three_prime') ?? null
-  const hasAny = !!(ext5 || ext3)
-
-  let defaultEnd = 'five_prime'
-  if (ext5 && !ext3) defaultEnd = 'five_prime'
-  else if (ext3 && !ext5) defaultEnd = 'three_prime'
-  else if (ext5 && ext3) defaultEnd = 'both'
-
-  const prefill = defaultEnd === 'five_prime' && ext5 ? ext5
-    : defaultEnd === 'three_prime' && ext3 ? ext3
-    : null
-
-  const dlgW = 280, dlgH = 380
-  const dlgX = Math.min(clientX + 8, window.innerWidth  - dlgW - 10)
-  const dlgY = Math.min(clientY + 8, window.innerHeight - dlgH - 10)
-
-  const dialog = document.createElement('div')
-  dialog.id = '__cadnano-ext-dialog'
-  dialog.style.cssText = `position:fixed;left:${dlgX}px;top:${dlgY}px;width:${dlgW}px;` +
-    `background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:14px 16px;` +
-    `z-index:10000;box-shadow:0 8px 24px rgba(0,0,0,.6);font-size:13px;color:#c9d1d9;user-select:none;`
-
-  const title = document.createElement('div')
-  title.style.cssText = 'font-size:13px;font-weight:700;margin-bottom:10px;color:#cde'
-  title.textContent = hasAny ? 'Edit extensions' : 'Add extension'
-  dialog.appendChild(title)
-
-  // End selector
-  let endVal = defaultEnd
-  const endRow = document.createElement('div')
-  endRow.style.cssText = 'display:flex;gap:12px;margin-bottom:10px'
-  for (const [val, lbl] of [['five_prime', "5′"], ['three_prime', "3′"], ['both', 'Both']]) {
-    const label = document.createElement('label')
-    label.style.cssText = 'display:flex;align-items:center;gap:4px;cursor:pointer;color:#cde;font-size:12px'
-    const radio = document.createElement('input')
-    radio.type = 'radio'; radio.name = '__cadnano-ext-end'; radio.value = val
-    if (val === defaultEnd) radio.checked = true
-    radio.addEventListener('change', () => { endVal = val })
-    label.appendChild(radio); label.appendChild(document.createTextNode(lbl))
-    endRow.appendChild(label)
+function _openStrandExtDialog(strandIds, clientX, clientY, context) {
+  const existingByStrand = new Map(strandIds.map(id => [id, { five_prime: null, three_prime: null }]))
+  for (const extension of context.source?.extensions ?? []) {
+    const pair = existingByStrand.get(extension.strand_id)
+    if (pair) pair[extension.end] = extension
   }
-  dialog.appendChild(endRow)
-
-  // Sequence input
-  const seqLabel = document.createElement('div')
-  seqLabel.textContent = 'Sequence (ACGTN, optional):'
-  seqLabel.style.cssText = 'font-size:11px;color:#8899aa;margin-bottom:4px'
-  dialog.appendChild(seqLabel)
-
-  const seqInput = document.createElement('input')
-  seqInput.type = 'text'; seqInput.value = prefill?.sequence ?? ''; seqInput.placeholder = 'e.g. TTTT'
-  seqInput.style.cssText = 'width:100%;box-sizing:border-box;background:#161b22;border:1px solid #30363d;' +
-    'border-radius:4px;color:#c9d1d9;padding:5px 8px;font-family:var(--font-ui);font-size:12px;outline:none;margin-bottom:4px;'
-  dialog.appendChild(seqInput)
-
-  const seqHint = document.createElement('div')
-  seqHint.style.cssText = 'font-size:11px;color:#8899aa;margin-bottom:8px;min-height:14px'
-  dialog.appendChild(seqHint)
-  seqInput.addEventListener('input', () => {
-    const v = seqInput.value.trim().toUpperCase()
-    if (v && !/^[ACGTN]+$/.test(v)) { seqHint.textContent = 'Only A, C, G, T, N allowed'; seqHint.style.color = '#ff6b6b' }
-    else { seqHint.textContent = v ? `${v.length} bp` : ''; seqHint.style.color = '#8899aa' }
-  })
-
-  // Modification dropdown
-  const modLabel = document.createElement('div')
-  modLabel.textContent = 'Modification:'; modLabel.style.cssText = 'font-size:11px;color:#8899aa;margin-bottom:4px'
-  dialog.appendChild(modLabel)
-
-  const modSel = document.createElement('select')
-  modSel.style.cssText = 'width:100%;background:#161b22;color:#c9d1d9;border:1px solid #30363d;' +
-    'border-radius:4px;padding:5px 6px;font-size:12px;cursor:pointer;outline:none;margin-bottom:8px;'
-  const noneOpt2 = document.createElement('option'); noneOpt2.value = ''; noneOpt2.textContent = 'None'
-  modSel.appendChild(noneOpt2)
-  for (const [key, name] of Object.entries(_MODIFICATION_NAMES)) {
-    const opt = document.createElement('option'); opt.value = key; opt.textContent = name
-    modSel.appendChild(opt)
-  }
-  modSel.value = prefill?.modification ?? ''
-  dialog.appendChild(modSel)
-
-  // Label input
-  const lblLabel = document.createElement('div')
-  lblLabel.textContent = 'Label (optional):'; lblLabel.style.cssText = 'font-size:11px;color:#8899aa;margin-bottom:4px'
-  dialog.appendChild(lblLabel)
-
-  const lblInput = document.createElement('input')
-  lblInput.type = 'text'; lblInput.value = prefill?.label ?? ''; lblInput.placeholder = 'e.g. Cy3 dye'
-  lblInput.style.cssText = 'width:100%;box-sizing:border-box;background:#161b22;border:1px solid #30363d;' +
-    'border-radius:4px;color:#c9d1d9;padding:5px 8px;font-size:12px;outline:none;margin-bottom:10px;'
-  dialog.appendChild(lblInput)
-
-  // Remove existing button (shown only when strand has extensions)
-  if (hasAny) {
-    const remBtn = document.createElement('button')
-    remBtn.textContent = 'Remove all extensions'
-    remBtn.style.cssText = 'width:100%;background:#21262d;border:1px solid #30363d;color:#ff9999;border-radius:4px;' +
-      'padding:5px 14px;cursor:pointer;font-size:12px;margin-bottom:8px;'
-    remBtn.addEventListener('click', async () => {
-      const ids = [ext5?.id, ext3?.id].filter(Boolean)
-      dialog.remove()
-      await deleteStrandExtensionsBatch(ids)
-    })
-    dialog.appendChild(remBtn)
-  }
-
-  const errHint = document.createElement('div')
-  errHint.style.cssText = 'font-size:11px;color:#ff6b6b;min-height:14px;margin-bottom:6px'
-  dialog.appendChild(errHint)
-
-  // Buttons
-  const btns = document.createElement('div')
-  btns.style.cssText = 'display:flex;gap:8px;justify-content:flex-end'
-
-  const cancelBtn = document.createElement('button')
-  cancelBtn.textContent = 'Cancel'
-  cancelBtn.style.cssText = 'background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;' +
-    'padding:5px 14px;cursor:pointer;font-size:12px;'
-  cancelBtn.addEventListener('click', () => dialog.remove())
-
-  const applyBtn = document.createElement('button')
-  applyBtn.textContent = 'Apply'
-  applyBtn.style.cssText = 'background:#238636;border:1px solid #2ea043;color:#fff;border-radius:4px;' +
-    'padding:5px 14px;cursor:pointer;font-size:12px;'
-  applyBtn.addEventListener('click', async () => {
-    const seq = seqInput.value.trim().toUpperCase() || null
-    const mod = modSel.value || null
-    const lbl = lblInput.value.trim() || null
-    if (!seq && !mod) { errHint.textContent = 'Provide at least a sequence or modification.'; return }
-    if (seq && !/^[ACGTN]+$/.test(seq)) { errHint.textContent = 'Sequence contains invalid characters.'; return }
-
-    const ends = endVal === 'both' ? ['five_prime', 'three_prime'] : [endVal]
-    const items = ends.map(end => ({ strandId: strand.id, end, sequence: seq, modification: mod, label: lbl }))
-    applyBtn.disabled = true; applyBtn.textContent = '…'
-    try {
-      await upsertStrandExtensionsBatch(items)
-      dialog.remove()
-    } catch (err) {
-      errHint.textContent = err?.message ?? 'Error saving extension.'
-      applyBtn.disabled = false; applyBtn.textContent = 'Apply'
-    }
-  })
-
-  btns.appendChild(cancelBtn); btns.appendChild(applyBtn)
-  dialog.appendChild(btns)
-  document.body.appendChild(dialog)
-  seqInput.focus()
-
-  const _esc = e => {
-    if (e.key === 'Escape') { dialog.remove(); document.removeEventListener('keydown', _esc) }
-    if (e.key === 'Enter')  { applyBtn.click() }
-  }
-  document.addEventListener('keydown', _esc)
-  requestAnimationFrame(() => {
-    const _out = e => {
-      if (!dialog.contains(e.target)) { dialog.remove(); document.removeEventListener('mousedown', _out) }
-    }
-    document.addEventListener('mousedown', _out)
-  })
+  return openStrandExtensionDialog({ x: clientX, y: clientY, strandIds,
+    existingByStrand, id: '__cadnano-ext-dialog', allowRemove: true, context,
+    api: { captureExtensionContext, upsertStrandExtensionsBatch, deleteStrandExtensionsBatch },
+    getError: () => editorStore.getState().lastError })
 }
 
 // ── Crossover context menu ────────────────────────────────────────────────────

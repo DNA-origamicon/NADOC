@@ -9,7 +9,12 @@ import { editorStore } from './store.js'
 import { nadocBroadcast } from '../shared/broadcast.js'
 import { recordNameEdit } from '../ui/name_edit_audit.js'
 import { notifyRequestFailure, notifyRequestSuccess } from '../shared/connection_monitor.js'
-import { docHeaders, getDocId } from '../shared/doc_id.js'
+import { docHeaders, docHeadersFor, getDocId } from '../shared/doc_id.js'
+import { createExtensionEndpoints } from '../api/extension_endpoints.js'
+import { createDocumentRequestScope } from '../api/document_request_scope.js'
+
+const _extensionDocuments = createDocumentRequestScope()
+if (import.meta.hot) import.meta.hot.dispose(() => _extensionDocuments.dispose())
 
 const BASE = '/api'
 
@@ -65,6 +70,7 @@ function _applyDesignResponse(json, { emit = false, source = '', crossTabMetadat
  *  (its per-session revision resets low, so post-restart responses would
  *  otherwise be dropped as "stale" and freeze the editor on old data). */
 export function resetRevisionWatermark() {
+  _extensionEndpoints.invalidate()
   _lastAppliedRev = -1
   _pushSyncLog({ decision: 'RESET', source: 'restart', rev: null, lastRev: -1 })
 }
@@ -85,14 +91,14 @@ export function getSyncDebugState() {
 /** Subscribe to every sync decision (APPLY/DROP/RESET) — for a live overlay. */
 export function onSyncEvent(fn) { _syncListeners.add(fn); return () => _syncListeners.delete(fn) }
 
-async function _request(method, path, body) {
+async function _request(method, path, body, { docId } = {}) {
   editorStore.setState({ loading: true })
   _inFlight++
   const opts = {
     method,
     headers: {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      ...docHeaders(),   // edit the same backend document as the 3D view that opened us
+      ...(docId === undefined ? docHeaders() : docHeadersFor(docId)),
       // The 2D editor renders from topology and never reads embedded 3D
       // geometry, so tell the backend to omit it. This skips a full-design
       // geometry recompute (hundreds of ms on large designs) and a multi-MB
@@ -287,25 +293,20 @@ export async function patchForcedLigationExtraBases(flId, sequence) {
   return mutate(req => req('PATCH', `/design/forced-ligations/${flId}/extra-bases`, { sequence }))
 }
 
-/** Upsert (create or update) strand extensions in one atomic request.
- *  items: Array of { strandId, end, sequence?, modification?, label? }
- */
-export async function upsertStrandExtensionsBatch(items) {
-  const mapped = items.map(i => ({
-    strand_id:    i.strandId,
-    end:          i.end,
-    sequence:     i.sequence   ?? null,
-    modification: i.modification ?? null,
-    label:        i.label       ?? null,
-  }))
-  return mutate(req => req('POST', '/design/extensions/batch', { items: mapped }))
-}
-
-/** Delete multiple strand extensions by ID. */
-export async function deleteStrandExtensionsBatch(extIds) {
-  if (!extIds.length) return null
-  return mutate(req => req('DELETE', '/design/extensions/batch', { ext_ids: extIds }))
-}
+// Same terminal CRUD ownership as the 3D host; this editor consumes topology only.
+const _extensionEndpoints = createExtensionEndpoints({
+  getDesign: () => editorStore.getState().design, getRevision: () => _lastAppliedRev,
+  getDocId, documentRequests: _extensionDocuments, request: _request, geometry: false,
+  syncDesign: response => {
+    _applyDesignResponse(response, { emit: true, source: 'extensions' })
+    if (editorStore.getState().design === response.design) _absorbAuxFields(response)
+    return response
+  },
+  getError: () => editorStore.getState().lastError,
+  reportError: message => editorStore.setState({ lastError: { ...editorStore.getState().lastError, message } }),
+})
+export const { captureExtensionContext, createStrandExtension, updateStrandExtension,
+  deleteStrandExtension, upsertStrandExtensionsBatch, deleteStrandExtensionsBatch } = _extensionEndpoints
 
 /** Delete a strand. */
 export async function deleteStrand(strandId) {

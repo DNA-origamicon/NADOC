@@ -373,117 +373,100 @@ unchanged native builders still resolve identities and topology.
 | Arbitrary organizational groups — OPEN | Retain original shared FH-18/FH-23 movement/frame/generated exits. Extension creation before conversion and delete after conversion replay; upsert after conversion remains refused pending conserved lineage and actual placement-owner qualification. Whole-helix tests cannot certify arbitrary domain ownership under legacy reconciliation. |
 | Qualification — OPEN | Existing FH-27/MV-52 app, complete HTTP/render/lock/memory acceptance and broad regression debt remain. Archive is absent; no browser/bulk scratch fallback or rollout. |
 
-### ISSUE-130 proposed extension-upsert v2 integration — NOT IMPLEMENTED
+<a id="issue-130-proposed-extension-upsert-v2-integration--not-implemented"></a>
 
-This is a finite proposal for the existing FH-18/FH-23 terminal-extension exit,
-not another milestone, an enabled route, or a claim that arbitrary group motion
-is solved. The post-conversion upsert refusal remains in force. No completion
-count changes follow from this plan.
+### ISSUE-130 extension-upsert v2 integration — implemented privately
 
-The current implementation separates the extension builder from its surrounding
-postprocessing:
+The versioned command and owned ordinary workflow below are implemented for the
+existing FH-18/FH-23 terminal-extension exit. The preceding U21 table records the
+older refusal boundary; v2 now supplies the explicit extension-only path after
+conversion. This does not resolve arbitrary organizational-group motion, enable
+rollout, or earn milestone completion credit. Software results and limitations are recorded in
+[U25 evidence](validation_organized_extensions.json).
+
+The implementation preserves the distinction that motivated the version change:
 
 - `backend/api/part_extension_commands.py::build` changes only `extensions`.
-  It already validates complete entries, explicit create/update intent, unique
+  It validates complete entries, explicit create/update intent, unique
   identities/termini and live strand references. Updates retain the original
   strand/end; output IDs survive historical input edits through
   `backend/core/part_edit_identity.py`.
-- `backend/api/feature_recording.py::_run` and
-  `backend/api/part_proof_commands.py::execute` nevertheless reconcile placement
-  membership and retry pending ligations for v1 upsert. The v1 dependency contract
-  therefore correctly remains a conservative barrier.
-- `backend/core/cluster_reconcile.py::_compute_domain_membership` rebuilds domain
-  owners using direction-blind interval overlap, selecting one winning owner.
-  Overlapping or opposite-direction placement memberships can change even when
-  the extension builder leaves the strand topology unchanged. Native
-  `lattice.retry_pending_ligations` can subsequently rename/coalesce domains;
-  `_ligate` also migrates or removes extensions at the affected termini.
-- `backend/core/part_group_lineage.py` transports organizational selections, not
-  ordered numerical placement ownership. Adding upsert to its admitted kinds
-  alone cannot establish unchanged placement or terminal coordinates. The
-  current generic extension recorder is also rejected by the active-organization
-  publication gate; native replay admission alone would not complete ordinary
-  CRUD.
-- `backend/core/design_geometry.py::_strand_extension_geometry` already obtains
-  the tail from the native cluster/deformation terminal position, base normal and
-  tangent. Its anchor map is populated before the later per-residue geometry
-  transform pass; this is not evidence that an independently moved terminal
-  residue carries its extension with it. Preserve and characterize that existing
-  boundary rather than silently repairing it in the upsert adapter.
-  `frontend/src/scene/part_group_display.js` already makes extension display
-  membership follow the exact terminal domain, or its whole helix when the group
-  has no domain selectors. Neither mechanism needs a new geometric formula.
+- Saved **v1** upserts retain global placement reconciliation and pending-ligation
+  retry in `feature_recording.py` / `part_proof_commands.py`, together with their
+  conservative dependency barrier. V1 remains refused after conversion; saved
+  rows are not silently upgraded. `cluster_reconcile._compute_domain_membership`
+  can select one direction-blind overlapping owner, while native ligation can
+  coalesce domains and migrate/remove terminal annotations. Those old semantics
+  have not been reinterpreted or changed.
+- **V2 owns extension annotations only.** Its replay returns from the existing
+  pure builder before reconciliation or ligation retry. Domain ordinals, ordered
+  placement membership/poses, parent/driver references, empty frame owners,
+  organization and every other authoring field remain unchanged. Organizational
+  lineage is not used as a substitute for preserving numerical placement owners.
+- V2 upsert and existing v1 delete both read/write the shared
+  `Resource("part", "extensions")` inventory in addition to their specific
+  references. This conservatively orders extension edits, including deletion and
+  recreation with a different ID at the same terminus. It is neither a topology
+  barrier nor a claim of exact per-terminus independence. V1 upsert retains its
+  original barrier contract; delete retains its extension-only execution.
 
-The proposed semantic decision is **extension-upsert proof v2 owns extension
-annotations only**: create/update/batch changes the declared extensions without
-reconciling placements or retrying unrelated ligations. Every other authoring
-field, including domain ordinals, ordered owner memberships/poses, parent/driver
-references, empty frame owners and organization, stays unchanged. This is an
-explicit command-contract choice, not a conclusion supplied by a CAD vendor's
-grouping semantics. It requires acceptance tests before admission. Existing
-native tail, atomistic/export placement, polarity, contour, constants and solvers
-remain authoritative and unchanged. If those tests reveal a molecular discrepancy,
-keep the refusal and use the existing isolated A/B authorization procedure; do
-not reinterpret ownership or change native geometry to make the adapter pass.
+The distinction is a versioned command/transaction decision, not a new molecular
+rule inferred from CAD grouping semantics. Native tail, atomistic/export
+placement, polarity, contour, constants and solvers remain unchanged. In
+particular, `design_geometry._strand_extension_geometry` uses terminal positions,
+normals and tangents from native cluster/deformation placement, but populates its
+anchor map before the later per-residue transform pass. V2 does not establish
+that independently moving a terminal residue moves its extension. The display
+helper `part_group_display.js` retains terminal-domain precedence (or whole-helix
+membership when there are no domain selectors). Arbitrary member motion and its
+companion/frame ordering still require the original full acceptance and molecular
+authorization where applicable.
 
-Preserve v1 byte-defined inputs and replay behavior, including its global
-postprocessing and barrier; v1 remains refused after conversion. Do not silently
-upgrade saved rows or let a generic version field change their meaning. New
-post-conversion authoring can emit v2 in the existing `extension-upsert` Snapshot
-kind. `extension-delete` retains its existing synthetic-only behavior. This needs
-no new model field or operation literal, and proposes no numerical manifest/pin
-change. Legacy/rootless documents gain no fabricated root or native certificate.
+The implemented connected workflow is:
 
-The finite implementation and acceptance sequence is:
+1. **Versioned input and replay.** The closed parser, local version predicate,
+   capabilities and replay dispatch accept upsert v1/v2, with new organized
+   authoring emitting v2 in the existing Snapshot kind. Existing operation-input,
+   aggregate batch and native geometry-work bounds apply. No model field,
+   operation literal, numerical manifest or stored pin changes are required.
+   Legacy/rootless documents gain no fabricated root or native certificate.
+2. **Owned ordinary publication.** `part_extension_owned_recording.py` captures a
+   bounded owned source, prepares outside the state lock and publishes through
+   `part_extension_publication.py`'s registered `extensions_v1` authority. The
+   evidence is `owned_extension_edit`, not a full historical recipe proof. Only
+   extensions and one recorded row/recovery pair may change; source history,
+   physical/presentation fields and all other authoring fields are retained.
+   Document, session incarnation, source object, revision, policy generation and
+   request bind admission and final publication. Cursor/loadout/CPD guards,
+   cancellation/liveness rechecks, one undo and failure rollback remain in force.
+   Unchanged requests return the unchanged source/revision and create no undo.
+   Generic active-document callbacks and strict-policy bypasses remain closed.
+3. **All five existing ordinary URLs.** Single POST/PUT/DELETE and batch
+   POST/DELETE under `/design/extensions` use the shared input resolver and
+   recorder. The organized path requires the captured revision and uses v2 for
+   upserts; the legacy path preserves v1 behavior. The bounded transport checks
+   the original document/session/source again after request-body reading and at
+   publication. Complete upsert geometry or the existing exact synthetic-delete
+   response comes from that candidate, without a replacement-document GET.
+   The shared frontend adapter and dialog retain draft/context ownership across
+   requests, refusals and document reset. The organization rollout gate remains
+   disabled. Dedicated earlier-row terminal controls and reference picking are
+   still FH-24/FH-26 work; input regeneration alone does not complete them.
 
-1. **Versioned native contract.** Extend the existing parser, dependency function,
-   local `proof_version_supported` override and advertised capabilities to
-   distinguish v1/v2. Dispatch v2 through the existing pure builder before the
-   reconcile/retry path; admit exactly v2 after conversion. Preserve v1 execution
-   and deletion. Reuse current operation-input and prospective extension/site
-   bounds, charging aggregate batch/output growth before native display work.
-   There is no domain ancestry to infer for v2 because topology cannot change.
-2. **Owned ordinary transaction.** Reuse the existing bounded capture, recovery
-   budgeting, private preparation, registered publication permit and exact CAS
-   mechanics for a closed extension operation. Its authority must explicitly
-   cover extensions plus one input row/recovery pair, not be mislabeled as a
-   group edit or a full recipe proof. Do not open generic callbacks or bypass
-   strict policy. Bind document, session incarnation, source object, revision,
-   policy generation and request; preserve current physical/presentation data
-   when merging only owned fields. Keep latest-cursor/loadout/CPD guards, one
-   undo, and cancellation/failure rollback. The existing legacy recorder must
-   not rewrite the v2 marker back to its default v1. Keep rollout disabled.
-3. **Complete ordinary and history acceptance.** Cover single/batch create,
-   update, omitted values, explicit clearing, repeated valid termini, invalid
-   earlier duplicates, and single/batch delete through ordinary controls. A
-   source-bound complete candidate response must not fetch replacement geometry
-   after a document/reset race. Retain normal saved-output identity preservation,
-   downstream reconstruction and missing-reference diagnostics. The dedicated
-   earlier-row terminal editor/reference-picker remains its already allocated
-   FH-24/FH-26 work, not something earned by this backend admission.
-
-The test matrix must include both ends/directions and sequence-only,
-modification-only and combined tails; overlapping nonidentity domain owners,
-opposite-direction owners, parent/driver placements and empty frame owners;
-overlapping named groups and terminal-domain visibility/style precedence; and an
-actually pending ligation which stays pending under v2 while the v1 control
-retains its established retry. Compare all non-extension authoring exactly and
-native coordinates of existing material independently, then compare emitted
-tails against the unchanged native geometry. Test actual input producers through
-conversion, v2, a later transform/suffix, one undo, save/reload and independent
-cold proof with unusable recovery payloads. Denied/stale/ABA/policy/cancelled or
-failed publication must leave source, stacks and request metadata unchanged.
-
-Reuse `tests/test_part_extension_commands.py`,
-`tests/test_part_extension_history.py`, `tests/test_part_group_lineage.py`,
-the existing organization recording transaction tests and transform recipe/DTO
-fixtures. `tests/test_design_geometry_core.py` supplies terminal/compact geometry
-oracles. The existing extension rigid-rotation test in
-`tests/test_oxdna_extensions.py` rotates helix axes; it is not by itself evidence
-for overlapping placement-owner preservation. No new test execution or molecular
-qualification is claimed by this proposal. Completion requires the finite native,
-transaction and ordinary-control matrix; partial whole-helix success cannot close
-the arbitrary-domain extension exit.
+The focused acceptance files are `tests/test_part_extension_commands.py`,
+`tests/test_part_extension_history.py`,
+`tests/test_part_extension_placement_preservation.py`,
+`tests/test_part_extension_owned_recording.py` and
+`tests/test_part_extension_publication.py`, alongside ordinary HTTP/frontend
+coverage. They cover strict version/field admission, the conservative inventory
+edge, both termini and sequence/modification forms, actual overlapping and
+opposite-direction owners, parent/driver and empty-frame owners, v1/v2 pending
+ligation behavior, native producer/conversion/suffix replay, undo/reload/cold
+proof and denied/stale/cancelled publication. Native existing-material/tail
+comparisons use unchanged builders rather than a second geometry formula. Full
+results, exact exercised cases and remaining qualification limits are in the
+[U25 evidence](validation_organized_extensions.json); this section does not claim app, latency or physical
+qualification, nor completion of the arbitrary-group movement exit.
 
 Pruning replaces duplicated extension route mutations with the shared recorder
 and updates the two existing fast-delete tests to actual recorded routes and

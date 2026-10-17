@@ -41,6 +41,12 @@ def require_live_design(design, *, lifecycle=None):
 
 def require_group_publication(source, candidate, checked):
     """Called only after the publisher validates its opaque registered permit."""
+    if checked is not None and checked.admission.scope_tag == "extensions_v1":
+        if (checked.evidence_class != "owned_extension_edit"
+                or checked.admission.operation not in {"extension-upsert", "extension-delete"}):
+            _refuse()
+        require_group_edit_enabled()
+        return
     if checked is not None and checked.admission.scope_tag == "group_organization_v1":
         if checked.evidence_class != "owned_group_edit":
             _refuse()
@@ -70,6 +76,10 @@ def require_native_command(kind, params):
             return  # Typed named selections resolve separately from placement context.
         if kind == "extension-delete":
             return  # Deletion bypasses reconciliation and preserves all owners/membership.
+        if kind == "extension-upsert":
+            from backend.api.part_extension_commands import UPSERT_VERSION, parse_command
+            if parse_command(kind, params)["_proof_version"] == UPSERT_VERSION:
+                return  # V2 changes extensions only; v1 retains unsafe global postprocessing.
         if kind == "cluster_op" and not set(params) - {
                 "_proof_version", "_generator", "cluster_id", "translation", "rotation", "pivot"}:
             return  # Explicit existing placement, with no organizational writes.

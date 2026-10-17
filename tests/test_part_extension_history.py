@@ -223,7 +223,8 @@ def test_extension_delete_preserves_organization_but_upsert_requires_lineage_qua
     verified(removed)
 
 
-def test_earlier_extension_input_edit_preserves_identity_and_later_move_replays():
+@pytest.mark.parametrize("version", [1, 2])
+def test_earlier_extension_input_edit_preserves_identity_and_later_move_replays(version):
     from backend.api.part_recipe_edit import prepare_change
     from backend.core.part_verification_capture import capture
     from tests.test_part_extension_commands import inputs
@@ -232,7 +233,11 @@ def test_earlier_extension_input_edit_preserves_identity_and_later_move_replays(
     from tests.test_part_deformation_preview import owned_capture
 
     source = recipe()
-    source = snapshot(source, "extension-upsert", inputs(source), "terminal")
+    source = _append(source, m.SnapshotLogEntry(
+        id="terminal", op_kind="extension-upsert", label="Terminal",
+        params=inputs(source, version=version), evicted=True,
+        design_snapshot_gz_b64="poisoned-pre", post_state_gz_b64="poisoned-post",
+    ))
     owner = source.cluster_transforms[0]
     source = _append(
         source,
@@ -247,7 +252,7 @@ def test_earlier_extension_input_edit_preserves_identity_and_later_move_replays(
     )
     prepared = service().prepare_from_capture(owned_capture(source), FEATURE)
     assert prepared.copy_prefix().extensions[0].sequence == "AT"
-    changed = inputs(source)
+    changed = inputs(source, version=version)
     changed["entries"][0]["extension"].update(sequence="GATT", id="attempted-new-id")
     rebuilt, _preview = prepare_change(
         source, capture(source), 1, lambda: None, params=changed
@@ -257,7 +262,9 @@ def test_earlier_extension_input_edit_preserves_identity_and_later_move_replays(
         and rebuilt.extensions[0].sequence == "GATT"
     )
     assert rebuilt.cluster_transforms[0].translation == [1, 2, 0]
-    verified(rebuilt)
+    assert rebuilt.feature_log[1].params["_proof_version"] == version
+    assert all(row.id == old.id for row, old in zip(rebuilt.feature_log, source.feature_log))
+    verified(m.Design.from_json(rebuilt.to_json()))
 
 
 @pytest.mark.parametrize("invalid", [{"sequence": "AX"}, {"modification": "not-valid"}])

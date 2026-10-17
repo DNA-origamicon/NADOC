@@ -2067,3 +2067,19 @@ Preserve framebuffer bindings across first allocation and real resizing.
 Join/Pattern recovery inspected `op_kind` with `getattr(..., None)` on every pose entry. Pydantic variants without that field repeatedly entered missing-attribute handling, making 1,000-pose histories take about 3.6 ms instead of the frozen evaluator's 0.64–0.68 ms. Type discrimination and skipping an unchanged cluster copy reduced the cases to about 0.30–0.32 ms without changing reconstruction semantics.
 
 How to avoid: check the feature discriminator before accessing variant-specific fields in large scans. Retain independent output equivalence and paired latency gates; do not raise thresholds to accommodate avoidable dispatch overhead. See ISSUE-81 and `docs/audits/feature_history_20261014/evaluation_benchmark_p2_completion.json`.
+
+
+<a id="c15"></a>
+### C15 — Ordinary edit completion is not necessarily a changed revision
+
+Extension dialogs closed when the API returned null; keyboard deletion cleared
+selection before acceptance. Conversely, a strict revision-increase check rejected
+valid unchanged PUT/batch edits from the new owned host. The shared adapter now
+requires exact document/reset/source ownership and an explicit boolean no-op
+receipt for same-revision acceptance. Changed receipts must advance revision.
+Selection clears only after acceptance while the same selection is still active.
+An empty synthetic deletion must not enter a generic merger that interprets an
+empty changed-ID list as full geometry replacement. Bind request acquisition to
+the session incarnation scalar too: the same source/session object can outlive a
+reset. See ISSUE-134 and U25 evidence; do not replace these checks with whole-design
+cloning or replay during ordinary edit dispatch.

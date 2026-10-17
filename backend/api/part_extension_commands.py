@@ -1,4 +1,4 @@
-"""Closed input recipes for terminal annotations; native geometry stays derived."""
+"""Closed terminal recipes: v1 retains postprocessing; v2 owns extensions only."""
 
 from copy import deepcopy
 import re
@@ -10,11 +10,14 @@ from backend.core.part_command_errors import (
 )
 from backend.core.part_dependencies import Dependencies, Resource
 from backend.core.part_operation_input import validate_operation_input
+from backend.core.part_overlay_commands import proof_version_supported
 
 KINDS = frozenset({"extension-upsert", "extension-delete"})
+UPSERT_VERSION = 2
 MAX_ENTRIES = 256
 MAX_SEQUENCE = 4096
 _FIELDS = frozenset({"id", "strand_id", "end", "sequence", "modification", "label"})
+_INVENTORY = Resource("part", "extensions")
 
 
 def _reject(message):
@@ -35,8 +38,8 @@ def parse_command(kind, params):
         or set(params) != {"_proof_version", field}
     ):
         _reject("Terminal extensions require exact versioned inputs")
-    if type(params["_proof_version"]) is not int or params["_proof_version"] != 1:
-        _reject("Terminal extension proof version must be 1")
+    if not proof_version_supported(kind, params["_proof_version"]):
+        _reject("Terminal upsert proof version must be 1 or 2; deletion requires 1")
     values = params[field]
     if type(values) is not list or not 1 <= len(values) <= MAX_ENTRIES:
         _reject("Terminal extensions require 1–256 entries")
@@ -153,9 +156,12 @@ def dependencies(kind, params):
     except (ValueError, TypeError):
         return Dependencies(known=False)
     if kind == "extension-delete":
-        refs = frozenset(
-            Resource("extension", value) for value in parsed["extension_ids"]
-        )
+        # IDs alone cannot identify the freed strand/end slot. Ordering all
+        # extension edits is conservative without imposing a topology barrier.
+        refs = frozenset({
+            _INVENTORY,
+            *(Resource("extension", value) for value in parsed["extension_ids"]),
+        })
         return Dependencies(refs, refs)
     reads, writes = set(), set()
     for item in parsed["entries"]:
@@ -165,6 +171,11 @@ def dependencies(kind, params):
         writes.add(resource)
         if not item["create"]:
             reads.add(resource)
-    # Upsert retains the ordinary route's global reconcile/pending-ligation
-    # pass. Its indirect topology writes must remain a conservative barrier.
-    return Dependencies(frozenset(reads), frozenset(writes), barrier=True)
+    legacy = parsed["_proof_version"] == 1
+    if not legacy:
+        # Distinct IDs can occupy the same terminus. The shared inventory also
+        # links delete/recreate without changing the saved deletion input shape.
+        reads.add(_INVENTORY)
+        writes.add(_INVENTORY)
+    # Only v1 retains global reconcile/retry and its indirect topology writes.
+    return Dependencies(frozenset(reads), frozenset(writes), barrier=legacy)

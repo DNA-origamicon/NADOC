@@ -1,0 +1,212 @@
+{
+  "checkpoint": "U25",
+  "date": "2026-10-16",
+  "base_commit": "21d973d4",
+  "status": "Organized extension-only contract, owned ordinary CRUD and shared clients; NOT VERIFIED IN APP",
+  "progress": {
+    "completed": 20,
+    "estimated_total": 38,
+    "remaining": 18,
+    "core_remaining": 9,
+    "parked_remaining": 9,
+    "delta_completed": 0,
+    "delta_total": 0,
+    "engineering_checkpoints_since_B1": 25,
+    "closed_since_B1": 3,
+    "FH18_checkpoints": 13,
+    "FH23_checkpoints": 8,
+    "task_growth_flagged": [
+      "FH-18",
+      "FH-23"
+    ],
+    "fixed_exits_unchanged": true
+  },
+  "implemented": [
+    "Local extension-upsert v2 owns extensions only. Historical v1 inputs, global reconcile/retry, topology barrier and post-conversion refusal remain unchanged; delete retains v1 synthetic-only semantics.",
+    "V2 upsert/delete share conservative part:extensions dependency inventory, preserving different-ID same-terminus delete/recreate order without unrelated placement/topology barriers.",
+    "Organized ordinary create/update/batch/delete capture bounded source; prepare outside lock; publish extensions plus one input/recovery row through existing opaque permit and one-undo transaction. Exact non-owned fields and previous rows retain source identities.",
+    "Five HTTP URLs bind document, session object/incarnation, source object, revision and policy before body acquisition and after thread dispatch. Full upsert reply geometry belongs to published candidate; deletes retain exact synthetic-only changes. 2D explicitly skips geometry.",
+    "Shared 2D/3D source-bound client and one ordinary extension dialog replace duplicated bodies. Failed/null/stale replies preserve drafts and newer selections; protected requests do not activate/retry another loadout.",
+    "Explicit no_op receipt acknowledges unchanged nonempty or empty edits at captured revision, with no history/undo. Empty deletion preserves cached geometry. No-op upserts still admit full response geometry work.",
+    "Native preservation tests cover nonidentity overlapping/opposite-direction owners, parent/driver and empty frame owners, both ends and sequence/modification forms; native pending cycle remains pending, while only v1 invokes historical retry.",
+    "Actual native producer to organization to v2 to later pose survives cold proof with poisoned recovery, upstream input edits, save/reload and owned-host undo/redo. Existing display tests retain terminal domain/style/opacity/visibility semantics."
+  ],
+  "bounds": {
+    "request_bytes": 256000,
+    "request_nodes": 10000,
+    "request_depth": 64,
+    "entries": 256,
+    "sequence_bases_each": 4096,
+    "serialization_nodes": 30000,
+    "serialization_bytes": 2000000,
+    "history_rows": 2000,
+    "retained_recovery_bytes": 8000000,
+    "native_work_provisional": 50000,
+    "body_read_seconds": 5,
+    "preparation_cooperative_seconds": 5,
+    "limitation": "No full history proof per ordinary edit. These are admission/cooperative bounds, not end-to-end latency or response-memory guarantees. Existing full undo copy remains under lock; native geometry formatting occurs after publication."
+  },
+  "validation": {
+    "distinct_backend_cases": 346,
+    "backend_files": [
+      "tests/test_part_extension_commands.py",
+      "tests/test_part_extension_history.py",
+      "tests/test_part_extension_owned_recording.py",
+      "tests/test_part_extension_placement_preservation.py",
+      "tests/test_part_extension_routes.py",
+      "tests/test_part_extension_publication.py",
+      "tests/test_routes_extensions_fast_delete.py",
+      "tests/test_part_publication_permit.py",
+      "tests/test_part_publication_state.py",
+      "tests/test_part_replacement_transaction.py",
+      "tests/test_group_organization_recording.py",
+      "tests/test_part_strict_http.py"
+    ],
+    "runs": [
+      {
+        "scope": "command/history test-first red",
+        "passed": 50,
+        "failed": 12,
+        "seconds": 3.21,
+        "reason": "V2 parsing, dispatch and capabilities absent before implementation."
+      },
+      {
+        "scope": "owned host test-first red",
+        "passed": 0,
+        "failed": 21,
+        "seconds": 3.02,
+        "reason": "Ordinary recorder lacked expected_revision/owned host."
+      },
+      {
+        "scope": "frontend test-first red",
+        "passed": 54,
+        "failed": 3,
+        "missing_module_suites": 2,
+        "seconds": 1.53,
+        "reason": "Shared adapter/dialog absent; premature selection clearing on null/throw/newer selection."
+      },
+      {
+        "scope": "initial commands/history/host/native placement",
+        "passed": 100,
+        "seconds": 4.14
+      },
+      {
+        "scope": "initial HTTP/history/placement checks",
+        "passed": 47,
+        "failed": 4,
+        "seconds": 4.45,
+        "reason": "Real missing session-incarnation scalar check; three fixture assertions corrected (metadata.name and ASGI-local ContextVars)."
+      },
+      {
+        "scope": "HTTP/publication after transport fix",
+        "passed": 60,
+        "seconds": 3.7
+      },
+      {
+        "scope": "initial focused frontend",
+        "passed": 218,
+        "failed": 1,
+        "seconds": 4.19,
+        "reason": "Test re-queried Apply caption after it became busy; retain button reference to test repeat click."
+      },
+      {
+        "scope": "final focused backend matrix",
+        "passed": 339,
+        "failed": 7,
+        "seconds": 8.07,
+        "reason": "Seven new malformed-input test variants referenced a missing local import; production regressions passed."
+      },
+      {
+        "scope": "owned host after test import correction",
+        "passed": 28,
+        "seconds": 3.0,
+        "note": "21 overlap previous matrix; seven additional distinct passing cases complete346."
+      },
+      {
+        "scope": "final focused frontend",
+        "passed": 229,
+        "files": 9,
+        "seconds": 4.14
+      },
+      {
+        "scope": "existing menu mock after full frontend failure",
+        "passed": 10,
+        "files": 1,
+        "seconds": 1.25,
+        "note": "Four newly passing cases; six overlap full sweep."
+      }
+    ],
+    "full_frontend": {
+      "command": "just test-frontend",
+      "passed": 9204,
+      "failed": 4,
+      "skipped": 1,
+      "files_passed": 764,
+      "files_failed": 1,
+      "uncaught_errors": 4,
+      "seconds": 327.34,
+      "reason": "Existing part_group_selection_manager.test.js API mock lacked newly exported captureExtensionContext; context menu construction stopped in four cases. Production adapter was unchanged.",
+      "correction": "Updated only that file mock to expose the new API. Focused rerun of all10 cases passed in1.25s with no errors.",
+      "final_distinct_passing_cases": 9208,
+      "final_unresolved_failures": 0,
+      "full_suite_rerun_after_fixture_only_fix": false,
+      "note": "Full sweep plus targeted fixture rerun is not represented as a second all-green full-suite execution. One existing skip remains."
+    },
+    "review": "Independent contract, publication and frontend reviews. Review caught unhashable operation admission, missing no-op geometry budget, false unchanged-Apply failure and empty partial geometry replacement. Focused tests cover corrections; no additional blocker found.",
+    "not_claimed": "Desktop/browser/smoke, representative HTTP/render/lock/heap latency, physical/molecular qualification or broad backend suites."
+  },
+  "remaining": [
+    "Arbitrary named-member movement still requires explicit scope/frame composition and original full native-consumer/scientific comparison matrix. Existing placement editing does not close this exit.",
+    "FH24 earlier-row terminal/Fine Routing controls and FH26 repair reference picking remain; ordinary v2 CRUD alone does not complete either.",
+    "Existing generated consumer, core qualification, strict automation and parked assets/provenance exits unchanged. All rollout gates remain false; assemblies and machine-specific VR deferred.",
+    "Closing an ordinary dialog after dispatch retires UI callbacks; it does not cancel an already dispatched synchronous server commit. Revision checks prevent blind repeat publication."
+  ],
+  "unchanged": [
+    "Molecular math/constants/locks/goldens",
+    "Native numerical source manifests/pins",
+    "Rollout gates",
+    "Fixed milestone exits and denominator"
+  ],
+  "main_js": {
+    "lines": 7350,
+    "delta": 0
+  },
+  "static_checks": {
+    "changed_python_ruff": "pass",
+    "repository_ruff": "5 existing F401; no delta",
+    "memory_lint": "6 existing errors,59 warnings; no delta",
+    "memory_head_lines": 200,
+    "git_diff_check": "pass",
+    "changed_python_files": 17
+  },
+  "broad_regression": {
+    "selector_command": "just test-smart --dry-run",
+    "executed_suite": false,
+    "result": "FAST  (fast suite only)",
+    "deferred_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\nThis is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\nOnly request `just test-session` when a broad/full sweep is actually needed.",
+    "clarification": "Selector-only executes neither FAST nor FULL. Archive mount was rechecked and absent; broad FAST scratch, browser/smoke and performance captures remain deferred, with no system-disk bulk fallback."
+  },
+  "cleanup": {
+    "status": "complete",
+    "path": "/tmp/pytest-of-joshua",
+    "inventory": {
+      "child_directories": 437,
+      "symlinks": 4,
+      "regular_files": 0,
+      "logical_bytes": 0,
+      "allocated_file_bytes": 0,
+      "active_readers": [],
+      "shared_memory_names": []
+    },
+    "removed": {
+      "directories": 437,
+      "symlinks": 4,
+      "regular_files": 0,
+      "bytes": 0
+    },
+    "pytest_root_empty": true,
+    "bulk_outputs_created": false,
+    "preserved": "User designs/jobs, active runtimes, caches and historical evidence untouched. Compact tracked report retained.",
+    "post_frontend_pytest_root_empty": true
+  }
+}

@@ -893,8 +893,29 @@ ordinary `ClusterRigidTransform` as a complete movement implementation.
 | Same module: `deform_extended_arrays`, `deformed_frame_at_bp` | Out-of-span scaffold-loop material and continuation frame queries currently use a first matching placement in their respective paths. These are separate from `StrandExtension` tails; appending a placement does not make their composition complete. Preserve existing frame owners and expose an explicit continuation/reference-frame choice where the moved selection has multiple frames. |
 | [design_geometry.py](../../../backend/core/design_geometry.py), [native_full_placement.py](../../../backend/core/native_full_placement.py), [atomistic.py](../../../backend/core/atomistic.py) | Canonical site frames, full/slab and atomistic poses must derive from one placement contract. Saved per-residue transforms run after cluster/deformation placement; inserting a new group pose before them is not generally the requested final-world delta. No bead fitting, phase changes or independently reconstructed atom frames. |
 | `design_geometry._strand_extension_geometry`, bridge and flexible companion builders | StrandExtension tails use terminal frames from native arrays, already including cluster/deformation placement. Their anchor map is built before the later per-residue transform pass. Bridge/flexible geometry uses its own endpoint rules. Qualify each companion's exact ownership/order; do not rigidly transform a newly derived connector twice or claim all terminal paths already share one ordering. |
-| [cluster_reconcile.py](../../../backend/core/cluster_reconcile.py) and actual extension publication/replay | Named-group lineage does not repair legacy placement membership. The current single-winner reconciliation can alter overlapping/directional owners even when a command only changes extensions. Organized extension admission must preserve the intended placement contract; bypassing or changing reconciliation needs its own before/after evidence. |
+| [cluster_reconcile.py](../../../backend/core/cluster_reconcile.py) and actual extension publication/replay | Named-group lineage does not repair legacy placement membership. Saved extension-upsert v1 retains its single-winner reconciliation, ligation retry and barrier, and remains refused after conversion. Implemented v2 changes only extensions and bypasses both postprocessors; its owned ordinary transaction preserves ordered membership/poses, parent/driver and empty frame owners. This explicit version boundary does not solve arbitrary member motion. |
 | [part_transform_inputs.py](../../../backend/api/part_transform_inputs.py), [part_deformation_preview_sessions.py](../../../backend/api/part_deformation_preview_sessions.py), [part_transform_preview_computation.py](../../../backend/api/part_transform_preview_computation.py), [transform_history_editor.js](../../../frontend/src/app/transform_history_editor.js) | Reuse strict inputs/references, fixed-prefix work, private display, numerical worker lane and exact-source publication. Add explicit creation/append and history roles to this owner; no second lease registry, automatic Apply retry, or live canonical preview. |
+
+### Terminal-extension v2 boundary — implemented privately
+
+The connected extension-only workflow is now implemented, as detailed in the
+[ISSUE-130 section of the transform plan](transform_history_editor_plan.md#issue-130-extension-upsert-v2-integration--implemented-privately).
+All five existing ordinary extension URLs use shared input/recording paths; the
+organized path uses the bounded owned transaction and exact-source publication
+permit, with v2 upserts and existing v1 deletes. V2 performs no placement
+reconciliation or pending-ligation retry. Its dependency contract shares a
+conservative extension-inventory read/write edge with delete, so different-ID
+same-terminus delete/recreate is ordered without claiming a topology barrier or
+per-terminus independence. Legacy v1 saved inputs, replay and barrier remain
+unchanged; no automatic upgrade or numerical formula/pin change is implied.
+
+[U25 evidence](validation_organized_extensions.json) records contract, placement-
+preservation, transaction, HTTP and frontend results. The
+organization rollout gate remains disabled. This is not arbitrary group movement:
+terminal tails still use the existing native cluster/deformation anchor path,
+and later per-residue transforms, out-of-span scaffold loops, continuation frames
+and derived connector ordering retain the separate obligations below. No original
+A–E/FH-18/FH-23 exit or completion count changes with this extension boundary.
 
 ### Proposed implementation sequence within A–E
 
@@ -972,5 +993,7 @@ the candidate before authorization. Producing this evidence is the next concrete
 step if the native-role investigation requires changed molecular placement; a
 prose-only request for permission is not a completed prerequisite.
 
-This appendix records a read-only audit and proposed sequence. It adds no test
-pass, app validation, rollout enablement or milestone completion.
+The member-motion sequence and acceptance matrix above remain proposed, not
+implemented. The separately identified extension-v2 boundary has
+software validation evidence; neither it nor this appendix adds app
+validation, rollout enablement or milestone completion.

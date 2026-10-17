@@ -5,7 +5,7 @@ from backend.api.part_linker_commands import KINDS as LINKER_KINDS
 from backend.api.part_crossover_moves import KINDS as MOVE_KINDS
 from backend.api.part_cell_commands import KINDS as CELL_KINDS
 from backend.api.part_annotation_commands import KINDS as ANNOTATION_KINDS
-from backend.api.part_extension_commands import KINDS as EXTENSION_KINDS
+from backend.api.part_extension_commands import KINDS as EXTENSION_KINDS, UPSERT_VERSION as EXTENSION_UPSERT_VERSION
 from backend.api.part_ligation_commands import KINDS as LIGATION_KINDS
 from backend.api.part_auto_commands import KINDS as AUTO_KINDS
 from backend.core.part_overlay_commands import GROUP_CREATE_VERSION, KINDS as OVERLAY_KINDS, proof_version_supported
@@ -103,7 +103,9 @@ def capabilities():
     kinds = PROOF_MINOR_KINDS | PROOF_SNAPSHOT_KINDS | OVERLAY_KINDS
     return {**part_replay_capabilities(), **editing_capabilities(kinds), "proof_version": PROOF_VERSION,
             "proof_version_overrides": {"cluster_create": {"supported": [1, GROUP_CREATE_VERSION],
-                                                            "authoring": GROUP_CREATE_VERSION}},
+                                                            "authoring": GROUP_CREATE_VERSION},
+                                        "extension-upsert": {"supported": [1, EXTENSION_UPSERT_VERSION],
+                                                             "authoring": EXTENSION_UPSERT_VERSION}},
             "proof_commands": sorted(PROOF_MINOR_KINDS | PROOF_SNAPSHOT_KINDS | OVERLAY_KINDS),
             "group_organization": {"native_version": 1, "public_authoring": False,
                                    "history_container": "snapshot"},
@@ -396,8 +398,11 @@ def _execute(kind, design, params, *, expensive):
         # Like cluster_op, complete absolute overlays perform no topology retry
         # or reconciliation. The builder validates every owner before applying.
         return build(design, params)
-    if kind == "extension-delete":
+    if kind == "extension-delete" or (kind == "extension-upsert"
+                                      and params["_proof_version"] == EXTENSION_UPSERT_VERSION):
         from backend.api.part_extension_commands import build
+        # V2 deliberately owns only terminal annotations. Existing v1 upserts
+        # continue through native reconciliation/retry below, unchanged.
         return build(kind, design, params)
     from backend.api.part_command_references import validate_command_references
     validate_command_references(kind, design, params)

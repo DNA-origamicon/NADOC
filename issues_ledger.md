@@ -2855,7 +2855,7 @@ and this issue are not declared resolved.
   native joint limits, exact complete linked poses, source isolation and cleanup.
   No molecular solver/math change. Paired rollout remains off; MV-52 app debt stays.
 
-## ISSUE-130 — Terminal extension CRUD bypassed feature-history inputs (2026-10-16, RECORDED; ORGANIZATION EXIT OPEN)
+## ISSUE-130 — Terminal extension CRUD bypassed feature-history inputs (2026-10-16, CORRECTED PRIVATELY)
 
 - Ordinary terminal sequence/modification create/update/batch/delete changed the
   design without executable feature inputs. New closed top-level upsert/delete
@@ -2863,10 +2863,16 @@ and this issue are not declared resolved.
 - All supplied batch items validate before valid repeated termini coalesce;
   omitted update fields and explicit clearing retain ordinary semantics. Delete
   keeps its synthetic-only response and skips topology reconciliation/retry.
-- Upsert retains legacy global postprocessing, so its dependency contract is a
-  conservative barrier. Do not claim arbitrary domain owners remain unchanged.
-  Upsert authored after group conversion stays refused until existing FH-18/FH-23
-  lineage/placement qualification; prior upsert followed by conversion/delete works.
+- Historical upsert v1 retains global postprocessing and its dependency barrier.
+  U25 adds extension-only v2 plus the owned organized transaction. Placement arrays,
+  overlapping/opposite-domain owners, parent/driver frames and empty frame owners
+  stay exact. V2 upserts/deletes order through the extension inventory; unrelated
+  placement edits do not acquire a topology barrier. Gates remain false.
+- Ordinary five-URL CRUD captures bounded source inputs, then publishes only
+  extensions and one row through the existing permit/undo transaction. No-op edits
+  return an explicit same-revision receipt. Native full upsert geometry belongs to
+  that candidate; deletion keeps synthetic-only geometry. Shared 2D/3D controls
+  preserve failed input. Desktop/performance remains MV-48/MV-52/FH-27.
 - Legacy rootless documents are not automatically certified. New commands add no
   public strict-policy bypass; repair UI/catalog completion remains FH-26/FH-29.
 
@@ -2911,3 +2917,23 @@ and this issue are not declared resolved.
   and scalar receipts have distinct lifetimes. Polls never renew them. Targeted
   red/green evidence lives in the U23 numerical lifecycle report. The ordinary
   editor limits and scientific builders are unchanged; rollout stays gated.
+
+
+## ISSUE-134 — Extension requests and dialogs could lose ownership or report false success (2026-10-16, CORRECTED)
+
+- The old dialog treated a null API result as success and closed; keyboard Delete
+  cleared selection before acceptance. The new shared dialog retains failed input,
+  and accepted deletion clears only the still-matching selection. Held responses
+  cannot affect a reset document or replacement dialog. Protected edits never
+  activate another loadout and retry old strand IDs.
+- Transport regression reproduced a same-source/session-object incarnation reset
+  during body acquisition; bind the scalar session identity as well. Publication
+  already checks source/revision/policy, candidate identity, cancellation and expiry.
+- Review found unchanged nonempty upserts wrongly required an incremented revision.
+  Explicit host no-op receipts acknowledge unchanged Apply without an extra row;
+  false/malformed same-revision packets remain refused. Empty partial deletions
+  preserve geometry caches rather than entering the generic full-replacement branch.
+- No-op upserts, including empty batches, still return full geometry and therefore
+  require native-work admission. The bounded host validates closed input before
+  snapshots/publication. U25 evidence retains regression failures and corrections;
+  desktop behavior and representative latency remain unverified.

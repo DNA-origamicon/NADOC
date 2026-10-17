@@ -35,6 +35,7 @@ Format per entry: short title → one-paragraph what-went-wrong → "How to avoi
 - **B2** — Re-centering native `.nadoc` on load — `/design/load` silently moved everyone's saved positions. [detail](LESSONS_archive.md#b2)
 
 ## C. Stale state / API misuse
+- **C15** — Extension dialog closes on refusal or rejects unchanged Apply: require an owned accepted receipt, explicitly acknowledge no-ops, and preserve newer selection. [detail](LESSONS_archive.md#c15)
 - **C14** — Numerical preview completion loses its result or allows duplicate Apply: computation, editable input and publication receipts need distinct deadlines and authoritative outcomes. [detail](LESSONS_archive.md#c14)
 - **C13** — UI polling orphans a living headless simulation because the polling process has no local thread handle. Ownership must span processes and inter-stage work; stale stop/status writes must be execution-generation scoped. [detail](LESSONS_archive.md#c13)
 - **C1** — uvicorn `--reload` keeps stale server state — Python test passes but the API returns wrong output; restart first. [detail](LESSONS_archive.md#c1)

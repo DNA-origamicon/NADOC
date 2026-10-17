@@ -2135,3 +2135,58 @@ gates remain false, and FH-27/MV-52 desktop/performance plus broad-backend debt
 remain. Assemblies and machine-specific VR stay deferred. Next deliver the full
 versioned extension transaction while the arbitrary-member movement comparison
 retains its required scientific boundary. The fixed denominator/exits stay intact.
+
+
+## U25 — owned extension-only editing and shared ordinary controls
+
+**20/38 complete;18 remaining (9 core,9 parked);+0 completed,+0 total.**
+U1–U25 are25 engineering checkpoints closing three milestones since B1. FH-23
+remains open after8 and FH-18 after13; both task-growth flags and original exits
+remain. This implements the finite extension integration from U24, without credit
+for closing either parent milestone. Arbitrary selected-member motion is next;
+its existing consumer/frame/scientific comparison boundary remains required.
+
+New organized extension-upsert v2 changes only extensions. Historical v1 retains
+its global membership reconciliation, pending-ligation retry and barrier. V2 and
+delete share a conservative extension-inventory dependency so different-ID
+same-terminus delete/recreate cannot be reordered; no unrelated placement barrier
+is added. Actual overlapping/opposite-direction poses, parent/driver and empty
+frame owners retain exact memberships/poses and native geometry. Native tails
+still use the existing terminal frame calculation; later per-residue placement
+and broader member-motion semantics are not changed or qualified here.
+
+All five existing URLs share one closed input resolver. Organized requests bind
+source/session incarnation/revision/policy before bounded body acquisition and
+through final publication. Preparation uses detached bounded inputs outside the
+state lock; publication reuses the existing one-shot permit/undo transaction.
+Only extensions and one history/recovery row merge back. No full recipe proof
+runs per ordinary edit. Changed edits add one row/undo; unchanged edits acknowledge
+an explicit no-op with the source revision. Rootless documents gain no certificate.
+
+Full upsert geometry belongs to that exact candidate, avoiding an unbound GET;
+delete retains the synthetic-only fast response and the 2D host skips geometry.
+Both clients share source/reset/revision guards and one tested dialog. Failed
+requests retain inputs and selection; a held deletion cannot clear newer selection.
+Duplicate dialog bodies are pruned from the 2D root and selection manager. Cancel
+before dispatch creates no request; closing after dispatch retires callbacks but
+cannot promise rollback of a synchronous server commit. No automatic protected-
+loadout activation/retry is allowed with captured strand references.
+
+[U25 evidence](validation_organized_extensions.json) records346 distinct focused
+backend passes,9,208 distinct frontend passes across the full sweep and targeted
+mock-fix rerun, one existing skip, earlier failures and final cleanup. The full
+sweep itself reported9,204 passes/four failures; only the missing mock export
+changed before all10 cases in that file passed. No second full run is claimed.
+Bounds remain256 entries,4,096 sequence bases each,256k request bytes,30k metadata
+nodes/2MB serialization,2,000 rows,8MB retained recovery and the shared provisional
+50k native-work admission. Body read and preparation each have5s cooperative
+allowances; these are not end-to-end response latency/heap guarantees. Full undo
+copying under lock and post-publication response computation remain qualification
+risks, not new full-history validation work.
+
+NOT VERIFIED IN APP: Archive is absent, so browser/smoke and representative
+latency/memory plus broad backend scratch remain deferred. Selector-only earns no
+FAST/FULL pass credit. Existing5 Ruff and6 memory errors/59 warnings remain;
+changed Python lint passes. `main.js` remains7350 lines (delta0), project head200.
+No numerical models, manifests, pins, constants or goldens change. All rollout
+gates remain false; assembly and machine-specific VR work stay deferred.

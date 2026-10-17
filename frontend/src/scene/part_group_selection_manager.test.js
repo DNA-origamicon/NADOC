@@ -11,7 +11,9 @@ vi.mock('../state/store.js', () => ({ pushGroupUndo: vi.fn(), store: {
   setState: patch => { const before = held.state; held.state = { ...before, ...patch }; held.listeners.forEach(fn => fn(held.state, before)) },
   subscribe: fn => { held.listeners.push(fn); return () => { held.listeners = held.listeners.filter(x => x !== fn) } },
 } }))
-vi.mock('../api/client.js', () => ({ groupOrganizationCommand: vi.fn() }))
+vi.mock('../api/client.js', () => ({ groupOrganizationCommand: vi.fn(),
+  captureExtensionContext: vi.fn(() => ({ source: held.state.currentDesign })),
+}))
 vi.mock('./ssdna_fjc.js', () => ({ ensureLoaded: async () => {} }))
 vi.mock('../ui/cpd_conversion.js', () => ({ showCpdConversion: vi.fn() }))
 vi.mock('./deformation_editor.js', () => ({

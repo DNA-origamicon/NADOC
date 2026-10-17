@@ -5,8 +5,10 @@ GROUP_CREATE_VERSION = 2
 
 
 def proof_version_supported(kind, version):
-    """Grouping v2 is a local contract change, not a global proof upgrade."""
-    return type(version) is int and version in ((1, GROUP_CREATE_VERSION) if kind == "cluster_create" else (1,))
+    """Local grouping/extension revisions do not upgrade other command kinds."""
+    versions = ((1, GROUP_CREATE_VERSION) if kind == "cluster_create" else
+                (1, 2) if kind == "extension-upsert" else (1,))
+    return type(version) is int and version in versions
 
 
 def pose_fields(entry, *, include_authored=True):

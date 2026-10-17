@@ -1297,5 +1297,13 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   next movement and release; inspect the same axis/limits before and after Apply.
   Verify terminal CRUD/batch now creates one history row per action,
   keeps deletion fast, and reports missing source references after upstream edits.
-  Numerical native gestures and arbitrary new-group movement remain unfinished;
-  post-conversion extension upsert still refuses until its lineage qualifies.
+  U25 implements post-conversion extension upsert privately. In both 2D and 3D,
+  edit unchanged values, sequence/modification/labels and both termini; inspect
+  tails on posed overlapping/opposite-domain, parent/driver and empty-frame owners.
+  Failed/stale Apply must retain inputs; deletion must preserve newer selection
+  and unrelated cached geometry. Verify one changed row/undo, no-op without a row,
+  save/reload and replay after an earlier pose edit. Closing after dispatch retires
+  UI callbacks but does not cancel a synchronous server commit. Measure full
+  request/render latency and source-capture/undo lock cost on representative parts.
+  Arbitrary new-group movement remains unfinished; numerical gesture software
+  evidence does not replace its remaining desktop qualification.

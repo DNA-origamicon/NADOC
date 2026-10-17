@@ -17,6 +17,7 @@ import { createPartRepairResponse } from './part_repair_response.js'
 import { createGroupOrganizationEndpoint } from './group_organization_endpoints.js'
 import { createPatternRequests } from './pattern_requests.js'
 import { createSourceBoundRequests } from './source_bound_requests.js'
+import { createExtensionEndpoints } from './extension_endpoints.js'
 
 const _documentRequests = createDocumentRequestScope()
 const _seekHistory = createSeekHistoryAcknowledgement()
@@ -84,6 +85,14 @@ export const partRepairAPI = createPartRepairEndpoints({ request: _request, head
 export const groupOrganizationCommand = createGroupOrganizationEndpoint({ store, request: _request,
   syncDesign: _syncFromDesignResponse, getDocId, currentRevision: currentRevisionWatermark,
   documentRequests: _documentRequests })
+const _extensionEndpoints = createExtensionEndpoints({
+  getDesign: () => store.getState().currentDesign, getRevision: currentRevisionWatermark,
+  getDocId, documentRequests: _documentRequests, request: _request, syncDesign: _syncFromDesignResponse,
+  isAssembly: () => store.getState().assemblyActive, getError: () => store.getState().lastError,
+  reportError: message => store.setState({ lastError: { ...store.getState().lastError, message } }),
+})
+export const { captureExtensionContext, createStrandExtension, updateStrandExtension,
+  deleteStrandExtension, upsertStrandExtensionsBatch, deleteStrandExtensionsBatch } = _extensionEndpoints
 const _assemblyRevisions = createDesignRevisionTracker()
 let _assemblyRevisionId = null
 
@@ -122,6 +131,7 @@ function _isStaleDesignResponse(json) {
 
 /** Reset both design and field revisions after a backend restart. */
 export function resetRevisionWatermark() {
+  _extensionEndpoints.invalidate()
   _seekHistory.reset()
   _designRevisions.reset()
   _assemblyRevisions.reset()
@@ -2608,66 +2618,6 @@ export async function patchStrandsReference(strandIds, isReference) {
     // loop/color references so they do not rebuild before partial geometry lands.
     crossTabMetadataOnly: true,
   })
-}
-
-/**
- * Add a terminal extension to a staple strand's 5′ or 3′ end.
- * @param {string} strandId
- * @param {'five_prime'|'three_prime'} end
- * @param {{sequence?: string, modification?: string, label?: string}} opts
- */
-export async function createStrandExtension(strandId, end, opts = {}) {
-  const json = await _request('POST', '/design/extensions', { strand_id: strandId, end, ...opts })
-  return _syncFromDesignResponse(json)
-}
-
-/**
- * Update an existing strand extension.
- * @param {string} extId
- * @param {{sequence?: string, modification?: string, label?: string}} opts
- */
-export async function updateStrandExtension(extId, opts) {
-  const json = await _request('PUT', `/design/extensions/${extId}`, opts)
-  return _syncFromDesignResponse(json)
-}
-
-/**
- * Remove a strand extension.
- * @param {string} extId
- */
-export async function deleteStrandExtension(extId) {
-  const json = await _request('DELETE', `/design/extensions/${extId}`)
-  return _syncFromDesignResponse(json)
-}
-
-/**
- * Upsert (create or update) multiple strand extensions in one round-trip.
- * Each item with the same (strand_id, end) as an existing extension will update
- * it in-place; otherwise a new extension is created.
- *
- * @param {Array<{strandId, end, sequence?, modification?, label?}>} items
- */
-export async function upsertStrandExtensionsBatch(items) {
-  const json = await _request('POST', '/design/extensions/batch', {
-    items: items.map(({ strandId, end, sequence, modification, label }) => ({
-      strand_id:    strandId,
-      end,
-      sequence:     sequence     ?? null,
-      modification: modification ?? null,
-      label:        label        ?? null,
-    })),
-  })
-  return _syncFromDesignResponse(json)
-}
-
-/**
- * Delete multiple strand extensions by ID in one round-trip.
- *
- * @param {string[]} extIds
- */
-export async function deleteStrandExtensionsBatch(extIds) {
-  const json = await _request('DELETE', '/design/extensions/batch', { ext_ids: extIds })
-  return _syncFromDesignResponse(json)
 }
 
 /**
