@@ -52,7 +52,7 @@ def preserve_proof_identity(previous, updated, *, kind=None):
         # inputs; malformed replacements still reach their strict parser.
         result = {**result, "group": {**result["group"], "id": previous["group"]["id"]}}
     keys = _PROTECTED.get(kind, ())
-    if kind == "overhang-bulk" and previous.get("connection_version_contract") == 1:
+    if kind == "overhang-bulk" and previous.get("connection_version_contract") in (1, 2):
         action = previous.get("action")
         if type(action) is str and action in {"connection-version-create", "connection-version-patch", "connection-version-delete"}:
             keys += ("action", "connection_version_contract")

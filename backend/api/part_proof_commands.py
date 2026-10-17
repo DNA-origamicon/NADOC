@@ -177,7 +177,9 @@ def dependencies(kind, params):
         version = Resource("connection_version", command.version_id)
         if command.action != "connection-version-create":
             reads.add(version)
-        return Dependencies(frozenset(reads), frozenset({PART_TOPOLOGY, version}), barrier=True)
+        affected = {Resource("connection_version", identity)
+                    for identity in getattr(command, "affected_version_ids", ())}
+        return Dependencies(frozenset(reads | affected), frozenset({PART_TOPOLOGY, version} | affected), barrier=True)
     if kind in NP_CONNECTION_KINDS:
         from backend.api.part_nanoparticle_connection_commands import parse_command
         try:

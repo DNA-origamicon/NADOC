@@ -16,7 +16,7 @@ rules, assembly deferral and nanoparticle priority remain unchanged.
 | Zero-length indirect | Two types, root-to-root and end-to-end; legacy callback | Native continuous complement strand, no bridge helix/domain; actual typed output footprint, replacement/removal parity, cold replay and upstream editing. Do not weaken finite v1's saved meaning to admit zero. |
 | Direct equal-length | Two types, root-to-root and end-to-root; legacy binding, restored prior topology, midpoint placement, child duplex cluster and display Duplex | Freeze complete allocated ownership and exact reversible source contract; reuse existing native helpers in their actual order. Qualify replacement with third-endpoint conflicts and all binding/duplex/cluster references. |
 | Direct unequal-length | Same two types, native Duplex paired window/toehold relocation without equal-length binding | Separate explicit branch and ownership proof; no fabricated binding or equal-length substitution. |
-| Applied version patch/delete/flag changes | Falls back to `mutate_and_validate`; metadata may change without rebuilding/removing materialized geometry | Record actual metadata semantics; distinguish deleting a saved alternative from disconnecting topology. Do not treat `applied=false` as proof of geometric removal. Review consistency/repair with explicit user-visible state. |
+| Applied version patch/delete/flag changes | U37 private metadata v2 records applied create/patch/delete and exact pair flag changes; geometry stays unchanged | Record actual metadata semantics; distinguish deleting a saved alternative from disconnecting topology. Do not treat `applied=false` as proof of geometric removal. Review consistency/repair with explicit user-visible state. |
 | Explicit linker add/patch/delete | Existing `part_linker_commands` and registered `linker-*` recipes | Preserve their distinct compatibility checks, response and lifecycle. They are not a drop-in replacement for version Apply. Include in cross-family replacement and replay regressions. |
 | History/repair/automation | General recipe and repair foundations | Editable complete inputs, exact failing references, downstream regeneration, save/reload/undo, public policy boundary. FH-26 owns integrated repair UI; FH-29 owns public automation release, not missing connection builders. |
 
@@ -729,3 +729,77 @@ matrix, then repair/user controls and qualification. Shared-host handling and
 ISSUE-126 remain explicit correctness work; no exit is narrowed or moved to the
 parked bucket. The shared selector avoids four divergent implementations; further
 contract versions require a semantic change, not a new version per test case.
+
+## U37 — applied saved-version metadata (FH-25 checkpoint 10)
+
+The existing `connection-version-create/patch/delete` actions now have a strict
+`connection_version_contract=2` for metadata on pending or applied versions.
+V1 remains pending-only. V2 retains existing sparse/null/blank/sequence-cleaning
+semantics, explicit version identity/time, and optional saved `applied` flag.
+An exact ordered `affected_version_ids` list declares the selected row and all
+same-pair siblings affected by setting the flag true. Replay validates that set;
+dependencies read/write it. The whole-topology barrier remains conservative.
+Flag changes copy affected records, preserving held source objects and existing
+pair mutex behavior. Create still copies mutable rows before default naming.
+
+This contract is explicitly metadata-only: deleting a saved alternative or
+clearing its flag neither removes nor regenerates geometry. Existing native
+Apply consumes edited parameters in a later recorded operation. The ordinary
+adapter reuses the bounded metadata inventory, one recording transaction and
+one undo; it does not traverse geometry, decode history or run a proof during
+metadata admission, and skips topology postprocessing. The new private gate
+`APPLIED_METADATA_ENABLED` remains false. No existing numerical builder or pin
+changed; no compatibility path has been proven unused and removed in this step.
+
+The distinction matters for correctness. Onshape documents separately configured
+feature parameters and suppression in its [configuration guide](https://cad.onshape.com/help/Content/PartStudio/part_studio_and_assembly_configurations.htm).
+Our inference is to give explicit materialization/removal actions their own
+recorded semantics, rather than interpreting a bookkeeping flag as proof of
+removal. This does not make NADOC saved alternatives equivalent to Onshape
+configurations or qualify the current flag's UI presentation.
+
+Source audit identified ISSUE-142: the current `_onApply`/`_deleteVersion` UI
+calls pair teardown and metadata mutation separately. `_teardownPair` only deletes
+a linker and binding, omitting Duplex restoration/removal. The complete lifecycle
+is therefore still open. Next implement one source-bound atomic Unapply and
+optional delete-with-disconnect operation using shared native ownership and
+restoration. Preserve explicit metadata CRUD for its actual API semantics;
+wire the user-facing removal controls to the new operation, with truthful state
+and failure behavior. This is the already-required lifecycle exit, not new scope.
+
+Tests-first14 failures preceded implementation. The first metadata/pending run
+passed61cases in5.12s. An expanded288-case run passed287; the new full schema
+transport fixture failed because its supplied sequences were noncomplementary.
+The existing schema correctly rejected it. Supplying explicit complementary A/T
+input sequences fixed the fixture without changing scientific validation;24cases
+then passed. Final eight-file regression: **296passed,22warnings,19.26s**. Includes
+all three connection families, metadata-only full-authoring parity, exact mutex
+and dependencies, downstream Apply using edited inputs, unchanged pending v1,
+strict malformed-input classification, ordinary HTTP create/patch/delete,
+no reconcile/retry, one undo/redo, failed-publication held-source protection,
+latest-cursor/protected-loadout checks, save/reload and independent worker proof.
+
+Changed-file Ruff passes; full lint retains5baseline F401 errors. `main.js`
+7350lines,delta0. Frontend behavior was not changed or app-qualified. Counts remain
+21/38complete,17remaining(8core,9parked);+0completed,+0total. Engineering effort is
+37checkpoints since B1; FH-25 remains growth-flagged after10. Metadata recording
+closes no whole milestone: atomic removal/UI state, legacy repair, organized
+integration, shared-host/ISSUE-126 correctness and qualification remain required.
+
+U37 hygiene/qualification: memory lint remains6baseline errors/59warnings;
+project head200lines. Archive is still absent. **NOT VERIFIED IN APP**; all gates
+remain disabled and desktop/latency work remains open. The completed task's
+pytest roots2/3/4/current contained611empty directories,4symlinks and0regular
+files/bytes. No readable same-user cwd/fd/maps references remained; systemd/PAM
+435/436 remain uninspectable. Removed only these artifacts; pytest root and
+`/dev/shm` are empty. User designs, jobs, caches and historical evidence untouched.
+
+`just test-smart --dry-run` selected FAST after deferring FULL for the accumulated
+5771-file foundational diff; **zero broad tests ran**. Literal selector notice:
+
+```text
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+Only request `just test-session` when a broad/full sweep is actually needed.
+```

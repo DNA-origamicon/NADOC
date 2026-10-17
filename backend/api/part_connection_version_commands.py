@@ -1,7 +1,8 @@
-"""Input-only pending ordinary-overhang candidates; no materialization authority.
+"""Input-defined ordinary connection metadata; no materialization authority.
 
-The three closed actions reuse overhang-bulk without changing numerical model
-pins. Applied versions and legacy request shapes retain their compatibility path.
+V1 retains pending-only semantics. V2 records applied metadata and exact sibling
+flag changes, without rebuilding or disconnecting geometry. Ordinary v2 rollout
+is private until the complete connection lifecycle is qualified.
 """
 
 from dataclasses import dataclass
@@ -13,11 +14,13 @@ from uuid import uuid4
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_validator
 
-from backend.core.connection_versions import assign_default_names, clean_sequence
+from backend.core.connection_versions import assign_default_names, clean_sequence, pair_key
 from backend.core.models import ConnectionVersion
 from backend.core.part_command_errors import CommandContractError, ReferenceResolutionError
 from backend.core.part_operation_input import MAX_OPERATION_BYTES, MAX_OPERATION_NODES, validate_operation_input
 
+
+APPLIED_METADATA_ENABLED = False
 
 CREATE = "connection-version-create"
 PATCH = "connection-version-patch"
@@ -83,11 +86,61 @@ class DeleteRequest(_Input):
     action: Literal["connection-version-delete"]
 
 
+class MetadataSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    connection_version_contract: Annotated[StrictInt, Field(ge=2, le=2)]
+    affected_version_ids: list[_Id] = Field(max_length=128)
+
+    @field_validator("affected_version_ids")
+    @classmethod
+    def unique_affected(cls, value):
+        if len(set(value)) != len(value):
+            raise ValueError("Affected version identities must be unique")
+        return value
+
+
+class CreateMetadataRequest(CreateRequest, MetadataSelection):
+    connection_version_contract: Annotated[StrictInt, Field(ge=2, le=2)]
+
+    @field_validator("applied")
+    @classmethod
+    def pending_only(cls, value):
+        # This is a saved metadata flag, not materialization authority.
+        return value
+
+
+class MetadataPatch(Patch):
+    applied: StrictBool | None = None
+
+
+class PatchMetadataRequest(PatchRequest, MetadataSelection):
+    connection_version_contract: Annotated[StrictInt, Field(ge=2, le=2)]
+    patch: MetadataPatch
+
+
+class DeleteMetadataRequest(DeleteRequest, MetadataSelection):
+    connection_version_contract: Annotated[StrictInt, Field(ge=2, le=2)]
+
+
+def affected_versions(design, values):
+    """Exact ordered metadata footprint; call after bounded inventory admission."""
+    action = values["action"]
+    applied = values.get("applied") if action == CREATE else values.get("patch", {}).get("applied")
+    pair = pair_key(values["overhang_a_id"], values["overhang_b_id"])
+    return [v.id for v in design.connection_versions
+            if (action != CREATE and v.id == values["version_id"])
+            or (applied is True and pair_key(v.overhang_a_id, v.overhang_b_id) == pair)]
+
+
 def parse_command(params):
     validate_operation_input(params)
     if not is_pending_action(params):
         raise ValueError("Unsupported pending connection action")
-    model = {CREATE: CreateRequest, PATCH: PatchRequest, DELETE: DeleteRequest}.get(params["action"])
+    marker = params.get("connection_version_contract")
+    models = ({CREATE: CreateMetadataRequest, PATCH: PatchMetadataRequest, DELETE: DeleteMetadataRequest}
+              if type(marker) is int and marker == 2 else
+              {CREATE: CreateRequest, PATCH: PatchRequest, DELETE: DeleteRequest})
+    model = models.get(params["action"])
     if model is None:
         raise ValueError("Unsupported pending connection action")
     return model.model_validate(params)
@@ -191,7 +244,7 @@ def _select(design, body, inventory):
     version = None
     if body.action != CREATE:
         version = _resolve(inventory.versions, body.version_id, "connection_version", "version_id")
-        if version.applied:
+        if version.applied and body.connection_version_contract == 1:
             _fail("Native pending edits cannot alter an applied connection", "connection_version", version.id, "version_id")
         for field in ("overhang_a_id", "overhang_b_id"):
             if getattr(version, field) != getattr(body, field):
@@ -202,6 +255,11 @@ def _select(design, body, inventory):
             _fail("Pending ordinary connections require ordinary overhangs", "overhang", selected.id, field)
     if body.overhang_a_id == body.overhang_b_id:
         _fail("A pending connection needs two distinct overhangs", "overhang", body.overhang_b_id, "overhang_b_id")
+    if body.connection_version_contract == 2:
+        actual = affected_versions(design, body.model_dump(by_alias=True))
+        if body.affected_version_ids != actual:
+            _fail("Metadata mutation requires the exact ordered affected version set",
+                  "connection_version", body.version_id, "affected_version_ids")
     return _Selection(design, body.action, (body.overhang_a_id, body.overhang_b_id), version)
 
 
@@ -230,12 +288,12 @@ def _build(design, prepared):
             overhang_a_id=body.overhang_a_id, overhang_b_id=body.overhang_b_id,
             connection_type=body.connection_type, overhang_a_seq=clean_sequence(body.overhang_a_seq),
             overhang_b_seq=clean_sequence(body.overhang_b_seq), bridge_length=body.bridge_length,
-            bridge_seq=clean_sequence(body.bridge_seq), applied=False)
+            bridge_seq=clean_sequence(body.bridge_seq), applied=body.applied)
         # The unchanged helper can name earlier blank legacy rows too. Copy those
         # mutable records first; existing applied/topology state remains untouched.
         result = design.copy_with(connection_versions=[*[v.model_copy() for v in design.connection_versions], version])
         assign_default_names(result)
-        return result
+        return _metadata_mutex(result, body, body.applied)
     if body.action == DELETE:
         return design.copy_with(connection_versions=[v for v in design.connection_versions if v.id != version.id])
     patch, updates = body.patch.model_dump(exclude_unset=True), {}
@@ -248,8 +306,19 @@ def _build(design, prepared):
             updates[field] = clean_sequence(patch[field])
     if patch.get("bridge_length") is not None:
         updates["bridge_length"] = patch["bridge_length"]
-    return design.copy_with(connection_versions=[v.model_copy(update=updates) if v.id == version.id else v
-                                                  for v in design.connection_versions])
+    if body.connection_version_contract == 2 and patch.get("applied") is not None:
+        updates["applied"] = patch["applied"]
+    result = design.copy_with(connection_versions=[v.model_copy(update=updates) if v.id == version.id else v
+                                                   for v in design.connection_versions])
+    return _metadata_mutex(result, body, patch.get("applied"))
+
+
+def _metadata_mutex(design, body, applied):
+    if body.connection_version_contract != 2 or applied is not True:
+        return design
+    affected = set(body.affected_version_ids) - {body.version_id}
+    return design.copy_with(connection_versions=[v.model_copy(update={"applied": False})
+        if v.id in affected else v for v in design.connection_versions])
 
 
 def build(design, params):
@@ -281,22 +350,26 @@ def try_record(action, choices, *, version_id=None):
                 return None
             version = None if action == CREATE else _resolve(
                 inventory.versions, version_id, "connection_version", "version_id")
-            if (version is not None and version.applied) or choices.get("applied"):
+            if not APPLIED_METADATA_ENABLED and ((version is not None and version.applied) or choices.get("applied")):
                 return None
-            if action == PATCH and "applied" in choices:
+            if not APPLIED_METADATA_ENABLED and action == PATCH and "applied" in choices:
                 return None  # Preserve explicit compatibility flag changes.
-            values = {"_proof_version": 1, "connection_version_contract": 1, "action": action,
+            values = {"_proof_version": 1, "connection_version_contract": 2 if APPLIED_METADATA_ENABLED else 1, "action": action,
                 "version_id": version_id or "pending", "overhang_a_id": choices.get("overhang_a_id") if version is None else version.overhang_a_id,
                 "overhang_b_id": choices.get("overhang_b_id") if version is None else version.overhang_b_id}
             if action == CREATE:
                 values.update(name=(choices.get("name") or "").strip(), created_at=0.0,
                     connection_type=choices.get("connection_type"), overhang_a_seq=choices.get("overhang_a_seq"),
                     overhang_b_seq=choices.get("overhang_b_seq"), bridge_seq=choices.get("bridge_seq"),
-                    bridge_length=max(0, int(choices.get("bridge_length") or 0)), applied=False)
+                    bridge_length=max(0, int(choices.get("bridge_length") or 0)), applied=bool(choices.get("applied")))
             elif action == PATCH:
                 values["patch"] = dict(choices)
                 if values["patch"].get("bridge_length") is not None:
                     values["patch"]["bridge_length"] = max(0, values["patch"]["bridge_length"])
+            if APPLIED_METADATA_ENABLED:
+                values["affected_version_ids"] = affected_versions(source, values)
+                if source.feature_log_cursor != -1 or source.feature_log_sub_cursor is not None:
+                    raise HTTPException(409, detail="Return to the latest feature before editing connection metadata.")
             try:
                 body = parse_command(values)
             except ValueError:
@@ -317,7 +390,7 @@ def try_record(action, choices, *, version_id=None):
                     raise HTTPException(409, detail="Pending connection source changed before recording.")
                 return _build(design, prepared).copy_with(feature_log=list(design.feature_log))
 
-            label = {CREATE: "Create", PATCH: "Edit", DELETE: "Delete"}[action] + " pending connection"
+            label = {CREATE: "Create", PATCH: "Edit", DELETE: "Delete"}[action] + (" connection metadata" if APPLIED_METADATA_ENABLED else " pending connection")
             return record_feature(session, "overhang-bulk", label, values, native)
     except ReferenceResolutionError as error:
         raise HTTPException(404 if error.code == "missing_reference" else 422, detail=error.as_issue()) from error

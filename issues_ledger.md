@@ -3058,3 +3058,23 @@ namespace and validate its rebuilt native owner set. Equal/unequal branch edits
 no longer require internal binding-ID repairs. Old literal recipes intentionally
 retain their saved meaning; reviewed legacy rebinding and public qualification
 remain open. No molecular builder or restoration snapshot format changed.
+
+## ISSUE-142 — Ordinary Unapply/Delete UI omits Duplex teardown and is non-atomic (2026-10-16, OPEN)
+
+Source audit: `frontend/src/ui/overhang_connections_panel.js::_onApply` and
+`_deleteVersion` call `_teardownPair` and then patch/delete saved metadata in
+separate requests. `_teardownPair` deletes only the first pair linker and binding;
+it never selects a Duplex. Unequal native direct connections have a bound Duplex
+and no binding, so this helper cannot restore their driven topology. Equal native
+connections also retain a display Duplex unless separately removed. An earlier
+request may commit before a later failure. U37's metadata-only recipes deliberately
+do not disguise this as geometric disconnection.
+
+Required existing FH-25 exit: one source-bound, failure-atomic explicit
+Unapply/delete-with-disconnect operation over exact owned pair materialization,
+using shared native restoration admission; preserve metadata-only CRUD semantics
+for explicit API use. Wire the UI to that operation, qualify both direct branches
+and finite/indirect types, incoming-owner refusal, undo/reload/cold replay and
+failed-publication source preservation. Do not broaden pair teardown to unrelated
+third-endpoint conflicts or reinterpret `applied=false` as a successful removal.
+No molecular placement change is authorized by this finding.

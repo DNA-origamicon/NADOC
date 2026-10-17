@@ -976,3 +976,11 @@ Direct v2/linker v4 use stable creator selectors with strict current-prefix
 ownership validation. Legacy literal recipe repair and public rollout remain
 open; no automatic reinterpretation of saved inputs. See the ordinary connection
 completion plan for evidence and remaining exits.
+
+### U37 — applied metadata recording; ISSUE-142 identified
+
+Version2 metadata commands record applied create/patch/delete and exact pair flag
+changes without touching materialized geometry. The current UI's non-atomic
+Unapply/delete sequence and omitted Duplex teardown are tracked as ISSUE-142,
+not claimed fixed by metadata support. Existing FH-25 scope and rollout gates
+remain unchanged.
