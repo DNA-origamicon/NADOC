@@ -311,3 +311,58 @@ persistent systemd/PAM435/436 denied inspection. Removed those empty paths and
 verified the root empty. User designs/jobs, runtimes, historical artifacts and
 shared caches remain untouched. Only compact documentation and reusable source/
 tests are retained.
+
+
+## U31 — direct replacement restoration
+
+Native input-built equal/unequal prefixes exposed a pre-existing ordinary Apply
+bug: teardown removed bindings but retained display Duplex records, and never
+restored unequal-length Duplex-owned relocation. Eight corrected characterization
+cases failed on retained Duplex records before the fix (an earlier fixture run
+used incorrect direct type strings; that run is not bug evidence).
+
+`connection_version_teardown.remove_conflicts` now owns existing linker teardown,
+equal-length binding restoration, unequal-length Duplex restoration and conflicting
+record removal. The callback calls it before sequence patching, avoiding writes
+to a still-relocated shared driver host. Existing native restoration helpers,
+placement algorithms, constants, models, source pins and goldens are unchanged.
+This removes30 lines from the route file and centralizes replacement cleanup.
+
+Twenty new regression cases use real independently verified bundle/extrusion
+recipes, with equal12/12 and unequal12/8 endpoints: both direct types, finite SS
+and indirect replacements, blank and explicit sequences, direct type switching,
+complete original topology restoration and held-source immutability. Comparison
+uses all authoring fields except saved alternative metadata, sorting identity
+record collections because native restoration may append the original helix.
+
+`just test-affected tests/test_connection_direct_replacement.py tests/test_connection_composition_contract.py tests/test_direct_connection_unified.py tests/test_connection_versions.py tests/test_part_connection_application_commands.py tests/test_part_connection_indirect.py --tb=short`
+passed157 tests/25 existing FastAPI warnings in7.89s. Changed-file Ruff passes;
+full lint retains5 baseline F401 findings. `main.js`7350lines,delta0.
+
+`just test-smart --dry-run` selected FAST after deferring the historical
+foundational FULL diff (5754files); **zero broad tests ran**. Literal notice:
+
+```text
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+Only request `just test-session` when a broad/full sweep is actually needed.
+```
+
+NOT VERIFIED IN APP: Archive is absent, so no bulk browser/native artifacts or
+visual qualification were attempted. This is a correction to the ordinary legacy
+callback, not a newly registered direct recipe. Deterministic direct identities,
+typed dependencies, complete replacement admission, applied metadata, organized
+ownership and qualification remain within FH-25. The direct audit found existing
+identity seams in `compute_bind_topology`, `materialize_duplex_cluster` and
+`relocate_duplex`; use those instead of replacing native molecular calculations.
+Counts remain21/38complete,17remaining;+0total,+0completed;31engineering checkpoints
+since B1. FH-25 remains task-growth flagged at4; no new milestone or narrower exit.
+
+Hygiene: memory lint retains6 baseline errors/59warnings; current project head
+remains200lines. Task-created `/tmp/pytest-of-joshua/pytest-{1,2,3}` and current
+link contained176empty directories,4symlinks,0regular files/bytes. No readable
+same-user cwd/fd/maps references were present; persistent systemd/PAM435/436
+remain uninspectable. Removed only those empty directories/links; pytest root
+and `/dev/shm` are empty. No user designs, managed jobs, caches or scientific
+artifacts were removed. No bulk artifacts were created.

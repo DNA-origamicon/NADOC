@@ -3026,3 +3026,16 @@ and this issue are not declared resolved.
   calculation order. Exact authoring parity and held-source/revision/history/redo
   regressions pass in the111-case focused run. Combined native history remains
   unfinished under FH-25; this correction does not grant a new replay capability.
+
+
+## ISSUE-140 — Direct replacement retains Duplex ownership and relocation (2026-10-16, CORRECTED)
+
+Ordinary connection-version Apply removed conflicting bindings/linkers but never
+removed their display Duplex records or restored unequal-length Duplex-owned
+topology. Native bundle/extrusion controls reproduced all eight equal/unequal,
+direct-type and finite/indirect replacement cases. Cleanup now uses existing
+binding and Duplex restoration before patching replacement sequences, then drops
+all conflicting direct records. No new molecular placement is introduced.
+Twenty new cases cover explicit/blank sequences, direct type switching, complete
+restoration and source isolation; six-file regression157passed. Full direct
+history contracts remain FH-25 work. App/visual qualification remains unverified.

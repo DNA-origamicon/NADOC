@@ -326,11 +326,10 @@ def _apply_connection_version_legacy(
     This is the backend replacement for the v1 frontend-orchestrated apply — it
     handles overhang LENGTH + sequence + connection-type changes in one step.
     """
-    from backend.core.binding_relax import revert_bind_topology
+    from backend.api.connection_version_teardown import remove_conflicts
     from backend.core.cluster_reconcile import MutationReport
     from backend.core.lattice import (
         generate_linker_topology,
-        remove_linker_topology,
         assign_overhang_connection_names,
     )
 
@@ -366,6 +365,9 @@ def _apply_connection_version_legacy(
                 deep=True,
             )
             assign_default_names(d)
+        # Restore the prior connection before editing sequences: a driven domain
+        # may still share the driver's host until its relocation is reverted.
+        d = remove_conflicts(d, (a_id, b_id))
         # 1. Sequences: patch each overhang, but preserve the live geometry
         #    length. A version can be created, then the user can drag-resize one
         #    of its overhangs before applying; the captured sequence length must
@@ -381,41 +383,9 @@ def _apply_connection_version_legacy(
                 d, b_id, OverhangPatchRequest(sequence=applied_b_seq)
             )[0]
 
-        # 2. Tear down EVERY materialized connection / binding that shares either
-        #    overhang — an overhang can be in only one applied connection, so any
-        #    prior one involving a_id or b_id (even with a third overhang) is
-        #    unapplied here before the new one is created.
         def _involves(x):
-            return a_id in (x.overhang_a_id, x.overhang_b_id) or b_id in (
-                x.overhang_a_id,
-                x.overhang_b_id,
-            )
+            return bool({a_id, b_id}.intersection((x.overhang_a_id, x.overhang_b_id)))
 
-        for c in list(d.overhang_connections):
-            if _involves(c):
-                d = remove_linker_topology(
-                    d.model_copy(
-                        update={
-                            "overhang_connections": [
-                                x for x in d.overhang_connections if x.id != c.id
-                            ]
-                        }
-                    ),
-                    c.id,
-                )
-        # Bound direct bindings relocated the driven OH's domain — revert that
-        # relocation (restore the driven helix + domain + crossovers) BEFORE dropping
-        # the binding, else the relocated domain is orphaned on the driver helix.
-        for bd in [b for b in d.overhang_bindings if _involves(b)]:
-            if bd.bound and bd.prior_driven_topology:
-                d = revert_bind_topology(d, bd.prior_driven_topology)
-        d = d.model_copy(
-            update={
-                "overhang_bindings": [
-                    b for b in d.overhang_bindings if not _involves(b)
-                ]
-            }
-        )
         # 3. Create the version's connection type.
         report = None
         bridge_helix_ids: list[str] = []

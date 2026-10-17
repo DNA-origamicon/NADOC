@@ -946,3 +946,15 @@ full regenerated history for owned edits, preserving ordinary append slimming.
 - Native complete-output parity covers all eight finite types; source isolation,
   default naming and real publication failure retain canonical/held-source state.
   Focused regression:111 passed,14 warnings,5.96s. No molecular or public gate change.
+
+
+### U31 — ISSUE-140 direct replacement owner cleanup
+
+- [x] Reproduced retained Duplex records across eight native replacement cases.
+- Root cause: replacement teardown accounted for bindings but not the later
+  unequal-length Duplex relocation owner; sequence edits also preceded restore.
+  Share complete restoration cleanup, preserving the existing native helpers.
+- Expanded regression20 cases; six-file regression157passed/25warnings/7.89s.
+  Initial fixture used non-existent direct type strings; corrected before the
+  bug reproduction. No alternate molecular hypothesis or new algorithm proposed.
+  Direct replay remains incomplete; desktop/visual validation remains deferred.
