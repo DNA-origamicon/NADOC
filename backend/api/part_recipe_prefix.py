@@ -2,7 +2,9 @@
 
 No saved output is read, and no state is cached between revisions or requests.
 The prefix's recovery bytes are re-encoded while source verification executes it.
-Only one isolated model (the state before the selected top-level entry) is kept.
+Keep the state before the selected top-level entry and, only for child input
+binding, the state after its earlier siblings. Both are request-local and bounded
+by the existing source/capture admission; neither becomes saved authority.
 """
 
 from backend.api import state
@@ -12,7 +14,7 @@ from backend.api.part_recovery_budget import RecoveryBudget
 
 
 class ReplayPrefix:
-    def __init__(self, source, count, *, budget=None):
+    def __init__(self, source, count, *, budget=None, sub_index=None):
         self.source = source
         self.count = count
         self.log = []
@@ -21,6 +23,9 @@ class ReplayPrefix:
         self.children = []
         self.pre = None
         self.budget = budget or RecoveryBudget()
+        self.sub_index = sub_index
+        self.selected_child_index = 0
+        self.child_design = None
 
     def execute(self, executor, kind, current, params):
         if len(self.log) == self.count:
@@ -28,6 +33,13 @@ class ReplayPrefix:
                 self.design = current.copy_with(
                     id=self.source.id, feature_log=list(self.log)
                 ).model_copy(deep=True)
+            if self.sub_index is not None and self.child_design is None:
+                if self.selected_child_index == self.sub_index:
+                    # Reference context after earlier siblings, not a separately
+                    # certified recipe or persisted construction authority.
+                    self.child_design = current.copy_with(id=self.source.id,
+                        feature_log=list(self.log)).model_copy(deep=True)
+                self.selected_child_index += 1
             return executor(kind, current, params)
         entry = self.source.feature_log[len(self.log)]
         if entry.feature_type in OVERLAY_KINDS:

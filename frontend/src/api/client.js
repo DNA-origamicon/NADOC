@@ -18,6 +18,7 @@ import { createGroupOrganizationEndpoint } from './group_organization_endpoints.
 import { createPatternRequests } from './pattern_requests.js'
 import { createSourceBoundRequests } from './source_bound_requests.js'
 import { createExtensionEndpoints } from './extension_endpoints.js'
+import { createRoutingFeatureAPI } from './routing_feature_endpoints.js'
 
 const _documentRequests = createDocumentRequestScope()
 const _seekHistory = createSeekHistoryAcknowledgement()
@@ -3718,6 +3719,13 @@ const _featureInputs = createSourceBoundRequests({ store, request: _request, syn
 export const captureFeatureEditContext = state => _featureInputs.capture(state)
 export const isFeatureEditContextCurrent = (context, state) => _featureInputs.isCurrent(context, state)
 export const editNativeExtrusionFeature = (index, params, context, featureId) => _featureInputs.edit(index, params, context, featureId)
+
+const _routingInputs = createRoutingFeatureAPI({ store, request: _request, syncDesign: _syncFromDesignResponse,
+  getDocId, currentRevision: currentRevisionWatermark, documentRequests: _documentRequests })
+export const captureRoutingEditContext = state => _routingInputs.capture(state)
+export const isRoutingEditContextCurrent = (context, state) => _routingInputs.isCurrent(context, state)
+export const getRoutingFeatureInputs = (index, subIndex, context, featureId, childId) => _routingInputs.load(index, subIndex, context, featureId, childId)
+export const editRoutingFeatureInputs = (index, subIndex, params, context, featureId, childId) => _routingInputs.edit(index, subIndex, params, context, featureId, childId)
 
 export async function createCluster(body) {
   const json = await _request('POST', '/design/cluster', body)

@@ -15,6 +15,122 @@ from backend.api.part_command_references import build_strict_nick_batch, validat
 from backend.core.part_command_errors import ReferenceResolutionError
 
 
+def _owned_source(operation):
+    """Capture the source of a caller-held recording lock, without copying it."""
+    generation = state._require_compatibility_write(operation).generation
+    session = state._session()
+    source = session.design
+    if source is None:
+        raise HTTPException(404, detail="No active design.")
+    state._assert_active_loadout_editable(source)
+    document = doc_context.get_current_doc()
+    identity, revision = session.identity, session.revision
+
+    def require_current(design):
+        policy = state._require_compatibility_write(operation)
+        if (doc_context.get_current_doc() != document
+                or state._sessions.get(document) is not session
+                or session.identity != identity or session.revision != revision
+                or session.design is not source or design is not source
+                or policy.generation != generation):
+            raise HTTPException(409, detail="Routing source changed before recording.")
+        state._assert_active_loadout_editable(source)
+
+    return session, source, require_current
+
+
+def record_loop_skip(kind, params):
+    """Compute once on the locked source; retain the native generated summary."""
+    from backend.api.crud import _helix_label
+    from backend.api.part_native_commands import build_loop
+    from backend.core.loop_skip_calculator import (
+        apply_loop_skips, bend_loop_skips, twist_loop_skips,
+    )
+
+    if kind not in {"loop-skip-insert", "loop-skip-twist", "loop-skip-bend"}:
+        raise ValueError("Unsupported ordinary loop/skip recording operation")
+    with state._lock:
+        session, source, require_current = _owned_source(kind)
+        if kind == "loop-skip-insert":
+            hid, bp, delta = params["helix_id"], params["bp_index"], params["delta"]
+            helix = source.find_helix(hid)
+            if helix is None:
+                raise HTTPException(404, detail=f"Helix '{hid}' not found")
+            if delta not in (-1, 0, 1):
+                raise HTTPException(400, detail=f"delta must be -1, 0, or +1, got {delta}")
+            # Removal must continue to clear stale out-of-range marks.
+            if delta != 0 and not helix.bp_start <= bp < helix.bp_start + helix.length_bp:
+                raise HTTPException(400, detail=(f"bp_index {bp} out of range "
+                    f"[{helix.bp_start}, {helix.bp_start + helix.length_bp - 1}]"))
+            verb = "Remove loop/skip" if delta == 0 else "Loop" if delta > 0 else "Skip"
+            label = f"{verb} · helix {_helix_label(source, hid)} bp {bp}"
+        else:
+            ids = params.get("helix_ids", [])
+            if not ids:
+                raise HTTPException(422, detail="No valid helix_ids provided.")
+            helix_map = {helix.id: helix for helix in source.helices}
+            helices = [helix_map.get(hid) for hid in ids]
+            # A missing explicit target must not be silently omitted from a
+            # command whose input-native replay requires the complete list.
+            missing = next((hid for hid, helix in zip(ids, helices) if helix is None), None)
+            if missing is not None:
+                raise HTTPException(404, detail=f"Helix '{missing}' not found")
+            a, b = int(params["plane_a_bp"]), int(params["plane_b_bp"])
+            if kind == "loop-skip-twist":
+                target = float(params["target_twist_deg"])
+                label = f"Twist {target:+.1f}° · {len(helices)} helices · bp [{a}, {b}]"
+            else:
+                radius, direction = float(params["radius_nm"]), float(params.get("direction_deg", 0.0))
+                if radius <= 0:
+                    raise HTTPException(422, detail="radius_nm must be positive.")
+                label = f"Bend r={radius:.1f} nm · {len(helices)} helices · bp [{a}, {b}]"
+        modifications = None
+
+        def native(design):
+            nonlocal modifications
+            require_current(design)
+            if kind == "loop-skip-insert":
+                return build_loop(kind, design, params)
+            try:
+                modifications = (twist_loop_skips(helices, a, b, target)
+                    if kind == "loop-skip-twist" else
+                    bend_loop_skips(helices, a, b, radius, direction))
+            except ValueError as exc:
+                raise HTTPException(422, detail=str(exc)) from exc
+            return apply_loop_skips(design, modifications)
+
+        updated, report, _entry = record_minor(session, kind, label, params, native)
+        summary = None if modifications is None else {
+            hid: [{"bp_index": mark.bp_index, "delta": mark.delta} for mark in marks]
+            for hid, marks in modifications.items()
+        }
+        return updated, report, summary
+
+
+def record_crossover_move(kind, body):
+    """Derive no-op, native output and response scope once from the same source."""
+    from backend.api.part_crossover_moves import move, batch_move
+
+    if kind not in {"crossover-move", "crossover-move-batch"}:
+        raise ValueError("Unsupported ordinary crossover move operation")
+    with state._lock:
+        session, source, require_current = _owned_source(kind)
+        builder = batch_move if kind == "crossover-move-batch" else move
+        candidate, changed = builder(source, body)
+        require_current(source)
+        if candidate is source:
+            return source, state.validate_design(source), None
+
+        def native(design):
+            require_current(design)
+            return candidate
+
+        updated, report, _entry = record_minor(
+            session, kind, "Move crossovers", body.model_dump(mode="json"), native,
+        )
+        return updated, report, changed
+
+
 def record_auto_crossover():
     """Build privately outside the lock, then record only the captured source.
 

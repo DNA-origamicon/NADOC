@@ -37,11 +37,20 @@ KINDS = frozenset({
     "crossover-move", "crossover-move-batch",
     "strand-end-resize", "domain-shift",
     "nucleotide-transform", "nucleotide-transform-batch", "nucleotide-transform-delete",
+    "loop-skip-clear", "loop-skip-clear-all", "loop-skip-twist", "loop-skip-bend",
+    "apply-loop-skips",
+    "crossover-extra-bases", "crossover-extra-bases-batch", "forced-ligation-extra-bases",
 })
-# Residue pose builders leave directional material unchanged. They still use
-# this conserved-material plan because native execution always reconciles and
-# retries pending ligations before publishing the final organization. Do not
-# bypass that postprocessing or reuse a stale domain-ordinal membership list.
+# Residue poses and loop/skip/junction annotations leave directional domain
+# intervals unchanged. Inserted loop copies and extra-base junction material
+# are not new domain entities. These commands still use the conserved-domain
+# plan: native execution reconciles and retries pending ligations before the
+# final membership is derived. Do not bypass that native postprocessing or
+# reuse an intermediate domain-ordinal list. A pending cycle itself survives
+# annotation; a later nick can enable retry and change its surviving strand.
+# apply-loop-skips replaces helix annotations using the existing realization
+# planner; it does not change directional domain intervals. Its native
+# whole-helix selection guard and reconciliation/retry remain authoritative.
 # Patterns declare their copied groups during native extraction. Capture that
 # raw result before global reconciliation/retry can merge domain identities.
 POSTPROCESS_KINDS = frozenset({"linear-pattern", "circular-pattern"})

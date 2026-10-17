@@ -1,10 +1,15 @@
 # FH-24 Fine Routing history editor contract
 
-Read-only source audit and proposed implementation contract, October 16, 2026,
-against `3fb2c61d`. **Not implemented or newly validated by this document.** No
-tests were run for this audit. Accounting remains **20/38 complete**, with
-18 remaining (9 core and 9 parked). This plan adds no milestone, checkpoint
-credit, or completion claim and does not change the central ledger.
+U27 implementation checkpoint, October 16, 2026, based on `3ffde3e3`.
+**All 22 native child kinds are implemented and software-tested.** Current
+accounting is **21/38 complete,17 remaining (8 core,9 parked)**; this closes only
+the original FH-24 implementation exit. Desktop/performance remains the already
+allocated FH-27/MV-53 exit. Editor and organization rollout gates stay off.
+See [validation evidence](validation_fine_routing_history_editor.json).
+
+The source audit below began against `3fb2c61d` without test execution and earned
+no completion credit. Its fixed inventory and acceptance contract are retained;
+the implementation status here supersedes the original gap descriptions.
 
 The [fixed FH-24 exit](remaining_standard_part_checkpoints.md) is: **Fine Routing
 child editors: resize, ligate, nick, crossovers and loop/skips editable through
@@ -13,7 +18,7 @@ Completing one form, a generic endpoint, or replay tests alone does not close it
 FH-18/FH-23 member movement and FH-26 dependency repair remain their existing
 exits; neither is replaced, parked, or narrowed by doing this parallel-safe work.
 
-## Existing foundation and actual gaps
+## Original source-audit gaps (before U27)
 
 [MinorMutationLogEntry and RoutingClusterLogEntry](../../../backend/core/models.py)
 already give each child and parent a stable ID. The
@@ -87,16 +92,15 @@ workflow/suffix controls, without relabeling them as new Fine Routing children.
 Other minor kinds (joint, color, structural creation, etc.) are not silently
 claimed implemented by this five-family editor inventory.
 
-## Closed editor and publication contract
+## Closed editor and publication contract — implemented U27
 
 Reuse the owned host with one explicit `routing_edit` family, not an arbitrary
-public command/callback selector. The proposed ordinary request targets the
+public command/callback selector. The ordinary request targets the
 existing `/design/features/{index}/edit?sub_index={j}` route and carries `params`,
 `expected_design_id`, `expected_revision`, `expected_feature_id` (parent), and
 `expected_child_id`. Both indexes are convenience addresses; exact IDs, selected
 subtype and supported proof version are checked against the owned source. The
-private worker header repeats that closed binding. These additions are proposed,
-not existing request support.
+private worker header repeats that closed binding. These additions are implemented by the source-bound route and owned host.
 
 Use a strict, bounded editor normalizer for the inventory above. Reject unknown
 editing fields and attempts to change protected identities; preserve recognized
@@ -131,11 +135,11 @@ rollback or automatically retry an unknown publication. Capture document/reset
 generation and both feature identities at opening; same-ID resets and later child
 replacement must retire stale work.
 
-## Pre-child references and stable output slots
+## Pre-child references and stable output slots — implemented U27
 
-[ReplayPrefix](../../../backend/api/part_recipe_prefix.py) currently retains the
-state before the selected top-level entry. A routing editor's reference picker
-must additionally execute the preceding children in that cluster, in order.
+[ReplayPrefix](../../../backend/api/part_recipe_prefix.py) retains the state before
+the selected top-level entry and now the selected routing child after executing
+the preceding children in that cluster, in order.
 Neither the parent pre-state nor the final live design is the selected child's
 input state. Reuse independent replay; do not decode stored child diffs to obtain
 authoritative choices. Earlier siblings can rename/merge/split the exact terminal
@@ -154,8 +158,8 @@ Batch creation cannot infer output identity from a new row ordinal. Existing
 output slots must retain identity across parameter edits/reordering; any supported
 added slot needs one host-authored ID allocated after source admission, and a
 removed slot must participate in normal downstream dependency failure/repair.
-Finalize and test that finite add/remove/reorder contract before exposing those
-controls. Do not declare a complete batch editor while silently omitting them,
+U27 implements and tests that finite add/remove/reorder contract in the native
+editor, including downstream refusal after a referenced output is removed. Do not declare a complete batch editor while silently omitting them,
 or let caller-supplied replacement IDs redirect existing downstream references.
 
 ## Native and organized behavior to preserve
@@ -169,25 +173,31 @@ or model literal is needed for this inventory.
 [Organization lineage](../../../backend/core/part_group_lineage.py) already
 qualifies resize/shift, nick/ligation, crossover placement/movement/deletion and
 loop-skip insertion. The [native gate](../../../backend/api/part_group_organization_gate.py)
-still refuses four loop commands (clear, clear-all, twist, bend) and three
+originally refused four loop commands (clear, clear-all, twist, bend) and three
 extra-base commands (single/batch crossover, forced ligation). Complete organized
 FH-24 requires bounded admission and final post-retry ancestry evidence for those
-seven roles. Local-looking input changes are not justification for a gate-only
+seven roles. U27 supplies that evidence through the conserved-domain adapter,
+and also qualifies the existing apply-loop-skips snapshot as a downstream suffix.
+Local-looking input changes are not justification for a gate-only
 allowlist expansion or for skipping retry.
 
-Two current ordinary API hazards remain part of entry-flow regression coverage:
-loop insert/twist/bend build an updated design before recording and return it from
-a callback; crossover movement runs native work once outside and again inside
-recording, with response scope from the first source. Use the established
+Two ordinary API hazards identified by the audit were corrected in U27:
+loop insert/twist/bend previously built an updated design before recording and
+returned it from a callback; crossover movement ran native work outside and again
+inside recording, with response scope from the first source. Both now capture
+and compute through the existing owned recorder; native calculations are unchanged. Use the established
 [routing recorder](../../../backend/api/part_routing_recording.py) ownership
 pattern for any necessary correction. Do not hold expensive native work under a
 new broad lock or change formulas. Preserve legitimate empty/no-op behavior and
 legacy tolerant internal helpers where that is the established contract.
 
-## Qualification matrix and existing evidence
+## Qualification matrix and evidence
 
-Existing tests below are reusable evidence and fixtures, not a claim that the new
-editor has passed. No tests were executed for this plan.
+The table retains the original required acceptance matrix and foundation tests.
+U27 adds native51, lineage56, host24, worker38, HTTP60, input73 and ordinary
+ownership47 cases, plus 49 focused frontend cases; the full frontend suite passes
+9,257 tests with one skip. See the validation record for exact runs and red/green
+failures. Desktop/performance and broad backend acceptance remain unqualified.
 
 | Required acceptance | Existing foundation / necessary extension |
 |---|---|
@@ -222,3 +232,28 @@ editor has passed. No tests were executed for this plan.
 These are implementation steps, not new phases or milestones. The full original
 FH-24 exit remains required; no partial-kind checkpoint closes it or transfers
 unimplemented core routing to parked scientific/assembly/VR work.
+
+## U27 delivered boundaries and pruning
+
+The closed normalizer preserves native defaults and consumer/output identity
+roles. New batch slots receive host UUIDs after source admission; workers accept
+only that exact private receipt. Prefix metadata uses a closed graph and strict
+JSON types with 30,000-node/2,000,000-byte bounds; operation input retains its 256,000-byte/10,000-node
+budget and native routing work is bounded. Full proof is confined to opening and
+Apply, with the existing shared slot and five-second deadline. These bounds are
+admission limits, not measured responsiveness guarantees.
+
+The host independently proves the original source, edits one exact child and
+regenerates all later children/features. Unknown legacy definitions refuse rather
+than losing fields. The editor keeps drafts on refusal, retires on source/reset
+changes, and exposes no fictitious cancellation of an in-flight Apply. Protected
+loadouts require the existing explicit workflow. Output IDs and recovery bodies
+remain independent: rebuilt history is sent in full for owned routing, extrusion
+and pattern edits so the browser cannot backfill stale stable-ID snapshots.
+
+The duplicated extension request-acquisition wrapper is replaced with one shared
+source-bound route; loop entry handlers and crossover movement delegate to the
+existing recorder. Legacy recovery readers remain necessary and are retained.
+All 22 kinds, organized annotation/realization, actual later native suffixes,
+missing downstream outputs, one undo/reload/cold proof and optimized seek are
+covered. No molecular algorithm, model, constant, pin or golden is changed.

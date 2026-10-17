@@ -1,0 +1,235 @@
+{
+  "checkpoint": "U27 — FH-24 checkpoint 1; complete native Fine Routing history editor",
+  "source_checkpoint": "3ffde3e3",
+  "date": "2026-10-16",
+  "evidence_status": "Software implementation qualified; NOT VERIFIED IN APP. Application servers stopped and Archive unavailable. Existing FH-27/MV-53 desktop/performance and broad backend exits remain open; gates stay off.",
+  "scope": {
+    "implemented": [
+      "All 22 native child kinds: resize/shift, nick/ligation, forced ligations, crossovers, loop/skips; actual Feature Log child Edit entry, complete native fields, ordered batch add/remove/reorder and honest no-input clear-all.",
+      "Closed source-bound HTTP acquisition and shared owned host: exact document/session incarnation/revision/policy/parent/child/family binding before body acquisition, after worker and immediately before one publication/undo.",
+      "Independent original-source proof and native pre-child reference inventory, preserving earlier siblings; full later-child/top-level rebuild, stable parent/child/output slots and private allocated-ID receipt for batch additions.",
+      "Isolated real worker and shared slot/deadline/capture/recovery/result limits; strict metadata packet shape/types and exact normalized params; no proof per field edit or viewport frame.",
+      "Native organized lineage for seven annotation roles and apply-loop-skips suffix with unchanged reconciliation/retry and whole-helix realization guard.",
+      "Ordinary loop insert/twist/bend compute against their owned source; crossover movement computes once with response scope from that candidate. Existing native no-op behavior retained.",
+      "Actual failing child attribution for native failures; partial routing expectations refuse without address-only fallback.",
+      "Owned routing/extrusion/pattern edit responses include rebuilt complete recovery history so stable IDs cannot revive stale browser cache bodies. Straight/current geometry and 2D suppression retain established contracts.",
+      "Shared SourceBoundRoute replaces duplicated extension HTTP acquisition; thin routing/loop adapters and existing recorders retained. No changes to legacy recovery meaning."
+    ],
+    "bounds": {
+      "owned_deadline_seconds": 5,
+      "history_rows": 2000,
+      "routing_native_work": 50000,
+      "prefix_inventory_nodes": 30000,
+      "prefix_inventory_bytes": 2000000,
+      "input_budget": "Existing validate_operation_input and bounded JSON limits; no increases",
+      "response_recovery": "Existing cumulative recovery admission retained; complete owned edit histories only, ordinary append replies remain slim"
+    },
+    "limits": [
+      "Editor, organization and other public rollout gates remain unchanged/off. Passing small software fixtures do not qualify desktop responsiveness, response formatting or ordinary recorder lock duration.",
+      "No molecular algorithm/model/constant/pin/golden changes, scientific simulation, native build or geometry authorization claim.",
+      "FH-18 and FH-23 remain unfinished/growth-flagged. U26 member-motion derived program remains a hypothesis; ISSUE-135 remains open.",
+      "Assemblies and machine-specific VR remain deferred; nanoparticle/assets parked. Full dependency repair and trusted public automation release remain separate fixed exits."
+    ],
+    "main_js": {
+      "lines": 7350,
+      "delta": 0
+    },
+    "issues_corrected": [
+      "ISSUE-136",
+      "ISSUE-137",
+      "ISSUE-138"
+    ],
+    "manual_debt": "MV-53; original FH-27 allocation"
+  },
+  "runs": {
+    "initial_owned_host_red": {
+      "failed": 24,
+      "seconds": 3.03,
+      "qualification": "22 missing host methods plus two fixture count assumptions corrected before qualification."
+    },
+    "initial_frontend_red": {
+      "failed_tests": 16,
+      "passed_tests": 3,
+      "failed_suites": 1,
+      "seconds": 2.49
+    },
+    "initial_inputs_lineage_red": {
+      "failed": 101,
+      "passed": 7,
+      "errors": 11,
+      "seconds": 4.56,
+      "qualification": "11 errors were an incorrect fixture import, subsequently corrected."
+    },
+    "initial_ordinary_recording_red": {
+      "failed": 17,
+      "passed": 25,
+      "seconds": 4.06
+    },
+    "input_and_host_intermediate": {
+      "command": "just test-affected tests/test_part_routing_edit_inputs.py tests/test_part_routing_owned_edit.py --tb=short",
+      "passed": 95,
+      "failed": 2,
+      "seconds": 3.3,
+      "qualification": "All 73 input cases passed; two host cases exposed missing actual child identity on native failure. Fixed, host24 green in shared run."
+    },
+    "frontend_focused": {
+      "passed": 49,
+      "files": 3,
+      "seconds": 2.16,
+      "scope": [
+        "routing_feature_endpoints.test.js",
+        "routing_feature_editor.test.js",
+        "feature_log_routing_history.test.js"
+      ]
+    },
+    "ordinary_and_lineage": {
+      "command": "just test-affected tests/test_routing_recording_ownership.py tests/test_group_lineage_routing_annotations.py --tb=short",
+      "passed": 97,
+      "warnings": 47,
+      "seconds": 4.08,
+      "qualification": "47 ordinary plus original50 lineage; lineage subsequently expanded to56."
+    },
+    "shared_host_regression": {
+      "command": "just test-affected tests/test_part_routing_owned_edit.py tests/test_part_extension_routes.py tests/test_part_pattern_recording.py tests/test_geometry_routing_recording.py tests/test_part_recipe_edit.py --tb=short",
+      "passed": 117,
+      "warnings": 39,
+      "seconds": 6.72
+    },
+    "native_and_existing_regression": {
+      "passed": 160,
+      "warnings": 82,
+      "seconds": 8.15,
+      "scope": [
+        "test_part_extrusion_edit_routes.py (22 then)",
+        "test_part_extrusion_edit_sources.py",
+        "test_native_routing_proof.py",
+        "test_native_refinement_proof.py",
+        "test_loop_skip.py",
+        "test_fine_routing_diffs.py"
+      ]
+    },
+    "frontend_full": {
+      "command": "just test-frontend",
+      "passed": 9257,
+      "skipped": 1,
+      "files": 768,
+      "seconds": 350.69,
+      "qualification": "No frontend edits after this final full-suite pass."
+    },
+    "native_http_worker_first": {
+      "passed": 124,
+      "failed": 25,
+      "seconds": 24.38,
+      "qualification": "HTTP60 passed; native48 passed with unadmitted organized realization plus two seek-oracle collection-order mismatches; worker16 passed including real spawned workers,22 failed strict result-packet expected-param seam. Fixed without changing molecular builders."
+    },
+    "owned_recovery_response_red": {
+      "failed": 8,
+      "warnings": 4,
+      "seconds": 3.55,
+      "qualification": "Routing4/extrusion2/pattern2 expose stale omitted downstream recovery bodies under stable IDs."
+    },
+    "worker_http_owned_response": {
+      "passed": 172,
+      "failed": 2,
+      "warnings": 22,
+      "seconds": 12.43,
+      "scope": [
+        "test_part_routing_worker.py (38)",
+        "test_part_routing_feature_routes.py (60)",
+        "test_part_extrusion_edit_routes.py (24)",
+        "test_part_pattern_routes.py (11)",
+        "test_feature_recording_transactions.py (41)"
+      ],
+      "qualification": "Worker38, routing60, pattern11 and transaction41 green; all8 new recovery response regressions green. Two existing extrusion cases expected422 but routing dispatch intercepted with409; dispatch narrowed and final HTTP/extrusion rerun green."
+    },
+    "http_and_extrusion_final": {
+      "command": "just test-affected tests/test_part_routing_feature_routes.py tests/test_part_extrusion_edit_routes.py --tb=short",
+      "passed": 84,
+      "warnings": 16,
+      "seconds": 9.05
+    },
+    "native_lineage_final_matrix": {
+      "command": "just test-affected tests/test_part_routing_edit_native_matrix.py tests/test_group_lineage_routing_annotations.py --tb=short",
+      "passed": 106,
+      "failed": 1,
+      "seconds": 16.45,
+      "qualification": "All51 native matrix cases pass. One of56 lineage cases had a duplicate fixture executable ID, changed to annotation-result; production unchanged and lineage rerun green."
+    },
+    "lineage_final": {
+      "command": "just test-affected tests/test_group_lineage_routing_annotations.py --tb=short",
+      "passed": 56,
+      "seconds": 3.18
+    },
+    "native_matrix_oracle": {
+      "qualification": "Native final authoring/cold-proof equality remains exact. Optimized seek compares unique strand IDs with complete ordered domain objects and exact geometry record multisets because recovery diffs append new strands whereas native builders insert at the old position. No geometry tolerance or production change. Actual optimized dispatch exercised beyond32 top-level rows and10 children."
+    },
+    "lint": {
+      "command": "just lint",
+      "exit_code": 1,
+      "errors": 5,
+      "delta": 0,
+      "qualification": "Only existing F401: vr_prompts parse_event and Path in four CPD test files. All changed/new Python covered."
+    },
+    "memory_lint": {
+      "command": "just lint-memory",
+      "exit_code": 1,
+      "errors": 6,
+      "warnings": 59,
+      "delta": 0,
+      "current_project_lines": 197
+    },
+    "diff_check": {
+      "command": "git diff --check",
+      "passed": true
+    },
+    "selector": {
+      "command": "just test-smart --dry-run",
+      "exit_code": 0,
+      "decision": "FAST (fast suite only)",
+      "routed": "FULL",
+      "tests_executed": 0,
+      "dry_run": true,
+      "deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\n  session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\n  This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\n  Only request `just test-session` when a broad/full sweep is actually needed.",
+      "qualification": "Selector wording says ran, but this was dry-run: neither FAST nor FULL executed. Archive unavailable prevents broad disk-scratch writers. Focused checks do not clear broad regression debt."
+    }
+  },
+  "review": {
+    "independent_read_only": "No must-fix found in final source-bound host/worker/lineage review; responsiveness remains FH-27."
+  },
+  "cleanup": {
+    "status": "Complete for task-owned disposable output; no browser/bulk/scientific writer started. Archive unavailable.",
+    "paths": [
+      "/tmp/pytest-of-joshua/pytest-11",
+      "/tmp/pytest-of-joshua/pytest-12",
+      "/tmp/pytest-of-joshua/pytest-13",
+      "/tmp/pytest-of-joshua/pytest-current"
+    ],
+    "removed_files": 0,
+    "removed_bytes": 0,
+    "removed_directories": 250,
+    "removed_symlinks": 4,
+    "remaining_task_paths": [],
+    "shared_memory_remaining": [],
+    "process_reference_check": "No active validation processes or readable same-user cwd/fd/maps references. Inspection denied for persistent systemd/PAM435/436; both are pre-existing session processes.",
+    "preserved": "Shared caches, active runtimes, workspace user designs/jobs and historical provenance. Pytest earlier retention cleanup removed its older scratch before this final inventory; no byte claim for that automatic removal."
+  },
+  "progress": {
+    "baseline": "B1:17/38 through2c15e747",
+    "completed": 21,
+    "estimated_total": 38,
+    "remaining": 17,
+    "core_remaining": 8,
+    "parked_remaining": 9,
+    "delta_completed": 1,
+    "delta_total": 0,
+    "fh18_checkpoints": 13,
+    "fh23_checkpoints": 9,
+    "fh24_checkpoints": 1,
+    "engineering_checkpoints_since_b1": 27,
+    "milestones_closed_since_b1": 4,
+    "task_growth_flagged": [
+      "FH-18",
+      "FH-23"
+    ]
+  }
+}

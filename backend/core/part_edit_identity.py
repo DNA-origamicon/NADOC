@@ -40,9 +40,11 @@ def preserve_proof_identity(previous, updated, *, kind=None):
                 ext = {**ext, "id": before["extension"]["id"]}
             entries.append({**after, "create": before["create"], "extension": ext})
         result = {**result, "entries": entries}
-    if kind == "nucleotide-transform" and "crossover_id" in updated:
-        # Here the junction is an authored residue target, not a newly created
-        # crossover identity. Keep the pinned factory's other families exact.
+    if kind in {"nucleotide-transform", "crossover-move", "crossover-delete", "crossover-extra-bases"} and "crossover_id" in updated:
+        # Here the junction is an authored target, not a newly created output.
+        # The routing normalizer separately protects creator output slots by
+        # identity (including batch reorder/add/remove), never by row position.
+        # Keep the pinned factory's other families exact.
         result["crossover_id"] = updated["crossover_id"]
     if (kind == "group-create" and type(previous.get("group")) is dict
             and "id" in previous["group"] and type(result.get("group")) is dict):

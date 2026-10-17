@@ -22,49 +22,46 @@ decrement completed if an exit reopens. Flag three major checkpoints spent on
 any still-open milestone (cumulative even across alternating work), or total
 growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
-Effort is separate: U1–U26 are **26 engineering checkpoints** since B1, closing
-**three milestones** (FH-19/FH-21/FH-22). FH-18 remains open after13 checkpoints;
-FH-23 after9. Both are **task-growth flagged**. Current counts: **20/38 complete,
-18 remaining (9 core,9 parked); U26 +0 completed,+0 total**. Fixed exits remain.
-U26 adds isolated native ordering/terminal-tail characterizations, no production
-geometry. Ordinary owner insertion and an unconditional final pass fail the
-chronological movement examples. Later tails already use their moved construction
-frame. ISSUE-135 confirms Full tail/atomistic tail disagreement after terminal
-residue poses, both ends/directions. Neither policy is approved as the correction.
-See [U26 evidence](../docs/audits/feature_history_20261014/validation_member_motion_order.json).
-Prefer a disposable derived placement program with bounded prefix material/birth/
-frame provenance; this remains an unimplemented hypothesis, not a second saved
-pose authority or an approved schema. No per-frame full history proof. Full
-companion/constraint/axis matrix and inspectable molecular authorization remain.
-U25's extension-only v2/owned transaction/shared 2D/3D UI remains implemented;
-legacy v1 retains global reconciliation/retry. Native work is not latency-qualified.
-U24's native CPD/duplex gesture qualification remains; gates stay false.
-FH-23 remains open: arbitrary new-group movement and qualification are unfinished.
-Next implement the [22-kind Fine Routing contract](../docs/audits/feature_history_20261014/fine_routing_history_editor_plan.md)
-while the full selected-material motion exit remains required. No math/pin changes.
-NOT VERIFIED IN APP: Archive unavailable; MV-52/FH-27 desktop/performance and
-broad backend regression remain open. ISSUE-125/126 remain until their exits;
-ISSUE-130 is corrected privately; ISSUE-135 is open. `main.js`7350; U26 delta0.
-FH-18 retains separate Groups/Placements, native lineage, named deformation
-preview/repair/creation, persistent visibility and organized pattern integration.
-Its original movement/generated/qualification exits remain open; rollout stays off.
-**Task growth is flagged.** The containment decision and five finite batches are
-in the [organization/placement migration plan](../docs/audits/feature_history_20261014/group_placement_migration_plan.md).
-Separate organizational membership from the existing ordered placement list;
-preserve that list as the sole numerical authority and expose its owners as
-editable placement features. No hidden replacement group, per-residue expansion
-or coordinate baking. New-group move/frame semantics remain a required integration exit;
-U25 qualifies extension-only ordinary authoring against existing placements. Recorded conversion → posed dissolve → regroup is implemented;
-retain remaining consumer/movement obligations; implement FH-24 Fine Routing next. Do not
-inflate counts by splitting batches or accumulate more identity-only subsets.
-No total-growth trigger or estimate change; the full original FH-18 exit stands.
+Effort is separate: U1–U27 are **27 engineering checkpoints** since B1, closing
+**four milestones** (FH-19/FH-21/FH-22/FH-24). FH-18 remains open after13 checkpoints;
+FH-23 after9. Both are **task-growth flagged**. Current counts: **21/38 complete,
+17 remaining (8 core,9 parked); U27 +1 completed,+0 total**. Fixed exits remain.
+U27 implements the complete [22-kind Fine Routing editor](../docs/audits/feature_history_20261014/fine_routing_history_editor_plan.md):
+pre-child native references, closed inputs/identities, stable batch add/remove/
+reorder, original-source proof and full sibling/downstream regeneration.
+Source-bound HTTP/isolated evaluation reuse the owned host, one undo and exact
+source/session/revision/policy checks. No field/viewport replay; bounds unchanged.
+Seven annotation roles plus apply-loop-skips preserve organized native lineage.
+ISSUE-136 fixes ordinary loop ownership and duplicate crossover calculation;
+ISSUE-137 fixes failing-child attribution; ISSUE-138 sends rebuilt suffix recovery
+for owned routing/extrusion/pattern edits instead of stale browser cache bodies.
+Native51, lineage56, HTTP60 and worker38 cases pass; full frontend9,257pass/1skip.
+See [U27 evidence](../docs/audits/feature_history_20261014/validation_fine_routing_history_editor.json).
+NOT VERIFIED IN APP: servers stopped, Archive unavailable; FH-27/MV-53 desktop,
+latency/memory and broad backend acceptance remain. All rollout gates stay off.
+`main.js`7350; U27 delta0. No molecular builders, pins, constants or goldens changed.
+Next bound FH-25 ordinary DNA connection coverage, then FH-26 core repair;
+full FH-18/FH-23 movement/qualification remains required, not parked.
+U26 rejects ordinary owner insertion/unconditional final passes for chronological
+movement. Later tails already use moved construction frames. ISSUE-135 Full/
+atomistic tail disagreement remains open, without molecularly approved correction.
+A disposable derived placement program with bounded material/birth/frame provenance
+remains unimplemented; no second saved pose authority or per-frame full proof.
+Full companion/constraint/axis matrix remains required. U25 extension-only v2 and
+U24 native CPD/duplex qualification remain implemented. ISSUE-125/126 remain open;
+ISSUE-130 is corrected privately. FH-18 retains Groups/Placements, native lineage,
+named deformation preview/repair/creation, visibility and organized patterns.
+Its original movement/generated/qualification exits remain open. Containment is
+the five finite batches in the [migration plan](../docs/audits/feature_history_20261014/group_placement_migration_plan.md).
+Keep organization separate from ordered numerical placement; no hidden group,
+per-residue expansion or baking. No split-batch credit, lowered exit or estimate change.
 **FH-18 consumer status:** batch A is implemented privately; B/C/D advance,
 E and incomplete consumer exits remain open. Named `part_group` targets resolve on the owned native prefix
 into existing frozen ranges, independently of explicit placement `cluster_ids`.
 Upstream edits re-resolve the named selection during replay; later topology/group
 edits retain already evaluated ranges. Missing references diagnose; dissolution
 with a live named deformation consumer refuses. Legacy selector grammar is unchanged.
-The 31-kind lineage adapter preserves actual contributors through native retry
+The bounded lineage adapter preserves actual contributors through native retry
 and resize/shift merge/re-split, without reviving removed tails or selecting
 unrelated new material; ambiguity refuses. See the [U10 contract](../docs/audits/feature_history_20261014/group_placement_migration_plan.md#u10-passive-resizedomain-shift-contributors).
 Owned transactions retain source/session/revision/policy checks and one undo.

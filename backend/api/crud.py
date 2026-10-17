@@ -316,9 +316,10 @@ def _design_response(
     # edited ones. Stripped by default on every response. The client
     # reconstructs stripped bodies from its own in-memory cache, keyed by
     # feature-log entry id (_mergeFeatureLogPayloads, client.js:485), so this
-    # is safe on any response that follows an already-loaded client design.
-    # *full_feature_log* is the escape hatch for cold-load paths (GET /design)
-    # where the client has no prior cache to merge from — there,
+    # is safe only while older entries' recovery bodies remain unchanged.
+    # Rebuilding a recipe retains IDs but replaces those bodies: return
+    # *full_feature_log* so the cache cannot restore obsolete suffix recovery.
+    # Cold-load paths also use full bodies when there is no prior cache. Here,
     # should_skip_geometry() (2D editor) still takes priority since that
     # client never decodes bodies at all, cold load or not.
     feature_log_partial = False
@@ -3561,15 +3562,8 @@ def move_crossover_endpoint(body: MoveCrossoverRequest) -> dict:
     position for the same helix pair, and the resized domains must not overlap
     with other domains.
     """
-    from backend.api.part_crossover_moves import move
-    from backend.core.validator import validate_design
-    original = design_state.get_or_404()
-    candidate, changed = move(original, body)
-    if candidate is original:
-        return _design_response_with_geometry(original, validate_design(original))
-    updated, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype="crossover-move", label="Move crossovers",
-        params=body.model_dump(mode="json"), fn=lambda d: move(d, body)[0])
+    from backend.api.part_routing_recording import record_crossover_move
+    updated, report, changed = record_crossover_move("crossover-move", body)
     return _design_response_with_geometry(updated, report, changed_helix_ids=changed)
 
 
@@ -3582,15 +3576,8 @@ def batch_move_crossovers(body: BatchMoveCrossoversRequest) -> dict:
     Validation (lattice position, occupancy, overlap) is checked for each move
     against the state that includes prior moves in the batch.
     """
-    from backend.api.part_crossover_moves import batch_move
-    from backend.core.validator import validate_design
-    original = design_state.get_or_404()
-    candidate, changed = batch_move(original, body)
-    if candidate is original:
-        return _design_response_with_geometry(original, validate_design(original))
-    updated, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype="crossover-move-batch", label="Move crossovers",
-        params=body.model_dump(mode="json"), fn=lambda d: batch_move(d, body)[0])
+    from backend.api.part_routing_recording import record_crossover_move
+    updated, report, changed = record_crossover_move("crossover-move-batch", body)
     return _design_response_with_geometry(updated, report, changed_helix_ids=changed)
 
 
@@ -6327,6 +6314,7 @@ class EditFeatureBody(BaseModel):
     expected_design_id: str | None = None
     expected_revision: int | None = Field(default=None, ge=0, strict=True)
     expected_feature_id: str | None = None
+    expected_child_id: str | None = None
 
 
 def _edit_cluster_op_feature(
@@ -6386,7 +6374,6 @@ def _edit_deformation_feature(
     return _design_replace_response(design, updated, report)
 
 
-@router.post("/design/features/{index}/edit", status_code=200)
 def edit_feature(index: int, body: EditFeatureBody, sub_index: int | None = None) -> dict:
     """Replay or update the feature at ``feature_log[index]`` in place.
 
@@ -6414,6 +6401,9 @@ def edit_feature(index: int, body: EditFeatureBody, sub_index: int | None = None
         DeformationLogEntry as _DeformationLogEntry,
     )
 
+    from backend.api.part_source_bound_route import require_current
+    with design_state._lock:
+        require_current()
     design = design_state.get_or_404()
     log = list(design.feature_log)
 
@@ -6424,6 +6414,10 @@ def edit_feature(index: int, body: EditFeatureBody, sub_index: int | None = None
         )
 
     entry = log[index]
+
+    from backend.api.part_routing_feature_route import owns_edit as owns_routing, edit_response as edit_routing
+    if owns_routing(design, entry, body, sub_index):
+        return edit_routing(index, body, sub_index=sub_index)
 
     from backend.api.part_extrusion_feature_route import owns_edit, edit_response
     if owns_edit(design, entry, body):
@@ -6438,7 +6432,7 @@ def edit_feature(index: int, body: EditFeatureBody, sub_index: int | None = None
             expected_feature_id=body.expected_feature_id,
             expected_design_id=body.expected_design_id, expected_revision=body.expected_revision)
         response = _design_response_with_geometry(updated, report, embed_straight=True,
-                                                 normalize_legacy=False)
+                                                 normalize_legacy=False, full_feature_log=True)
         response["pattern_report"] = copies
         return response
 
@@ -6545,6 +6539,12 @@ def edit_feature(index: int, body: EditFeatureBody, sub_index: int | None = None
     # / positions_only fire in the rare case where an extrusion edit happened
     # to leave the renderer-relevant fields unchanged.
     return _design_replace_response(design, final, report)
+
+
+from backend.api.part_routing_feature_route import FeatureEditRoute, router as routing_feature_router
+router.add_api_route("/design/features/{index}/edit", edit_feature, methods=["POST"],
+                     status_code=200, route_class_override=FeatureEditRoute)
+router.include_router(routing_feature_router)
 
 
 def roll_active_to_job_state(

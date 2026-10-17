@@ -137,6 +137,28 @@ def test_exact_editor_expectations_refuse_without_starting_native_worker(documen
     assert not worker.instances
 
 
+def test_early_extrusion_response_replaces_all_regenerated_suffix_recovery(document, worker):
+    source, index = recipe("bundle-create", document)
+    session, client = install(source)
+    previous = session.design
+    old_tail = previous.feature_log[-1]
+    response = client.post(f"/api/design/features/{index}/edit", json={
+        "params": {"length_bp": 28}, **guards(session, index)})
+    assert response.status_code == 200, response.text[:500]
+    packet = response.json()
+    published = session.design
+    new_tail = published.feature_log[-1]
+    assert new_tail.id == old_tail.id == "later-extrusion"
+    assert new_tail.params == old_tail.params
+    assert new_tail.design_snapshot_gz_b64 != old_tail.design_snapshot_gz_b64
+    assert new_tail.post_state_gz_b64 != old_tail.post_state_gz_b64
+    # Partial-history responses would let the browser backfill these stable IDs
+    # with recovery bytes belonging to the previous bundle length.
+    assert packet["design"]["feature_log"] == published.model_dump(mode="json")["feature_log"]
+    assert not packet.get("feature_log_payloads_partial")
+    assert previous.helices[0].length_bp == 21
+
+
 def test_cannot_edit_an_extrusion_as_a_routing_child(document, worker):
     source, index = recipe("extrude-segment", document)
     session, client = install(source)

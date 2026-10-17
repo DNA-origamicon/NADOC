@@ -31,6 +31,15 @@ it is not implemented or molecularly authorized. This unresolved geometry
 architecture does not invalidate input proof, owned publication or dependency
 repair, and does not justify adding full replay to interaction frames.
 
+U27 completes FH-24's 22-kind Fine Routing software implementation through that
+same owned host; [evidence](validation_fine_routing_history_editor.json) includes
+native suffix replay, stable batch identities, exact source/child binding and
+ordinary-tool regressions. Full frontend validation passes; desktop/performance
+acceptance remains FH-27 and gates stay off. Current progress is **21/38 complete,
+17 remaining (8 core,9 parked)**. Next bound ordinary DNA connection coverage
+(FH-25), then integrate the core contracts with repair (FH-26), retaining the full
+unresolved FH-18/FH-23 movement exit. No new milestone or narrowed exit.
+
 ## Findings that change the order of work
 
 1. Dependency edges are mostly conservative whole-part barriers. They identify

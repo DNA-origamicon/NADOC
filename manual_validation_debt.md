@@ -1307,3 +1307,23 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   request/render latency and source-capture/undo lock cost on representative parts.
   Arbitrary new-group movement remains unfinished; numerical gesture software
   evidence does not replace its remaining desktop qualification.
+
+
+- **MV-53 — PENDING — Fine Routing history inputs (2026-10-16).**
+  **NOT VERIFIED IN APP.** With Archive mounted, privately enable the routing
+  history editor and, for organized fixtures, the existing group host gate.
+  Expand Fine Routing and edit earlier resize/domain-shift, nick/ligation,
+  crossover and loop/skip children with evicted recovery. Check all 22 listed
+  kinds, nested batch add/remove/reorder and protected creation identities.
+  Reference choices must describe the state immediately before that child.
+  Clear-all has an honest no-input summary. Apply must rebuild later children,
+  deformation, extrusion and loop realization, with complete current/straight
+  geometry, one undo and save/reload parity. Missing targets or invalid later
+  steps must identify the failing row and retain the draft and current design.
+  Exercise Cancel/loading, reset/same-ID replacement, protected loadouts, refused
+  Apply and stale responses. Verify ordinary 2D/3D loop and crossover tools retain
+  their current behavior and successful movement runs native work once.
+  Measure representative opening/Apply/HTTP/render, ordinary-tool lock duration
+  and retained memory. No full history proof should run per field or frame.
+  This is the existing FH-27 qualification allocation, not new counted scope.
+  Editor rollout remains off; assembly and machine-specific VR stay deferred.

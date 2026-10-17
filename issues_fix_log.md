@@ -922,3 +922,18 @@ replay reuses its occupancy predicate without an added successful-target scan.
 The standard regression command exposed an import-time randomized Sweep test ID;
 replace it with a deterministic value. Archive-backed collection and FULL debt
 remain explicit. FH-23 stays open; these fixes add no completed milestone.
+
+
+2026-10-16 — U27 / ISSUE-136–137: Fine Routing entry adapters computed before
+source ownership or twice, and native input errors escaped precise row attribution.
+Use the existing locked recorder once and attach diagnostics at the actual
+executing command. Keep native mathematical behavior, source-bound edit publication,
+no-op handling and undo/redo intact. This is within FH-24, with desktop/performance
+qualification still assigned to FH-27; no additional milestone is counted.
+
+
+2026-10-16 — U27 / ISSUE-138: source-bound geometry alone did not guarantee correct
+browser recovery. Stable feature IDs survive upstream edits, so a partial reply
+must not backfill regenerated suffix bodies from the old client cache. Eight red
+HTTP cases cover the existing routing/extrusion/pattern response families; use
+full regenerated history for owned edits, preserving ordinary append slimming.

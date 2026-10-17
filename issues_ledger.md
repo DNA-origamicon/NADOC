@@ -2960,3 +2960,53 @@ and this issue are not declared resolved.
   matrix and inspectable molecular authorization remain required. This issue is
   within existing FH-18/FH-23 scope and adds no milestone. See
   [U26 evidence](docs/audits/feature_history_20261014/validation_member_motion_order.json).
+
+
+## ISSUE-136 — Ordinary routing calculations could use a different source than their history row (2026-10-16, CORRECTED)
+
+- Loop insertion and loop/skip twist/bend computed an updated design before
+  acquiring the recording lock, then ignored the callback's current source.
+  A concurrent edit could be overwritten while the history row described inputs
+  applied to another design. Crossover movement calculated twice, with response
+  scope/no-op decisions from the first source and recorded geometry from the second.
+- `part_routing_recording` now selects the source under the existing recording
+  lock and invokes each native operation once. Source/session/incarnation/revision,
+  policy and protected-loadout checks precede work and publication. Existing
+  recorders still own reconciliation, retry, one history row and undo/rollback.
+  No-op moves remain no-ops. Missing explicit twist/bend helix IDs now refuse;
+  silently omitting them would record inputs that strict replay cannot reproduce.
+- Red ownership coverage: 17 failed / 25 passed before the correction. The final
+  expanded 47-case ownership suite passes, including legitimate empty intervals,
+  stale-mark removal and no full recipe proof on ordinary routing gestures.
+- Native molecular calculations and constants are unchanged. Representative lock
+  time and desktop responsiveness remain FH-27; this fix earns no extra milestone.
+
+## ISSUE-137 — Native routing failures could lose the actual failing history child (2026-10-16, CORRECTED)
+
+- Regeneration attributed typed reference failures, but a native `ValueError`
+  (for example nicking an already nicked site) escaped without its child identity.
+  Two legacy/organized owned-editor tests reproduced the lost row attribution.
+- Wrap native input failures at the executing row, preserving the actual later
+  child's identity when a downstream step fails. Resource/time/cancellation
+  outcomes retain their distinct semantics and do not become invalid-geometry
+  accusations. The candidate remains private and undo/redo remain untouched.
+- Bounded routing HTTP edits also refuse partially specified source guards rather
+  than falling through to address-only legacy editing. Full FH-26 repair remains
+  a separate unfinished milestone; these diagnostics do not close it.
+
+
+## ISSUE-138 — Owned history edit responses could retain stale browser recovery bodies (2026-10-16, CORRECTED)
+
+- Routing, extrusion and organized pattern edits regenerate later snapshots/diffs
+  while retaining feature IDs. Their HTTP replies preserved only the selected
+  row's body. The browser's partial-history merge would restore older later-row
+  bodies by ID and persist them in its recovery cache.
+- Eight HTTP regressions reproduced incomplete history replies across all three
+  families, including a response formatted after another source change. These
+  owned regeneration replies now use the existing full-history response option;
+  their history and geometry describe the same accepted candidate. Ordinary
+  append responses keep their existing slimming, and the explicit 2D skip
+  contract is unchanged. The existing cumulative recovery allowance is 8 MB.
+- No new cache authority or alternate snapshot replay path is introduced. Native
+  input replay remains authoritative; response-size/desktop qualification remains
+  FH-27. This adjacent regression correction does not add milestone credit.

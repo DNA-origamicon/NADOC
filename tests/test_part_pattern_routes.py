@@ -62,6 +62,32 @@ def test_http_organized_creation_never_defaults_missing_intent(document, worker,
     assert not worker.instances
 
 
+@pytest.mark.parametrize("kind", ["linear-pattern", "circular-pattern"])
+def test_early_owned_pattern_edit_returns_complete_regenerated_suffix_history(document, worker, kind):
+    # Use the actual owned producers for both rows, then edit the earlier one
+    # through HTTP. The later pattern keeps its identity but needs new recovery.
+    created, _, entry, _ = recording.create(document, kind)
+    index = len(created.feature_log) - 1
+    recording.create(document, "linear-pattern")
+    previous = document.design
+    old_tail = previous.feature_log[-1]
+    client = TestClient(app, headers={"X-NADOC-Doc": doc_context.get_current_doc()})
+    response = client.post(f"/api/design/features/{index}/edit", json={
+        "params": {"spacing": 19} if kind == "linear-pattern" else {"total_angle": 180},
+        "expected_design_id": previous.id, "expected_revision": document.revision,
+        "expected_feature_id": entry.id})
+    assert response.status_code == 200, response.text[:500]
+    packet = response.json()
+    published = document.design
+    new_tail = published.feature_log[-1]
+    assert published.feature_log[index].id == entry.id
+    assert new_tail.id == old_tail.id and new_tail.params == old_tail.params
+    assert new_tail.design_snapshot_gz_b64 != old_tail.design_snapshot_gz_b64
+    assert new_tail.post_state_gz_b64 != old_tail.post_state_gz_b64
+    assert packet["design"]["feature_log"] == published.model_dump(mode="json")["feature_log"]
+    assert not packet.get("feature_log_payloads_partial")
+
+
 @pytest.mark.parametrize("revision", [True, "1", 1.0, -1])
 def test_http_pattern_revision_is_an_exact_nonnegative_integer(document, worker, revision):
     client = TestClient(app, headers={"X-NADOC-Doc": doc_context.get_current_doc()})

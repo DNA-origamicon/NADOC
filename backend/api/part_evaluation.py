@@ -91,6 +91,9 @@ def _authoring_changes(source, candidate):
 def evaluate(source, operation, *, executor=None, dependency_resolver=None):
     """Closed owned hosts add target guards or a native pattern report observer."""
     header = operation["header"]
+    if "routing_recording_version" in header:
+        from backend.api.part_routing_edit_evaluation import evaluate as evaluate_routing
+        return evaluate_routing(source, operation, executor=executor, dependency_resolver=dependency_resolver)
     if "extrusion_recording_version" in header:
         return _evaluate_extrusion(source, operation, executor=executor,
                                    dependency_resolver=dependency_resolver)

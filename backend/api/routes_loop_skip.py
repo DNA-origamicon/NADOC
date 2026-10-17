@@ -29,11 +29,10 @@ from pydantic import BaseModel
 
 from backend.api import state as design_state
 
-# _design_response and _helix_label are response/label helpers shared with
-# the rest of crud.py's route handlers. They stay in crud.py (used by 100+
-# routes there) and are imported here. This is a deliberate cross-module
-# import — the helpers are not loop-skip specific.
-from backend.api.crud import _design_response, _helix_label
+# _design_response is a response helper shared with
+# the rest of crud.py's route handlers. It stays in crud.py (used by 100+
+# routes there) and is imported here; it is not loop-skip specific.
+from backend.api.crud import _design_response
 
 router = APIRouter()
 
@@ -51,50 +50,9 @@ def insert_loop_skip(body: LoopSkipInsertRequest) -> dict:
     delta=+1 inserts a loop (extra bp), delta=-1 inserts a skip (deleted bp),
     delta=0 removes any existing modification at that position.
     """
-    from backend.core.models import LoopSkip
-    from backend.core.loop_skip_calculator import apply_loop_skips
+    from backend.api.part_routing_recording import record_loop_skip
 
-    design = design_state.get_or_404()
-
-    helix = design.find_helix(body.helix_id)
-    if helix is None:
-        raise HTTPException(404, detail=f"Helix '{body.helix_id}' not found")
-    if body.delta not in (-1, 0, 1):
-        raise HTTPException(400, detail=f"delta must be -1, 0, or +1, got {body.delta}")
-    # Range check only applies when inserting — removals (delta=0) must always
-    # succeed so stale out-of-range skips can be cleared.
-    if body.delta != 0 and (
-        body.bp_index < helix.bp_start
-        or body.bp_index >= helix.bp_start + helix.length_bp
-    ):
-        raise HTTPException(
-            400,
-            detail=f"bp_index {body.bp_index} out of range [{helix.bp_start}, {helix.bp_start + helix.length_bp - 1}]",
-        )
-
-    if body.delta == 0:
-        # Remove any existing loop/skip at this position
-        new_ls = [ls for ls in helix.loop_skips if ls.bp_index != body.bp_index]
-        new_helix = helix.model_copy(update={"loop_skips": new_ls})
-        new_helices = [
-            new_helix if h.id == body.helix_id else h for h in design.helices
-        ]
-        updated = design.model_copy(update={"helices": new_helices})
-        kind = "Remove loop/skip"
-    else:
-        updated = apply_loop_skips(
-            design,
-            {body.helix_id: [LoopSkip(bp_index=body.bp_index, delta=body.delta)]},
-        )
-        kind = "Loop" if body.delta > 0 else "Skip"
-
-    label = f"{kind} · helix {_helix_label(design, body.helix_id)} bp {body.bp_index}"
-    updated, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype="loop-skip-insert",
-        label=label,
-        params=body.model_dump(mode="json"),
-        fn=lambda _d: updated,
-    )
+    updated, report, _summary = record_loop_skip("loop-skip-insert", body.model_dump(mode="json"))
     return _design_response(updated, report)
 
 
@@ -114,42 +72,11 @@ def apply_twist_loop_skips(body: dict) -> dict:
 
     Raises 422 if target exceeds physical limits.
     """
-    from backend.core.loop_skip_calculator import (
-        apply_loop_skips,
-        twist_loop_skips,
-    )
+    from backend.api.part_routing_recording import record_loop_skip
 
-    design = design_state.get_or_404()
-    helix_ids: list[str] = body.get("helix_ids", [])
-    plane_a_bp: int = int(body["plane_a_bp"])
-    plane_b_bp: int = int(body["plane_b_bp"])
-    target_twist_deg: float = float(body["target_twist_deg"])
-
-    h_map = {h.id: h for h in design.helices}
-    segment_helices = [h_map[hid] for hid in helix_ids if hid in h_map]
-    if not segment_helices:
-        raise HTTPException(422, "No valid helix_ids provided.")
-
-    try:
-        mods = twist_loop_skips(
-            segment_helices, plane_a_bp, plane_b_bp, target_twist_deg
-        )
-    except ValueError as exc:
-        raise HTTPException(422, str(exc)) from exc
-
-    updated = apply_loop_skips(design, mods)
-    label = f"Twist {target_twist_deg:+.1f}° · {len(segment_helices)} helices · bp [{plane_a_bp}, {plane_b_bp}]"
-    updated, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype="loop-skip-twist",
-        label=label,
-        params=body,
-        fn=lambda _d: updated,
-    )
+    updated, report, summary = record_loop_skip("loop-skip-twist", body)
     response = _design_response(updated, report)
-    response["loop_skips"] = {
-        hid: [{"bp_index": ls.bp_index, "delta": ls.delta} for ls in lst]
-        for hid, lst in mods.items()
-    }
+    response["loop_skips"] = summary
     return response
 
 
@@ -167,46 +94,11 @@ def apply_bend_loop_skips(body: dict) -> dict:
 
     Raises 422 if radius is below the physical minimum for this cross-section.
     """
-    from backend.core.loop_skip_calculator import (
-        apply_loop_skips,
-        bend_loop_skips,
-    )
+    from backend.api.part_routing_recording import record_loop_skip
 
-    design = design_state.get_or_404()
-    helix_ids: list[str] = body.get("helix_ids", [])
-    plane_a_bp: int = int(body["plane_a_bp"])
-    plane_b_bp: int = int(body["plane_b_bp"])
-    radius_nm: float = float(body["radius_nm"])
-    direction_deg: float = float(body.get("direction_deg", 0.0))
-
-    if radius_nm <= 0:
-        raise HTTPException(422, "radius_nm must be positive.")
-
-    h_map = {h.id: h for h in design.helices}
-    segment_helices = [h_map[hid] for hid in helix_ids if hid in h_map]
-    if not segment_helices:
-        raise HTTPException(422, "No valid helix_ids provided.")
-
-    try:
-        mods = bend_loop_skips(
-            segment_helices, plane_a_bp, plane_b_bp, radius_nm, direction_deg
-        )
-    except ValueError as exc:
-        raise HTTPException(422, str(exc)) from exc
-
-    updated = apply_loop_skips(design, mods)
-    label = f"Bend r={radius_nm:.1f} nm · {len(segment_helices)} helices · bp [{plane_a_bp}, {plane_b_bp}]"
-    updated, report, _entry = design_state.mutate_with_minor_log(
-        op_subtype="loop-skip-bend",
-        label=label,
-        params=body,
-        fn=lambda _d: updated,
-    )
+    updated, report, summary = record_loop_skip("loop-skip-bend", body)
     response = _design_response(updated, report)
-    response["loop_skips"] = {
-        hid: [{"bp_index": ls.bp_index, "delta": ls.delta} for ls in lst]
-        for hid, lst in mods.items()
-    }
+    response["loop_skips"] = summary
     return response
 
 

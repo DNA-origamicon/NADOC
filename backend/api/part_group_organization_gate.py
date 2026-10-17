@@ -54,7 +54,7 @@ def require_group_publication(source, candidate, checked):
         return
     if checked is not None and checked.admission.scope_tag == "organized_recipe_v1":
         if (checked.evidence_class != "owned_recipe_rebuild"
-                or checked.admission.operation not in {"repair", "deformation_preview", "sweep_preview", "transform_preview", "pattern", "extrusion_edit"}):
+                or checked.admission.operation not in {"repair", "deformation_preview", "sweep_preview", "transform_preview", "pattern", "extrusion_edit", "routing_edit"}):
             _refuse()
         require_group_edit_enabled()
         return

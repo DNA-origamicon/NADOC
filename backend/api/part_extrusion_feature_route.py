@@ -22,4 +22,4 @@ def edit_response(index, body, *, sub_index=None):
     # Native rebuild already owns the complete authoring result. Do not infer
     # legacy owners or ask the client to fetch geometry from a later revision.
     return _design_response_with_geometry(candidate, report, embed_straight=True,
-        normalize_legacy=False, preserve_feature_log_id=entry.id)
+        normalize_legacy=False, preserve_feature_log_id=entry.id, full_feature_log=True)

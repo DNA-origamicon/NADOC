@@ -82,11 +82,10 @@ def regenerate(source, log, checkpoint, *, identify_failures=False, attribute_fa
         try:
             return executor(kind, current, arguments)
         except (ValueError, HTTPException) as exc:
-            typed_failure = isinstance(exc, CommandContractError) and exc.status != "unverified"
             if (isinstance(exc, CommandContractError) and exc.status == "unverified") or not (
-                identify_failures or (attribute_failures and typed_failure)
+                identify_failures or attribute_failures
             ) or (
-                isinstance(exc, HTTPException) and exc.status_code in {408, 429}
+                isinstance(exc, HTTPException) and exc.status_code in {408, 413, 429}
             ):
                 raise
             raise CommandReplayError(entry.id, exc) from exc
@@ -179,7 +178,7 @@ def prepare_change(source, captured, index, checkpoint, *, params=None, sub_inde
         raise HTTPException(400, detail="Feature index out of range")
     from backend.api.part_recipe_prefix import ReplayPrefix
 
-    prefix = ReplayPrefix(source, index)
+    prefix = ReplayPrefix(source, index, sub_index=sub_index if params is not None else None)
     proof = assess_part_history(
         captured,
         execute=lambda kind, d, p: prefix.execute(executor, kind, d, p),
@@ -204,10 +203,23 @@ def prepare_change(source, captured, index, checkpoint, *, params=None, sub_inde
                 raise HTTPException(400, detail="Routing child index out of range")
             child = entry.children[sub_index]
             children = list(entry.children)
+            kind = command_input(child)[0]
+            try:
+                from backend.api.part_routing_edit_inputs import KINDS as ROUTING_EDIT_KINDS, normalize, bind_prefix
+                changed = {**child.params, **params}
+                if kind in ROUTING_EDIT_KINDS:
+                    changed = (input_binder(kind, changed, prefix.child_design)
+                               if input_binder is not None else
+                               bind_prefix(kind, normalize(kind, child.params, params), prefix.child_design))
+                elif input_binder is not None:
+                    raise CommandContractError("Unsupported owned routing child",
+                                               code="invalid_routing_input")
+            except CommandContractError as exc:
+                raise HTTPException(409, detail={**exc.as_issue(), "feature_id": child.id}) from exc
             children[sub_index] = child.model_copy(
                 update={
                     "params": preserve_proof_identity(
-                        child.params, {**child.params, **params}, kind=command_input(child)[0]
+                        child.params, changed, kind=kind
                     )
                 }
             )
