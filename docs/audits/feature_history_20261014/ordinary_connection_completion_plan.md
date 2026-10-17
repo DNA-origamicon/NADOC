@@ -1059,3 +1059,95 @@ Cleanup: completed pytest2/3/4/current contained500entries,0regularfiles/bytes;
 no readable same-user cwd/fd/maps references. Persistent systemd/PAM435/436 were
 uninspectable. Removed only those task artifacts; pytest root and `/dev/shm`
 empty. User designs/jobs/caches/historical evidence unchanged.
+
+## U41 — owned organized lifecycle and history publication (2026-10-17)
+
+FH-25 checkpoint14 extends the existing ordinary recipe host with one closed
+`connection` family. It retains exact source/session/revision/policy checks,
+protected-loadout/latest-cursor requirements, the existing shared slot/deadline,
+isolated source proof and execution, candidate/schema/structure validation,
+publication permit, one undo, and cancellation/source-change refusal. No second
+transaction engine, builder callback or generic grouped publication was added.
+The append parser accepts `overhang-bulk` only through the connection worker's
+versioned captured context; generic append without it is refused. Editing keeps
+contract/output identities fixed; reference replacement remains explicit repair.
+
+Private organized ordinary routes now capture server-owned identities/conflicts
+for metadata Create/Patch/Delete, direct/linker Apply/Connect, Unapply and
+Disconnect-and-delete. They never fall back to compatibility after a grouped
+failure. Connect/Apply/disconnect use existing source-bound route acquisition;
+ordinary feature edits route to the same host with original feature expectations.
+Responses use the owned result with `normalize_legacy=False` and complete history;
+materializing operations include geometry. Tests forbid legacy membership
+inference during formatting. Existing compatibility routes/builders remain used
+and are retained. UI controls/repair qualification still require completion.
+`part_connection_organized_routes.ENABLED=False`, all other rollout gates unchanged.
+
+The worker now schema-validates connection candidates before transfer. This
+exposed **ISSUE-143**: unequal direct relocation preserves stale Duplex endpoint
+registers. All four direct-type/unequal-branch cases fail the unorganized native
+oracle's schema too; the owned path reports `invalid_connection_output` and leaves
+source/revision/undo unchanged. The existing six ISSUE-126 dsDNA cases likewise
+remain ambiguous-ancestry refusals. These ten cases are NOT qualified families
+and remain in FH-25's original exit. No molecular algorithm, constant, source pin
+or golden was changed; pairing corrections require the established A/B review.
+The initial equal direct publication failures were noncomplementary fixture
+sequences; complementary fixtures now exercise success, with a separate test
+retaining the original invalid-sequence refusal.
+
+Research check: [Onshape repair documentation](https://cad.onshape.com/help/Content/Document/repairing.htm)
+describes repairing upstream failures first and propagating explicit replacement
+references to failed downstream consumers. Inference for NADOC: keep invalid
+native output diagnostic and repairable; neither successful deterministic replay
+nor saved recovery should suppress an independent validity failure. This source
+does not authorize any DNA pairing correction.
+
+**Capture performance remains unqualified.** Repeated functional runs encountered
+the unchanged25ms source-capture deadline at different steps. A focused real-clock
+GC diagnostic measured ordinary capture3.364–6.710ms; a generation-2 collection
+lasted141.771ms during a144.953ms capture and caused refusal. Temporary tracing
+was removed. Functional fixtures now release test/import garbage with `gc.collect`
+outside production requests/locks; no production GC change, disabled collection,
+clock substitution, deadline increase, automatic retry or budget bypass was added.
+A separate injected CaptureLimit case proves atomic refusal before worker start.
+This isolation makes functional checks useful but DOES NOT qualify production GC
+or latency tails. FH-25/FH-28 qualification must address the measured behavior.
+
+Final focused runs after these changes:
+- New57-case owned connection matrix + publication/group/routing boundaries:
+  **152passed,19.05s**,47 existing FastAPI deprecation warnings.
+- Shared pattern/extrusion host, existing disconnect/metadata and evaluation:
+  **207passed,13.14s**,3 existing FastAPI deprecation warnings.
+These are **359 unique passing cases**, including explicit invalid-output and
+resource-refusal cases; not359 successful geometry cases. One new test uses an
+actual worker; fault tests use a controlled worker running the real evaluator.
+The four HTTP workflows exercise complete lifecycle, history edit, source proof,
+metadata-delete distinction, and undo/redo. Compound bridge edits preserve output
+identity and regenerate. Changed-file Ruff and diff whitespace checks pass.
+Memory lint remains6baseline errors/59warnings; current memory head200lines.
+No frontend changes/rerun; `main.js`7350,delta0. NOT VERIFIED IN APP; Archive absent.
+
+`just test-smart --dry-run`: accumulated foundational changes select FULL, fallback
+FAST. **Zero broad backend tests ran**; literal selector notice follows (its
+"fast suite ran" wording is not an execution claim for this dry run):
+
+```
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+Only request `just test-session` when a broad/full sweep is actually needed.
+```
+
+Next: complete connection controls and legacy reference repair, qualify broader
+source profiles, prepare the required native defect corrections/review evidence,
+and close desktop/performance exits. Existing private repair host authority is
+unchanged; complete organized repair workflows still need explicit coverage.
+No package or milestone closes. Counts **21/38complete,17remaining(8core,9parked)**;
+**41engineering checkpoints**, **+0completed,+0total**, FH-25 growth flagged at14.
+FH-18 remains13 and FH-23 remains9. The new counterexamples explain unfinished
+work within the fixed exit; they do not expand the denominator or shrink scope.
+
+Cleanup: completed pytest7/8/9/current contained518entries and0regularfiles/bytes.
+No readable same-user cwd/fd/maps references; systemd/PAM435/436 remain
+uninspectable. Removed only these completed task entries. Pytest root and
+`/dev/shm` empty; user designs/jobs/caches/historical evidence preserved.

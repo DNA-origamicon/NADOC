@@ -3086,3 +3086,28 @@ the unused `_teardownConflicts` helper was pruned. Native family/branch replay
 and third-endpoint preservation pass. Both rollout gates remain disabled;
 MV-54 desktop/latency acceptance is outstanding, so the public defect is not
 claimed resolved. Existing metadata-only API semantics remain unchanged.
+
+## ISSUE-143 — Unequal direct relocation leaves stale Duplex registers (2026-10-17, OPEN)
+
+U41's owned connection matrix proves both direct types with A-longer/B-longer
+endpoints reproduce native output that fails `Design.model_validate`: a Duplex
+end still references its pre-relocation bp interval while its backing domain has
+moved. Equal complementary endpoints pass. The unorganized native oracle fails
+the same validation, so organization ancestry is not the origin of the defect.
+`relocate_duplex` calls `apply_bind_topology`, then sets the snapshot/bound flag
+without updating the Duplex end register. Examples: right interval[7,0] against
+backing[34,41], or left[41,30] against backing[4,15]. Root cause lead: relocation
+updates domain addresses without transporting this dependent register.
+
+Reproduction/containment: `tests/test_connection_recipe_recording.py`, unequal
+`test_owned_apply_disconnect_one_undo_and_replay` cases assert both the native
+schema failure and the owned worker's `invalid_connection_output` refusal, with
+unchanged source/revision/undo. This is NOT fixed and the four unequal direct
+cases are not qualified successes. Input replay parity alone is insufficient.
+
+Required FH-25 exit: preserve the intended molecular pairing through relocation,
+restore and subsequent edits, then prove schema/reload/geometry/sequence parity
+and the complete matrix. Do not clamp ranges, skip validation or drop a Duplex.
+Any correction affecting pairing/geometry needs the established concrete A/B
+molecular review before deployment. The current checkpoint only strengthens
+worker diagnostics and leaves native molecular algorithms unchanged.

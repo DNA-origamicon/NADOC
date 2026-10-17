@@ -1342,3 +1342,14 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   complete request/lock/serialization/render latency and retained memory.
   This is existing FH-25/FH-27 qualification, not new milestone scope. Gates stay
   off; assembly and machine-specific VR validation remain deferred.
+
+  U41 organized lifecycle extension (2026-10-17): additionally qualify private
+  `part_connection_organized_routes.ENABLED` with group rollout and the matching
+  UI gates. Create/Apply/Connect/metadata/Unapply/delete and history editing now
+  use the shared owned worker/publication host. Verify named group membership,
+  complete geometry/history responses, input edits and repair, one Undo/Redo and
+  save/reload. ISSUE-126 ambiguous dsDNA occupancy and ISSUE-143 unequal direct
+  registers remain explicit failures, not qualified families. Capture diagnostics
+  measured3–7ms normally but144.953ms when generation-2 GC overlapped142ms; the
+  unchanged25ms capture deadline refused that request. Functional test cleanup is
+  not a production latency fix. Qualify GC/load tails before enabling any gate.

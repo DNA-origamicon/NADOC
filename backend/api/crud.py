@@ -6419,6 +6419,10 @@ def edit_feature(index: int, body: EditFeatureBody, sub_index: int | None = None
     if owns_routing(design, entry, body, sub_index):
         return edit_routing(index, body, sub_index=sub_index)
 
+    from backend.api.part_connection_organized_routes import owns_edit as owns_connection, edit_response as edit_connection
+    if owns_connection(design, entry):
+        return edit_connection(index, body, sub_index=sub_index)
+
     from backend.api.part_extrusion_feature_route import owns_edit, edit_response
     if owns_edit(design, entry, body):
         return edit_response(index, body, sub_index=sub_index)

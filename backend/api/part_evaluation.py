@@ -20,7 +20,7 @@ class EvaluationRequest(BaseModel):
 
     operation: Literal["verify", "append", "edit", "delete", "repair", "selection", "batch"]
     kind: Literal["photoproduct-create", "photoproduct-relax", "duplex-relax", "streptavidin-coating",
-                  "linear-pattern", "circular-pattern"] | None = None
+                  "linear-pattern", "circular-pattern", "overhang-bulk"] | None = None
     params: dict | None = None
     index: StrictInt | None = Field(default=None, ge=0)
     sub_index: StrictInt | None = Field(default=None, ge=0)
@@ -91,6 +91,9 @@ def _authoring_changes(source, candidate):
 def evaluate(source, operation, *, executor=None, dependency_resolver=None):
     """Closed owned hosts add target guards or a native pattern report observer."""
     header = operation["header"]
+    if "connection_recording_version" in header:
+        from backend.api.part_connection_recipe_recording import evaluate as evaluate_connection
+        return evaluate_connection(source, operation, executor=executor, dependency_resolver=dependency_resolver)
     if "routing_recording_version" in header:
         from backend.api.part_routing_edit_evaluation import evaluate as evaluate_routing
         return evaluate_routing(source, operation, executor=executor, dependency_resolver=dependency_resolver)

@@ -17,7 +17,8 @@ class ConnectRoute(SourceBoundRoute):
 
     def enabled(self):
         from backend.api import routes_connection_versions as routes
-        return (routes.OWNED_COMBINED_CONNECTION_APPLY_ENABLED or routes.NATIVE_LINKER_V2_ENABLED
+        from backend.api.part_connection_organized_routes import ENABLED
+        return (ENABLED or routes.OWNED_COMBINED_CONNECTION_APPLY_ENABLED or routes.NATIVE_LINKER_V2_ENABLED
                 or routes.NATIVE_DIRECT_CONNECT_ENABLED or routes.NATIVE_LINKER_V3_ENABLED or routes.NATIVE_CONNECTION_OWNER_SELECTION_ENABLED)
 
     def get_route_handler(self):
@@ -47,7 +48,8 @@ class ApplyRoute(ConnectRoute):
 
     def enabled(self):
         from backend.api import routes_connection_versions as routes
-        return routes.NATIVE_LINKER_V2_ENABLED or routes.NATIVE_DIRECT_APPLY_ENABLED or routes.NATIVE_LINKER_V3_ENABLED or routes.NATIVE_CONNECTION_OWNER_SELECTION_ENABLED
+        from backend.api.part_connection_organized_routes import ENABLED
+        return ENABLED or routes.NATIVE_LINKER_V2_ENABLED or routes.NATIVE_DIRECT_APPLY_ENABLED or routes.NATIVE_LINKER_V3_ENABLED or routes.NATIVE_CONNECTION_OWNER_SELECTION_ENABLED
 
 
 class DisconnectRoute(ApplyRoute):
@@ -56,4 +58,5 @@ class DisconnectRoute(ApplyRoute):
 
     def enabled(self):
         from backend.api.part_connection_disconnect import ENABLED
-        return ENABLED
+        from backend.api.part_connection_organized_routes import ENABLED as ORGANIZED
+        return ENABLED or ORGANIZED

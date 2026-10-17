@@ -1,4 +1,4 @@
-"""One owned transaction for patterns, extrusion and Fine Routing history edits.
+"""One owned transaction for closed native construction families.
 
 The closed families share capture, isolated input proof, exact source CAS and
 one undo. This is not a generic operation/callback host. Extrusion edits also
@@ -57,8 +57,8 @@ def _expectations(design_id, revision, cancelled, *, code):
 def _editable(source, family):
     if source is None:
         _refuse("No current part")
-    if family == "pattern" and source.group_organization is None:
-        _refuse("Owned pattern work requires an organized part")
+    if family in {"pattern", "connection"} and source.group_organization is None:
+        _refuse("This owned operation requires an organized part")
     if family == "pattern" or source.group_organization is not None:
         gate.require_group_edit_enabled()
     state._assert_active_loadout_editable(source)
@@ -99,12 +99,15 @@ def _validation(value, *, code):
 def _run(family, kind, inputs, *, expected_design_id, expected_revision, index=None,
          expected_feature_id=None, sub_index=None, expected_child_id=None,
          inputs_only=False, cancelled=None):
-    if family not in {"pattern", "extrusion_edit", "routing_edit"}:
+    if family not in {"pattern", "extrusion_edit", "routing_edit", "connection"}:
         _refuse("Unknown owned recipe family", code="invalid_operation_admission")
-    error_prefix = {"pattern": "pattern", "extrusion_edit": "extrusion", "routing_edit": "routing"}[family]
+    error_prefix = {"pattern": "pattern", "extrusion_edit": "extrusion", "routing_edit": "routing", "connection": "connection"}[family]
     if family == "pattern":
         gate.require_group_edit_enabled()
         allowed = PATTERN_COMMANDS
+    elif family == "connection":
+        gate.require_group_edit_enabled()
+        allowed = {"overhang-bulk"}
     elif family == "extrusion_edit":
         from backend.api.part_extrusion_edit_inputs import KINDS
         allowed = KINDS
@@ -163,6 +166,9 @@ def _run(family, kind, inputs, *, expected_design_id, expected_revision, index=N
             if family == "pattern":
                 from backend.api.part_pattern_recording import _inputs
                 choices = _inputs(kind, inputs, previous=previous)
+            elif family == "connection":
+                from backend.api.part_connection_recipe_recording import normalize
+                choices = normalize(kind, inputs, previous=previous)
             elif family == "extrusion_edit":
                 from backend.api.part_extrusion_edit_inputs import normalize
                 choices = normalize(kind, previous, inputs)
@@ -199,6 +205,8 @@ def _run(family, kind, inputs, *, expected_design_id, expected_revision, index=N
                 "expected_feature_id": expected_feature_id}}
             if family == "pattern":
                 operation["header"]["pattern_recording_version"] = 1
+            elif family == "connection":
+                operation["header"]["connection_recording_version"] = 1
             elif family == "extrusion_edit":
                 operation["header"].update(extrusion_recording_version=1, expected_kind=kind)
             else:
@@ -296,3 +304,10 @@ def routing_inputs(index, sub_index, *, expected_feature_id, expected_child_id,
     return _run("routing_edit", None, {}, inputs_only=True, index=index, sub_index=sub_index,
         expected_feature_id=expected_feature_id, expected_child_id=expected_child_id,
         expected_design_id=expected_design_id, expected_revision=expected_revision, cancelled=cancelled)
+
+
+def run_connection(inputs, *, expected_design_id, expected_revision, index=None,
+                   expected_feature_id=None, cancelled=None):
+    return _run("connection", "overhang-bulk", inputs,
+                expected_design_id=expected_design_id, expected_revision=expected_revision,
+                index=index, expected_feature_id=expected_feature_id, cancelled=cancelled)

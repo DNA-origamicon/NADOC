@@ -63,6 +63,9 @@ def append_features(source, request, header, executor, dependencies, *, metadata
                 or header.get("source_design_id") != source.id):
             raise CommandContractError("Pattern append requires its owned captured context",
                                        code="invalid_capture_context")
+    if request.kind == "overhang-bulk":
+        from backend.api.part_connection_recipe_recording import require_context
+        require_context(source, request, header)
     needed, limit = _reservation(source, request)
     try:
         # Reserve every new row BEFORE replay, recovery, file reads or packing.
@@ -103,6 +106,8 @@ def append_features(source, request, header, executor, dependencies, *, metadata
 
         params = {**request.params, "_proof_version": 1, "history_seed": header["identity"]}
         definitions = [(header["identity"], request.kind, pattern_label(request.kind, params), params)]
+    elif request.kind == "overhang-bulk":
+        definitions = [(header["identity"], request.kind, "Connection version", request.params)]
     else:
         definitions = [_legacy_definition(current, request, header)]
     if len(definitions) != needed:

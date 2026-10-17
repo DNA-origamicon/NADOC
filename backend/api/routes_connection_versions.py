@@ -48,6 +48,9 @@ NATIVE_DIRECT_CONNECT_ENABLED = False
 
 @router.post("/design/connection-versions", status_code=201)
 def create_connection_version(body: ConnectionVersionCreateRequest) -> dict:
+    from backend.api.part_connection_organized_routes import try_response
+    if (response := try_response('create', body.model_dump())) is not None:
+        return response
     from backend.api.part_connection_version_commands import CREATE, try_record
     recorded = try_record(CREATE, body.model_dump())
     if recorded is not None:
@@ -87,6 +90,9 @@ def create_connection_version(body: ConnectionVersionCreateRequest) -> dict:
 def patch_connection_version(
     version_id: str, body: ConnectionVersionPatchRequest
 ) -> dict:
+    from backend.api.part_connection_organized_routes import try_response
+    if (response := try_response('patch', body.model_dump(exclude_unset=True), version_id=version_id)) is not None:
+        return response
     from backend.api.part_connection_version_commands import PATCH, try_record
     recorded = try_record(PATCH, body.model_dump(exclude_unset=True), version_id=version_id)
     if recorded is not None:
@@ -127,6 +133,9 @@ def patch_connection_version(
 
 @router.delete("/design/connection-versions/{version_id}", status_code=200)
 def delete_connection_version(version_id: str) -> dict:
+    from backend.api.part_connection_organized_routes import try_response
+    if (response := try_response('delete', version_id=version_id)) is not None:
+        return response
     from backend.api.part_connection_version_commands import DELETE, try_record
     recorded = try_record(DELETE, {}, version_id=version_id)
     if recorded is not None:
@@ -384,11 +393,17 @@ def _connection_apply_response(design, updated, report):
 
 
 def apply_connection_version(version_id: str) -> dict:
+    from backend.api.part_connection_organized_routes import try_response
+    if (response := try_response('apply', version_id=version_id)) is not None:
+        return response
     return _apply_connection_version_impl(version_id)
 
 
 def create_and_apply_connection_version(body: ConnectionVersionCreateRequest) -> dict:
     """Create and materialize a first-time connection as one undoable action."""
+    from backend.api.part_connection_organized_routes import try_response
+    if (response := try_response('connect', body.model_dump())) is not None:
+        return response
     if NATIVE_DIRECT_CONNECT_ENABLED or NATIVE_CONNECTION_OWNER_SELECTION_ENABLED:
         from backend.api.part_connection_direct_recording import try_record_connect
         recorded = try_record_connect(body.model_dump(), owner_selection=NATIVE_CONNECTION_OWNER_SELECTION_ENABLED)
@@ -432,12 +447,18 @@ router.add_api_route("/design/connection-versions/{version_id}/apply", apply_con
 
 
 def unapply_connection_version(version_id: str) -> dict:
+    from backend.api.part_connection_organized_routes import try_response
+    if (response := try_response('unapply', version_id=version_id)) is not None:
+        return response
     from backend.api.part_connection_disconnect import record
     source, updated, report, _ = record(version_id)
     return _connection_apply_response(source, updated, report)
 
 
 def disconnect_and_delete_connection_version(version_id: str) -> dict:
+    from backend.api.part_connection_organized_routes import try_response
+    if (response := try_response('disconnect_delete', version_id=version_id)) is not None:
+        return response
     from backend.api.part_connection_disconnect import record
     source, updated, report, _ = record(version_id, delete_version=True)
     return _connection_apply_response(source, updated, report)
