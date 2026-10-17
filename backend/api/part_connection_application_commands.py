@@ -507,6 +507,8 @@ def _materialize(design, body, selected):
     )
     from backend.core.sequences import overhang_dependent_strand_ids, reassign_strands
 
+    from backend.api.part_connection_organization import observe
+
     version, a_id, b_id = selected.version, body.overhang_a_id, body.overhang_b_id
     applied_a_seq = _cv_sequence_for_live_overhang(design, a_id, version.overhang_a_seq)
     applied_b_seq = _cv_sequence_for_live_overhang(design, b_id, version.overhang_b_seq)
@@ -516,8 +518,10 @@ def _materialize(design, body, selected):
     if applied_b_seq:
         result = _build_overhang_patch(result, b_id, OverhangPatchRequest(sequence=applied_b_seq))[0]
     for connection in selected.connections:
+        before = result
         result = remove_linker_topology(result.copy_with(overhang_connections=[
             item for item in result.overhang_connections if item.id != connection.id]), connection.id)
+        observe(before, result, removed_linker=connection.id)
     attach_a, attach_b = _cv_attach_pair(body.connection_type)
     connection = OverhangConnection(id=body.connection_id, overhang_a_id=a_id, overhang_a_attach=attach_a,
         overhang_b_id=b_id, overhang_b_attach=attach_b, linker_type=_cv_linker_type(body.connection_type),
@@ -525,7 +529,9 @@ def _materialize(design, body, selected):
         bridge_sequence=(version.bridge_seq or "").upper().strip() or None)
     result = assign_overhang_connection_names(result.copy_with(
         overhang_connections=[*result.overhang_connections, connection]))
+    before = result
     result = generate_linker_topology(result, connection)
+    observe(before, result, added_linker=connection.id)
     bridge_id = f"__lnk__{connection.id}"
     affected = overhang_dependent_strand_ids(result, [a_id, b_id], extra_helix_ids=[bridge_id])
     result = reassign_strands(result, affected)

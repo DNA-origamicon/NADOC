@@ -102,6 +102,7 @@ def build(design, params):
 
 def materialize(restored, body, version):
     from backend.api.connection_version_direct import materialize_direct
+    from backend.api.part_connection_organization import observe_direct
     from backend.api.overhang_patch import OverhangPatchRequest, _build_overhang_patch
     from backend.api.routes_connection_versions import _cv_attach_pair, _cv_sequence_for_live_overhang
     from backend.core.sequences import overhang_dependent_strand_ids, reassign_strands
@@ -115,6 +116,7 @@ def materialize(restored, body, version):
     attach_a, attach_b = _cv_attach_pair(body.connection_type)
     result = materialize_direct(restored, a_id, b_id, attach_a, attach_b, body.connection_type,
                                 history_seed=body.history_seed, created_at=body.created_at)
+    observe_direct(restored, result, output_slots(body))
     required = {slot for slot in output_slots(body) if slot[0] in {'duplex', 'cluster'}}
     present = {('duplex', item.id) for item in result.duplexes} | {
         ('cluster', item.id) for item in result.cluster_transforms}

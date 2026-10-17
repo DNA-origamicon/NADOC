@@ -117,6 +117,16 @@ def capabilities():
 
 
 def dependencies(kind, params):
+    if type(params) is dict and "_connection_organization" in params:
+        from backend.api.part_connection_organization import split
+        from backend.core.part_group_organization import ORGANIZATION
+        try:
+            inputs = split(kind, params)
+        except ValueError:
+            return Dependencies(known=False)
+        inner = dependencies(kind, inputs)
+        return Dependencies(inner.reads | {ORGANIZATION}, inner.writes | {ORGANIZATION},
+                            known=inner.known, barrier=True, imported_sources=inner.imported_sources)
     if kind in EXTENSION_KINDS:
         from backend.api.part_extension_commands import dependencies as extension_dependencies
         return extension_dependencies(kind, params)
@@ -377,6 +387,10 @@ def _execute(kind, design, params, *, expensive):
     if design.group_organization is not None:
         from backend.api.part_group_organization_gate import require_native_command
         require_native_command(kind, params)
+    if "_connection_organization" in params:
+        from backend.api.part_connection_organization import execute as organized_connection
+        return organized_connection(kind, design, params,
+            lambda k, d, p: _execute(k, d, p, expensive=expensive))
     if kind in GROUP_ORGANIZATION_KINDS:
         from backend.core.part_group_organization import build
         return build(kind, design, {key: value for key, value in params.items() if key != "_generator"})

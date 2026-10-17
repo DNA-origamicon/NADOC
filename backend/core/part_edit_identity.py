@@ -75,4 +75,6 @@ def preserve_proof_identity(previous, updated, *, kind=None):
     if (kind == "overhang-bulk" and previous.get("connection_disconnect_version") == 1
             and previous.get("action") == "connection-version-disconnect"):
         keys += ("action", "connection_disconnect_version")
+    if "_connection_organization" in previous:
+        keys += ("_connection_organization",)
     return {**result, **{key: previous[key] for key in keys if key in previous}}

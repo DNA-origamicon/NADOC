@@ -22,10 +22,10 @@ decrement completed if an exit reopens. Flag three major checkpoints spent on
 any still-open milestone (cumulative even across alternating work), or total
 growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
-Effort is separate: U1–U39 are **39 engineering checkpoints** since B1, closing
+Effort is separate: U1–U40 are **40 engineering checkpoints** since B1, closing
 **four milestones** (FH-19/FH-21/FH-22/FH-24). FH-18 remains open after13 checkpoints;
 FH-23 after9. Both are **task-growth flagged**. Current counts: **21/38 complete,
-17 remaining (8 core,9 parked); U39 +0 completed,+0 total**. Fixed exits remain.
+17 remaining (8 core,9 parked); U40 +0 completed,+0 total**. Fixed exits remain.
 U27 implements the complete [22-kind Fine Routing editor](../docs/audits/feature_history_20261014/fine_routing_history_editor_plan.md):
 pre-child native references, closed inputs/identities, stable batch add/remove/
 reorder, original-source proof and full sibling/downstream regeneration.
@@ -40,9 +40,9 @@ See [U27 evidence](../docs/audits/feature_history_20261014/validation_fine_routi
 NOT VERIFIED IN APP: servers stopped, Archive unavailable; FH-27/MV-53 desktop,
 latency/memory and broad backend acceptance remain. All rollout gates stay off.
 `main.js`7350; U27 delta0. No molecular builders, pins, constants or goldens changed.
-FH-25 checkpoint12: native organization audit117passes; moved/restored domains,
-removed hosts/new complements need composed lineage. **Task growth flagged.**
-[Matrix/evidence](../docs/audits/feature_history_20261014/ordinary_connection_completion_plan.md): next shared staged connection lineage plus owned publication;
+FH-25 checkpoint13: private versioned staged connection lineage preserves groups;
+239 connection checks pass; ISSUE-126 stays refused. **Task growth flagged.**
+[Matrix/evidence](../docs/audits/feature_history_20261014/ordinary_connection_completion_plan.md): next owned publication, complete source profiles and qualification;
 legacy repair/full profiles/qualification remain. ISSUE-142 correction stays gated. All gates off; preserve finite v1 and full scope.
 full FH-18/FH-23 movement/qualification remains required, not parked.
 U26 rejects ordinary owner insertion/unconditional final passes for chronological

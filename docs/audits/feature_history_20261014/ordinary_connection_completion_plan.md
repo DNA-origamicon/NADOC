@@ -989,3 +989,73 @@ remain uninspectable. Removed only those completed artifacts; pytest root and
 `/dev/shm` are empty. No user designs, jobs, caches or historical evidence changed.
 No production backend behavior changed, so this audit did not rerun the broad
 selector or frontend suite; existing broad backend/app qualification debt remains.
+
+## U40 — explicit organized native material tracking (FH-25 checkpoint13)
+
+Private replay now accepts the closed `_connection_organization` context
+`{version:1, removed_hosts:"follow_material"}` around the latest direct2,
+linker4, disconnect1 and metadata2 contracts. Older recipes remain unchanged.
+Dependencies include organization reads/writes; edits preserve the context.
+The adapter uses a bounded scalar plan and a call-local observer, executes the
+existing native builder on a private organization-free projection, then composes
+observed material ancestry through the existing reconciliation/retry result.
+API orchestration reports native direct relocation/restoration and linker
+creation/removal. No molecular builder, sequence formula, pin or golden changes.
+Unorganized commands do not instantiate or scan this lineage plan.
+
+Surviving whole-host groups retain their mode. When a selected host disappears,
+the explicit context follows its material and converts the entire affected group
+to domain membership, including material on its retained hosts. This avoids domain
+precedence hiding half a mixed selection or accidentally selecting every domain
+on the destination host. Converted groups remain domain selections after restore;
+there is no implicit switch back to future whole-host growth. Newly introduced
+linker material has no inherited domain-group membership. Styles remain intact.
+Unobserved transport, material growth/loss or host changes are refused. Existing
+bounded inventory and relationship limits remain; work is by intervals, not bases.
+Host conversion uses an indexed source table and charges emitted relationships.
+
+Validation: 65 new adapter cases include the 12 native families across equal and
+both unequal lengths, replacement Apply/Connect, disconnect, metadata create,
+source immutability, context refusal, live gate closure, mixed-host conversion,
+exception cleanup and unorganized no-scan behavior. Named Bend/Twist consumers
+survive an upstream length edit and independent-worker proof. Six family/length
+cases retain explicit ISSUE-126 overlap refusal: root-to-root/end-to-end dsDNA
+native builders produce ambiguous same-direction occupancy. This defect is NOT
+fixed or removed from the completion matrix. Initial run:30pass/6fail exposed
+that known defect; assertions now prove the underlying native ambiguity and
+matching organized refusal. A subsequent diagnostic had47pass/14test errors
+(helper signature and expected public refusal type), corrected without relaxing
+production checks.
+
+Final connection run: **239passed,21.29s**. After reusing the common interval
+coverage helper, adapter plus group/extrusion/transport/resize regressions:
+**193passed,11.01s**. These overlap by65 tests: **367 unique passing cases**.
+Changed-file Ruff and whitespace checks pass. Memory lint remains the known
+6errors/59warnings; current memory head stays200lines. `main.js`7350,delta0.
+No frontend changes, broad frontend rerun, geometry/latency acceptance or app
+verification claimed. Archive remains unavailable. All rollout gates stay false.
+
+`just test-smart --dry-run` selects FULL from accumulated foundational changes,
+fallback FAST; **zero broad backend tests ran** because this was a dry run.
+Its literal notice (the "fast suite ran" wording is not an execution claim):
+
+```
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+Only request `just test-session` when a broad/full sweep is actually needed.
+```
+
+Next: complete owned ordinary/history/repair publication and controls using the
+adapter, broader source profiles and metadata/repair chains, shared-host and
+ISSUE-126 correctness, then desktop/latency qualification. Package A has useful
+private implementation evidence but is not fully qualified. Packages B/C and the
+original full matrix remain mandatory; no milestone closes here.
+
+Counts: **21/38complete,17remaining(8core,9parked);+0completed,+0total**.
+**40 engineering checkpoints** since B1; **FH-25 growth flagged at13**. FH-18
+remains13 and FH-23 remains9. This checkpoint does not change the estimate.
+Cleanup: completed pytest2/3/4/current contained500entries,0regularfiles/bytes;
+no readable same-user cwd/fd/maps references. Persistent systemd/PAM435/436 were
+uninspectable. Removed only those task artifacts; pytest root and `/dev/shm`
+empty. User designs/jobs/caches/historical evidence unchanged.

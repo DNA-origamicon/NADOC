@@ -12,6 +12,8 @@ def remove_conflicts(design, endpoint_ids, *, pair_only=False):
     from backend.core.duplex import revert_duplex_relocation
     from backend.core.lattice import remove_linker_topology
 
+    from backend.api.part_connection_organization import observe
+
     selected = frozenset(endpoint_ids)
 
     def involves(record):
@@ -19,19 +21,26 @@ def remove_conflicts(design, endpoint_ids, *, pair_only=False):
 
     for connection in list(design.overhang_connections):
         if involves(connection):
+            before = design
             design = remove_linker_topology(design.model_copy(update={
                 'overhang_connections': [c for c in design.overhang_connections
                                          if c.id != connection.id],
             }), connection.id)
+            observe(before, design, removed_linker=connection.id)
     # Equal-length connections own restoration on the binding. Unequal-length
     # connections own it on the Duplex. Display-only duplexes have no snapshot.
     for binding in design.overhang_bindings:
         if involves(binding) and binding.bound and binding.prior_driven_topology:
+            before = design
             design = revert_bind_topology(design, binding.prior_driven_topology)
+            observe(before, design, moved=binding.prior_driven_topology)
     removed_duplex_ids = set()
     for duplex in design.duplexes:
         if involves(duplex):
+            before = design
             design = revert_duplex_relocation(design, duplex)
+            if duplex.bound and duplex.prior_driven_topology:
+                observe(before, design, moved=duplex.prior_driven_topology)
             removed_duplex_ids.add(duplex.id)
     return design.model_copy(update={
         'overhang_bindings': [b for b in design.overhang_bindings if not involves(b)],

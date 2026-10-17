@@ -65,6 +65,10 @@ def require_group_publication(source, candidate, checked):
 def require_native_command(kind, params):
     """Only already-qualified roles may follow conversion in a private recipe."""
     from backend.core.part_group_lineage import KINDS as LINEAGE_KINDS
+    if "_connection_organization" in params:
+        from backend.api.part_connection_organization import split
+        split(kind, params)
+        return
     if "_generated_scope" not in params:
         if kind in KINDS or kind in LINEAGE_KINDS:
             return
