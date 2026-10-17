@@ -1,0 +1,252 @@
+{
+  "checkpoint": "U23",
+  "date": "2026-10-16",
+  "base_commit": "51875b8d",
+  "status": "Private numerical editor lifecycle integrated; rollout remains gated; NOT VERIFIED IN APP",
+  "progress": {
+    "completed": 20,
+    "estimated_total": 38,
+    "remaining": 18,
+    "core_remaining": 9,
+    "parked_remaining": 9,
+    "delta_completed": 0,
+    "delta_total": 0,
+    "engineering_checkpoints_since_B1": 23,
+    "closed_since_B1": 3,
+    "FH18_checkpoints": 13,
+    "FH23_checkpoints": 6,
+    "task_growth_flagged": [
+      "FH-18",
+      "FH-23"
+    ]
+  },
+  "delivered": [
+    "Fixed numerical histories select asynchronous Prepare/Apply in existing catalog; ordinary1s/5s paths remain unchanged.",
+    "No second job registry; exact source/session/policy/sequence checks, one supervisor ownership transfer, bounded retained output and nonqueued admission.",
+    "Computation180s, ready prefix60s and published scalar receipt60s are distinct; polling never renews deadlines.",
+    "Owned Prepare/Apply progress appears before main controls exist, showing elapsed time with Cancel/close/Escape and teardown ownership.",
+    "Validated finite polling and trusted final-read timing, including local display validation; unknown outcomes require Status and never resubmit Apply.",
+    "Shared atomic publication helper reused by both lanes; preserves authoritative receipts after ancillary timer failure.",
+    "ISSUE-133 regressions close stale sequence binding, premature cache retirement, contradictory terminal failure and lost-publication recovery."
+  ],
+  "bounds": {
+    "numerical_computation_seconds": 180,
+    "ready_seconds": 60,
+    "published_receipt_seconds": 60,
+    "ordinary_prepare_seconds": 1,
+    "ordinary_apply_seconds": 5,
+    "max_catalog_entries": 2,
+    "work_slots": 1,
+    "worker_input_bytes": 2000000,
+    "prepare_worker_result_bytes": 2000000,
+    "apply_worker_result_bytes": 16000000,
+    "failure_bytes": 32000,
+    "poll_interval_ms": 500,
+    "max_polls": 360,
+    "whole_display_response_bytes": 2000000,
+    "note": "Existing command/site/control bounds retained. OS cleanup can exceed computation deadline and holds admission until successful; wire reports owned operation, not separate cleanup phase."
+  },
+  "validation": {
+    "distinct_backend_cases": 317,
+    "backend_files": 14,
+    "runs": [
+      {
+        "scope": "frontend initial missing integration",
+        "passed": 82,
+        "failed": 29,
+        "unhandled_expectation_errors": 8,
+        "missing_module_suites": 1,
+        "seconds": 2.39
+      },
+      {
+        "scope": "backend initial lifecycle dossier",
+        "collection_errors": 1,
+        "collected": 0,
+        "seconds": 0.94,
+        "note": "New computation module absent; recorded before implementation."
+      },
+      {
+        "scope": "four-file first host regression",
+        "passed": 97,
+        "seconds": 7.96
+      },
+      {
+        "scope": "frontend first implementation",
+        "passed": 117,
+        "failed": 2,
+        "seconds": 2.36,
+        "note": "Both failures were global fake timer counts. JSDOM focus schedules zero-delay selectionchange; tests now flush only zero-delay callbacks and still require zero retained timers."
+      },
+      {
+        "scope": "shared nine-file backend regression",
+        "passed": 205,
+        "warnings": 15,
+        "seconds": 12.53
+      },
+      {
+        "scope": "three backend race regressions",
+        "passed": 31,
+        "failed": 3,
+        "seconds": 3.98
+      },
+      {
+        "scope": "four-file host regression after race fixes",
+        "passed": 109,
+        "seconds": 8.42
+      },
+      {
+        "scope": "unknown Status refusal regression",
+        "passed": 0,
+        "failed": 1,
+        "skipped": 71,
+        "seconds": 0.748
+      },
+      {
+        "scope": "local display validation lease regression",
+        "passed": 0,
+        "failed": 1,
+        "skipped": 72,
+        "seconds": 0.756
+      },
+      {
+        "scope": "native duplex host",
+        "passed": 1,
+        "deselected": 1,
+        "seconds": 8.4
+      },
+      {
+        "scope": "native CPD host",
+        "passed": 1,
+        "deselected": 1,
+        "seconds": 189.24
+      },
+      {
+        "scope": "terminal Prepare timer-failure regression",
+        "passed": 34,
+        "failed": 1,
+        "seconds": 4.2
+      },
+      {
+        "scope": "final focused frontend",
+        "passed": 123,
+        "files": 4,
+        "seconds": 2.31
+      },
+      {
+        "scope": "required full frontend regression",
+        "passed": 9151,
+        "skipped": 1,
+        "files": 762,
+        "seconds": 327.96
+      },
+      {
+        "scope": "final14-file backend regression",
+        "passed": 315,
+        "deselected": 2,
+        "warnings": 15,
+        "seconds": 18.46
+      }
+    ],
+    "command_correction": "An initial regression command named nonexistent test_part_deformation_creation.py, collected0 and executed no tests; rerun used test_deformation_creation_preview.py.",
+    "native_scope": "Both actual empty-root native producer chains, poisoned recovery, real spawned Prepare/status, selected-only Evaluate, Apply/status, one undo/redo, save/reload and independent cold proof. Every worker reaped and shared buffer unlinked; no disk fixture/physical simulation/native scratch.",
+    "frontend_full": {
+      "command": "just test-frontend",
+      "passed": 9151,
+      "skipped": 1,
+      "files": 762,
+      "seconds": 327.96,
+      "note": "One existing skip; full suite executed after final frontend changes."
+    },
+    "app": "Not exercised: Archive mount absent; no browser/bulk scratch fallback. MV-52/FH-27 and paired rollout gates remain open/false.",
+    "native_final_note": "Both native chains passed before the final failure-only Prepare cache cleanup and restoration of the unchanged ordinary Status fast return. Final35 lifecycle cases exercise that cleanup; native math/worker/success path unchanged, so expensive native chains were not redundantly rerun."
+  },
+  "timings_seconds": {
+    "duplex": {
+      "relax_append": 1.229600207,
+      "host_prepare": 1.64612915,
+      "host_apply": 1.317814758,
+      "selected_evaluations": [
+        0.076228028,
+        0.018307755,
+        0.195135238
+      ],
+      "independent_cold_proof": 1.217556923
+    },
+    "cpd": {
+      "create_append": 19.720312759,
+      "relax_append": 41.645677003,
+      "host_prepare": 41.599214266,
+      "host_apply": 41.226210739,
+      "selected_evaluations": [
+        0.012262701,
+        0.003685679,
+        0.011639058
+      ],
+      "independent_cold_proof": 42.393100137
+    },
+    "qualification": "Tiny in-memory host probes include selected display/control projection and status polling; not HTTP/render/gesture/lock/heap or representative performance acceptance. Controls-only is the middle selected sample. Numerical native gesture qualification still open."
+  },
+  "retained_open": [
+    "Numerical native gesture qualification through actual editor/host; current native host fixtures use explicit input changes.",
+    "FH18/FH23 arbitrary new-group movement, generated consumers and post-conversion extension-upsert lineage; no relocation or scope reduction.",
+    "FH24/FH26 terminal/Fine Routing history and repair controls; FH27/MV52 desktop/performance and rollout.",
+    "Broad backend FAST requires mounted Archive scratch; FULL additionally session-gated; previous broad debt remains.",
+    "Assemblies and machine-specific VR validation deferred; remaining asset/provenance milestones parked."
+  ],
+  "scientific_changes": {
+    "native_math_changed": false,
+    "source_manifest_changes": false,
+    "pins_rewritten": false,
+    "constants_or_goldens_changed": false,
+    "physical_simulations_run": false,
+    "checked_source_path_intersections": {
+      "cpd": [],
+      "duplex_relax": [],
+      "streptavidin": []
+    }
+  },
+  "main_js": {
+    "lines": 7350,
+    "delta": 0
+  },
+  "static_checks": {
+    "changed_python_ruff": "pass (5 files)",
+    "repository_ruff": "5 existing F401; no delta",
+    "memory_lint": "6 existing errors,59 warnings; no delta",
+    "memory_head_lines": 200,
+    "milestones": 38,
+    "completed": 20,
+    "parked": 9,
+    "git_diff_check": "pass"
+  },
+  "broad_regression": {
+    "selector_command": "just test-smart --dry-run",
+    "executed_suite": false,
+    "result": "FAST  (fast suite only)",
+    "deferred_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.\nThis is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.\nOnly request `just test-session` when a broad/full sweep is actually needed.",
+    "clarification": "Emitted wording above is selector-only: dry-run executed neither FAST nor FULL. Broad FAST additionally deferred until mounted Archive supplies TMPDIR/basetemp. Prior broad debt retained."
+  },
+  "cleanup": {
+    "status": "complete",
+    "path": "/tmp/pytest-of-joshua",
+    "inventory": {
+      "child_directories": 354,
+      "symlinks": 4,
+      "regular_files": 0,
+      "logical_bytes": 0,
+      "allocated_bytes": 0,
+      "active_readers": [],
+      "shared_memory_names": []
+    },
+    "removed": {
+      "directories": 354,
+      "symlinks": 4,
+      "regular_files": 0,
+      "bytes": 0
+    },
+    "pytest_root_empty": true,
+    "bulk_outputs_created": false,
+    "workers": "Real native fixtures assert actual child close/reap, SharedMemory unlink, stopped timers and released admissions in failure-safe teardown.",
+    "preserved": "User designs/jobs, active runtimes, shared caches and historical evidence untouched. Only compact tracked report retained."
+  }
+}

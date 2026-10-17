@@ -6,6 +6,7 @@ import { createTransformHistoryPreview } from '../scene/transform_history_previe
 import { createTransformHistoryTool } from '../scene/transform_history_tool.js'
 import { getDocId } from '../shared/doc_id.js'
 import { sameRepairContext } from '../features/part_repair_model.js'
+import { createTransformHistoryProgress } from '../ui/transform_history_progress.js'
 
 export const TRANSFORM_HISTORY_EDITOR_ENABLED = false
 const SNAPSHOTS = new Set(['placement-poses', 'nucleotide-transform', 'nucleotide-transform-batch', 'nucleotide-transform-delete'])
@@ -21,7 +22,7 @@ export function createTransformHistoryEditor({ store, api, scene, camera, canvas
   createPreview = () => createTransformHistoryPreview({ scene, camera: typeof camera === 'function' ? camera() : camera }),
   createTool = createTransformHistoryTool, validateDisplay = validateTransformPreviewDisplay }) {
   let opening = false, boundOpening = false, ready = false, disposed = false, generation = 0
-  let preview = null, tool = null, lastProjection = null, localError = null
+  let preview = null, tool = null, lastProjection = null, localError = null, progress = null
   function context() {
     const state = store.getState(), design = state.currentDesign
     if (!design || state.assemblyActive) return null
@@ -37,13 +38,25 @@ export function createTransformHistoryEditor({ store, api, scene, camera, canvas
   function teardown() {
     const ownedTool = tool, ownedPreview = preview
     ready = false; tool = preview = lastProjection = null
+    closeProgress()
     try { ownedTool?.dispose() } finally { ownedPreview?.dispose() }
+  }
+  function closeProgress() {
+    const owned = progress
+    progress = null; owned?.dispose()
+  }
+  function showProgress(state) {
+    const operation = opening && !ready ? 'prepare' : ready && state.busy === 'apply' ? 'apply' : null
+    if (!operation) { closeProgress(); return }
+    progress ??= createTransformHistoryProgress({ onCancel: cancel })
+    progress.show({ operation, computation: state.computation, error: state.error })
   }
   function render(state) {
     if (opening) {
       if (state.open) boundOpening = true
       else if (boundOpening) { generation++; opening = false; boundOpening = false }
     }
+    showProgress(state)
     if (!ready) return
     if (!state.open) { teardown(); return }
     if (state.projection && state.projection !== lastProjection) {
@@ -55,11 +68,12 @@ export function createTransformHistoryEditor({ store, api, scene, camera, canvas
       } catch (failure) { localError = failure; preview.show('before') }
     }
     tool.setStatus({ busy: state.busy, expired: state.expired, error: localError ?? state.error,
-      publicationUnknown: state.publicationUnknown, refreshNeeded: state.refreshNeeded })
+      publicationUnknown: state.publicationUnknown, refreshNeeded: state.refreshNeeded,
+      computation: state.computation })
   }
   const unsubscribe = controller.subscribe(render)
   const resetOpening = () => {
-    if (opening && !boundOpening) { generation++; opening = false }
+    if (opening && !boundOpening) { generation++; opening = false; closeProgress() }
   }
   const comparisonMode = event => {
     if (!['multi-view', 'multi-overlay'].includes(event.detail?.mode) || (!opening && !controller.getState().open)) return
@@ -92,6 +106,7 @@ export function createTransformHistoryEditor({ store, api, scene, camera, canvas
     await controller.cancel()
     const closed = !controller.getState().open
     if (closed && opening) { generation++; opening = false; boundOpening = false }
+    if (closed) closeProgress()
     return closed
   }
   async function open(entry) {
@@ -99,6 +114,7 @@ export function createTransformHistoryEditor({ store, api, scene, camera, canvas
     if (disposed || opening || controller.getState().open || !isNativeTransformFeature(entry) || !requestedContext?.editable) return false
     const token = ++generation
     opening = true; boundOpening = false; localError = null
+    showProgress({ busy: 'prepare' })
     try {
       const waits = []
       events?.dispatchEvent(new CustomEvent('nadoc:comparison-mode', { detail: { mode: 'transform-history', waits } }))
@@ -118,7 +134,7 @@ export function createTransformHistoryEditor({ store, api, scene, camera, canvas
       teardown(); await controller.cancel()
       if (!disposed) showToast(`Move/Rotate history unavailable: ${failure.message}`, 6000)
       return false
-    } finally { if (token === generation) { opening = false; boundOpening = false } }
+    } finally { if (token === generation) { opening = false; boundOpening = false; showProgress(controller.getState()) } }
   }
   return { open, cancel, active: () => opening || controller.getState().open,
     dispose() { if (!disposed) {

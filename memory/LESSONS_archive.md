@@ -1,5 +1,20 @@
 # LESSONS — full entries
 
+<a id="c14"></a>
+### C14. Long computation is not an extended editing lease (2026-10-16)
+
+Numerical preview integration exposed old timer callbacks retiring new phases,
+busy claims erasing completed packets, timer errors losing published receipts,
+and Status transport failures authorizing duplicate Apply. Final response processing
+also incorrectly credited display validation time back to the editing lease.
+
+**How to avoid:** bind every operation to its accepted sequence and exact source;
+separate fixed compute, ready and receipt deadlines. Retain completed data until
+its successor actually owns admission. A published receipt remains authoritative
+after ancillary failure; a failed read proves no publication outcome. Anchor lease
+accounting to a trusted local receive clock, including subsequent processing.
+See ISSUE-133 and the [U23 evidence](../docs/audits/feature_history_20261014/validation_transform_numerical_lifecycle.json).
+
 <a id="c13"></a>
 ### C13. Local thread/PID state is not global simulation ownership (2026-10-11)
 

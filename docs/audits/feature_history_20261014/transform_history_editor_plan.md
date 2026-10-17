@@ -474,3 +474,56 @@ milestone or a finished editor. Real pending Prepare/Apply cancellation, stale
 policy/session/source rejection, result/receipt retrieval, unknown-engine refusal
 through the host, native gestures and FH-27/MV-52 app/performance qualification
 remain required. New-group movement stays the same shared FH-18/FH-23 exit.
+
+
+## U23 — numerical computation in the existing editor host
+
+The researched three-lifetime decision is implemented privately. Only transform
+histories containing CPD create/relax or duplex-relax select numerical computation,
+including numerical commands after the selected feature. Ordinary Prepare1s and
+Apply5s limits remain; slider evaluation remains selected-only. No new registry:
+the same two-entry catalog and single nonqueued work slot own preparation and
+publication. The existing supervisor retains proof admission until reaping and
+buffer cleanup; host work ownership persists through decode and adoption.
+
+Prepare acknowledges its exact origin/lease/role and sequence0, then Status returns
+the existing bounded display packet. Apply acknowledges its exact request sequence,
+then Status returns the scalar receipt or a typed known refusal. Computation is
+bounded by180s; ready prefixes, terminal errors and receipts have fixed60s windows.
+Only a successful new operation starts a new phase window; polls never extend it.
+The ready display is retained only until an accepted edit, cancellation or expiry;
+its wrapper and result share the existing whole-response bound. Old timer callbacks
+are bound to their own deadlines. Background threads preserve document context.
+
+Cancel/removal signals the exact worker. Source/session/policy/sequence changes
+prevent result adoption; full source proof and suffix rebuild still run on every
+Apply. A timer failure after canonical publication preserves the authoritative
+receipt. Lost Apply or Status responses retain uncertainty and cannot authorize a
+second submission. Only validated terminal refusal can restore editable state.
+OS cleanup can outlast its computational allowance; admission remains held until
+it succeeds. The private wire currently reports the owned operation, not a
+separate cleanup subphase; do not promise a hard cleanup deadline.
+
+Frontend polling is finite and abortable, with validated scalar acknowledgements,
+local final-read timing and independent controller checks. An owned modal appears
+before Prepare and during Apply, showing elapsed time without invented percentage
+or ETA. Cancel, close and Escape work before the main controls are created.
+Completion/reset/disposal removes its timer and listeners; a late old operation
+cannot close a replacement dialog. Ordinary controls retain unknown-result/status
+recovery when the modal closes. No main.js growth or legacy live-tool pruning.
+
+[U23 evidence](validation_transform_numerical_lifecycle.json) records tests,
+measurements and cleanup. Native numerical gesture and full desktop/HTTP/render/
+lock/heap acceptance, arbitrary new-group movement and post-conversion extension
+upsert remain required. Both rollout gates stay false; FH-23 is still open after
+six engineering checkpoints. No milestone exit is weakened or moved to parked work.
+
+Next numerical gesture check reuses `test_part_transform_numerical_host.py`'s
+real recipe/supervisor helpers and `test_part_transform_gesture_contract.py`'s
+`gesture_draft` bridge. That bridge already drives the private renderer, tool,
+gizmo and native events. Its current fixture assumes `placement-poses`; numerical
+recipes select `cluster_op`, so exercise the existing explicit Upgrade control
+and submit its actual emitted definition. Do not fabricate pending poses. The
+joint oracle must bind the numerical fixture's real relaxed pose and30-degree
+limit instead of inheriting the bridge's identity-pose/25-degree assumptions.
+This is the remaining acceptance substep, not a new fixture framework or milestone.

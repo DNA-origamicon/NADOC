@@ -1,7 +1,7 @@
 """Private numerical transform preparation and full edit in disposable children.
 
-This pair is deliberately not connected to the editor lease host yet. A live
-cutover needs separate computation/ready/receipt lifetimes and visible Cancel.
+The private editor host owns separate computation/ready/receipt lifetimes and
+visible Cancel. Its paired rollout gates remain closed pending qualification.
 Ordinary Prepare/Evaluate/Apply keep their existing deadlines and executors.
 The caller owns admission, supervision, source checks and publication; a child
 result is neither a lease nor a proof certificate for a later source revision.

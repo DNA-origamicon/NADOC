@@ -2894,3 +2894,20 @@ and this issue are not declared resolved.
   repeated close failures, real shared-memory unlink retries, live-child cleanup,
   cancellation and source changes. A persistent OS cleanup failure deliberately
   leaves admission occupied; the service must not pretend that resources are free.
+
+
+## ISSUE-133 — Numerical preview phase transitions could lose results or authorize a duplicate retry (2026-10-16, CORRECTED PRIVATELY)
+
+- Integration review reproduced four backend races: a stale Apply bound a newer
+  sequence, a busy claim erased a completed packet, receipt-timer failure removed
+  an already published result, and a failed ready timer retained a prefix/result
+  alongside terminal failure. Fixed request binding, admission-before-retirement,
+  authoritative receipt retention and terminal-prefix cleanup close these cases.
+- Frontend regressions reproduced a Status404 clearing unknown-publication state
+  and local display validation being credited back to the lease. Status transport
+  refusal proves no publication outcome; only a validated terminal worker refusal
+  permits retry. Local receive time anchors the final lease budget.
+- Timer callbacks bind to their own deadline; numerical computation, ready inputs
+  and scalar receipts have distinct lifetimes. Polls never renew them. Targeted
+  red/green evidence lives in the U23 numerical lifecycle report. The ordinary
+  editor limits and scientific builders are unchanged; rollout stays gated.

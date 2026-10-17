@@ -1,3 +1,5 @@
+import { pollPreviewComputation } from './preview_computation.js'
+
 /** Data-only transport. Publication adoption belongs to the source-bound controller. */
 export class DeformationPreviewRequestError extends Error {
   constructor(status, detail) {
@@ -70,14 +72,32 @@ export function createDeformationPreviewEndpoints({ request, family = 'deformati
     if (result == null) throw new DeformationPreviewRequestError(0, 'Preview request was cancelled or unavailable')
     return result
   }
+  async function computation(action, body, options = {}) {
+    const started = performance.now()
+    const result = await json('POST', action === 'prepare' ? PATH : `${PATH}/${action}`, body, options)
+    const operation = action === 'status' ? options.computation?.operation : action
+    const expectedBody = action === 'status'
+      ? { ...body, request_sequence: options.computation?.request_sequence } : body
+    if (family === 'transform' && ['prepare', 'apply'].includes(operation)
+        && (['preparing', 'applying', 'committing'].includes(result.status) || result.computation)) {
+      return pollPreviewComputation({ initial: result, started, body: expectedBody, context: options.context,
+        operation, signal: options.signal, onComputation: options.onComputation, onReadTiming: options.onReadTiming,
+        expectedIdentity: options.computation?.identity,
+        identity: (value, expected) => previewFamilyIdentity(value, family, expected),
+        error: (status, detail) => new DeformationPreviewRequestError(status, detail),
+        read: (pollBody, signal) => json('POST', `${PATH}/status`, pollBody, { ...options, signal }) })
+    }
+    options.onReadTiming?.({ elapsedMs: Math.max(0, performance.now() - started), renewed: false, response: result })
+    return result
+  }
   return {
-    prepare: (body, options) => json('POST', PATH, body, options),
+    prepare: (body, options) => computation('prepare', body, options),
     prepareCreation: (body, options) => family === 'deformation' ? json('POST', `${PATH}/create`, body, options)
       : Promise.reject(new DeformationPreviewRequestError(422, `${family === 'sweep' ? 'Sweep' : 'Transform'} creation uses its ordinary authoring tool`)),
     evaluate: (body, options) => json('POST', `${PATH}/evaluate`, body, options),
-    apply: (body, options) => json('POST', `${PATH}/apply`, body, options),
+    apply: (body, options) => computation('apply', body, options),
     cancel: (body, options) => json('POST', `${PATH}/cancel`, body, options),
-    status: (body, options) => json('POST', `${PATH}/status`, body, options),
+    status: (body, options) => computation('status', body, options),
     async refreshCommitted(receipt, options = {}) {
       const context = options.context
       const expected = previewPublicationReceipt(receipt, context, null, { family })

@@ -14,8 +14,8 @@ agreed; do not invent historical estimate deltas. This is a milestone estimate,
 not a count of messages/commits or a percentage of time or user-ready features.
 Core estimates have moderate confidence; parked work has lower confidence.
 
-Keep delivery and effort visible separately: **22 engineering checkpoints have
-been delivered since B1 (U1–U22), closing three additional milestones**. Thirteen of
+Keep delivery and effort visible separately: **23 engineering checkpoints have
+been delivered since B1 (U1–U23), closing three additional milestones**. Thirteen of
 those checkpoints were spent on still-open FH-18. The 38 is an estimate of
 deliverable milestones, not a promise of 38 commits or assistant responses;
 the thirteen-checkpoint effort must not disappear behind the unchanged denominator.
@@ -63,7 +63,7 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 |---|---|---|
 | FH-18 | In progress · 13 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Owned organization transactions, named deformation preview/repair/comparison, qualified final-topology lineage including extrusion/crossover and resize/domain-shift edits and matching Fine Routing recovery are implemented; Groups/Placements UI, explicit placement Apply and ordinary owned Bend/Twist creation are integrated privately; persistent group visibility follows current identity membership and saves after queued writes; ordinary explicit-placement patterns now copy declared named groups through owned create/edit/replay; generated consumers, new-group movement and qualification stay open. |
 | FH-20 | Remaining | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
-| FH-23 | In progress · 5 checkpoints; task growth flagged | Move/rotate history editing: complete parameter controls, guarded commit, downstream edits and undo/persistence parity. Owned transport, native private rendering/controls and explicit complete linked-owner pose recording are integrated. Actual native tether/joint/linker gestures now cross through host Apply and cold replay; bounded ordinary producer-prefix admission is extended. Private numerical Prepare/Apply workers now pass native-empty-root CPD/duplex replay, but their live asynchronous lifecycle/receipt integration remains open, along with organized extension upserts and the existing FH-18/FH-23 arbitrary new-group movement exit; paired rollout gates stay false. |
+| FH-23 | In progress · 6 checkpoints; task growth flagged | Move/rotate history editing: complete parameter controls, guarded commit, downstream edits and undo/persistence parity. Owned transport, native private rendering/controls and explicit complete linked-owner pose recording are integrated. Actual native tether/joint/linker gestures now cross through host Apply and cold replay; bounded ordinary producer-prefix admission is extended. Numerical Prepare/Apply now use the same private host with bounded asynchronous computation, cancellation and receipt recovery; numerical gesture qualification remains open, along with organized extension upserts and the existing FH-18/FH-23 arbitrary new-group movement exit; paired rollout gates stay false. |
 | FH-24 | Remaining | Fine Routing child editors: resize, ligate, nick, crossovers and loop/skips editable through ordinary UI with downstream replay. |
 | FH-25 | Remaining | Ordinary DNA connection completion: explicit supported core matrix including required combined/direct/indirect paths, recorded and qualified. |
 | FH-26 | Remaining | Core dependency repair: earliest failure/blocked descendants, reviewed input/reference replacement or explicit cascade, candidate review, Apply/undo/reload. |
@@ -148,6 +148,31 @@ bound their matrices before implementation rather than expanding them indefinite
 | U20 · 2026-10-16 | FH-23 checkpoint 3: connected owned editor, complete native private renderer, existing gestures/panel, explicit linked-pose upgrade and frame-bound compound replay; [evidence](validation_transform_history_integration.json) | None; complete producer-prefix/constraint matrices, arbitrary new-group movement and existing qualification exits remain | 20 | 38 | 9 | 9 | +0 total, +0 completed. **Task growth flagged:** three checkpoints on unfinished FH-23. Twenty engineering checkpoints close three milestones since B1; original scope and exits unchanged. |
 | U21 · 2026-10-16 | FH-23 checkpoint 4: actual native constraint/gesture-to-host matrix, bounded ordinary producer-prefix admission and recorded terminal-extension lifecycle; [evidence](validation_transform_native_prefix_constraints.json) | None; long-worker numerical prefixes, organized upsert lineage and arbitrary new-group movement remain within the existing exits | 20 | 38 | 9 | 9 | +0 total, +0 completed. Twenty-one engineering checkpoints close three milestones since B1. FH-23 remains growth-flagged after four; FH-18 after thirteen. No exit is narrowed or split for credit. |
 | U22 · 2026-10-16 | FH-23 checkpoint 5: private numerical Prepare AND Apply worker pair, native-empty-root CPD/duplex round trips, selected-only evaluations, bounded exact source/draft transport and shared cleanup ownership; [evidence](validation_transform_numerical_workers.json) | None; live asynchronous lifecycle/cancellation/receipt integration and arbitrary new-group movement remain | 20 | 38 | 9 | 9 | +0 total, +0 completed. Twenty-two engineering checkpoints close three milestones since B1. FH-23 remains growth-flagged after five; FH-18 after thirteen. The worker pair is not connected to the editor host; no exit is split or narrowed. |
+| U23 · 2026-10-16 | FH-23 checkpoint 6: numerical worker integration into existing preview leases, visible cancellable progress, separate computation/editing/receipt lifetimes and lost-response recovery; [evidence](validation_transform_numerical_lifecycle.json) | None; numerical gesture qualification, arbitrary new-group movement and organized extension upsert remain | 20 | 38 | 9 | 9 | +0 total, +0 completed. Twenty-three engineering checkpoints close three milestones since B1. FH-23 remains growth-flagged after six; FH-18 after thirteen. Same fixed exits; paired rollout remains off. |
+
+### U23 containment and remaining acceptance
+
+**20/38 complete;18 remaining (9 core,9 parked);+0 completed,+0 total.**
+This checkpoint connects the previously private numerical workers to the existing
+host and controller. It adds no second job registry, numerical solver, milestone
+or permission to use a wider ordinary edit budget. Computing has the existing180s
+numerical ceiling; successful Prepare and known Apply refusal start a fresh60s
+editing window, and publication starts a separate60s scalar-receipt window.
+Polling does not renew any deadline; selected edits do not replay the prefix.
+
+The owned progress dialog provides elapsed time and Cancel/Escape before the
+ordinary controls exist and while Apply rebuilds the recipe. Exact origin,
+sequence and role checks bind every poll; unknown Apply outcomes require Status,
+never automatic resubmission. Read timing is local and includes client validation.
+The shared publication transaction is extracted once for both execution lanes.
+
+Containment remains the original FH-23/FH-18 matrix: finish numerical native-gesture
+qualification, arbitrary new-group movement and organized extension-upsert
+semantics, then core Fine Routing editors. Existing FH-27/MV-52 desktop and
+representative performance acceptance stays open. The tiny native host probes and
+automated lifecycle tests do not establish interactive latency or enable rollout.
+Six checkpoints on unfinished FH-23 and thirteen on FH-18 remain explicit growth
+flags. The denominator stays38; no partial milestone credit is added.
 
 ### U22 containment and remaining acceptance
 

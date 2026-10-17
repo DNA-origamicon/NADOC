@@ -1281,8 +1281,8 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   comparison-view transitions. Check restored camera/panel ownership and focus.
   Measure representative HTTP/render/drag responsiveness, memory retention and
   lock costs; bounded data/tests do not establish interactive performance.
-  U22 adds a private numerical worker pair, not a live editor cutover. After its
-  planned integration, test long CPD/duplex preparation and Apply with visible
+  U23 integrates the numerical worker pair into the gated host/controller.
+  Test long CPD/duplex preparation and Apply with visible
   Cancel, separate computing/ready/receipt expiry, result retrieval after network
   loss and no automatic recommit. Confirm ordinary edits keep their existing
   responsiveness and selected-only evaluation does not rerun the solvers.
@@ -1294,5 +1294,5 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   next movement and release; inspect the same axis/limits before and after Apply.
   Verify terminal CRUD/batch now creates one history row per action,
   keeps deletion fast, and reports missing source references after upstream edits.
-  Numerical-history Prepare and arbitrary new-group movement remain unfinished;
+  Numerical native gestures and arbitrary new-group movement remain unfinished;
   post-conversion extension upsert still refuses until its lineage qualifies.

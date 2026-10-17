@@ -4,7 +4,8 @@ One prepared prefix per document, two globally; one nonqueued computation at a
 time. Native work and proof run without state/catalog locks. Apply reserves the
 commit under the state lock, then releases the catalog lock before the existing
 undo/publication transaction. Its full-source snapshot cost is not qualified by
-the input capture budget. Deadlines are cooperative, not process isolation.
+the input capture budget. Ordinary deadlines remain cooperative; fixed numerical
+transform histories use the existing isolated worker and separate bounded phases.
 """
 
 from collections import OrderedDict
@@ -14,6 +15,7 @@ from dataclasses import dataclass
 from threading import BoundedSemaphore, Lock, Timer
 from time import monotonic
 from typing import Literal
+import sys
 from uuid import UUID, uuid4
 from weakref import ref
 
@@ -118,6 +120,10 @@ class _Entry:
     publication: dict | None = None  # bounded scalar receipt; never a model/report
     applying_sequence: int | None = None
     family: str = "deformation"
+    numerical: bool = False
+    computation: object = None
+    payload: dict | None = None
+    failure: dict | None = None
 
 
 def _conflict(detail, code="preview_conflict"):
@@ -165,7 +171,9 @@ def _remove(entry, *, remember=True):
         _entries.pop(entry.doc)
     if remember:
         _remember_cancel(entry)
-    entry.prepared = None
+    entry.prepared = entry.payload = entry.failure = None
+    if entry.computation is not None:
+        entry.computation.cancelled.set()
     if entry.timer is not None:
         entry.timer.cancel()
         entry.timer = None
@@ -181,8 +189,10 @@ def _prune():
             _tombstones.pop(key)
 
 
-def _expire(entry):
+def _expire(entry, deadline=None):
     with _lock:
+        if deadline is not None and (entry.expires != deadline or monotonic() < deadline):
+            return
         if _entries.get(entry.doc) is entry:
             if entry.phase == "committing":
                 entry.expired_during_commit = True
@@ -190,6 +200,18 @@ def _expire(entry):
                 _remove(entry)
         # Commit completion either retains a scalar receipt until the original
         # expiry, or removes an already expired entry; rollback also prunes it.
+
+
+def _renew(entry, seconds):
+    """Catalog-lock owned; old callbacks cannot retire a later phase."""
+    if entry.timer is not None:
+        entry.timer.cancel()
+    entry.expires = monotonic() + seconds
+    entry.expired_during_commit = False
+    deadline = entry.expires
+    entry.timer = Timer(seconds, lambda: _expire(entry, deadline))
+    entry.timer.daemon = True
+    entry.timer.start()
 
 
 def _matches_request(entry, request, family):
@@ -270,6 +292,7 @@ def _finish(entry, sequence, payload, *, prepared=None):
 
 def _claim(request, *, applying=False, family="deformation"):
     _family(family)
+    admitted = False
     with _lock:
         _prune()
         entry = _entries.get(doc_context.get_current_doc())
@@ -279,13 +302,22 @@ def _claim(request, *, applying=False, family="deformation"):
             _conflict("The preview is still preparing or committing")
         if request.request_sequence <= entry.sequence:
             _conflict("The preview request was superseded")
+        if entry.computation is not None:
+            # A completed async result becomes ready just before its supervisor
+            # releases work ownership. Do not destroy its retrieval packet when
+            # an immediate edit loses that race; no edit has been admitted yet.
+            admitted = _work_slot.acquire(blocking=False)
+            if not admitted:
+                raise HTTPException(429, detail={"code": "preview_busy", "detail": "A preview operation is already running"})
         # A newer request invalidates any older in-flight response even when
         # the work slot is busy. The caller retries with a new sequence number.
         entry.sequence = request.request_sequence
+        entry.payload = entry.failure = None
+        entry.computation = None
         if applying:
             entry.applying_sequence = request.request_sequence
         prepared = entry.prepared
-    if not _work_slot.acquire(blocking=False):
+    if not admitted and not _work_slot.acquire(blocking=False):
         if applying:
             with _lock:
                 if entry.applying_sequence == request.request_sequence:
@@ -308,6 +340,7 @@ def _prepare(request, *, family="deformation"):
     if not _work_slot.acquire(blocking=False):
         raise HTTPException(429, detail={"code": "preview_busy", "detail": "A preview operation is already running"})
     entry = None
+    transferred = False
     try:
         with _mapped_errors():
             with state._lock:
@@ -338,6 +371,15 @@ def _prepare(request, *, family="deformation"):
                 captured = capture(source, preserve_entry_types=True)
             # Do not keep the live source/session in this computation frame.
             del source, session
+            if family == "transform":
+                from backend.api import part_transform_preview_computation as numerical
+                if numerical.required(captured):
+                    from backend.api.part_transform_preview import select_from_capture
+                    from backend.api.part_deformation_preview import _checkpoint
+                    kind = select_from_capture(captured, request.feature_id, _checkpoint())[3]
+                    result = numerical.begin_prepare(sys.modules[__name__], entry, captured, kind)
+                    transferred = True
+                    return result
             timer = Timer(max(0, entry.expires - monotonic()), lambda: _expire(entry))
             timer.daemon = True
             with _lock:
@@ -360,7 +402,8 @@ def _prepare(request, *, family="deformation"):
                     _remove(entry)
         raise
     finally:
-        _work_slot.release()
+        if not transferred:
+            _work_slot.release()
 
 
 def evaluate(value, *, family="deformation"):
@@ -425,7 +468,21 @@ def status(value, *, family="deformation"):
             result = {**_envelope(entry, entry.sequence), "status": phase}
             if entry.publication is not None:
                 result.update(entry.publication)
-            return result
+            if entry.computation is not None:
+                from backend.api.part_transform_preview_computation import fields
+                result["computation"] = fields(entry.computation)
+            if entry.payload is not None:
+                result["result"] = {**entry.payload, "remaining_seconds": result["remaining_seconds"]}
+            if entry.failure is not None:
+                result["failure"] = entry.failure
+    # A caller cannot mutate the retained display/error; no large copy or
+    # whole-response admission runs while the state or catalog lock is held.
+    if not entry.numerical:
+        return result
+    from backend.api.part_transform_preview_dto import _bounded
+    with _mapped_errors():
+        result = _bounded(deepcopy(result))
+    return _finish(entry, result["request_sequence"], result)
 
 
 def apply(value, *, family="deformation"):
@@ -437,8 +494,26 @@ def apply(value, *, family="deformation"):
     request_sha256 = digest(request.model_dump(mode="json"))
     entry, prepared = _claim(request, applying=True, family=family)
     proof_admitted = False
-    committing = False
+    transferred = False
     try:
+        if entry.numerical:
+            from backend.api import part_transform_preview_computation as numerical
+            with _mapped_errors():
+                _current(entry, request.request_sequence)
+                params = family_work.apply_params(family, prepared, request.params)
+                with state._lock:
+                    session = _source_current(entry)
+                    with _lock:
+                        _catalog_current(entry, request.request_sequence)
+                    admission = (permits.admit_organized_recipe(entry.doc, session,
+                        operation=f"{family}_preview", request_sha256=request_sha256)
+                        if session.design.group_organization is not None else None)
+                    captured = capture(session.design, preserve_entry_types=True)
+                del session
+                result = numerical.begin_apply(sys.modules[__name__], entry, captured,
+                    request, params, admission, request_sha256)
+                transferred = True
+                return result
         if not proof_slot.acquire(blocking=False):
             raise HTTPException(429, detail="A part history operation is already running")
         proof_admitted = True
@@ -473,43 +548,62 @@ def apply(value, *, family="deformation"):
                     _conflict("The original native feature identity is no longer unique")
                 candidate, _report = prepare_change(captured, captured, indices[0], check, params=params)
             check()
-            with state._lock:
-                session = _source_current(entry)
-                if monotonic() > deadline:
-                    raise HTTPException(408, detail="Recipe regeneration time limit")
-                with _lock:
-                    _catalog_current(entry, request.request_sequence)
-                    entry.phase = "committing"
-                    committing = True
-                # Reservation closes cancellation/supersession. No catalog
-                # lock spans preservation, native dependency checks or undo.
-                candidate = preserve_document_state(session.design, candidate)
-                state._assert_active_loadout_editable(session.design, candidate)
-                state._assert_photoproduct_dependencies(candidate)
-                # Preservation and dependency validation may consume the last
-                # allowance even for legacy sources without a publication permit.
-                if monotonic() > deadline:
-                    raise HTTPException(408, detail="Recipe regeneration time limit")
-                _source_current(entry)
-                with _lock:
-                    _catalog_current(entry, request.request_sequence)
-                permit = (permits.issue_organized_recipe_permit(admission, candidate,
-                    request_sha256=request_sha256, expires=min(deadline, entry.expires))
-                    if admission is not None else None)
-                revision = (publish_replacement(session, candidate, publication_permit=permit)
-                            if permit is not None else publish_replacement(session, candidate))
-                receipt = {**entry.request.model_dump(), "status": "applied",
-                           "lease_id": entry.lease_id, "design_id": candidate.id,
-                           "revision": revision, **entry.identity,
-                           "doc_id": entry.doc, "request_sequence": request.request_sequence}
-                with _lock:
-                    entry.source = ref(candidate)
-                    entry.publication = receipt
-                    entry.prepared = None
-                    entry.phase = "applied"
-                    if entry.expires <= monotonic() or entry.expired_during_commit:
-                        _remove(entry)
-            return dict(receipt)
+            return _publish(entry, request, candidate, deadline, admission, request_sha256)
+
+    finally:
+        with _lock:
+            if not transferred and entry.applying_sequence == request.request_sequence:
+                entry.applying_sequence = None
+        if proof_admitted:
+            proof_slot.release()
+        if not transferred:
+            _work_slot.release()
+
+
+def _publish(entry, request, candidate, deadline, admission, request_sha256, *, renew_receipt=False):
+    """The sole preview publication transaction, shared by both compute lanes."""
+    committing = False
+    try:
+        with state._lock:
+            session = _source_current(entry)
+            if monotonic() > deadline:
+                raise HTTPException(408, detail="Recipe regeneration time limit")
+            with _lock:
+                _catalog_current(entry, request.request_sequence)
+                entry.phase = "committing"
+                committing = True
+            # Reservation closes cancellation/supersession. No catalog
+            # lock spans preservation, native dependency checks or undo.
+            candidate = preserve_document_state(session.design, candidate)
+            state._assert_active_loadout_editable(session.design, candidate)
+            state._assert_photoproduct_dependencies(candidate)
+            # Preservation and dependency validation may consume the last
+            # allowance even for legacy sources without a publication permit.
+            if monotonic() > deadline:
+                raise HTTPException(408, detail="Recipe regeneration time limit")
+            _source_current(entry)
+            with _lock:
+                _catalog_current(entry, request.request_sequence)
+            permit = (permits.issue_organized_recipe_permit(admission, candidate,
+                request_sha256=request_sha256, expires=min(deadline, entry.expires))
+                if admission is not None else None)
+            revision = (publish_replacement(session, candidate, publication_permit=permit)
+                        if permit is not None else publish_replacement(session, candidate))
+            receipt = {**entry.request.model_dump(), "status": "applied",
+                       "lease_id": entry.lease_id, "design_id": candidate.id,
+                       "revision": revision, **entry.identity,
+                       "doc_id": entry.doc, "request_sequence": request.request_sequence}
+            with _lock:
+                entry.source = ref(candidate)
+                entry.publication = receipt
+                entry.prepared = None
+                entry.phase = "applied"
+                if renew_receipt:
+                    entry.payload = entry.failure = None
+                    _renew(entry, TTL_SECONDS)
+                elif entry.expires <= monotonic() or entry.expired_during_commit:
+                    _remove(entry)
+        return dict(receipt)
     except BaseException:
         if committing:
             with state._lock:
@@ -519,18 +613,16 @@ def apply(value, *, family="deformation"):
                              and session.revision == entry.request.expected_revision)
                 with _lock:
                     if _entries.get(entry.doc) is entry:
+                        if entry.publication is not None:
+                            # Canonical publication already succeeded. If a
+                            # receipt timer could not start, catalog pruning
+                            # still enforces its fixed scalar-retention deadline.
+                            return dict(entry.publication)
                         if unchanged and entry.expires > monotonic() and not entry.expired_during_commit:
                             entry.phase = "ready"
                         else:
                             _remove(entry)
         raise
-    finally:
-        with _lock:
-            if entry.applying_sequence == request.request_sequence:
-                entry.applying_sequence = None
-        if proof_admitted:
-            proof_slot.release()
-        _work_slot.release()
 
 
 def clear_for_testing():

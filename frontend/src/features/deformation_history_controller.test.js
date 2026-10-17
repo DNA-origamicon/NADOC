@@ -550,3 +550,160 @@ it('rejects an unsolicited evaluated placement upgrade without granting it draft
   expect(f.controller.getState().error).toBeInstanceOf(Error)
   await f.controller.apply(); expect(f.api.apply).not.toHaveBeenCalled()
 })
+
+const computationAck = (request, operation, extra = {}) => ({
+  ...Object.fromEntries(['preview_id', 'expected_design_id', 'expected_revision', 'feature_id'].map(key => [key, request[key]])),
+  doc_id: 'doc', lease_id: LEASE, family: 'transform', command_kind: 'cluster_op',
+  request_sequence: request.request_sequence ?? 0, status: operation === 'prepare' ? 'preparing' : 'applying',
+  computation: { version: 1, operation, request_sequence: request.request_sequence ?? 0,
+    elapsed_seconds: 0, remaining_seconds: 180 }, ...extra,
+})
+async function pollingFixture(request) {
+  const { createDeformationPreviewEndpoints } = await import('../api/deformation_preview_endpoints.js')
+  const api = createDeformationPreviewEndpoints({ request, family: 'transform' })
+  api.refreshCommitted = vi.fn(async () => ({ design: { id: 'part' }, revision: 8 }))
+  return transformFixture('cluster_op', api)
+}
+
+describe('numerical transform computation lifecycle', () => {
+  it('keeps a long Prepare private and starts the ready lease from the final status read', async () => {
+    let opening, reading
+    const held = deferred(), request = vi.fn(async (_method, path, body) => {
+      if (path.endsWith('/status')) { reading = body; return held.promise }
+      if (path.endsWith('/cancel')) return { status: 'cancelled', preview_id: PREVIEW }
+      opening = body; return computationAck(body, 'prepare')
+    })
+    const f = await pollingFixture(request), task = f.controller.open('feature')
+    await tick()
+    expect(f.controller.getState()).toMatchObject({ open: true, busy: 'prepare', projection: null,
+      computation: { operation: 'prepare', request_sequence: 0 } })
+    await vi.advanceTimersByTimeAsync(65000)
+    expect(f.controller.getState().expired).toBe(false)
+    // A status read started before a65s stall must not grant60 fresh seconds.
+    held.resolve({ ...computationAck(opening, 'prepare'), status: 'ready', remaining_seconds: 60,
+      result: transformPacket(opening) })
+    await task
+    expect(reading).toEqual({ ...opening, lease_id: LEASE })
+    expect(f.controller.getState().expired).toBe(true)
+    expect(f.applyPublished).not.toHaveBeenCalled()
+  })
+
+  it('a long computation followed by a fast final poll leaves a usable fresh ready lease', async () => {
+    let opening, finish = false
+    const request = vi.fn(async (_method, path, body) => {
+      if (path.endsWith('/cancel')) return { status: 'cancelled', preview_id: PREVIEW }
+      if (path.endsWith('/status')) return finish
+        ? { ...computationAck(opening, 'prepare'), status: 'ready', remaining_seconds: 60, result: transformPacket(opening) }
+        : computationAck(opening, 'prepare', { computation: { version: 1, operation: 'prepare', request_sequence: 0,
+          elapsed_seconds: 65, remaining_seconds: 115 } })
+      opening = body; return computationAck(body, 'prepare')
+    })
+    const f = await pollingFixture(request), task = f.controller.open('feature')
+    await vi.advanceTimersByTimeAsync(65000); finish = true
+    await vi.advanceTimersByTimeAsync(1000); expect(await task).toBeTruthy()
+    expect(f.controller.getState()).toMatchObject({ expired: false, busy: null, computation: null })
+    await vi.advanceTimersByTimeAsync(59000)
+    expect(f.controller.getState().expired).toBe(false)
+    expect(f.applyPublished).not.toHaveBeenCalled()
+  })
+
+  it('suspends idle expiry only after an accepted Apply computation and restores a fresh lease on known failure', async () => {
+    let appliedBody, finish = false
+    const request = vi.fn(async (_method, path, body) => {
+      if (path.endsWith('/cancel')) return { status: 'cancelled', preview_id: PREVIEW }
+      if (path.endsWith('/apply')) { appliedBody = body; return computationAck(body, 'apply') }
+      if (path.endsWith('/status')) return finish
+        ? { ...computationAck(appliedBody, 'apply'), status: 'ready', remaining_seconds: 60,
+          failure: { status: 422, detail: { code: 'missing_reference', detail: 'Downstream reference missing' } } }
+        : computationAck(appliedBody, 'apply')
+      return transformPacket(body)
+    })
+    const f = await pollingFixture(request); await f.controller.open('feature')
+    await vi.advanceTimersByTimeAsync(59000)
+    const task = f.controller.apply(); await tick()
+    expect(f.controller.getState().computation.operation).toBe('apply')
+    await vi.advanceTimersByTimeAsync(65000)
+    expect(f.controller.getState()).toMatchObject({ expired: false, busy: 'apply' })
+    finish = true; await vi.advanceTimersByTimeAsync(1000); await task
+    expect(f.controller.getState()).toMatchObject({ open: true, expired: false, computation: null,
+      publicationUnknown: false, error: { code: 'missing_reference' } })
+    await vi.advanceTimersByTimeAsync(59000); expect(f.controller.getState().expired).toBe(false)
+    expect(f.applyPublished).not.toHaveBeenCalled()
+    expect(request.mock.calls.filter(([, path]) => path.endsWith('/apply'))).toHaveLength(1)
+  })
+
+  it('invalid Apply acknowledgement cannot postpone the original editing expiry', async () => {
+    const request = vi.fn(async (_m, path, body) => path.endsWith('/apply')
+      ? computationAck(body, 'apply', { expected_revision: 999 }) : transformPacket(body))
+    const f = await pollingFixture(request); await f.controller.open('feature')
+    await vi.advanceTimersByTimeAsync(59000); await f.controller.apply()
+    await vi.advanceTimersByTimeAsync(1001)
+    expect(f.controller.getState()).toMatchObject({ expired: true, computation: null })
+    expect(f.applyPublished).not.toHaveBeenCalled()
+  })
+
+  it.each(['cancel', 'reset'])('%s while Prepare polls aborts immediately and ignores late output', async action => {
+    const held = deferred(); let opening
+    const request = vi.fn(async (_m, path, body) => {
+      if (path.endsWith('/cancel')) return { status: 'cancelled', preview_id: PREVIEW }
+      if (path.endsWith('/status')) return held.promise
+      opening = body; return computationAck(body, 'prepare')
+    })
+    const f = await pollingFixture(request), task = f.controller.open('feature')
+    await vi.advanceTimersByTimeAsync(1000)
+    if (action === 'reset') f.events.dispatchEvent(new Event('nadoc:document-reset'))
+    else await f.controller.cancel()
+    await task
+    expect(f.controller.getState()).toMatchObject({ open: false, computation: null, projection: null })
+    held.resolve({ ...computationAck(opening, 'prepare'), status: 'ready', remaining_seconds: 60, result: transformPacket(opening) })
+    await tick(); expect(f.controller.getState().open).toBe(false)
+    expect(f.applyPublished).not.toHaveBeenCalled()
+  })
+
+  it('polling failure leaves Apply unknown until exact Status resolves it, without recommitting', async () => {
+    let appliedBody, resolving = false
+    const request = vi.fn(async (_m, path, body, options) => {
+      if (path.endsWith('/apply')) { appliedBody = body; return computationAck(body, 'apply') }
+      if (path.endsWith('/status')) {
+        if (resolving) return transformReceipt(appliedBody)
+        options.onError(404, { code: 'unavailable' }); return null
+      }
+      return transformPacket(body)
+    })
+    const f = await pollingFixture(request); await f.controller.open('feature')
+    const task = f.controller.apply(); await vi.advanceTimersByTimeAsync(1000); await task
+    expect(f.controller.getState()).toMatchObject({ publicationUnknown: true, committed: null })
+    await f.controller.apply()
+    expect(request.mock.calls.filter(([, path]) => path.endsWith('/apply'))).toHaveLength(1)
+    resolving = true; await f.controller.resolvePublication()
+    expect(f.applyPublished).toHaveBeenCalledOnce()
+    expect(f.controller.getState()).toMatchObject({ open: false, publicationUnknown: false })
+  })
+})
+
+it('a missing Status response cannot clear an unresolved Apply or authorize recommitting', async () => {
+  const { DeformationPreviewRequestError } = await import('../api/deformation_preview_endpoints.js')
+  const f = await transformFixture('cluster_op', {
+    apply: vi.fn(async () => { throw new Error('Apply response lost') }),
+    status: vi.fn(async () => { throw new DeformationPreviewRequestError(404, 'Status unavailable') }),
+  })
+  await f.controller.open('feature'); await f.controller.apply()
+  const request = f.api.apply.mock.lastCall[0]
+  await f.controller.resolvePublication()
+  expect(f.controller.getState()).toMatchObject({ publicationUnknown: true, committed: null })
+  await f.controller.apply(); expect(f.api.apply).toHaveBeenCalledOnce()
+  f.api.status.mockResolvedValue(transformReceipt(request))
+  await f.controller.resolvePublication()
+  expect(f.applyPublished).toHaveBeenCalledOnce()
+  expect(f.controller.getState()).toMatchObject({ open: false, publicationUnknown: false })
+})
+
+it('charges local display validation time against the final response lease', async () => {
+  const request = vi.fn(async (_method, _path, body) => transformPacket(body, 'cluster_op', { remaining_seconds: 10 }))
+  const f = await pollingFixture(request)
+  f.validateDisplay.mockImplementationOnce(value => { vi.advanceTimersByTime(5000); return value })
+  await f.controller.open('feature')
+  await vi.advanceTimersByTimeAsync(5001)
+  expect(f.controller.getState().expired).toBe(true)
+  expect(f.applyPublished).not.toHaveBeenCalled()
+})

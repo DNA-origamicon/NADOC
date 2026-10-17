@@ -2058,3 +2058,49 @@ dry-run selects FAST and declares FULL deferred but executes no suite. Broad FAS
 also awaits mounted Archive scratch; prior broad debt remains. NOT VERIFIED IN APP:
 Archive is unavailable, all rollout gates remain false, and MV-52/FH-27 desktop,
 HTTP/render/lock/heap qualification remains open. Assemblies and VR stay deferred.
+
+
+## U23 — cancellable numerical movement lifecycle
+
+**20/38 complete;18 remaining (9 core,9 parked);+0 completed,+0 total.**
+U1–U23 are23 engineering checkpoints closing three milestones since B1. FH-23
+remains task-growth flagged after six; FH-18 after13. The full original exits,
+core priorities and denominator remain unchanged. See the
+[containment decision](remaining_standard_part_checkpoints.md#u23-containment-and-remaining-acceptance).
+
+The existing preview catalog now owns fixed numerical Prepare and Apply work.
+It keeps source/session/revision/policy and accepted-request checks through the
+existing supervisor, exact child-result decode and a shared atomic publication
+helper. Ordinary short paths retain their limits; only numerical transform
+histories use the existing180s ceiling. A successful Prepare or known Apply
+refusal starts a fresh60s editable lease; successful publication starts a separate
+60s scalar-receipt window. Polling never renews them. No second job registry,
+per-frame history proof, changed native solver or new publication bypass.
+
+The editor presents owned elapsed-time progress and Cancel/Escape before its
+controls exist and during Apply. Polling is finite, abortable and source-bound;
+local final-read timing includes display validation. Lost Apply/Status responses
+retain an unknown outcome until a validated status/receipt resolves it, without
+resubmission. ISSUE-133 pins sequence, busy-admission, timer-failure and recovery
+races. Retained output shares the existing whole-response bound and is retired
+on accepted edit/cancel/expiry. Child cleanup retains admission until release.
+
+Real empty-root CPD and duplex producer histories passed through host Prepare,
+three selected-only evaluations, Apply, one undo/redo, memory save/reload and an
+independent spawned cold proof. Captures exclude physical/recovery outputs;
+workers, shared-memory buffers, threads and timers are checked after teardown.
+Tiny CPD host Prepare/Apply measured41.60/41.23s; duplex1.65/1.32s. Controls-only
+selected samples were3.69ms and18.31ms; geometry-bearing samples include native
+projection and vary. These are software probes, not desktop responsiveness,
+scientific validity or representative HTTP/render/lock/heap qualification.
+
+[U23 evidence](validation_transform_numerical_lifecycle.json) records317 distinct
+focused backend passes and the full frontend9151 passes/one existing skip, plus
+red failures, fixture corrections and cleanup. Main.js
+remains7350 lines (delta0); molecular manifests, pins, constants and goldens are
+unchanged. NOT VERIFIED IN APP: Archive is absent, so browser/smoke/performance
+and broad backend scratch are deferred. Selector-only earns no suite credit;
+previous broad regression debt remains. Both transform rollout gates stay false.
+Numerical native gestures, arbitrary new-group movement and post-conversion
+extension upsert remain existing FH-23/FH-18 work. Desktop acceptance remains
+FH-27/MV-52. No completed milestone is added for this integration checkpoint.
