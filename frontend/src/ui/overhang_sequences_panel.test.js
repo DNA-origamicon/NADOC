@@ -14,6 +14,7 @@ vi.mock('./overhang_connections_panel.js', () => ({
   openConnectionForPair: vi.fn(),
 }))
 import { openConnectionForPair } from './overhang_connections_panel.js'
+import { makeDesign, makeReport, makeWarningReport, OA, OB } from '../test-helpers/hairpin_dimer_fixture.js'
 
 import {
   liveOverhangs,
@@ -297,9 +298,9 @@ describe('initOverhangSequencesPanel', () => {
     expect(document.getElementById('overhang-label-size-val').textContent).toBe('2.5')
   })
 
-  it('Gen button shows for empty/all-N OR connected overhangs (choice reachable)', () => {
+  it('Gen stays available for unconnected overhangs with or without sequences', async () => {
     mountDom()
-    // Two UNCONNECTED overhangs: one all-N (Gen shown), one sequenced (Gen hidden).
+    // QD-style handles need Gen even when already sequenced and unconnected.
     const deps = makeDeps({
       strands: [{ id: 's1' }, { id: 's2' }],
       overhangs: [
@@ -312,7 +313,24 @@ describe('initOverhangSequencesPanel', () => {
     const rows = [...document.getElementById('overhang-list').children].filter(c => c.dataset.strandId)
     const genOf = row => [...row.querySelectorAll('button')].find(b => b.textContent === 'Gen')
     expect(genOf(rows[0]).style.display).toBe('')       // all-N → shown
-    expect(genOf(rows[1]).style.display).toBe('none')   // sequenced + UNconnected → hidden
+    expect(genOf(rows[1]).style.display).toBe('')
+    genOf(rows[1]).click()
+    await vi.waitFor(() => expect(deps.api.generateOverhangRandomSequence).toHaveBeenCalledWith('o2'))
+  })
+
+  it('keeps Gen available with locked sub-domains and uses override-preserving generation', async () => {
+    mountDom()
+    const deps = makeDeps({ strands: [{ id: 's1' }], overhangs: [{
+      id: 'o1', strand_id: 's1', sequence: 'ACGT',
+      sub_domains: [{ id: 'sd1', length_bp: 2, start_bp_offset: 0, sequence_override: 'AC' }],
+    }] })
+    initOverhangSequencesPanel(deps)
+    document.getElementById('overhang-panel-heading').click()
+    const gen = [...document.querySelectorAll('#overhang-list button')].find(b => b.textContent === 'Gen')
+    expect(gen.style.display).toBe('')
+    gen.click()
+    await vi.waitFor(() => expect(deps.api.generateOverhangRandomSequence).toHaveBeenCalledWith('o1'))
+    expect(deps.api.patchOverhang).not.toHaveBeenCalled()
   })
 
   it('Gen button stays shown for a CONNECTED sequenced overhang (so the Gen choice is reachable)', () => {
@@ -387,6 +405,63 @@ describe('initOverhangSequencesPanel', () => {
     const r2 = rows.find(r => r.dataset.strandId === 's2')
     expect(r1.style.background).toBe('rgb(30, 58, 95)')   // #1e3a5f
     expect(r2.style.background).toBe('')
+  })
+
+  it('shows current overhang/linker warnings and opens the structure viewer without selecting the row', () => {
+    mountDom()
+    const deps = makeDeps(makeDesign())
+    initOverhangSequencesPanel(deps)
+    document.getElementById('overhang-panel-heading').click()
+    const row = document.querySelector(`[data-overhang-id="${OA}"]`)
+    const input = row.querySelector('input')
+    input.value = 'unfinished name'
+    deps.store.setState({ hairpinDimerReport: makeReport() })
+    const icon = row.querySelector('.hd-warn-icon--critical')
+    expect(icon).toBeTruthy()
+    expect(icon.title).toContain('hairpin Tm')
+    // The second OH's own check is clear, but its connected linker is flagged.
+    expect(document.querySelector(`[data-overhang-id="${OB}"] .hd-warn-icon`)).toBeTruthy()
+    expect(row.querySelector('input')).toBe(input)
+    expect(input.value).toBe('unfinished name')
+    icon.click()
+    expect(deps.selectionManager.selectOverhang).not.toHaveBeenCalled()
+    expect(document.querySelector('.hd-window__generate')).toBeTruthy()
+    expect(document.querySelector('.hd-window__subject').textContent).toContain('OH-A')
+    deps.store.setState({ hairpinDimerReport: makeWarningReport() })
+    expect(row.querySelector('.hd-warn-icon--warning')).toBeTruthy()
+    expect(document.querySelector(`[data-overhang-id="${OB}"] .hd-warn-icon`)).toBeNull()
+    deps.store.setState({ hairpinDimerReport: { ...makeReport(), design_id: 'other-design' } })
+    expect(document.querySelector('#overhang-list .hd-warn-icon')).toBeNull()
+  })
+
+  it.each(['overhang', 'strand'])('expands the list for a selected %s with an overhang', (kind) => {
+    mountDom()
+    const deps = makeDeps(DESIGN)
+    initOverhangSequencesPanel(deps)
+    deps.store.setState({ selection: { items: [{ kind, id: kind === 'overhang' ? 'o1' : 's1' }] } })
+    expect(document.getElementById('overhang-list').style.display).toBe('')
+    expect(document.querySelector('[data-overhang-id="o1"]')).toBeTruthy()
+  })
+
+  it('scrolls to the exact primary overhang even when another entry shares its staple', () => {
+    mountDom()
+    const deps = makeDeps({ strands: [{ id: 's1' }], overhangs: [
+      { id: 'o1', strand_id: 's1', label: 'A' }, { id: 'o2', strand_id: 's1', label: 'B' },
+    ] })
+    initOverhangSequencesPanel(deps)
+    document.getElementById('overhang-panel-heading').click()
+    const list = document.getElementById('overhang-list')
+    vi.spyOn(list, 'getBoundingClientRect').mockReturnValue({ top: 100 })
+    Object.defineProperty(list, 'clientHeight', { value: 100 })
+    const row = document.querySelector('[data-overhang-id="o2"]')
+    vi.spyOn(row, 'getBoundingClientRect').mockReturnValue({ top: 280, bottom: 310 })
+    const primary = { kind: 'overhang', id: 'o2' }
+    deps.store.setState({ selection: { items: [{ kind: 'strand', id: 's1' }, primary], primary } })
+    expect(list.scrollTop).toBe(110)
+    deps.store.setState({ hairpinDimerReport: makeReport() })
+    expect(list.scrollTop).toBe(110) // report updates must not move the list
+    deps.store.setState({ selection: { items: [] } })
+    expect(list.scrollTop).toBe(110)
   })
 
   it('rebuilds the list when currentDesign changes (while expanded)', () => {

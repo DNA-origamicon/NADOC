@@ -463,7 +463,8 @@ def test_generation_screen_includes_whole_staple_body_and_preserves_it():
     assert screen.apply(_rc(BENIGN)).find_strand("s_a").sequence == fixed + _rc(BENIGN)
 
 
-def test_gen_endpoint_retries_and_commits_matching_staple_and_linker(monkeypatch):
+def test_gen_endpoint_retries_and_commits_matching_staple_and_linker(monkeypatch, tmp_path):
+    import backend.api.assembly as assembly_api
     import backend.core.overhang_generator as generator
 
     d = _seed(seq_a=BENIGN, seq_b=_rc(BENIGN), linker_type="ss", bridge="TTTT")
@@ -483,8 +484,21 @@ def test_gen_endpoint_retries_and_commits_matching_staple_and_linker(monkeypatch
     linker = next(s for s in updated.strands if s.strand_type == StrandType.LINKER)
     assert linker.sequence == linker_strand_sequence(updated, linker)
 
+    # Exercise the actual autosave endpoint and reload the portable part file:
+    # storing the new OverhangSpec alone would leave exported staples stale.
+    monkeypatch.setattr(assembly_api, "_WORKSPACE_DIR", tmp_path)
+    saved = client.post(
+        "/api/design/save-workspace",
+        json={"path": "generated-part.nadoc", "overwrite": True},
+    )
+    assert saved.status_code == 200, saved.text
+    reloaded = Design.model_validate_json((tmp_path / "generated-part.nadoc").read_text())
+    assert reloaded.overhangs[0].sequence == _rc(BENIGN)
+    assert reloaded.find_strand("s_a").sequence == _rc(BENIGN)
+    assert reloaded.find_strand(linker.id).sequence == linker.sequence
 
-def test_gen_exhaustion_returns_422_without_mutation_or_random_fallback(monkeypatch):
+
+def test_gen_exhaustion_assigns_screened_candidate_with_warning(monkeypatch):
     import backend.core.overhang_generator as generator
 
     d = _seed(seq_a=BENIGN, seq_b=_rc(BENIGN), linker_type="ss", bridge="TTTT")
@@ -493,9 +507,40 @@ def test_gen_exhaustion_returns_422_without_mutation_or_random_fallback(monkeypa
     design_state.set_design(d)
     before = design_state.get_or_404()
     r = client.post(f"/api/design/overhang/{d.overhangs[0].id}/generate-random")
-    assert r.status_code == 422, r.text
-    assert "whole staple and connected linkers" in r.json()["detail"]
-    assert design_state.get_or_404() is before
+    assert r.status_code == 200, r.text
+    assert "Assigned the best screened sequence" in r.json()["sequence_generation_warnings"][0]
+    updated = design_state.get_or_404()
+    assert updated is not before
+    assert updated.overhangs[0].sequence == BENIGN
+    linker = next(s for s in updated.strands if s.strand_type == StrandType.LINKER)
+    assert linker.sequence == linker_strand_sequence(updated, linker)
+
+
+def test_best_candidate_scores_all_oligos_and_breaks_ties_by_total_excess(monkeypatch):
+    from backend.core.overhang_sequence_screen import OverhangSequenceScreen
+
+    d = _seed()
+    screen = OverhangSequenceScreen(d, d.overhangs[0])
+    monkeypatch.setattr(screen, "sequences", lambda candidate: (candidate, {"linker": candidate + "link"}))
+    tms = {"a": (31, 0), "alink": (50, 0),
+           "b": (35, 0), "blink": (40, 0),
+           "c": (32, 0), "clink": (40, 0)}
+    monkeypatch.setattr(screen, "_tms", lambda sequence: tms[sequence])
+    for candidate in ("a", "c", "b"):
+        assert not screen(candidate)
+    assert screen.best_candidate == "c"
+    assert screen.best_score == (10, 12)
+    assert "linker" in screen.best_failure
+
+
+def test_generation_failure_identifies_a_hairpin_in_the_unchanged_linker_arm():
+    from backend.core.overhang_sequence_screen import OverhangSequenceScreen
+
+    d = _seed(seq_a=BENIGN, seq_b=STRONG, linker_type="ss", bridge="TTTT")
+    screen = OverhangSequenceScreen(d, d.overhangs[0])
+    assert screen.fixed_linker_failures
+    assert "Unchanged bases in the connected linker" in screen.failure_message()
+    assert "other linker arm or bridge also needs editing" in screen.failure_message()
 
 
 def test_locked_sequence_is_screened_and_not_silently_overwritten():
@@ -571,7 +616,7 @@ def test_screened_fallback_can_find_safe_candidate_without_relaxing_constraints(
     assert result == [BENIGN]
 
 
-def test_bulk_generation_failure_is_atomic_with_locked_unsafe_overhang():
+def test_bulk_generation_warns_and_preserves_locked_unsafe_bases():
     d = _seed(seq_a=BENIGN, seq_b=STRONG)
     locked = (
         d.overhangs[1].sub_domains[0].model_copy(update={"sequence_override": STRONG})
@@ -585,10 +630,11 @@ def test_bulk_generation_failure_is_atomic_with_locked_unsafe_overhang():
         }
     )
     design_state.set_design(d)
-    before = design_state.get_or_404()
     r = client.post("/api/design/generate-overhang-sequences")
-    assert r.status_code == 422, r.text
-    assert design_state.get_or_404() is before
+    assert r.status_code == 200, r.text
+    assert r.json()["sequence_generation_warnings"]
+    assert r.json()["generated_count"] == 2
+    assert design_state.get_or_404().overhangs[1].sub_domains[0].sequence_override == STRONG
 
 
 def test_repeated_seed_candidates_do_not_exhaust_screen_before_random_search(monkeypatch):

@@ -43,6 +43,14 @@ describe('workspace save response synchronization', () => {
     expect(store.getState().validationReport).toEqual({ marker: 'before' })
   })
 
+  it('rejects a failed save instead of resolving as if the file were saved', async () => {
+    fetch.mockResolvedValueOnce({
+      ok: false, status: 409, headers: { get: () => null },
+      json: async () => ({ detail: 'The branch has a conflicting edit.' }),
+    })
+    await expect(saveDesignToWorkspace('part.nadoc')).rejects.toThrow('conflicting edit')
+  })
+
   it('also preserves object identity for an explicit save to the same path', async () => {
     const current = { id: 'same-id', strands: [], helices: [], metadata: {} }
     store.setState({ currentDesign: current })

@@ -4902,7 +4902,7 @@ export async function saveAssemblyToWorkspace(filename) {
 
 export async function saveDesignToWorkspace(path) {
   const json = await _request('POST', '/design/save-workspace', { path, overwrite: true })
-  if (!json) return null
+  if (!json) throw new Error(store.getState().lastError?.message ?? 'The part file could not be saved.')
   // A same-path save refreshes only the backend's identity_confirmed_at stamp.
   // Feeding that response back through currentDesign creates an autosave loop:
   // design ref changes → autosave → fresh timestamp/ref → autosave, and every

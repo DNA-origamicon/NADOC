@@ -105,6 +105,24 @@ describe('overhang connections — versions (Connect / Add version / Apply)', ()
     expect($('oconn-apply').disabled).toBe(false)
   })
 
+  it('deselects a version on blank panel/list space or scene deselection', () => {
+    store.setState(design([V('v1', true), V('v2', false)]))
+    for (const clear of [
+      () => $('oconn-list').click(),
+      () => $('oconn-body').click(),
+      () => store.setState({ selection: { items: [] } }),
+    ]) {
+      rows().find(r => r.textContent.includes('V2')).click()
+      expect(rows().some(r => r.classList.contains('is-selected'))).toBe(true)
+      expect($('oconn-details').hidden).toBe(false)
+      clear()
+      expect(rows().some(r => r.classList.contains('is-selected'))).toBe(false)
+      expect($('oconn-details').hidden).toBe(true)
+      expect($('oconn-select-a').value).toBe(A)
+      expect($('oconn-select-b').value).toBe(B)
+    }
+  })
+
   it('Unapply tears down the materialization + clears the applied flag', async () => {
     store.setState({ currentDesign: {
       overhangs: OHS, strands: [],

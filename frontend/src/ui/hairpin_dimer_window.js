@@ -11,6 +11,8 @@
 import { createModal } from './primitives/modal.js'
 import { createButton } from './primitives/button.js'
 import { dimerSvg, hairpinSvg } from './hairpin_dimer_structure.js'
+import { generateOverhangRandomSequence, checkHairpinDimer } from '../api/overhang_endpoints.js'
+import { showToast } from './toast.js'
 import {
   HAIRPIN_DIMER_COLORS,
   HAIRPIN_DIMER_SEVERE_C,
@@ -39,6 +41,11 @@ function _section(check, { nameOf, threshold, severe }) {
   head.textContent = hairpinDimerSubject(check, nameOf)
     + (check.status === 'partial' ? ' — N bases not evaluated' : '')
   wrap.appendChild(head)
+  if (!hairpinDimerHits(check, threshold).length) {
+    const clear = document.createElement('div')
+    clear.textContent = 'No secondary structure above the screening threshold.'
+    wrap.appendChild(clear)
+  }
   for (const { label, hit } of hairpinDimerHits(check, threshold)) {
     const critical = hit.tm > severe
     const cap = document.createElement('div')
@@ -79,6 +86,63 @@ export function openHairpinDimerWindow({ checks, title, nameOf, conditions, thre
   body.className = 'hd-window__body'
   body.style.cssText = 'max-height:72vh;overflow:auto'
   for (const check of checks ?? []) body.appendChild(_section(check, { nameOf, threshold: t, severe: sv }))
+  // Check records carry their overhang IDs regardless of where the window was
+  // opened (3D marker, plates, either spreadsheet, or Connections sidebar).
+  const ids = [...new Set((checks ?? []).flatMap(check => check.overhang_ids ?? []))]
+  const target = document.createElement('select')
+  target.className = 'hd-window__generate-target'
+  target.setAttribute('aria-label', 'Overhang to regenerate')
+  for (const id of ids) {
+    const option = document.createElement('option')
+    option.value = id
+    option.textContent = nameOf?.(id) || id
+    target.appendChild(option)
+  }
+  if (ids.length > 1) body.appendChild(target)
+  const status = document.createElement('div')
+  status.className = 'hd-window__generation-status'
+  status.setAttribute('role', 'status')
+  body.appendChild(status)
+  const generate = createButton({
+    label: 'Generate new sequence', className: 'hd-window__generate',
+    disabled: !ids.length,
+    title: ids.length ? 'Regenerate the selected overhang and recheck its structures'
+      : 'This structure has no editable overhang sequence.',
+    onClick: async () => {
+      const id = target.value
+      if (!id || generate.disabled) return
+      generate.disabled = true
+      target.disabled = true
+      status.textContent = 'Generating and screening a new sequence…'
+      try {
+        const generated = await generateOverhangRandomSequence(id)
+        if (!generated) throw new Error('Sequence generation did not complete.')
+        if (_current !== modal) return
+        // Do not leave drawings of the old sequence visible after it changes.
+        body.querySelectorAll('.hd-window__check').forEach(el => el.remove())
+        status.textContent = 'Sequence generated. Updating structure checks…'
+        const report = await checkHairpinDimer({
+          overhang_ids: ids,
+          strand_ids: [...new Set((checks ?? []).map(c => c.strand_id).filter(Boolean))],
+        })
+        if (_current !== modal) return
+        if (!report?.checks) throw new Error('Sequence generated, but structure checks could not be refreshed.')
+        const keys = new Set((checks ?? []).map(c => c.key))
+        const sections = report.checks.filter(c => keys.has(c.key)).map(c => _section(c, {
+          nameOf, threshold: report.threshold_c ?? t, severe: report.severe_threshold_c ?? sv,
+        }))
+        body.prepend(...sections)
+        status.textContent = 'New sequence generated. Structure checks updated.'
+      } catch (err) {
+        if (_current !== modal) return
+        status.textContent = err?.message ?? String(err)
+        showToast(status.textContent, { severity: 'error' })
+      } finally {
+        generate.disabled = !ids.length
+        target.disabled = false
+      }
+    },
+  })
   const foot = document.createElement('div')
   foot.className = 'hd-window__conditions'
   foot.style.cssText = 'font-size:11px;color:var(--color-text-muted,#8b949e)'
@@ -89,7 +153,7 @@ export function openHairpinDimerWindow({ checks, title, nameOf, conditions, thre
     size: 'lg',
     body,
     className: 'hd-window',
-    actions: [createButton({ label: 'Close', onClick: () => modal.close() })],
+    actions: [generate, createButton({ label: 'Close', onClick: () => modal.close() })],
     onClose: () => { if (_current === modal) _current = null },
   })
   _current = modal

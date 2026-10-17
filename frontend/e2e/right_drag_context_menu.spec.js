@@ -1,0 +1,42 @@
+import { expect, test } from '@playwright/test'
+
+test('orbit release over a quantum dot does not open its menu or leave orbit active', async ({ page }) => {
+  test.setTimeout(90_000)
+  await page.goto('/')
+  await page.locator('.menu-item').filter({ hasText: 'File' }).first().hover()
+  await page.click('#menu-file-new')
+  await page.fill('#new-design-name', '__e2e__right_drag_qd')
+  await page.getByRole('button', { name: 'Create', exact: true }).click()
+  await expect(page.locator('#welcome-screen')).not.toBeVisible()
+  await page.waitForFunction(() => Boolean(window.__nadocTest?.nanoparticles))
+  await page.evaluate(() => window.__nadocTest.nanoparticles.createQuantumDot('nn-hecz-600', 9.5))
+  await expect.poll(() => page.evaluate(() => window.__nadocTest.nanoparticles.rendered().length)).toBe(1)
+  await page.keyboard.press('Escape')
+  const id = await page.evaluate(() => window.__nadocTest.nanoparticles.rendered()[0].id)
+  await page.evaluate(() => window.__nadocTest.applyCameraPoseForTest({ position: [0, 0, 50], target: [0, 0, 0] }))
+  const point = await page.evaluate(id => window.__nadocTest.nanoparticles.screenPosition(id), id)
+  const camera = () => page.evaluate(() => window.__nadocTest.viewerDiagnostic().camera.position)
+  const before = await camera()
+  await page.mouse.move(point.x + 130, point.y)
+  await page.mouse.down({ button: 'right' })
+  await page.mouse.move(point.x, point.y, { steps: 12 })
+  // The final position really hits the dot, rather than passing because the
+  // ray missed it after the camera moved.
+  expect(await page.evaluate(point => window.__nadocTest.nanoparticles.hitAt(point), point)).toMatchObject({ id })
+  await page.mouse.up({ button: 'right' })
+  await expect(page.locator('.nanoparticle-context-menu')).toHaveCount(0)
+  await expect(page.locator('.context-menu:visible')).toHaveCount(0)
+  expect(await camera()).not.toEqual(before)
+  // Let normal camera damping settle, then verify unpressed motion cannot orbit.
+  await page.waitForTimeout(1000)
+  const released = await camera()
+  await page.mouse.move(point.x + 90, point.y + 70, { steps: 8 })
+  const after = await camera()
+  expect(Math.hypot(...after.map((v, i) => v - released[i]))).toBeLessThan(0.01)
+  expect(await page.evaluate(() => window.__nadocTest.controlsEnabled())).toBe(true)
+
+  const current = await page.evaluate(id => window.__nadocTest.nanoparticles.screenPosition(id), id)
+  await page.mouse.click(current.x, current.y, { button: 'right' })
+  await expect(page.locator('.nanoparticle-context-menu')).toBeVisible()
+  await expect(page.locator('.nanoparticle-context-menu')).toContainText('Edit scene diameter')
+})

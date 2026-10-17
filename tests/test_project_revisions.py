@@ -118,6 +118,20 @@ def test_stale_embedded_branch_pointer_is_divergence(tmp_path):
         store.materialize_loadouts(stale)
 
 
+def test_portable_file_without_revision_sidecar_can_save_new_edits(tmp_path):
+    original = refresh_active_revision(tmp_path / "source", _design())
+    changed = original.model_copy(update={
+        "metadata": original.metadata.model_copy(update={"description": "new sequence edit"}),
+    })
+    destination = tmp_path / "destination"
+    saved = refresh_active_revision(destination, changed)
+    store = ProjectRevisionStore(destination)
+    head = store.branch_head(saved.id, "main")
+    assert head == saved.loadouts[0].head_revision_id
+    assert store.load_design(saved.id, head).metadata.description == "new sequence edit"
+    assert refresh_active_revision(destination, saved).loadouts[0].head_revision_id == head
+
+
 def test_refresh_active_revision_advances_history_and_updates_embedded_fallback(tmp_path):
     migrated = ProjectRevisionStore(tmp_path).materialize_loadouts(_design())
     old_head = migrated.loadouts[0].head_revision_id

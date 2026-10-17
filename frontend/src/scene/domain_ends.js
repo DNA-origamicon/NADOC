@@ -18,6 +18,7 @@
  */
 
 import * as THREE from 'three'
+import { deferrableContextMenu } from './right_click_menu.js'
 import { store }  from '../state/store.js'
 import { BDNA_RISE_PER_BP, CADNANO_TRACK_OFFSET } from '../constants.js'
 
@@ -583,7 +584,8 @@ export function initDomainEnds(scene, camera, canvas, {
   canvas.addEventListener('pointermove', _onPointerMove)
   canvas.addEventListener('pointerdown', _onPointerDown, { capture: true })
   canvas.addEventListener('pointerup',   _onPointerUp,   { capture: true })
-  canvas.addEventListener('contextmenu', _onContextMenu, { capture: true })
+  const contextMenuHandler = deferrableContextMenu(canvas, _onContextMenu, { capture: true })
+  canvas.addEventListener('contextmenu', contextMenuHandler, { capture: true })
 
   // ── Store subscription ─────────────────────────────────────────────────────────
 
@@ -926,7 +928,7 @@ export function initDomainEnds(scene, camera, canvas, {
       canvas.removeEventListener('pointermove', _onPointerMove)
       canvas.removeEventListener('pointerdown', _onPointerDown, { capture: true })
       canvas.removeEventListener('pointerup',   _onPointerUp,   { capture: true })
-      canvas.removeEventListener('contextmenu', _onContextMenu, { capture: true })
+      canvas.removeEventListener('contextmenu', contextMenuHandler, { capture: true })
       for (const { ringMesh, hitMesh, labelSprite } of _ends) {
         ringMesh.material.dispose()
         hitMesh.material.dispose()

@@ -39,6 +39,9 @@ class OverhangSequenceScreen:
         self.max_candidates = max_candidates
         self.attempts = 0
         self.last_failure = ""
+        self.best_candidate = None
+        self.best_score = None
+        self.best_failure = ""
         self.overhangs = {o.id: o for o in design.overhangs}
         self.bp_bases = build_overhang_bp_bases(design)
         self.loop_skips = _build_loop_skip_map(design)
@@ -77,6 +80,7 @@ class OverhangSequenceScreen:
         # structure type against its own fixed-body baseline, with the variable
         # overhang masked out; never grandfather the old overhang's structures.
         self.limits = {}
+        self.fixed_linker_failures = []
         _, fixed = self.sequences(
             "N" * (abs(self.backing.end_bp - self.backing.start_bp) + 1)
         )
@@ -85,6 +89,12 @@ class OverhangSequenceScreen:
                 self.limits[strand.id] = tuple(
                     max(self.threshold_c, tm) for tm in self._tms(fixed[strand.id])
                 )
+            else:
+                for kind, tm in zip(("hairpin", "self-dimer"), self._tms(fixed[strand.id])):
+                    if tm > self.threshold_c:
+                        self.fixed_linker_failures.append(
+                            f"{strand.id}: {kind} Tm {tm:.1f} °C"
+                        )
 
     def _sequence_tms(self, sequence):
         return tuple(
@@ -144,6 +154,8 @@ class OverhangSequenceScreen:
             raise SequenceGenerationError(self.failure_message())
         self.attempts += 1
         overhang, strands = self.sequences(candidate)
+        excesses = []
+        failures = []
         for label, sequence in [
             (f"overhang {self.spec.id}", overhang),
             *strands.items(),
@@ -152,19 +164,44 @@ class OverhangSequenceScreen:
             for kind, tm, limit in zip(
                 ("hairpin", "self-dimer"), self._tms(sequence), limits
             ):
+                excesses.append(max(0.0, tm - limit))
                 if tm > limit:
-                    self.last_failure = (
+                    failures.append((tm - limit,
                         f"{label}: {kind} Tm {tm:.1f} °C (limit {limit:.1f} °C)"
-                    )
-                    return False
-        return True
+                    ))
+        # Minimise the worst excess first, then the total excess across all
+        # affected oligos. Score every structure, including the connected linker,
+        # rather than selecting whichever candidate failed the first check least.
+        score = (max(excesses, default=0.0), sum(excesses))
+        self.last_failure = max(failures, default=(0, ""))[1]
+        if self.best_score is None or score < self.best_score:
+            self.best_candidate = candidate
+            self.best_score = score
+            self.best_failure = self.last_failure
+        return not failures
+
+    def fallback_warning(self):
+        return (
+            f"{self.spec.label or self.spec.id}: no candidate passed the "
+            f"{self.threshold_c:g} °C hairpin/self-dimer screen after "
+            f"{self.attempts} candidates. Assigned the best screened sequence "
+            f"(lowest worst excess, then total excess). Remaining concern: "
+            f"{self.best_failure}. Review the structure warnings."
+        )
 
     def failure_message(self):
+        fixed_hint = (
+            " Unchanged bases in the connected linker already exceed the cutoff "
+            "with this overhang masked out: " + "; ".join(self.fixed_linker_failures)
+            + ". This Gen button changes only one overhang; the other linker arm "
+            "or bridge also needs editing."
+        ) if self.fixed_linker_failures else ""
         return (
             f"No overhang sequence passed the {self.threshold_c:g} °C hairpin/self-dimer "
             f"screen for the whole staple and connected linkers after {self.attempts} candidates. "
             f"{self.last_failure}. Fixed staple bases, locked sub-domains, the other linker arm "
             "or bridge may prevent a solution; edit those sequences or regenerate the other arm."
+            + fixed_hint
         )
 
     def apply(self, candidate):

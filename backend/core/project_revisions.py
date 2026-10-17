@@ -537,7 +537,11 @@ class ProjectRevisionStore:
             if loadout.head_revision_id and head == loadout.head_revision_id:
                 migrated.append(loadout)
                 continue
-            if loadout.head_revision_id and head != loadout.head_revision_id:
+            # A portable .nadoc includes its loadout snapshots, but the local
+            # revision sidecar may not have travelled with it. With no local
+            # branch, seed it from that embedded snapshot below. Only an
+            # existing, different local head represents a competing edit.
+            if loadout.head_revision_id and head is not None and head != loadout.head_revision_id:
                 # Two autosaves may start from the same embedded head.  If the
                 # winner only persisted the exact embedded fallback snapshot,
                 # adopting its head is safe and makes the operation idempotent.

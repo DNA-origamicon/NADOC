@@ -7229,9 +7229,8 @@ def generate_sub_domain_random(
     matching them. The target's old override (if any) is dropped before the
     re-roll.
 
-    Blocks (422) when the target already has an active ``hairpin_warning`` or
-    ``dimer_warning`` — clear those upstream first (e.g. tweak the parent or
-    a neighbour) so we don't blindly regenerate into the same trap.
+    Existing structure warnings do not block regeneration. If no candidate
+    passes the screen, assign the best evaluated candidate with a warning.
 
     Body: ``{seed?: int}``. When present, seeds ``random`` for reproducible
     generation in tests / for record-and-replay.
@@ -7249,16 +7248,6 @@ def generate_sub_domain_random(
             404,
             detail=(
                 f"Sub-domain {sub_domain_id!r} not found on overhang {overhang_id!r}."
-            ),
-        )
-
-    # 1. Block on existing warnings — user should fix those first.
-    if sd.hairpin_warning or sd.dimer_warning:
-        raise HTTPException(
-            422,
-            detail=(
-                f"Sub-domain {sd.name!r} has an active hairpin/dimer warning; "
-                f"resolve it before regenerating."
             ),
         )
 
@@ -7287,8 +7276,8 @@ def generate_sub_domain_random(
         _random.seed(int(body.seed))
 
     # Screen the complete oligos with the neighbours locked, not just the
-    # variable fragment; no candidate is committed until every screen passes.
-    full_seq, _ = _generated_sequence(
+    # variable fragment. Exhaustion assigns the best candidate with a warning.
+    full_seq, _, warning = _generated_sequence(
         design, spec.model_copy(update={"sub_domains": temp_sub_doms}),
         sum(s.length_bp for s in temp_sub_doms),
     )
@@ -7358,6 +7347,7 @@ def generate_sub_domain_random(
     return {
         **_design_response(updated, report),
         "sub_domain": (cur_sd or new_sd).model_dump(),
+        "sequence_generation_warnings": [warning] if warning else [],
     }
 
 

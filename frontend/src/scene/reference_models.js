@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { deferrableContextMenu } from './right_click_menu.js'
 import { STLLoader } from 'three/addons/loaders/STLLoader.js'
 import { setReferenceOpacity } from './reference_material.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
@@ -129,7 +130,7 @@ export function initReferenceModels({ scene, camera, canvas, controls, onImporte
   canvas.addEventListener('pointerdown', e => {
     gizmoGesture = e.button === 0 && !!tc.axis
     down = { x: e.clientX, y: e.clientY, mesh: hit(e) }
-    consumed = !!down.mesh && (e.button === 2 || !tc.axis)
+    consumed = !!down.mesh && e.button !== 2 && !tc.axis
     if (consumed) { controls.enabled = false; e.stopImmediatePropagation() }
   }, true)
   canvas.addEventListener('pointerup', e => {
@@ -142,7 +143,10 @@ export function initReferenceModels({ scene, camera, canvas, controls, onImporte
   canvas.addEventListener('pointerup', e => { if (gizmoGesture) { gizmoGesture = false; e.stopImmediatePropagation() } })
   canvas.addEventListener('pointercancel', () => { consumed = gizmoGesture = false; controls.enabled = true })
   canvas.addEventListener('click', e => { if (hit(e) || tc.axis) e.stopImmediatePropagation() }, true)
-  canvas.addEventListener('contextmenu', e => { if (hit(e)) { e.preventDefault(); e.stopImmediatePropagation(); if (!(e.buttons & 2)) { select(hit(e)); context(e) } } }, true)
+  canvas.addEventListener('contextmenu', deferrableContextMenu(canvas, e => {
+    const mesh = hit(e)
+    if (mesh) { e.stopImmediatePropagation(); select(mesh); context(e) }
+  }), true)
   window.addEventListener('keydown', e => {
     if (colorPopup?.isOpen()) return
     if (!selected || /INPUT|TEXTAREA|SELECT/.test(e.target?.tagName) || e.target?.isContentEditable) return

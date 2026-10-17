@@ -315,6 +315,17 @@ describe('initAutosaveSync', () => {
     expect(deps.api.saveDesignToWorkspace).toHaveBeenCalledOnce()
   })
 
+  it.each(['rejection', 'empty response'])('shows save error, never saved, after %s', async (failure) => {
+    const { store, deps } = makeAutosaveDeps({ deps: { getWorkspacePath: () => '/ws/d.nadoc' } })
+    if (failure === 'rejection') deps.api.saveDesignToWorkspace.mockRejectedValueOnce(new Error('conflict'))
+    else deps.api.saveDesignToWorkspace.mockResolvedValueOnce(null)
+    initAutosaveSync(deps)
+    store._emitSlice('design', { currentDesign: { id: 'd1' } })
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(deps.syncBadge.setSyncStatus).toHaveBeenLastCalledWith('red', 'save error')
+    expect(deps.syncBadge.setSyncStatus).not.toHaveBeenCalledWith('green', 'saved')
+  })
+
   it('part-edit context routes to savePartToAssembly (900ms, silent), not a workspace save', async () => {
     const { store, deps } = makeAutosaveDeps({
       deps: { getPartEditContext: () => ({ instanceId: 'i1' }), getWorkspacePath: () => '/ws/d.nadoc' },

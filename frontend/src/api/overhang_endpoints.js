@@ -4,6 +4,13 @@
 
 import { _request, _syncFromDesignResponse } from './client.js'
 import { store } from '../state/store.js'
+import { showToast } from '../ui/toast.js'
+
+function _showGenerationWarnings(json) {
+  if (json?.sequence_generation_warnings?.length) {
+    showToast(json.sequence_generation_warnings.join('\n'), { severity: 'warning', duration: 12000 })
+  }
+}
 
 // Listeners told which overhangs just received a GENERATED sequence (single,
 // sub-domain or bulk generate) — the hairpin/dimer checker re-checks exactly those.
@@ -77,6 +84,7 @@ export async function generateOverhangRandomSequence(overhangId, { deferReassign
   // a full GET /design/geometry; on deformed designs that also recomputes the
   // embedded straight geometry, making a sequence-only edit take several seconds.
   const ok = await _syncFromDesignResponse(json, { skipGeometry: true })
+  _showGenerationWarnings(json)
   if (json) _emitGenerated([overhangId])
   return ok
 }
@@ -193,6 +201,7 @@ export async function generateAllOverhangSequences() {
   const json = await _request('POST', '/design/generate-overhang-sequences')
   if (!json) return null
   const ok = await _syncFromDesignResponse(json)
+  _showGenerationWarnings(json)
   _emitGenerated(json.generated_overhang_ids ?? [])
   return { ok, count: json.generated_count ?? 0 }
 }
@@ -248,6 +257,7 @@ export async function generateSubDomainRandom(overhangId, subDomainId, { seed } 
     body,
   )
   const ok = await _syncFromDesignResponse(json)
+  _showGenerationWarnings(json)
   if (json) _emitGenerated([overhangId])
   return ok
 }

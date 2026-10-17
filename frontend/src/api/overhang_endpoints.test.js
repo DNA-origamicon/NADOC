@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('../ui/toast.js', () => ({ showToast: vi.fn() }))
+import { showToast } from '../ui/toast.js'
 
 import {
   connectDuplex,
@@ -57,6 +59,20 @@ describe('overhang sequence endpoints', () => {
       expect(store.getState().currentDesign).toBe(before)
       expect(generated).not.toHaveBeenCalled()
     } finally { unsubscribe() }
+  })
+
+  it('commits a best-effort sequence and displays the returned warning', async () => {
+    const warning = 'Assigned the best screened sequence. Remaining hairpin Tm 41 °C.'
+    global.fetch = vi.fn(async () => ({
+      ok: true, status: 200, headers: { get: () => null },
+      json: async () => ({
+        design: { id: 'after', helices: [], strands: [], overhangs: [{ id: 'oh1', sequence: 'ACGT' }] },
+        validation: {}, sequence_generation_warnings: [warning],
+      }),
+    }))
+    await generateOverhangRandomSequence('oh1')
+    expect(store.getState().currentDesign.overhangs[0].sequence).toBe('ACGT')
+    expect(showToast).toHaveBeenCalledWith(warning, { severity: 'warning', duration: 12000 })
   })
 
   it('keeps Connect intermediate mutations geometry-free', async () => {

@@ -204,7 +204,8 @@ export function initAutosaveSync({
       _selfSavedPaths.add(path)
       nadocBroadcast.emit('file-saved', { path })   // tell sibling tabs to skip the SSE reload echo
       try {
-        await api.saveDesignToWorkspace(path)
+        const saved = await api.saveDesignToWorkspace(path)
+        if (!saved) throw new Error('The part file could not be saved.')
         syncBadge.setSyncStatus('green', 'saved')
         setTimeout(() => _selfSavedPaths.delete(path), 5000)
       } catch (err) {

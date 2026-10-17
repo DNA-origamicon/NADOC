@@ -515,12 +515,9 @@ export function initDomainDesignerPanel(rootEl, { store, api, pathview }) {
     const genBtn = document.createElement('button')
     genBtn.className = 'dd-ann-generate'
     genBtn.textContent = 'Gen this sub-domain'
-    _applyGenButtonState(genBtn, sd)
+    _applyGenButtonState(genBtn)
     genBtn.addEventListener('click', () => {
-      const cur = _focusedSubDomain() ?? sd
-      const blocked = !!(cur.hairpin_warning || cur.dimer_warning)
-      _debug('gen click', sd.id, 'disabled=', blocked)
-      if (!blocked) api.generateSubDomainRandom?.(ovhg.id, sd.id, {})
+      api.generateSubDomainRandom?.(ovhg.id, sd.id, {})
     })
     annEl.appendChild(genBtn)
   }
@@ -541,7 +538,7 @@ export function initDomainDesignerPanel(rootEl, { store, api, pathview }) {
     const warnEl = annEl.querySelector('.dd-ann-warnings')
     if (warnEl) _applyWarningBanner(warnEl, sd, ovhg)
     const genBtn = annEl.querySelector('.dd-ann-generate')
-    if (genBtn) _applyGenButtonState(genBtn, sd)
+    if (genBtn) _applyGenButtonState(genBtn)
     // Sequence-override length hint may move after a split.
     const seqHeader = annEl.querySelector('.dd-ann-seq-header')
     if (seqHeader) seqHeader.textContent = `Sequence override (${sd.length_bp} bp)`
@@ -583,17 +580,14 @@ export function initDomainDesignerPanel(rootEl, { store, api, pathview }) {
     }
   }
 
-  function _applyGenButtonState(btn, sd) {
-    const isBlocked = !!(sd.hairpin_warning || sd.dimer_warning)
-    btn.disabled = isBlocked
+  function _applyGenButtonState(btn) {
+    btn.disabled = false
     btn.style.cssText = (
-      'padding:6px 12px;background:' + (isBlocked ? '#3a3f47' : '#238636')
+      'padding:6px 12px;background:#238636'
       + ';border:none;border-radius:3px;color:#fff;font-family:monospace;'
-      + 'font-size:11px;cursor:' + (isBlocked ? 'not-allowed' : 'pointer')
+      + 'font-size:11px;cursor:pointer'
     )
-    btn.title = isBlocked
-      ? 'Resolve the active hairpin/dimer warning first.'
-      : ''
+    btn.title = 'Generate a sequence; if screening fails, use the best candidate with a warning.'
   }
 
 

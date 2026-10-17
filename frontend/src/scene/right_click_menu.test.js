@@ -1,88 +1,100 @@
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { deferrableContextMenu } from './right_click_menu.js'
 
-// Minimal fake canvas: records listeners so the test can dispatch synthetic events
-// deterministically without a real DOM.
-function makeCanvas() {
-  const listeners = new Map() // `${type}:${capture}` -> Set<fn>
-  const key = (type, capture) => `${type}:${!!capture}`
-  return {
-    listeners,
-    addEventListener(type, fn, opts) {
-      const cap = typeof opts === 'object' ? !!opts.capture : !!opts
-      const k = key(type, cap)
-      if (!listeners.has(k)) listeners.set(k, new Set())
-      listeners.get(k).add(fn)
-    },
-    removeEventListener(type, fn, opts) {
-      const cap = typeof opts === 'object' ? !!opts.capture : !!opts
-      listeners.get(key(type, cap))?.delete(fn)
-    },
-    dispatch(type, ev, capture = false) {
-      for (const fn of listeners.get(key(type, capture)) ?? []) fn(ev)
-    },
-    count(type, capture = false) {
-      return listeners.get(key(type, capture))?.size ?? 0
-    },
+afterEach(() => { window.dispatchEvent(new Event('blur')); document.body.replaceChildren() })
+
+function setup({ capture = false } = {}) {
+  const canvas = document.createElement('canvas')
+  document.body.appendChild(canvas)
+  const body = vi.fn(e => e.stopPropagation())
+  canvas.addEventListener('contextmenu', deferrableContextMenu(canvas, body, { capture }), capture)
+  const fire = (type, options = {}, target = canvas) => {
+    const event = new MouseEvent(type, {
+      bubbles: true, cancelable: true, button: 2, buttons: type === 'pointerup' ? 0 : 2,
+      clientX: 20, clientY: 20, ...options,
+    })
+    target.dispatchEvent(event)
+    return event
   }
+  return { canvas, body, fire }
 }
 
-const ctxEvent = ({ buttons }) => ({ buttons, preventDefault: vi.fn() })
-
 describe('deferrableContextMenu', () => {
-  it('runs the body immediately when the button is already released (Windows/mac)', () => {
-    const canvas = makeCanvas()
-    const body = vi.fn()
-    const handler = deferrableContextMenu(canvas, body)
-
-    const e = ctxEvent({ buttons: 0 }) // released at contextmenu time
-    handler(e)
-
-    expect(e.preventDefault).toHaveBeenCalledOnce()
-    expect(body).toHaveBeenCalledOnce()
-    expect(body).toHaveBeenCalledWith(e)
-    expect(canvas.count('pointerup')).toBe(0) // no deferral registered
+  it('opens a release-time right-click menu', () => {
+    const { body, fire } = setup()
+    fire('pointerdown')
+    fire('pointerup')
+    const e = fire('contextmenu', { buttons: 0 })
+    expect(e.defaultPrevented).toBe(true)
+    expect(body).toHaveBeenCalledExactlyOnceWith(e)
   })
 
-  it('defers to pointerup when the right button is still held (Linux press-time)', () => {
-    const canvas = makeCanvas()
-    const body = vi.fn()
-    const handler = deferrableContextMenu(canvas, body)
-
-    const e = ctxEvent({ buttons: 2 }) // right button still down
-    handler(e)
-
-    expect(e.preventDefault).toHaveBeenCalledOnce()
-    expect(body).not.toHaveBeenCalled() // nothing shown at press time
-    expect(canvas.count('pointerup')).toBe(1)
-
-    const up = { clientX: 40, clientY: 12 }
-    canvas.dispatch('pointerup', up)
-
-    expect(body).toHaveBeenCalledOnce()
-    expect(body).toHaveBeenCalledWith(up) // body sees the release position
-    expect(canvas.count('pointerup')).toBe(0)      // listener cleaned up
-    expect(canvas.count('pointercancel')).toBe(0)
-  })
-
-  it('cancels the deferral without running the body on pointercancel', () => {
-    const canvas = makeCanvas()
-    const body = vi.fn()
-    const handler = deferrableContextMenu(canvas, body)
-
-    handler(ctxEvent({ buttons: 2 }))
-    canvas.dispatch('pointercancel', {})
-
+  it.each([false, true])('defers a press-time menu until release finishes (capture=%s)', async capture => {
+    const { canvas, body, fire } = setup({ capture })
+    const orbitRelease = vi.fn()
+    canvas.addEventListener('pointerup', orbitRelease)
+    fire('pointerdown')
+    fire('contextmenu')
     expect(body).not.toHaveBeenCalled()
-    expect(canvas.count('pointerup')).toBe(0)
-    expect(canvas.count('pointercancel')).toBe(0)
+    fire('pointerup')
+    expect(orbitRelease).toHaveBeenCalledOnce()
+    expect(body).not.toHaveBeenCalled()
+    await Promise.resolve()
+    expect(body).toHaveBeenCalledOnce()
+    expect(body.mock.calls[0][0].type).toBe('contextmenu')
   })
 
-  it('registers deferred listeners in the requested phase', () => {
-    const canvas = makeCanvas()
-    const handler = deferrableContextMenu(canvas, vi.fn(), { capture: true })
-    handler(ctxEvent({ buttons: 2 }))
-    expect(canvas.count('pointerup', true)).toBe(1)
-    expect(canvas.count('pointerup', false)).toBe(0)
+  it.each(['press', 'release'])('suppresses a drag menu on %s-time platforms, including out-and-back drags', async timing => {
+    const { body, fire } = setup()
+    fire('pointerdown')
+    if (timing === 'press') fire('contextmenu')
+    fire('pointermove', { clientX: 100 })
+    fire('pointermove', { clientX: 20 })
+    fire('pointerup')
+    if (timing === 'release') fire('contextmenu', { buttons: 0 })
+    await Promise.resolve()
+    expect(body).not.toHaveBeenCalled()
+    // The following real click still opens normally.
+    fire('pointerdown')
+    fire('pointerup')
+    fire('contextmenu', { buttons: 0 })
+    expect(body).toHaveBeenCalledOnce()
+  })
+
+  it('tracks movement outside the canvas and tolerates small click jitter', () => {
+    const { body, fire } = setup()
+    fire('pointerdown')
+    fire('pointermove', { clientX: 100 }, window)
+    fire('pointerup', {}, window)
+    fire('contextmenu', { buttons: 0 })
+    expect(body).not.toHaveBeenCalled()
+    fire('pointerdown')
+    fire('pointerup', { clientX: 22 })
+    fire('contextmenu', { buttons: 0, clientX: 22 })
+    expect(body).toHaveBeenCalledOnce()
+  })
+
+  it.each(['pointercancel', 'blur'])('cancels a pending menu on %s', async type => {
+    const { body, fire } = setup()
+    fire('pointerdown')
+    fire('contextmenu')
+    fire(type, {}, window)
+    fire('pointerup')
+    fire('contextmenu', { buttons: 0 })
+    await Promise.resolve()
+    expect(body).not.toHaveBeenCalled()
+  })
+
+  it('delivers one menu event to multiple handlers without duplicate native/replayed menus', async () => {
+    const { canvas, body, fire } = setup()
+    const second = vi.fn()
+    canvas.addEventListener('contextmenu', deferrableContextMenu(canvas, second))
+    fire('pointerdown')
+    fire('contextmenu')
+    fire('pointerup')
+    await Promise.resolve()
+    fire('contextmenu', { buttons: 0 })
+    expect(body).toHaveBeenCalledOnce()
+    expect(second).toHaveBeenCalledOnce()
   })
 })

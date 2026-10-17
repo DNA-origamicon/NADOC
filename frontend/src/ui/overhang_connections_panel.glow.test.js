@@ -31,7 +31,7 @@ describe('overhang connections — cyan/magenta overhang highlight', () => {
     })
     glows = []
     createGlowLayer = vi.fn((_scene, _color, _scale, _name) => {
-      const layer = { setEntries: vi.fn(e => { layer.lastEntries = e }), clear: vi.fn(), lastEntries: null }
+      const layer = { setEntries: vi.fn(e => { layer.lastEntries = e }), clear: vi.fn(() => { layer.lastEntries = [] }), lastEntries: null }
       glows.push(layer)
       return layer
     })
@@ -56,6 +56,41 @@ describe('overhang connections — cyan/magenta overhang highlight', () => {
     ] } })
     expect(glows[0].lastEntries).toHaveLength(2)   // A = OH1 → 2 beads
     expect(glows[1].lastEntries).toHaveLength(3)   // B = OH2 → 3 beads
+  })
+
+  it.each(['scene', 'list', 'body'])('clears version glows on empty %s space and keeps them cleared across redraws', (surface) => {
+    store.setState({ currentDesign: {
+      ...store.getState().currentDesign,
+      connection_versions: [{ id: 'v1', name: 'V1', overhang_a_id: OH1.id, overhang_b_id: OH2.id,
+        connection_type: 'root-to-root-ssdna-linker', applied: false }],
+    } })
+    const selectVersion = () => document.querySelector('.oconn-version-row').click()
+    selectVersion()
+    expect(glows.map(g => g.lastEntries.length)).toEqual([2, 3])
+    if (surface === 'scene') store.setState({ selection: { items: [] } })
+    else document.getElementById(`oconn-${surface}`).click()
+    expect(document.querySelector('.oconn-version-row.is-selected')).toBeNull()
+    expect(glows.map(g => g.lastEntries)).toEqual([[], []])
+    expect(document.getElementById('oconn-select-a').value).toBe(OH1.id)
+    expect(document.getElementById('oconn-select-b').value).toBe(OH2.id)
+
+    store.setState({ currentGeometry: [] })
+    store.setState({ currentDesign: { ...store.getState().currentDesign } })
+    document.getElementById('oconn-heading').click() // collapse
+    document.getElementById('oconn-heading').click() // reopen
+    expect(glows.map(g => g.lastEntries)).toEqual([[], []])
+
+    selectVersion()
+    expect(glows.map(g => g.lastEntries.length)).toEqual([2, 3])
+  })
+
+  it('restores highlighting on a fresh dropdown or scene selection', () => {
+    store.setState({ selection: { items: [] } })
+    document.getElementById('oconn-select-a').dispatchEvent(new Event('change'))
+    expect(glows.map(g => g.lastEntries.length)).toEqual([2, 3])
+    store.setState({ selection: { items: [] } })
+    store.setState({ selection: { items: [{ kind: 'overhang', id: OH1.id }] } })
+    expect(glows.map(g => g.lastEntries.length)).toEqual([2, 3])
   })
 
   it('clears both glows when the section collapses', () => {
