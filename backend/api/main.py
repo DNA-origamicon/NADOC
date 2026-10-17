@@ -108,6 +108,7 @@ from backend.api.routes_vr import router as vr_router
 from backend.api.routes_vr_tours import router as vr_tours_router, shutdown_tours
 from backend.api.routes_vr_scene import router as vr_scene_router
 from backend.api.vr_ligation import router as vr_ligation_router
+from backend.api.vr_clipboard import router as vr_clipboard_router
 from backend.api.vr_join import router as vr_join_router
 from backend.api.vr_view_tools import router as vr_view_tools_router
 from backend.api.vr_references import router as vr_references_router
@@ -453,6 +454,7 @@ app.include_router(vr_router, prefix="/api")
 app.include_router(vr_tours_router, prefix="/api")
 app.include_router(vr_scene_router, prefix="/api")
 app.include_router(vr_ligation_router, prefix="/api")
+app.include_router(vr_clipboard_router, prefix="/api")
 app.include_router(vr_join_router, prefix="/api")
 app.include_router(vr_view_tools_router, prefix="/api")
 app.include_router(vr_share_router, prefix="/api")

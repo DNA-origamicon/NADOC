@@ -17,7 +17,7 @@ export const VR_TOOL_CONFIG_LIMITS = Object.freeze({
 const PARAMETERIZED_MODES = new Set(['extrude', 'sweep', 'twist', 'bend'])
 const TARGET_KINDS = new Set([
   'none', 'selection', 'cluster', 'strand', 'domain', 'base', 'end', 'bond', 'crossover',
-  'overhang', 'extension', 'protein',
+  'overhang', 'extension', 'protein', 'nanoparticle',
 ])
 const STRAND_FILTERS = new Set(['both', 'scaffold', 'staples'])
 const TWIST_AMOUNT_MODES = new Set(['total_degrees', 'degrees_per_nm'])

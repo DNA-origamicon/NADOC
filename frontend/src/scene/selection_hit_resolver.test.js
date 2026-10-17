@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry, vrPrimitiveOwner,
-  vrDeformationPlanePick, vrInitialSelectionOwnerTokens, vrOwnerTokens,
+  vrDeformationPlanePick, vrInitialSelectionOwnerTokens, vrCommittedSelectionOwnerTokens, vrOwnerTokens,
   vrSelectionAccepted, vrToolTargetSnapshot,
 } from './selection_hit_resolver.js'
 
@@ -322,6 +322,17 @@ describe('pure selection hit resolution', () => {
     expect(vrInitialSelectionOwnerTokens(null)).toEqual([])
   })
 
+  it('transports mixed selections and owned DNA with the primary target first', () => {
+    const protein = { kind: 'protein', id: 'protein a' }
+    const strand = { kind: 'strand', id: 'owned DNA' }
+    const base = { kind: 'base', key: 'h:3:FORWARD' }
+    expect(vrCommittedSelectionOwnerTokens({ items: [strand, base, protein], primary: protein })
+      .map(decodeURIComponent)).toEqual([
+      '["protein","protein a"]', '["strand","owned DNA"]', '["base","h:3:FORWARD"]',
+    ])
+    expect(vrCommittedSelectionOwnerTokens()).toEqual([])
+  })
+
   it('locks the native owner × canonical selection-level acceptance matrix', () => {
     const levels = ['default', 'cluster', 'strand', 'domain', 'end', 'xover', 'base']
     const accepted = (kind, facts = {}) => levels.filter(level =>
@@ -395,4 +406,13 @@ describe('pure selection hit resolution', () => {
       ).toEqual(expectedLevels)
     }
   })
+})
+
+it('resolves rigid native primitives through canonical live owners', () => {
+  for (const kind of ['protein','nanoparticle']) {
+    const design = {protein_attachments:[{id:'p:a'}],nanoparticles:[{id:'p:a'}]}
+    const identity = encodeURIComponent(`rigid-ref:${JSON.stringify([kind,'p:a','1:trace'])}`)
+    expect(vrPrimitiveOwner(identity,{design})).toEqual({kind,ref:{kind,id:'p:a'}})
+    expect(vrPrimitiveOwner(identity,{design:{}})).toBeNull()
+  }
 })

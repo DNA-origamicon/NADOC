@@ -15,21 +15,21 @@ from backend.core.models import (
 )
 
 
-def paste_elements(design, source, protein_ids, nanoparticle_ids, paste_index=1):
+def paste_elements(design, source, protein_ids, nanoparticle_ids, paste_index=1, *, placement=None, strand_ids=(), source_geometry=None, pose_source=None):
     proteins = [a for a in source.protein_attachments if a.id in protein_ids]
     particles = [p for p in source.nanoparticles if p.id in nanoparticle_ids]
     if len(proteins) != len(set(protein_ids)) or len(particles) != len(
         set(nanoparticle_ids)
     ):
         raise ValueError("Copied element no longer exists in the snapshot.")
-    if not proteins and not particles:
+    if not proteins and not particles and not strand_ids:
         raise ValueError("Select a nanoparticle or protein to copy.")
     conjugations = [
         c
         for c in source.nanoparticle_conjugations
         if c.nanoparticle_id in nanoparticle_ids
     ]
-    sids = {a.binder_strand_id for a in proteins if a.binder_strand_id}
+    sids = set(strand_ids) | {a.binder_strand_id for a in proteins if a.binder_strand_id}
     sids.update(r.strand_id for c in conjugations for r in c.surface_strands)
     sids.update(r.strand_id for p in particles for r in p.biotin_dna)
     strands = [s for s in source.strands if s.id in sids]
@@ -38,7 +38,18 @@ def paste_elements(design, source, protein_ids, nanoparticle_ids, paste_index=1)
     overhangs = [o for o in source.overhangs if o.strand_id in sids]
     extensions = [e for e in source.extensions if e.strand_id in sids]
     groups = [g for g in source.staple_groups if sids.intersection(g.strand_ids)]
-    records = [
+    def contains(hid, bp, direction):
+        return any(d.helix_id == hid and d.direction == direction and
+                   min(d.start_bp, d.end_bp) <= bp <= max(d.start_bp, d.end_bp)
+                   for s in strands for d in s.domains)
+
+    crossovers = [x for x in source.crossovers if all(contains(h.helix_id, h.index, h.strand) for h in (x.half_a, x.half_b))]
+    ligations = [x for x in source.forced_ligations if
+                contains(x.three_prime_helix_id, x.three_prime_bp, x.three_prime_direction) and
+                contains(x.five_prime_helix_id, x.five_prime_bp, x.five_prime_direction)]
+    oids = {o.id for o in overhangs}
+    connections = [c for c in source.overhang_connections if c.overhang_a_id in oids and c.overhang_b_id in oids]
+    records = [*crossovers, *ligations, *connections,
         *proteins,
         *particles,
         *conjugations,
@@ -78,7 +89,7 @@ def paste_elements(design, source, protein_ids, nanoparticle_ids, paste_index=1)
     from backend.core.design_geometry import fitting_geometry
 
     geometry = (
-        fitting_geometry(source)
+        source_geometry if source_geometry is not None else fitting_geometry(source)
         if strands or any(a.target.kind != "free" for a in proteins)
         else []
     )
@@ -93,9 +104,10 @@ def paste_elements(design, source, protein_ids, nanoparticle_ids, paste_index=1)
 
     assets = {a.id: a for a in source.protein_assets}
     worlds = {}
+    anchor_geometry = fitting_geometry(pose_source) if pose_source is not None and any(a.target.kind == "overhang" for a in proteins) else geometry
     for a in proteins:
         tip, outward = (
-            resolve_overhang_anchor(geometry, a.target.overhang_id, a.target.attach_end)
+            resolve_overhang_anchor(anchor_geometry, a.target.overhang_id, a.target.attach_end)
             if a.target.kind == "overhang"
             else (None, None)
         )
@@ -109,6 +121,9 @@ def paste_elements(design, source, protein_ids, nanoparticle_ids, paste_index=1)
     offset = np.array([(width + 5.0) * paste_index, 0.0, 0.0])
     shift = np.eye(4)
     shift[:3, 3] = offset
+    if placement is not None:
+        shift = np.asarray(placement, dtype=float)
+        offset = shift[:3, 3]
     copied_helices = [clone(h) for h in helices]
     for h in copied_helices:
         for field in ("axis_start", "axis_end"):
@@ -116,13 +131,13 @@ def paste_elements(design, source, protein_ids, nanoparticle_ids, paste_index=1)
             setattr(
                 h,
                 field,
-                Vec3(**dict(zip(("x", "y", "z"), np.array([v.x, v.y, v.z]) + offset))),
+                Vec3(**dict(zip(("x", "y", "z"), shift[:3, :3] @ np.array([v.x, v.y, v.z]) + offset))),
             )
         h.grid_pos = None
         h.lattice_frame_id = None
         for residue in h.native_residues:
             residue.atoms = {
-                k: Vec3(x=v.x + offset[0], y=v.y, z=v.z)
+                k: Vec3(**dict(zip(("x", "y", "z"), shift[:3, :3] @ np.array([v.x, v.y, v.z]) + offset)))
                 for k, v in residue.atoms.items()
             }
     copied_strands = [clone(s) for s in strands]
@@ -134,12 +149,31 @@ def paste_elements(design, source, protein_ids, nanoparticle_ids, paste_index=1)
         o.rotation = [0.0, 0.0, 0.0, 1.0]
         o.translation = [0.0, 0.0, 0.0]
         o.parent_overhang_id = None
-    fragment = Design(
-        helices=copied_helices, strands=copied_strands, overhangs=copied_overhangs
+    copied_extensions = [clone(e) for e in extensions]
+    copied_crossovers = [clone(x) for x in crossovers]
+    copied_ligations = [clone(x) for x in ligations]
+    copied_connections = [clone(c) for c in connections]
+    fragment = Design(lattice_type=source.lattice_type,
+        helices=copied_helices, strands=copied_strands, overhangs=copied_overhangs,
+        extensions=copied_extensions, crossovers=copied_crossovers,
+        forced_ligations=copied_ligations, overhang_connections=copied_connections,
     )
     # Preserve the exact displayed DNA pose, including bound, rotated and deformed handles.
+    def geometry_key(n, copied=False):
+        hid = n['helix_id']
+        if copied and hid in ids:
+            hid = ids[hid]
+        elif copied:
+            for prefix in ('__ext_', '__lnk__'):
+                if hid.startswith(prefix):
+                    hid = prefix + ids.get(hid[len(prefix):], hid[len(prefix):])
+                    break
+            else:
+                hid = ids.get(hid, hid)
+        return (hid, n['bp_index'], n['direction'], n.get('copy_k', n.get('copy', 0)))
+
     original = {
-        (ids[n["strand_id"]], n["bp_index"], n.get("copy_k", n.get("copy", 0))): n
+        geometry_key(n, True): n
         for n in geometry
         if n.get("strand_id") in sids
     }
@@ -154,13 +188,11 @@ def paste_elements(design, source, protein_ids, nanoparticle_ids, paste_index=1)
         return np.column_stack((x, np.cross(z, x), z))
 
     for n in fitting_geometry(fragment):
-        old = original.get(
-            (n.get("strand_id"), n["bp_index"], n.get("copy_k", n.get("copy", 0)))
-        )
+        old = original.get(geometry_key(n))
         if old is None:
             continue
-        delta = np.asarray(old["backbone_position"]) + offset - n["backbone_position"]
-        rotation = frame(old) @ frame(n).T
+        delta = shift[:3, :3] @ np.asarray(old["backbone_position"]) + offset - n["backbone_position"]
+        rotation = shift[:3, :3] @ frame(old) @ frame(n).T
         if np.linalg.norm(delta) < 1e-8 and np.linalg.norm(rotation - np.eye(3)) < 1e-8:
             continue
         poses.append(
@@ -225,7 +257,10 @@ def paste_elements(design, source, protein_ids, nanoparticle_ids, paste_index=1)
         helices=copied_helices,
         strands=copied_strands,
         overhangs=copied_overhangs,
-        extensions=[clone(e) for e in extensions],
+        extensions=copied_extensions,
+        crossovers=copied_crossovers,
+        forced_ligations=copied_ligations,
+        overhang_connections=copied_connections,
         staple_groups=copied_groups,
         protein_attachments=copied_proteins,
         nanoparticles=copied_particles,

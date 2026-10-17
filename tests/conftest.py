@@ -575,6 +575,10 @@ _SLOW_TESTS = {
     # integration checks (9.86 s and 16.33 s isolated); path/schema cases stay fast.
     "test_joined_routing_records_each_native_section_and_join",
     "test_generated_joined_route_cold_replay_and_upstream_path_edit",
+    # Six real input-package preparations for a 1,008-nt assembly: 5.90 s in
+    # the October 16 sweep and 5.34 s alone. No simulation runs, but the shared
+    # lifecycle integration belongs in the assembly/CanDo slow area; siblings stay fast.
+    "test_assembly_prepares_shared_engine_jobs_and_unified_lifecycle",
     # Starts three real pytest processes to verify failure persistence, explicit
     # acknowledgment, and a green rerun (33.75 s in the October 13 fast sweep).
     # The other placement-review unit checks remain in the fast suite.
@@ -994,7 +998,7 @@ def _slow_area_for(module: str) -> str:
     """Map a slow test's module (bare filename, no .py) to one area marker.
     First match wins; order matters (oxdna before headless so the oxDNA
     headless-build file lands in oxdna, not headless)."""
-    if module == "test_assembly_flatten":
+    if module in {"test_assembly_flatten", "test_assembly_simulation_parity"}:
         return "cando"
     if "oxdna" in module or "skip_twist" in module or "chudoba" in module:
         return "oxdna"

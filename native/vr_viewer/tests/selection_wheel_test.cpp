@@ -21,8 +21,8 @@ int main() {
     assert(glm::distance(up,glm::vec3(0,std::sqrt(.75F),-.5F))<1e-6F);
     wheel.update(false,{0,0},hand);
     nadoc_vr::EditWheel edit;
-    const std::array<glm::vec2,4> editAxes{{{1,0},{0,1},{-1,0},{0,-1}}};
-    for(size_t i=0;i<4;++i) {
+    const std::array<glm::vec2,6> editAxes{{{1,0},{.5F,.8660254F},{-.5F,.8660254F},{-1,0},{-.5F,-.8660254F},{.5F,-.8660254F}}};
+    for(size_t i=0;i<6;++i) {
         assert(nadoc_vr::EditWheel::sector(editAxes[i])==i);
         edit.update(true,{0,0},hand);assert(edit.open() && !edit.hovered());
         const auto r=edit.update(true,editAxes[i],hand);assert(r.hoverChanged && !r.commit);
@@ -87,7 +87,7 @@ int main() {
     assert(std::string(edit.itemLabel(1))=="CONFIRM");
     edit.update(true,{-1,0},hand);
     edit.setWorkflow(false);
-    assert(!edit.update(false,{0,0},hand).commit && edit.itemCount()==4);
+    assert(!edit.update(false,{0,0},hand).commit && edit.itemCount()==6);
     edit.setSweep(true);
     assert(edit.itemCount()==2 && std::string(edit.itemLabel(0))=="DELETE LAST" && std::string(edit.itemLabel(1))=="ADD POINT");
     edit.update(true,{1,0},hand);
@@ -97,7 +97,7 @@ int main() {
     assert(!edit.update(false,{-1,0},hand).commit); // Center cancels a destructive point edit.
     edit.update(true,{-1,0},hand);
     edit.setSweep(false);
-    assert(!edit.update(false,{0,0},hand).commit && edit.itemCount()==4); // Switching tools never leaks Delete.
+    assert(!edit.update(false,{0,0},hand).commit && edit.itemCount()==6); // Switching tools never leaks Delete.
     assert(SelectionWheel::sector({.49F,.8660254F})==0);
     assert(SelectionWheel::sector({.51F,.8660254F})==1);
     assert(SelectionWheel::sector({-.51F,.8660254F})==5);

@@ -73,7 +73,7 @@ def run(socket, output, role, expected_revision=None):
         live.send('button', hand=1, button='trackpad', pressed=True);live.frame()
         assert live.state['radial_edit']['open']
         items = live.state['radial_edit']['items']
-        assert [i['label'] for i in items] == ['LIGATE','NICK','UNDO','REDO']
+        assert [i['label'] for i in items] == ['LIGATE','NICK','UNDO','REDO','COPY','PASTE']
         assert [i['enabled'] for i in items] == [True,True,True,True]
         from .edit_wheel_check import slide
         slide(live,index,preset,trials)

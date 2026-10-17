@@ -52,7 +52,7 @@ import { flexAnchorKey } from './flexible_arcs.js'
 import { moveRotateSelectionLocked, selectedCrossoverRefs, selectedEndRefs } from './selection_model.js'
 import {
   bondRefForCone, coneForBondRef, crossoverRefForArc, endRefForEntry, vrPrimitiveOwner,
-  vrDeformationPlanePick, vrInitialSelectionOwnerTokens, vrOwnerTokens,
+  vrDeformationPlanePick, vrInitialSelectionOwnerTokens, vrCommittedSelectionOwnerTokens, vrOwnerTokens,
   vrSelectionAccepted, vrToolTargetSnapshot,
 } from './selection_hit_resolver.js'
 import { selectionHighlightDescriptor } from './selection_highlight_model.js'
@@ -2460,6 +2460,11 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
       design: state.currentDesign,
     })
     if (!owner) return null
+    if (['protein','nanoparticle'].includes(owner.kind) && _selLevel === 'default') {
+      selectionController.replace([owner.ref])
+      return { owner, accepted: true, selected: true, selectionKind: owner.kind,
+        ownerTokens: vrInitialSelectionOwnerTokens(owner.ref) }
+    }
     const deformationRef = vrDeformationRefForOwner(owner, _selLevel, state.currentDesign, state.currentGeometry)
     if (deformationRef) {
       selectionController.replace([deformationRef])
@@ -2600,8 +2605,8 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
         ...result,
         identity: bounded[0],
         selectedIdentities: result.accepted && result.selected ? [bounded[0]] : [],
-        selectedOwnerTokens: result.accepted && result.selected && result.ownerTokens?.[0]
-          ? [result.ownerTokens[0]] : [],
+        selectedOwnerTokens: result.accepted && result.selected
+          ? vrCommittedSelectionOwnerTokens(selectionController.getState()) : [],
       } : null
     }
 
@@ -5121,7 +5126,7 @@ export function initSelectionManager(canvas, camera, designRenderer, opts = {}) 
      *  the desktop selection was made. No renderer identity crosses this boundary. */
     getVRInitialSelectionOwnerTokens() {
       const aggregate = vrDeformationSelection(selectionController.getState().items)
-      return aggregate ? [...aggregate.ownerTokens, ...aggregate.selectedOwnerTokens] : vrInitialSelectionOwnerTokens(selectionController.getState().primary)
+      return aggregate ? [...aggregate.ownerTokens, ...aggregate.selectedOwnerTokens] : vrCommittedSelectionOwnerTokens(selectionController.getState())
     },
 
     /** Canonical kind accompanies opaque aliases only so the native tool shell can

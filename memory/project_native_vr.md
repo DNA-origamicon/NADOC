@@ -548,8 +548,15 @@ feel and through-lens comfort remain MV-41.
 
 The Edit wheel now shares the left wheel's `TouchpadWheel` gesture/render module:
 thumb-axis sector hover, light tick on entry, last-held selection on release,
-center cancellation and controller-following pose. Existing compass is preserved:
-Ligate right, Nick up, Undo left, Redo down. The old `RadialToolMenu` world-volume
+center cancellation and controller-following pose. As of October 16, the six
+sectors run counterclockwise from the right: Ligate, Nick, Undo, Redo, Copy, Paste.
+The [clipboard workflow](../docs/vr_clipboard.md) snapshots the selected supported
+elements and carries a bounded wire preview on the right hand until Paste.
+Cluster, minimum-owning-domain, and rigid-element Copy/Paste/Undo pass all four
+motion profiles. Small picks promote to their owning domains; overlapping scopes
+are deduplicated. The backend supplies the resolved preview, and native scene
+exports now include selectable protein traces and nanoparticle cores. See the
+[October 16 audit](../docs/audits/vr_clipboard_20261016.md) for scope and retained failures. The old `RadialToolMenu` world-volume
 hit implementation is removed. Right-sidebar focus navigation remains when open.
 `edit-wheel` is registered under Controls & layout; its empty-scene metadata
 fixture verifies history request publication without editing a user document.

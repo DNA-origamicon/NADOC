@@ -27,6 +27,7 @@ class Catalog(BaseModel):
     status: Literal['ready', 'created', 'failed', 'refused'] = 'ready'
     ends: list[End] = Field(max_length=32768)
     bonds: list[Bond] = Field(default_factory=list, max_length=1000000)
+    clipboard_preview: list[Bond] = Field(default_factory=list, max_length=8192)
 
 
 def record(body, rotation):
@@ -44,6 +45,12 @@ def record(body, rotation):
         values = [*(rotation @ bond.a), *(rotation @ bond.b), 0, 0, 0, 0, 0, 0]
         if not np.isfinite(values).all() or np.max(np.abs(values)) > 1e9:
             raise HTTPException(422, detail='Invalid nick bond geometry')
+        lines.append(' '.join(f'{v:.17g}' for v in values))
+    lines.append(f'CLIPBOARD {len(body.clipboard_preview)}')
+    for segment in body.clipboard_preview:
+        values = [*(rotation @ segment.a), *(rotation @ segment.b)]
+        if not np.isfinite(values).all() or np.max(np.abs(values)) > 1e9:
+            raise HTTPException(422, detail='Invalid clipboard preview')
         lines.append(' '.join(f'{v:.17g}' for v in values))
     return '\n'.join(lines) + '\n'
 
@@ -66,12 +73,25 @@ def publish(body: Catalog, request: Request):
     return {'published': True}
 
 
-def parse_event(value):
+def parse_event(value, basis=None):
     if not isinstance(value, dict) or any(type(value.get(k)) is not int for k in ('sequence', 'version', 'source', 'target')):
         return None
     action = value.get('action', 'ligate')
-    if action not in ('ligate', 'nick', 'undo', 'redo'):
+    if action not in ('ligate', 'nick', 'undo', 'redo', 'copy', 'paste'):
         return None
     if value['sequence'] < 1 or value['version'] < 1 or not all(0 <= value[k] < (1000000 if action == 'nick' else 32768) for k in ('source', 'target')):
         return None
-    return {**{k: value[k] for k in ('sequence', 'version', 'source', 'target')}, **({'action': action} if 'action' in value else {})}
+    extra = {}
+    if action in ('copy', 'paste'):
+        from backend.core.vr_clipboard import rigid_matrix
+        owners = value.get('owners')
+        if not isinstance(owners, list) or not 0 < len(owners) <= 4096 or any(not isinstance(t, str) or len(t) > 2048 for t in owners):
+            return None
+        try:
+            matrix = rigid_matrix(value.get('matrix'))
+            if basis is not None:
+                matrix = np.linalg.inv(basis) @ matrix @ basis
+            extra = {'owners': owners, 'matrix': matrix.flatten(order='F').tolist()}
+        except (ValueError, TypeError):
+            return None
+    return {**extra, **{k: value[k] for k in ('sequence', 'version', 'source', 'target')}, **({'action': action} if 'action' in value else {})}

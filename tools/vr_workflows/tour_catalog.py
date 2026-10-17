@@ -81,8 +81,10 @@ def catalog():
         'Launch a read-only private copy of 24HB through the normal launch route. Capture loading and first model stereo frames and verify advancing headset frames during natural-only export (no Quick Expand).', module='startup_tour')
     add('edit-wheel-history', 'interaction', 'Right touchpad wheel · document Undo & Redo',
         'Prepare a nicked strand in a temporary design, then undo and redo the nick through the right thumb wheel. Checks exact restored strands/helices, native refresh, haptic requests and no menus. Validation uses all four motion profiles.', module='edit_wheel_history_tour')
+    add('clipboard', 'interaction', 'Right touchpad · Copy, hand preview & Paste',
+        'Copy clusters, minimum owning domains, and rigid elements; carry the resolved lightweight preview, paste at the displayed pose, and undo the document edit. Captures both eyes; validation runs all four motion profiles.', module='clipboard_tour')
     add('edit-wheel', 'interaction', 'Right touchpad edit wheel',
-        'Hold the right pad, slide to Ligate (right), Nick (up), Undo (left) or Redo (down), then release. Validates haptics, stereo highlights, independent hands, cancellation and history requests using isolated empty-scene metadata. Actual document undo/redo is covered by the Nick tour.', ['--edit-checks'])
+        'Hold the right pad, slide to Ligate, Nick, Undo, Redo, Copy or Paste, then release. Validates haptics, stereo highlights, independent hands, cancellation and history requests using isolated empty-scene metadata. Actual document undo/redo is covered by the Nick tour.', ['--edit-checks'])
     add('selection-wheel', 'interaction', 'Left touchpad selection wheel',
         'Hold the left pad, slide through Drill, Cluster, Strand, Domain, Crossover and Bases clockwise, then release. Checks hover haptics, no early selection, center cancellation, sidebar independence and stereo highlights with all four profiles.', ['--selection-checks'])
     add('menu-actions', 'interaction', 'Current menu routes',
