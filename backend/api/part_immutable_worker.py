@@ -39,9 +39,13 @@ class ImmutableInput:
 
 
 def reserve_input(source):
+    return _reserve_input(source, scope="registered_batch_v1")
+
+
+def _reserve_input(source, *, scope):
     metadata = require_sealed(source)
-    if metadata.scope_tag != "registered_batch_v1":
-        raise ValueError("This worker admits only the registered batch storage scope")
+    if metadata.scope_tag != scope:
+        raise ValueError(f"This worker requires its admitted storage scope: {scope}")
     value = object.__new__(ImmutableInput)
     for key, item in (("source", source), ("id", metadata.design_id), ("_token", _TOKEN)):
         object.__setattr__(value, key, item)
@@ -53,11 +57,15 @@ def is_immutable_input(value):
 
 
 def encode_input(ticket, operation):
+    return _encode_input(ticket, operation, scope="registered_batch_v1", magic=MAGIC)
+
+
+def _encode_input(ticket, operation, *, scope, magic):
     """Own the bounded operation and retain existing source bytes, without decode."""
     if not is_immutable_input(ticket):
         raise ValueError("Strict byte transport requires a private source reservation")
     metadata = require_sealed(ticket.source)
-    if ticket.id != metadata.design_id:
+    if ticket.id != metadata.design_id or metadata.scope_tag != scope:
         raise ValueError("Immutable source reservation changed identity")
     validate_operation_input(operation)
     raw = json.dumps(operation, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
@@ -65,16 +73,16 @@ def encode_input(ticket, operation):
         raise ValueError("Strict worker operation exceeds its byte ceiling")
     source = ticket.source.payload
     source_hash, operation_hash = sha256(source).digest(), sha256(raw).digest()
-    header = _HEADER.pack(MAGIC, len(source), len(raw), source_hash, operation_hash)
+    header = _HEADER.pack(magic, len(source), len(raw), source_hash, operation_hash)
     binding = {"version": 1, "source_sha256": source_hash.hex(), "operation_sha256": operation_hash.hex()}
     return (header, source, raw), binding
 
 
-def _frame(payload):
+def _frame(payload, *, expected_magic=MAGIC):
     if type(payload) is not bytes or not _HEADER.size < len(payload) <= MAX_INPUT_BYTES:
         raise ValueError("Invalid strict worker frame size")
     magic, source_size, operation_size, source_hash, operation_hash = _HEADER.unpack_from(payload)
-    if (magic != MAGIC or not 0 < source_size <= MAX_CANDIDATE_BYTES
+    if (magic != expected_magic or not 0 < source_size <= MAX_CANDIDATE_BYTES
             or not 0 < operation_size <= MAX_OPERATION_BYTES
             or _HEADER.size + source_size + operation_size != len(payload)):
         raise ValueError("Invalid strict worker frame header")
@@ -148,17 +156,30 @@ def evaluate_payload(payload):
 
 
 def _evaluate(input_name, input_size, output_name):
+    _run_framed(input_name, input_size, output_name, evaluate_payload)
+
+
+def _owned_input(input_name, input_size):
+    if not _HEADER.size < input_size <= MAX_INPUT_BYTES:
+        raise ValueError("Invalid strict worker buffer size")
+    source = SharedMemory(name=input_name)
+    try:
+        return bytes(source.buf[:input_size])
+    finally:
+        source.close()
+
+
+def _run_framed(input_name, input_size, output_name, evaluator):
+    """Fixed child targets share resource cleanup; no request selects evaluator."""
     for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
                  "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
         os.environ[name] = "1"
-    source = None
     output = SharedMemory(name=output_name)
     try:
         try:
-            if not _HEADER.size < input_size <= MAX_INPUT_BYTES:
-                raise ValueError("Invalid strict worker buffer size")
-            source = SharedMemory(name=input_name)
-            result = evaluate_payload(bytes(source.buf[:input_size]))
+            # No extra local payload alias survives during evaluation. The
+            # evaluator can release the full frame after splitting its inputs.
+            result = evaluator(_owned_input(input_name, input_size))
         except BaseException as error:
             result = {"issues": [], "binding": None, "result": failure("strict_worker_input", error)}
         encoded = _result_bytes(result, limit=MAX_CANDIDATE_BYTES,
@@ -166,8 +187,6 @@ def _evaluate(input_name, input_size, output_name):
         output.buf[RESULT_HEADER_BYTES:RESULT_HEADER_BYTES + len(encoded)] = encoded
         struct.pack_into("!I", output.buf, 0, len(encoded))
     finally:
-        if source is not None:
-            source.close()
         output.close()
 
 

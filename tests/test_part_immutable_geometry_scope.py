@@ -74,7 +74,7 @@ def test_existing_worker_and_evaluation_do_not_accept_geometry_scope(monkeypatch
     source, _ = recipe('bundle-create', False)
     handle = revisions.prepare_geometry_revision(Design.model_validate_json(source.model_dump_json()))
     monkeypatch.setattr(revisions, '_decoded_exact', lambda *_: pytest.fail('Admission decoded source'))
-    with pytest.raises(ValueError, match='batch storage scope'):
+    with pytest.raises(ValueError, match='admitted storage scope'):
         worker.reserve_input(handle)
     with pytest.raises(HTTPException) as error:
         check_request(handle, EvaluationRequest(operation='verify'), 0,
