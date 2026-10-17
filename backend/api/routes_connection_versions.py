@@ -352,8 +352,13 @@ def _apply_connection_version_legacy(
         # inside the logged mutation; Undo then restores the truly pre-Connect
         # design instead of leaving a draft version/sidebar group behind.
         if new_version is not None:
+            # Pydantic applies update values after deep-copying the model.
+            # Detach these records explicitly before default naming mutates them;
+            # a held source must remain unchanged even if publication fails.
             d = d.model_copy(
-                update={"connection_versions": [*d.connection_versions, new_version]},
+                update={"connection_versions": [
+                    *(v.model_copy() for v in d.connection_versions), new_version.model_copy()
+                ]},
                 deep=True,
             )
             assign_default_names(d)

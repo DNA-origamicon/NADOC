@@ -14,8 +14,8 @@ agreed; do not invent historical estimate deltas. This is a milestone estimate,
 not a count of messages/commits or a percentage of time or user-ready features.
 Core estimates have moderate confidence; parked work has lower confidence.
 
-Keep delivery and effort visible separately: **27 engineering checkpoints have
-been delivered since B1 (U1–U27), closing four additional milestones**. Thirteen of
+Keep delivery and effort visible separately: **28 engineering checkpoints have
+been delivered since B1 (U1–U28), closing four additional milestones**. Thirteen of
 those checkpoints were spent on still-open FH-18. The 38 is an estimate of
 deliverable milestones, not a promise of 38 commits or assistant responses;
 the thirteen-checkpoint effort must not disappear behind the unchanged denominator.
@@ -65,7 +65,7 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 | FH-18 | In progress · 13 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Owned organization transactions, named deformation preview/repair/comparison, qualified final-topology lineage including extrusion/crossover and resize/domain-shift edits and matching Fine Routing recovery are implemented; Groups/Placements UI, explicit placement Apply and ordinary owned Bend/Twist creation are integrated privately; persistent group visibility follows current identity membership and saves after queued writes; ordinary explicit-placement patterns now copy declared named groups through owned create/edit/replay; generated consumers, new-group movement and qualification stay open. |
 | FH-20 | Remaining | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
 | FH-23 | In progress · 9 checkpoints; task growth flagged | Move/rotate history editing: complete parameter controls, guarded commit, downstream edits and undo/persistence parity. Owned transport, native private rendering/controls and explicit complete linked-owner pose recording are integrated. Actual native tether/joint/linker gestures now cross through host Apply and cold replay; bounded ordinary producer-prefix admission is extended. Numerical Prepare/Apply now use the same private host with bounded asynchronous computation, cancellation and receipt recovery; native CPD free-motion and relaxed-duplex root/taut/joint gestures are qualified through the host, organized extension-only v2 upserts now use the bounded ordinary transaction and shared 2D/3D controls. U26 native counterexamples reject ordinary owner insertion and unconditional final-pass shortcuts; arbitrary new-group movement and its complete comparison/qualification remain open. Paired rollout gates stay false. |
-| FH-25 | Remaining | Ordinary DNA connection completion: explicit supported core matrix including required combined/direct/indirect paths, recorded and qualified. |
+| FH-25 | In progress · 1 checkpoint | Ordinary DNA connection completion: explicit supported core matrix including required combined/direct/indirect paths, recorded and qualified. [Fixed matrix and implementation order](ordinary_connection_completion_plan.md); native finite composition/indirect output characterized and legacy source alias corrected. Combined/direct/indirect input contracts, applied metadata lifecycle and qualification remain open. |
 | FH-26 | Remaining | Core dependency repair: earliest failure/blocked descendants, reviewed input/reference replacement or explicit cascade, candidate review, Apply/undo/reload. |
 | FH-27 | Remaining | Integrated desktop geometry acceptance: representative full workflows, measured latency/memory and broad regression exits; relevant app debt and proven-unused legacy paths closed. Test reruns alone do not close this. |
 | FH-28 | Remaining | Qualify existing immutable host lifecycle: durable creation/recovery/publication on actual paths, cancellation and retained-state limits accepted. |
@@ -95,7 +95,7 @@ memory, and include this line in the user-facing final report even when no
 milestone closed:
 
 > Overhaul: **21 / 38 complete**; **17 remaining** (8 core, 9 parked).
-> Change this update: **+1 completed, +0 total**. Baseline total: **38**.
+> Change this update: **+0 completed, +0 total**. Baseline total: **38**.
 
 Replace the numbers with current counts, name the milestone worked/closed, and
 explain every total or scope change. Counts are whole milestones, not fractional
@@ -153,6 +153,26 @@ bound their matrices before implementation rather than expanding them indefinite
 | U25 · 2026-10-16 | FH-23 checkpoint 8: extension-only v2, owned ordinary transaction, exact-source full replies, shared 2D/3D controls and placement-preservation matrix; [evidence](validation_organized_extensions.json) | None; arbitrary new-group movement and existing qualification remain | 20 | 38 | 9 | 9 | +0 total, +0 completed. Twenty-five engineering checkpoints close three milestones since B1. FH-23 remains growth-flagged after eight; FH-18 after thirteen. Original exits and estimate unchanged. |
 | U26 · 2026-10-16 | FH-23 checkpoint 9: native transform-order counterexamples and terminal-tail discrepancy characterization; bounded FH-24 inventory; [evidence](validation_member_motion_order.json) | None; diagnostic tests and a proposed compiler contract do not implement movement | 20 | 38 | 9 | 9 | +0 total, +0 completed. Twenty-six engineering checkpoints close three milestones since B1. FH-23 remains growth-flagged after nine; FH-18 after thirteen. Advance FH-24 next without parking or narrowing movement. No estimate change. |
 | U27 · 2026-10-16 | FH-24 checkpoint 1: all 22 Fine Routing child editors, bounded original-source proof/prefix references, native downstream/organized replay, stable batch slots and source-bound publication; [evidence](validation_fine_routing_history_editor.json) | FH-24 implementation exit closed; existing FH-27 desktop/performance acceptance remains | 21 | 38 | 8 | 9 | +0 total, +1 completed. Twenty-seven engineering checkpoints close four milestones since B1. FH-18 remains growth-flagged after thirteen; FH-23 after nine. No exit or estimate change. |
+| U28 · 2026-10-16 | FH-25 checkpoint 1: full ordinary connection matrix, eight finite native composition controls, two indirect output controls and combined naming/failure-source ownership fix; [contract/evidence](ordinary_connection_completion_plan.md) | None; characterization and source isolation do not complete combined/direct/indirect contracts | 21 | 38 | 8 | 9 | +0 total,+0 completed. Twenty-eight engineering checkpoints close four milestones since B1. FH-18/FH-23 growth flags remain13/9; FH-25 has one checkpoint. |
+
+### U28 ordinary connection entry audit and source ownership
+
+**21/38 complete;17 remaining (8 core,9 parked);+0 completed,+0 total.**
+The [fixed FH-25 matrix](ordinary_connection_completion_plan.md) now includes
+combined/direct/indirect application, applied-version metadata and ordinary
+linker parity, organized ownership, the shared-host and ISSUE-126 correctness
+debts and full qualification. No ordinary connection branch is silently parked.
+Thirteen new native tests establish reuse of pending+finite builders, exact
+zero-bridge output grammar and immutable held-source behavior. The combined
+callback now detaches mutable version records before default naming (ISSUE-139).
+Its transaction already restored canonical state after failure; held source
+references are now preserved too. Complete-output comparisons remain exact.
+
+Root's focused regression passes111 tests/14 warnings in5.96s. No geometry,
+model, constant, pin, frontend or public gate changes. Next implement the closed
+finite compound Connect contract and one transaction, then the remaining matrix;
+passing characterization tests does not constitute that implementation. FH-25
+checkpoint count is1; original completion and task-growth rules remain in force.
 
 ### U27 closure and remaining acceptance
 

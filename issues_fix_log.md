@@ -937,3 +937,12 @@ browser recovery. Stable feature IDs survive upstream edits, so a partial reply
 must not backfill regenerated suffix bodies from the old client cache. Eight red
 HTTP cases cover the existing routing/extrusion/pattern response families; use
 full regenerated history for owned edits, preserving ordinary append slimming.
+
+
+### U28 — ISSUE-139 combined Connect source alias
+
+- [x] Observed real blank-version naming mutate source records through Pydantic
+  deep-copy update values. Detach the supplied version records before naming.
+- Native complete-output parity covers all eight finite types; source isolation,
+  default naming and real publication failure retain canonical/held-source state.
+  Focused regression:111 passed,14 warnings,5.96s. No molecular or public gate change.

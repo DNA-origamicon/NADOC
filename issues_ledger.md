@@ -3010,3 +3010,19 @@ and this issue are not declared resolved.
 - No new cache authority or alternate snapshot replay path is introduced. Native
   input replay remains authoritative; response-size/desktop qualification remains
   FH-27. This adjacent regression correction does not add milestone credit.
+
+
+## ISSUE-139 — Combined Connect default naming mutates held source versions (2026-10-16, CORRECTED)
+
+- `model_copy(deep=True, update={...})` applies update objects without deep-copying
+  them. Combined Connect supplied the original connection-version records, then
+  default naming mutated their blank names through shared references.
+- Canonical failure rollback already restores the recorder snapshot; this issue
+  affects holders of the original source object, including successful callbacks.
+  Two actual native parity controls and a real failed-publication control exposed
+  the mutation. No molecular helper is mocked or changed.
+- Copy the version records supplied in the update before naming, including the
+  proposed new version. Keep the existing whole-design copy, one undo and native
+  calculation order. Exact authoring parity and held-source/revision/history/redo
+  regressions pass in the111-case focused run. Combined native history remains
+  unfinished under FH-25; this correction does not grant a new replay capability.

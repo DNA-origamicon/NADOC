@@ -36,8 +36,10 @@ same owned host; [evidence](validation_fine_routing_history_editor.json) include
 native suffix replay, stable batch identities, exact source/child binding and
 ordinary-tool regressions. Full frontend validation passes; desktop/performance
 acceptance remains FH-27 and gates stay off. Current progress is **21/38 complete,
-17 remaining (8 core,9 parked)**. Next bound ordinary DNA connection coverage
-(FH-25), then integrate the core contracts with repair (FH-26), retaining the full
+17 remaining (8 core,9 parked)**. U28 bounds [ordinary connection coverage](ordinary_connection_completion_plan.md)
+(FH-25), verifies native composition and fixes source aliasing; next implement the
+closed combined Connect command, then the remaining direct/indirect matrix and
+core repair (FH-26), retaining the full
 unresolved FH-18/FH-23 movement exit. No new milestone or narrowed exit.
 
 ## Findings that change the order of work
