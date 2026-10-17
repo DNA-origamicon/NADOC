@@ -57,7 +57,7 @@ def test_registered_contract_exposes_typed_inputs_conflicts_and_output_ownership
 
 @pytest.mark.parametrize("change", [
     {"connection_application_version": None}, {"connection_application_version": True},
-    {"connection_application_version": 2}, {"action": []},
+    {"connection_application_version": 3}, {"action": []},
     {"action": "connection-version-apply"}, {"_generated_scope": {}},
 ])
 def test_registration_does_not_promote_legacy_malformed_or_scoped_receipts(pending, change):

@@ -71,7 +71,7 @@ def test_dependency_contract_creates_version_instead_of_reading_it(application_p
 
 
 @pytest.mark.parametrize('change', [
-    {'connection_composition_version': True}, {'connection_composition_version': 2},
+    {'connection_composition_version': True}, {'connection_composition_version': 3},
     {'applied': True}, {'_generated_scope': {}}, {'unregistered_input': {}},
     {'connection_type': 'root-to-root-indirect'}, {'conflict_version_ids': ['candidate']},
 ])
@@ -249,7 +249,8 @@ def test_http_compatibility_fallback_cannot_rebind_after_capture(document, monke
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from backend.api import routes_connection_versions as routes, state
-    def unsupported_after_revision_change(_choices):
+    def unsupported_after_revision_change(_choices, *, contract_version):
+        assert contract_version == 1
         with state._lock:
             state._bump_revision(document.session)
         return None

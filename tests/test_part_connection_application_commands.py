@@ -320,7 +320,7 @@ def test_work_bounds_refuse_before_native_geometry(source, monkeypatch, oversize
 
 
 @pytest.mark.parametrize("change", [
-    {"_proof_version": True}, {"connection_application_version": 2},
+    {"_proof_version": True}, {"connection_application_version": 3},
     {"action": "connection-version-apply-direct"}, {"connection_id": ""},
     {"connection_type": "root-to-root"}, {"connection_type": "root-to-root-indirect"},
     {"conflict_connection_ids": ["repeated", "repeated"]},

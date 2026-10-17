@@ -1,4 +1,4 @@
-"""Closed finite Connect composition: pending definition then native Apply.
+"""Closed versioned Connect composition: pending definition then native Apply.
 
 A single registered feature, never an arbitrary command batch. Builders return
 one candidate; the caller owns exactly one reconciliation/recording transaction.
@@ -38,9 +38,17 @@ class ConnectRequest(pending.CreateRequest):
         return self
 
 
+class ConnectRequestV2(ConnectRequest):
+    connection_composition_version: Annotated[StrictInt, Field(ge=2, le=2)]
+    connection_type: application._FiniteType | application._IndirectType
+
+
 def parse_command(params):
     validate_operation_input(params)
-    return ConnectRequest.model_validate(params)
+    if type(params) is not dict:
+        raise ValueError("Native connection inputs require an object")
+    model = ConnectRequestV2 if params.get('connection_composition_version') == 2 else ConnectRequest
+    return model.model_validate(params)
 
 
 def dependency_contract(params, *, topology):
@@ -56,8 +64,10 @@ def dependency_contract(params, *, topology):
     prefix = f'__lnk__{command.connection_id}'
     suffixes = ('a', 'b') if 'dsdna' in command.connection_type else ('s',)
     writes = {topology, Resource('connection_version', command.version_id), *versions,
-              Resource('overhang_connection', command.connection_id), Resource('helix', prefix),
+              Resource('overhang_connection', command.connection_id),
               *(Resource('strand', f'{prefix}__{suffix}') for suffix in suffixes)}
+    if command.connection_type not in application.INDIRECT_TYPES:
+        writes.add(Resource('helix', prefix))
     return Dependencies(frozenset(reads), frozenset(writes), barrier=True)
 
 
@@ -72,7 +82,7 @@ def _stage(design, body):
 
 def _bind(staged, body, index):
     request = application.parse_command({
-        '_proof_version': 1, 'connection_application_version': 1,
+        '_proof_version': 1, 'connection_application_version': body.connection_composition_version,
         'action': application.ACTION, 'version_id': body.version_id,
         'overhang_a_id': body.overhang_a_id, 'overhang_b_id': body.overhang_b_id,
         'connection_type': body.connection_type, 'connection_id': body.connection_id,
@@ -97,20 +107,19 @@ def build(design, params):
     return materialize(prepare(design, parse_command(params)))
 
 
-def try_record(choices):
+def try_record(choices, *, contract_version=1):
     """Private ordinary adapter; unsupported scope falls back before native work.
 
     The public rollout stays disabled pending desktop and responsiveness
     qualification. HTTP acquisition is bound by ConnectRoute. No extra whole-design clone or proof runs on this path.
     """
-    from typing import get_args
     from fastapi import HTTPException
     from backend.api import state
     from backend.api.feature_recording import record_feature
     from backend.api.part_source_bound_route import require_current
     from backend.core.part_command_errors import CommandContractError, ReferenceResolutionError
 
-    if choices.get('connection_type') not in get_args(application._FiniteType):
+    if choices.get('connection_type') not in application.supported_types(contract_version):
         return None
     try:
         with state._lock:
@@ -137,7 +146,7 @@ def try_record(choices):
             })
             pending._select(source, provisional, inventory)
             values = provisional.model_dump(by_alias=True)
-            values.update(action=ACTION, connection_composition_version=1,
+            values.update(action=ACTION, connection_composition_version=contract_version,
                 version_id=str(uuid4()), created_at=time(), connection_id=str(uuid4()),
                 conflict_version_ids=[], conflict_connection_ids=[])
             try:

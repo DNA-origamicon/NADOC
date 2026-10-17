@@ -39,7 +39,8 @@ acceptance remains FH-27 and gates stay off. Current progress is **21/38 complet
 17 remaining (8 core,9 parked)**. U28 bounds [ordinary connection coverage](ordinary_connection_completion_plan.md)
 (FH-25), verifies native composition and fixes source aliasing; next implement the
 closed combined Connect command (implemented privately at U29), then the remaining
-direct/indirect matrix and core repair (FH-26), retaining the full
+direct/indirect matrix (indirect v2 implemented privately at U30) and core repair
+(FH-26), retaining the full
 unresolved FH-18/FH-23 movement exit. No new milestone or narrowed exit.
 
 ## Findings that change the order of work

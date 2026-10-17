@@ -34,6 +34,7 @@ router = APIRouter()
 # Internal rollout only; whole-request latency must be qualified before enabling.
 OWNED_FINITE_CONNECTION_APPLY_ENABLED = False
 OWNED_COMBINED_CONNECTION_APPLY_ENABLED = False
+NATIVE_LINKER_V2_ENABLED = False
 
 
 @router.post("/design/connection-versions", status_code=201)
@@ -304,9 +305,9 @@ def _cv_create_bound_binding(
 def _apply_connection_version_impl(
     version_id: str, *, new_version: ConnectionVersion | None = None
 ) -> dict:
-    if OWNED_FINITE_CONNECTION_APPLY_ENABLED and new_version is None:
+    if (OWNED_FINITE_CONNECTION_APPLY_ENABLED or NATIVE_LINKER_V2_ENABLED) and new_version is None:
         from backend.api.part_connection_application_commands import try_record
-        recorded = try_record(version_id)
+        recorded = try_record(version_id, contract_version=2 if NATIVE_LINKER_V2_ENABLED else 1)
         if recorded is not None:
             source, updated, report, _entry = recorded
             return _connection_apply_response(source, updated, report)
@@ -545,16 +546,15 @@ def _connection_apply_response(design, updated, report):
     return _design_response_with_geometry(updated, report)
 
 
-@router.post("/design/connection-versions/{version_id}/apply", status_code=200)
 def apply_connection_version(version_id: str) -> dict:
     return _apply_connection_version_impl(version_id)
 
 
 def create_and_apply_connection_version(body: ConnectionVersionCreateRequest) -> dict:
     """Create and materialize a first-time connection as one undoable action."""
-    if OWNED_COMBINED_CONNECTION_APPLY_ENABLED:
+    if OWNED_COMBINED_CONNECTION_APPLY_ENABLED or NATIVE_LINKER_V2_ENABLED:
         from backend.api.part_connection_composition_commands import try_record
-        recorded = try_record(body.model_dump())
+        recorded = try_record(body.model_dump(), contract_version=2 if NATIVE_LINKER_V2_ENABLED else 1)
         if recorded is not None:
             source, updated, report, _entry = recorded
             return _connection_apply_response(source, updated, report)
@@ -579,7 +579,10 @@ def create_and_apply_connection_version(body: ConnectionVersionCreateRequest) ->
     return _apply_connection_version_impl(version.id, new_version=version)
 
 
-from backend.api.part_connection_composition_route import ConnectRoute
+from backend.api.part_connection_composition_route import ConnectRoute, ApplyRoute
 
 router.add_api_route("/design/connection-versions/connect", create_and_apply_connection_version,
                      methods=["POST"], status_code=201, route_class_override=ConnectRoute)
+
+router.add_api_route("/design/connection-versions/{version_id}/apply", apply_connection_version,
+                     methods=["POST"], status_code=200, route_class_override=ApplyRoute)

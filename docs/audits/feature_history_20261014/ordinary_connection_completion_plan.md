@@ -230,3 +230,84 @@ No readable same-user cwd/fd/maps references or shared-memory remnants remained;
 only persistent systemd/PAM435/436 denied inspection. Removed those empty task
 paths and verified the root empty. Workspace designs/jobs and shared caches are
 preserved. Retained evidence is this compact report and reusable source/tests.
+
+
+## U30 — native linker v2 and FH-25 containment
+
+Based on `b9cf6681`. Apply and Connect retain their action names and strict v1
+models; explicit version2 models admit the eight finite and two indirect types.
+Saved v1 remains finite-only and retains its old replacement grammar. No v1
+recipe is silently migrated. New private recorder arguments select the host's
+contract version; request bodies cannot enable the rollout switch.
+
+Version2 indirect work uses the same native materializer with bridge length zero.
+Dependencies expose the actual single complement strand and connection, without
+a fictional helix. Removal requires exactly that strand, exact native ordered
+complement domains, no reference-strand flag, no matching-prefix helix/extra
+strand and exact endpoint ownership. The native `_zero_bridge_side_order` and
+`_make_complement_domain` supply the oracle; no routing/polarity algorithm changes.
+The existing full output namespace reservation remains conservative even without
+an emitted helix, preventing adoption of dangling/retained virtual-helix owners.
+Native mutation reports retain their legacy prospective-helix entry for parity;
+they are not used as the dependency output inventory.
+
+Version2 can replace finite with indirect, indirect with finite, and indirect with
+indirect. It shares the existing bounded source index, work limits, materializer,
+one recording transaction, undo and native reconciliation/retry. The Apply
+route now captures source/session/revision/policy before dispatch and rejects
+body inputs; its selected saved version is the input. Connect retains bounded
+JSON/source acquisition. Disabled v1 routes retain their original behavior.
+`NATIVE_LINKER_V2_ENABLED`, `OWNED_FINITE_CONNECTION_APPLY_ENABLED` and
+`OWNED_COMBINED_CONNECTION_APPLY_ENABLED` all remain false.
+
+The fixed native matrix checks both indirect types for Apply/Connect complete
+output/report parity, exact dependency writes, v1 rejection, eight cross-family
+replacement cases, poisoned-recovery input proof, domain-order/extra-domain/
+extra-owner refusal, ordinary HTTP Connect/reapply, one undo per action and redo,
+held-request revision changes, exact version markers, body refusal, dangling
+virtual-helix references, protected loadouts/latest cursor before source
+preparation, and two actual isolated workers after earlier overhang-length edits.
+
+Initial17 cases:15 failed/2 passed in2.97s because v2 was unimplemented.
+After core implementation17 passed2.92s. Expanded shared run:164 passed/2 failed
+in9.43s; one callback fixture needed the new trusted `contract_version` argument,
+and one old unknown-version test still used the newly implemented2. Unknown
+version controls now use3; explicit v1-indirect refusal and exact v2 marker tests
+remain. Another run passed258 with one fixture error in13.94s: a dangling pose
+fixture omitted its required `kind=base`. This was corrected without altering
+production validation. Final regression: **261 passed,22 warnings,13.27s**, including
+41 new indirect cases. The additional warning locations are existing FastAPI
+ORJSON deprecations now passing through the thin Apply wrapper.
+
+Final command:
+`just test-affected tests/test_part_connection_indirect.py tests/test_part_connection_compose.py tests/test_connection_version_owned_apply_route.py tests/test_native_connection_application_proof.py tests/test_part_connection_application_commands.py tests/test_connection_composition_contract.py tests/test_connection_versions.py tests/test_part_pending_connection_versions.py --tb=short`.
+
+**FH-25 task growth is flagged after three checkpoints.** The ledger counts one
+audit/source-isolation checkpoint and two implementation checkpoints; no milestone
+has closed. Containment is the original finite matrix, not additional variants:
+next direct equal/unequal contracts for both authored types, then applied-version
+metadata and organized ownership, then actual history controls/desktop/latency
+qualification. Direct work must first map binding, Duplex and cluster output
+identities and restored prior topology against the existing native helpers.
+Existing shared-host sequence and ISSUE-126 duplicate DS occupancy debts remain
+required; replay parity does not certify scientific validity. No molecular
+correction, new scope, parked ordinary family or denominator change is authorized
+by these passing tests. Public rollout and the full objective remain incomplete.
+
+
+U30 hygiene: `just lint` retains5 baseline F401 findings; `just lint-memory`
+retains6 errors/59 warnings with the project head at200 lines. Changed Python
+files pass targeted Ruff and `git diff --check` passes. `main.js` remains7,350
+lines,delta0. No frontend behavior changed or frontend/app pass is claimed.
+`just test-smart --dry-run` selected FAST from a would-be FULL historical diff,
+executing zero tests; its literal DEFERRED notice is retained above. Broad debt
+is not cleared. Archive is still absent, so no browser/bulk/scientific writer or
+native build was launched. All numerical algorithms/models/pins remain unchanged.
+
+Final task-owned `/tmp/pytest-of-joshua/pytest-2`, `pytest-3`, `pytest-4` and
+`pytest-current` contained689 empty directories,4 symlinks and0 file bytes.
+No readable same-user cwd/fd/maps references or shared-memory remnants remained;
+persistent systemd/PAM435/436 denied inspection. Removed those empty paths and
+verified the root empty. User designs/jobs, runtimes, historical artifacts and
+shared caches remain untouched. Only compact documentation and reusable source/
+tests are retained.

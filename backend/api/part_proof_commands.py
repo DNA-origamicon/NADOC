@@ -156,20 +156,8 @@ def dependencies(kind, params):
         from backend.api.part_connection_composition_commands import dependency_contract
         return dependency_contract(params, topology=PART_TOPOLOGY)
     if kind == "overhang-bulk" and params.get("action") == CONNECTION_APPLY_ACTION:
-        from backend.api.part_connection_application_commands import parse_command
-        try:
-            command = parse_command(params)
-        except ValueError:
-            return Dependencies(known=False)
-        versions = {Resource("connection_version", identity) for identity in command.conflict_version_ids}
-        reads = {PART_TOPOLOGY, Resource("connection_version", command.version_id),
-                 Resource("overhang", command.overhang_a_id), Resource("overhang", command.overhang_b_id),
-                 *versions, *(Resource("overhang_connection", identity) for identity in command.conflict_connection_ids)}
-        prefix = f"__lnk__{command.connection_id}"
-        suffixes = ("a", "b") if "dsdna" in command.connection_type else ("s",)
-        writes = {PART_TOPOLOGY, Resource("overhang_connection", command.connection_id), Resource("helix", prefix),
-                  *versions, *(Resource("strand", f"{prefix}__{suffix}") for suffix in suffixes)}
-        return Dependencies(frozenset(reads), frozenset(writes), barrier=True)
+        from backend.api.part_connection_application_commands import dependency_contract
+        return dependency_contract(params, topology=PART_TOPOLOGY)
     if kind == "overhang-bulk" and is_pending_action(params):
         from backend.api.part_connection_version_commands import parse_command
         try:

@@ -1,8 +1,8 @@
-"""Bounded finite ordinary-linker Apply over the existing native algorithms.
+"""Bounded versioned ordinary-linker Apply over existing native algorithms.
 
 The pure builder and private recording adapter share one admitted selection and
-the unchanged native materializer. Direct bindings, indirect linkers and combined
-Connect retain their independently available legacy callback.
+the unchanged native materializer. V1 stays finite-only; V2 also admits indirect
+links and exact zero-bridge removal. Direct bindings retain their legacy callback.
 """
 
 from bisect import bisect_left, bisect_right
@@ -32,6 +32,16 @@ _FiniteType = Literal[
     "root-to-root-dsdna-linker", "root-to-end-dsdna-linker",
     "end-to-root-dsdna-linker", "end-to-end-dsdna-linker",
 ]
+_IndirectType = Literal["root-to-root-indirect", "end-to-end-indirect"]
+INDIRECT_TYPES = frozenset(get_args(_IndirectType))
+
+
+def supported_types(version):
+    if type(version) is not int or version not in {1, 2}:
+        raise ValueError("Unsupported native linker contract version")
+    return frozenset(get_args(_FiniteType)) | (INDIRECT_TYPES if version == 2 else frozenset())
+
+
 _SOURCE_FIELDS = frozenset({
     "dimensions", "lattice_frames", "helices", "strands", "cluster_transforms",
     "nucleotide_transforms", "overhangs", "overhang_connections", "connection_versions",
@@ -62,9 +72,36 @@ class ApplyRequest(BaseModel):
         return value
 
 
+class ApplyRequestV2(ApplyRequest):
+    connection_application_version: Annotated[StrictInt, Field(ge=2, le=2)]
+    connection_type: _FiniteType | _IndirectType
+
+
 def parse_command(params):
     validate_operation_input(params)
-    return ApplyRequest.model_validate(params)
+    if type(params) is not dict:
+        raise ValueError("Native connection inputs require an object")
+    model = ApplyRequestV2 if params.get("connection_application_version") == 2 else ApplyRequest
+    return model.model_validate(params)
+
+
+def dependency_contract(params, *, topology):
+    from backend.core.part_dependencies import Dependencies, Resource
+    try:
+        command = parse_command(params)
+    except ValueError:
+        return Dependencies(known=False)
+    versions = {Resource("connection_version", identity) for identity in command.conflict_version_ids}
+    reads = {topology, Resource("connection_version", command.version_id),
+             Resource("overhang", command.overhang_a_id), Resource("overhang", command.overhang_b_id),
+             *versions, *(Resource("overhang_connection", identity) for identity in command.conflict_connection_ids)}
+    prefix = f"__lnk__{command.connection_id}"
+    suffixes = ("a", "b") if "dsdna" in command.connection_type else ("s",)
+    writes = {topology, Resource("overhang_connection", command.connection_id),
+              *versions, *(Resource("strand", f"{prefix}__{suffix}") for suffix in suffixes)}
+    if command.connection_type not in INDIRECT_TYPES:
+        writes.add(Resource("helix", prefix))
+    return Dependencies(frozenset(reads), frozenset(writes), barrier=True)
 
 
 def _unsupported(detail):
@@ -239,11 +276,17 @@ def _conflicts(design, body, index):
     return connections
 
 
-def _removed_ownership(design, index, connections, backings, host_owners):
+def _removed_ownership(design, index, connections, backings, host_owners, *, allow_indirect=False):
     removed = set()
     for offset, connection in enumerate(connections):
         path = ["conflict_connection_ids", offset]
         prefix = f"__lnk__{connection.id}"
+        if allow_indirect and connection.length_value == 0:
+            from backend.api.part_indirect_linker_ownership import removed_resources
+            targets = {identity: _target(design, index, backings, host_owners, identity, path)
+                       for identity in (connection.overhang_a_id, connection.overhang_b_id)}
+            removed.update(removed_resources(design, index, connection, targets, path))
+            continue
         if (connection.linker_type not in {"ss", "ds"} or connection.length_unit != "bp"
                 or connection.length_value < 1 or not float(connection.length_value).is_integer()):
             _fail("Only finite native linker ownership can be replaced", "overhang_connection", connection.id, path)
@@ -371,7 +414,7 @@ def _select_inputs(design, body, index):
         _fail("Selected version connection type changed", "connection_version", version.id, "connection_type")
     if type(version.bridge_length) is not int or version.bridge_length < 0:
         _unsupported("Selected version has an unsupported bridge length")
-    bridge_length = max(1, version.bridge_length)
+    bridge_length = 0 if body.connection_type in INDIRECT_TYPES else max(1, version.bridge_length)
     backings, host_owners = {}, {}
     for strand in design.strands:
         for domain in strand.domains:
@@ -383,7 +426,8 @@ def _select_inputs(design, body, index):
                for field in ("overhang_a_id", "overhang_b_id")]
     _work_admission(design, bridge_length, [target[2] for target in targets])
     connections = _conflicts(design, body, index)
-    removed = _removed_ownership(design, index, connections, backings, host_owners)
+    removed = _removed_ownership(design, index, connections, backings, host_owners,
+                                 allow_indirect=body.connection_application_version == 2)
     _complement_ownership(design, index, targets, removed)
     return _Selected(version, tuple(connections), bridge_length), removed
 
@@ -391,6 +435,8 @@ def _select_inputs(design, body, index):
 def _check_outputs(design, body, index, removed):
     prefix = f"__lnk__{body.connection_id}"
     strands = {f"{prefix}__a", f"{prefix}__b"} if "dsdna" in body.connection_type else {f"{prefix}__s"}
+    # Reserve the complete removal namespace even when an indirect output emits
+    # no helix. A retained/dangling helix owner must not enter that namespace.
     outputs = {("overhang_connection", body.connection_id), ("helix", prefix),
                *(("strand", identity) for identity in strands)}
     collisions = outputs & index.keys()
@@ -479,7 +525,7 @@ def _route_version(design, version_id):
     return selected
 
 
-def try_record(version_id):
+def try_record(version_id, *, contract_version=1):
     """Record one finite Apply under the existing document transaction lock.
 
     Only explicitly unsupported input scope returns None. Selection finishes
@@ -489,9 +535,12 @@ def try_record(version_id):
     from fastapi import HTTPException
     from backend.api import state
     from backend.api.feature_recording import record_feature
+    from backend.api.part_source_bound_route import require_current
 
+    allowed = supported_types(contract_version)
     try:
         with state._lock:
+            require_current()
             state._require_compatibility_write("finite_connection_apply")
             session = state._session()
             source = session.design
@@ -499,12 +548,14 @@ def try_record(version_id):
                 raise HTTPException(404, detail="No active design.")
             try:
                 version = _route_version(source, version_id)
-                if version.connection_type not in get_args(_FiniteType):
+                if version.connection_type not in allowed:
                     return None
                 state._assert_active_loadout_editable(source)
+                if contract_version == 2 and (source.feature_log_cursor != -1 or source.feature_log_sub_cursor is not None):
+                    raise HTTPException(409, detail="Return to the latest feature before Apply.")
                 index = _source_index(source)
                 endpoints = {version.overhang_a_id, version.overhang_b_id}
-                values = {"_proof_version": 1, "connection_application_version": 1, "action": ACTION,
+                values = {"_proof_version": 1, "connection_application_version": contract_version, "action": ACTION,
                     "version_id": version.id, "overhang_a_id": version.overhang_a_id,
                     "overhang_b_id": version.overhang_b_id, "connection_type": version.connection_type,
                     "connection_id": "pending",
@@ -527,6 +578,7 @@ def try_record(version_id):
                 raise
 
             def native(design):
+                require_current()
                 if session.design is not source or design is not source:
                     raise HTTPException(409, detail="Connection application source changed before recording.")
                 result, report = _materialize(design, body, selected)
