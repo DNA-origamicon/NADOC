@@ -11,7 +11,7 @@ import asyncio
 import json
 from time import monotonic
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from starlette.responses import JSONResponse
 from starlette.routing import compile_path
 
@@ -39,6 +39,7 @@ def _strict_application():
     from backend.api.routes_feature_log import (
         cancel_part_evaluation, commit_part_evaluation, get_part_evaluation, start_part_evaluation,
     )
+    from backend.api.part_strict_geometry_http import definitions as geometry_definitions
 
     definitions = (
         (_EMPTY, "POST", create_registered_empty, 201, MAX_EMPTY_BYTES),
@@ -50,7 +51,7 @@ def _strict_application():
         (_JOBS + "/{job_id}", "GET", get_part_evaluation, 200, 0),
         (_JOBS + "/{job_id}", "DELETE", cancel_part_evaluation, 200, 0),
         (_JOBS + "/{job_id}/commit", "POST", commit_part_evaluation, 200, 0),
-    )
+    ) + geometry_definitions()
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None, redirect_slashes=False)
     matches = []
     for path, method, endpoint, status, limit in definitions:
@@ -200,6 +201,15 @@ class StrictPartDispatch:
             await error(scope, receive, send)
             return
         context = StrictRequestContext(doc, selected.generation)
+        from backend.api import part_strict_geometry_http as geometry
+        geometry_context = None
+        if path.startswith(geometry.PREFIX + '/'):
+            try:
+                geometry_context = geometry.capture_context(doc, selected.generation,
+                    recovering=path == geometry.PREFIX + '/recovery/jobs')
+            except HTTPException as error:
+                await JSONResponse({'detail': error.detail}, status_code=error.status_code)(scope, receive, send)
+                return
         if limit:
             body, error = await _body(receive, limit, context)
             if error is None and body is not None:
@@ -223,4 +233,6 @@ class StrictPartDispatch:
             return
         strict_scope = dict(scope)
         strict_scope[CONTEXT_KEY] = context
+        if geometry_context is not None:
+            strict_scope[geometry.CONTEXT_KEY] = geometry_context
         await self.strict(strict_scope, receive, send)

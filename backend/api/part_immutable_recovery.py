@@ -30,6 +30,7 @@ from backend.core.part_verification_capture import CaptureLimit
 
 TIME_BUDGET = 5.0
 _QUALIFICATION = object()
+_UNSET_SESSION = object()
 
 
 @dataclass
@@ -138,12 +139,13 @@ def start(request, *, expected_policy_generation=None):
     return _start(request, expected_policy_generation=expected_policy_generation, geometry=False)
 
 
-def start_geometry(request, *, expected_policy_generation=None):
+def start_geometry(request, *, expected_policy_generation=None, expected_empty_session=_UNSET_SESSION):
     """Private explicit recovery; public restore remains on its original scope."""
-    return _start(request, expected_policy_generation=expected_policy_generation, geometry=True)
+    return _start(request, expected_policy_generation=expected_policy_generation, geometry=True,
+                  expected_empty_session=expected_empty_session)
 
 
-def _start(request, *, expected_policy_generation, geometry):
+def _start(request, *, expected_policy_generation, geometry, expected_empty_session=_UNSET_SESSION):
     request = RestoreRequest.model_validate(request)
     if not _slot.acquire(blocking=False):
         raise HTTPException(429, detail="A part history operation is already running")
@@ -158,6 +160,9 @@ def _start(request, *, expected_policy_generation, geometry):
             _context_locked(doc, expected_policy_generation)
             _require_current_owner(owner)
             session = state._sessions.get(doc)
+            if expected_empty_session is not _UNSET_SESSION and session is not expected_empty_session:
+                raise HTTPException(409, detail={'code': 'source_changed',
+                    'detail': 'Recovery request belongs to an earlier document incarnation'})
             if request.expected_revision != (0 if session is None else session.revision):
                 raise HTTPException(409, detail={"code": "source_changed", "detail": "Recovery belongs to an earlier revision"})
             if session is None:

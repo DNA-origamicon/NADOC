@@ -33,7 +33,7 @@ def _refuse(message, code='source_changed', status=409):
     raise HTTPException(status, detail={'code': code, 'detail': message})
 
 
-def _source(design_id, revision):
+def _source(design_id, revision, *, expected_source=None, expected_session_identity=None):
     require_http_source()
     doc = doc_context.get_current_doc()
     publication.require_policy(doc_id=doc)
@@ -44,6 +44,9 @@ def _source(design_id, revision):
     metadata = publication.source_metadata(session.design)
     if metadata.design_id != design_id:
         _refuse('The captured document identity changed')
+    if ((expected_source is not None and session.design is not expected_source)
+            or (expected_session_identity is not None and session.identity != expected_session_identity)):
+        _refuse('The request belongs to an earlier document incarnation')
     return doc, session, metadata
 
 
@@ -61,7 +64,7 @@ def _current(context, session, deadline, cancelled):
 
 
 def edit(index, params, *, expected_kind, expected_feature_id, expected_design_id,
-         expected_revision, cancelled=None):
+         expected_revision, cancelled=None, expected_source=None, expected_session_identity=None):
     """Regenerate off-lock, then atomically replace one immutable revision."""
     if (type(expected_kind) is not str or expected_kind not in KINDS
             or type(expected_feature_id) is not str or not 1 <= len(expected_feature_id) <= 512
@@ -85,7 +88,8 @@ def edit(index, params, *, expected_kind, expected_feature_id, expected_design_i
         validate_operation_input(operation)
         request_hash = digest(operation)
         with state._lock:
-            doc, session, source_metadata = _source(expected_design_id, expected_revision)
+            doc, session, source_metadata = _source(expected_design_id, expected_revision,
+                expected_source=expected_source, expected_session_identity=expected_session_identity)
             source = session.design
             admission = publication.admit(doc, session, request_sha256=request_hash)
             context = permits.admission_context(admission)
@@ -136,12 +140,13 @@ def _preparation_checkpoint(deadline, cancelled):
         _refuse('Extrusion edit deadline exceeded', 'time_limit', 408)
 
 
-def history(action, *, expected_design_id, expected_revision):
+def history(action, *, expected_design_id, expected_revision, expected_source=None, expected_session_identity=None):
     """Undo/redo only exact retained immutable handles, without reconstruction."""
     if type(action) is not str or action not in {'undo', 'redo'}:
         _refuse('Unknown immutable history action', 'invalid_geometry_input', 422)
     with state._lock:
-        _, session, metadata = _source(expected_design_id, expected_revision)
+        _, session, metadata = _source(expected_design_id, expected_revision,
+            expected_source=expected_source, expected_session_identity=expected_session_identity)
         origin, destination = (session.history, session.redo) if action == 'undo' else (session.redo, session.history)
         if not origin:
             _refuse(f'Nothing to {action}', 'empty_history', 404)
