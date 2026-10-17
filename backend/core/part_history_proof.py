@@ -75,6 +75,8 @@ def command_rows(design, limit):
                     # Routing diffs currently carry topology collections only.
                     # A proof must not certify a row whose recovery drops groups.
                     raise ValueError("group_organization_requires_snapshot")
+                if kind == "placement-poses":
+                    raise ValueError("placement_poses_requires_snapshot")
             yield child.id, kind, params
 
 

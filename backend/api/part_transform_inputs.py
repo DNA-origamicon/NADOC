@@ -16,7 +16,7 @@ from backend.core.part_operation_input import validate_operation_input
 from backend.core.part_overlay_commands import command_input
 
 
-KINDS = frozenset({"cluster_op", "nucleotide-transform", "nucleotide-transform-batch",
+KINDS = frozenset({"cluster_op", "placement-poses", "nucleotide-transform", "nucleotide-transform-batch",
                    "nucleotide-transform-delete"})
 POSE_FIELDS = frozenset({"translation", "rotation", "pivot"})
 AUTHORED_FIELDS = frozenset({"name", "helix_ids", "domain_ids", "color", "opacity"})
@@ -126,6 +126,9 @@ def _placement(values):
 
 def normalize(kind, previous, patch):
     """Return owned complete inputs; preserve literals and protected metadata."""
+    if kind == "placement-poses":
+        from backend.api.part_placement_pose_commands import normalize as normalize_poses
+        return normalize_poses(previous, patch)
     if type(kind) is not str or kind not in KINDS:
         _reject("Select an ordinary native transform", "unsupported_transform_scope")
     if type(previous) is not dict or type(patch) is not dict:
@@ -201,6 +204,9 @@ def edit_transform_entry(entry, patch, prefix):
             type(entry) is SnapshotLogEntry and entry.op_kind in KINDS - {"cluster_op"}):
         _reject("Select an ordinary top-level transform history row", "unsupported_transform_scope")
     kind, previous = command_input(entry)
+    if kind == "cluster_op" and type(patch) is dict and "upgrade_to" in patch:
+        from backend.api.part_placement_pose_commands import upgrade_entry
+        return upgrade_entry(entry, patch, prefix)
     values = _bind_normalized(kind, normalize(kind, previous, patch), prefix)
     if (kind == "nucleotide-transform-delete" and "target" in patch
             and patch["target"] != values["target"]):

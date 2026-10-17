@@ -223,7 +223,7 @@ def prepare_change(source, captured, index, checkpoint, *, params=None, sub_inde
             except CommandContractError as exc:
                 raise HTTPException(409, detail={**exc.as_issue(), "feature_id": entry.id}) from exc
         elif entry.feature_type == "snapshot":
-            if entry.op_kind in {"nucleotide-transform", "nucleotide-transform-batch",
+            if entry.op_kind in {"placement-poses", "nucleotide-transform", "nucleotide-transform-batch",
                                   "nucleotide-transform-delete"}:
                 from backend.api.part_transform_inputs import edit_transform_entry
 

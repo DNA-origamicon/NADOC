@@ -49,7 +49,7 @@ EXTRA_BASES = frozenset({"crossover-extra-bases", "crossover-extra-bases-batch",
 CONSTRAINTS = frozenset({"joint-place", "joint-update", "joint-delete",
                          "flexible-segment-mark", "flexible-segment-unmark"})
 PREFIX_KINDS = EXTRUSIONS | ROUTING | ORGANIZATION_KINDS | TRANSFORMS | EXTRA_BASES | CONSTRAINTS | frozenset({
-    "bundle-create", "sweep", "deformation", "cluster_create", "cluster_op",
+    "bundle-create", "sweep", "deformation", "cluster_create", "cluster_op", "placement-poses",
 })
 PATCH_FIELDS = frozenset({"type", "plane_a_bp", "plane_b_bp", "params", "cluster_ids", "targets"})
 

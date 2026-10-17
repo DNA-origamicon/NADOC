@@ -8,10 +8,10 @@ rejects ambiguous identities and never changes placement or occupancy rules.
 from backend.core.part_command_errors import ReferenceResolutionError
 
 
-KINDS = frozenset({"cluster_op", "nucleotide-transform", "nucleotide-transform-batch",
+KINDS = frozenset({"cluster_op", "placement-poses", "nucleotide-transform", "nucleotide-transform-batch",
                    "nucleotide-transform-delete"})
 _FIELDS = {"cluster": "cluster_transforms", "helix": "helices", "strand": "strands",
-           "overhang": "overhangs", "nucleotide_transform": "nucleotide_transforms"}
+           "overhang": "overhangs", "nucleotide_transform": "nucleotide_transforms", "joint": "cluster_joints"}
 
 
 def _fail(kind, identity, path, *, ambiguous=False, detail=None):
@@ -41,15 +41,18 @@ class _References:
         return matches[0]
 
 
-def _placement(refs, params):
+def _placement(refs, params, *, path_prefix=None, authored_path=None):
     from backend.core.models import DomainRef
 
-    owner = refs.resolve("cluster", params["cluster_id"], ["cluster_id"])
+    path_prefix = [] if path_prefix is None else path_prefix
+    authored_path = path_prefix if authored_path is None else authored_path
+    owner_path = [*path_prefix, "cluster_id"]
+    owner = refs.resolve("cluster", params["cluster_id"], owner_path)
     visited = set()
     selected = True
     while owner is not None:
         if owner.id in visited:
-            _fail("cluster", owner.id, ["cluster_id"], ambiguous=True,
+            _fail("cluster", owner.id, owner_path, ambiguous=True,
                   detail="Movement placement has a cyclic parent reference")
         visited.add(owner.id)
         explicit_helices = selected and "helix_ids" in params
@@ -57,11 +60,11 @@ def _placement(refs, params):
         helices = params["helix_ids"] if explicit_helices else owner.helix_ids
         domains = params["domain_ids"] if explicit_domains else owner.domain_ids
         for index, identity in enumerate(helices):
-            path = ["helix_ids", index] if explicit_helices else ["cluster_id"]
+            path = [*authored_path, "helix_ids", index] if explicit_helices else owner_path
             refs.resolve("helix", identity, path)
         for index, value in enumerate(domains):
             ref = DomainRef.model_validate(value)
-            path = ["domain_ids", index] if explicit_domains else ["cluster_id"]
+            path = [*authored_path, "domain_ids", index] if explicit_domains else owner_path
             strand = refs.resolve("strand", ref.strand_id, path + ["strand_id"] if explicit_domains else path)
             domain_path = path + ["domain_index"] if explicit_domains else path
             if not 0 <= ref.domain_index < len(strand.domains):
@@ -69,8 +72,8 @@ def _placement(refs, params):
             refs.resolve("helix", strand.domains[ref.domain_index].helix_id, domain_path)
         if owner.overhang_duplex_driver_id is not None:
             # Despite the historical field name, this references an overhang.
-            refs.resolve("overhang", owner.overhang_duplex_driver_id, ["cluster_id"])
-        owner = (refs.resolve("cluster", owner.parent_cluster_id, ["cluster_id"])
+            refs.resolve("overhang", owner.overhang_duplex_driver_id, owner_path)
+        owner = (refs.resolve("cluster", owner.parent_cluster_id, owner_path)
                  if owner.parent_cluster_id is not None else None)
         selected = False
 
@@ -110,6 +113,10 @@ def _nucleotides(refs, kind, params, *, validate_slots):
 def validate_transform_references(kind, design, params, *, validate_slots=True):
     """Refuse absent/ambiguous inputs, retaining native target validity exactly."""
     if kind not in KINDS:
+        return
+    if kind == "placement-poses":
+        from backend.api.part_placement_pose_commands import parse_command, validate_references
+        validate_references(design, parse_command(params))
         return
     refs = _References(design)
     if kind == "cluster_op":

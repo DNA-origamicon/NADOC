@@ -2794,6 +2794,13 @@ milestone because FH-18 remains open. App qualification remains MV-48/FH-27.
   solve, failed Apply/cancel, downstream edits and cold proof. Archive-dependent
   app qualification remains FH-27. This issue is existing scope, not a new milestone.
 
+U20 progress: the gated owned editor now records all emitted native poses in
+`placement-poses`, with explicit old-row upgrade, frame/source guards and one
+publication. Focused tests cover complete queued auxiliary writes and fixed-owner
+refusal; native compound Apply/cold-replay/undo checks pass. Actual linked-control
+solve matrices and qualified rollout remain open, so the still-used legacy path
+and this issue are not declared resolved.
+
 ## ISSUE-126 — Connection-version DS application can retain duplicate bridge occupancy (2026-10-16, OPEN)
 
 - The native mixed-end fixture with `root-to-root-dsdna-linker` produces two
@@ -2823,3 +2830,14 @@ milestone because FH-18 remains open. App qualification remains MV-48/FH-27.
   The broad run also reported a repair-job setup error that did not reproduce in
   its eight-case file; retain it as unresolved broad-suite debt. Other recorded
   environment/scientific failures and deferred FULL validation remain separate.
+
+
+## ISSUE-128 — Late Apply reply could obscure confirmed publication (2026-10-16, CORRECTED)
+
+- A Cancel reply could confirm publication while the original Apply remained in
+  flight. A subsequent malformed Apply reply retained the receipt but set
+  `publicationUnknown` again, obscuring an already confirmed save.
+- Preserve confirmed authority while reporting the conflicting reply. The shared
+  controller regression was observed failing and now passes; do not infer a
+  second commit from transport failure. Transform receipts require their full
+  exact origin/role; legacy small-receipt enrichment keeps its prior contract.

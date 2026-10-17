@@ -120,7 +120,10 @@ export function flexAnchorKey(design) {
   }
 }
 
-export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => null) {
+export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => null, { storeRef = store } = {}) {
+  // Pane owners coexist: releasing one must not dispose another's templates.
+  const beadGeometry = GEO_BEAD.clone(), slabGeometry = GEO_SLAB.clone()
+  let disposed = false
   const group = new THREE.Group()
   group.name = 'flexibleArcs'
   scene.add(group)
@@ -149,7 +152,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
 
   /** Re-read the cluster colour/alpha lookups off a design. */
   function _syncClusterLookups(design) {
-    _clusterColorFn = (store.getState().coloringMode === 'cluster')
+    _clusterColorFn = (storeRef.getState().coloringMode === 'cluster')
       ? buildClusterColorLookup(design)
       : null
     _clusterAlphaKeys = clusterAlphaKeys(design)
@@ -258,7 +261,8 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
   function _clear() {
     for (const ch of [...group.children]) {
       group.remove(ch)
-      ch.geometry?.dispose?.()
+      if (ch.geometry !== beadGeometry && ch.geometry !== slabGeometry) ch.geometry?.dispose?.()
+      if (ch.isInstancedMesh) ch.dispose()
       // Materials are per-connection now (they used to be shared singletons that
       // must NOT be disposed) — dropping them here or they leak on every render.
       ch.material?.dispose?.()
@@ -272,7 +276,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     tube.userData.connectionId = connId
     group.add(tube)
     if (!beads.length) return
-    const inst = new THREE.InstancedMesh(GEO_BEAD, mats.bead, beads.length)
+    const inst = new THREE.InstancedMesh(beadGeometry, mats.bead, beads.length)
     const m = new THREE.Matrix4()
     beads.forEach((p, i) => { m.makeTranslation(p.x, p.y, p.z); inst.setMatrixAt(i, m) })
     inst.instanceMatrix.needsUpdate = true
@@ -288,7 +292,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
       new THREE.Vector3().subVectors(pB, pA).normalize(), bow)
     if (planeN.lengthSq() < 1e-9) return
     planeN.normalize()
-    const slabs = new THREE.InstancedMesh(GEO_SLAB, mats.slab, beads.length)
+    const slabs = new THREE.InstancedMesh(slabGeometry, mats.slab, beads.length)
     const sm = new THREE.Matrix4(), q = new THREE.Quaternion()
     const tan = new THREE.Vector3(), bn = new THREE.Vector3(), center = new THREE.Vector3()
     const scl = new THREE.Vector3(1, 1, 1)
@@ -330,7 +334,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, TUBE_SEGS, TUBE_RADIUS, 6, false), mats.tube)
     tube.userData.connectionId = connId
     group.add(tube)
-    const inst = new THREE.InstancedMesh(GEO_BEAD, mats.bead, beads.length)
+    const inst = new THREE.InstancedMesh(beadGeometry, mats.bead, beads.length)
     const m = new THREE.Matrix4()
     beads.forEach((p, i) => { m.makeTranslation(p.x, p.y, p.z); inst.setMatrixAt(i, m) })
     inst.instanceMatrix.needsUpdate = true
@@ -338,7 +342,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     inst.userData.connectionId = connId
     inst.name = 'flexSegmentBeads'   // sim-frame twin of _drawArc's mesh — same name, same picking
     group.add(inst)
-    const slabs = new THREE.InstancedMesh(GEO_SLAB, mats.slab, beads.length)
+    const slabs = new THREE.InstancedMesh(slabGeometry, mats.slab, beads.length)
     const sm = new THREE.Matrix4(), q = new THREE.Quaternion()
     const tan = new THREE.Vector3(), bn = new THREE.Vector3(), center = new THREE.Vector3()
     const scl = new THREE.Vector3(1, 1, 1)
@@ -389,7 +393,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     }
   }
 
-  function rebuild(design) { _design = design; if (!design?.flexible_connections?.length) _lastBow.clear(); _render(null) }
+  function rebuild(design) { if (disposed) return; _design = design; if (!design?.flexible_connections?.length) _lastBow.clear(); _render(null) }
   function applyLiveUpdate(helixIds, centerVec, dummyPos, incrQuat) {
     const live = (helixIds && centerVec && dummyPos && incrQuat)
       ? { helixIds: new Set(helixIds), centerVec, dummyPos, incrQuat }
@@ -429,10 +433,12 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
     _render()
   }
   function dispose() {
+    if (disposed) return
+    disposed = true; unsubscribe?.(); _design = null; _simByKey = null; _lastBow.clear()
     // _clear() disposes the per-connection materials; only the shared geometries
     // are left to release here.
     _clear(); scene.remove(group)
-    GEO_BEAD.dispose(); GEO_SLAB.dispose()
+    beadGeometry.dispose(); slabGeometry.dispose()
   }
 
   /**
@@ -463,7 +469,7 @@ export function initFlexibleArcs(scene, designRenderer, getHelixAxes = () => nul
 
   // Entering or leaving cluster-coloring mode changes nothing about the design, so
   // the design subscriber that drives rebuild() never fires for it.
-  store.subscribe((newState, prevState) => {
+  const unsubscribe = storeRef.subscribe((newState, prevState) => {
     if (newState.coloringMode === prevState.coloringMode) return
     if (!group.children.length) return
     refreshClusterDisplay(newState.currentDesign)

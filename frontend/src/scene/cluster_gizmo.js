@@ -30,6 +30,7 @@
 import * as THREE from 'three'
 import { commitPlacementTransforms } from './placement_commit.js'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
+import { bindPrivateGizmoLayer, markGizmoLayer } from './private_gizmo_layer.js'
 
 import { clampQuatToJointBounds } from './assembly_revolute_math.js'
 import { relaxToConvergence } from './flexible_relax_solver.js'
@@ -212,7 +213,8 @@ function _ringRadius(cluster, currentHelixAxes) {
   return Math.max(3, maxDist * 1.4 + 1.0)
 }
 
-export function initClusterGizmo(store, controls, onLiveTransform = null, captureBase = null, onTransformUpdate = null, client = null) {
+export function initClusterGizmo(store, controls, onLiveTransform = null, captureBase = null, onTransformUpdate = null, client = null, { displayLayer } = {}) {
+  let releaseLayer = null
   let _tc             = null   // TransformControls instance (translate mode)
   let _rotationSnapDeg = null  // rotate-drag angle snap in degrees, or null for free drag
   let _dummy          = null   // Object3D TC is attached to
@@ -267,6 +269,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
   let _ringStartQuat  = null   // cluster quaternion at ring drag start
   let _ringRefVec     = null   // reference vector in ring plane for angle computation
   const _ringRaycaster = new THREE.Raycaster()
+  if (Number.isInteger(displayLayer)) _ringRaycaster.layers.set(displayLayer)
 
   // ── Axis-line translation drag state ─────────────────────────────────────────
   let _lineMesh        = null   // THREE.Group — axis drag handle geometry
@@ -423,6 +426,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     _ringMesh.quaternion.copy(q)
     _ringMesh.position.copy(_axisOrigin).addScaledVector(_axisDir, 1)  // 1 nm above surface
 
+    markGizmoLayer(_ringMesh, displayLayer)
     _ringScene.add(_ringMesh)
 
     _ringCanvas.addEventListener('pointerdown', _onRingPointerDown)
@@ -478,6 +482,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     group.position.copy(_axisOrigin)
     group.renderOrder = 998
     _lineMesh = group
+    markGizmoLayer(_lineMesh, displayLayer)
     _ringScene.add(_lineMesh)
 
     _ringCanvas.addEventListener('pointerdown', _onLinePointerDown)
@@ -847,6 +852,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     _tc.setMode('translate')
     _tc.setSpace(_space)
     _tc.setRotationSnap(_rotationSnapDeg == null ? null : THREE.MathUtils.degToRad(_rotationSnapDeg))
+    releaseLayer = bindPrivateGizmoLayer(_tc, displayLayer)
     scene.add(_tc.getHelper())
     _tc.addEventListener('dragging-changed', _onGroupDraggingChanged)
     _tc.addEventListener('change', _onGroupChange)
@@ -884,6 +890,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     _tc.setRotationSnap(_rotationSnapDeg == null ? null : THREE.MathUtils.degToRad(_rotationSnapDeg))
     // In Three.js r158+, TransformControls is not an Object3D.
     // The visible gizmo is accessed via getHelper() which returns the _root Object3D.
+    releaseLayer = bindPrivateGizmoLayer(_tc, displayLayer)
     scene.add(_tc.getHelper())
 
     _tc.addEventListener('dragging-changed', e => {
@@ -951,7 +958,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
           }
         }
       } else {
-        // Drag ended — persist final transform to backend once.
+        // Drag ended — queue the complete pose for the owning Apply transaction.
         _isDragging = false
         _recordCurrentTransform()
       }
@@ -1359,6 +1366,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
 
   // ── Detach ──────────────────────────────────────────────────────────────────
   function detach() {
+    releaseLayer?.(); releaseLayer = null
     _hideRing()
     _hideLine()
     if (_tc) {
@@ -1593,6 +1601,7 @@ export function initClusterGizmo(store, controls, onLiveTransform = null, captur
     commitPendingTransforms,
     beginConstrainedRotation,
     isActive: () => _clusterId !== null,
+    isDragging: () => _isDragging || _ringDragging || _lineDragging,
     isGroupActive: () => _isGroup(),
     getMode:  () => _mode,
     isJointConstraintActive: () => !_isGroup() && _constraintType === 'joint' && !!((_constraintJoint) ?? _activeJoint()),

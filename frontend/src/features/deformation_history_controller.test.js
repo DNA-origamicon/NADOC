@@ -23,7 +23,7 @@ function packet(body, extra = {}) {
 }
 
 const fixtures = []
-async function fixture(overrides = {}) {
+async function fixture(overrides = {}, options = {}) {
   let context = { docId: 'doc', designId: 'part', revision: 7, loadoutId: null, editable: true, cursor: -1, subCursor: null }
   let listener = () => {}
   const api = {
@@ -38,7 +38,7 @@ async function fixture(overrides = {}) {
   const events = new EventTarget()
   const controller = createDeformationHistoryController({ api, getContext: () => context,
     subscribeContext: callback => { listener = callback; return vi.fn() },
-    validateDisplay, applyPublished, events, uuid: () => PREVIEW, now: () => Date.now() })
+    validateDisplay, applyPublished, events, uuid: () => PREVIEW, now: () => Date.now(), ...options })
   const value = { controller, api, validateDisplay, applyPublished, events,
     setContext(next, notify = true) { context = { ...context, ...next }; if (notify) listener() },
     context: () => context }
@@ -329,5 +329,224 @@ it('keeps create mode separate from edit responses and leaves failed initial eva
   const f = await fixture({ prepareCreation: vi.fn(async body => createPacket(body)), evaluate: vi.fn(async body => packet(body)) })
   await f.controller.openCreation(creation); await f.controller.update(completeCreation)
   expect(f.controller.getState().error).toBeTruthy()
+  await f.controller.apply(); expect(f.api.apply).not.toHaveBeenCalled()
+})
+
+const TRANSFORMS = ['cluster_op', 'nucleotide-transform', 'nucleotide-transform-batch', 'nucleotide-transform-delete', 'placement-poses']
+const transformPacket = (body, kind = 'cluster_op', extra = {}) => ({ ...body,
+  doc_id: 'doc', lease_id: LEASE, request_sequence: body.request_sequence ?? 0, remaining_seconds: 60,
+  family: 'transform', command_kind: kind, evaluated_command_kind: kind, projection_version: 1, stage: 'feature',
+  source_equivalence_checked: false, downstream_evaluated: false, physical_validity: false,
+  before: { pane: 'before' }, candidate: body.include_geometry === false ? null : { pane: 'candidate' },
+  control_context: { inputs: { translation: [0, 0, 0] } }, control_state: { inputs: body.params ?? {} }, ...extra })
+const transformReceipt = (body, kind = 'cluster_op', extra = {}) => ({
+  ...Object.fromEntries(['preview_id', 'expected_design_id', 'expected_revision', 'feature_id', 'lease_id', 'request_sequence']
+    .map(key => [key, body[key]])), status: 'applied', family: 'transform', command_kind: kind,
+  doc_id: 'doc', design_id: 'part', revision: 8, ...extra })
+async function transformFixture(kind = 'cluster_op', overrides = {}, options = {}) {
+  return fixture({ prepare: vi.fn(async body => transformPacket(body, kind)),
+    evaluate: vi.fn(async body => transformPacket(body, kind)),
+    apply: vi.fn(async body => transformReceipt(body, kind)), ...overrides }, { family: 'transform', ...options })
+}
+
+describe('declared transform editor lifecycle', () => {
+  it.each(TRANSFORMS)('binds %s and adopts one exact scalar receipt without a deformation ID', async kind => {
+    const f = await transformFixture(kind)
+    expect(await f.controller.open('feature')).toBeTruthy()
+    expect(f.controller.getState()).toMatchObject({ open: true, featureId: 'feature', commandKind: kind })
+    expect(f.controller.getState()).not.toHaveProperty('deformationId')
+    const draft = kind === 'nucleotide-transform-delete' ? {} : { translation: [1, 2, 3] }
+    await f.controller.update(draft, { includeGeometry: false })
+    expect(f.controller.getState().projection.candidate).toBeNull()
+    await f.controller.apply()
+    expect(f.api.apply.mock.lastCall[0]).toMatchObject({ feature_id: 'feature', params: draft })
+    expect(f.api.apply.mock.lastCall[0]).not.toHaveProperty('deformation_id')
+    expect(f.applyPublished).toHaveBeenCalledOnce()
+    expect(f.controller.getState().committed).toMatchObject({ family: 'transform', command_kind: kind, feature_id: 'feature' })
+    expect(f.controller.getState().committed).not.toHaveProperty('deformation_id')
+    await f.controller.apply(); await f.controller.refreshCommitted()
+    expect(f.api.apply).toHaveBeenCalledOnce(); expect(f.applyPublished).toHaveBeenCalledOnce()
+  })
+
+  it.each([['family', 'sweep'], ['command_kind', 'deformation'], ['command_kind', null],
+    ['deformation_id', 'fabricated']])('refuses malformed Prepare identity %s', async (field, value) => {
+    const f = await transformFixture('cluster_op', { prepare: vi.fn(async body => transformPacket(body, 'cluster_op', { [field]: value })) })
+    expect(await f.controller.open('feature')).toBeNull()
+    expect(f.controller.getState().projection).toBeNull()
+    await f.controller.apply(); expect(f.api.apply).not.toHaveBeenCalled()
+  })
+
+  it('does not auto-select a transform contract from a response in the default controller', async () => {
+    const f = await fixture({ prepare: vi.fn(async body => transformPacket(body)) })
+    expect(await f.controller.open('feature')).toBeNull()
+    expect(f.controller.getState().projection).toBeNull()
+  })
+
+  it('rejects unknown declared families and transform creation before a request', async () => {
+    const { createDeformationHistoryController } = await import(modulePath)
+    expect(() => createDeformationHistoryController({ api: {}, getContext: () => ({}),
+      validateDisplay: () => {}, applyPublished: () => {}, family: 'untrusted' })).toThrow()
+    const f = await transformFixture('cluster_op', { prepareCreation: vi.fn() })
+    expect(await f.controller.openCreation(creation)).toBeNull()
+    expect(f.api.prepareCreation).not.toHaveBeenCalled(); expect(f.api.prepare).not.toHaveBeenCalled()
+  })
+
+  it('requires the bound command kind on every evaluation without erasing the accepted pane', async () => {
+    const f = await transformFixture()
+    await f.controller.open('feature')
+    const before = f.controller.getState().projection
+    f.api.evaluate.mockImplementation(async body => transformPacket(body, 'nucleotide-transform'))
+    await f.controller.update({ translation: [1, 2, 3] })
+    expect(f.controller.getState().projection).toBe(before)
+    expect(f.controller.getState().error).toBeTruthy()
+    await f.controller.apply(); expect(f.api.apply).not.toHaveBeenCalled()
+  })
+
+  it.each(['apply', 'status', 'cancel'])('refuses a foreign-kind %s receipt and can resolve the original publication', async method => {
+    const f = await transformFixture('cluster_op', { apply: vi.fn().mockRejectedValue(Object.assign(new Error('Lost'), { status: 0 })) })
+    await f.controller.open('feature')
+    if (method === 'apply') f.api.apply.mockImplementation(async body => transformReceipt(body, 'nucleotide-transform'))
+    await f.controller.apply()
+    const body = f.api.apply.mock.lastCall[0]
+    if (method !== 'apply') {
+      f.api[method].mockResolvedValue(transformReceipt(body, 'nucleotide-transform'))
+      await (method === 'status' ? f.controller.resolvePublication() : f.controller.cancel())
+    }
+    expect(f.applyPublished).not.toHaveBeenCalled()
+    expect(f.controller.getState()).toMatchObject({ open: true, committed: null, publicationUnknown: true })
+    f.api.status.mockResolvedValue(transformReceipt(body))
+    await f.controller.resolvePublication()
+    expect(f.api.apply).toHaveBeenCalledOnce(); expect(f.applyPublished).toHaveBeenCalledOnce()
+  })
+
+  it.each(['family', 'command_kind', 'expected_design_id', 'expected_revision'])('does not enrich missing transform Apply %s', async field => {
+    const f = await transformFixture('cluster_op', { apply: vi.fn(async body => {
+      const value = transformReceipt(body); delete value[field]; return value
+    }) })
+    await f.controller.open('feature'); await f.controller.apply()
+    expect(f.applyPublished).not.toHaveBeenCalled()
+    expect(f.controller.getState()).toMatchObject({ committed: null, publicationUnknown: true })
+  })
+
+  it('cancels pending Prepare by nonce and ignores its late owned result', async () => {
+    const held = deferred(), f = await transformFixture('cluster_op', { prepare: vi.fn(() => held.promise) })
+    const opening = f.controller.open('feature')
+    await f.controller.cancel()
+    expect(f.api.cancel.mock.calls[0][0]).toEqual({ preview_id: PREVIEW, expected_design_id: 'part', expected_revision: 7, feature_id: 'feature' })
+    held.resolve(transformPacket(f.api.prepare.mock.lastCall[0])); await opening
+    expect(f.controller.getState()).toMatchObject({ open: false, projection: null })
+    expect(f.api.cancel.mock.calls.some(([body]) => body.lease_id === LEASE)).toBe(true)
+  })
+
+  it('retains confirmed publication after a racing original transport failure', async () => {
+    const held = deferred(), f = await transformFixture('nucleotide-transform-delete', { apply: vi.fn(() => held.promise) })
+    await f.controller.open('feature')
+    const applying = f.controller.apply(); await tick()
+    const body = f.api.apply.mock.lastCall[0]
+    f.api.cancel.mockResolvedValue(transformReceipt(body, 'nucleotide-transform-delete'))
+    await f.controller.cancel()
+    held.reject(Object.assign(new Error('Original response lost'), { status: 0 })); await applying
+    expect(f.controller.getState()).toMatchObject({ publicationUnknown: false, refreshNeeded: true,
+      committed: expect.objectContaining({ command_kind: 'nucleotide-transform-delete' }) })
+    await f.controller.refreshCommitted()
+    expect(f.api.apply).toHaveBeenCalledOnce(); expect(f.applyPublished).toHaveBeenCalledOnce()
+  })
+
+  it('does not replace confirmed publication with uncertainty after a conflicting late Apply reply', async () => {
+    const held = deferred(), f = await transformFixture('cluster_op', { apply: vi.fn(() => held.promise) })
+    await f.controller.open('feature')
+    const applying = f.controller.apply(); await tick()
+    const body = f.api.apply.mock.lastCall[0]
+    f.api.cancel.mockResolvedValue(transformReceipt(body))
+    await f.controller.cancel()
+    const confirmed = f.controller.getState().committed
+    held.resolve(transformReceipt(body, 'nucleotide-transform')); await applying
+    expect(f.controller.getState()).toMatchObject({ committed: confirmed, publicationUnknown: false, refreshNeeded: true })
+    expect(f.applyPublished).not.toHaveBeenCalled()
+    await f.controller.refreshCommitted()
+    expect(f.api.apply).toHaveBeenCalledOnce(); expect(f.applyPublished).toHaveBeenCalledOnce()
+  })
+
+  it('ignores an old Apply after same-document reset and a new feature opening', async () => {
+    const held = deferred(), f = await transformFixture('cluster_op', { apply: vi.fn(() => held.promise) })
+    await f.controller.open('old-feature')
+    const applying = f.controller.apply(); await tick()
+    const body = f.api.apply.mock.lastCall[0]
+    f.events.dispatchEvent(new Event('nadoc:document-reset'))
+    f.api.prepare.mockImplementation(async request => transformPacket(request, 'nucleotide-transform'))
+    await f.controller.open('new-feature')
+    held.resolve(transformReceipt(body)); await applying
+    expect(f.controller.getState()).toMatchObject({ open: true, featureId: 'new-feature', commandKind: 'nucleotide-transform', committed: null })
+    expect(f.applyPublished).not.toHaveBeenCalled()
+  })
+
+  it('does not adopt after the source changes during private publication reads', async () => {
+    const held = deferred(), f = await transformFixture('cluster_op', { refreshCommitted: vi.fn(() => held.promise) })
+    await f.controller.open('feature')
+    const applying = f.controller.apply(); await tick()
+    f.setContext({ revision: 9 }, false)
+    held.resolve({ design: { id: 'part' }, revision: 8 }); await applying
+    expect(f.applyPublished).not.toHaveBeenCalled()
+  })
+
+  it('expires an idle transform lease without another native request', async () => {
+    const f = await transformFixture()
+    await f.controller.open('feature')
+    await vi.advanceTimersByTimeAsync(60001)
+    expect(f.controller.getState()).toMatchObject({ open: true, expired: true, projection: null })
+    await f.controller.update({ translation: [1, 2, 3] }); await f.controller.apply()
+    expect(f.api.evaluate).not.toHaveBeenCalled(); expect(f.api.apply).not.toHaveBeenCalled()
+  })
+
+  it('keeps original lease identity when an explicit draft upgrades the evaluated command', async () => {
+    const f = await transformFixture('cluster_op', { evaluate: vi.fn(async body =>
+      transformPacket(body, 'cluster_op', { evaluated_command_kind: 'placement-poses' })) })
+    await f.controller.open('feature')
+    const draft = { upgrade_to: 'placement-poses-v1', expected_definition_sha256: 'a'.repeat(64),
+      definition: { primary_cluster_id: 'primary', poses: [] } }
+    await f.controller.update(draft)
+    expect(f.controller.getState()).toMatchObject({ commandKind: 'cluster_op',
+      projection: { command_kind: 'cluster_op', evaluated_command_kind: 'placement-poses' } })
+    await f.controller.apply()
+    expect(f.api.apply.mock.lastCall[0].params).toEqual(draft)
+    expect(f.controller.getState().committed.command_kind).toBe('cluster_op')
+  })
+
+  it.each(['cancelled', 'commit_in_progress'])('refuses a foreign %s acknowledgment during an unresolved Apply', async status => {
+    const held = deferred(), f = await transformFixture('cluster_op', { apply: vi.fn(() => held.promise) })
+    await f.controller.open('feature')
+    const applying = f.controller.apply(); await tick()
+    const body = f.api.apply.mock.lastCall[0]
+    f.api.cancel.mockResolvedValue({ status, preview_id: 'foreign', lease_id: LEASE })
+    await f.controller.cancel()
+    expect(f.controller.getState()).toMatchObject({ open: true, error: expect.any(Error), committed: null })
+    f.api.cancel.mockResolvedValue({ status: 'commit_in_progress', preview_id: PREVIEW, lease_id: LEASE })
+    expect(await f.controller.cancel()).toMatchObject({ status: 'commit_in_progress' })
+    held.resolve(transformReceipt(body)); await applying
+    expect(f.applyPublished).toHaveBeenCalledOnce()
+  })
+})
+
+it('Reset replaces an accumulated transform upgrade and waits for its independent evaluation before Apply', async () => {
+  const f = await transformFixture('cluster_op', { evaluate: vi.fn(async body => transformPacket(body, 'cluster_op', {
+    evaluated_command_kind: body.params.upgrade_to === 'placement-poses-v1' ? 'placement-poses' : 'cluster_op',
+  })) })
+  await f.controller.open('feature')
+  expect(await f.controller.update({ upgrade_to: 'placement-poses-v1', expected_definition_sha256: 'a'.repeat(64), definition: { poses: [] } }))
+    .toMatchObject({ evaluated_command_kind: 'placement-poses' })
+  await f.controller.resetDraft()
+  expect(f.controller.getState().draft).toEqual({})
+  expect(f.api.evaluate.mock.lastCall[0].params).toEqual({})
+  await f.controller.apply()
+  expect(f.api.apply.mock.lastCall[0].params).toEqual({})
+})
+
+it('rejects an unsolicited evaluated placement upgrade without granting it draft authority', async () => {
+  const f = await transformFixture('cluster_op', { evaluate: vi.fn(async body =>
+    transformPacket(body, 'cluster_op', { evaluated_command_kind: 'placement-poses' })) })
+  await f.controller.open('feature'); const original = f.controller.getState().projection
+  await f.controller.update({ translation: [1, 0, 0] })
+  expect(f.controller.getState().projection).toBe(original)
+  expect(f.controller.getState().error).toBeInstanceOf(Error)
   await f.controller.apply(); expect(f.api.apply).not.toHaveBeenCalled()
 })

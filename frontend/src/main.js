@@ -1008,6 +1008,7 @@ async function main() {
     seekFeaturesWithDelta: _seekFeaturesWithDelta,
     showToast,
     getOrientPanel: () => _orientPanel,
+    getMoveRotatePanel: () => _moveRotatePanel,
     activateTranslateRotateTool: (...args) => _activateTranslateRotateTool(...args),
   })
   const _watchDeformState = featureEditor.watchDeformState

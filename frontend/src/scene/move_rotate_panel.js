@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { posEulerFromMatrix, eulerDegToQuat, stepEulerDeg } from './rotation_math.js'
 import { showToast } from '../ui/toast.js'
 import { canonicalSelection } from './selection_model.js'
+import { createMoveRotateHistoryBinding } from './move_rotate_history_binding.js'
 
 export function moveRotateSelectionLabels(state) {
   const design = state.currentDesign
@@ -491,26 +492,32 @@ export function initMoveRotatePanel({
     }
   })
 
+  const history = createMoveRotateHistoryBinding({ panel: _mrPanel,
+    setTransformValues: _mrSetTransformValues, setJointAngle: _mrSetJointAngle, showJointMode: _mrShowJointMode,
+    getJointMode: () => _mrPivotIsJoint, onBind: () => { _pivotRequest++ } })
+  const ordinary = history.guard
   return {
     panel:                        _mrPanel,
     selectionBox:                 _mrSelectionBox,
     pivotSel:                     _mrPivotSel,
-    setTransformValues:           _mrSetTransformValues,
-    setTransformValuesFromMatrix: _mrSetTransformValuesFromMatrix,
-    setJointAngle:                _mrSetJointAngle,
-    setPivotOptions:              _mrSetPivotOptions,
-    setSelectedPivot:             _mrSetSelectedPivot,
-    setCurrentSelection:          _mrSetCurrentSelection,
-    setSessionMode:               _mrSetSessionMode,
-    showJointMode:                _mrShowJointMode,
-    commitInputs:                 _mrCommitInputs,
-    stepAxis:                     _mrStepAxis,
+    setTransformValues:           ordinary(_mrSetTransformValues),
+    setTransformValuesFromMatrix: ordinary(_mrSetTransformValuesFromMatrix),
+    setJointAngle:                ordinary(_mrSetJointAngle),
+    setPivotOptions:              ordinary(_mrSetPivotOptions),
+    setSelectedPivot:             ordinary(_mrSetSelectedPivot),
+    setCurrentSelection:          ordinary(_mrSetCurrentSelection),
+    setSessionMode:               ordinary(_mrSetSessionMode),
+    showJointMode:                ordinary(_mrShowJointMode),
+    commitInputs:                 ordinary(_mrCommitInputs),
+    stepAxis:                     ordinary(_mrStepAxis),
     getAssemblyCtx:               () => _mrAssemblyCtx,
     setAssemblyCtx:               (ctx) => { _mrAssemblyCtx = ctx },
     getPivotIsJoint:              () => _mrPivotIsJoint,
     setProteinController:         controller => { _proteinController = controller },
     getProteinController:         () => _proteinController,
     getFrameSpace:                () => _mrFrameSel?.value === 'local' ? 'local' : 'world',
-    applyFrame:                   _mrApplyFrame,
+    applyFrame:                   ordinary(_mrApplyFrame),
+    bindHistorySession:           history.bind,
+    hasHistorySession:            history.active,
   }
 }

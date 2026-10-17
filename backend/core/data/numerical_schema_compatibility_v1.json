@@ -2,12 +2,12 @@
   "schema": "nadoc.numerical-schema-compatibility.v1",
   "transitions": [
     {
-      "id": "group-visibility-v1.from-grouping-v1.nadoc.cpd-native-engine.v1",
-      "event": "group-visibility-v1",
+      "id": "placement-poses-v1.from-grouping-v1.nadoc.cpd-native-engine.v1",
+      "event": "placement-poses-v1",
       "source_checkpoint": "1ae1137f",
       "engine_id": "nadoc.cpd-native-engine.v1",
       "from_sha256": "094b0e289c7f02ed4c97408605619a9b7711954e0a3aec8ffc4c7360ceda18ab",
-      "to_sha256": "2656ac0c21c0994eeeee19360741820cdd8e724c2566e2c6bfba0df640afea4e",
+      "to_sha256": "76d891863cf758bceb4a20858fc00959ca2246dc5fa624dbe97738f686733baf",
       "changed_paths": [
         "backend/core/lattice.py",
         "backend/core/models.py",
@@ -16,15 +16,15 @@
         "backend/core/part_history_contract.py",
         "backend/core/part_numerical_schema_compatibility.py"
       ],
-      "rationale": "Reviewed persistent named-group visibility metadata in VisibilityState and compatibility-policy capacity of 32 entries/32 KiB. Numerical calculations, solver/data and runtime/template checks are unchanged. Includes earlier reviewed changes where listed. Exact direct edge only; no transitive approval or stored repin."
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
     },
     {
-      "id": "group-visibility-v1.from-grouping-v2.nadoc.cpd-native-engine.v1",
-      "event": "group-visibility-v1",
+      "id": "placement-poses-v1.from-grouping-v2.nadoc.cpd-native-engine.v1",
+      "event": "placement-poses-v1",
       "source_checkpoint": "96ed8fe1ab9486b6adb4b32961fb0946272bb295",
       "engine_id": "nadoc.cpd-native-engine.v1",
       "from_sha256": "f91acd3473e89ba351034e2520e9bbff77c7186d50b9a6267d4a84f354c61400",
-      "to_sha256": "2656ac0c21c0994eeeee19360741820cdd8e724c2566e2c6bfba0df640afea4e",
+      "to_sha256": "76d891863cf758bceb4a20858fc00959ca2246dc5fa624dbe97738f686733baf",
       "changed_paths": [
         "backend/core/lattice.py",
         "backend/core/models.py",
@@ -33,15 +33,15 @@
         "backend/core/part_history_contract.py",
         "backend/core/part_numerical_schema_compatibility.py"
       ],
-      "rationale": "Reviewed persistent named-group visibility metadata in VisibilityState and compatibility-policy capacity of 32 entries/32 KiB. Numerical calculations, solver/data and runtime/template checks are unchanged. Includes earlier reviewed changes where listed. Exact direct edge only; no transitive approval or stored repin."
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
     },
     {
-      "id": "group-visibility-v1.from-cluster-dissolve-v1.nadoc.cpd-native-engine.v1",
-      "event": "group-visibility-v1",
+      "id": "placement-poses-v1.from-cluster-dissolve-v1.nadoc.cpd-native-engine.v1",
+      "event": "placement-poses-v1",
       "source_checkpoint": "e9f3ed7bf31f3129e88a7e0231bf189140dd083f",
       "engine_id": "nadoc.cpd-native-engine.v1",
       "from_sha256": "b27662c778b2cbbefe6f0fbf2151aa7ad8a08e9a136a3347a1ba7d0b2a3ee027",
-      "to_sha256": "2656ac0c21c0994eeeee19360741820cdd8e724c2566e2c6bfba0df640afea4e",
+      "to_sha256": "76d891863cf758bceb4a20858fc00959ca2246dc5fa624dbe97738f686733baf",
       "changed_paths": [
         "backend/core/lattice.py",
         "backend/core/models.py",
@@ -50,56 +50,56 @@
         "backend/core/part_history_contract.py",
         "backend/core/part_numerical_schema_compatibility.py"
       ],
-      "rationale": "Reviewed persistent named-group visibility metadata in VisibilityState and compatibility-policy capacity of 32 entries/32 KiB. Numerical calculations, solver/data and runtime/template checks are unchanged. Includes earlier reviewed changes where listed. Exact direct edge only; no transitive approval or stored repin."
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
     },
     {
-      "id": "group-visibility-v1.from-group-organization-v1.nadoc.cpd-native-engine.v1",
-      "event": "group-visibility-v1",
+      "id": "placement-poses-v1.from-group-organization-v1.nadoc.cpd-native-engine.v1",
+      "event": "placement-poses-v1",
       "source_checkpoint": "31a9a8d8847f1ccf2b81dd737dc281bceafd568f",
       "engine_id": "nadoc.cpd-native-engine.v1",
       "from_sha256": "8a20d881ea784ed663cc5b7c11713c9f113f74318f0503d7147fc3d140ce8388",
-      "to_sha256": "2656ac0c21c0994eeeee19360741820cdd8e724c2566e2c6bfba0df640afea4e",
+      "to_sha256": "76d891863cf758bceb4a20858fc00959ca2246dc5fa624dbe97738f686733baf",
       "changed_paths": [
         "backend/core/lattice.py",
         "backend/core/models.py",
         "backend/core/part_numerical_schema_compatibility.py"
       ],
-      "rationale": "Reviewed persistent named-group visibility metadata in VisibilityState and compatibility-policy capacity of 32 entries/32 KiB. Numerical calculations, solver/data and runtime/template checks are unchanged. Includes earlier reviewed changes where listed. Exact direct edge only; no transitive approval or stored repin."
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
     },
     {
-      "id": "group-visibility-v1.from-organization-load-v1.nadoc.cpd-native-engine.v1",
-      "event": "group-visibility-v1",
+      "id": "placement-poses-v1.from-organization-load-v1.nadoc.cpd-native-engine.v1",
+      "event": "placement-poses-v1",
       "source_checkpoint": "e1fca697468b661ea2fdc73974a5348fbfb9f030",
       "engine_id": "nadoc.cpd-native-engine.v1",
       "from_sha256": "57c8533168455febc6b2717f825c9571391b748272ae72739834d09197b1c3fa",
-      "to_sha256": "2656ac0c21c0994eeeee19360741820cdd8e724c2566e2c6bfba0df640afea4e",
+      "to_sha256": "76d891863cf758bceb4a20858fc00959ca2246dc5fa624dbe97738f686733baf",
       "changed_paths": [
         "backend/core/lattice.py",
         "backend/core/models.py",
         "backend/core/part_numerical_schema_compatibility.py"
       ],
-      "rationale": "Reviewed persistent named-group visibility metadata in VisibilityState and compatibility-policy capacity of 32 entries/32 KiB. Numerical calculations, solver/data and runtime/template checks are unchanged. Includes earlier reviewed changes where listed. Exact direct edge only; no transitive approval or stored repin."
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
     },
     {
-      "id": "group-visibility-v1.from-native-domain-lineage-v1.nadoc.cpd-native-engine.v1",
-      "event": "group-visibility-v1",
+      "id": "placement-poses-v1.from-native-domain-lineage-v1.nadoc.cpd-native-engine.v1",
+      "event": "placement-poses-v1",
       "source_checkpoint": "79c7bdeee8f02daa718ef0fb8a28b364f2171d28",
       "engine_id": "nadoc.cpd-native-engine.v1",
       "from_sha256": "c67da80884b973d6c5a5464aff030d55a51c0d055873380923f65c54944c8404",
-      "to_sha256": "2656ac0c21c0994eeeee19360741820cdd8e724c2566e2c6bfba0df640afea4e",
+      "to_sha256": "76d891863cf758bceb4a20858fc00959ca2246dc5fa624dbe97738f686733baf",
       "changed_paths": [
         "backend/core/models.py",
         "backend/core/part_numerical_schema_compatibility.py"
       ],
-      "rationale": "Reviewed persistent named-group visibility metadata in VisibilityState and compatibility-policy capacity of 32 entries/32 KiB. Numerical calculations, solver/data and runtime/template checks are unchanged. Includes earlier reviewed changes where listed. Exact direct edge only; no transitive approval or stored repin."
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
     },
     {
-      "id": "group-visibility-v1.from-grouping-v1.nadoc.duplex-relax-native.v1",
-      "event": "group-visibility-v1",
+      "id": "placement-poses-v1.from-grouping-v1.nadoc.duplex-relax-native.v1",
+      "event": "placement-poses-v1",
       "source_checkpoint": "1ae1137f",
       "engine_id": "nadoc.duplex-relax-native.v1",
       "from_sha256": "6c00a274d08a7423f714f95d1fb9fdb6332c6fba3ee8497a9e04dbb385b5b99c",
-      "to_sha256": "7d36afcf4f3ae6134ec2b730606bd1f0a64e8ac5bc92bd69a427c4e2cac23071",
+      "to_sha256": "d1a194fc251dd4f989093df3065c3c53dfb7d73a20a4ba94685cd8b75b96a2ae",
       "changed_paths": [
         "backend/core/lattice.py",
         "backend/core/models.py",
@@ -108,15 +108,15 @@
         "backend/core/part_history_contract.py",
         "backend/core/part_numerical_schema_compatibility.py"
       ],
-      "rationale": "Reviewed persistent named-group visibility metadata in VisibilityState and compatibility-policy capacity of 32 entries/32 KiB. Numerical calculations, solver/data and runtime/template checks are unchanged. Includes earlier reviewed changes where listed. Exact direct edge only; no transitive approval or stored repin."
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
     },
     {
-      "id": "group-visibility-v1.from-grouping-v2.nadoc.duplex-relax-native.v1",
-      "event": "group-visibility-v1",
+      "id": "placement-poses-v1.from-grouping-v2.nadoc.duplex-relax-native.v1",
+      "event": "placement-poses-v1",
       "source_checkpoint": "96ed8fe1ab9486b6adb4b32961fb0946272bb295",
       "engine_id": "nadoc.duplex-relax-native.v1",
       "from_sha256": "015ca817a2dd9669a513cdaee70d629f3870e94f47b4e46fea71e8a19022df3a",
-      "to_sha256": "7d36afcf4f3ae6134ec2b730606bd1f0a64e8ac5bc92bd69a427c4e2cac23071",
+      "to_sha256": "d1a194fc251dd4f989093df3065c3c53dfb7d73a20a4ba94685cd8b75b96a2ae",
       "changed_paths": [
         "backend/core/lattice.py",
         "backend/core/models.py",
@@ -125,15 +125,15 @@
         "backend/core/part_history_contract.py",
         "backend/core/part_numerical_schema_compatibility.py"
       ],
-      "rationale": "Reviewed persistent named-group visibility metadata in VisibilityState and compatibility-policy capacity of 32 entries/32 KiB. Numerical calculations, solver/data and runtime/template checks are unchanged. Includes earlier reviewed changes where listed. Exact direct edge only; no transitive approval or stored repin."
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
     },
     {
-      "id": "group-visibility-v1.from-cluster-dissolve-v1.nadoc.duplex-relax-native.v1",
-      "event": "group-visibility-v1",
+      "id": "placement-poses-v1.from-cluster-dissolve-v1.nadoc.duplex-relax-native.v1",
+      "event": "placement-poses-v1",
       "source_checkpoint": "e9f3ed7bf31f3129e88a7e0231bf189140dd083f",
       "engine_id": "nadoc.duplex-relax-native.v1",
       "from_sha256": "266031eda0da33158023c7cf4206478ef9e24b41aaf93a4158aea04b858c94e3",
-      "to_sha256": "7d36afcf4f3ae6134ec2b730606bd1f0a64e8ac5bc92bd69a427c4e2cac23071",
+      "to_sha256": "d1a194fc251dd4f989093df3065c3c53dfb7d73a20a4ba94685cd8b75b96a2ae",
       "changed_paths": [
         "backend/core/lattice.py",
         "backend/core/models.py",
@@ -142,56 +142,56 @@
         "backend/core/part_history_contract.py",
         "backend/core/part_numerical_schema_compatibility.py"
       ],
-      "rationale": "Reviewed persistent named-group visibility metadata in VisibilityState and compatibility-policy capacity of 32 entries/32 KiB. Numerical calculations, solver/data and runtime/template checks are unchanged. Includes earlier reviewed changes where listed. Exact direct edge only; no transitive approval or stored repin."
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
     },
     {
-      "id": "group-visibility-v1.from-group-organization-v1.nadoc.duplex-relax-native.v1",
-      "event": "group-visibility-v1",
+      "id": "placement-poses-v1.from-group-organization-v1.nadoc.duplex-relax-native.v1",
+      "event": "placement-poses-v1",
       "source_checkpoint": "31a9a8d8847f1ccf2b81dd737dc281bceafd568f",
       "engine_id": "nadoc.duplex-relax-native.v1",
       "from_sha256": "25a355131ff72c3fcd3647ef04badd31499d064012012cbaecfb9a66807b3580",
-      "to_sha256": "7d36afcf4f3ae6134ec2b730606bd1f0a64e8ac5bc92bd69a427c4e2cac23071",
+      "to_sha256": "d1a194fc251dd4f989093df3065c3c53dfb7d73a20a4ba94685cd8b75b96a2ae",
       "changed_paths": [
         "backend/core/lattice.py",
         "backend/core/models.py",
         "backend/core/part_numerical_schema_compatibility.py"
       ],
-      "rationale": "Reviewed persistent named-group visibility metadata in VisibilityState and compatibility-policy capacity of 32 entries/32 KiB. Numerical calculations, solver/data and runtime/template checks are unchanged. Includes earlier reviewed changes where listed. Exact direct edge only; no transitive approval or stored repin."
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
     },
     {
-      "id": "group-visibility-v1.from-organization-load-v1.nadoc.duplex-relax-native.v1",
-      "event": "group-visibility-v1",
+      "id": "placement-poses-v1.from-organization-load-v1.nadoc.duplex-relax-native.v1",
+      "event": "placement-poses-v1",
       "source_checkpoint": "e1fca697468b661ea2fdc73974a5348fbfb9f030",
       "engine_id": "nadoc.duplex-relax-native.v1",
       "from_sha256": "c9e922c333b5756e73775da00e7a3bfbd659d03e41c1d841196cda6f9d0e3996",
-      "to_sha256": "7d36afcf4f3ae6134ec2b730606bd1f0a64e8ac5bc92bd69a427c4e2cac23071",
+      "to_sha256": "d1a194fc251dd4f989093df3065c3c53dfb7d73a20a4ba94685cd8b75b96a2ae",
       "changed_paths": [
         "backend/core/lattice.py",
         "backend/core/models.py",
         "backend/core/part_numerical_schema_compatibility.py"
       ],
-      "rationale": "Reviewed persistent named-group visibility metadata in VisibilityState and compatibility-policy capacity of 32 entries/32 KiB. Numerical calculations, solver/data and runtime/template checks are unchanged. Includes earlier reviewed changes where listed. Exact direct edge only; no transitive approval or stored repin."
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
     },
     {
-      "id": "group-visibility-v1.from-native-domain-lineage-v1.nadoc.duplex-relax-native.v1",
-      "event": "group-visibility-v1",
+      "id": "placement-poses-v1.from-native-domain-lineage-v1.nadoc.duplex-relax-native.v1",
+      "event": "placement-poses-v1",
       "source_checkpoint": "79c7bdeee8f02daa718ef0fb8a28b364f2171d28",
       "engine_id": "nadoc.duplex-relax-native.v1",
       "from_sha256": "b1205c2f9bdb9754bd646b18fb586e0e4719dbcda4a0644c6204dea2c7c318ce",
-      "to_sha256": "7d36afcf4f3ae6134ec2b730606bd1f0a64e8ac5bc92bd69a427c4e2cac23071",
+      "to_sha256": "d1a194fc251dd4f989093df3065c3c53dfb7d73a20a4ba94685cd8b75b96a2ae",
       "changed_paths": [
         "backend/core/models.py",
         "backend/core/part_numerical_schema_compatibility.py"
       ],
-      "rationale": "Reviewed persistent named-group visibility metadata in VisibilityState and compatibility-policy capacity of 32 entries/32 KiB. Numerical calculations, solver/data and runtime/template checks are unchanged. Includes earlier reviewed changes where listed. Exact direct edge only; no transitive approval or stored repin."
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
     },
     {
-      "id": "group-visibility-v1.from-grouping-v1.nadoc.streptavidin-native.v1",
-      "event": "group-visibility-v1",
+      "id": "placement-poses-v1.from-grouping-v1.nadoc.streptavidin-native.v1",
+      "event": "placement-poses-v1",
       "source_checkpoint": "1ae1137f",
       "engine_id": "nadoc.streptavidin-native.v1",
       "from_sha256": "6b2b55a59160868f16d15b50ab02d7d48ac3a2b152b400a1386b391eb762ab49",
-      "to_sha256": "639081305b31e2036c91f6ac857254842d85c0b593156db405d14476563ad411",
+      "to_sha256": "167443106d5a5498273103b764f16c306535c687b9d4abdad37b54fcd82af52e",
       "changed_paths": [
         "backend/api/part_streptavidin_commands.py",
         "backend/core/models.py",
@@ -199,15 +199,15 @@
         "backend/core/part_numerical_schema_compatibility.py",
         "backend/core/part_streptavidin_contract.py"
       ],
-      "rationale": "Reviewed persistent named-group visibility metadata in VisibilityState and compatibility-policy capacity of 32 entries/32 KiB. Numerical calculations, solver/data and runtime/template checks are unchanged. Includes earlier reviewed changes where listed. Exact direct edge only; no transitive approval or stored repin."
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
     },
     {
-      "id": "group-visibility-v1.from-grouping-v2.nadoc.streptavidin-native.v1",
-      "event": "group-visibility-v1",
+      "id": "placement-poses-v1.from-grouping-v2.nadoc.streptavidin-native.v1",
+      "event": "placement-poses-v1",
       "source_checkpoint": "96ed8fe1ab9486b6adb4b32961fb0946272bb295",
       "engine_id": "nadoc.streptavidin-native.v1",
       "from_sha256": "d16f581fde15048d78d6d8e630b45939952e8d7d0a09cec9034a936e57d67bfa",
-      "to_sha256": "639081305b31e2036c91f6ac857254842d85c0b593156db405d14476563ad411",
+      "to_sha256": "167443106d5a5498273103b764f16c306535c687b9d4abdad37b54fcd82af52e",
       "changed_paths": [
         "backend/api/part_streptavidin_commands.py",
         "backend/core/models.py",
@@ -215,15 +215,15 @@
         "backend/core/part_numerical_schema_compatibility.py",
         "backend/core/part_streptavidin_contract.py"
       ],
-      "rationale": "Reviewed persistent named-group visibility metadata in VisibilityState and compatibility-policy capacity of 32 entries/32 KiB. Numerical calculations, solver/data and runtime/template checks are unchanged. Includes earlier reviewed changes where listed. Exact direct edge only; no transitive approval or stored repin."
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
     },
     {
-      "id": "group-visibility-v1.from-cluster-dissolve-v1.nadoc.streptavidin-native.v1",
-      "event": "group-visibility-v1",
+      "id": "placement-poses-v1.from-cluster-dissolve-v1.nadoc.streptavidin-native.v1",
+      "event": "placement-poses-v1",
       "source_checkpoint": "e9f3ed7bf31f3129e88a7e0231bf189140dd083f",
       "engine_id": "nadoc.streptavidin-native.v1",
       "from_sha256": "bf071fef6464e05a45db04e75ae7e80fd1635a23aab3ad515225b4d3f1235599",
-      "to_sha256": "639081305b31e2036c91f6ac857254842d85c0b593156db405d14476563ad411",
+      "to_sha256": "167443106d5a5498273103b764f16c306535c687b9d4abdad37b54fcd82af52e",
       "changed_paths": [
         "backend/api/part_streptavidin_commands.py",
         "backend/core/models.py",
@@ -231,33 +231,69 @@
         "backend/core/part_numerical_schema_compatibility.py",
         "backend/core/part_streptavidin_contract.py"
       ],
-      "rationale": "Reviewed persistent named-group visibility metadata in VisibilityState and compatibility-policy capacity of 32 entries/32 KiB. Numerical calculations, solver/data and runtime/template checks are unchanged. Includes earlier reviewed changes where listed. Exact direct edge only; no transitive approval or stored repin."
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
     },
     {
-      "id": "group-visibility-v1.from-group-organization-v1.nadoc.streptavidin-native.v1",
-      "event": "group-visibility-v1",
+      "id": "placement-poses-v1.from-group-organization-v1.nadoc.streptavidin-native.v1",
+      "event": "placement-poses-v1",
       "source_checkpoint": "31a9a8d8847f1ccf2b81dd737dc281bceafd568f",
       "engine_id": "nadoc.streptavidin-native.v1",
       "from_sha256": "b9935ada31f38a1d33b6c615826d03524c83fd49401e6e4317383691a00667be",
-      "to_sha256": "639081305b31e2036c91f6ac857254842d85c0b593156db405d14476563ad411",
+      "to_sha256": "167443106d5a5498273103b764f16c306535c687b9d4abdad37b54fcd82af52e",
       "changed_paths": [
         "backend/core/models.py",
         "backend/core/part_numerical_schema_compatibility.py"
       ],
-      "rationale": "Reviewed persistent named-group visibility metadata in VisibilityState and compatibility-policy capacity of 32 entries/32 KiB. Numerical calculations, solver/data and runtime/template checks are unchanged. Includes earlier reviewed changes where listed. Exact direct edge only; no transitive approval or stored repin."
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
     },
     {
-      "id": "group-visibility-v1.from-native-domain-lineage-v1.nadoc.streptavidin-native.v1",
-      "event": "group-visibility-v1",
+      "id": "placement-poses-v1.from-native-domain-lineage-v1.nadoc.streptavidin-native.v1",
+      "event": "placement-poses-v1",
       "source_checkpoint": "79c7bdeee8f02daa718ef0fb8a28b364f2171d28",
       "engine_id": "nadoc.streptavidin-native.v1",
       "from_sha256": "67f3141feab0d5771926b7f532f7b40e3a13d31403fc1866e158b3a589406d9f",
-      "to_sha256": "639081305b31e2036c91f6ac857254842d85c0b593156db405d14476563ad411",
+      "to_sha256": "167443106d5a5498273103b764f16c306535c687b9d4abdad37b54fcd82af52e",
       "changed_paths": [
         "backend/core/models.py",
         "backend/core/part_numerical_schema_compatibility.py"
       ],
-      "rationale": "Reviewed persistent named-group visibility metadata in VisibilityState and compatibility-policy capacity of 32 entries/32 KiB. Numerical calculations, solver/data and runtime/template checks are unchanged. Includes earlier reviewed changes where listed. Exact direct edge only; no transitive approval or stored repin."
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
+    },
+    {
+      "id": "placement-poses-v1.from-group-visibility-v1.nadoc.cpd-native-engine.v1",
+      "event": "placement-poses-v1",
+      "source_checkpoint": "46477eddb891ca6c1b7530714989a13dfe40f913",
+      "engine_id": "nadoc.cpd-native-engine.v1",
+      "from_sha256": "2656ac0c21c0994eeeee19360741820cdd8e724c2566e2c6bfba0df640afea4e",
+      "to_sha256": "76d891863cf758bceb4a20858fc00959ca2246dc5fa624dbe97738f686733baf",
+      "changed_paths": [
+        "backend/core/models.py"
+      ],
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
+    },
+    {
+      "id": "placement-poses-v1.from-group-visibility-v1.nadoc.duplex-relax-native.v1",
+      "event": "placement-poses-v1",
+      "source_checkpoint": "46477eddb891ca6c1b7530714989a13dfe40f913",
+      "engine_id": "nadoc.duplex-relax-native.v1",
+      "from_sha256": "7d36afcf4f3ae6134ec2b730606bd1f0a64e8ac5bc92bd69a427c4e2cac23071",
+      "to_sha256": "d1a194fc251dd4f989093df3065c3c53dfb7d73a20a4ba94685cd8b75b96a2ae",
+      "changed_paths": [
+        "backend/core/models.py"
+      ],
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
+    },
+    {
+      "id": "placement-poses-v1.from-group-visibility-v1.nadoc.streptavidin-native.v1",
+      "event": "placement-poses-v1",
+      "source_checkpoint": "46477eddb891ca6c1b7530714989a13dfe40f913",
+      "engine_id": "nadoc.streptavidin-native.v1",
+      "from_sha256": "639081305b31e2036c91f6ac857254842d85c0b593156db405d14476563ad411",
+      "to_sha256": "167443106d5a5498273103b764f16c306535c687b9d4abdad37b54fcd82af52e",
+      "changed_paths": [
+        "backend/core/models.py"
+      ],
+      "rationale": "Reviewed addition of the placement-poses SnapshotOpKind literal only. Numerical calculations, solver/data, compatibility helper and runtime/template checks are unchanged. Earlier reviewed changes remain listed for older generations. Exact direct edge only; no transitive approval or stored repin."
     }
   ]
 }

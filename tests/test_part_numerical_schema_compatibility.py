@@ -23,9 +23,12 @@ LINEAGE_BEFORE = ROOT / "docs/audits/feature_history_20261014/domain_lineage_com
 LINEAGE_PRIOR_POLICY = ROOT / "docs/audits/feature_history_20261014/domain_lineage_compatibility_prior_policy.json"
 VISIBILITY_BEFORE = ROOT / "docs/audits/feature_history_20261014/group_visibility_schema_compatibility_before.json"
 VISIBILITY_PRIOR_POLICY = ROOT / "docs/audits/feature_history_20261014/group_visibility_schema_compatibility_prior_policy.json"
+POSES_BEFORE = ROOT / "docs/audits/feature_history_20261014/placement_poses_schema_compatibility_before.json"
+POSES_PRIOR_POLICY = ROOT / "docs/audits/feature_history_20261014/placement_poses_schema_compatibility_prior_policy.json"
 BASELINES = {"grouping-v1": BEFORE, "grouping-v2": DISSOLVE_BEFORE,
              "cluster-dissolve-v1": ORGANIZATION_BEFORE, "group-organization-v1": LOAD_BEFORE,
-             "organization-load-v1": LINEAGE_BEFORE, "native-domain-lineage-v1": VISIBILITY_BEFORE}
+             "organization-load-v1": LINEAGE_BEFORE, "native-domain-lineage-v1": VISIBILITY_BEFORE,
+             "group-visibility-v1": POSES_BEFORE}
 FAMILIES = ("part_cpd_contract", "part_duplex_relax_contract", "part_streptavidin_contract")
 LIVE_BASELINES = [(family, generation) for family in FAMILIES for generation in BASELINES
                   if family != "part_streptavidin_contract" or generation != "organization-load-v1"]
@@ -177,7 +180,7 @@ def test_installed_policy_targets_only_current_engines_and_preserves_prior_audit
                digest(import_module(f"backend.core.{family}").implementation_manifest())
                for family in FAMILIES}
     entries = compatibility._policy()
-    assert len(entries) == 17
+    assert len(entries) == 20
     assert compatibility.POLICY_PATH.stat().st_size <= 32 * 1024
     assert all(entry["to_sha256"] == current[entry["engine_id"]] for entry in entries)
     historical = json.loads(LOAD_PRIOR_POLICY.read_text())["transitions"]
@@ -190,11 +193,18 @@ def test_installed_policy_targets_only_current_engines_and_preserves_prior_audit
     coating = "nadoc.streptavidin-native.v1"
     assert [entry for entry in immediate_prior if entry["engine_id"] == coating] == [
         entry for entry in prior if entry["engine_id"] == coating]
-    assert sum(entry["engine_id"] == coating for entry in entries) == 5
+    assert sum(entry["engine_id"] == coating for entry in entries) == 6
     captured = json.loads(VISIBILITY_BEFORE.read_text())["engines"]
     expected_sources = {(entry["engine_id"], entry["from_sha256"]) for entry in immediate_prior}
     expected_sources.update((engine, value["implementation_sha256"]) for engine, value in captured.items())
     assert len(expected_sources) == 17
+    previous = json.loads(POSES_PRIOR_POLICY.read_text())["transitions"]
+    assert len(previous) == 17
+    assert {(entry["engine_id"], entry["from_sha256"]) for entry in previous} == expected_sources
+    latest = json.loads(POSES_BEFORE.read_text())["engines"]
+    assert all(entry["to_sha256"] == latest[entry["engine_id"]]["implementation_sha256"] for entry in previous)
+    expected_sources.update((engine, value["implementation_sha256"]) for engine, value in latest.items())
+    assert len(expected_sources) == 20
     assert {(entry["engine_id"], entry["from_sha256"]) for entry in entries} == expected_sources
     assert all(entry["to_sha256"] == captured[entry["engine_id"]]["implementation_sha256"]
                for entry in immediate_prior)
@@ -236,21 +246,23 @@ def test_real_captured_old_manifest_has_one_exact_reviewed_transition(compatibil
                and entry["to_sha256"] == digest(current)]
     assert len(entries) == 1
     entry = entries[0]
-    event = "group-visibility-v1"
+    event = "placement-poses-v1"
     assert entry["id"] == f"{event}.from-{generation}.{contract.ENGINE_ID}"
     assert entry["event"] == event
     assert entry["source_checkpoint"] == capture["checkpoint"]
     old_files, new_files = before["manifest"]["files"], current["files"]
     changes = {path for path in old_files.keys() | new_files.keys() if old_files.get(path) != new_files.get(path)}
     expected = {"backend/core/models.py", "backend/core/part_numerical_schema_compatibility.py"}
-    if generation not in {"group-organization-v1", "organization-load-v1", "native-domain-lineage-v1"}:
+    if generation not in {"group-organization-v1", "organization-load-v1", "native-domain-lineage-v1", "group-visibility-v1"}:
         expected.update({"backend/core/part_group_model.py", f"backend/core/{family}.py"})
         if family == "part_streptavidin_contract":
             expected.add("backend/api/part_streptavidin_commands.py")
         else:
             expected.add("backend/core/part_history_contract.py")
-    if family != "part_streptavidin_contract" and generation != "native-domain-lineage-v1":
+    if family != "part_streptavidin_contract" and generation not in {"native-domain-lineage-v1", "group-visibility-v1"}:
         expected.add("backend/core/lattice.py")
+    if generation == "group-visibility-v1":
+        expected = {"backend/core/models.py"}
     assert changes == set(entry["changed_paths"]) == expected
     assert {key: value for key, value in before["manifest"].items() if key != "files"} == {
         key: value for key, value in current.items() if key != "files"}
@@ -325,7 +337,7 @@ def test_previous_twelve_edges_still_accept_exact_archived_target(
 
 
 @pytest.mark.parametrize("family,generation", [
-    value for value in LIVE_BASELINES if value[1] != "native-domain-lineage-v1"])
+    value for value in LIVE_BASELINES if value[1] not in {"native-domain-lineage-v1", "group-visibility-v1"}])
 def test_immediate_prior_fourteen_edges_still_accept_exact_archived_target(
         compatibility, monkeypatch, family, generation):
     contract = import_module(f"backend.core.{family}")
@@ -338,6 +350,21 @@ def test_immediate_prior_fourteen_edges_still_accept_exact_archived_target(
     event = "organization-load-v1" if family == "part_streptavidin_contract" else "native-domain-lineage-v1"
     assert require(compatibility, old["implementation_sha256"], target["manifest"],
                    engine=contract.ENGINE_ID) == f"{event}.from-{generation}.{contract.ENGINE_ID}"
+
+
+@pytest.mark.parametrize("family,generation", [
+    value for value in LIVE_BASELINES if value[1] != "group-visibility-v1"])
+def test_prior_seventeen_edges_accept_the_exact_unmodified_archived_target(
+        compatibility, monkeypatch, family, generation):
+    contract = import_module(f"backend.core.{family}")
+    old = json.loads(BASELINES[generation].read_text())["engines"][contract.ENGINE_ID]
+    target = json.loads(POSES_BEFORE.read_text())["engines"][contract.ENGINE_ID]
+    assert digest(old["manifest"]) == old["implementation_sha256"]
+    assert digest(target["manifest"]) == target["implementation_sha256"]
+    monkeypatch.setattr(compatibility, "POLICY_PATH", POSES_PRIOR_POLICY)
+    assert len(compatibility._policy()) == 17
+    assert require(compatibility, old["implementation_sha256"], target["manifest"],
+                   engine=contract.ENGINE_ID) == f"group-visibility-v1.from-{generation}.{contract.ENGINE_ID}"
 
 
 @pytest.mark.parametrize("family", FAMILIES)

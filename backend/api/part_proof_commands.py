@@ -43,7 +43,7 @@ PROOF_SNAPSHOT_KINDS = (
     | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS
     | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS
     | frozenset({"photoproduct-relax", "bundle-create", "sweep", "cluster-join", "strand-sequence",
-                 "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste", "cluster-dissolve"})
+                 "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste", "cluster-dissolve", "placement-poses"})
 )
 PROOF_MINOR_KINDS = MOVE_KINDS | CELL_KINDS | LIGATION_KINDS | TOPOLOGY_MINOR_KINDS | LOOP_COMMANDS | STRUCTURAL_KINDS | frozenset({"joint-place", "joint-update", "joint-delete", "strand-patch"})
 PROOF_VERSION = 1
@@ -110,6 +110,9 @@ def capabilities():
 
 
 def dependencies(kind, params):
+    if kind == "placement-poses":
+        from backend.api.part_placement_pose_commands import dependencies as pose_dependencies
+        return pose_dependencies(params)
     if kind in GROUP_ORGANIZATION_KINDS:
         from backend.core.part_group_organization import dependencies as organization_dependencies
         # Generated composition has not qualified the distinct namespaces yet.
@@ -384,6 +387,11 @@ def _execute(kind, design, params, *, expensive):
         # Match dependency/scoped admission: preserve the recorded annotation,
         # but never pass it into reference resolution or native command inputs.
         params = {key: value for key, value in params.items() if key != "_generator"}
+    if kind == "placement-poses":
+        from backend.api.part_placement_pose_commands import build
+        # Like cluster_op, complete absolute overlays perform no topology retry
+        # or reconciliation. The builder validates every owner before applying.
+        return build(design, params)
     from backend.api.part_command_references import validate_command_references
     validate_command_references(kind, design, params)
     from backend.api.part_connection_version_commands import is_metadata_command

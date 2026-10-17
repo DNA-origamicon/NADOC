@@ -71,6 +71,10 @@ def require_native_command(kind, params):
         if kind == "cluster_op" and not set(params) - {
                 "_proof_version", "_generator", "cluster_id", "translation", "rotation", "pivot"}:
             return  # Explicit existing placement, with no organizational writes.
+        if kind == "placement-poses":
+            from backend.api.part_placement_pose_commands import parse_command
+            if not parse_command(params)["primary_authored_fields"]:
+                return  # Explicit complete poses, with no legacy membership/style writes.
         # These native numerical contracts explicitly preserve the new authoring
         # metadata, have closed source inventories and exact manifest transitions.
         if (kind == "photoproduct-relax" or

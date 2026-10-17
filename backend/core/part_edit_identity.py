@@ -11,6 +11,7 @@ from backend.core.feature_identity import preserve_proof_identity as _preserve_b
 
 
 _PROTECTED = {
+    "placement-poses": ("_proof_version", "primary_cluster_id", "primary_authored_fields", "legacy_source"),
     # Conversion derives organizational outputs from this complete ordered
     # placement namespace. Pose values are intentionally not pinned here.
     "group-organize": ("expected_placement_ids",),

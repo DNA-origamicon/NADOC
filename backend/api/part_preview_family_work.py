@@ -75,12 +75,15 @@ def prepare_display(family, prepared, evaluated, *, envelope):
     display = _display(family)
     if _creation(family, prepared):
         return display.prepare_creation_display(prepared.copy_prefix(), prepared, envelope=envelope)
-    return display.prepare_display(prepared.copy_prefix(), evaluated, envelope=envelope)
+    options = {"source_entry": prepared._entry} if family == "transform" else {}
+    return display.prepare_display(prepared.copy_prefix(), evaluated, envelope=envelope, **options)
 
 
 def evaluate_display(family, prepared, evaluated, *, include_geometry, envelope):
     display = _display(family)
     options = {"creation": _creation(family, prepared)} if family == "deformation" else {}
+    if family == "transform":
+        options["source_entry"] = prepared._entry
     return display.evaluate_display(prepared.copy_prefix(), evaluated,
         include_geometry=include_geometry, envelope=envelope, **options)
 

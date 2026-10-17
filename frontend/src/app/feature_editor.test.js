@@ -1,7 +1,12 @@
 import { afterEach, expect, it, vi } from 'vitest'
 const f = vi.hoisted(() => ({ history: { open: vi.fn(), openCreation: vi.fn(), watchToolState: vi.fn(() => false), active: vi.fn(() => false), onToolExit: vi.fn(), dispose: vi.fn() },
+  transform: { open: vi.fn(), active: vi.fn(() => false), dispose: vi.fn() }, createTransform: vi.fn(),
   create: vi.fn(), deleteDeformation: vi.fn(), seekFeatures: vi.fn(), start: vi.fn(), scope: vi.fn(), listeners: new Set() }))
 vi.mock('./deformation_history_editor.js', () => ({ createDeformationHistoryEditor: (...args) => { f.create(...args); return f.history } }))
+vi.mock('./transform_history_editor.js', () => ({ TRANSFORM_HISTORY_EDITOR_ENABLED: false,
+  isNativeTransformFeature: entry => entry.proof_version === 1 || ['nucleotide-transform', 'nucleotide-transform-batch',
+    'nucleotide-transform-delete', 'placement-poses'].includes(entry.op_kind),
+  createTransformHistoryEditor: (...args) => { f.createTransform(...args); return f.transform } }))
 vi.mock('../api/client.js', () => ({ deleteDeformation: f.deleteDeformation, seekFeatures: f.seekFeatures }))
 vi.mock('../state/store.js', () => ({ store: { getState: () => ({ currentDesign: f.design ?? { id: 'part', feature_log: [] } }),
   subscribe: callback => { f.listeners.add(callback); return () => f.listeners.delete(callback) }, setState: vi.fn() } }))
@@ -38,8 +43,25 @@ it('qualified history dispatch uses the stable private editor and never peels or
 it('keeps ordinary rollout gated pending desktop and latency qualification', () => {
   const owner = initFeatureEditor({ showToast: vi.fn() })
   expect(f.create).not.toHaveBeenCalled()
+  expect(f.createTransform).not.toHaveBeenCalled()
   owner.dispose(); expect(f.listeners.size).toBe(0)
 })
+
+it.each(['cluster_op', 'nucleotide-transform', 'nucleotide-transform-batch', 'nucleotide-transform-delete', 'placement-poses'])(
+  'dispatches %s to owned history without seeking or falling back after refusal', async kind => {
+    const activateTranslateRotateTool = vi.fn(), getMoveRotatePanel = vi.fn()
+    f.transform.open.mockResolvedValue(false)
+    const owner = initFeatureEditor({ isolatedTransformEnabled: true, showToast: vi.fn(),
+      activateTranslateRotateTool, getMoveRotatePanel })
+    const entry = kind === 'cluster_op' ? { id: 'feature', feature_type: kind, cluster_id: 'a', proof_version: 1 }
+      : { id: 'feature', feature_type: 'snapshot', op_kind: kind, params: { _proof_version: 1 } }
+    await owner.onEditFeature(entry, 1)
+    expect(f.transform.open).toHaveBeenCalledWith(entry)
+    expect(f.seekFeatures).not.toHaveBeenCalled()
+    expect(activateTranslateRotateTool).not.toHaveBeenCalled()
+    expect(f.createTransform.mock.lastCall[0].getPanel).toBe(getMoveRotatePanel)
+    owner.dispose(); expect(f.transform.dispose).toHaveBeenCalledOnce()
+  })
 
 
 it('wires server-selected private guide scope without a canonical update path', () => {

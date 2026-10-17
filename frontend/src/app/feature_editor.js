@@ -1,6 +1,7 @@
 import * as api from '../api/client.js'
 import { store } from '../state/store.js'
 import { createDeformationHistoryEditor } from './deformation_history_editor.js'
+import { createTransformHistoryEditor, isNativeTransformFeature, TRANSFORM_HISTORY_EDITOR_ENABLED } from './transform_history_editor.js'
 import {
   initDeformationEditor, previewDeformation, confirmDeformation,
   waitForDeformationIdle, discardDeformationPreview,
@@ -28,9 +29,13 @@ export function initFeatureEditor({
   seekFeaturesWithDelta, showToast, getOrientPanel,
   activateTranslateRotateTool, isolatedHistoryEnabled = ISOLATED_DEFORMATION_HISTORY_ENABLED,
   isolatedCreationEnabled = ISOLATED_DEFORMATION_CREATION_ENABLED,
+  getMoveRotatePanel, isolatedTransformEnabled = TRANSFORM_HISTORY_EDITOR_ENABLED,
 }) {
   // Context set while editing an existing feature; cleared on confirm or cancel.
   let _editContext = null  // { priorCursor, pendingParams }
+  const transformHistory = isolatedTransformEnabled ? createTransformHistoryEditor({
+    store, api, scene, camera, canvas, controls, getPanel: getMoveRotatePanel, showToast,
+  }) : null
   const history = (isolatedHistoryEnabled || isolatedCreationEnabled) ? createDeformationHistoryEditor({
     store, api, scene, camera, designRenderer, showToast,
     editor: { startToolForHistory, startToolForCreation, finishHistoryTool, updateHistoryScope, repositionPlane: repositionDeformPlane,
@@ -164,7 +169,13 @@ export function initFeatureEditor({
   })
 
   async function _onEditFeature(entry, featureIndex) {
-    if (history?.active()) { showToast('Finish the current feature edit before opening another', 4000); return }
+    if (history?.active() || transformHistory?.active()) { showToast('Finish the current feature edit before opening another', 4000); return }
+    if (transformHistory && isNativeTransformFeature(entry)) {
+      if (getDeformState() !== DEFORM_STATES.IDLE || _editContext) {
+        showToast('Finish the current tool before editing feature history', 4000); return
+      }
+      return transformHistory.open(entry)
+    }
     if (isolatedHistoryEnabled && history && entry.feature_type === 'deformation') {
       if (getDeformState() !== DEFORM_STATES.IDLE || _editContext) {
         showToast('Finish the current tool before editing feature history', 4000); return
@@ -271,6 +282,6 @@ export function initFeatureEditor({
     watchDeformState: _watchDeformState,
     getEditContext: () => _editContext,
     setEditContext: value => { _editContext = value },
-    dispose() { unsubscribe(); history?.dispose() },
+    dispose() { unsubscribe(); history?.dispose(); transformHistory?.dispose() },
   }
 }

@@ -145,6 +145,111 @@ function rotationPointResponse(source, spec = { kind: 'overhang_root', overhangI
 
 beforeEach(() => { clearDom(); vi.clearAllMocks() })
 
+describe('exclusive history panel ownership', () => {
+  function opened() {
+    const els = mountPanelDom(), deps = makeDeps({ currentDesign: duplexDesign(), activeClusterId: 'dc1' })
+    for (const [id, node] of Object.entries(els)) if (id !== 'move-rotate-panel') els['move-rotate-panel'].append(node)
+    const panel = initMoveRotatePanel(deps)
+    const callbacks = Object.fromEntries(['onApply', 'onCancel', 'onReset', 'onTransform', 'onJointAngle',
+      'onPivot', 'onFrame', 'onSnap', 'onStep', 'onUpgrade'].map(key => [key, vi.fn()]))
+    const lease = panel.bindHistorySession(callbacks)
+    lease.update({ role: 'placement', labels: ['Historical placement'], translation: [1, 2, 3],
+      euler: [0, 0, 0], pivots: [{ id: 'centroid', label: 'Centroid' }, { id: 'dup:root:ohD', label: 'Driver root' }] })
+    return { els, deps, panel, callbacks, lease }
+  }
+
+  it('routes existing numeric and pivot controls only to the private session', () => {
+    const f = opened()
+    f.els['mr-tx'].value = '8'
+    f.els['mr-tx'].dispatchEvent(new Event('change', { bubbles: true }))
+    expect(f.callbacks.onTransform).toHaveBeenCalledWith([8, 2, 3], [0, 0, 0])
+    f.els['mr-pivot-sel'].value = 'dup:root:ohD'
+    f.els['mr-pivot-sel'].dispatchEvent(new Event('change', { bubbles: true }))
+    expect(f.callbacks.onPivot).toHaveBeenCalledWith('dup:root:ohD')
+    expect(f.deps.setClusterRotationPoint).not.toHaveBeenCalled()
+    expect(f.deps.clusterGizmo.setTransform).not.toHaveBeenCalled()
+    f.lease.release()
+  })
+
+  it('blocks live selection refreshes and ordinary Apply listeners while bound', () => {
+    const f = opened(), ordinary = vi.fn()
+    f.els['mr-apply-btn'].addEventListener('click', ordinary)
+    f.panel.setCurrentSelection(['Latest selection'])
+    f.panel.setTransformValues(99, 99, 99, 0, 0, 0)
+    f.panel.setPivotOptions([], 'dc1')
+    expect(f.els['mr-current-selection'].textContent).toBe('Historical placement')
+    expect(f.els['mr-tx'].value).toBe('1.000')
+    expect(f.els['mr-pivot-sel'].options).toHaveLength(2)
+    f.els['mr-apply-btn'].click()
+    expect(f.callbacks.onApply).toHaveBeenCalledOnce()
+    expect(ordinary).not.toHaveBeenCalled()
+    f.lease.release()
+    f.els['mr-apply-btn'].click()
+    expect(ordinary).toHaveBeenCalledOnce()
+  })
+
+  it('refuses concurrent ownership and makes released callbacks inert', () => {
+    const f = opened()
+    expect(() => f.panel.bindHistorySession({})).toThrow(/already/i)
+    f.lease.release()
+    const next = f.panel.bindHistorySession({})
+    next.update({ role: 'reset', labels: ['Reset a saved nucleotide pose'] })
+    f.lease.update({ labels: ['Late response'] })
+    f.lease.release()
+    expect(next.isCurrent()).toBe(true)
+    expect(f.els['mr-current-selection'].textContent).toBe('Reset a saved nucleotide pose')
+    expect(f.els['mr-tx'].disabled).toBe(true)
+    next.release()
+  })
+
+  it('preserves invalid numeric input and reports it without authoring zero', () => {
+    const f = opened()
+    f.els['mr-tx'].value = 'not a number'
+    f.els['mr-tx'].dispatchEvent(new Event('change', { bubbles: true }))
+    expect(f.callbacks.onTransform).not.toHaveBeenCalled()
+    expect(f.els['mr-session-hint'].textContent).toContain('finite')
+    expect(f.els['mr-tx'].value).toBe('not a number')
+    f.lease.release()
+  })
+
+  it('offers an explicit linked-placement upgrade only when admitted by Prepare', () => {
+    const f = opened(), button = document.getElementById('mr-history-upgrade-btn')
+    expect(button).not.toBeNull()
+    expect(button.hidden).toBe(true)
+    f.lease.update({ placement_upgrade: { upgrade_to: 'placement-poses-v1' } })
+    expect(button.hidden).toBe(false)
+    button.click()
+    expect(f.callbacks.onUpgrade).toHaveBeenCalledOnce()
+    f.lease.release()
+    expect(button.hidden).toBe(true)
+  })
+
+  it('restores the previous joint control mode after releasing history', () => {
+    const els = mountPanelDom(), panel = initMoveRotatePanel(makeDeps())
+    panel.showJointMode(true)
+    const lease = panel.bindHistorySession({})
+    lease.update({ jointMode: false })
+    lease.release()
+    expect(panel.getPivotIsJoint()).toBe(true)
+    expect(els['mr-rotation-section'].style.display).toBe('none')
+  })
+
+  it('keeps draft input editable during evaluation but uses explicit recovery labels', () => {
+    const f = opened()
+    f.lease.setStatus({ busy: 'evaluate' })
+    expect(f.els['mr-tx'].disabled).toBe(false)
+    f.lease.setStatus({ inputsUnavailable: true })
+    expect(f.els['mr-tx'].disabled).toBe(true)
+    expect(f.els['mr-reset-btn'].disabled).toBe(true)
+    expect(f.els['mr-apply-btn'].disabled).toBe(false)
+    f.lease.setStatus({ publicationUnknown: true, error: new Error('Response lost') })
+    expect(f.els['mr-tx'].disabled).toBe(true)
+    expect(f.els['mr-apply-btn'].textContent).toBe('Check saved result')
+    expect(f.els['mr-apply-btn'].disabled).toBe(false)
+    f.lease.release()
+  })
+})
+
 describe('initMoveRotatePanel — view setters', () => {
   it('accepts an entity-neutral protein transform controller', () => {
     const els = mountPanelDom()
@@ -514,6 +619,20 @@ describe('duplex pivot response ownership', () => {
     expect(ctx.deps.clusterGizmo.clearPendingTransform).not.toHaveBeenCalled()
     expect(ctx.releases.every(release => release.mock.calls.length === 1)).toBe(true)
   }
+
+  it('invalidates an earlier live pivot request when history takes ownership', async () => {
+    const ctx = setup(), before = ctx.getPending(), waiting = deferred()
+    const response = rotationPointResponse(ctx.deps.store.getState().currentDesign)
+    ctx.deps.setClusterRotationPoint.mockReturnValue(waiting.promise)
+    const operation = ctx.choose('dup:root:ohD')
+    const lease = ctx.panel.bindHistorySession({})
+    lease.update({ pivots: [{ id: 'centroid', label: 'History centroid' }], pivot: 'centroid' })
+    ctx.deps.store.setState({ currentDesign: response.design })
+    waiting.resolve(response); await operation
+    untouched(ctx, before)
+    expect(ctx.select.value).toBe('centroid')
+    lease.release()
+  })
 
   it.each(['null', 'throw', 'missing design', 'missing cluster', 'malformed pose'])(
     'preserves pending/live gizmo and restores prior choice after %s', async failure => {

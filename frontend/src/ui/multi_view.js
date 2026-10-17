@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { COLORING_LABELS, supportedColoringSet } from '../scene/coloring_modes.js'
+import { showToast } from './toast.js'
 import './multi_view.css'
 
 export const MULTI_VIEW_REPRESENTATIONS = [
@@ -134,7 +135,8 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
     const button = document.createElement('button')
     button.type = 'button'; button.className = 'mv-layout-btn'; button.dataset.count = String(n)
     button.title = `Split into ${n} synchronized panels`; button.setAttribute('aria-label', button.title)
-    button.innerHTML = layoutIcon(n); button.addEventListener('click', () => activate(count === n ? 1 : n))
+    button.innerHTML = layoutIcon(n); button.addEventListener('click', () => activate(count === n ? 1 : n)
+      .catch(error => showToast(error.message, { severity: 'error' })))
     buttons.append(button)
   }
   host.append(buttons)
@@ -299,6 +301,11 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
   }
 
   async function activate(next) {
+    if (next > 1) {
+      const waits = []
+      globalThis.window?.dispatchEvent(new CustomEvent('nadoc:comparison-mode', { detail: { mode: 'multi-view', waits } }))
+      await Promise.all(waits)
+    }
     const previousCount = count
     count = next
     activePanel = Math.min(activePanel, count - 1)
@@ -332,9 +339,6 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
         if (panels[0].coloring) setColoringMode(panels[0].coloring)
       }
     } else {
-      const waits = []
-      globalThis.window?.dispatchEvent(new CustomEvent('nadoc:comparison-mode', { detail: { mode: 'multi-view', waits } }))
-      await Promise.all(waits)
       if (previousCount !== count) needsFit = true
       if (!savedCamera) {
         savedCamera = {
@@ -350,7 +354,7 @@ export function initMultiView({ document, scene, camera, renderer, canvas, store
 
   renderControls()
   const exclusiveMode = event => {
-    if (event.detail?.mode !== 'multi-overlay' || count <= 1) return
+    if (!['multi-overlay', 'transform-history'].includes(event.detail?.mode) || count <= 1) return
     const closing = activate(1)
     event.detail?.waits?.push(closing)
   }

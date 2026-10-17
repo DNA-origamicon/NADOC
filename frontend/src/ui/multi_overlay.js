@@ -2,6 +2,7 @@ import { overlayRenderOrder } from '../viewer/shared_overlay.js'
 export { overlayRenderOrder } from '../viewer/shared_overlay.js'
 import * as THREE from 'three'
 import { COLORING_LABELS, supportedColoringSet } from '../scene/coloring_modes.js'
+import { showToast } from './toast.js'
 import { MULTI_VIEW_REPRESENTATIONS, cloneMultiScene, disposeMultiScene,
   multiViewContentBounds, multiViewDesignCentroid } from './multi_view.js'
 import './multi_overlay.css'
@@ -78,7 +79,8 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
     const button = document.createElement('button')
     button.type = 'button'; button.dataset.count = String(n); button.className = 'mo-count-btn'
     button.textContent = String(n); button.title = `Overlay ${n} representation${n === 1 ? '' : 's'}`
-    button.addEventListener('click', () => activate(count === n ? 0 : n))
+    button.addEventListener('click', () => activate(count === n ? 0 : n)
+      .catch(error => showToast(error.message, { severity: 'error' })))
     buttons.append(button)
   }
   const separationRow = document.createElement('label'); separationRow.className = 'mo-separation-row'
@@ -234,6 +236,11 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
   }
 
   async function activate(next, configured = false) {
+    if (next) {
+      const waits = []
+      globalThis.window?.dispatchEvent(new CustomEvent('nadoc:comparison-mode', { detail: { mode: 'multi-overlay', waits } }))
+      await Promise.all(waits)
+    }
     if (!count && next && !configured) {
       const state = store.getState(), instances = state.currentAssembly?.instances ?? []
       const target = instances.find(i => i.id === state.activeInstanceId) ?? instances.find(i => i.visible !== false)
@@ -262,9 +269,6 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
       }
       return
     }
-    const waits = []
-    globalThis.window?.dispatchEvent(new CustomEvent('nadoc:comparison-mode', { detail: { mode: 'multi-overlay', waits } }))
-    await Promise.all(waits)
     if (!savedCamera) savedCamera = {
       position: camera.position.toArray(), target: controls.target.toArray(), up: camera.up.toArray(),
       fov: camera.fov, near: camera.near, far: camera.far,
@@ -273,7 +277,7 @@ export function initMultiOverlay({ document, scene, camera, renderer, canvas, co
   }
 
   const exclusiveMode = event => {
-    if (event.detail?.mode !== 'multi-view' || !count) return
+    if (!['multi-view', 'transform-history'].includes(event.detail?.mode) || !count) return
     const closing = activate(0)
     event.detail?.waits?.push(closing)
   }

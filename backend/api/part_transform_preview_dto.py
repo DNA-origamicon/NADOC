@@ -135,32 +135,43 @@ def _controls(design, params, check):
     return result
 
 
-def _display(prefix, evaluated, *, prepare, include_geometry, envelope):
+def _display(prefix, evaluated, *, prepare, include_geometry, envelope, source_entry=None):
     from backend.api.part_transform_projection import project_admitted
 
     if type(include_geometry) is not bool:
         reject("Transform geometry choice must be boolean", "invalid_preview_definition")
     check = checkpoint()
     kind = _inputs(prefix, evaluated)
-    envelope = _envelope(envelope, prefix, evaluated, kind)
+    # The host supplies its retained original row; envelope strings cannot
+    # change the lease identity when an explicit upgrade changes row kind.
+    source_entry = evaluated.entry if source_entry is None else source_entry
+    source_kind, _ = command_input(source_entry)
+    if (source_entry.id != evaluated.entry.id or source_kind not in KINDS
+            or (source_kind != kind and (source_kind, kind) != ("cluster_op", "placement-poses"))):
+        reject("Transform source and evaluated command roles differ", "invalid_preview_definition")
+    envelope = _envelope(envelope, prefix, evaluated, source_kind)
     before = inventory(prefix, check)
     after = inventory(evaluated.design, check)
     native_work = _control_cost(evaluated.design, after) + (before.work * 2 if prepare else 0) + (after.work * 2 if include_geometry else 0)
     limit(native_work, MAX_CONTROL_WORK, "cumulative native display/control work")
-    result = {"projection_version": 1, "family": "transform", "command_kind": kind,
+    result = {"projection_version": 1, "family": "transform", "command_kind": source_kind,
+        "evaluated_command_kind": kind,
         "feature_id": evaluated.entry.id, "stage": "feature", "source_equivalence_checked": False,
         "downstream_evaluated": False, "physical_validity": False,
         "control_state": _controls(evaluated.design, evaluated.params, check),
         "candidate": project_admitted(evaluated.design, after, check) if include_geometry else None}
     if prepare:
         result.update(control_context=_context(prefix, evaluated.params), before=project_admitted(prefix, before, check))
+        from backend.api.part_placement_pose_commands import upgrade_descriptor
+        result["control_context"]["placement_upgrade"] = (
+            upgrade_descriptor(source_entry) if source_kind == "cluster_op" else None)
     check()
     return _bounded({**result, **envelope})
 
 
-def prepare_display(prefix, evaluated, *, envelope=None):
-    return _display(prefix, evaluated, prepare=True, include_geometry=True, envelope=envelope)
+def prepare_display(prefix, evaluated, *, envelope=None, source_entry=None):
+    return _display(prefix, evaluated, prepare=True, include_geometry=True, envelope=envelope, source_entry=source_entry)
 
 
-def evaluate_display(prefix, evaluated, *, include_geometry=True, envelope=None):
-    return _display(prefix, evaluated, prepare=False, include_geometry=include_geometry, envelope=envelope)
+def evaluate_display(prefix, evaluated, *, include_geometry=True, envelope=None, source_entry=None):
+    return _display(prefix, evaluated, prepare=False, include_geometry=include_geometry, envelope=envelope, source_entry=source_entry)

@@ -53,7 +53,8 @@ const GEO_SS_BEAD      = new THREE.SphereGeometry(SS_BEAD_RADIUS, 8, 6)
 const GEO_SS_SLAB      = new THREE.BoxGeometry(1, 1, 1)
 const Y_HAT            = new THREE.Vector3(0, 1, 0)
 
-export function initOverhangLinkArcs(scene) {
+export function initOverhangLinkArcs(scene, { storeRef = store, staticLookup = false } = {}) {
+  let disposed = false
   const group = new THREE.Group()
   group.name = 'overhangLinkArcs'
   scene.add(group)
@@ -76,12 +77,15 @@ export function initOverhangLinkArcs(scene) {
   // the random-walk shape).
   let _lastDesign = null
   let _lastGeometry = null
-  ensureFjcLookup().catch(() => {})
-  onFjcLookupLoaded(() => {
-    if (_lastDesign && _lastGeometry) rebuild(_lastDesign, _lastGeometry)
+  if (!staticLookup) ensureFjcLookup().catch(() => {})
+  const unsubscribeLookup = staticLookup ? null : onFjcLookupLoaded(() => {
+    if (!disposed && _lastDesign && _lastGeometry) rebuild(_lastDesign, _lastGeometry)
   })
+  group.userData.linkerLookup = fjcLookupLoaded() ? 'cached-native-fjc' : 'native-bezier-fallback'
+
 
   function rebuild(design, geometry) {
+    if (disposed) return
     _lastDesign = design
     _lastGeometry = geometry
     _clear()
@@ -187,7 +191,7 @@ export function initOverhangLinkArcs(scene) {
   /** Re-read the cluster colour/alpha lookups off a design. */
   function _syncClusterLookups(design) {
     const d = design ?? _lastDesign
-    _clusterColorFn = (store.getState().coloringMode === 'cluster')
+    _clusterColorFn = (storeRef.getState().coloringMode === 'cluster')
       ? buildClusterColorLookup(d)
       : null
     _clusterAlphaKeys = clusterAlphaKeys(d)
@@ -216,7 +220,7 @@ export function initOverhangLinkArcs(scene) {
    * them to fully opaque.
    */
   function _applyClusterAlpha() {
-    const state = store.getState()
+    const state = storeRef.getState()
     const referenceIds = new Set(
       (state.currentDesign?.strands ?? []).filter(s => s.is_reference).map(s => s.id))
     const hideReference = state.showReferenceGeometry === false || state.simulationTabActive === true
@@ -246,6 +250,9 @@ export function initOverhangLinkArcs(scene) {
   }
 
   function dispose() {
+    if (disposed) return
+    disposed = true; unsubscribe?.(); unsubscribeLookup?.()
+    _lastDesign = null; _lastGeometry = null
     _clear()
     if (group.parent) group.parent.remove(group)
   }
@@ -418,7 +425,7 @@ export function initOverhangLinkArcs(scene) {
   // the design/geometry subscriber that drives rebuild() never fires for it.
   // (A cluster's own colour/opacity edit DOES change the design, and that path
   // already runs a full rebuild.)
-  store.subscribe((newState, prevState) => {
+  const unsubscribe = storeRef.subscribe((newState, prevState) => {
     const referenceChanged = newState.currentDesign !== prevState.currentDesign &&
       (newState.currentDesign?.strands ?? []).some((s, i) =>
         s.is_reference !== prevState.currentDesign?.strands?.[i]?.is_reference)
@@ -438,6 +445,7 @@ export function initOverhangLinkArcs(scene) {
 
 function _disposeRenderable(root) {
   root.traverse?.((obj) => {
+    if (obj.isInstancedMesh) obj.dispose()
     if (obj.geometry && obj.geometry !== GEO_SS_BEAD && obj.geometry !== GEO_SS_SLAB) {
       obj.geometry.dispose()
     }

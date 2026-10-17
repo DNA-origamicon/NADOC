@@ -102,3 +102,80 @@ it('uses the closed Sweep family for every lease operation and guarded publicati
   await expect(api.prepareCreation(origin, { context })).rejects.toThrow()
   expect(() => createDeformationPreviewEndpoints({ request, family: '../design' })).toThrow()
 })
+
+const TRANSFORMS = ['cluster_op', 'nucleotide-transform', 'nucleotide-transform-batch', 'nucleotide-transform-delete', 'placement-poses']
+const transformReceipt = (kind = 'cluster_op', extra = {}) => {
+  const { deformation_id: _discard, ...common } = receipt
+  return { ...common, family: 'transform', command_kind: kind, ...extra }
+}
+
+describe('declared transform preview transport', () => {
+  it('routes every operation through the closed transform family and refuses creation', async () => {
+    const request = vi.fn(async () => ({}))
+    const { createDeformationPreviewEndpoints } = await import(modulePath)
+    const api = createDeformationPreviewEndpoints({ request, family: 'transform' })
+    for (const action of ['prepare', 'evaluate', 'apply', 'cancel', 'status']) await api[action](origin, { context })
+    expect(request.mock.calls.map(([, path]) => path)).toEqual(['/design/features/transform-preview',
+      ...['evaluate', 'apply', 'cancel', 'status'].map(action => `/design/features/transform-preview/${action}`)])
+    for (const [, , body, options] of request.mock.calls) {
+      expect(body).toEqual(origin)
+      expect(options).toMatchObject({ docId: context.docId, protectedRetry: false, skipSimulationPrepare: true })
+    }
+    await expect(api.prepareCreation(origin, { context })).rejects.toMatchObject({ status: 422 })
+    expect(request).toHaveBeenCalledTimes(5)
+  })
+
+  it.each(TRANSFORMS)('retains exact scalar %s identity without inventing a deformation ID', async kind => {
+    const { previewPublicationReceipt } = await import(modulePath)
+    const value = transformReceipt(kind)
+    const normalized = previewPublicationReceipt({ ...value, validation: { large: true } }, context, null, { family: 'transform' })
+    expect(normalized).toEqual(value)
+    expect(normalized).not.toHaveProperty('deformation_id')
+    expect(normalized).not.toHaveProperty('validation')
+    expect(previewPublicationReceipt(value, context, normalized, { family: 'transform' })).toEqual(value)
+  })
+
+  it('never infers the receipt family from returned fields', async () => {
+    const { previewPublicationReceipt } = await import(modulePath)
+    expect(() => previewPublicationReceipt(transformReceipt(), context)).toThrow()
+    expect(() => previewPublicationReceipt(receipt, context, null, { family: 'transform' })).toThrow()
+    expect(() => previewPublicationReceipt(receipt, context, null, { family: 'unknown' })).toThrow()
+    expect(previewPublicationReceipt(receipt, context)).toEqual(receipt)
+    expect(previewPublicationReceipt(receipt, context, null, { family: 'sweep' })).toEqual(receipt)
+  })
+
+  it.each([
+    ['family', 'sweep'], ['command_kind', 'deformation'], ['command_kind', null],
+    ['deformation_id', 'fabricated'], ['expected_revision', 8], ['feature_id', ''],
+  ])('rejects invalid transform receipt %s=%s', async (field, value) => {
+    const { previewPublicationReceipt } = await import(modulePath)
+    expect(() => previewPublicationReceipt(transformReceipt('cluster_op', { [field]: value }), context,
+      null, { family: 'transform' })).toThrow()
+  })
+
+  it.each(['initial', 'final'])('refuses a changed command kind at the %s publication check', async stage => {
+    const { createDeformationPreviewEndpoints } = await import(modulePath)
+    const expected = transformReceipt()
+    const responses = [expected, { design: { id: 'part' }, revision: 8 }, { nucleotides: [], helix_axes: [] },
+      { doc_id: context.docId, design_id: 'part', revision: 8, has_design: true }, expected]
+    responses[stage === 'initial' ? 0 : 4] = transformReceipt('nucleotide-transform')
+    const request = vi.fn(async () => responses.shift())
+    const api = createDeformationPreviewEndpoints({ request, family: 'transform' })
+    await expect(api.refreshCommitted(expected, { context })).rejects.toMatchObject({ status: 409 })
+    expect(request).toHaveBeenCalledTimes(stage === 'initial' ? 1 : 5)
+  })
+
+  it('refreshes only between two exact transform status receipts', async () => {
+    const { createDeformationPreviewEndpoints } = await import(modulePath)
+    const expected = transformReceipt('nucleotide-transform-delete')
+    const design = { design: { id: 'part' }, revision: 8 }
+    const responses = [expected, design, { nucleotides: [], helix_axes: [] },
+      { doc_id: context.docId, design_id: 'part', revision: 8, has_design: true }, expected]
+    const request = vi.fn(async () => responses.shift())
+    const api = createDeformationPreviewEndpoints({ request, family: 'transform' })
+    expect(await api.refreshCommitted(expected, { context })).toEqual({ ...design, nucleotides: [], helix_axes: [] })
+    expect(request.mock.calls[0][1]).toBe('/design/features/transform-preview/status')
+    expect(request.mock.calls[4][1]).toBe('/design/features/transform-preview/status')
+    expect(request.mock.calls[0][2]).toEqual({ ...origin, lease_id: expected.lease_id })
+  })
+})

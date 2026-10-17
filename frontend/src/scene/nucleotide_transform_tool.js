@@ -2,6 +2,7 @@
 
 import * as THREE from 'three'
 import { TransformControls } from 'three/addons/controls/TransformControls.js'
+import { bindPrivateGizmoLayer } from './private_gizmo_layer.js'
 
 import { baseKey, parseBaseKey } from './base_ref.js'
 import { putNucleotideTransform, putNucleotideTransforms } from '../api/client.js'
@@ -76,7 +77,9 @@ export function transformTargetsForSelection(state, exactRef = null) {
   return expandCpdTargets(state.currentDesign, keys, refs).map(parseBaseKey).filter(Boolean)
 }
 
-export function initNucleotideTransformTool({ store, scene, camera, canvas, controls, designRenderer, atomisticRenderer, getAtomisticRenderers, moveRotatePanel, refreshCurrentSelection }) {
+export function initNucleotideTransformTool({ store, scene, camera, canvas, controls, designRenderer, atomisticRenderer, getAtomisticRenderers, moveRotatePanel, refreshCurrentSelection, historySession = null }) {
+  let releaseLayer = null
+  const historyTargets = historySession?.targets.map(target => ({ ...target }))
   let tc = null
   let helper = null
   let dummy = null
@@ -95,7 +98,7 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
       .multiply(new THREE.Matrix4().makeTranslation(-pivot.x, -pivot.y, -pivot.z))
   }
 
-  const selectedTargets = (exactRef = null) => transformTargetsForSelection(
+  const selectedTargets = (exactRef = null) => historyTargets ?? transformTargetsForSelection(
     store.getState(), exactRef)
 
   function renderers() {
@@ -136,19 +139,23 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     scene.add(dummy)
     tc = new TransformControls(camera, canvas)
     tc.attach(dummy); tc.setMode(mode); tc.setSpace('world')
+    releaseLayer = bindPrivateGizmoLayer(tc, historySession?.displayLayer)
     helper = tc.getHelper(); scene.add(helper)
     tc.addEventListener('dragging-changed', e => { dragging = e.value; controls.enabled = !e.value })
     tc.addEventListener('change', () => {
       if (!dragging) return
-      applyPreviews(targetInfos, liveMatrix())
+      if (historySession) historySession.onChange(_pendingBodies())
+      else applyPreviews(targetInfos, liveMatrix())
     })
-    document.getElementById('mode-indicator').textContent =
-      'NUCLEOTIDE MOVE/ROTATE — Tab: move/rotate · M: apply · Esc: cancel'
-    moveRotatePanel?.setAssemblyCtx(null)
-    moveRotatePanel?.setSessionMode?.('nucleotide')
-    moveRotatePanel?.setTransformValues?.(0, 0, 0, 0, 0, 0)
-    refreshCurrentSelection?.()
-    if (moveRotatePanel?.panel) moveRotatePanel.panel.style.display = ''
+    if (!historySession) {
+      document.getElementById('mode-indicator').textContent =
+        'NUCLEOTIDE MOVE/ROTATE — Tab: move/rotate · M: apply · Esc: cancel'
+      moveRotatePanel?.setAssemblyCtx(null)
+      moveRotatePanel?.setSessionMode?.('nucleotide')
+      moveRotatePanel?.setTransformValues?.(0, 0, 0, 0, 0, 0)
+      refreshCurrentSelection?.()
+      if (moveRotatePanel?.panel) moveRotatePanel.panel.style.display = ''
+    }
     document.addEventListener('keydown', onKey)
     return true
   }
@@ -167,6 +174,7 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
   }
 
   async function _persistCurrent({ atomic = false } = {}) {
+    if (historySession) return { accepted: false, reason: 'owned_history', result: null }
     if (!tc) return { accepted: false, reason: 'preview_required', result: null }
     if (!_hasPendingMotion()) {
       return { accepted: false, reason: 'no_change', result: null }
@@ -211,6 +219,7 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
 
   function cancel() {
     if (!tc) return
+    if (historySession) { historySession.onCancel(); return }
     restorePreview()
     detach(false)
   }
@@ -221,9 +230,11 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     dummy.position.copy(pivot)
     dummy.quaternion.identity()
     tc.updateMatrixWorld?.()
+    if (historySession) historySession.onChange(_pendingBodies())
   }
 
   function restorePreview() {
+    if (historySession) return
     applyPreviews(targetInfos, identity())
   }
 
@@ -247,21 +258,23 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
   }
 
   function detach(restore = true) {
+    releaseLayer?.(); releaseLayer = null
     if (restore && targets.length) restorePreview()
     if (tc) { tc.detach(); scene.remove(helper); tc.dispose?.() }
     dummy?.parent?.remove(dummy)
     document.removeEventListener('keydown', onKey)
     controls.enabled = true
-    if (moveRotatePanel?.panel) moveRotatePanel.panel.style.display = 'none'
+    if (!historySession && moveRotatePanel?.panel) moveRotatePanel.panel.style.display = 'none'
     tc = helper = dummy = pivot = null
     targets = []; targetInfos = []
     exactSessionRef = null
     vrPreviewRef = null
     dragging = false
-    document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
+    if (!historySession) document.getElementById('mode-indicator').textContent = 'NADOC · WORKSPACE'
   }
 
   function beginVRPreview(selectedRef) {
+    if (historySession) return { accepted: false, reason: 'owned_history' }
     const primary = canonicalSelection(store.getState()).primary
     if (!selectedRef || !selectionRefsEqual(primary, selectedRef)) {
       return { accepted: false, reason: 'selection_changed' }
@@ -322,6 +335,7 @@ export function initNucleotideTransformTool({ store, scene, camera, canvas, cont
     handleSelectionChange,
     isVRPreviewActive: () => !!vrPreviewRef,
     isActive: () => !!tc,
+    isDragging: () => dragging,
     debugState: () => ({
       active: !!tc, mode, pivot: pivot?.toArray() ?? null,
       exactSessionRef: exactSessionRef ? { ...exactSessionRef } : null,

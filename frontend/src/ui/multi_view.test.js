@@ -2,11 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { JSDOM } from 'jsdom'
 import * as THREE from 'three'
 import { cloneMultiScene, initMultiView, MULTI_VIEW_REPRESENTATIONS, multiViewContentBounds, multiViewDesignCentroid, multiViewRects } from './multi_view.js'
+vi.mock('./toast.js', () => ({ showToast: vi.fn() }))
+import { showToast } from './toast.js'
 
 describe('multi-view', () => {
   beforeEach(() => {
     const dom = new JSDOM('<div id="right-multi-view-body"></div><div id="area"><canvas id="canvas"></canvas></div>')
     globalThis.document = dom.window.document
+    dom.window.HTMLElement.prototype.setPointerCapture = () => {}
+    dom.window.HTMLElement.prototype.releasePointerCapture = () => {}
   })
 
   it('computes gap-free responsive layouts', () => {
@@ -83,4 +87,39 @@ describe('multi-view', () => {
     renderFn()
     expect(renderer.render).toHaveBeenCalledTimes(3)
   })
+})
+
+it('releases the existing multi-view renderer for the transform history owner', async () => {
+  document.body.innerHTML = '<div id="right-multi-view-body"></div><canvas id="canvas"></canvas>'
+  const api = initMultiView({ document, scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(), canvas: document.getElementById('canvas'),
+    renderer: { setScissorTest: vi.fn(), setViewport: vi.fn() }, controls: { target: new THREE.Vector3(), update: vi.fn(), enabled: true },
+    store: { getState: () => ({}) }, setRenderFn: vi.fn(), resetRenderFn: vi.fn(), setRepresentation: vi.fn(), setColoringMode: vi.fn() })
+  try {
+    await api.activate(2)
+    const waits = []; window.dispatchEvent(new CustomEvent('nadoc:comparison-mode', { detail: { mode: 'transform-history', waits } }))
+    await Promise.all(waits); expect(api.getCount()).toBe(1)
+  } finally { api.dispose() }
+})
+it('does not change multi-view state when an existing owner refuses the mode transition', async () => {
+  document.body.innerHTML = '<div id="right-multi-view-body"></div><canvas id="canvas"></canvas>'
+  const api = initMultiView({ document, scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(), canvas: document.getElementById('canvas'),
+    renderer: { setScissorTest: vi.fn(), setViewport: vi.fn() }, controls: { target: new THREE.Vector3(), update: vi.fn(), enabled: true },
+    store: { getState: () => ({}) }, setRenderFn: vi.fn(), resetRenderFn: vi.fn(), setRepresentation: vi.fn(), setColoringMode: vi.fn() })
+  const block = event => event.detail.waits.push(Promise.reject(new Error('Publication unresolved')))
+  window.addEventListener('nadoc:comparison-mode', block)
+  try { await expect(api.activate(2)).rejects.toThrow('Publication unresolved'); expect(api.getCount()).toBe(1) }
+  finally { window.removeEventListener('nadoc:comparison-mode', block); api.dispose() }
+})
+it('reports a refused layout button transition without an unhandled rejection', async () => {
+  document.body.innerHTML = '<div id="right-multi-view-body"></div><canvas id="canvas"></canvas>'
+  const api = initMultiView({ document, scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(), canvas: document.getElementById('canvas'),
+    renderer: { setScissorTest: vi.fn(), setViewport: vi.fn() }, controls: { target: new THREE.Vector3(), update: vi.fn(), enabled: true },
+    store: { getState: () => ({}) }, setRenderFn: vi.fn(), resetRenderFn: vi.fn(), setRepresentation: vi.fn(), setColoringMode: vi.fn() })
+  const block = event => event.detail.waits.push(Promise.reject(new Error('Resolve the saved result')))
+  window.addEventListener('nadoc:comparison-mode', block)
+  try {
+    document.querySelector('.mv-layout-btn[data-count="2"]').click()
+    await vi.waitFor(() => expect(showToast).toHaveBeenCalledWith('Resolve the saved result', { severity: 'error' }))
+    expect(api.getCount()).toBe(1)
+  } finally { window.removeEventListener('nadoc:comparison-mode', block); api.dispose() }
 })

@@ -1262,3 +1262,25 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   do not qualify interactive speed or larger designs. Both rollout gates remain
   false until qualification; legacy creation/recovery remain available. This is
   the existing FH-27 exit, not additional milestone scope. VR stays deferred.
+
+
+- **MV-52 — PENDING — Owned Move/Rotate history editor (2026-10-16).**
+  **NOT VERIFIED IN APP.** With Archive mounted, privately enable the paired
+  transform client/host gates. Edit earlier placement, nucleotide single/batch,
+  saved-pose reset and complete-placement rows with evicted recovery. Exercise
+  exact numeric/45-degree inputs, global/local frames, snap, Tab and gizmo drags;
+  verify native joint limits/locks, duplex root pivots and tether/linked controls.
+  Explicitly upgrade a single-owner row before including linked poses. Confirm
+  every selected/auxiliary owner, original parent/driver frame and fixed owner;
+  inspect extra bases, CPD, extensions, flexible strands and both linker types.
+  Apply must rebuild later inputs once, retain stable feature identities and
+  survive undo/redo/save/reload/cold proof. Missing sources/downstream references
+  must preserve the document and draft with actionable diagnostics.
+  Exercise Reset after upgrade, Cancel/Escape during Prepare/evaluation/Apply,
+  expiry, lost publication responses, same-ID reset, live-tool conflicts and
+  comparison-view transitions. Check restored camera/panel ownership and focus.
+  Measure representative HTTP/render/drag responsiveness, memory retention and
+  lock costs; bounded data/tests do not establish interactive performance.
+  Complete historical-prefix and arbitrary organizational-group movement exits
+  remain FH-23/FH-18; desktop qualification is the existing FH-27 exit. Both
+  transform gates remain false. No assembly or machine-specific VR claim.

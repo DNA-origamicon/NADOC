@@ -15,7 +15,7 @@ def _reference(kind: str, identity: str, path: list[str | int]) -> CommandRefere
 
 def validate_command_references(kind, design, params):
     """Reject missing targets before executing a permissive native builder."""
-    if kind in {"cluster_op", "nucleotide-transform", "nucleotide-transform-batch",
+    if kind in {"cluster_op", "placement-poses", "nucleotide-transform", "nucleotide-transform-batch",
                 "nucleotide-transform-delete"}:
         from backend.api.part_transform_references import validate_transform_references
 

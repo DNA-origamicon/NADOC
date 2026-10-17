@@ -4,6 +4,7 @@ import { createFeatureLogVR } from './feature_log_vr.js'
 import { editPatternFeature, isPatternFeature } from './pattern_feature_editor.js'
 import { editExtrusionFeature, isNativeExtrusionFeature } from './extrusion_feature_editor.js'
 import { isNativeSweepFeature, SWEEP_HISTORY_EDITOR_ENABLED } from '../app/sweep_history_editor.js'
+import { isNativeTransformFeature, TRANSFORM_HISTORY_EDITOR_ENABLED } from '../app/transform_history_editor.js'
 /**
  * Feature Log panel — unified timeline of geometry operations with a vertical
  * notch slider for seeking to any prior feature state.
@@ -54,7 +55,7 @@ const REPLAYABLE_SUBTYPES = new Set([
   'joint-place', 'joint-update', 'joint-delete',
 ])
 
-export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, onEditNanoparticle, onAnimateConfiguration, onOpenOverhangsManager, showSeekPreview, sweepHistoryEnabled = SWEEP_HISTORY_EDITOR_ENABLED }) {
+export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, onEditNanoparticle, onAnimateConfiguration, onOpenOverhangsManager, showSeekPreview, sweepHistoryEnabled = SWEEP_HISTORY_EDITOR_ENABLED, transformHistoryEnabled = TRANSFORM_HISTORY_EDITOR_ENABLED }) {
   const panelBody = document.getElementById('feature-log-panel-body')
   const heading   = document.getElementById('feature-log-panel-heading')
   const arrow     = document.getElementById('feature-log-panel-arrow')
@@ -920,6 +921,9 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
           return 'Deformation target removed; this feature can no longer be applied.'
         }
       } else if (entry.feature_type === 'cluster_op') {
+        // Owned native references are resolved at the feature's prefix. A later
+        // deletion is not evidence that an earlier transform is broken.
+        if (transformHistoryEnabled && isNativeTransformFeature(entry)) return null
         if (!clusterMap[entry.cluster_id]) {
           return 'Cluster removed; this transform can no longer be applied.'
         }
@@ -1432,6 +1436,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         const isPattern = isPatternFeature(entry.op_kind)
         const nativeExtrusion = isNativeExtrusionFeature(entry)
         const nativeSweep = sweepHistoryEnabled && isNativeSweepFeature(entry)
+        const nativeTransform = transformHistoryEnabled && isNativeTransformFeature(entry)
         const latestInputs = (store.getState().currentDesign?.feature_log_cursor ?? -1) === -1
           && store.getState().currentDesign?.feature_log_sub_cursor == null
         const ownedPattern = isPattern && !!store.getState().currentDesign?.group_organization
@@ -1439,14 +1444,14 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         const isLinkerAdd = entry.op_kind === 'linker-add'
         const isNanoparticle = entry.op_kind === 'nanoparticle-create'
         const isGenerated = entry.params?._generator?.version === 1
-        const isEditable = (isGenerated || _EDIT_REPLAY_KINDS.has(entry.op_kind) || isLinkerAdd || isNanoparticle || isPattern || nativeExtrusion) && (!isEvicted || ownedPattern || nativeExtrusion || nativeSweep)
+        const isEditable = (isGenerated || _EDIT_REPLAY_KINDS.has(entry.op_kind) || isLinkerAdd || isNanoparticle || isPattern || nativeExtrusion || nativeTransform) && (!isEvicted || ownedPattern || nativeExtrusion || nativeSweep || nativeTransform)
         const hasLaterSnapshot = isEditable && log.slice(i + 1).some(e => e.feature_type === 'snapshot')
         // Linker and nanoparticle editors change the current object; they do
         // not replay the original creation snapshot. Later operations are fine.
         const particle = isNanoparticle
           ? store.getState().currentDesign?.nanoparticles?.find(p => p.id === entry.params?.nanoparticle_id)
           : null
-        const editAllowed = isEditable && (nativeExtrusion || nativeSweep ? latestInputs : isGenerated ? canReplayGenerated(log, i) : isNanoparticle ? !!particle : (isLinkerAdd || isPattern || entry.op_kind === 'sweep' || !hasLaterSnapshot))
+        const editAllowed = isEditable && (nativeExtrusion || nativeSweep || nativeTransform ? latestInputs : isGenerated ? canReplayGenerated(log, i) : isNanoparticle ? !!particle : (isLinkerAdd || isPattern || entry.op_kind === 'sweep' || !hasLaterSnapshot))
 
         let editBtn = null
         if (isEditable) {
@@ -1457,10 +1462,10 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
                 ? `Open Overhangs Manager for this linker`
                 : isNanoparticle
                   ? `Edit scene diameter (currently ${particle.diameter_nm} nm)`
-                  : isPattern || nativeExtrusion ? `Edit ${entry.label} parameters`
+                  : isPattern || nativeExtrusion || nativeTransform ? `Edit ${entry.label} parameters`
                   : entry.op_kind === 'sweep' ? `Edit sweep path (${entry.params?.points_nm?.length ?? 0} points)`
                   : `Edit ${entry.label} parameters (currently length_bp=${entry.params?.length_bp ?? '?'})`)
-            : nativeExtrusion || nativeSweep ? 'Return to the latest history position before editing feature inputs.'
+            : nativeExtrusion || nativeSweep || nativeTransform ? 'Return to the latest history position before editing feature inputs.'
               : isNanoparticle ? 'Cannot edit: this nanoparticle has been deleted.'
               : 'Cannot edit: a later snapshot exists. Revert to this point first.'
           editBtn.disabled = !editAllowed
@@ -1527,6 +1532,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
                 }
                 return
               }
+              if (nativeTransform) { onEditFeature?.(entry, i); return }
               if (entry.op_kind === 'sweep') { onEditSweep?.(entry, i); return }
               const current = entry.params?.length_bp
               if (current == null) {
@@ -1557,7 +1563,7 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         } else {
           row.append(icon, label, revertBtn, delBtn)
         }
-      } else {
+      } else if (entry.feature_type === 'cluster_op') {
         const cluster = clusterMap[entry.cluster_id]
         // `source` is set by ops other than the manual move/rotate UI — e.g.
         // 'relax' from Relax-Linker, 'bind-relax'/'unbind-revert' from the
@@ -1604,6 +1610,10 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
           const editBtn = document.createElement('button')
           editBtn.textContent = '✎'
           editBtn.title = 'Edit this move/rotate feature'
+          if (transformHistoryEnabled && isNativeTransformFeature(entry)) {
+            editBtn.disabled = (design.feature_log_cursor ?? -1) !== -1 || design.feature_log_sub_cursor != null
+            if (editBtn.disabled) editBtn.title = 'Return to the latest history position before editing feature inputs.'
+          }
           editBtn.style.cssText = [
             'background:#21262d;border:1px solid #30363d;color:#8b949e',
             'border-radius:3px;font-size:var(--text-xs);line-height:1.4',
@@ -1617,6 +1627,12 @@ export function initFeatureLogPanel(store, { api, onEditFeature, onEditSweep, on
         } else {
           row.append(icon, label, revertBtn, delBtn)
         }
+      }
+
+      else {
+        icon.textContent = '◻'
+        label.textContent = `F${i + 1}: ${entry.feature_type === 'cluster_create' ? 'Create placement' : entry.feature_type} · ${entry.name ?? entry.label ?? entry.cluster_id ?? ''}`
+        row.append(icon, label, delBtn)
       }
 
       // Insert the warning icon ahead of the type icon if the entry is broken.

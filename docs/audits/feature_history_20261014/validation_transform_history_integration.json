@@ -1,0 +1,524 @@
+{
+  "checkpoint": "U20: connected private move/rotate editor; FH-23 remains open",
+  "source_checkpoint": "46477edd",
+  "runs": {
+    "frontend_contract_red": {
+      "failed": 27,
+      "passed": 57,
+      "failed_suites": 2,
+      "seconds": 1.07
+    },
+    "panel_ownership_red": {
+      "failed": 5,
+      "passed": 49,
+      "seconds": 0.996
+    },
+    "compound_command_red": {
+      "failed": 28,
+      "passed": 1,
+      "seconds": 3.14
+    },
+    "frontend_initial_family_panel": {
+      "passed": 143,
+      "failed": 1,
+      "seconds": 1.63,
+      "finding": "Late malformed Apply incorrectly reintroduced uncertainty after confirmed publication; regression fixed."
+    },
+    "gesture_red": {
+      "passed": 1,
+      "failed": 2,
+      "seconds": 0.941
+    },
+    "initial_native_display_frontend": {
+      "passed": 36,
+      "seconds": 0.596
+    },
+    "initial_python_javascript_bridge": {
+      "failed": 16,
+      "seconds": 4.16,
+      "finding": "New evaluated-command-kind packet fields preceded strict JS contract update."
+    },
+    "app_tool_reset_red": {
+      "passed": 62,
+      "failed": 1,
+      "failed_suites": 2,
+      "seconds": 1.54
+    },
+    "compound_contract_history_policy_initial": {
+      "passed": 190,
+      "failed": 3,
+      "seconds": 4.26,
+      "finding": "Local draft errors correctly use existing host422 contract; new tests expected409 and were corrected."
+    },
+    "panel_owner_followup_red": {
+      "passed": 54,
+      "failed": 3,
+      "seconds": 1.06,
+      "finding": "Missing explicit upgrade control, lost previous joint mode, stale live pivot response could reclaim private panel."
+    },
+    "gesture_panel_legacy_green": {
+      "passed": 86,
+      "seconds": 2.71,
+      "files": 5
+    },
+    "backend_transform_history_green": {
+      "passed": 227,
+      "seconds": 6.18,
+      "files": 6
+    },
+    "app_controller_tool_feature_list_initial": {
+      "passed": 94,
+      "failed": 8,
+      "seconds": 3.43,
+      "finding": "One inconsistent new nucleotide fixture; seven observed new feature-list dispatch/classification tests."
+    },
+    "feature_list_editor_green": {
+      "passed": 21,
+      "seconds": 2.5,
+      "files": 3
+    },
+    "compound_primary_anchor_red": {
+      "failed": 2,
+      "seconds": 2.83,
+      "finding": "Normal compound edit could retarget inherited primary fields; fixed to preserve primary anchor."
+    },
+    "native_same_kernel_compatibility": {
+      "passed": 3,
+      "seconds": 125.57,
+      "durations": {
+        "cpd": 100.76,
+        "coating": 11.65,
+        "duplex": 10.44
+      },
+      "scope": "Independent workers; exact current/historical implementation-pin parity. No historical binary or scientific correctness claim."
+    },
+    "frontend_full_contract_first": {
+      "passed": 91,
+      "failed": 4,
+      "seconds": 3.23,
+      "finding": "Three role-fixture inconsistencies after schema extension; one live-tool ownership guard red."
+    },
+    "bridge_command_policy": {
+      "passed": 208,
+      "failed": 2,
+      "seconds": 8.6,
+      "finding": "All24 validator/native-render executions succeeded; two test-only stdout marker assertions included native debug output. Terminal marker assertion corrected."
+    },
+    "native_bridge_history_http_constraints": {
+      "passed": 50,
+      "warnings": 4,
+      "seconds": 8.36,
+      "files": 4
+    },
+    "final_lifecycle_first": {
+      "passed": 136,
+      "failed": 1,
+      "seconds": 6.34,
+      "finding": "New comparison release boundary required test to await actual held Prepare; fixture timeout corrected without raising timeout."
+    },
+    "final_review_red": {
+      "passed": 223,
+      "failed": 2,
+      "seconds": 4.11,
+      "files": 7,
+      "finding": "Group numeric fields used primary absolute pose instead of group delta; controls-only candidate retained disposed geometry. Both failures observed before bounded fixes."
+    },
+    "final_review_signed_zero": {
+      "passed": 224,
+      "failed": 1,
+      "seconds": 4.0,
+      "files": 7,
+      "finding": "Remaining assertion distinguished signed zero in native identity Euler output. Test now compares numerical equivalence; native math unchanged."
+    },
+    "final_group_controls_green": {
+      "passed": 16,
+      "seconds": 1.67,
+      "files": 1,
+      "finding": "Group identity delta, per-owner composition, failed-Apply reattachment and controls-only suspension pass with real native gizmo."
+    }
+  },
+  "nonruns": [
+    {
+      "command": "just validate-safe bash -c quoted cd/frontend npx",
+      "exit_code": 130,
+      "reason": "just recipe shell lost intended cd quoting; npx resolved Vitest5 at repo root. Interrupted before test result; no pass credit. Corrected all later targeted runs to direct validation_guard.sh with existing frontend/node_modules/.bin/vitest4.1.11 from frontend working directory.",
+      "cleanup": {
+        "path": "/home/joshua/.npm/_npx/69c381f8ad94b576",
+        "files_removed": 597,
+        "bytes_removed": 38592799,
+        "verified_absent": true,
+        "active_readable_process_references": 0,
+        "preserved": "Existing shared npm caches and older npx installations; no dependency files changed."
+      }
+    }
+  ],
+  "qualification": {
+    "application": "NOT VERIFIED IN APP",
+    "archive_mounted": false,
+    "vr": "Deferred by user for machine-specific session",
+    "rollout": "Both transform gates remain false",
+    "counts": {
+      "completed": 20,
+      "total": 38,
+      "remaining": 18,
+      "completed_delta": 0,
+      "total_delta": 0
+    },
+    "task_growth": {
+      "FH-18_checkpoints": 13,
+      "FH-23_checkpoints": 3,
+      "engineering_checkpoints_since_B1": 20,
+      "milestones_closed_since_B1": 3,
+      "containment": "Finish existing native-prefix/constraint matrix; separately resolve original arbitrary named-group integration, preserving scientific authorization and FH27 qualification exits. No new milestone or reduced exit."
+    }
+  },
+  "standard_backend": {
+    "command": "just test-smart",
+    "decision": "FAST",
+    "deferred": "FULL",
+    "passed": 17582,
+    "failed": 23,
+    "errors": 8,
+    "skipped": 21,
+    "warnings": 2978,
+    "seconds": 249.45,
+    "guard_seconds": 260,
+    "timing_report": {
+      "per_test_budget_sec": 5.0,
+      "total_test_seconds": 882.8,
+      "n_tests": 17630,
+      "sim_running": false,
+      "sim_reason": "",
+      "slowest_files_15": [
+        {
+          "file": "tests/test_oxdna_relaxation.py",
+          "seconds": 57.3,
+          "n_tests": 248,
+          "n_slow_marked": 0
+        },
+        {
+          "file": "tests/test_cluster_join_api.py",
+          "seconds": 37.6,
+          "n_tests": 17,
+          "n_slow_marked": 0
+        },
+        {
+          "file": "tests/test_headless_oxdna_build.py",
+          "seconds": 29.7,
+          "n_tests": 45,
+          "n_slow_marked": 0
+        },
+        {
+          "file": "tests/test_vr_representation_loading.py",
+          "seconds": 23.8,
+          "n_tests": 14,
+          "n_slow_marked": 0
+        },
+        {
+          "file": "tests/test_immutable_recovery_worker_lifecycle.py",
+          "seconds": 15.9,
+          "n_tests": 37,
+          "n_slow_marked": 0
+        },
+        {
+          "file": "tests/test_cluster_join_constraints.py",
+          "seconds": 12.9,
+          "n_tests": 14,
+          "n_slow_marked": 0
+        },
+        {
+          "file": "tests/test_headless_spec_build.py",
+          "seconds": 11.5,
+          "n_tests": 81,
+          "n_slow_marked": 0
+        },
+        {
+          "file": "tests/test_atomistic_validation.py",
+          "seconds": 10.3,
+          "n_tests": 16,
+          "n_slow_marked": 0
+        },
+        {
+          "file": "tests/test_automation_harness.py",
+          "seconds": 10.3,
+          "n_tests": 136,
+          "n_slow_marked": 0
+        },
+        {
+          "file": "tests/test_native_streptavidin_proof.py",
+          "seconds": 9.8,
+          "n_tests": 18,
+          "n_slow_marked": 0
+        },
+        {
+          "file": "tests/test_oxdna_surface.py",
+          "seconds": 9.7,
+          "n_tests": 33,
+          "n_slow_marked": 0
+        },
+        {
+          "file": "tests/test_streptavidin.py",
+          "seconds": 9.2,
+          "n_tests": 10,
+          "n_slow_marked": 0
+        },
+        {
+          "file": "tests/test_part_group_repair_evaluation.py",
+          "seconds": 7.6,
+          "n_tests": 8,
+          "n_slow_marked": 0
+        },
+        {
+          "file": "tests/test_atomistic.py",
+          "seconds": 7.4,
+          "n_tests": 52,
+          "n_slow_marked": 0
+        },
+        {
+          "file": "tests/test_cluster_join_core.py",
+          "seconds": 7.0,
+          "n_tests": 17,
+          "n_slow_marked": 0
+        }
+      ],
+      "violators": [],
+      "slowest_25": [
+        {
+          "nodeid": "tests/test_streptavidin.py::test_packing_is_deterministic_and_clash_checked[adsorption]",
+          "seconds": 3.98,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_native_branch_proof.py::test_generated_branch_cold_replay_edit_and_undo",
+          "seconds": 3.8,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_generated_joined_proof.py::test_generated_joined_path_edit_regenerates_without_samples_or_recovery",
+          "seconds": 3.68,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_native_streptavidin_proof.py::test_explicit_coating_upgrade_rebuilds_old_pin_even_after_coating_removal",
+          "seconds": 3.59,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_part_coating_evaluation.py::test_public_coating_submission_uses_real_worker_then_one_commit_and_cold_replay",
+          "seconds": 3.48,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_streptavidin.py::test_packing_is_deterministic_and_clash_checked[biotin_tether]",
+          "seconds": 3.26,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_cluster_join_api.py::test_native_save_reload_and_history_seek_restore_pose_with_route",
+          "seconds": 3.14,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[oxdna]",
+          "seconds": 3.05,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_cluster_join_constraints.py::test_api_preview_is_readonly_apply_realizes_every_bridge_and_undo_redo",
+          "seconds": 2.96,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_native_path_proof.py::test_cold_path_replay_and_radius_edit_rebuild_outputs_with_stable_identity",
+          "seconds": 2.95,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[ballstick]",
+          "seconds": 2.86,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_vr_representation_loading.py::test_selective_export_matches_same_blocks_in_complete_snapshot[hull-prism]",
+          "seconds": 2.81,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_cluster_join_api.py::test_native_linear_routes_merge_preserving_fine_edits_and_one_undo[6-kinds0]",
+          "seconds": 2.8,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_cluster_join_api.py::test_manual_moves_around_join_seek_and_delete_in_chronological_order",
+          "seconds": 2.79,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_cluster_join_api.py::test_removing_join_restores_original_native_pose_and_routes[delete]",
+          "seconds": 2.77,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_surface_tiled.py::test_tiles_match_dense_field_without_seams[0.24]",
+          "seconds": 2.77,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_part_repair_evaluation.py::test_spawned_repair_rebuilds_broken_inputs_ignores_recovery_and_cold_verifies_after_reload",
+          "seconds": 2.76,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_cluster_join_api.py::test_native_linear_routes_merge_preserving_fine_edits_and_one_undo[6-kinds2]",
+          "seconds": 2.75,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_cluster_join_api.py::test_rejected_join_is_transactionally_empty_and_preserves_redo[same_cluster]",
+          "seconds": 2.74,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_part_group_repair_evaluation.py::test_spawned_job_applies_once_undo_restores_invalid_source_and_reload_cold_proves",
+          "seconds": 2.73,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_part_batch_evaluation.py::test_spawned_mixed_batch_then_independent_cold_replay_survive_json_and_poisoned_recovery",
+          "seconds": 2.71,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_native_recipe_determinism.py::test_routing_recipe_is_identical_across_python_hash_seeds",
+          "seconds": 2.66,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_cluster_join_api.py::test_native_linear_routes_merge_preserving_fine_edits_and_one_undo[6-kinds1]",
+          "seconds": 2.65,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_part_immutable_evaluation.py::test_real_spawned_batch_then_cold_verify_keeps_immutable_publication",
+          "seconds": 2.65,
+          "slow_marked": false
+        },
+        {
+          "nodeid": "tests/test_oxdna_relaxation.py::test_unwrap_adjacency_keeps_loop_copies_in_one_component",
+          "seconds": 2.62,
+          "slow_marked": false
+        }
+      ]
+    },
+    "findings": {
+      "vr_failures": 14,
+      "photoproduct_review_failures": 7,
+      "junction_balance_failures": 2,
+      "cpd_archive_collection_errors": 4,
+      "cpd_preview_stereochemistry_errors": 4
+    },
+    "limits": "Failure nodes match retained U19 debt; exact current full raw traceback was truncated. Archive collection and cis-anti-I stereochemistry errors observed directly. No broad green claim. Prior repair-job setup error did not recur.",
+    "timing_triage": {
+      "skill": "triage-slow-tests",
+      "individual_5s_violators": 0,
+      "summed_test_seconds": 882.8,
+      "worker_count": 4,
+      "ideal_worker_floor_seconds": 220.7,
+      "finding": "Aggregate test work explains a floor above the unchanged 90s budget; retained prior guard duration also260s. No demonstrated shared stall or individual slow-test offender. No arbitrary slow marking, threshold increase, or interactive latency claim."
+    }
+  },
+  "focused_backend": {
+    "distinct_passed": 466,
+    "files": 13,
+    "includes": "24 actual Python\u2192JavaScript packet/native-render cases and 3 independent same-kernel native compatibility cases. Repeated runs are not additional distinct credit."
+  },
+  "cleanup_inventory": {
+    "inventory": [
+      {
+        "path": "/tmp/pytest-of-joshua/pytest-6",
+        "files": 26,
+        "bytes": 217148,
+        "allocated_bytes": 303104,
+        "directories": 238,
+        "symlinks": 13,
+        "special": 0
+      },
+      {
+        "path": "/tmp/pytest-of-joshua/pytest-7",
+        "files": 0,
+        "bytes": 0,
+        "allocated_bytes": 0,
+        "directories": 51,
+        "symlinks": 1,
+        "special": 0
+      },
+      {
+        "path": "/tmp/pytest-of-joshua/pytest-8",
+        "files": 12237,
+        "bytes": 2432652309,
+        "allocated_bytes": 322502656,
+        "directories": 26219,
+        "symlinks": 2516,
+        "special": 2
+      }
+    ],
+    "special": [
+      {
+        "path": "/tmp/pytest-of-joshua/pytest-8/popen-gw2/test_nonexclusive_regular_reco2/.session-strict-v1/13d9cdc2c1c99a90cf5342afa7c3420b154375b7a9f82db3d059ac85df1946e3.partcache",
+        "mode": "prw-r--r--"
+      },
+      {
+        "path": "/tmp/pytest-of-joshua/pytest-8/popen-gw0/test_transfer_keeps_running_af0/w/worker.sock",
+        "mode": "srw-------"
+      }
+    ],
+    "active_references": [],
+    "owned_processes_inspected": 34,
+    "unreadable_owned_processes": 2,
+    "attribution": "All three exact roots created by serialized current-task pytest runs today; contents match test named directories. No workspace, managed-job, active-runtime, shared-cache or historical archive path selected."
+  },
+  "cleanup": {
+    "files": 12263,
+    "bytes": 2432869457,
+    "allocated_bytes": 322805760,
+    "directories": 26508,
+    "symlinks": 2531,
+    "special": 2,
+    "verified_absent": true,
+    "readable_process_references": 0,
+    "live_test_sockets": 0,
+    "unreadable_processes": "Only user systemd435 and sd-pam436; no test/runtime process unreadable.",
+    "preserved": "User workspace, managed jobs, active runtimes, shared caches and historical provenance.",
+    "storage_finding": "Standard FAST generated pytest scratch on system temp despite unavailable Archive. Largest file is a sparse2GiB boundary fixture; actual allocated regular-file bytes recorded separately. Cleaned exact task-owned outputs. Future broad runs require mounted Archive TMPDIR/basetemp preflight; do not repeat with system-temp fallback.",
+    "final_post_frontend_absence_verified": true
+  },
+  "static_checks": {
+    "changed_python_ruff_pass": 18,
+    "changed_js_syntax_pass": 32,
+    "repository_ruff": "5 pre-existing F401 findings unchanged",
+    "memory_lint": "6 errors/59 warnings unchanged",
+    "project_memory_lines": 200,
+    "main_js_lines": 7350,
+    "main_js_delta": 1,
+    "ledger": {
+      "unique_milestones": 38,
+      "completed": 20,
+      "core_remaining": 9,
+      "parked_remaining": 9
+    },
+    "diff_check": "passed"
+  },
+  "standard_frontend": {
+    "command": "just test-frontend",
+    "exit_code": 0,
+    "files_passed": 760,
+    "passed": 9088,
+    "skipped": 1,
+    "seconds": 330.01,
+    "transform_seconds": 9.19,
+    "import_seconds": 40.64,
+    "test_seconds": 82.47,
+    "environment_seconds": 447.05,
+    "qualification": "Software regression only; no desktop, rendering-comfort or interactive-latency claim."
+  }
+}

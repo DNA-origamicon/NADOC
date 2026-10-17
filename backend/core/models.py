@@ -1938,6 +1938,7 @@ SnapshotOpKind = Literal[
     "generate-design",
     "nick",
     "cluster-pose",
+    "placement-poses",
     "cluster-dissolve",
     "group-organize",
     "group-create",

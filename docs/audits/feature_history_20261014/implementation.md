@@ -1879,3 +1879,71 @@ Cleanup verified63 empty task directories and4 symlinks removed,0 files/bytes;
 user workspace, runtimes, caches and historical evidence were preserved. The
 shared-host branch cleanup is complete; used legacy UI paths remain until their
 full replacement is qualified.
+
+## U20 — connected private movement editor, FH-23 remains open
+
+The owned history editor now connects the existing Move/Rotate panel, native
+placement and nucleotide gestures, complete private native rendering and the
+shared preview/publication controller. Five roles retain exact historical inputs,
+feature identity and source authority. Numeric controls, group deltas, joint and
+tether context, pivots, Reset, Apply/Cancel and comparison transitions have one
+private owner. Controls suspend when a full accepted geometry pane is unavailable.
+Confirmed publication survives a conflicting late transport response; a failed
+Apply retains the draft without applying group movement twice.
+
+An explicit upgrade from an old single-owner pose adds a versioned
+`placement-poses` definition containing every accepted selected/auxiliary owner
+pose, exact parent/driver frame and authoring provenance. Fixed-owner motion
+refuses. Upgrade retains the feature ID and inherited primary metadata; normal
+edits cannot retarget that primary anchor. Replay applies accepted absolute poses
+through unchanged native placement behavior without rerunning a constraint solver.
+Apply independently proves the source and rebuilds the suffix with one undo.
+
+The validator bounds native records, repeated axis work and companion allocation
+before rendering. Real Python packets exercise the actual JavaScript validator
+and native Three.js rendering, including extra bases, CPD, flexible arcs and
+compatible linkers. Pane resources and shared gizmo layers have explicit cleanup;
+unused new preview-gizmo plumbing is pruned. Used legacy UI remains until the
+replacement qualifies. `main.js` adds only one lazy getter, reaching7350 lines.
+
+The schema changes by one operation-kind literal. Captured before manifests and
+the previous17-edge policy support20 exact direct compatibility edges for the
+three native engines. Independent same-kernel worker checks pass; stored pins,
+runtime/template checks, molecular calculations and geometry goldens are unchanged.
+This establishes engineering schema compatibility, not historical-binary parity.
+
+**20/38 complete;18 remaining (9 core,9 parked);+0 completed,+0 total.** Twenty
+engineering checkpoints since B1 close three milestones. FH-23 remains open after
+three and is now task-growth flagged; FH-18 remains flagged after thirteen.
+Containment retains the existing historical-prefix/actual-constraint matrix and
+the separate shared arbitrary-group movement matrix, without another solver,
+registry, milestone or reduced exit. See the [fixed ledger](remaining_standard_part_checkpoints.md#u20-progress-and-mandatory-containment-review)
+and [movement contract](transform_history_editor_plan.md).
+
+[Validation evidence](validation_transform_history_integration.json) records
+**466 distinct focused backend passes** across13 files, including24 real
+Python→JavaScript/native-render cases and3 native compatibility cases. Required
+`just test-smart` selected **FAST**: **17,582 passed,23 failed,8 errors,21 skipped**
+(249.45s); **FULL deferred**. The23 failure nodes match retained VR, photoproduct
+and junction-balance debt. Four Archive collection errors and four CPD preview
+stereochemistry errors remain; the prior repair-job setup error did not recur.
+There is no broad-backend green claim. Timing triage found zero individual5s
+violators; summed882.8s work over4 workers explains an aggregate floor above90s.
+The260s guard warning does not justify changing thresholds or marking arbitrary
+tests slow, and does not measure interactive latency.
+
+The full frontend run passes **9,088 tests with one existing skip across760
+files** (330.01s). All18 changed Python files pass Ruff and all32 changed JavaScript
+files pass syntax checks. Repository lint retains five existing F401 findings;
+memory lint retains six errors/59 warnings, with the current project head200 lines.
+The ledger check confirms38 unique milestones:20 complete,9 core remaining,9 parked.
+The final diff check is clean.
+
+**NOT VERIFIED IN APP:** Archive is unavailable; both transform rollout gates
+stay false. Desktop/latency qualification remains FH-27/MV-52 and VR remains
+deferred by the user. The standard backend suite unexpectedly retained system-temp
+scratch, including a sparse2GiB boundary fixture. Cleanup verified12,263 regular
+files (2,432,869,457 logical bytes;322,805,760 allocated bytes),26,508 directories,
+2,531 symlinks and2 test-special nodes removed after reader/dependency checks.
+Future broad pytest runs require mounted Archive temp from the start. User
+workspace, managed jobs, runtimes, shared caches and historical evidence remain.
