@@ -1,3 +1,4 @@
+import { buildVolumeExtras, paintVolumeExtras } from './view_volume_extras.js'
 import { coarseVolumePicker } from './volume_render_adapter.js'
 import { baseKey } from './base_ref.js'
 import { clusterAlphaKeys } from './cluster_entries.js'
@@ -45,6 +46,7 @@ export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHidd
       entry.cg.applyColoring(mode, design, Object.fromEntries(strands), state.loopStrandIds)
       entry.cg.setClusterAlphas(clusterAlphaKeys(design))
       entry.cg.applyRepOverrides(entry.columns)
+      paintVolumeExtras(entry.extras, { columns: entry.columns, design, mode, strands, nucAlphas })
       entry.root.traverse(o => {
         for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) {
           m.opacity = layer.opacity; m.transparent = true
@@ -92,6 +94,7 @@ export function initViewVolumeDisplays({ scene, store, api, ensureAtoms, getHidd
         for (const key of keys) columns.set(key, layer.representation === 'cylinders' ? 'cylinders' : 'full')
         entry.cg.setReferenceStrands(new Set((design.strands ?? []).filter(s => s.is_reference).map(s => s.id)))
         entry.cg.setDetailLevel(layer.representation === 'cylinders' ? 2 : layer.representation === 'beads' ? 1 : 0)
+        entry.extras = buildVolumeExtras(design, geometry, root, layer.representation)
         entry.columns = columns
         entry.cg.applyRepOverrides(columns)
         entry.ready = true; paint(entry, layer)
