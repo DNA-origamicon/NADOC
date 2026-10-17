@@ -3052,3 +3052,9 @@ qualify manual internal-ID editing as acceptable UX. Resolve stable logical crea
 selection or reviewed prefix rebinding before FH-25/FH-26 rollout; preserve literal
 saved contracts, strict missing/ambiguous ownership checks and native algorithms.
 Research/evidence: [U35](docs/audits/feature_history_20261014/ordinary_connection_completion_plan.md#branch-changing-upstream-edits-issue-141-remains-open).
+
+ISSUE-141 U36 update: new direct v2/linker v4 recipes select the stable creating
+namespace and validate its rebuilt native owner set. Equal/unequal branch edits
+no longer require internal binding-ID repairs. Old literal recipes intentionally
+retain their saved meaning; reviewed legacy rebinding and public qualification
+remain open. No molecular builder or restoration snapshot format changed.

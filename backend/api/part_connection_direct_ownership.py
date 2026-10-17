@@ -140,6 +140,8 @@ def prepare_replacement(design, body, *, slots, slot_path, qualify_targets=True)
             historical = {key for key, _ in saved.definitions()} & slots
             if historical:
                 common._fail('Direct output identity collides with saved topology', *sorted(historical)[0], slot_path)
+    from backend.api.part_connection_owner_selection import resolve_selection
+    body = resolve_selection(design, body, index)
     conflicts = _conflicts(design, body, index)
     backings, hosts = _backings(design)
     # Existing exact finite/indirect ownership checks prevent prefix-based

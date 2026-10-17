@@ -969,3 +969,10 @@ process. Root cause is freezing conditional child ownership rather than selectin
 a stable logical creator. Onshape query/repair research informs the next contract
 review; no automatic retargeting or saved-contract reinterpretation implemented.
 This remains within existing FH-25/FH-26 exits, with no milestone credit.
+
+### U36 — ISSUE-141 prevention in new versioned recipes
+
+Direct v2/linker v4 use stable creator selectors with strict current-prefix
+ownership validation. Legacy literal recipe repair and public rollout remain
+open; no automatic reinterpretation of saved inputs. See the ordinary connection
+completion plan for evidence and remaining exits.

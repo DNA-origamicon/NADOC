@@ -8,10 +8,11 @@ from tests.test_part_pending_connection_versions import authored, native_prefix 
 from tests.test_part_connection_direct import pending, ACTION
 
 
-@pytest.fixture
-def direct_document(document, monkeypatch):
+@pytest.fixture(params=[False, True], ids=["literal-v1", "creator-v2"])
+def direct_document(document, monkeypatch, request):
     from backend.api import routes_connection_versions as routes
 
+    monkeypatch.setattr(routes, 'NATIVE_CONNECTION_OWNER_SELECTION_ENABLED', request.param)
     monkeypatch.setattr(routes, 'NATIVE_DIRECT_APPLY_ENABLED', True)
     document.source = pending(document.source)
     document.session.design = document.source

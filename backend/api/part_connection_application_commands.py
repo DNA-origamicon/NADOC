@@ -20,6 +20,8 @@ from backend.core.part_operation_input import MAX_OPERATION_BYTES, MAX_OPERATION
 from backend.core.part_scope_references import COLLECTIONS, SCHEMAS, identity_index, referenced_resources
 
 
+from backend.api.part_connection_owner_selection import OwnerSelection, dependency_reads
+
 ACTION = "connection-version-apply-linker"
 # Provisional pure-builder ceiling, not a live-route latency qualification. This
 # stays below the ordinary proof/capture ceilings and never raises those limits.
@@ -37,7 +39,7 @@ INDIRECT_TYPES = frozenset(get_args(_IndirectType))
 
 
 def supported_types(version):
-    if type(version) is not int or version not in {1, 2, 3}:
+    if type(version) is not int or version not in {1, 2, 3, 4}:
         raise ValueError("Unsupported native linker contract version")
     return frozenset(get_args(_FiniteType)) | (INDIRECT_TYPES if version >= 2 else frozenset())
 
@@ -95,12 +97,16 @@ class ApplyRequestV3(ApplyRequestV2, DirectConflicts):
     connection_application_version: Annotated[StrictInt, Field(ge=3, le=3)]
 
 
+class ApplyRequestV4(ApplyRequestV3, OwnerSelection):
+    connection_application_version: Annotated[StrictInt, Field(ge=4, le=4)]
+
+
 def parse_command(params):
     validate_operation_input(params)
     if type(params) is not dict:
         raise ValueError("Native connection inputs require an object")
     marker = params.get("connection_application_version")
-    model = {2: ApplyRequestV2, 3: ApplyRequestV3}.get(marker, ApplyRequest) if type(marker) is int else ApplyRequest
+    model = {2: ApplyRequestV2, 3: ApplyRequestV3, 4: ApplyRequestV4}.get(marker, ApplyRequest) if type(marker) is int else ApplyRequest
     return model.model_validate(params)
 
 
@@ -114,9 +120,10 @@ def dependency_contract(params, *, topology):
     reads = {topology, Resource("connection_version", command.version_id),
              Resource("overhang", command.overhang_a_id), Resource("overhang", command.overhang_b_id),
              *versions, *(Resource("overhang_connection", identity) for identity in command.conflict_connection_ids)}
-    if command.connection_application_version == 3:
+    if command.connection_application_version >= 3:
         reads.update(Resource("overhang_binding", identity) for identity in command.conflict_binding_ids)
         reads.update(Resource("duplex", identity) for identity in command.conflict_duplex_ids)
+    reads.update(dependency_reads(command))
     prefix = f"__lnk__{command.connection_id}"
     suffixes = ("a", "b") if "dsdna" in command.connection_type else ("s",)
     writes = {topology, Resource("overhang_connection", command.connection_id),
@@ -533,7 +540,7 @@ def _materialize(design, body, selected):
 
 def build(design, params):
     body = parse_command(params)
-    if body.connection_application_version == 3:
+    if body.connection_application_version >= 3:
         from backend.api.part_connection_linker_replacement import prepare
         return _materialize(*prepare(design, body))
     return _materialize(design, body, _select(design, body))
@@ -569,9 +576,9 @@ def try_record(version_id, *, contract_version=1):
     from backend.api.feature_recording import record_feature
     from backend.api.part_source_bound_route import require_current
 
-    if type(contract_version) is int and contract_version == 3:
+    if type(contract_version) is int and contract_version in (3, 4):
         from backend.api.part_connection_direct_recording import try_record as record_native
-        return record_native(version_id, linker_version=3)
+        return record_native(version_id, linker_version=contract_version)
     allowed = supported_types(contract_version)
     try:
         with state._lock:

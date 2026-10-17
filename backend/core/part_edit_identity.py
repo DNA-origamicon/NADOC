@@ -58,17 +58,17 @@ def preserve_proof_identity(previous, updated, *, kind=None):
             keys += ("action", "connection_version_contract")
             if action == "connection-version-create":
                 keys += ("version_id",)
-    if (kind == "overhang-bulk" and previous.get("connection_application_version") in (1, 2, 3)
+    if (kind == "overhang-bulk" and previous.get("connection_application_version") in (1, 2, 3, 4)
             and previous.get("action") == "connection-version-apply-linker"):
         keys += ("action", "connection_application_version", "connection_id")
-    if (kind == "overhang-bulk" and previous.get("connection_composition_version") in (1, 2, 3)
+    if (kind == "overhang-bulk" and previous.get("connection_composition_version") in (1, 2, 3, 4)
             and previous.get("action") == "connection-version-connect-linker"):
         keys += ("action", "connection_version_contract", "connection_composition_version",
                  "version_id", "created_at", "connection_id")
-    if (kind == "overhang-bulk" and previous.get("direct_application_version") == 1
+    if (kind == "overhang-bulk" and previous.get("direct_application_version") in (1, 2)
             and previous.get("action") == "connection-version-apply-direct"):
         keys += ("action", "direct_application_version", "history_seed", "created_at")
-    if (kind == "overhang-bulk" and previous.get("direct_composition_version") == 1
+    if (kind == "overhang-bulk" and previous.get("direct_composition_version") in (1, 2)
             and previous.get("action") == "connection-version-connect-direct"):
         keys += ("action", "connection_version_contract", "direct_composition_version",
                  "version_id", "history_seed", "created_at")

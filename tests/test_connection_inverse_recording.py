@@ -8,10 +8,11 @@ from tests.test_part_pending_connection_versions import append, authored, native
 from tests.test_part_connection_direct import pending, params as direct_params
 
 
-@pytest.fixture
-def inverse_document(document, monkeypatch):
+@pytest.fixture(params=[False, True], ids=["literal-v3", "creator-v4"])
+def inverse_document(document, monkeypatch, request):
     from backend.api import routes_connection_versions as routes
     monkeypatch.setattr(routes, 'NATIVE_LINKER_V3_ENABLED', True)
+    monkeypatch.setattr(routes, 'NATIVE_CONNECTION_OWNER_SELECTION_ENABLED', request.param)
     source = pending(document.source)
     source = append(source, 'overhang-bulk', direct_params(source), 'direct')
     document.source = source
@@ -39,7 +40,9 @@ def test_inverse_http_one_undo_and_independent_replay(inverse_document, connecti
     assert response.status_code == (201 if combined else 200), response.text
     result = doc.session.design
     marker = 'connection_composition_version' if combined else 'connection_application_version'
-    assert result.feature_log[-1].params[marker] == 3
+    assert result.feature_log[-1].params[marker] == (4 if routes.NATIVE_CONNECTION_OWNER_SELECTION_ENABLED else 3)
+    if routes.NATIVE_CONNECTION_OWNER_SELECTION_ENABLED:
+        assert len(result.feature_log[-1].params['direct_owner_seeds']) == 1
     assert not result.duplexes and not result.overhang_bindings
     assert len(doc.session.history) == 1 and doc.session.revision == 5
     assert proof(result)['status'] == 'verified'

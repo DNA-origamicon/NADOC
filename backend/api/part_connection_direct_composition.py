@@ -25,16 +25,24 @@ class ConnectRequest(pending.CreateRequest, direct.DirectSelection):
         return self
 
 
+class ConnectRequestV2(ConnectRequest, direct.OwnerSelection):
+    direct_composition_version: Annotated[StrictInt, Field(ge=2, le=2)]
+
+
 def parse_command(params):
     validate_operation_input(params)
-    return ConnectRequest.model_validate(params)
+    marker = params.get("direct_composition_version") if type(params) is dict else None
+    model = ConnectRequestV2 if type(marker) is int and marker == 2 else ConnectRequest
+    return model.model_validate(params)
 
 
 def _apply_body(body):
     values = body.model_dump(by_alias=True)
-    values.update(action=direct.ACTION, direct_application_version=1,
+    values.update(action=direct.ACTION, direct_application_version=body.direct_composition_version,
                   conflict_version_ids=[*body.conflict_version_ids, body.version_id])
     fields = {'_proof_version' if field == 'proof_version' else field for field in direct.ApplyRequest.model_fields}
+    if body.direct_composition_version == 2:
+        fields.add("direct_owner_seeds")
     return direct.parse_command({field: values[field] for field in fields})
 
 

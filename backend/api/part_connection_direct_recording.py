@@ -24,15 +24,16 @@ def conflict_values(source, a_id, b_id):
         else (item.overhang_a_id, item.overhang_b_id))] for field, collection in fields}
 
 
-def try_record(version_id, *, linker_version=None):
+def try_record(version_id, *, linker_version=None, owner_selection=False):
     from backend.api import state
     from backend.api.feature_recording import record_feature
     from backend.api.part_connection_direct_ownership import prepare
     from backend.api.part_source_bound_route import require_current
 
-    if linker_version is not None and (type(linker_version) is not int or linker_version != 3):
-        raise ValueError('Only linker v3 uses native restoration recording')
-    allowed = common.supported_types(3) if linker_version else {'root-to-root', 'end-to-root'}
+    if linker_version is not None and (type(linker_version) is not int or linker_version not in (3, 4)):
+        raise ValueError('Only linker v3/v4 uses native restoration recording')
+    owner_selection = owner_selection or linker_version == 4
+    allowed = common.supported_types(linker_version) if linker_version else {'root-to-root', 'end-to-root'}
     try:
         with state._lock:
             require_current()
@@ -48,17 +49,20 @@ def try_record(version_id, *, linker_version=None):
                 state._assert_active_loadout_editable(source)
                 if source.feature_log_cursor != -1 or source.feature_log_sub_cursor is not None:
                     raise HTTPException(409, detail='Return to the latest feature before Apply.')
-                values = {'_proof_version': 1, 'direct_application_version': 1, 'action': command.ACTION,
+                values = {'_proof_version': 1, 'direct_application_version': 2 if owner_selection else 1, 'action': command.ACTION,
                     'version_id': version.id, 'overhang_a_id': version.overhang_a_id,
                     'overhang_b_id': version.overhang_b_id, 'connection_type': version.connection_type,
                     'history_seed': str(uuid4()), 'created_at': time(),
                     **conflict_values(source, version.overhang_a_id, version.overhang_b_id)}
+                if owner_selection:
+                    from backend.api.part_connection_owner_selection import capture_selection
+                    values.update(capture_selection(source, values))
                 if linker_version:
                     from backend.api.part_connection_linker_replacement import prepare as prepare_linker
                     values.pop('history_seed')
                     values.pop('created_at')
                     values.pop('direct_application_version')
-                    values.update(action=common.ACTION, connection_application_version=3, connection_id=str(uuid4()))
+                    values.update(action=common.ACTION, connection_application_version=linker_version, connection_id=str(uuid4()))
                     body = common.parse_command(values)
                     prepared = prepare_linker(source, body)
                     materialize = common._materialize
@@ -88,17 +92,18 @@ def try_record(version_id, *, linker_version=None):
         raise HTTPException(422, detail=error.as_issue() if isinstance(error, CommandContractError) else str(error)) from error
 
 
-def try_record_connect(choices, *, linker_version=None):
+def try_record_connect(choices, *, linker_version=None, owner_selection=False):
     from backend.api import state, part_connection_version_commands as pending
     from backend.api import part_connection_direct_composition as composition
     from backend.api.feature_recording import record_feature
     from backend.api.part_source_bound_route import require_current
 
-    if linker_version is not None and (type(linker_version) is not int or linker_version != 3):
-        raise ValueError('Only linker v3 uses native restoration recording')
+    if linker_version is not None and (type(linker_version) is not int or linker_version not in (3, 4)):
+        raise ValueError('Only linker v3/v4 uses native restoration recording')
     if linker_version:
         from backend.api import part_connection_composition_commands as composition
-    allowed = common.supported_types(3) if linker_version else {'root-to-root', 'end-to-root'}
+    owner_selection = owner_selection or linker_version == 4
+    allowed = common.supported_types(linker_version) if linker_version else {'root-to-root', 'end-to-root'}
     if choices.get('connection_type') not in allowed:
         return None
     try:
@@ -125,13 +130,16 @@ def try_record_connect(choices, *, linker_version=None):
             pending._select(source, provisional, inventory)
             try:
                 values = {**provisional.model_dump(by_alias=True),
-                    'action': composition.ACTION, 'direct_composition_version': 1,
+                    'action': composition.ACTION, 'direct_composition_version': 2 if owner_selection else 1,
                     'version_id': str(uuid4()), 'history_seed': str(uuid4()), 'created_at': time(),
                     **conflict_values(source, provisional.overhang_a_id, provisional.overhang_b_id)}
+                if owner_selection:
+                    from backend.api.part_connection_owner_selection import capture_selection
+                    values.update(capture_selection(source, values))
                 if linker_version:
                     values.pop('history_seed')
                     values.pop('direct_composition_version')
-                    values.update(connection_composition_version=3, connection_id=str(uuid4()))
+                    values.update(connection_composition_version=linker_version, connection_id=str(uuid4()))
                 prepared = composition.prepare(source, composition.parse_command(values))
             except CommandContractError as error:
                 if error.code == 'unsupported_connection_application_source':

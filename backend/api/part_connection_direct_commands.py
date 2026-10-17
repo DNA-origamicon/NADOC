@@ -13,6 +13,8 @@ from backend.api import part_connection_application_commands as linker
 from backend.core.feature_identity import identity_factory
 from backend.core.part_operation_input import validate_operation_input
 
+from backend.api.part_connection_owner_selection import OwnerSelection, dependency_reads
+
 ACTION = 'connection-version-apply-direct'
 _Id = linker._Id
 
@@ -49,9 +51,15 @@ class ApplyRequest(DirectSelection):
     overhang_b_id: _Id
     connection_type: Literal['root-to-root', 'end-to-root']
 
+class ApplyRequestV2(ApplyRequest, OwnerSelection):
+    direct_application_version: Annotated[StrictInt, Field(ge=2, le=2)]
+
+
 def parse_command(params):
     validate_operation_input(params)
-    return ApplyRequest.model_validate(params)
+    marker = params.get("direct_application_version") if type(params) is dict else None
+    model = ApplyRequestV2 if type(marker) is int and marker == 2 else ApplyRequest
+    return model.model_validate(params)
 
 
 def output_slots(body):
@@ -74,6 +82,7 @@ def dependency_contract(params, *, topology):
                         ('overhang_binding', 'conflict_binding_ids'), ('duplex', 'conflict_duplex_ids'),
                         ('connection_version', 'conflict_version_ids')]:
         reads.update(Resource(kind, identity) for identity in getattr(body, field))
+    reads.update(dependency_reads(body))
     # Reserve conditional binding/ligation slots as potential writes: upstream
     # length edits may switch branches. The whole-topology barrier covers native
     # relocation/restoration, whose exact footprint depends on the rebuilt prefix.

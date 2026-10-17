@@ -659,3 +659,73 @@ and0regular files/bytes. No readable same-user cwd/fd/maps references were found
 persistent systemd/PAM435/436 remain uninspectable. Removed only those completed
 task directories/links; pytest root and `/dev/shm` are empty. No user designs,
 managed jobs, historical evidence or caches were removed.
+
+## U36 — stable native creator selection (FH-25 checkpoint 9)
+
+Direct Apply/Connect v2 and linker Apply/Connect v4 now record explicit
+`direct_owner_seeds`. The selector resolves the stable native Duplex and its
+conditional binding in the rebuilt prefix. Bound Duplex requires its restoration
+state and no paired binding; display Duplex requires its matching bound binding
+and restoration state. The existing complete restoration ownership/incoming
+reference checks still run. Missing, inconsistent, overlapping or extra owners
+fail; literal remainder lists remain exact and ordered. Old direct v1/linker v3
+recipes keep their literal meaning, including U35's failing upstream-edit test.
+ISSUE-141 prevention is implemented for new recipes; reviewed old-recipe repair
+remains part of the existing repair exit.
+
+This implements the creator-query direction researched in U35. No new geometry,
+solver, snapshot schema, pin or molecular constant is introduced. One shared
+selector module supports all four consumers. Dependencies read the stable Duplex;
+conditional bindings are resolved internally, not saved back into recipe inputs.
+Ordinary recording inspects at most 2,000 producer metadata entries and skips that
+scan when no direct Duplex is selected. It never decodes recovery or runs a proof.
+Resolution reuses the bounded source index and builds one binding-pair lookup;
+resolved conflicts retain the existing 128-record limit. Replay does not consult
+history to infer ownership. Unknown legacy owners retain literal references.
+Duplicate producer namespaces fail rather than selecting an arbitrary producer.
+
+`NATIVE_CONNECTION_OWNER_SELECTION_ENABLED` is false. When privately enabled it
+selects the new versions through the existing source-bound Apply/Connect routes,
+with one recording transaction. Existing gates and saved contracts remain usable.
+This is not latency or public rollout qualification.
+
+Validation: tests-first 16 failures preceded implementation. Focused development
+then passed 295 cases in 22.59s. The 20-file current connection regression ran
+623 cases: 622 passed, one new test failed because it reused the creating feature's
+output namespace (the collision refusal was correct), with 33 warnings in37.76s.
+After correcting that fixture's consumer namespace, all39 selector cases passed
+in7.64s. Thus all623 distinct cases have passing evidence; no claim of a single
+623-pass invocation. Coverage includes both direct types and either longer
+endpoint, equal→unequal→equal edits through direct/finite/indirect Apply+Connect,
+poisoned recovery replay and a real independent verification worker, malformed/
+missing/ambiguous owners, exact legacy behavior, bounded capture, both producer
+actions, protected version identities, and HTTP Apply/reapply/undo/redo/failure/
+stale-source/loadout guards under both old and new route flags.
+
+Changed-file Ruff passes; full lint retains5 baseline F401 errors. Memory lint
+retains6 baseline errors/59warnings; current project head remains200lines.
+`main.js`7350lines, delta0. No frontend changes or new app checks.
+`just test-smart --dry-run` selected FAST after deferring FULL for the accumulated
+5769-file foundational diff. **Zero broad tests ran.** Literal selector notice:
+
+```text
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+Only request `just test-session` when a broad/full sweep is actually needed.
+```
+
+NOT VERIFIED IN APP: Archive is absent; no bulk/native scratch or visual/latency
+qualification was attempted. After checks, task pytest roots4/5/6/current had
+960empty directories,4symlinks and0regular files/bytes. No readable same-user
+cwd/fd/maps references remained; systemd/PAM435/436 remain uninspectable. Removed
+only these completed task artifacts; pytest root and `/dev/shm` are empty. User
+designs, managed jobs, historical evidence and caches were preserved.
+
+Counts:21/38complete,17remaining (8core,9parked);+0completed,+0total;
+36engineering checkpoints since B1. FH-25 remains growth-flagged after9. Next:
+finish applied metadata lifecycle and organized integration within the fixed
+matrix, then repair/user controls and qualification. Shared-host handling and
+ISSUE-126 remain explicit correctness work; no exit is narrowed or moved to the
+parked bucket. The shared selector avoids four divergent implementations; further
+contract versions require a semantic change, not a new version per test case.
