@@ -16,13 +16,13 @@ from backend.core.part_overlay_commands import proof_version_supported
 # old extrusion bytes valid; the label is neither proof nor public authority.
 SCOPE = "native_extrusion_v1"
 _FIELDS = frozenset({"dimensions", "lattice_frames", "helices", "strands", "lattice_type",
-    "metadata", "cluster_transforms", "overhangs", "crossovers", "deformations"})
+    "metadata", "cluster_transforms", "overhangs", "crossovers", "deformations", "nucleotide_transforms"})
 
 
 def _row(entry):
     if type(entry) is SnapshotLogEntry:
         params = entry.params
-        known = (entry.op_kind in KINDS - {"deformation"} and type(params) is dict
+        known = (entry.op_kind in KINDS - {"deformation", "cluster_op"} and type(params) is dict
             and type(params.get("_proof_version")) is int and params["_proof_version"] == 1
             and "_generated_scope" not in params and "_generator" not in params)
         if known and entry.op_kind == "sweep":

@@ -79,7 +79,8 @@ class SourceRequest(BaseModel):
 
 
 GeometryKind = Literal['bundle-create', 'extrude-segment', 'extrude-continuation',
-    'extrude-deformed-continuation', 'extrude-frame', 'circle-segment', 'overhang-extrude', 'sweep', 'deformation']
+    'extrude-deformed-continuation', 'extrude-frame', 'circle-segment', 'overhang-extrude', 'sweep', 'deformation', 'cluster_op',
+    'placement-poses', 'nucleotide-transform', 'nucleotide-transform-batch', 'nucleotide-transform-delete']
 
 
 class EditRequest(SourceRequest):

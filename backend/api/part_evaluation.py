@@ -22,7 +22,8 @@ class EvaluationRequest(BaseModel):
     kind: Literal["photoproduct-create", "photoproduct-relax", "duplex-relax", "streptavidin-coating",
                   "linear-pattern", "circular-pattern", "overhang-bulk",
                   "bundle-create", "extrude-segment", "extrude-continuation",
-                  "extrude-deformed-continuation", "extrude-frame", "circle-segment", "overhang-extrude", "sweep", "deformation"] | None = None
+                  "extrude-deformed-continuation", "extrude-frame", "circle-segment", "overhang-extrude", "sweep", "deformation", "cluster_op", "placement-poses",
+                  "nucleotide-transform", "nucleotide-transform-batch", "nucleotide-transform-delete"] | None = None
     params: dict | None = None
     index: StrictInt | None = Field(default=None, ge=0)
     sub_index: StrictInt | None = Field(default=None, ge=0)

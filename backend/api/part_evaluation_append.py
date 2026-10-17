@@ -4,7 +4,7 @@ from backend.api import state
 from backend.api.part_recipe_prefix import ReplayPrefix
 from backend.api.part_native_commands import PATTERN_COMMANDS
 from backend.api.part_geometry_inputs import KINDS as EXTRUSIONS, normalize_creation, bind_prefix
-from backend.core.models import SnapshotLogEntry, DeformationLogEntry
+from backend.core.models import SnapshotLogEntry, DeformationLogEntry, ClusterOpLogEntry
 from backend.core.part_overlay_commands import command_input
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_history_contract import assess_part_history
@@ -138,6 +138,14 @@ def append_features(source, request, header, executor, dependencies, *, metadata
         updated = executor(kind, current, params)
         if request.kind in EXTRUSIONS:
             updated = updated.copy_with(id=source.id)
+        if kind == "cluster_op":
+            from backend.api.part_transform_inputs import AUTHORED_FIELDS
+            log.append(ClusterOpLogEntry(id=identity, timestamp=header["timestamp"],
+                cluster_id=params["cluster_id"], translation=params["translation"],
+                rotation=params["rotation"], pivot=params["pivot"], proof_version=1,
+                source="immutable-geometry", authored_fields={k: params[k] for k in AUTHORED_FIELDS if k in params}))
+            current = updated.copy_with(feature_log=list(log), feature_log_cursor=-1, feature_log_sub_cursor=None)
+            continue
         if kind == "deformation":
             log.append(DeformationLogEntry(id=identity, timestamp=header["timestamp"],
                 deformation_id=identity, op_snapshot=updated.deformations[-1], proof_version=1))
