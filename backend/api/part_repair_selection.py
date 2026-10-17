@@ -67,6 +67,11 @@ def reference_slot(kind, params, path):
     if "_generated_scope" in params:
         _unsupported("Generated local scopes need a separate selection adapter")
     values = {key: value for key, value in params.items() if key != "_generator"}
+    if kind == "overhang-bulk":
+        from backend.api.part_connection_repair_selection import reference_slot as connection_slot
+        slot = connection_slot(values, path)
+        if slot is not None:
+            return slot
     if kind == "deformation":
         from backend.core.part_deformation_repair import operation_from_params, reference_index
 
@@ -155,6 +160,9 @@ def _candidates(design, slot, kind, params, request, checkpoint):
         from backend.core.part_deformation_repair import group_candidates
 
         return group_candidates(design, params, request, checkpoint)
+    if slot.family in {"connection_endpoint", "connection_version"}:
+        from backend.api.part_connection_repair_selection import candidates
+        return candidates(design, slot, params, request, checkpoint)
     records = getattr(design, slot.collection)
     seen = set()
     for record in records:

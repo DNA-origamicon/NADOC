@@ -1353,3 +1353,10 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   measured3–7ms normally but144.953ms when generation-2 GC overlapped142ms; the
   unchanged25ms capture deadline refused that request. Functional test cleanup is
   not a production latency fix. Qualify GC/load tails before enabling any gate.
+
+  U42 repair extension: in the existing repair panel, inspect a broken connection
+  definition, choose a prefix-derived Overhang A/B or saved-version replacement,
+  save/review the proposal, rebuild and Apply. Verify stale expectations, failed
+  prefixes, limited candidate lists, downstream results, one Undo/Redo and reload.
+  Candidate eligibility must not appear as full recipe validity. Compound creator
+  migration is still unavailable; do not present this adapter as complete repair.

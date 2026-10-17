@@ -131,8 +131,8 @@ def describe_inputs(kind, params):
                                "expected_old_json": encode_expected_old(values[name]),
                                "label": label, "input_type": input_type, **constraints})
 
-        def reference(path, label):
-            slot = reference_slot(kind, values, path)
+        def reference(path, label, slot=None):
+            slot = slot if slot is not None else reference_slot(kind, values, path)
             old = values
             for token in path:
                 old = old[token]
@@ -144,6 +144,13 @@ def describe_inputs(kind, params):
         if kind == "deformation":
             for index in range(len(values["targets"])):
                 reference(["targets", index, "id"], f"Organizational group {index + 1}")
+        elif kind == "overhang-bulk":
+            from backend.api.part_connection_repair_selection import reference_slots
+            slots = reference_slots(values)
+            for name, label in (("overhang_a_id", "Overhang A"), ("overhang_b_id", "Overhang B"),
+                                ("version_id", "Connection version")):
+                if name in slots:
+                    reference([name], label, slots[name])
         elif kind in {"nanoparticle-create", "nanoparticle-patch", "nanoparticle-delete"} and not {
                 "coating_version", "thiol_version"}.intersection(values):
             from backend.api.part_nanoparticle_commands import parse_command

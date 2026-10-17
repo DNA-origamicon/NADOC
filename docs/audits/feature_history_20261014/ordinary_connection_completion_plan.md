@@ -1151,3 +1151,74 @@ Cleanup: completed pytest7/8/9/current contained518entries and0regularfiles/byte
 No readable same-user cwd/fd/maps references; systemd/PAM435/436 remain
 uninspectable. Removed only these completed task entries. Pytest root and
 `/dev/shm` empty; user designs/jobs/caches/historical evidence preserved.
+
+## U42 — reviewed connection reference repair (2026-10-17)
+
+FH-25 checkpoint15 adds a closed connection reference catalog to the existing
+repair input descriptors and prefix-selection worker. Metadata Create and
+compound Connect expose Overhang A/B; metadata Patch/Delete, Apply and explicit
+disconnect expose their consumed saved-version ID. Output identities, versions,
+organization context, literal conflict lists and creator queries do not become
+single-reference editors. The current native dependency parser must recognize
+the entire command before any slot is offered; generated scopes remain closed.
+
+Candidates come only from the independently regenerated prefix immediately before
+the target. Endpoint candidates exclude the opposite endpoint and auxiliary
+endpoints. Saved versions must retain the authored endpoint orientation and, when
+the command pins it, connection type. The bounded inventory rejects duplicate IDs
+and oversized/nonordinary lists before enumeration; result limits report total
+eligible count and truncation. Inspection scans no geometry/recovery and does no
+replay. Its connection slots are classified together to avoid repeated schema
+parsing for each displayed reference. Selection remains expressly prefix-only:
+choosing a candidate is not whole-command/recipe validity, and dependent conflict
+lists may still need a separately reviewed repair.
+
+The existing exact-expectation SetInput proposal, complete root/suffix rebuild,
+comparison/commit host and source-bound permit remain authoritative. No new repair
+engine or implicit migration was introduced. The existing generic reference UI can
+consume these backend descriptors without new JavaScript; desktop behavior is not
+claimed verified. Tests cover all seven ordinary lifecycle actions' descriptors,
+legacy/organized direct/finite/indirect repair through downstream disconnection,
+wrong/future/unlogged candidates, bounded truncation, bad expectations, broken
+prefix attribution, read-only inspection and source immutability. An actual
+organized repair job regenerates privately, commits once even on repeated commit,
+reloads/proves, and supports undo to the original broken recipe and redo.
+
+This follows the already researched [Onshape upstream-first reference-repair
+workflow](https://cad.onshape.com/help/Content/Document/repairing.htm); NADOC's
+explicit candidate filters are implementation decisions, not a claim that Onshape
+uses identical internals. Legacy literal-owner migration to stable creator
+selection (ISSUE-141) still needs its own explicit exact-definition upgrade;
+ordinary SetInput cannot silently change protected command versions. That remains
+the next connection repair package, alongside complete controls, ISSUE-126/143
+corrections/review, broader source profiles and desktop/performance acceptance.
+FH-26's complete core repair workflow is not closed by this connection adapter.
+
+Validation: **194passed,6.19s**, including26new cases; no warnings in that run.
+Changed-file Ruff and whitespace checks pass. Memory lint retains the known
+6errors/59warnings; current head200lines. No frontend source changes or full
+frontend rerun; `main.js`7350,delta0. No molecular builder/constants/pins/goldens,
+rollout flags, performance limits or publication scope changed. Production capture
+GC tails remain U41 debt; functional job setup releases fixture garbage outside
+capture, without claiming latency qualification. NOT VERIFIED IN APP; Archive
+remains unavailable and no browser/bulk artifact workflow was started.
+
+`just test-smart --dry-run` selects FULL from accumulated foundational changes,
+fallback FAST. **Zero broad backend tests ran.** Literal notice follows (its
+"fast suite ran" phrase is not an execution claim for the dry run):
+
+```
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+Only request `just test-session` when a broad/full sweep is actually needed.
+```
+
+Counts remain **21/38complete,17remaining(8core,9parked);+0completed,+0total**.
+**42engineering checkpoints** since B1, **FH-25 growth flagged at15**; FH-18 stays13
+and FH-23 stays9. The38 estimate counts deliverable milestones, not commits; the
+42 effort checkpoints are disclosed separately and do not alter that denominator.
+Cleanup: pytest0/1/2/current had232entries,0regularfiles/bytes, no readable same-user
+cwd/fd/maps references. Persistent systemd/PAM435/436 remain uninspectable. Removed
+only those completed task artifacts; pytest root and `/dev/shm` empty. User
+workspace designs/jobs/caches/historical evidence preserved.
