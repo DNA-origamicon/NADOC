@@ -76,7 +76,7 @@ def _capture(source, selection):
     return copier.clone(kind), copier.clone(selected.params)
 
 
-def describe_inputs(kind, params):
+def describe_inputs(kind, params, *, feature_id=None, child_id=None):
     """Reviewed field adapters; command-kind membership alone grants nothing."""
     from backend.api.part_proof_commands import dependencies
     from backend.api.part_repair_contracts import recognize_gold_inputs
@@ -147,6 +147,14 @@ def describe_inputs(kind, params):
         elif kind == "overhang-bulk":
             from backend.api.part_connection_repair_selection import reference_slots
             slots = reference_slots(values)
+            if feature_id is not None and child_id is None:
+                from backend.core.part_connection_owner_repair import upgrade_action
+                try:
+                    action = upgrade_action(kind, params, feature_id)
+                except CommandContractError:
+                    pass  # Not every connection row has literal native owners.
+                else:
+                    result["upgrades"].append({"label": "Follow native connection creators", "action": action})
             for name, label in (("overhang_a_id", "Overhang A"), ("overhang_b_id", "Overhang B"),
                                 ("version_id", "Connection version")):
                 if name in slots:
@@ -226,7 +234,7 @@ def inspect_inputs(selection):
         return {"version": 1, "design_id": selection.expected_design_id,
                 "revision": selection.expected_revision, "feature_id": selection.feature_id,
                 "child_id": selection.child_id, "kind": kind, "assessment": "inputs_only",
-                "references_checked": False, **describe_inputs(kind, params)}
+                "references_checked": False, **describe_inputs(kind, params, feature_id=selection.feature_id, child_id=selection.child_id)}
     except CaptureLimit as error:
         _error("repair_input_capture_limit", str(error), 413)
     except ValueError as error:

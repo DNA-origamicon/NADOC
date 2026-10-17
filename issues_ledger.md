@@ -3111,3 +3111,15 @@ and the complete matrix. Do not clamp ranges, skip validation or drop a Duplex.
 Any correction affecting pairing/geometry needs the established concrete A/B
 molecular review before deployment. The current checkpoint only strengthens
 worker diagnostics and leaves native molecular algorithms unchanged.
+
+ISSUE-141 U43 update (2026-10-17): an explicit `upgrade_connection_owners` repair
+now migrates recognized direct v1/linker v3 consumers to creator selection v2/v4.
+An exact command-input receipt guards the target; only unique preceding native
+producer definitions can identify an owner. Output IDs, seeds, time and unrelated
+inputs remain fixed. Draft discovery reads no recovery and performs no producer
+scan/hash; full repair regenerates the root and suffix before publication. The
+repair panel offers a reviewed proposal, not an immediate mutation. Both shorter/
+longer dependency branches and finite/indirect restoration pass; a native worker
+case commits once and reloads. Ordinary historical recipes are not rewritten on
+load. Desktop qualification and ISSUE-143's independent unequal native output
+failure remain, so this is private migration evidence, not a full public closure.

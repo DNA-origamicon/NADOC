@@ -30,10 +30,11 @@ export function createRepairInputEditor({ onChange, onUpgrade, onSelect, onSourc
     }
     root.append(el('p', { className: 'part-repair__muted', text: 'Inputs only. Reference validity and the complete result are checked by Evaluate.' }))
     for (const upgrade of catalog.upgrades ?? []) {
-      if (upgrade?.action?.action !== 'upgrade_cluster_creation' || typeof upgrade.label !== 'string') continue
+      const connection = upgrade?.action?.action === 'upgrade_connection_owners'
+      if ((!connection && upgrade?.action?.action !== 'upgrade_cluster_creation') || typeof upgrade.label !== 'string') continue
       root.append(el('div', { className: 'part-repair__field', children: [
-        el('strong', { text: 'Structural repair' }),
-        el('small', { text: 'Keep group owners referenced by later features. Save and evaluate the proposal before applying it.' }),
+        el('strong', { text: connection ? 'Connection reference repair' : 'Structural repair' }),
+        el('small', { text: connection ? 'Follow the original native connection creator across length changes. Save and evaluate the proposal before applying it.' : 'Keep group owners referenced by later features. Save and evaluate the proposal before applying it.' }),
         createButton({ label: upgrade.label, size: 'sm', onClick: () => {
           try { onUpgrade(upgrade) } catch (error) { onError(error) }
         } }),

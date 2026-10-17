@@ -98,3 +98,18 @@ it('replaces only a deliberate proposal for the same group and preserves other a
   expect(updateRepairActions([first], { ...first })).toEqual([first])
   expect(first.expected_definition_sha256).toBe('a'.repeat(64))
 })
+
+it('preserves the closed connection migration receipt and rejects added version or seed choices', () => {
+  const upgrade = { label: 'Follow native connection creators', action: {
+    action: 'upgrade_connection_owners', feature_id: 'group-feature', child_id: null,
+    expected_definition_sha256: 'a'.repeat(64),
+  } }
+  const catalog = groupCatalog(upgrade)
+  expect(fields.actionFromRepairUpgrade(catalog, upgrade)).toEqual(upgrade.action)
+  expect(updateRepairActions([upgrade.action], { ...upgrade.action, expected_definition_sha256: 'b'.repeat(64) }))
+    .toEqual([{ ...upgrade.action, expected_definition_sha256: 'b'.repeat(64) }])
+  for (const extra of [{ direct_owner_seeds: [] }, { expected_version: 1 }, { child_id: 'child' }, { feature_id: 'other' }]) {
+    const forged = { ...upgrade, action: { ...upgrade.action, ...extra } }
+    expect(() => fields.actionFromRepairUpgrade(groupCatalog(forged), forged)).toThrow()
+  }
+})

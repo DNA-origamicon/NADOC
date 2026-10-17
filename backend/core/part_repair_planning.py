@@ -13,7 +13,7 @@ from backend.core.part_command_errors import CommandContractError
 from backend.core.part_history_proof import digest
 from backend.core.part_overlay_commands import command_input
 from backend.core.models import ClusterCreateLogEntry, DeformationLogEntry
-from backend.core.part_repair_inputs import SetInput, UpgradeClusterCreation, UpgradeNumericalContract
+from backend.core.part_repair_inputs import SetInput, UpgradeClusterCreation, UpgradeConnectionOwners, UpgradeNumericalContract
 
 
 class RepairInputError(CommandContractError):
@@ -42,8 +42,9 @@ class RepairTarget:
     # Structural source discovery retains only its typed replacement. None is
     # deliberately not executable input; final planning always fills params.
     params: dict | None
-    action: SetInput | UpgradeNumericalContract | UpgradeClusterCreation
+    action: SetInput | UpgradeNumericalContract | UpgradeClusterCreation | UpgradeConnectionOwners
     upgrade: UpgradeNumericalContract | None = None
+    owner_upgrade: dict | None = None
     structural_replacement: ClusterCreateLogEntry | None = None
     definition_replacement: DeformationLogEntry | None = None
 
@@ -91,7 +92,7 @@ def plan_actions(source, actions, *, dependencies=None, recognize_invalid=None, 
         raise CommandContractError("Empty routing groups have no replay contract", code="empty_routing_cluster")
     targets, paths = {}, {}
     for action in actions:
-        if not isinstance(action, (SetInput, UpgradeNumericalContract, UpgradeClusterCreation)):
+        if not isinstance(action, (SetInput, UpgradeNumericalContract, UpgradeClusterCreation, UpgradeConnectionOwners)):
             raise TypeError("Repair planning requires parsed repair actions")
         entry = entries.get(action.feature_id)
         if entry is None:
@@ -155,6 +156,21 @@ def plan_actions(source, actions, *, dependencies=None, recognize_invalid=None, 
             if annotate_contract_errors:
                 raise error_type(detail, code="missing_proof_contract", action=action)
             raise CommandContractError(detail, code="missing_proof_contract")
+        if isinstance(action, UpgradeConnectionOwners):
+            from backend.core.part_connection_owner_repair import upgrade
+            if entry.id in targets:
+                raise error_type("Owner migration cannot overlap other changes to the same feature",
+                                 code="overlapping_repair_paths", action=action)
+            try:
+                params, receipt = upgrade(source, entry, action, dependencies=dependencies,
+                    check_expectations=check_expectations, copy_value=copy_value)
+            except CommandContractError as exc:
+                raise error_type(str(exc), code=exc.code, action=action) from exc
+            targets[entry.id] = RepairTarget(entry, kind, params, action, owner_upgrade=receipt)
+            continue
+        if entry.id in targets and isinstance(targets[entry.id].action, UpgradeConnectionOwners):
+            raise error_type("Owner migration cannot overlap other changes to the same feature",
+                             code="overlapping_repair_paths", action=action)
         if replacement is not None:
             _, params = command_input(replacement)
             targets[entry.id] = RepairTarget(entry, kind, params, action, structural_replacement=replacement)

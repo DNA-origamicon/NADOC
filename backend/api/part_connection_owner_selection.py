@@ -9,7 +9,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from backend.core.feature_identity import identity_factory
+from backend.core.part_connection_owner_query import owner_ids
 from backend.core.part_saved_topology import snapshot_for
 
 MAX_PRODUCERS = 2000
@@ -25,11 +25,6 @@ class OwnerSelection(BaseModel):
         if len(set(values)) != len(values) or any(str(UUID(value)) != value for value in values):
             raise ValueError('Direct creator namespaces must be canonical and unique')
         return values
-
-
-def owner_ids(seed):
-    identifier = identity_factory(seed)
-    return identifier('connection-duplex', []), identifier('connection-binding', [])
 
 
 def dependency_reads(body):

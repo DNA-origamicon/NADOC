@@ -123,6 +123,8 @@ export function initPartRepairPanel({ store, api, host, isPartContext = () => !s
     actions.forEach((action, index) => {
       const text = action.action === 'set_input'
         ? `${action.feature_id}${action.child_id ? ` / ${action.child_id}` : ''} — ${JSON.stringify(action.parameter_path)}: ${short(action.expected_old)} → ${short(action.value)}`
+        : action.action === 'upgrade_connection_owners'
+          ? `${action.feature_id}: follow native connection creators (reviewed reference migration)`
         : action.action === 'upgrade_cluster_creation'
           ? `${action.feature_id}: structural group repair (preserve empty owners, v1 → v2)`
           : action.action === 'upgrade_numerical_contract'

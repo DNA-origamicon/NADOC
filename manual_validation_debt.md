@@ -1360,3 +1360,11 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   prefixes, limited candidate lists, downstream results, one Undo/Redo and reload.
   Candidate eligibility must not appear as full recipe validity. Compound creator
   migration is still unavailable; do not present this adapter as complete repair.
+
+  U43 owner-migration extension: on a recognized old literal-owner replacement,
+  inspect inputs and choose “Follow native connection creators”. Verify the
+  proposal names the selected feature, Save/Evaluate precede Apply, stale receipts
+  and overlapping edits refuse, and output identities stay unchanged. After repair,
+  change an upstream endpoint length across equal/unequal branches and back; verify
+  suffix regeneration, undo/reload, and honest independent ISSUE-143 errors. Native
+  dependency migration is not molecular validity. No automatic migration on load.

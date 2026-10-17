@@ -102,3 +102,17 @@ describe('reviewed repair field editor', () => {
     expect(h.onChange).not.toHaveBeenCalled()
   })
 })
+
+it('offers connection migration only as a reviewed proposal with evaluation required', () => {
+  const onUpgrade = vi.fn(), editor = createRepairInputEditor({ onUpgrade })
+  const upgrade = { label: 'Follow native connection creators', action: {
+    action: 'upgrade_connection_owners', feature_id: 'group', child_id: null,
+    expected_definition_sha256: 'a'.repeat(64),
+  } }
+  editor.render({ ...catalog([]), child_id: null, upgrades: [upgrade] })
+  expect(editor.root.textContent).toContain('Connection reference repair')
+  expect(editor.root.textContent).toContain('Save and evaluate')
+  expect(editor.root.querySelector('input,select,textarea')).toBeNull()
+  button(editor.root, upgrade.label).click()
+  expect(onUpgrade).toHaveBeenCalledExactlyOnceWith(upgrade)
+})

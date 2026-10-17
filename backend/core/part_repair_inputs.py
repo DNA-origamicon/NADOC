@@ -56,7 +56,14 @@ class UpgradeClusterCreation(_Target):
     expected_definition_sha256: Annotated[str, Field(strict=True, pattern=r"^[0-9a-f]{64}$")]
 
 
-RepairAction = Annotated[SetInput | UpgradeNumericalContract | UpgradeClusterCreation, Field(discriminator="action")]
+
+class UpgradeConnectionOwners(_Target):
+    """Explicit migration of native literal owner references to creator queries."""
+    action: Literal["upgrade_connection_owners"]
+    child_id: None = None
+    expected_definition_sha256: Annotated[str, Field(strict=True, pattern=r"^[0-9a-f]{64}$")]
+
+RepairAction = Annotated[SetInput | UpgradeNumericalContract | UpgradeClusterCreation | UpgradeConnectionOwners, Field(discriminator="action")]
 RepairActions = Annotated[list[RepairAction], Field(min_length=1, max_length=MAX_REPAIR_ACTIONS)]
 
 

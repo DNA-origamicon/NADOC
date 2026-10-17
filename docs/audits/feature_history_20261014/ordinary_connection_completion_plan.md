@@ -1222,3 +1222,87 @@ Cleanup: pytest0/1/2/current had232entries,0regularfiles/bytes, no readable same
 cwd/fd/maps references. Persistent systemd/PAM435/436 remain uninspectable. Removed
 only those completed task artifacts; pytest root and `/dev/shm` empty. User
 workspace designs/jobs/caches/historical evidence preserved.
+
+## U43 — explicit native owner-selection migration (2026-10-17)
+
+FH-25 checkpoint16 introduces the closed `upgrade_connection_owners` repair
+proposal. A recognized direct Apply/Connect v1 or linker Apply/Connect v3 consumer
+with literal Duplex dependencies can explicitly adopt creator-selection v2/v4.
+The receipt hashes the original command kind and all authored parameters,
+including generator attribution; it does not hash recovery/geometry. No migration
+runs automatically on load or ordinary replay. Existing literal contracts remain.
+
+The shared repair planner resolves only unique recognized preceding native direct
+producers for selected Duplex IDs. It replaces matching Duplex/binding literals
+with their stable creator seeds, retaining unrelated literal owners, ordering,
+output identities, timestamps, sequence choices and other inputs. Final native
+owner resolution still requires complete live restoration ownership. Missing,
+future, duplicate or unrecognized producers cannot become guessed references.
+Same-feature overlap with other repair actions is refused in either order; other
+upstream feature edits may remain explicit actions in the proposal. Final native
+schema/dependency admission and full root/suffix regeneration remain mandatory.
+The result reports exact before/after receipts and chosen creator seeds.
+
+The small stable `owner_ids` function moved into a core identity module shared by
+recording and repair; no duplicated UUID formula or new reconstruction engine.
+Draft source discovery uses the existing bounded copier without receipt hashing
+or producer scans; this source-free migration introduces no imported data. Full
+planning runs outside source capture. The existing owned repair job/commit host
+owns publication. No generic grouped write path or new permit family was opened.
+
+The repair input panel offers “Follow native connection creators” as a reviewed
+proposal. Client guards preserve the exact backend action/receipt and forbid
+client-added seeds or target versions. Proposal text requires Save/Evaluate before
+Apply; repeated additions update that proposal rather than creating duplicates.
+No arbitrary version/JSON editor was added. Inspection preserves full attribution
+in its receipt even though attribution is not an editable field; a regression
+covers that review-found mismatch.
+
+Dependency evidence covers shorter/longer upstream edits, direct/finite/indirect
+consumers, Apply/Connect, returning to equal lengths, exact changed-input keys,
+stale receipts, overlapping actions, future/duplicate/unknown creators, source-free
+discovery and persisted request roundtrip. A real repair worker migrates a broken
+finite replacement, commits only once, reloads/proves and supports undo/redo.
+Direct unequal recipes can regain dependency replay while still failing the
+independent ISSUE-143 molecular/schema requirement; migration does not qualify
+those outputs. ISSUE-126/143 and GC capture tails remain separate open exits.
+
+Initial diagnostic:14pass/2fixture errors; the direct combined fixture omitted
+its old conflict lists. Capturing those lists before its original append corrected
+the fixture without weakening the upgrade or native ownership checks. One command
+referenced a nonexistent test filename and ran zero tests; it was corrected.
+
+Validation: owner-selection/planning77passed(9.79s), draft/capture/group/input
+regressions127passed(5.84s), repair/draft evaluation/jobs124passed(11.84s), and
+final migration/input inspection51passed(6.73s). Accounting for repeated migration
+and input metadata cases: **292 unique passing backend cases**, including25 new migration cases. Final tests
+also verify full attribution receipts and refusal when a recognized creator's
+live binding is absent. Full frontend: **9268passed,1skipped,769files,365.65s**;
+existing canvas/navigation/WebSocket mock diagnostics remain. Changed-file Ruff
+and whitespace checks pass. Memory lint retains6baseline errors/59warnings;
+current memory head200lines. `main.js`7350,delta0. NOT VERIFIED IN APP: Archive
+absent, no browser/bulk workflow. All rollout gates and molecular constraints
+remain unchanged; no performance or hardware VR qualification claimed.
+
+`just test-smart --dry-run` selects FULL from accumulated foundational changes,
+fallback FAST. **Zero broad backend tests ran.** Literal notice (not an execution
+claim for the dry run):
+
+```
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+Only request `just test-session` when a broad/full sweep is actually needed.
+```
+
+Next: complete remaining ordinary control/source-profile coverage and prepare
+concrete native defect review evidence, retaining ISSUE-126/143, GC latency and
+desktop acceptance in the original exit. The new migration is implemented and
+software-tested; its interactive qualification remains MV-54. No milestone closes.
+Counts **21/38complete,17remaining(8core,9parked);+0completed,+0total**,
+**43engineering checkpoints** since B1; **FH-25 growth flagged at16**. FH-18 stays13
+and FH-23 stays9. No scope/denominator change or extra credit for repeated tests.
+Cleanup: completed pytest2/3/4/current contained309entries,0regularfiles/bytes.
+No readable same-user cwd/fd/maps references; systemd/PAM435/436 uninspectable.
+Removed only those task entries; pytest root and `/dev/shm` empty. Existing frontend
+cache, user designs/jobs and historical evidence preserved; no browser captures.

@@ -103,6 +103,8 @@ def _definitions(source, request, dependency_resolver, numerical_provider):
                            recognize_invalid=recognizes_invalid_inputs)
     upgrades, definition_upgrades = [], []
     for target in targets.values():
+        if target.owner_upgrade is not None:
+            definition_upgrades.append(target.owner_upgrade)
         if target.structural_replacement is not None:
             replacement = target.structural_replacement
             definition_upgrades.append({
