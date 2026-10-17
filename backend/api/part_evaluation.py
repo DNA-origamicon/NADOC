@@ -22,7 +22,7 @@ class EvaluationRequest(BaseModel):
     kind: Literal["photoproduct-create", "photoproduct-relax", "duplex-relax", "streptavidin-coating",
                   "linear-pattern", "circular-pattern", "overhang-bulk",
                   "bundle-create", "extrude-segment", "extrude-continuation",
-                  "extrude-deformed-continuation", "extrude-frame", "circle-segment", "overhang-extrude"] | None = None
+                  "extrude-deformed-continuation", "extrude-frame", "circle-segment", "overhang-extrude", "sweep"] | None = None
     params: dict | None = None
     index: StrictInt | None = Field(default=None, ge=0)
     sub_index: StrictInt | None = Field(default=None, ge=0)
@@ -59,7 +59,7 @@ class EvaluationRequest(BaseModel):
         elif self.operation == "append":
             if self.kind is None or self.params is None or self.index is not None or self.sub_index is not None or self.cascade:
                 raise ValueError("Append needs a supported long-operation kind and authored inputs only")
-            from backend.api.part_extrusion_edit_inputs import KINDS as EXTRUSIONS
+            from backend.api.part_geometry_inputs import KINDS as EXTRUSIONS
             if self.kind in EXTRUSIONS and self.expected_revision is None:
                 raise ValueError("Extrusion append requires expected_revision")
             if self.kind == "streptavidin-coating":
@@ -145,7 +145,7 @@ def evaluate(source, operation, *, executor=None, dependency_resolver=None):
 
 
 def _evaluate_extrusion(source, operation, *, executor=None, dependency_resolver=None):
-    from backend.api.part_extrusion_edit_inputs import KINDS, bind_prefix
+    from backend.api.part_geometry_inputs import KINDS, bind_prefix
 
     try:
         header = operation["header"]
@@ -240,7 +240,7 @@ def _evaluate(source, operation, *, executor=None, dependency_resolver=None, inp
             if isinstance(candidate, dict):
                 return candidate
             validation = validate_design(candidate)
-            from backend.api.part_extrusion_edit_inputs import KINDS as EXTRUSIONS
+            from backend.api.part_geometry_inputs import KINDS as EXTRUSIONS
             if request.kind in EXTRUSIONS:
                 proof = assess_part_history(candidate, execute=executor, dependencies=dependency_resolver)
                 if proof["status"] != "verified":

@@ -577,6 +577,9 @@ _SLOW_TESTS = {
     # October 15: durable creation/flush/restart/edit plus four real spawned
     # batch/recovery/proof workers (5.56 s). Keep sibling storage/fault tests fast.
     "test_real_durable_create_batch_flush_restart_restore_and_edit",
+    # October 17: four real geometry/recovery processes in one durable lifecycle
+    # (5.31 s); retain the full chain as focused headless integration coverage.
+    "test_real_create_append_edit_save_undo_redo_recover",
     # October 15: real pinned coating packing/repacking and spawned numerical
     # upgrade lifecycles. Small admission/fault tests stay in the fast suite.
     "test_real_native_lifecycle_defaults_sources_and_input_replay",  # 6.37 s, repeated one-site packing
@@ -1046,7 +1049,7 @@ def _slow_area_for(module: str) -> str:
     if "headless" in module or "spec_build" in module or module in {
         "test_generated_commands", "test_generated_fork_proof", "test_generated_joined_steps", "test_generated_joined_proof",
         "test_native_join_proof", "test_native_connectivity_proof", "test_part_repair_evaluation", "test_part_immutable_creation",
-        "test_native_schema_compatibility",
+        "test_native_schema_compatibility", "test_part_immutable_geometry_append",
     }:
         return "headless"
     # cluster autodetect's heavy test is heavy because it builds a fully ROUTED 18hb

@@ -3,7 +3,7 @@
 from backend.api import state
 from backend.api.part_recipe_prefix import ReplayPrefix
 from backend.api.part_native_commands import PATTERN_COMMANDS
-from backend.api.part_extrusion_edit_inputs import KINDS as EXTRUSIONS, normalize_creation, bind_prefix
+from backend.api.part_geometry_inputs import KINDS as EXTRUSIONS, normalize_creation, bind_prefix
 from backend.core.models import SnapshotLogEntry
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_history_contract import assess_part_history

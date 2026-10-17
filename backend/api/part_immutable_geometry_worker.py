@@ -6,7 +6,7 @@ from time import monotonic
 from backend.api import part_immutable_worker as transport
 from backend.api.part_evaluation import EvaluationRequest
 from backend.api.part_evaluation_worker import MAX_CANDIDATE_BYTES, evaluate_native
-from backend.api.part_extrusion_edit_inputs import KINDS, normalize, normalize_creation
+from backend.api.part_geometry_inputs import KINDS, normalize, normalize_creation
 from backend.api.part_immutable_geometry_scope import SCOPE, admit_source
 from backend.api.part_immutable_revision import _decoded_exact
 from backend.api.part_verification_worker import failure

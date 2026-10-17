@@ -78,18 +78,18 @@ class SourceRequest(BaseModel):
     expected_revision: StrictInt = Field(ge=0)
 
 
-ExtrusionKind = Literal['bundle-create', 'extrude-segment', 'extrude-continuation',
-    'extrude-deformed-continuation', 'extrude-frame', 'circle-segment', 'overhang-extrude']
+GeometryKind = Literal['bundle-create', 'extrude-segment', 'extrude-continuation',
+    'extrude-deformed-continuation', 'extrude-frame', 'circle-segment', 'overhang-extrude', 'sweep']
 
 
 class EditRequest(SourceRequest):
     expected_feature_id: StrictStr = Field(min_length=1, max_length=512)
-    expected_kind: ExtrusionKind
+    expected_kind: GeometryKind
     params: dict
 
 
 class AppendRequest(SourceRequest):
-    kind: ExtrusionKind
+    kind: GeometryKind
     params: dict
 
 

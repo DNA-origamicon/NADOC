@@ -14,7 +14,7 @@ from backend.api import part_immutable_geometry_worker as worker
 from backend.api.part_evaluation import EvaluationRequest
 from backend.api.part_evaluation_candidate import decode_candidate, CandidateDecodeError
 from backend.api.part_evaluation_jobs import EvaluationJob
-from backend.api.part_extrusion_edit_inputs import KINDS
+from backend.api.part_geometry_inputs import KINDS
 from backend.api.part_history_verification import _slot
 from backend.api.part_immutable_preservation import preservation_digest
 from backend.api.part_immutable_revision import prepare_geometry_revision

@@ -14,8 +14,8 @@ agreed; do not invent historical estimate deltas. This is a milestone estimate,
 not a count of messages/commits or a percentage of time or user-ready features.
 Core estimates have moderate confidence; parked work has lower confidence.
 
-Keep delivery and effort visible separately: **51 engineering checkpoints have
-been delivered since B1 (U1–U51), closing four additional milestones**. Thirteen of
+Keep delivery and effort visible separately: **52 engineering checkpoints have
+been delivered since B1 (U1–U52), closing four additional milestones**. Thirteen of
 those checkpoints were spent on still-open FH-18. The 38 is an estimate of
 deliverable milestones, not a promise of 38 commits or assistant responses;
 the thirteen-checkpoint effort must not disappear behind the unchanged denominator.
@@ -68,7 +68,7 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 | FH-25 | In progress · 16 checkpoints; task growth flagged | Ordinary DNA connection completion: explicit supported core matrix including required combined/direct/indirect paths, recorded and qualified. [Fixed matrix and implementation order](ordinary_connection_completion_plan.md); finite/indirect Apply and compound Connect have versioned native recipes, exact zero-bridge replacement, guarded ordinary HTTP/recording, input editing and cold replay. Direct/finite/indirect Apply+Connect and cross-family restoration have private recipes; branch-stable creator selection is implemented privately; applied metadata CRUD is recorded privately. Atomic Unapply/delete is implemented privately (ISSUE-142). Explicit organized material lineage, owned HTTP/history publication and prefix-derived endpoint/version repair are implemented privately; exact-definition legacy owner migration is implemented privately; complete controls/full profiles, ISSUE-126/143 corrections and qualification remain open. |
 | FH-26 | Remaining | Core dependency repair: earliest failure/blocked descendants, reviewed input/reference replacement or explicit cascade, candidate review, Apply/undo/reload. |
 | FH-27 | In progress · 1 checkpoint | Integrated desktop geometry acceptance: representative full workflows, measured latency/memory and broad regression exits; relevant app debt and proven-unused legacy paths closed. Test reruns alone do not close this. |
-| FH-28 | In progress · 7 checkpoints; task growth flagged | Qualify existing immutable host lifecycle: durable creation/recovery/publication on actual paths, cancellation and retained-state limits accepted. |
+| FH-28 | In progress · 8 checkpoints; task growth flagged | Qualify existing immutable host lifecycle: durable creation/recovery/publication on actual paths, cancellation and retained-state limits accepted. |
 | FH-29 | Remaining | Core registered automation release: complete geometry catalog under trusted policy, editable UI/script equivalence, bypass/stale/tamper closure and qualified public gates. |
 
 ### Parked milestones still included in the estimate
@@ -187,6 +187,7 @@ bound their matrices before implementation rather than expanding them indefinite
 | U49 · 2026-10-17 | FH-28 checkpoint 5: gated geometry HTTP recovery/edit/save/undo/redo, request-source binding and disconnect cleanup; [evidence](immutable_geometry_http.md) | None; fresh creation, complete tool/editor coverage and lifecycle/resource qualification remain | 21 | 38 | 8 | 9 | +0 completed, +0 total; **task growth flagged at 5 checkpoints**. Reuses the existing dispatcher, worker and persistence owner; no public rollout or new milestone. |
 | U50 · 2026-10-17 | FH-28 checkpoint 6: geometry empty creation uses the existing durable transaction and gated HTTP; [evidence](immutable_geometry_creation.md) | None; adding geometry from that root, complete tool/editor coverage and lifecycle/resource qualification remain | 21 | 38 | 8 | 9 | +0 completed, +0 total; **task growth flagged at 6 checkpoints**. Fresh empty-root creation closes one lifecycle gap, not complete new-part authoring. |
 | U51 · 2026-10-17 | FH-28 checkpoint 7: all seven extrusion families append through shared evaluator/immutable host; real create/append/edit/save/recover workflow; [evidence](immutable_geometry_append.md) | None; complete standard-tool/preserved-state coverage, editor integration and lifecycle/resource qualification remain | 21 | 38 | 8 | 9 | +0 completed, +0 total; **task growth flagged at 7 checkpoints**. Complete extrusion authoring path is private; other core tools and qualification remain part of the original exit. |
+| U52 · 2026-10-17 | FH-28 checkpoint 8: Sweep creation/edit/recovery through shared geometry catalog and host; cold capture import regression corrected; [evidence and remaining tool map](immutable_sweep_integration.md) | None; typed deformation/transform/routing integration, full preserved-state/editor coverage and resource qualification remain | 21 | 38 | 8 | 9 | +0 completed, +0 total; **task growth flagged at 8 checkpoints**. No new worker, transaction, wire format or weakened budget. |
 
 ### U35 inverse replacement and branch-reference audit
 
