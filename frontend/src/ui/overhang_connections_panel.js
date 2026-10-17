@@ -41,7 +41,7 @@ import {
   generateRandomSequence, generateOverhangRandomSequence, relaxLinker,
   relaxOverhangBinding,
   createConnectionVersion, createAndApplyConnectionVersion,
-  patchConnectionVersion, deleteConnectionVersion,
+  patchConnectionVersion, deleteConnectionVersion, disconnectConnectionVersion,
   applyConnectionVersion, patchDuplex, relaxDuplex,
   createNanoparticleConnectionVersion, patchNanoparticleConnectionVersion,
   deleteNanoparticleConnectionVersion, relaxNanoparticleConnectionVersions,
@@ -59,6 +59,14 @@ import {
   formatHairpinDimerTooltip, hairpinDimerIconEl, hairpinDimerLevel, overhangNameResolver,
 } from './hairpin_dimer_report.js'
 import { openHairpinDimerWindow } from './hairpin_dimer_window.js'
+import { createConnectionVersionRemoval, nativeConnectionRemovalEnabled } from './connection_version_removal.js'
+
+const _versionRemoval = createConnectionVersionRemoval({
+  enabled: nativeConnectionRemovalEnabled, disconnect: disconnectConnectionVersion,
+  patchVersion: patchConnectionVersion, deleteVersion: deleteConnectionVersion,
+  connections: () => _connections(), bindings: () => _bindings(),
+  deleteConnection: deleteOverhangConnection, deleteBinding: deleteOverhangBinding,
+})
 
 const _STORAGE = 'nadoc.overhangConnections.connectionType'
 
@@ -971,20 +979,6 @@ async function _onConnect() {
   }
 }
 
-/** Unapply + tear down every materialized connection/binding (and its version)
- *  that shares overhang `a` or `b`, so the next connect doesn't leave an
- *  overhang in two applied connections. */
-async function _teardownConflicts(a, b) {
-  const involves = (x) =>
-    x.overhang_a_id === a || x.overhang_b_id === a ||
-    x.overhang_a_id === b || x.overhang_b_id === b
-  for (const v of [..._versions()]) {
-    if (v.applied && involves(v)) await patchConnectionVersion(v.id, { applied: false })
-  }
-  for (const c of [..._connections()]) if (involves(c)) await deleteOverhangConnection(c.id)
-  for (const bd of [..._bindings()]) if (involves(bd)) await deleteOverhangBinding(bd.id)
-}
-
 /** Add version: snapshot the current form (type/length/live sequences) as a new
  *  version and AUTO-APPLY it (the most recently created version becomes the
  *  materialized one, clearing the pair's prior applied version). */
@@ -1035,8 +1029,7 @@ async function _onApply() {
   if (_applyBtn) _applyBtn.disabled = true
   try {
     if (v.applied) {
-      await _teardownPair(v.overhang_a_id, v.overhang_b_id)
-      await patchConnectionVersion(v.id, { applied: false })
+      await _versionRemoval.unapply(v)
     } else {
       const beforeIds = new Set((_store.getState().currentDesign?.cluster_transforms ?? [])
         .map(c => c.id))
@@ -1052,16 +1045,6 @@ async function _onApply() {
   } finally {
     _render()
   }
-}
-
-/** Tear down the pair's current materialized connection + binding (used when a
- *  user deletes the applied version). */
-async function _teardownPair(a, b) {
-  const key = _pairKey(a, b)
-  const c = _connections().find(x => _pairKey(x.overhang_a_id, x.overhang_b_id) === key)
-  if (c) await deleteOverhangConnection(c.id)
-  const bd = _bindings().find(x => _pairKey(x.overhang_a_id, x.overhang_b_id) === key)
-  if (bd) await deleteOverhangBinding(bd.id)
 }
 
 function _gcPercent(seq) {
@@ -1348,8 +1331,7 @@ async function _deleteVersion(v) {
   if (!ok) return
   try {
     if (_selRow?.kind === 'version' && _selRow.id === v.id) _selRow = null
-    if (v.applied) await _teardownPair(v.overhang_a_id, v.overhang_b_id)
-    await deleteConnectionVersion(v.id)
+    await _versionRemoval.remove(v)
   } catch (err) {
     showToast(err?.message ?? String(err))
   }

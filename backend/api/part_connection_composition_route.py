@@ -48,3 +48,12 @@ class ApplyRoute(ConnectRoute):
     def enabled(self):
         from backend.api import routes_connection_versions as routes
         return routes.NATIVE_LINKER_V2_ENABLED or routes.NATIVE_DIRECT_APPLY_ENABLED or routes.NATIVE_LINKER_V3_ENABLED or routes.NATIVE_CONNECTION_OWNER_SELECTION_ENABLED
+
+
+class DisconnectRoute(ApplyRoute):
+    input_prefix = 'connection_disconnect'
+    input_label = 'Disconnect connection version'
+
+    def enabled(self):
+        from backend.api.part_connection_disconnect import ENABLED
+        return ENABLED

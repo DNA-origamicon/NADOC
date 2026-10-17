@@ -151,6 +151,13 @@ export async function deleteConnectionVersion(versionId) {
   return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
+/** Restore the materialized pair and update its saved version in one undo. */
+export async function disconnectConnectionVersion(versionId, { deleteVersion = false } = {}) {
+  const action = deleteVersion ? 'disconnect-and-delete' : 'unapply'
+  const json = await _request('POST', `/design/connection-versions/${encodeURIComponent(versionId)}/${action}`)
+  return _syncFromDesignResponse(json)
+}
+
 export async function relaxOverhangBinding(bindingId) {
   // UNIFIED direct-binding relax (root-to-root + end-to-root): swing the driver's
   // overhang duplex about its root (persisted as the driver's overhang rotation;

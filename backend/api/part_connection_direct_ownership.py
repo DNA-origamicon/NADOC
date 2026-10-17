@@ -36,7 +36,8 @@ def _backings(design):
     return backings, hosts
 
 
-def _conflicts(design, body, index):
+def _conflicts(design, body, index, *, pair_only=False):
+    from backend.api.connection_version_teardown import matches_endpoints
     selected = {body.overhang_a_id, body.overhang_b_id}
     result = {}
     for kind, collection, field in [
@@ -45,9 +46,8 @@ def _conflicts(design, body, index):
         ('duplex', 'duplexes', 'conflict_duplex_ids'),
         ('connection_version', 'connection_versions', 'conflict_version_ids'),
     ]:
-        records = [item for item in getattr(design, collection) if selected.intersection(
-            (item.left.overhang_id, item.right.overhang_id) if kind == 'duplex'
-            else (item.overhang_a_id, item.overhang_b_id))]
+        records = [item for item in getattr(design, collection)
+                   if matches_endpoints(item, selected, pair_only=pair_only)]
         actual, expected = [item.id for item in records], getattr(body, field)
         if actual != expected:
             absent = next((value for value in expected if (kind, value) not in index), None)
@@ -114,7 +114,7 @@ def prepare(design, body):
     return restored, version
 
 
-def prepare_replacement(design, body, *, slots, slot_path, qualify_targets=True):
+def prepare_replacement(design, body, *, slots, slot_path, qualify_targets=True, pair_only=False):
     from backend.api.connection_version_teardown import remove_conflicts
 
     index = _index(design, body)
@@ -131,7 +131,7 @@ def prepare_replacement(design, body, *, slots, slot_path, qualify_targets=True)
     collision = slots & index.keys()
     if collision:
         common._fail('Direct output identity already exists', *sorted(collision)[0], slot_path)
-    for record in index.values():
+    for record in (index.values() if slots else ()):
         incoming = referenced_resources(record) & slots
         if incoming:
             common._fail('Direct output identity already has an incoming reference', *sorted(incoming)[0], slot_path)
@@ -141,17 +141,30 @@ def prepare_replacement(design, body, *, slots, slot_path, qualify_targets=True)
             if historical:
                 common._fail('Direct output identity collides with saved topology', *sorted(historical)[0], slot_path)
     from backend.api.part_connection_owner_selection import resolve_selection
-    body = resolve_selection(design, body, index)
-    conflicts = _conflicts(design, body, index)
+    body = resolve_selection(design, body, index, pair_only=pair_only)
+    conflicts = _conflicts(design, body, index, pair_only=pair_only)
     backings, hosts = _backings(design)
     # Existing exact finite/indirect ownership checks prevent prefix-based
     # teardown from consuming unrelated authored material.
     common._removed_ownership(design, index, conflicts['overhang_connection'], backings, hosts, allow_indirect=True)
     _restoration_owners(design, conflicts, index)
-    restored = remove_conflicts(design, (body.overhang_a_id, body.overhang_b_id))
+    restored = remove_conflicts(design, (body.overhang_a_id, body.overhang_b_id), pair_only=pair_only)
     restored_index = _index(restored, body)  # Detect external references to removed owners.
+    # Exact-pair removal may retain a legitimate A/C owner while removing A/B.
+    # It must not leave an orphan placement from a missing A/B binding, including
+    # legacy owners without a creator namespace.
+    retained_drivers = set()
+    if pair_only:
+        from backend.api.connection_version_teardown import matches_endpoints
+        selected = {body.overhang_a_id, body.overhang_b_id}
+        retained_drivers.update(b.driver_oh_id for b in restored.overhang_bindings
+                                if b.bound and not matches_endpoints(b, selected, pair_only=True))
+        retained_drivers.update(d.left.overhang_id if d.driver == 'left' else d.right.overhang_id
+                                for d in restored.duplexes
+                                if d.bound and not matches_endpoints(d, selected, pair_only=True))
     for cluster in restored.cluster_transforms:
-        if cluster.overhang_duplex_driver_id in {body.overhang_a_id, body.overhang_b_id}:
+        driver = cluster.overhang_duplex_driver_id
+        if driver in {body.overhang_a_id, body.overhang_b_id} and driver not in retained_drivers:
             common._fail('Retained placement already owns a direct endpoint', 'cluster', cluster.id, 'version_id')
     if qualify_targets:
         backings, hosts = _backings(restored)

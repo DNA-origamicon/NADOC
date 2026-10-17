@@ -1,7 +1,13 @@
 """Restore conflicting native connection owners before applying a version."""
 
 
-def remove_conflicts(design, endpoint_ids):
+def matches_endpoints(record, selected, *, pair_only=False):
+    pair = ((record.left.overhang_id, record.right.overhang_id) if hasattr(record, 'left')
+            else (record.overhang_a_id, record.overhang_b_id))
+    return frozenset(pair) == selected if pair_only else bool(selected.intersection(pair))
+
+
+def remove_conflicts(design, endpoint_ids, *, pair_only=False):
     from backend.core.binding_relax import revert_bind_topology
     from backend.core.duplex import revert_duplex_relocation
     from backend.core.lattice import remove_linker_topology
@@ -9,7 +15,7 @@ def remove_conflicts(design, endpoint_ids):
     selected = frozenset(endpoint_ids)
 
     def involves(record):
-        return bool(selected.intersection((record.overhang_a_id, record.overhang_b_id)))
+        return matches_endpoints(record, selected, pair_only=pair_only)
 
     for connection in list(design.overhang_connections):
         if involves(connection):
@@ -24,7 +30,7 @@ def remove_conflicts(design, endpoint_ids):
             design = revert_bind_topology(design, binding.prior_driven_topology)
     removed_duplex_ids = set()
     for duplex in design.duplexes:
-        if selected.intersection((duplex.left.overhang_id, duplex.right.overhang_id)):
+        if involves(duplex):
             design = revert_duplex_relocation(design, duplex)
             removed_duplex_ids.add(duplex.id)
     return design.model_copy(update={

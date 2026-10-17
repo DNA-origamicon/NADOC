@@ -803,3 +803,91 @@ session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
 This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
 Only request `just test-session` when a broad/full sweep is actually needed.
 ```
+
+## U38 — atomic exact-pair disconnection (FH-25 checkpoint 11)
+
+`connection-version-disconnect` is an explicit version1 input recipe under
+`overhang-bulk`: selected saved version/endpoints/type, exact pair conflict IDs,
+branch-stable direct creator selectors and a strict `delete_version` choice.
+It reuses native restoration ownership admission, binding/Duplex reversion and
+linker removal. It creates no new geometry/output identity. Exact pair matching
+is shared by capture, selector resolution, conflict validation and teardown;
+Apply keeps its existing either-endpoint conflict replacement semantics.
+A saved A/B alternative cannot tear down an active A/C connection. Retained
+third-pair owners are allowed when they remain valid; dangling incoming owners,
+missing restoration records and ambiguous direct creators still refuse.
+
+The operation restores topology, removes the selected pair's materialized owner
+records, clears same-pair saved flags and optionally deletes the selected saved
+version in one recording transaction. Other saved alternatives remain. It skips
+new-output collision scans because it allocates no output, and does not perform
+new-target construction qualification; existing bounded source and restoration
+checks still run. Reconciliation/retry occur once in the common executor/recorder.
+No molecular equations, native placement helpers, solver, pins or goldens changed.
+
+Private bodyless POST routes `/{version_id}/unapply` and
+`/{version_id}/disconnect-and-delete` use source-bound request acquisition and
+exact document/session/revision/policy checks. Preparation precedes one native
+callback; admitted failure has no legacy retry. Existing metadata PATCH/DELETE
+retain U37 semantics. `part_connection_disconnect.ENABLED` remains false.
+
+The frontend API applies the full geometry response. A shared removal controller
+owns native/compatibility selection for both Unapply and applied Delete; the
+frontend `nativeConnectionRemovalEnabled` gate remains false. Native requests
+never fall back after failure. Unapplied-alternative deletion remains metadata-
+only. The old pair teardown moved into the controller's gated compatibility
+branch; unused local `_teardownConflicts` and its obsolete comments were removed
+after confirming no call sites. The large panel only gains import/init/thin
+calls and shrinks overall. `main.js` remains7350lines,delta0.
+
+ISSUE-142 has a private implementation correction, not public/app closure.
+MV-54 records coordinated UI/backend enablement, both direct branches and all
+finite/indirect families, one undo/reload, failure preservation, third endpoints,
+current/straight geometry and complete latency/memory acceptance. These remain
+within existing FH-25/FH-27 exits. Assemblies and machine-specific VR stay deferred.
+
+Counts remain21/38complete,17remaining(8core,9parked);+0completed,+0total.
+Engineering effort is38checkpoints since B1, distinct from the38 estimated
+milestones. FH-25 remains growth-flagged after11. The shared ownership machinery
+contains this lifecycle work without a second restoration algorithm. Next:
+organized integration/full source profiles, old-recipe repair and qualification;
+shared-host and ISSUE-126 correctness stay required. No milestone closes here.
+
+U38 validation began with76tests-first failures (missing disconnect contract),
+then115pure/selector cases passed in10.32s. The expanded disconnection/inverse/
+selector run passed267cases in19.37s. Added guards cover body rejection, stale
+request acquisition, protected loadouts/latest cursor, protected contract version
+and missing legacy binding ownership. A retained third-endpoint owner is allowed;
+a leftover placement without a remaining bound owner refuses, preventing orphan
+legacy geometry. Save/reload and a real independent worker follow a branch-
+changing upstream edit through final disconnection.
+
+Frontend focused23cases passed in2.82s, including existing panel behavior, one
+native request/no legacy retry, metadata-only deletion of an unapplied alternative,
+encoded route IDs and full geometry refresh. Full `just test-frontend` passed
+**9266tests,1skipped,769files,368.66s**. No browser or desktop claim follows from
+Vitest. Native molecular builders and numerical geometry remain unchanged.
+
+Final U38 backend regression: **604passed,35.56s** across14 current connection
+files, including88 disconnection cases and all existing selector/inverse/direct/
+metadata/HTTP controls. Changed-file Ruff passes; full lint retains5baseline F401
+errors, memory lint6baseline errors/59warnings; project head200lines. Final panel
+change is11added/29removed lines; `main.js` delta0. No frontend suite overlap with
+backend tests or native builds occurred.
+
+`just test-smart --dry-run` selected FAST after deferring FULL for the accumulated
+5772-file foundational diff; **zero broad backend tests ran**. Literal notice:
+
+```text
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+Only request `just test-session` when a broad/full sweep is actually needed.
+```
+
+NOT VERIFIED IN APP: Archive remains absent; no browser, native scratch or
+visual/latency qualification was attempted. Completed task pytest roots1/2/3/
+current contained989empty directories,4symlinks,0regular files/bytes. No readable
+same-user cwd/fd/maps references remained; systemd/PAM435/436 remain uninspectable.
+Removed only those completed artifacts; pytest root and `/dev/shm` are empty.
+User designs, managed jobs, caches and historical evidence remain untouched.

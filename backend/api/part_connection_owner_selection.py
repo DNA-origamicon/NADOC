@@ -37,7 +37,8 @@ def dependency_reads(body):
     return {Resource('duplex', owner_ids(seed)[0]) for seed in getattr(body, 'direct_owner_seeds', ())}
 
 
-def resolve_selection(design, body, index):
+def resolve_selection(design, body, index, *, pair_only=False):
+    from backend.api.connection_version_teardown import matches_endpoints
     from backend.api import part_connection_application_commands as common
 
     if not hasattr(body, 'direct_owner_seeds'):
@@ -52,7 +53,7 @@ def resolve_selection(design, body, index):
         duplex_id, binding_id = owner_ids(seed)
         duplex = common._resolve(index, 'duplex', duplex_id, 'direct_owner_seeds')
         pair = {duplex.left.overhang_id, duplex.right.overhang_id}
-        if not selected.intersection(pair):
+        if not matches_endpoints(duplex, selected, pair_only=pair_only):
             common._fail('Direct creator does not own a selected endpoint', 'duplex', duplex_id, 'direct_owner_seeds')
         bindings = bindings_by_pair.get(frozenset(pair), [])
         if duplex.bound:
@@ -71,9 +72,8 @@ def resolve_selection(design, body, index):
     for kind, collection, field in [('duplex', 'duplexes', 'conflict_duplex_ids'),
                                     ('overhang_binding', 'overhang_bindings', 'conflict_binding_ids')]:
         literal = getattr(body, field)
-        actual = [item.id for item in getattr(design, collection) if selected.intersection(
-            (item.left.overhang_id, item.right.overhang_id) if kind == 'duplex'
-            else (item.overhang_a_id, item.overhang_b_id))]
+        actual = [item.id for item in getattr(design, collection)
+                  if matches_endpoints(item, selected, pair_only=pair_only)]
         if owned[kind].intersection(literal) or [i for i in actual if i not in owned[kind]] != literal:
             common._fail('Creator and literal selections must partition the exact conflict set',
                          kind, next(iter(literal or actual), body.version_id), field)

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   connectDuplex,
+  disconnectConnectionVersion,
   createConnectionVersion,
   generateOverhangRandomSequence,
   patchOverhang,
@@ -110,4 +111,16 @@ describe('overhang sequence endpoints', () => {
     expect(store.getState().currentGeometry).toBe(geometry)
     expect(store.getState().currentHelixAxes).toBe(axes)
   })
+  it.each([false, true])('refreshes geometry after atomic disconnect (delete=%s)', async deleteVersion => {
+    global.fetch = vi.fn(async () => ({ ok: true, status: 200, headers: { get: () => null },
+      json: async () => ({ design: { id: 'restored', helices: [], strands: [], overhangs: [] },
+        nucleotides: [], helix_axes: [], validation: { loop_strand_ids: [] } }),
+    }))
+    await disconnectConnectionVersion('v/1', { deleteVersion })
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(global.fetch.mock.calls[0][0]).toBe(`/api/design/connection-versions/v%2F1/${deleteVersion ? 'disconnect-and-delete' : 'unapply'}`)
+    expect(store.getState().currentDesign.id).toBe('restored')
+    expect(store.getState().currentGeometry).toEqual([])
+  })
+
 })

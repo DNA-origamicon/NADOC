@@ -1327,3 +1327,18 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   and retained memory. No full history proof should run per field or frame.
   This is the existing FH-27 qualification allocation, not new counted scope.
   Editor rollout remains off; assembly and machine-specific VR stay deferred.
+
+- **MV-54 — PENDING — Atomic ordinary connection removal (2026-10-16).**
+  **NOT VERIFIED IN APP.** With Archive mounted, privately enable backend
+  `part_connection_disconnect.ENABLED` and frontend `nativeConnectionRemovalEnabled`
+  together. Exercise Unapply and Delete on both direct types with equal/A-longer/
+  B-longer endpoints and all finite/indirect variants. Verify restoration, absence
+  of stale binding/Duplex/cluster/linker display, one Undo/Redo, save/reload and
+  later reapplication. A failed/stale/refused request must leave the original
+  design intact and never retry through separate legacy mutations. A saved A/B
+  alternative must not disconnect an active A/C pair. Metadata-only API deletion
+  remains distinct from the UI's applied Delete operation. Check protected
+  loadouts, loading/error messages and current/straight geometry refresh; measure
+  complete request/lock/serialization/render latency and retained memory.
+  This is existing FH-25/FH-27 qualification, not new milestone scope. Gates stay
+  off; assembly and machine-specific VR validation remain deferred.

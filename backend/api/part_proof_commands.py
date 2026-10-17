@@ -31,6 +31,7 @@ from backend.api.part_connection_application_commands import ACTION as CONNECTIO
 from backend.api.part_connection_composition_commands import ACTION as CONNECTION_COMPOSE_ACTION
 from backend.api.part_connection_direct_commands import ACTION as CONNECTION_DIRECT_ACTION
 from backend.api.part_connection_direct_composition import ACTION as CONNECTION_DIRECT_COMPOSE_ACTION
+from backend.api.part_connection_disconnect import ACTION as CONNECTION_DISCONNECT_ACTION
 from backend.core.part_group_organization import KINDS as GROUP_ORGANIZATION_KINDS
 
 
@@ -146,7 +147,7 @@ def dependencies(kind, params):
         return Dependencies(known=False)
     if "_generated_scope" in params and (kind in NP_CONNECTION_KINDS or (
             kind == "overhang-bulk" and (is_pending_action(params)
-                or params.get("action") in (CONNECTION_APPLY_ACTION, CONNECTION_COMPOSE_ACTION, CONNECTION_DIRECT_ACTION, CONNECTION_DIRECT_COMPOSE_ACTION))) or (
+                or params.get("action") in (CONNECTION_APPLY_ACTION, CONNECTION_COMPOSE_ACTION, CONNECTION_DIRECT_ACTION, CONNECTION_DIRECT_COMPOSE_ACTION, CONNECTION_DISCONNECT_ACTION))) or (
             kind == "nanoparticle-patch" and "thiol_version" in params
             and params.get("pending_connection_version_ids"))):
         return Dependencies(known=False)  # Compound scoped owner selection is not qualified yet.
@@ -154,6 +155,9 @@ def dependencies(kind, params):
     # strict command schema. Preserve source provenance during scoped admission.
     params = {key: value for key, value in params.items()
               if key not in {"_generated_scope", "_generator"}}
+    if kind == "overhang-bulk" and params.get("action") == CONNECTION_DISCONNECT_ACTION:
+        from backend.api.part_connection_disconnect import dependency_contract
+        return dependency_contract(params, topology=PART_TOPOLOGY)
     if kind == "overhang-bulk" and params.get("action") == CONNECTION_DIRECT_COMPOSE_ACTION:
         from backend.api.part_connection_direct_composition import dependency_contract
         return dependency_contract(params, topology=PART_TOPOLOGY)
@@ -525,7 +529,10 @@ def _execute(kind, design, params, *, expensive):
         result = build(kind, design, params)
         updated, report = result if isinstance(result, tuple) else (result, None)
     elif kind == "overhang-bulk":
-        if params.get("action") == CONNECTION_DIRECT_COMPOSE_ACTION:
+        if params.get("action") == CONNECTION_DISCONNECT_ACTION:
+            from backend.api.part_connection_disconnect import build
+            updated, report = build(design, params)
+        elif params.get("action") == CONNECTION_DIRECT_COMPOSE_ACTION:
             from backend.api.part_connection_direct_composition import build
             updated, report = build(design, params)
         elif params.get("action") == CONNECTION_DIRECT_ACTION:

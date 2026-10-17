@@ -429,3 +429,23 @@ router.add_api_route("/design/connection-versions/connect", create_and_apply_con
 
 router.add_api_route("/design/connection-versions/{version_id}/apply", apply_connection_version,
                      methods=["POST"], status_code=200, route_class_override=ApplyRoute)
+
+
+def unapply_connection_version(version_id: str) -> dict:
+    from backend.api.part_connection_disconnect import record
+    source, updated, report, _ = record(version_id)
+    return _connection_apply_response(source, updated, report)
+
+
+def disconnect_and_delete_connection_version(version_id: str) -> dict:
+    from backend.api.part_connection_disconnect import record
+    source, updated, report, _ = record(version_id, delete_version=True)
+    return _connection_apply_response(source, updated, report)
+
+
+from backend.api.part_connection_composition_route import DisconnectRoute
+
+router.add_api_route('/design/connection-versions/{version_id}/unapply', unapply_connection_version,
+                     methods=['POST'], route_class_override=DisconnectRoute)
+router.add_api_route('/design/connection-versions/{version_id}/disconnect-and-delete', disconnect_and_delete_connection_version,
+                     methods=['POST'], route_class_override=DisconnectRoute)

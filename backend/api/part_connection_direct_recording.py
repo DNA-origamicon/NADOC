@@ -11,7 +11,8 @@ from backend.core.part_command_errors import CommandContractError, ReferenceReso
 from backend.core.part_operation_input import MAX_OPERATION_NODES
 
 
-def conflict_values(source, a_id, b_id):
+def conflict_values(source, a_id, b_id, *, pair_only=False):
+    from backend.api.connection_version_teardown import matches_endpoints
     fields = [('conflict_connection_ids', 'overhang_connections'),
               ('conflict_binding_ids', 'overhang_bindings'),
               ('conflict_duplex_ids', 'duplexes'),
@@ -19,9 +20,8 @@ def conflict_values(source, a_id, b_id):
     if sum(len(getattr(source, collection)) for _, collection in fields) > MAX_OPERATION_NODES:
         common._unsupported('Direct application exceeds its conflict table allowance')
     pair = {a_id, b_id}
-    return {field: [item.id for item in getattr(source, collection) if pair.intersection(
-        (item.left.overhang_id, item.right.overhang_id) if collection == 'duplexes'
-        else (item.overhang_a_id, item.overhang_b_id))] for field, collection in fields}
+    return {field: [item.id for item in getattr(source, collection)
+                   if matches_endpoints(item, pair, pair_only=pair_only)] for field, collection in fields}
 
 
 def try_record(version_id, *, linker_version=None, owner_selection=False):

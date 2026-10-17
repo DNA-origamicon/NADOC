@@ -984,3 +984,11 @@ changes without touching materialized geometry. The current UI's non-atomic
 Unapply/delete sequence and omitted Duplex teardown are tracked as ISSUE-142,
 not claimed fixed by metadata support. Existing FH-25 scope and rollout gates
 remain unchanged.
+
+### U38 — ISSUE-142 atomic disconnection implemented privately
+
+New exact-pair command/HTTP transaction and shared UI controller restore native
+owners, clear pair flags and optionally delete the chosen saved version in one
+undo. No admitted failure retries through legacy writes. Existing Apply retains
+its broader endpoint-conflict semantics. Public correction awaits MV-54 and
+coordinated gate rollout; the unused local conflict-teardown helper is removed.

@@ -3078,3 +3078,11 @@ and finite/indirect types, incoming-owner refusal, undo/reload/cold replay and
 failed-publication source preservation. Do not broaden pair teardown to unrelated
 third-endpoint conflicts or reinterpret `applied=false` as a successful removal.
 No molecular placement change is authorized by this finding.
+
+ISSUE-142 U38 update: explicit registered exact-pair disconnection now restores
+linker/binding/Duplex owners and changes saved metadata in one transaction.
+Private source-bound HTTP and shared UI Unapply/Delete controller are wired;
+the unused `_teardownConflicts` helper was pruned. Native family/branch replay
+and third-endpoint preservation pass. Both rollout gates remain disabled;
+MV-54 desktop/latency acceptance is outstanding, so the public defect is not
+claimed resolved. Existing metadata-only API semantics remain unchanged.

@@ -22,10 +22,10 @@ decrement completed if an exit reopens. Flag three major checkpoints spent on
 any still-open milestone (cumulative even across alternating work), or total
 growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
-Effort is separate: U1–U37 are **37 engineering checkpoints** since B1, closing
+Effort is separate: U1–U38 are **38 engineering checkpoints** since B1, closing
 **four milestones** (FH-19/FH-21/FH-22/FH-24). FH-18 remains open after13 checkpoints;
 FH-23 after9. Both are **task-growth flagged**. Current counts: **21/38 complete,
-17 remaining (8 core,9 parked); U37 +0 completed,+0 total**. Fixed exits remain.
+17 remaining (8 core,9 parked); U38 +0 completed,+0 total**. Fixed exits remain.
 U27 implements the complete [22-kind Fine Routing editor](../docs/audits/feature_history_20261014/fine_routing_history_editor_plan.md):
 pre-child native references, closed inputs/identities, stable batch add/remove/
 reorder, original-source proof and full sibling/downstream regeneration.
@@ -40,10 +40,10 @@ See [U27 evidence](../docs/audits/feature_history_20261014/validation_fine_routi
 NOT VERIFIED IN APP: servers stopped, Archive unavailable; FH-27/MV-53 desktop,
 latency/memory and broad backend acceptance remain. All rollout gates stay off.
 `main.js`7350; U27 delta0. No molecular builders, pins, constants or goldens changed.
-FH-25 checkpoint10: applied metadata v2 CRUD/flags record without geometry writes;
-direct v2/linker v4 creator selectors remain. **Task growth flagged.**
-[Matrix/evidence](../docs/audits/feature_history_20261014/ordinary_connection_completion_plan.md): next atomic Unapply/delete (ISSUE-142), legacy repair,
-organization and qualification. All gates off; preserve finite v1 and full scope.
+FH-25 checkpoint11: atomic pair Unapply/delete restores native owners, one undo;
+private UI/HTTP and third-endpoint preservation. **Task growth flagged.**
+[Matrix/evidence](../docs/audits/feature_history_20261014/ordinary_connection_completion_plan.md): next organized integration, legacy repair,
+full source profiles and qualification. ISSUE-142 correction remains gated. All gates off; preserve finite v1 and full scope.
 full FH-18/FH-23 movement/qualification remains required, not parked.
 U26 rejects ordinary owner insertion/unconditional final passes for chronological
 movement. Later tails already use moved construction frames. ISSUE-135 Full/
