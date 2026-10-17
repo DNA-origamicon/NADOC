@@ -135,6 +135,15 @@ def status(*, expected_policy_generation=None):
 
 
 def start(request, *, expected_policy_generation=None):
+    return _start(request, expected_policy_generation=expected_policy_generation, geometry=False)
+
+
+def start_geometry(request, *, expected_policy_generation=None):
+    """Private explicit recovery; public restore remains on its original scope."""
+    return _start(request, expected_policy_generation=expected_policy_generation, geometry=True)
+
+
+def _start(request, *, expected_policy_generation, geometry):
     request = RestoreRequest.model_validate(request)
     if not _slot.acquire(blocking=False):
         raise HTTPException(429, detail="A part history operation is already running")
@@ -143,6 +152,8 @@ def start(request, *, expected_policy_generation=None):
         owner = _owner()
         doc = require_document_identity(get_current_doc())
         request_hash = digest({"operation": "restore", **request.model_dump(mode="json")})
+        if geometry:
+            request_hash = digest({'operation': 'geometry_restore', **request.model_dump(mode='json')})
         with state._lock:
             _context_locked(doc, expected_policy_generation)
             _require_current_owner(owner)
@@ -152,7 +163,8 @@ def start(request, *, expected_policy_generation=None):
             if session is None:
                 session = state._session()  # Explicit restore reserves an actual incarnation.
             require_empty_session(session)
-            admission = permits.admit_recovery(doc, session, request_sha256=request_hash)
+            admit = permits.admit_geometry_recovery if geometry else permits.admit_recovery
+            admission = admit(doc, session, request_sha256=request_hash)
             job = RecoveryJob(doc, lambda: None, session.revision, created=monotonic(),
                 admitted_operation="restore", session_identity=session.identity, admission=admission,
                 request_sha256=request_hash, persistence=owner)

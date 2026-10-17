@@ -36,6 +36,16 @@ def _nonfinite(_value):
 
 
 def prepare_stored(stored, *, checkpoint=lambda: None):
+    """Prepare the original batch scope; never infer scope from saved fields."""
+    return _prepare_stored(stored, checkpoint=checkpoint, geometry=False)
+
+
+def prepare_geometry_stored(stored, *, checkpoint=lambda: None):
+    """Exact geometry-scope preparation; no proof or publication authority."""
+    return _prepare_stored(stored, checkpoint=checkpoint, geometry=True)
+
+
+def _prepare_stored(stored, *, checkpoint, geometry):
     """Return one scope-only seal and an isolated ordinary proof projection.
 
     No byte-to-seal shortcut exists: untrusted JSON must pass current scope and
@@ -53,7 +63,11 @@ def prepare_stored(stored, *, checkpoint=lambda: None):
         _check_structure(data, checkpoint)
         private = Design.model_validate(data)
         del data
-        candidate = prepare_revision(private, checkpoint=checkpoint)
+        if geometry:
+            from backend.api.part_immutable_revision import prepare_geometry_revision
+            candidate = prepare_geometry_revision(private, checkpoint=checkpoint)
+        else:
+            candidate = prepare_revision(private, checkpoint=checkpoint)
         if candidate.payload != stored.payload:
             _reject("Saved strict content changes under current full-document decoding")
         captured = capture(private)

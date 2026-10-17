@@ -58,9 +58,11 @@ def _context(value):
     """Validate the tiny fixed wire header, not any document or authority."""
     from backend.api.document_identity import require_document_identity
 
-    if type(value) is not dict or set(value) != _CONTEXT_FIELDS:
+    geometry = type(value) is dict and set(value) == _CONTEXT_FIELDS | {'storage_scope'}
+    if type(value) is not dict or (not geometry and set(value) != _CONTEXT_FIELDS):
         _reject("Invalid recovery transport context fields")
-    if (type(value["version"]) is not int or value["version"] != 1
+    if (type(value["version"]) is not int or value["version"] != (2 if geometry else 1)
+            or (geometry and value['storage_scope'] != 'native_extrusion_v1')
             or type(value["storage_version"]) is not int or value["storage_version"] != 1
             or type(value["session_identity"]) is not str or not 1 <= len(value["session_identity"]) <= 128
             or not _integer(value["source_revision"], 2 ** 63 - 1)
@@ -78,9 +80,11 @@ def _current_admission(admission):
     from backend.api.part_publication_policy import resolve
 
     context = admission_context(admission)
-    if (context is None or context.operation != "restore" or context.scope_tag != "strict_recovery_v1"
+    if (context is None or context.operation != "restore" or context.scope_tag not in {"strict_recovery_v1", "geometry_recovery_v1"}
             or context.source() is not None or not _hash(context.request_sha256)):
         _reject("Recovery transport requires its registered empty-session admission")
+    from backend.api.part_immutable_recovery_scope import require_scope
+    require_scope(context)
     policy = resolve(context.doc_id)
     if (not policy.strict or policy.generation != context.policy_generation
             or state.verification_source_matches(context.doc_id, None, context.source_revision,
@@ -88,6 +92,16 @@ def _current_admission(admission):
                 expected_policy_generation=context.policy_generation) is not True):
         _reject("Recovery transport admission is stale or its source is busy")
     return context
+
+
+def _wire_context(context, nonce):
+    data = {"version": 1, "storage_version": 1, "doc_id": context.doc_id,
+        "session_identity": context.session_identity, "source_revision": context.source_revision,
+        "policy_generation": context.policy_generation, "request_sha256": context.request_sha256,
+        "nonce": nonce}
+    if context.scope_tag == 'geometry_recovery_v1':
+        data.update(version=2, storage_scope='native_extrusion_v1')
+    return _context(data)
 
 
 @dataclass(frozen=True, slots=True, weakref_slot=True, eq=False, init=False)
@@ -140,10 +154,7 @@ def reserve_input(stored, *, admission):
             or sha256(stored.payload).hexdigest() != manifest.payload_sha256):
         _reject("Recovery record does not match its admitted document, length or hash")
     nonce = token_hex(16)
-    _context({"version": 1, "storage_version": 1, "doc_id": context.doc_id,
-        "session_identity": context.session_identity, "source_revision": context.source_revision,
-        "policy_generation": context.policy_generation, "request_sha256": context.request_sha256,
-        "nonce": nonce})
+    _wire_context(context, nonce)
     ticket = object.__new__(RecoveryInput)
     for name, value in (("payload", stored.payload), ("admission", admission), ("nonce", nonce), ("id", None)):
         object.__setattr__(ticket, name, value)
@@ -158,10 +169,7 @@ def encode_input(ticket):
     context = _current_admission(ticket.admission)
     if context is not reservation.context:
         _reject("Recovery input admission changed after reservation")
-    data = _context({"version": 1, "storage_version": 1, "doc_id": context.doc_id,
-        "session_identity": context.session_identity, "source_revision": context.source_revision,
-        "policy_generation": context.policy_generation, "request_sha256": context.request_sha256,
-        "nonce": ticket.nonce})
+    data = _wire_context(context, ticket.nonce)
     raw = json.dumps(data, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     if not 0 < len(raw) <= MAX_HEADER_BYTES:
         _reject("Recovery context exceeds its fixed header allowance")
@@ -246,7 +254,11 @@ def _evaluate_input(read_frame):
         # remains entirely in the parent, outside the child protocol.
         stored = StoredRevision(CacheManifest(context["doc_id"], len(source), binding["source_sha256"]),
                                 source, None)
-        candidate, captured = prepare_stored(stored)
+        if context.get('storage_scope') == 'native_extrusion_v1':
+            from backend.api.part_immutable_recovery_inputs import prepare_geometry_stored
+            candidate, captured = prepare_geometry_stored(stored)
+        else:
+            candidate, captured = prepare_stored(stored)
         del stored, source
         # Preserve the actual existing pickle ceiling, independently of capture
         # accounting, and the old private serialize/deserialize handoff semantics.
@@ -280,7 +292,7 @@ def _binding(value):
     return tuple(sorted(value.items()))
 
 
-def _metadata(value, payload_size):
+def _metadata(value, payload_size, *, scope_tag="registered_batch_v1"):
     from backend.api.part_batch_publication_scope import MAX_PUBLIC_HISTORY_ROWS
     from backend.api.part_immutable_preservation import PRESERVATION_VERSION
     from backend.api.part_immutable_revision import RevisionMetadata
@@ -298,7 +310,7 @@ def _metadata(value, payload_size):
             or type(value["annotations_enabled"]) is not bool
             or type(value["preservation_version"]) is not int or value["preservation_version"] != PRESERVATION_VERSION
             or type(value["storage_version"]) is not int or value["storage_version"] != 1
-            or type(value["scope_tag"]) is not str or value["scope_tag"] != "registered_batch_v1"):
+            or type(value["scope_tag"]) is not str or value["scope_tag"] != scope_tag):
         _reject("Recovery result metadata exceeds its reviewed scope")
     return RevisionMetadata(**value)
 
@@ -399,7 +411,10 @@ class RecoveryWorker(VerificationWorker):
                 or result.get("status") not in {"verified", "reproduced_import", "failed", "mismatch", "unverified"}
                 or {"candidate", "payload", "_seal", "qualification"}.intersection(result)):
             _reject("Invalid recovery proof result")
-        metadata = _metadata(report["metadata"], len(self._ticket.payload)) if report["metadata"] is not None else None
+        from backend.api.part_immutable_recovery_scope import storage_scope
+        expected_scope = storage_scope(_reservation(self._ticket).context)
+        metadata = (_metadata(report["metadata"], len(self._ticket.payload), scope_tag=expected_scope)
+                    if report["metadata"] is not None else None)
         if result["status"] == "verified":
             if (metadata is None or result["native_editable"] is not True or result["issues"]
                     or result.get("scope") != "part" or type(result.get("contract_version")) is not int

@@ -307,6 +307,14 @@ def admit_empty_creation(doc_id, session):
 
 
 def admit_recovery(doc_id, session, *, request_sha256):
+    return _admit_recovery(doc_id, session, request_sha256=request_sha256, geometry=False)
+
+
+def admit_geometry_recovery(doc_id, session, *, request_sha256):
+    return _admit_recovery(doc_id, session, request_sha256=request_sha256, geometry=True)
+
+
+def _admit_recovery(doc_id, session, *, request_sha256, geometry):
     """Host-only empty-session admission; no public operation selects restore."""
     from backend.api.part_immutable_storage import require_empty_session
 
@@ -314,10 +322,13 @@ def admit_recovery(doc_id, session, *, request_sha256):
     current = policy.resolve(doc_id)
     if not current.strict:
         _refusal("Recovery requires strict host policy", code="immutable_publication_scope")
+    if geometry:
+        from backend.api.part_immutable_geometry_publication import require_policy
+        require_policy(doc_id=doc_id)
     if type(request_sha256) is not str or fullmatch(r"[0-9a-f]{64}", request_sha256) is None:
         raise ValueError("Recovery admission requires the canonical bounded request digest")
     context = AdmissionContext(doc_id, session.identity, lambda: None, session.revision,
-        current.generation, "restore", request_sha256, "strict_recovery_v1")
+        current.generation, "restore", request_sha256, "geometry_recovery_v1" if geometry else "strict_recovery_v1")
     return _register(_admissions, EvaluationAdmission(), context)
 
 
@@ -326,12 +337,15 @@ def issue_recovery_permit(admission, candidate, *, qualification, expires, cance
     from backend.api.part_immutable_storage import require_sealed
 
     context = admission_context(admission)
-    if context is None or context.operation != "restore" or context.scope_tag != "strict_recovery_v1":
+    if context is None or context.operation != "restore" or context.scope_tag not in {"strict_recovery_v1", "geometry_recovery_v1"}:
         _refusal("Recovery needs its original host admission")
     if not policy.resolve(context.doc_id).strict or context.policy_generation != policy.resolve(context.doc_id).generation:
         _refusal("Recovery host policy changed", code="policy_changed")
     require_qualification(qualification, admission, candidate)
     metadata = require_sealed(candidate)
+    from backend.api.part_immutable_recovery_scope import require_scope
+    if metadata.scope_tag != require_scope(context):
+        _refusal("Recovery candidate has a different admitted storage scope")
     now = monotonic()
     if type(expires) not in {int, float} or not now < expires <= now + MAX_LIFETIME:
         _refusal("Recovery candidate expired", code="publication_expired")
@@ -408,10 +422,12 @@ def check_publication(permit, *, doc_id, session, candidate):
                 admit_batch_source(candidate)
         except CommandContractError as error:
             raise HTTPException(422, detail=error.as_issue()) from error
-    elif context.admission.scope_tag == "strict_recovery_v1":
+    elif context.admission.scope_tag in {"strict_recovery_v1", "geometry_recovery_v1"}:
+        from backend.api.part_immutable_recovery_scope import require_scope
         metadata = require_sealed(candidate)
         require_empty_session(session)
-        if (not policy.resolve(doc_id).strict or context.evidence_class != "independent_cold_replay"
+        if (metadata.scope_tag != require_scope(context.admission)
+                or not policy.resolve(doc_id).strict or context.evidence_class != "independent_cold_replay"
                 or metadata.authoring_sha256 != context.authoring_sha256
                 or metadata.recipe_sha256 != context.recipe_sha256):
             _refusal("Recovery lost its checked candidate binding", code="immutable_publication_scope")
@@ -428,7 +444,10 @@ def check_publication(permit, *, doc_id, session, candidate):
 
 def check_liveness(context):
     """Repeat after undo preparation, immediately before assignment."""
-    if context.admission.scope_tag == "immutable_extrusion_edit_v1":
+    if context.admission.scope_tag == "geometry_recovery_v1":
+        from backend.api.part_immutable_recovery_scope import require_scope
+        require_scope(context.admission)
+    elif context.admission.scope_tag == "immutable_extrusion_edit_v1":
         from backend.api.part_immutable_geometry_publication import require_policy
         require_policy(context.admission)
     elif context.admission.scope_tag == "extensions_v1":
