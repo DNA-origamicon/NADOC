@@ -26,6 +26,20 @@ _PROTECTED = {
 def preserve_proof_identity(previous, updated, *, kind=None):
     """Preserve only authored output/contract slots, never invent absent ones."""
     result = _preserve_base(previous, updated, kind=kind)
+    if kind == "extension-upsert" and type(result.get("entries")) is list:
+        old, new = previous.get("entries"), result["entries"]
+        if type(old) is not list or len(old) != len(new):
+            raise ValueError("Extension edits must retain their authored output slots")
+        entries = []
+        for before, after in zip(old, new):
+            if type(after) is not dict or type(after.get("extension")) is not dict:
+                entries.append(after)
+                continue  # Strict command admission reports the malformed input.
+            ext = after["extension"]
+            if before["create"]:
+                ext = {**ext, "id": before["extension"]["id"]}
+            entries.append({**after, "create": before["create"], "extension": ext})
+        result = {**result, "entries": entries}
     if kind == "nucleotide-transform" and "crossover_id" in updated:
         # Here the junction is an authored residue target, not a newly created
         # crossover identity. Keep the pinned factory's other families exact.

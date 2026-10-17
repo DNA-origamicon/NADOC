@@ -22,26 +22,26 @@ decrement completed if an exit reopens. Flag three major checkpoints spent on
 any still-open milestone (cumulative even across alternating work), or total
 growth to 42 (more than 10% over B1).
 Update the ledger and these current counts before each major final response.
-Effort is separate: U1–U20 are **20 engineering checkpoints** since B1, closing
-**three additional milestones**: FH-19 in two checkpoints; FH-21/FH-22 in one each.
-Thirteen checkpoints went to still-open FH-18; audits/commits earn no credit. Current counts: **20 / 38 complete,18 remaining (9 core,9 parked)**.
-Latest U20 delta: **+0 completed,+0 total**. FH-23 has three checkpoints and is
-**task-growth flagged**. Its private editor now connects shared owned transport,
-complete native renderer, existing panel/gestures and explicit linked-pose upgrade.
-Five roles retain source/feature identity, one Apply/undo and receipt recovery.
-`placement-poses` stores each accepted owner pose with its native parent/driver frame;
-old primary metadata/provenance remain protected. Replay does not rerun a
-solver. Model schema adds one literal;20 exact compatibility edges preserve stored
-pins, runtime/template checks and unchanged molecular builders/goldens.
+Effort is separate: U1–U21 are **21 engineering checkpoints** since B1, closing
+**three milestones** (FH-19/FH-21/FH-22). FH-18 remains open after13 checkpoints;
+FH-23 after4. Both are **task-growth flagged**. Current counts: **20/38 complete,
+18 remaining (9 core,9 parked); U21 +0 completed,+0 total**. Fixed exits remain.
+U21 qualifies actual empty-root histories and real native gestures through owned
+Apply, suffix, undo/reload and cold proof. Joint interim/final pose and baseline
+races and flexible-junction display accounting are fixed. OH/linker/duplex gain bounded
+admission; long numerical prefixes still need owned-worker Prepare/Apply integration.
+Terminal CRUD/batch records closed input commands with stable IDs. Delete
+preserves its synthetic-only/no-reconcile fast path;
+upsert retains global postprocessing and a conservative dependency barrier.
+Creation before group conversion and later delete replay; post-conversion upsert
+remains refused until its existing FH-18 lineage/placement exit qualifies.
+Two model literals require23 exact schema edges; numerical pins/math stay unchanged.
 See [movement contract](../docs/audits/feature_history_20261014/transform_history_editor_plan.md)
-and [U20 evidence](../docs/audits/feature_history_20261014/validation_transform_history_integration.json).
-FH-23 remains open: complete producer-prefix/constraint matrices and arbitrary
-new-group integration with FH-18. Two finite batches contain the remaining work;
-no new solver/registry or milestone split. Both transform rollout gates stay false.
-NOT VERIFIED IN APP: Archive unavailable; MV-52/FH-27 desktop/latency stays open.
-Broad pytest wrote system-temp scratch; U20 cleanup verified. Require mounted Archive temp before another broad run.
-ISSUE-125 improves privately but legacy linked writes remain until rollout;
-ISSUE-126 DS occupancy remains. `main.js` adds one lazy getter only (7350 lines).
+and [U21 evidence](../docs/audits/feature_history_20261014/validation_transform_native_prefix_constraints.json).
+FH-23 remains open: numerical producer-prefix and arbitrary new-group integration;
+No milestone split; both transform gates stay false. NOT VERIFIED IN APP: Archive unavailable; MV-52/FH-27 desktop/latency stays open.
+Broad pytest wrote system-temp scratch; require mounted Archive before another broad run. U21 reports selector-only and focused checks separately.
+ISSUE-125 remains until rollout; ISSUE-126 remains. `main.js` is7350; U21 delta0.
 FH-18 retains separate Groups/Placements, native lineage, named deformation
 preview/repair/creation, persistent visibility and organized pattern integration.
 Its original movement/generated/qualification exits remain open; rollout stays off.
@@ -134,7 +134,7 @@ finished tool: recording, preview/cancel/Apply, downstream editing, undo/reload
 and ordinary controls must agree. Nanoparticle/protein/assets and their remaining
 benchmarks are parked; ordinary DNA connections are core. Assemblies and VR
 remain separately deferred. The persistent P3–P6 goal stays active.
-U20 sequencing: finish FH-23's native-prefix/constraint matrix, then new-group movement;
+U21 sequencing: finish FH-23's numerical worker prefixes, then new-group movement;
 generated compatibility retains the existing B–E exits. U13 completes the
 private ordinary Bend/Twist creation adapter: same owned prefix, controller,
 renderer and lease as history editing, no provisional canonical operation.
@@ -156,7 +156,7 @@ placement editing remains gated until FH-23.
 The [caller audit](../docs/audits/feature_history_20261014/group_placement_migration_plan.md#post-u11-caller-audit-and-next-delivery)
 found no ordinary core caller needing a new generic scope compiler first.
 Generated compatibility remains FH-18, not silently transferred to FH-36.
-No fixed exit changed; FH-18 remains at checkpoint13 after U20. Full redraw for structural partial
+No fixed exit changed; FH-18 remains at checkpoint13 after U21. Full redraw for structural partial
 updates and full undo copying under lock remain performance debt. No per-frame
 history proof is introduced. Shared prefix admission and editor setup are reused;
 live legacy authoring cannot be pruned until qualified rollout.

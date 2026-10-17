@@ -1939,6 +1939,8 @@ SnapshotOpKind = Literal[
     "nick",
     "cluster-pose",
     "placement-poses",
+    "extension-upsert",
+    "extension-delete",
     "cluster-dissolve",
     "group-organize",
     "group-create",

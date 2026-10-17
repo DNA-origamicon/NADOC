@@ -1,0 +1,123 @@
+{
+  "checkpoint": "399b5b429c8ffaff715a22d3837eea093b47bf9f",
+  "event": "terminal-extensions-v1",
+  "engines": {
+    "nadoc.cpd-native-engine.v1": {
+      "manifest": {
+        "id": "nadoc.cpd-native-engine.v1",
+        "solver": "canonical-torsion-search-v2",
+        "placement": "native-full-o5-v1",
+        "source_policy": "ordinary-native-dna-v1",
+        "files": {
+          "backend/core/part_cpd_contract.py": "2bacfa3b2a150737fd1a53cee04bf029d5eca9e196ea3689f7b682e2e31df1ec",
+          "backend/core/part_numerical_runtime.py": "3c7996da418a1de1cf2005dc681b0787068e88bed8c3556389fe74691ef307c5",
+          "backend/core/part_numerical_schema_compatibility.py": "bac712160b03aacf799b3581940fbcefe16954c64c9ba49428742c151bc8e643",
+          "backend/core/cpd_design.py": "77591a64b0a3f79dc308d415194a2aa53ba1c164a2c9901eedda037497dd2272",
+          "backend/core/cpd_product.py": "a7b9c3b0e391a5432930c5eeed088c8351f6d51dd73929f9f8f005ac92bc516e",
+          "backend/core/atomistic.py": "cb9677d29821fd8c9b7b8326079f3d032a02c5772c19bdc45678d19ebd18c0e8",
+          "backend/core/atomistic_helpers.py": "f9cd6c5de263e0d2a8ce17671cb39f5401e501f91ebb5860be54fd6242889674",
+          "backend/core/atomistic_minimisers.py": "8fcd7ec6ec321d9554d43cd8c768a3033194a2cce649bf92edc2b8b2d228513d",
+          "backend/core/atomistic_validation.py": "ab9c8a72223a8fffc61d6423d4b1760e038875db1c8e2c025ee059ab3d255c64",
+          "backend/core/base_keys.py": "324343d10681a4007c84b7f40018d5f38aa3323e70055e97f3542413d98a351d",
+          "backend/core/constants.py": "6ba274236fc0b838442ae8ea660b46c3ac63497b65c65b9014181465455f6a8f",
+          "backend/core/geometry.py": "610d990e978c09934b49d0f5f90ee7972d48da959b387c0a2e0ba3bf892c5b04",
+          "backend/core/design_geometry.py": "8b956b048bcb30e6b49069dc58fa5cf53d4be257a6afb4ba1fe325c914b8d8c2",
+          "backend/core/deformation.py": "8a57fd96c2bf371883143ee000fc94a78cae13e092168f6fd7c6a24ec23e9671",
+          "backend/core/deformation_scope.py": "dab6578720720b13cf9e868d21cb536ff965cfed8a664d38d565633527cc28a3",
+          "backend/core/sweep_path.py": "3448a13be959d80e5a4d841c01ac392f2d1e3603c40838a3a237f97a07cc5fc6",
+          "backend/core/native_full_placement.py": "118c4547cf5915af50480c2879d045c22c4e48852d49456e08fb9ea2aa7a12a3",
+          "backend/core/native_slab_placement.py": "6bf869332a133ba445b4ddccb80534c2d6d05b25f5858ec166787581bc482a32",
+          "backend/core/measured_atomistic.py": "46668e297a2fb430ff9ec13f4ab4f9860d43d37206ac31d1537de1c2b7fe9ad9",
+          "backend/core/measured_positioning.py": "39b5e45f522b15ca023c999197d6916249f5ebfb3f9d1549285e9b0bd96acee8",
+          "backend/core/nucleotide_landmarks.py": "813e1e83cafa042bcb385cb540726107ef024ba615cc5e5c17a359ff2480c45e",
+          "backend/core/junction_topology.py": "deab0897f98ebe7a97ebae735b14489f46859207ba3576d80934fda7e076e02b",
+          "backend/core/flexible_segments.py": "2f179a15c4d937c7fbdfb4fd0e1d2b095b4a43c6c8112e10a4b15a169284a711",
+          "backend/core/aptamer.py": "173b6c39d964e0095d4594d4ce1b2b2b4737b8dd688be644cc438ece35aff394",
+          "backend/core/lattice.py": "4a081e14b6be4ffa4d2acac7dd4d752d998f35853b0c8787a8360c6e30d5bbab",
+          "backend/core/sequences.py": "347a670a73f72189f270680fadbc9617d6418431206c70b5b4cb6ac77f8e4b59",
+          "backend/core/chain_ids.py": "4b9afdcc6f6ed8c2ddbb72fcf6062c753270821fe25f69d7be19303513a87b6b",
+          "backend/core/models.py": "5f7b59a85a2486785f7b27fc3356f9711edd961dd531a981ebd98994bbfb465d",
+          "backend/core/part_group_model.py": "485206e8427ddbcec0730a22632d006a2d01cad3d39144d606fa0a12b5e826e5",
+          "backend/core/sweep_model.py": "fac47acfad53b20c725b7da6ce7b6bdef4e679c573aa9a46d0527f40f026432d",
+          "backend/core/lattice_frame_model.py": "4908555bf1dfb60dafa74c4fcdaf3333208207bd38d45437f3369706a22bd467",
+          "backend/core/dimensions.py": "f700f3dd42427272bb807ca2ab3a5de2fed5460d9187ca7f7ff4774a79fd06b6",
+          "backend/core/biotin_extensions.py": "0a006507ad3cc4a778cb30c7a6d60cb3f81beb84f2b9e569b5331f37baa46b6a",
+          "backend/core/part_history_contract.py": "5ac75a506a994ab76d2e227731168f2d3f646677e0260447962a16ffaa753bc5",
+          "backend/api/part_cpd_commands.py": "cb53fb9930b777bddf5e6bbe4303f3a08c266ae33816b98bb2d6d2c54e720f16"
+        },
+        "data": {
+          "backend/core/data/measured_atomistic_template.json": "00123ff0cb6d06fcf0f6739075f44057c9df7c936e312dd6c30123a39f15235a"
+        }
+      },
+      "implementation_sha256": "76d891863cf758bceb4a20858fc00959ca2246dc5fa624dbe97738f686733baf"
+    },
+    "nadoc.duplex-relax-native.v1": {
+      "manifest": {
+        "id": "nadoc.duplex-relax-native.v1",
+        "solver": "direct-binding-arc-midpoint-clash-v1",
+        "placement": "native-full-o5-v1",
+        "source_policy": "native-dna-direct-duplex-v1",
+        "files": {
+          "backend/core/part_duplex_relax_contract.py": "c53a4e9e54f6e2559f3d14b026dfd12448152f57ca973050fab0c0778e40d34b",
+          "backend/core/part_numerical_runtime.py": "3c7996da418a1de1cf2005dc681b0787068e88bed8c3556389fe74691ef307c5",
+          "backend/core/part_numerical_schema_compatibility.py": "bac712160b03aacf799b3581940fbcefe16954c64c9ba49428742c151bc8e643",
+          "backend/core/direct_relax.py": "28e2ff194928f0a45fe90ae7f0844904ecb4349a6e6e1a1c68a1b2a21afd0a66",
+          "backend/core/duplex_cluster.py": "1b097ec000e5ca6634df6281966adf2abb9577ac2a80216376180c5f292eec30",
+          "backend/core/linker_relax.py": "b1839c42fb759b37fc8368bcc4325192e26668d367da0e0089723c657094d0d2",
+          "backend/core/bond_relax.py": "48ddb2c2e130c3ba2ed981bf4639b94540d920a8349d1cdd21fc13bec4ecafbb",
+          "backend/core/duplex.py": "f5e39c21558da8c6f86dea7bb2340acbecc1e9846c97c2fd62e30317b8e81120",
+          "backend/core/constants.py": "6ba274236fc0b838442ae8ea660b46c3ac63497b65c65b9014181465455f6a8f",
+          "backend/core/geometry.py": "610d990e978c09934b49d0f5f90ee7972d48da959b387c0a2e0ba3bf892c5b04",
+          "backend/core/design_geometry.py": "8b956b048bcb30e6b49069dc58fa5cf53d4be257a6afb4ba1fe325c914b8d8c2",
+          "backend/core/deformation.py": "8a57fd96c2bf371883143ee000fc94a78cae13e092168f6fd7c6a24ec23e9671",
+          "backend/core/deformation_scope.py": "dab6578720720b13cf9e868d21cb536ff965cfed8a664d38d565633527cc28a3",
+          "backend/core/sweep_path.py": "3448a13be959d80e5a4d841c01ac392f2d1e3603c40838a3a237f97a07cc5fc6",
+          "backend/core/native_full_placement.py": "118c4547cf5915af50480c2879d045c22c4e48852d49456e08fb9ea2aa7a12a3",
+          "backend/core/native_slab_placement.py": "6bf869332a133ba445b4ddccb80534c2d6d05b25f5858ec166787581bc482a32",
+          "backend/core/measured_atomistic.py": "46668e297a2fb430ff9ec13f4ab4f9860d43d37206ac31d1537de1c2b7fe9ad9",
+          "backend/core/measured_positioning.py": "39b5e45f522b15ca023c999197d6916249f5ebfb3f9d1549285e9b0bd96acee8",
+          "backend/core/nucleotide_landmarks.py": "813e1e83cafa042bcb385cb540726107ef024ba615cc5e5c17a359ff2480c45e",
+          "backend/core/junction_topology.py": "deab0897f98ebe7a97ebae735b14489f46859207ba3576d80934fda7e076e02b",
+          "backend/core/flexible_segments.py": "2f179a15c4d937c7fbdfb4fd0e1d2b095b4a43c6c8112e10a4b15a169284a711",
+          "backend/core/aptamer.py": "173b6c39d964e0095d4594d4ce1b2b2b4737b8dd688be644cc438ece35aff394",
+          "backend/core/lattice.py": "4a081e14b6be4ffa4d2acac7dd4d752d998f35853b0c8787a8360c6e30d5bbab",
+          "backend/core/sequences.py": "347a670a73f72189f270680fadbc9617d6418431206c70b5b4cb6ac77f8e4b59",
+          "backend/core/models.py": "5f7b59a85a2486785f7b27fc3356f9711edd961dd531a981ebd98994bbfb465d",
+          "backend/core/part_group_model.py": "485206e8427ddbcec0730a22632d006a2d01cad3d39144d606fa0a12b5e826e5",
+          "backend/core/sweep_model.py": "fac47acfad53b20c725b7da6ce7b6bdef4e679c573aa9a46d0527f40f026432d",
+          "backend/core/lattice_frame_model.py": "4908555bf1dfb60dafa74c4fcdaf3333208207bd38d45437f3369706a22bd467",
+          "backend/core/dimensions.py": "f700f3dd42427272bb807ca2ab3a5de2fed5460d9187ca7f7ff4774a79fd06b6",
+          "backend/core/part_history_contract.py": "5ac75a506a994ab76d2e227731168f2d3f646677e0260447962a16ffaa753bc5",
+          "backend/core/cluster_autodetect.py": "55c31f8e6b69bbbde07ba595dbc427f715d291ff05d059101b266bacf4de5dc4",
+          "backend/core/feature_identity.py": "063a5eb49c09c9335775bc6f66c83a24d667b28ad721be739796f29b3a7dc730",
+          "backend/api/part_duplex_commands.py": "88bb64c5ff6bef220f912fa6a40ecb3b9165bbc5a08fc7ce60aa36cac6e42c7e"
+        },
+        "data": {
+          "backend/core/data/measured_atomistic_template.json": "00123ff0cb6d06fcf0f6739075f44057c9df7c936e312dd6c30123a39f15235a"
+        }
+      },
+      "implementation_sha256": "d1a194fc251dd4f989093df3065c3c53dfb7d73a20a4ba94685cd8b75b96a2ae"
+    },
+    "nadoc.streptavidin-native.v1": {
+      "manifest": {
+        "id": "nadoc.streptavidin-native.v1",
+        "preparation": "1stp-assembly-centering-native-v1",
+        "packing": "fibonacci-random-rotation-clash-filter-native-v1",
+        "source_policy": "pinned-complete-1stp-and-optional-coverage-v1",
+        "files": {
+          "backend/core/part_streptavidin_contract.py": "ed899b46d66370c57419a2213b9b27ee7193d6a41a28142769f1989ed18bf0e1",
+          "backend/core/part_numerical_runtime.py": "3c7996da418a1de1cf2005dc681b0787068e88bed8c3556389fe74691ef307c5",
+          "backend/core/part_numerical_schema_compatibility.py": "bac712160b03aacf799b3581940fbcefe16954c64c9ba49428742c151bc8e643",
+          "backend/core/streptavidin.py": "6a85e9f7031d964953c1f7574e5953ad5d58f24099c6da0adb8ba26a894321f7",
+          "backend/core/protein.py": "f374a12569c414752576152307951ceb592a7f8249528b89c743a7c8f9fe605d",
+          "backend/core/pdb_to_design.py": "67e61af96ffb33f1a1758d4ee884b1e9705c78523fe22be9ff540138b63468e4",
+          "backend/core/nanoparticle.py": "f12084a9c86447f82e0b3df1e2fc73497ad751505f8dd9f7ce9ae46c318dc730",
+          "backend/core/models.py": "5f7b59a85a2486785f7b27fc3356f9711edd961dd531a981ebd98994bbfb465d",
+          "backend/core/part_group_model.py": "485206e8427ddbcec0730a22632d006a2d01cad3d39144d606fa0a12b5e826e5",
+          "backend/api/part_streptavidin_commands.py": "06ddbf80614bab763391ccbce70d93a482d487c523840987ccb2b5465dc684b8"
+        }
+      },
+      "implementation_sha256": "167443106d5a5498273103b764f16c306535c687b9d4abdad37b54fcd82af52e"
+    }
+  }
+}

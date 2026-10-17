@@ -23,6 +23,221 @@ function fixture(packet = transformPacket(), options = {}) {
     callbacks: () => callbacks }
 }
 afterEach(() => { for (const owner of owners.splice(0)) owner.dispose() })
+
+// Deliberately collinear or planar fixtures: the existing native solver runs;
+// these tests exercise its adapter/ownership contract, not molecular placement.
+function constrainedPacket({ kind = 'flexible', reverse = false, compound = false, fixed = [] } = {}) {
+  const p = transformPacket(), c = p.control_state, template = p.candidate.nucleotides[0]
+  const positions = kind === 'link'
+    ? [['h', 0, [0, 0, 0]], ['link-h', 0, [2, 0, 0]], ['link-h', 1, [4, 0, 0]], ['fixed-h', 0, [6, 0, 0]]]
+    : [['h', 0, [0, 0, 0]], ['fixed-h', 0, [3, 0, 0]]]
+  p.candidate.nucleotides = positions.map(([helix_id, bp_index, backbone_position]) => ({
+    ...structuredClone(template), helix_id, bp_index, direction: 'FORWARD', copy_k: 0, backbone_position,
+  }))
+  c.strands = positions.map(([id]) => ({ id: `strand-${id}`, domains: [{ helix_id: id }] }))
+  const primary = c.cluster_transforms[0]
+  c.cluster_transforms = [primary,
+    ...(kind === 'link' ? [{ ...structuredClone(primary), id: 'link', name: 'Duplex link', helix_ids: ['link-h'], pivot: [3, 0, 0] }] : []),
+    { ...structuredClone(primary), id: 'fixed', name: 'Fixed partner', helix_ids: ['fixed-h'], pivot: [kind === 'link' ? 6 : 3, 0, 0] }]
+  const anchor = (helix_id, bp = 0) => ({ helix_id, bp, direction: 'FORWARD' })
+  if (kind === 'flexible') {
+    const a = { strand_id: 'strand-h', domain_index: 0, bp_index: 0, direction: 'FORWARD' }
+    const b = { strand_id: 'strand-fixed-h', domain_index: 0, bp_index: 0, direction: 'FORWARD' }
+    c.flexible_connections = [{ cluster_a_id: reverse ? 'fixed' : 'placement', cluster_b_id: reverse ? 'placement' : 'fixed',
+      anchor_a: reverse ? b : a, anchor_b: reverse ? a : b, contour_length_nm: 3 }]
+    c.flexible_gates.placement.gate = true
+  } else if (kind === 'taut') {
+    primary.overhang_duplex_driver_id = 'driver'
+    c.placement_constraints[0].tethers = [{ moving: anchor('h'), fixed: anchor('fixed-h'), contour_nm: 3, rigid: true }]
+  } else {
+    c.placement_constraints[0].movable_links = [{ kind: 'duplex', link_cluster_id: 'link', helix_ids: ['link-h'], domain_ids: [],
+      tethers: [{ l: anchor('link-h'), part: anchor('h'), contour_nm: 2, part_dragged: true },
+        { l: anchor('link-h', 1), part: anchor('fixed-h'), contour_nm: 2, part_dragged: false }] }]
+  }
+  if (compound) {
+    p.command_kind = 'placement-poses'
+    c.inputs = { _proof_version: 1, primary_cluster_id: 'placement', selected_cluster_ids: ['placement'],
+      poses: [{ cluster_id: primary.id, pivot: [...primary.pivot], translation: [...primary.translation], rotation: [...primary.rotation],
+        parent_cluster_id: null, overhang_duplex_driver_id: primary.overhang_duplex_driver_id }],
+      authoring: { mode: 'tethers', joint_id: null, pivot_id: kind === 'taut' ? 'dup:taut' : 'ssdna', fixed_cluster_ids: fixed },
+      primary_authored_fields: { name: 'Preserved authored primary' }, legacy_source: 'translate' }
+  }
+  p.control_context = { ...structuredClone(c), placement_upgrade: p.control_context.placement_upgrade }
+  return p
+}
+function nativeDrag(f, delta, { release = true } = {}) {
+  const tc = f.scene.children.find(node => node.controls).controls
+  tc.dispatchEvent({ type: 'dragging-changed', value: true })
+  tc.object.position.add(new THREE.Vector3(...delta))
+  tc.dispatchEvent({ type: 'change' })
+  if (release) tc.dispatchEvent({ type: 'dragging-changed', value: false })
+  return tc
+}
+function ringFixture(initial = {}) {
+  const p = transformPacket()
+  Object.assign(p.control_state.cluster_transforms[0], structuredClone(initial))
+  Object.assign(p.control_state.inputs, structuredClone(initial))
+  p.control_context.inputs = structuredClone(p.control_state.inputs)
+  p.control_state.cluster_joints = [{ id: 'joint', name: 'Offset hinge', cluster_id: 'placement',
+    axis_origin: [2, 0, 0], axis_direction: [0, 0, 1], local_axis_origin: [2, 0, 0], local_axis_direction: [0, 0, 1],
+    min_angle_deg: -20, max_angle_deg: 25 }]
+  let gizmo
+  const f = fixture(p, { createClusterGizmo: (...args) => (gizmo = initClusterGizmo(...args)) })
+  f.camera.position.set(2, 0, 40); f.camera.lookAt(2, 0, 0); f.camera.updateMatrixWorld(true)
+  f.canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 800 })
+  f.canvas.setPointerCapture = vi.fn(); f.canvas.releasePointerCapture = vi.fn()
+  f.callbacks().onPivot('joint')
+  const ring = f.scene.children.find(node => node.geometry?.type === 'TorusGeometry')
+  const r = ring.geometry.parameters.radius
+  const pointer = (type, point) => {
+    const projected = new THREE.Vector3(...point).project(f.camera)
+    f.canvas.dispatchEvent(new MouseEvent(type, { bubbles: true, button: 0,
+      clientX: (projected.x + 1) * 400, clientY: (1 - projected.y) * 400 }))
+  }
+  const start = () => pointer('pointerdown', [2 + r, 0, 0])
+  const move = (degrees = 90) => pointer('pointermove', [2 + r * Math.cos(degrees * Math.PI / 180), r * Math.sin(degrees * Math.PI / 180), 0])
+  const end = () => pointer('pointerup', [2, r, 0])
+  return { ...f, gizmo, start, move, end }
+}
+function expectJointWorldPose(actual, baseline, degrees) {
+  const axis = new THREE.Vector3(2, 0, 0)
+  for (const coordinates of [[0, 0, 0], [5, -1, 2]]) {
+    const point = new THREE.Vector3(...coordinates)
+    const expected = point.clone().sub(new THREE.Vector3(...baseline.pivot)).applyQuaternion(new THREE.Quaternion(...baseline.rotation))
+      .add(new THREE.Vector3(...baseline.pivot)).add(new THREE.Vector3(...baseline.translation))
+      .sub(axis).applyAxisAngle(new THREE.Vector3(0, 0, 1), degrees * Math.PI / 180).add(axis)
+    const result = point.clone().sub(new THREE.Vector3(...actual.pivot)).applyQuaternion(new THREE.Quaternion(...actual.rotation))
+      .add(new THREE.Vector3(...actual.pivot)).add(new THREE.Vector3(...actual.translation))
+    expect(result.distanceTo(expected)).toBeLessThan(1e-10)
+  }
+}
+
+it.each([false, true])('uses real flexible-tether projection for either native anchor side (reverse=%s)', async reverse => {
+  const f = fixture(constrainedPacket({ reverse })); f.callbacks().onPivot('ssdna')
+  nativeDrag(f, [-2, 0, 0]); await tick()
+  const result = f.onChange.mock.lastCall[0]
+  // A slack-only tether rejects stretching, without imposing a new solver tolerance.
+  expect(result.translation[0]).toBeLessThan(0)
+  expect(result.translation[0]).toBeGreaterThan(-.05)
+  expect(result.translation.slice(1)).toEqual([0, 0])
+  expect(f.packet).toEqual(f.source); expect(f.onError).not.toHaveBeenCalled()
+})
+it('preserves the native rigid duplex taut constraint when a drag would shorten its bond', async () => {
+  const f = fixture(constrainedPacket({ kind: 'taut' })); f.callbacks().onPivot('dup:taut')
+  nativeDrag(f, [1, 0, 0]); await tick()
+  const result = f.onChange.mock.lastCall[0]
+  expect(result.translation[0]).toBeGreaterThan(0)
+  expect(result.translation[0]).toBeLessThan(.05)
+  expect(f.packet).toEqual(f.source); expect(f.onError).not.toHaveBeenCalled()
+})
+it('records all real solved link poses after explicit upgrade and excludes the unmoved fixed partner', async () => {
+  let gizmo
+  const f = fixture(constrainedPacket({ kind: 'link' }), { createClusterGizmo: (...args) => (gizmo = initClusterGizmo(...args)) })
+  f.callbacks().onPivot('ssdna'); nativeDrag(f, [-2, 2, 0]); await tick()
+  const native = gizmo.getAllPendingTransforms()
+  expect(native.map(value => value.clusterId).sort()).toEqual(['link', 'placement'])
+  expect(native.find(value => value.clusterId === 'link').translation.some(value => Math.abs(value) > .01)).toBe(true)
+  expect(f.onChange).not.toHaveBeenCalled(); expect(f.onError.mock.lastCall[0].message).toMatch(/explicit/i)
+  f.callbacks().onApply(); expect(f.onApply).not.toHaveBeenCalled()
+  f.callbacks().onUpgrade(); await tick()
+  const definition = f.onChange.mock.lastCall[0].definition
+  expect(definition.poses.map(value => value.cluster_id)).toEqual(['placement', 'link'])
+  for (const value of native) expect(definition.poses.find(row => row.cluster_id === value.clusterId)).toMatchObject({
+    pivot: value.pivot, translation: value.translation, rotation: value.rotation,
+    parent_cluster_id: null, overhang_duplex_driver_id: null,
+  })
+  expect(definition.authoring).toEqual({ mode: 'tethers', pivot_id: 'ssdna', joint_id: null, fixed_cluster_ids: [] })
+  expect(f.packet).toEqual(f.source)
+})
+it('retains complete solved poses and fixed-owner provenance after a failed Apply without another draft', async () => {
+  const f = fixture(constrainedPacket({ kind: 'link', compound: true, fixed: ['fixed'] }))
+  nativeDrag(f, [-2, 2, 0]); await tick()
+  const definition = structuredClone(f.onChange.mock.lastCall[0]), calls = f.onChange.mock.calls.length
+  expect(definition.poses.map(value => value.cluster_id)).toEqual(['placement', 'link'])
+  expect(definition.authoring.fixed_cluster_ids).toEqual(['fixed'])
+  expect(definition.primary_authored_fields).toEqual({ name: 'Preserved authored primary' })
+  f.callbacks().onApply(); expect(f.onApply).toHaveBeenCalledOnce()
+  f.owner.setStatus({ busy: 'apply' }); f.owner.setStatus({ busy: null, error: new Error('Downstream input needs repair') })
+  expect(f.onChange).toHaveBeenCalledTimes(calls)
+  expect(f.onChange.mock.lastCall[0]).toEqual(definition)
+  f.callbacks().onApply(); expect(f.onApply).toHaveBeenCalledTimes(2)
+  expect(f.packet).toEqual(f.source)
+})
+it('blocks an actual solver-produced write to an explicitly fixed owner instead of dropping it', async () => {
+  const f = fixture(constrainedPacket({ kind: 'link', compound: true, fixed: ['link'] }))
+  nativeDrag(f, [-2, 2, 0]); await tick()
+  expect(f.onChange).not.toHaveBeenCalled(); expect(f.onError.mock.lastCall[0].message).toMatch(/fixed/i)
+  f.callbacks().onApply(); expect(f.onApply).not.toHaveBeenCalled()
+  expect(f.packet).toEqual(f.source)
+})
+it('drops queued native solved writes when cancellation tears down their private owner', async () => {
+  const f = fixture(constrainedPacket({ kind: 'link', compound: true }))
+  nativeDrag(f, [-2, 2, 0])
+  f.callbacks().onCancel(); f.owner.dispose(); await tick()
+  expect(f.onCancel).toHaveBeenCalledOnce(); expect(f.onChange).not.toHaveBeenCalled()
+  expect(f.scene.children).toHaveLength(0); expect(f.controls.enabled).toBe(false)
+  expect(f.packet).toEqual(f.source)
+})
+it('adopts the native final joint-ring pose after release and keeps the offset axis fixed', async () => {
+  const f = ringFixture(); f.start(); expect(f.gizmo.isDragging()).toBe(true)
+  f.move(); await tick(); f.end(); await tick()
+  const result = f.onChange.mock.lastCall[0], pending = f.gizmo.getPendingTransform('placement')
+  expect(result).toEqual({ pivot: pending.pivot, rotation: pending.rotation, translation: pending.translation })
+  const point = new THREE.Vector3(0, 0, 0), axis = new THREE.Vector3(2, 0, 0)
+  const expected = point.clone().sub(axis).applyAxisAngle(new THREE.Vector3(0, 0, 1), 25 * Math.PI / 180).add(axis)
+  const actual = point.clone().sub(new THREE.Vector3(...result.pivot)).applyQuaternion(new THREE.Quaternion(...result.rotation))
+    .add(new THREE.Vector3(...result.pivot)).add(new THREE.Vector3(...result.translation))
+  expect(actual.distanceTo(expected)).toBeLessThan(1e-10)
+  expect(f.packet).toEqual(f.source)
+})
+it('previews both native ring motions about the joint axis before pointer release without accumulating the first delta', async () => {
+  const f = ringFixture(), baseline = structuredClone(f.packet.control_state.cluster_transforms[0])
+  f.start(); f.move(10); await tick()
+  expectJointWorldPose(f.onChange.mock.lastCall[0], baseline, 10)
+  f.move(20); await tick()
+  expectJointWorldPose(f.onChange.mock.lastCall[0], baseline, 20)
+  expect(f.gizmo.isDragging()).toBe(true)
+  f.end(); await tick()
+  expectJointWorldPose(f.onChange.mock.lastCall[0], baseline, 20)
+})
+it('keeps the captured native ring baseline when an accepted intermediate projection arrives during the gesture', async () => {
+  const f = ringFixture({ pivot: [.5, 1, 0], translation: [1, 2, 0],
+    rotation: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), 5 * Math.PI / 180).toArray() })
+  const baseline = structuredClone(f.packet.control_state.cluster_transforms[0])
+  f.start(); f.move(8); await tick()
+  const accepted = structuredClone(f.packet), first = f.onChange.mock.lastCall[0]
+  Object.assign(accepted.control_state.cluster_transforms[0], structuredClone(first))
+  Object.assign(accepted.control_state.inputs, structuredClone(first))
+  f.owner.update(accepted)
+  f.move(15); await tick()
+  expectJointWorldPose(f.onChange.mock.lastCall[0], baseline, 15)
+  f.end(); await tick()
+  expectJointWorldPose(f.onChange.mock.lastCall[0], baseline, 15)
+  expect(f.packet).toEqual(f.source)
+})
+it('refuses Apply while a native ring drag is active, then adopts its finalized pose synchronously', async () => {
+  const f = ringFixture(); f.start(); f.move(); await tick()
+  f.callbacks().onApply(); expect(f.onApply).not.toHaveBeenCalled()
+  expect(f.onError.mock.lastCall[0].message).toMatch(/finish|release|drag/i)
+  f.end(); f.callbacks().onApply()
+  const pending = f.gizmo.getPendingTransform('placement')
+  expect(f.onChange.mock.lastCall[0]).toEqual({ pivot: pending.pivot, rotation: pending.rotation, translation: pending.translation })
+  expect(f.onApply).toHaveBeenCalledOnce(); await tick()
+})
+it('keeps a newer numeric pose when a released joint gesture still has queued completion work', async () => {
+  const f = ringFixture(); f.start(); f.move(); await tick(); f.end()
+  f.callbacks().onTransform([7, 8, 9], [0, 0, 10]); f.callbacks().onApply(); await tick()
+  expect(f.onChange.mock.lastCall[0].translation).toEqual([7, 8, 9])
+  expect(f.onApply).toHaveBeenCalledOnce()
+})
+it.each(['reset', 'dispose', 'locked'])('does not adopt a released ring from a retired or locked gesture (%s)', async action => {
+  const f = ringFixture(); f.start(); f.move(); await tick(); f.end()
+  f.onChange.mockClear()
+  if (action === 'reset') f.owner.reset(f.packet)
+  else if (action === 'dispose') f.owner.dispose()
+  else f.owner.setStatus({ busy: 'cancel' })
+  await tick(); expect(f.onChange).not.toHaveBeenCalled()
+})
 it('uses the real private placement gizmo for exact numeric edits and preserves metadata without mutating packet', async () => {
   const packet = transformPacket(); Object.assign(packet.control_state.inputs, { name: 'Authored name', color: '#abcdef' })
   const f = fixture(packet); expect(f.onChange).not.toHaveBeenCalled()

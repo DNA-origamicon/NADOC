@@ -1,0 +1,246 @@
+{
+  "checkpoint": "U21: bounded native producers, actual constraints and terminal history; FH-23 remains open",
+  "source_checkpoint": "399b5b42",
+  "progress": {
+    "baseline_completed": 17,
+    "baseline_total": 38,
+    "completed": 20,
+    "estimated_total": 38,
+    "remaining_core": 9,
+    "remaining_parked": 9,
+    "delta_completed": 0,
+    "delta_total": 0,
+    "engineering_checkpoints_since_baseline": 21,
+    "fh23_checkpoints": 4,
+    "fh18_checkpoints": 13,
+    "task_growth_flagged": [
+      "FH-18",
+      "FH-23"
+    ]
+  },
+  "runs": {
+    "initial_extension_recording_red": {
+      "failed": 3,
+      "passed": 2,
+      "seconds": 2.74,
+      "note": "Two actual unrecorded lifecycle failures; one incorrect duplicate-terminus refusal expectation corrected to existing valid last-item-wins semantics."
+    },
+    "initial_native_gesture_frontend_red": {
+      "failed": 2,
+      "passed": 27,
+      "seconds": 1.99,
+      "finding": "Native joint final pose and active-drag Apply were not synchronized."
+    },
+    "extension_and_constraint_prefix_initial": {
+      "failed": 4,
+      "passed": 14,
+      "seconds": 3.77,
+      "finding": "Four actual native OH-prefix cases refused; extensions4 and source cold controls passed."
+    },
+    "initial_prefix_admission_red": {
+      "failed": 19,
+      "passed": 5,
+      "seconds": 3.49,
+      "note": "One proposed stale candidate sequence negative was subsequently corrected: native finite Apply fits saved text to current live length."
+    },
+    "joint_interim_response_red": {
+      "failed": 2,
+      "passed": 29,
+      "seconds": 1.91,
+      "finding": "Independent joint-axis world pose differed before release and when preview arrived mid-gesture."
+    },
+    "joint_frontend_focused_green": {
+      "passed": 31,
+      "seconds": 1.96
+    },
+    "extension_schema_initial": {
+      "failed": 6,
+      "passed": 178,
+      "seconds": 3.86,
+      "finding": "Historical policy tests accidentally included the newly added future source generation; corrected exact historical subsets."
+    },
+    "extension_schema_fastdelete_green": {
+      "passed": 186,
+      "seconds": 4.09
+    },
+    "extension_followup_initial": {
+      "failed": 3,
+      "passed": 6,
+      "seconds": 2.91,
+      "note": "One organized admission refusal; two new-test assumptions corrected (recorder snapshot identity and required pose fields). Post-conversion upsert ultimately remains refused pending lineage qualification."
+    },
+    "native_prefix_constraints_initial_green": {
+      "passed": 157,
+      "seconds": 7.61,
+      "files": 5
+    },
+    "schema_native_workers": {
+      "passed": 3,
+      "seconds": 140.68,
+      "durations_seconds": {
+        "duplex": 12.4,
+        "coating": 12.81,
+        "cpd": 112.63
+      },
+      "scope": "Independent workers use same installed unchanged kernel and captured historical implementation pins. No historical binary or physical validity claim."
+    },
+    "added_walk_and_bridge_initial": {
+      "failed": 11,
+      "passed": 28,
+      "seconds": 10.84,
+      "finding": "Two real prospective added-domain-loop-work admission failures; nine new bridge harness failures due to missing browser location global."
+    },
+    "selector_dry_run": {
+      "decision": "FAST  (fast suite only)",
+      "suite_executed": false,
+      "full_deferred": true,
+      "reason": "Archive is unmounted; broad backend scratch cannot use system temp. Dry-run output mentions the fast suite ran, but no suite executes in dry-run.",
+      "verbatim_deferred": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending.",
+      "first_attempt": "Guard correctly refused selector invocation while native focused suite held the lock; retried after completion."
+    },
+    "frontend_full": {
+      "passed": 9103,
+      "skipped": 1,
+      "files": 760,
+      "seconds": 333.1
+    },
+    "native_prefix_and_extension_final_bridge_red": {
+      "passed": 86,
+      "failed": 4,
+      "seconds": 16.4,
+      "files": 6,
+      "finding": "All32 bounded producer cases and extension lifecycle/dependency tests passed; five real native linker/duplex gestures passed. Flexible/joint source packets failed actual renderer completeness: authored junction connection omitted. Under investigation, not claimed green."
+    },
+    "shared_backend_regression": {
+      "passed": 650,
+      "warnings": 18,
+      "seconds": 13.79,
+      "files": 17,
+      "scope": "Numerical compatibility policy, recording transactions, recipe editing, movement commands/references/host/display/HTTP, and shared deformation preview/receipt/HTTP paths."
+    },
+    "flexible_junction_renderer_red": {
+      "passed": 5,
+      "failed": 3,
+      "seconds": 0.611,
+      "finding": "Flexible junction ownership and duplicate cross-helix chord; missing companion test reached premature rigid-only check."
+    },
+    "joint_and_flexible_frontend_focused": {
+      "passed": 39,
+      "files": 2,
+      "seconds": 1.97
+    },
+    "real_native_gesture_and_packet_bridge_green": {
+      "passed": 33,
+      "seconds": 16.89,
+      "files": 2,
+      "native_gesture_cases": 9,
+      "existing_real_packet_cases": 24
+    },
+    "same_helix_flexible_chord_red": {
+      "failed": 1,
+      "filtered_out": 8,
+      "seconds": 0.545,
+      "finding": "Native same-helix rigid cone remained visible across flexible run; private display now suppresses its instance without changing native metadata/positions."
+    },
+    "final_focused_frontend": {
+      "passed": 40,
+      "files": 2,
+      "seconds": 1.94
+    },
+    "frontend_final_full": {
+      "passed": 9108,
+      "skipped": 1,
+      "files": 760,
+      "seconds": 328.45,
+      "reason_for_repeat": "Actual native bridge exposed flexible junction and duplicate chord display bugs after first full run; final run includes all fixes."
+    }
+  },
+  "schema": {
+    "new_model_literals": [
+      "extension-upsert",
+      "extension-delete"
+    ],
+    "exact_direct_edges": 23,
+    "policy_bytes": 21537,
+    "changed_manifest_paths": [
+      "backend/core/models.py"
+    ],
+    "prior_policy_byte_identical": true,
+    "numerical_sources_pins_constants_templates_goldens_changed": false
+  },
+  "limits": {
+    "native_sites": 1024,
+    "helices": 16,
+    "operations": 64,
+    "raw_saved_topology_nodes": 30000,
+    "raw_saved_topology_bytes": 2000000,
+    "extension_batch_entries": 256,
+    "extension_sequence_bases": 4096
+  },
+  "scope_limits": [
+    "No app/browser/GPU qualification: Archive absent.",
+    "Broad backend run deferred; retained U20 failures and FULL debt remain.",
+    "Fast prefix never runs CPD conversion/relaxation or duplex-relax; owned-worker Prepare/Apply integration remains.",
+    "Post-conversion extension upsert requires existing FH18 lineage/placement qualification. Prior upsert then conversion/delete is supported.",
+    "Extension rows record native inputs; dedicated history input controls and repair selectors remain in FH24/FH26. Ordinary terminal edit UI continues appending recorded edits.",
+    "Arbitrary new-group movement remains original shared FH18/FH23 exit.",
+    "Transform rollout gates remain false; assemblies and machine-specific VR remain deferred.",
+    "No solver convergence, physical validity, latency or heap guarantee follows from bounded software tests."
+  ],
+  "main_js": {
+    "lines": 7350,
+    "delta": 0
+  },
+  "cleanup": {
+    "status": "verified",
+    "paths": [
+      "/tmp/pytest-of-joshua/pytest-9",
+      "/tmp/pytest-of-joshua/pytest-10",
+      "/tmp/pytest-of-joshua/pytest-11"
+    ],
+    "removed_files": 26,
+    "removed_logical_bytes": 223850,
+    "removed_allocated_bytes": 303104,
+    "removed_directories": 803,
+    "removed_symlinks": 16,
+    "active_file_mapping_readers": 0,
+    "remaining_files_under_pytest_root": 0,
+    "native_worker_shared_memory": "Each native qualification worker asserted process/buffer teardown.",
+    "node_gestures": "Finally disposed private scene/tool and closed browser/broadcast resources; no network/broadcast or file outputs.",
+    "browser_bulk_native_disk_outputs_created": false,
+    "preserved": [
+      "user workspace/designs",
+      "managed jobs",
+      "installed runtimes",
+      "shared caches",
+      "historical provenance"
+    ],
+    "final_pytest_root_empty": true
+  },
+  "static": {
+    "changed_python_ruff": "pass",
+    "javascript_syntax_files": 4,
+    "repository_ruff_baseline_F401": 5,
+    "memory_lint_baseline_errors": 6,
+    "memory_lint_baseline_warnings": 59,
+    "memory_head_lines": 200,
+    "ledger_unique_milestones": 38,
+    "ledger_done": 20,
+    "ledger_core_remaining": 9,
+    "ledger_parked": 9,
+    "changed_python_files": 19,
+    "diff_check": "pass"
+  },
+  "backend_distinct_passing_cases": 767,
+  "backend_distinct_files": 25,
+  "legacy_pruning": {
+    "removed": "Duplicated terminal CRUD mutation/validation bodies; all five URLs/request types and response shapes retained.",
+    "callers_audited": [
+      "backend/api/main.py router mounting",
+      "backend/api/headless_build.py add_strand_extension wrapper",
+      "frontend API ordinary extension endpoints",
+      "tests/test_routes_extensions_fast_delete.py replaced weak mocks with actual recorded routes"
+    ],
+    "retained": "Used legacy native movement, scientific helpers, recovery readers and rollout gates."
+  }
+}

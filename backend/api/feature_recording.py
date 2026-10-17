@@ -42,7 +42,8 @@ def _transaction(session, state):
 def _run(session, before, fn, state, *, retry=True, command=None):
     state._require_compatibility_write("feature_recording_callback")
     from backend.api.part_connection_version_commands import metadata_policy
-    metadata_only = command is not None and metadata_policy(*command)
+    metadata_only = command is not None and (
+        metadata_policy(*command) or command[0] == "extension-delete")
     result = fn(session.design)
     report = None
     if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], Design):

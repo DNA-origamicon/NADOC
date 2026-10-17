@@ -5,6 +5,7 @@ from backend.api.part_linker_commands import KINDS as LINKER_KINDS
 from backend.api.part_crossover_moves import KINDS as MOVE_KINDS
 from backend.api.part_cell_commands import KINDS as CELL_KINDS
 from backend.api.part_annotation_commands import KINDS as ANNOTATION_KINDS
+from backend.api.part_extension_commands import KINDS as EXTENSION_KINDS
 from backend.api.part_ligation_commands import KINDS as LIGATION_KINDS
 from backend.api.part_auto_commands import KINDS as AUTO_KINDS
 from backend.core.part_overlay_commands import GROUP_CREATE_VERSION, KINDS as OVERLAY_KINDS, proof_version_supported
@@ -41,7 +42,7 @@ PROOF_SNAPSHOT_KINDS = (
     | PROTEIN_CONJUGATION_KINDS | PROTEIN_KINDS | DUPLEX_KINDS | NANOPARTICLE_KINDS
     | JOINED_PATH_KINDS | CONNECTIVITY_KINDS | SECTION_KINDS | PATH_KINDS | BRANCH_KINDS
     | PHOTOPRODUCT_KINDS | REFINEMENT_KINDS | LINKER_KINDS | ANNOTATION_KINDS | AUTO_KINDS
-    | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS
+    | EXTRUSION_COMMANDS | SEQUENCE_COMMANDS | PATTERN_COMMANDS | EXTENSION_KINDS
     | frozenset({"photoproduct-relax", "bundle-create", "sweep", "cluster-join", "strand-sequence",
                  "apply-loop-skips", "overhang-extrude", "overhang-sequence", "overhang-bulk", "cluster-paste", "cluster-dissolve", "placement-poses"})
 )
@@ -110,6 +111,9 @@ def capabilities():
 
 
 def dependencies(kind, params):
+    if kind in EXTENSION_KINDS:
+        from backend.api.part_extension_commands import dependencies as extension_dependencies
+        return extension_dependencies(kind, params)
     if kind == "placement-poses":
         from backend.api.part_placement_pose_commands import dependencies as pose_dependencies
         return pose_dependencies(params)
@@ -392,6 +396,9 @@ def _execute(kind, design, params, *, expensive):
         # Like cluster_op, complete absolute overlays perform no topology retry
         # or reconciliation. The builder validates every owner before applying.
         return build(design, params)
+    if kind == "extension-delete":
+        from backend.api.part_extension_commands import build
+        return build(kind, design, params)
     from backend.api.part_command_references import validate_command_references
     validate_command_references(kind, design, params)
     from backend.api.part_connection_version_commands import is_metadata_command
@@ -426,6 +433,9 @@ def _execute(kind, design, params, *, expensive):
             raise CommandContractError("CPD regeneration requires an explicit bounded evaluation job",
                                        code="long_job_required")
         from backend.api.part_cpd_commands import build
+        updated = build(kind, design, params)
+    elif kind in EXTENSION_KINDS:
+        from backend.api.part_extension_commands import build
         updated = build(kind, design, params)
     elif kind == "nick-batch":
         from backend.api.part_command_references import build_strict_nick_batch

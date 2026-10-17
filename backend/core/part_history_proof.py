@@ -77,6 +77,8 @@ def command_rows(design, limit):
                     raise ValueError("group_organization_requires_snapshot")
                 if kind == "placement-poses":
                     raise ValueError("placement_poses_requires_snapshot")
+                if kind in {"extension-upsert", "extension-delete"}:
+                    raise ValueError("extensions_require_snapshot")
             yield child.id, kind, params
 
 

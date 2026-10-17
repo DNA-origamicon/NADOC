@@ -2841,3 +2841,41 @@ and this issue are not declared resolved.
   controller regression was observed failing and now passes; do not infer a
   second commit from transport failure. Transform receipts require their full
   exact origin/role; legacy small-receipt enrichment keeps its prior contract.
+
+## ISSUE-129 — Private joint drag preview/final pose used incomplete callback state (2026-10-16, CORRECTED PRIVATELY)
+
+- Actual offset-axis ring tests exposed an interim translation mismatch and a
+  release-time callback that preceded the native final pending pose. An accepted
+  preview response could also replace the native gesture's starting owner pose.
+- The owned adapter composes the existing native live delta against its captured
+  baseline and adopts the native finalized pending pose after pointerup. Preview
+  redraws preserve that baseline until release. Active-drag Apply refuses;
+  reset/dispose/lock/newer numeric motion invalidates queued completion.
+- Independent world-point oracles and real native gesture-to-host tests retain
+  native joint limits, exact complete linked poses, source isolation and cleanup.
+  No molecular solver/math change. Paired rollout remains off; MV-52 app debt stays.
+
+## ISSUE-130 — Terminal extension CRUD bypassed feature-history inputs (2026-10-16, RECORDED; ORGANIZATION EXIT OPEN)
+
+- Ordinary terminal sequence/modification create/update/batch/delete changed the
+  design without executable feature inputs. New closed top-level upsert/delete
+  commands retain authored IDs, typed strand/extension failures and cold replay.
+- All supplied batch items validate before valid repeated termini coalesce;
+  omitted update fields and explicit clearing retain ordinary semantics. Delete
+  keeps its synthetic-only response and skips topology reconciliation/retry.
+- Upsert retains legacy global postprocessing, so its dependency contract is a
+  conservative barrier. Do not claim arbitrary domain owners remain unchanged.
+  Upsert authored after group conversion stays refused until existing FH-18/FH-23
+  lineage/placement qualification; prior upsert followed by conversion/delete works.
+- Legacy rootless documents are not automatically certified. New commands add no
+  public strict-policy bypass; repair UI/catalog completion remains FH-26/FH-29.
+
+## ISSUE-131 — Private movement display rejected junctions owned by flexible arcs (2026-10-16, CORRECTED PRIVATELY)
+
+- Actual empty-root three-arm flexible/joint histories exposed a completeness
+  check that counted only rigid cones/connectors. Native flexible arcs own the
+  internal forced-ligation bonds, so valid packets were refused before rendering.
+- The private adapter accounts for actual consecutive flexible-path keys and
+  reuses the ordinary display's suppression of duplicate anchor-to-anchor chords.
+  Do not weaken junction completeness, alter authored topology or replace native
+  flexible coordinates. Real source→renderer→gesture→Apply proof is the exit.

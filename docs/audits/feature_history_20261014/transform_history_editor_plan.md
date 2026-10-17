@@ -350,3 +350,54 @@ substitution or a latest-state missing-ID heuristic. The source does not describ
 NADOC's ownership/transaction internals.
 [Onshape Repairing](https://cad.onshape.com/help/Content/Document/repairing.htm)
 (retrieved October 16, 2026).
+
+## U21 native-prefix and constraint acceptance
+
+The finite producer/gesture batch remains the same FH-23 exit. This checkpoint
+adds prospective admission to the shared prefix replay, retaining1024 sites,
+16 helices,64 operations and existing coordinate-span/time limits. It charges
+sequence growth, domain/insert walks, backing-helix allocation and bounded saved
+native topology before builders allocate. Terminal sequences/modifications count
+in the existing site allowance. Accepted admission grants no replay authority;
+unchanged native builders still resolve identities and topology.
+
+| Original acceptance area | U21 boundary / remaining work |
+|---|---|
+| Ordinary native producers | OH extrusion, sequence/rotation, subdomains/bindings, finite connection versions/Apply, ordinary linkers and duplex lifecycle use bounded native prefix admission. Saved bound topology is charged before the existing parser/restorer. |
+| Terminal extensions | New top-level input commands record ordinary CRUD/batch, protect created IDs and expose typed strand/extension failures. Valid duplicate batch termini retain last-item-wins, but every item validates first. Delete remains synthetic-only and skips reconcile/retry; upsert retains that native postprocessing and a conservative dependency barrier. No fake import root is introduced for old documents. |
+| Terminal history UI — OPEN | Ordinary terminal controls append recorded edits. A dedicated earlier-row input editor and repair reference selectors remain in the existing Fine Routing/core repair milestones FH-24/FH-26; backend input regeneration alone does not qualify those controls. |
+| Actual native constraints | Empty-root source fixtures include flexible tethers, historical joints, movable duplex links, SS/compatible DS linkers and driver-child root/taut pivots. Real renderer/gizmo drafts enter owned host Apply, later features, one undo and cold proof. Constraint wiring is tested separately from physical correctness. |
+| Flexible display | Verify the actual native flexible companion before crediting its consecutive bonds; preserve missing/unrelated-junction refusals. Suppress duplicate cross-helix and same-helix rigid chords only in the private display, leaving native record poses/metadata unchanged. |
+| Joint gestures | Native capture/live composition supplies interim world poses; native pending poses supply final release. Accepted packets do not replace a gesture's baseline. Active-drag Apply refuses; retired/locked/replaced gestures cannot emit late completion. No joint solver math changes. |
+| Long numerical producers — OPEN | Native CPD conversion/relax and duplex-relax need existing owned-worker Prepare/Apply integration. Fast prefix replay cannot call expensive solvers. Current-model render/import-root fixtures do not close native-empty-root producer replay. |
+| Arbitrary organizational groups — OPEN | Retain original shared FH-18/FH-23 movement/frame/generated exits. Extension creation before conversion and delete after conversion replay; upsert after conversion remains refused pending conserved lineage and actual placement-owner qualification. Whole-helix tests cannot certify arbitrary domain ownership under legacy reconciliation. |
+| Qualification — OPEN | Existing FH-27/MV-52 app, complete HTTP/render/lock/memory acceptance and broad regression debt remain. Archive is absent; no browser/bulk scratch fallback or rollout. |
+
+Pruning replaces duplicated extension route mutations with the shared recorder
+and updates the two existing fast-delete tests to actual recorded routes and
+partial synthetic geometry assertions. The scientific/native movement helpers,
+legacy public placement path and guarded release boundaries remain in use.
+Two new model operation literals have captured prior manifests/policy and23
+exact direct compatibility edges for the three numerical engines. No pin,
+calculation, template, runtime, constant or golden is rewritten.
+
+Next numerical-prefix batch uses the existing lease host: `_prepare` already
+reserves an exact source/session/revision/policy-owned entry before family work.
+A bounded child operation can rebuild the prefix using the existing long native
+executor, thread cap, transport and supervisor; return typed prefix data plus
+exact selected definition/binding to that same lease, with cancellation on removal
+or supersession. Evaluate remains selected-command-only. Apply also needs the
+existing worker edit/rebuild executor and decoded candidate before final source
+checks/one-undo publication; fixing Prepare alone cannot close the exit. Reuse the
+existing entry catalog and worker transport rather than introduce another registry.
+Acceptance requires native-empty-root CPD and duplex numerical producers through
+actual Prepare/gesture/Apply/cold proof, plus cancellation/stale policy/session
+and unknown-engine refusal with no publication. Numerical fixtures and any needed
+scratch must obey existing source/Archive rules; no physical simulation run is
+required or authorized by this integration plan.
+Keep the existing budget distinction explicit: pure Prepare currently1s, Apply5s,
+lease TTL60s; public numerical jobs have a separate180s allowance. Worker reuse
+alone does not authorize replacing ordinary budgets with that allowance. First
+measure genuine tiny native histories; if they cannot fit, choose and research an
+explicit asynchronous interaction with a revertible checkpoint, rather than
+silently block the normal editor or weaken its timing tests.

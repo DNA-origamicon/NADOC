@@ -148,8 +148,9 @@ def _slots(design):
 
 
 def _extra_slots(design):
-    return sum(len(item.extra_bases or "") for items in (design.crossovers, design.forced_ligations)
-               for item in items)
+    return (sum(len(item.extra_bases or "") for items in (design.crossovers, design.forced_ligations)
+                for item in items)
+            + sum(len(item.sequence or "") + bool(item.modification) for item in design.extensions))
 
 
 def _extra_growth(kind, design, params):
@@ -279,7 +280,12 @@ def _work(design, check):
 
 
 def _before_command(kind, params, design):
-    if kind not in PREFIX_KINDS or "_generated_scope" in params:
+    if "_generated_scope" in params:
+        _reject(f"Private deformation preview does not yet replay prefix command {kind!r}")
+    if kind not in PREFIX_KINDS:
+        from backend.api.part_transform_prefix_admission import admit as admit_producer
+        if admit_producer(kind, design, {key: value for key, value in params.items() if key != "_generator"}):
+            return
         _reject(f"Private deformation preview does not yet replay prefix command {kind!r}")
     # Match the shared dispatcher: provenance annotation is not builder input.
     params = {key: value for key, value in params.items() if key != "_generator"}

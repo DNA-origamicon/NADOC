@@ -35,6 +35,8 @@ export function createTransformHistoryTool({ scene, camera, canvas, controls, pa
   let disposed = false, locked = false, upgraded = false, primary = null, selected = [], pivotId = 'centroid'
   let geometry = null, baselineBodies = null, groupBaseline = null, groupDelta = null, scheduled = null, motionError = null
   let status = {}, lastPose = null, residueDraft = null
+  let gestureGeneration = 0, motionGeneration = 0, completion = null, dragApplyBlocked = false
+  let jointBaseline = null, jointMotion = null
   const priorControls = controls?.enabled
   const privateStore = { getState: () => state, setState: patch => { state = { ...state, ...patch } } }
   const currentKind = () => packet?.evaluated_command_kind ?? packet?.command_kind
@@ -48,7 +50,10 @@ export function createTransformHistoryTool({ scene, camera, canvas, controls, pa
     packet = value
     geometry = value.candidate === null ? null : preview.candidateGeometry()
     const c = copy(value.control_state)
-    state = { ...state, currentDesign: { ...(geometry?.design ?? {}), ...c },
+    // Native pointerup uses the gesture's starting owner pose. Accepted preview
+    // packets may redraw the private pane meanwhile, but must not change it.
+    const design = gizmo?.isDragging() ? state.currentDesign : { ...(geometry?.design ?? {}), ...c }
+    state = { ...state, currentDesign: design,
       currentGeometry: geometry?.records ?? [], currentHelixAxes: geometry?.helixAxes ?? {} }
     if (value.evaluated_command_kind === 'placement-poses') upgraded = true
   }
@@ -146,11 +151,44 @@ export function createTransformHistoryTool({ scene, camera, canvas, controls, pa
   }
   function moved(translation, quaternion) {
     if (!editable()) return
+    motionGeneration++; completion = null; dragApplyBlocked = false
     const rotation = quaternion.toArray ? quaternion.toArray() : [...quaternion]
-    const transform = { pivot: [...gizmo.getPivot()], translation: [...translation], rotation }
+    const transform = jointMotion ?? { pivot: [...gizmo.getPivot()], translation: [...translation], rotation }
+    jointMotion = null
     if (selected.length > 1) groupDelta = transform
     else lastPose = transform
     scheduled = copy(transform); updatePanel(); queueMicrotask(flush)
+  }
+  function captureNativeBase(_helixIds, _domainIds, append = false) {
+    if (append) return
+    jointMotion = null
+    jointBaseline = selected.length === 1 && joint() && gizmo?.isDragging()
+      ? pose({ ...owner(primary), ...gizmo.getPendingTransform(primary) }) : null
+  }
+  function nativeLiveTransform(_helixIds, start, end, rotation) {
+    if (jointBaseline && joint() && gizmo?.isDragging())
+      jointMotion = composeGroupMemberTransform(jointBaseline, start.toArray(), rotation.toArray(), end.toArray())
+  }
+  function finishGesture(token) {
+    if (!token || token !== completion || token.gizmo !== gizmo || token.generation !== gestureGeneration
+      || token.motion !== motionGeneration || !editable() || gizmo.isDragging()) return
+    completion = null; dragApplyBlocked = false
+    // The native joint ring rebases its absolute pose on pointerup, after its
+    // last motion callback. Read that result; do not reproduce the joint math.
+    const final = selected.length > 1 ? groupDelta : gizmo.getPendingTransform(primary)
+    if (!final) return
+    jointBaseline = jointMotion = null
+    receive(packet)
+    if (selected.length === 1) lastPose = pose(final)
+    scheduled = copy(final); updatePanel(); flush()
+  }
+  function pointerup() {
+    if (!editable() || !gizmo?.isDragging()) return
+    const token = { gizmo, generation: gestureGeneration, motion: motionGeneration }
+    completion = token
+    // Capture runs before the gizmo's native pointerup listener; defer until
+    // that listener has queued the complete final pose and all linked owners.
+    queueMicrotask(() => finishGesture(token))
   }
   function extraInfo(target) {
     const xovers = geometry?.extraBases, arc = xovers?.arcData.find(value => value.xoId === target.crossover_id)
@@ -208,7 +246,14 @@ export function createTransformHistoryTool({ scene, camera, canvas, controls, pa
         scheduled = lastPose ?? pose(owner(primary)); flush()
       },
       onReset: () => { if (editable()) return onReset() },
-      onApply() { if (!disposed && binding) { flush(); if (!motionError) return onApply() } },
+      onApply() { if (!disposed && binding) {
+        if (gizmo?.isDragging()) {
+          dragApplyBlocked = true; error(new Error('Release the active placement drag before Apply.')); return
+        }
+        if (dragApplyBlocked && gizmo && !completion)
+          completion = { gizmo, generation: gestureGeneration, motion: motionGeneration }
+        finishGesture(completion); flush(); if (!motionError) return onApply()
+      } },
       onCancel: () => { if (!disposed && binding) return onCancel() },
     }
   }
@@ -220,7 +265,7 @@ export function createTransformHistoryTool({ scene, camera, canvas, controls, pa
       selected = original.command_kind === 'cluster_op' ? [primary] : [...inputs.selected_cluster_ids]
       pivotId = inputs.authoring?.pivot_id ?? 'centroid'
       upgraded = original.command_kind === 'placement-poses'
-      gizmo = createClusterGizmo(privateStore, controls, () => {}, null, moved, null, { displayLayer: DEFORMATION_PREVIEW_LAYER })
+      gizmo = createClusterGizmo(privateStore, controls, nativeLiveTransform, captureNativeBase, moved, null, { displayLayer: DEFORMATION_PREVIEW_LAYER })
       attachPlacements()
     } else if (!original.command_kind.endsWith('-delete')) {
       baselineBodies = copy(original.command_kind.endsWith('-batch') ? inputs.transforms : [inputs])
@@ -229,6 +274,8 @@ export function createTransformHistoryTool({ scene, camera, canvas, controls, pa
     updatePanel()
   }
   function clearGestures() {
+    gestureGeneration++; completion = null; dragApplyBlocked = false
+    jointBaseline = jointMotion = null
     scheduled = null; gizmo?.discardPendingTransforms(); gizmo?.detach(); residues?.detach(false)
     gizmo = residues = null
     if (controls) controls.enabled = priorControls
@@ -242,6 +289,8 @@ export function createTransformHistoryTool({ scene, camera, canvas, controls, pa
     status = value; locked = !!(!geometry || status.expired || status.publicationUnknown || status.refreshNeeded
       || ['apply', 'cancel', 'status', 'refresh'].includes(status.busy))
     if (locked && !wasLocked) {
+      gestureGeneration++; completion = null; dragApplyBlocked = false
+      jointBaseline = jointMotion = null
       scheduled = null; gizmo?.setConstraint('centroid', null); gizmo?.detach(); residues?.detach(false)
       if (controls) controls.enabled = priorControls
     }
@@ -260,7 +309,7 @@ export function createTransformHistoryTool({ scene, camera, canvas, controls, pa
       if (disposed || binding) throw new Error('Transform tool is already owned or disposed')
       original = copy(value)
       binding = panel.bindHistorySession(callbacks())
-      try { start(value); document.addEventListener('keydown', keydown) }
+      try { start(value); document.addEventListener('keydown', keydown); canvas.addEventListener('pointerup', pointerup, true) }
       catch (failure) { clearGestures(); binding.release(); binding = null; throw failure }
     },
     update(value) { if (!disposed && binding) {
@@ -274,7 +323,7 @@ export function createTransformHistoryTool({ scene, camera, canvas, controls, pa
     setStatus,
     dispose() {
       if (disposed) return
-      disposed = true; document.removeEventListener('keydown', keydown)
+      disposed = true; document.removeEventListener('keydown', keydown); canvas.removeEventListener('pointerup', pointerup, true)
       try { clearGestures() } finally {
         binding?.release(); binding = null
         original = packet = state = geometry = baselineBodies = groupBaseline = groupDelta = residueDraft = lastPose = null

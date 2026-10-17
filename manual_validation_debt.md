@@ -1284,3 +1284,10 @@ passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
   Complete historical-prefix and arbitrary organizational-group movement exits
   remain FH-23/FH-18; desktop qualification is the existing FH-27 exit. Both
   transform gates remain false. No assembly or machine-specific VR claim.
+  U21 adds actual native gesture/host automation but does not close this debt.
+  During a joint drag, let an intermediate preview response arrive before the
+  next movement and release; inspect the same axis/limits before and after Apply.
+  Verify terminal CRUD/batch now creates one history row per action,
+  keeps deletion fast, and reports missing source references after upstream edits.
+  Numerical-history Prepare and arbitrary new-group movement remain unfinished;
+  post-conversion extension upsert still refuses until its lineage qualifies.

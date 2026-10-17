@@ -1947,3 +1947,68 @@ files (2,432,869,457 logical bytes;322,805,760 allocated bytes),26,508 directori
 2,531 symlinks and2 test-special nodes removed after reader/dependency checks.
 Future broad pytest runs require mounted Archive temp from the start. User
 workspace, managed jobs, runtimes, shared caches and historical evidence remain.
+
+## U21 — native movement producers, constraints and terminal history
+
+Actual empty-root histories now exercise flexible tethers, historical joint
+limits, movable duplex links, compatible SS/DS linkers and child-driver root/taut
+pivots. Real native renderer/gizmo output crosses back into the owned backend
+lease: Evaluate, Apply, downstream replay, one undo, save/reload and independent
+cold proof. These tests verify adapter/authoring parity, not physical validity.
+They exposed and corrected joint interim/final pose and arriving-response baseline
+races, plus rigid-only junction completeness and duplicate flexible chords in the
+private renderer. Existing native helpers supply the poses/arcs; scientific
+coordinates, constraints, constants and molecular kernels are unchanged.
+
+Shared prefix admission now bounds ordinary OH/connection/linker/duplex producers
+before native allocation, including insertion-copy work, future spans and saved
+restoration inputs. Existing1024-site/16-helix/64-operation/span/time limits stay.
+Terminal extension CRUD/batch previously bypassed feature history; closed upsert
+and delete commands now retain authored identities, typed failures and cold replay.
+The route refactor removes duplicated mutation code. Valid repeated termini keep
+last-item-wins, every supplied item validates first, and explicit clearing retains
+its contract. Delete keeps synthetic-only geometry and skips reconciliation/retry;
+upsert retains global postprocessing and therefore a conservative dependency barrier.
+New model schema is exactly two literals, with23 exact direct compatibility edges
+and captured prior policy/manifests. Stored pins, runtime/template checks and
+numerical outputs remain unchanged in independent same-kernel worker controls.
+
+This is **FH-23 checkpoint4**, not milestone completion. **20/38 complete,
+18 remaining (9 core,9 parked);+0 completed,+0 total.** Twenty-one engineering
+checkpoints since B1 close three milestones. Both FH-23 and FH-18 remain growth
+flagged. Long numerical producer Prepare AND Apply need existing owned-worker
+integration; arbitrary new-group movement and post-conversion extension-upsert
+lineage/placement remain original shared exits. Earlier terminal history UI and
+repair selectors stay in existing FH-24/FH-26. No split earns new completed credit.
+See the [fixed ledger](remaining_standard_part_checkpoints.md#u21-containment-and-remaining-acceptance)
+and [finite next batch](transform_history_editor_plan.md#u21-native-prefix-and-constraint-acceptance).
+
+[Validation evidence](validation_transform_native_prefix_constraints.json)
+records **767 distinct focused backend cases across25 files**, including9 real
+native gesture/Apply cases,24 existing Python→native-render cases and3 numerical
+schema worker cases. Shared transactions, recipe editing, exact source ownership,
+HTTP receipts and deformation preview regressions contribute650 passing cases.
+The new prospective inserted-work controls were observed failing before the fix;
+all32 producer admission cases pass. Renderer/gesture focused coverage passes40
+cases, including missing-companion and unrelated-junction negative controls.
+The final full frontend run passes **9,108 tests with one existing skip across760
+files** (328.45s); the repeat follows the observed real-source renderer fixes.
+
+**NOT VERIFIED IN APP:** Archive is still absent. No browser/bulk scratch fallback
+was used; transform and organization rollout gates remain false. The required
+backend selector dry-run selects **FAST** and declares **FULL deferred**; it runs
+no suite. Broad FAST is also deferred here because its prior system-temp scratch
+must be moved to mounted Archive from the first byte on a future run. Retained
+U20 broad failures and FULL debt are not cleared by focused passes. Desktop,
+HTTP/render/lock/memory performance remain FH-27/MV-52; machine-specific VR stays
+deferred by the user. No observed time/heap regression claim follows from budgets.
+
+Changed Python and JavaScript checks pass; repository lint retains five existing
+F401 findings and memory lint retains six errors/59 warnings. The current memory
+head stays200 lines; the ledger independently counts38 unique milestones.
+`main.js` stays7350 lines (delta0). After reader/dependency checks, current pytest
+scratch was removed:26 policy files,223,850 logical/303,104 allocated bytes,
+803 directories and16 symlinks; the pytest output root is empty. Native workers
+asserted process/shared-memory cleanup and Node gesture harnesses closed their
+private scenes/browser resources without network, broadcast or file output.
+User designs/jobs, runtimes, shared caches and historical evidence remain intact.

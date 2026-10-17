@@ -1,55 +1,49 @@
-from types import SimpleNamespace
+"""Recorded deletes retain synthetic-only display updates and skip reconciliation."""
 
-from backend.api import routes_extensions
+import pytest
+
+from backend.api import crud, routes_extensions as routes, state
+from tests.test_part_extension_history import add, recipe
+from tests.test_part_transform_preview_sessions import document  # noqa: F401
 
 
-def _extension(ext_id: str):
-    return SimpleNamespace(id=ext_id)
-
-
-def test_batch_delete_skips_cluster_reconciliation(monkeypatch):
-    design = SimpleNamespace(extensions=[_extension("e1"), _extension("e2")])
-    calls = []
-
-    monkeypatch.setattr(routes_extensions.design_state, "get_or_404", lambda: design)
+@pytest.mark.parametrize("batch", [False, True])
+def test_recorded_delete_skips_topology_and_real_geometry(document, monkeypatch, batch):  # noqa: F811
+    source = recipe()
+    state.load_design(source)
+    identity = add(source)["extension"]["id"]
+    before = state.get_or_404().model_copy(deep=True)
+    depth = state.undo_depth()
     monkeypatch.setattr(
-        routes_extensions.design_state,
-        "mutate_with_reconcile",
-        lambda _fn: (_ for _ in ()).throw(AssertionError("cluster reconciliation must not run")),
+        state,
+        "reconcile_cluster_membership",
+        lambda *_: pytest.fail("Extension deletion reconciled topology"),
     )
-
-    def mutate_and_validate(fn):
-        calls.append("fast")
-        fn(design)
-        return design, object()
-
-    monkeypatch.setattr(routes_extensions.design_state, "mutate_and_validate", mutate_and_validate)
-    monkeypatch.setattr(routes_extensions, "_design_response_with_geometry", lambda current, _report, **_kw: {"design": current})
-
-    routes_extensions.delete_strand_extensions_batch(
-        routes_extensions.StrandExtensionBatchDeleteRequest(ext_ids=["e1"])
-    )
-
-    assert calls == ["fast"]
-    assert [ext.id for ext in design.extensions] == ["e2"]
-
-
-def test_single_delete_skips_cluster_reconciliation(monkeypatch):
-    design = SimpleNamespace(extensions=[_extension("e1")])
-    monkeypatch.setattr(routes_extensions.design_state, "get_or_404", lambda: design)
     monkeypatch.setattr(
-        routes_extensions.design_state,
-        "mutate_with_reconcile",
-        lambda _fn: (_ for _ in ()).throw(AssertionError("cluster reconciliation must not run")),
+        state,
+        "_retry_pending_ligations",
+        lambda *_: pytest.fail("Extension deletion retried ligations"),
     )
-
-    def mutate_and_validate(fn):
-        fn(design)
-        return design, object()
-
-    monkeypatch.setattr(routes_extensions.design_state, "mutate_and_validate", mutate_and_validate)
-    monkeypatch.setattr(routes_extensions, "_design_response_with_geometry", lambda current, _report, **_kw: {"design": current})
-
-    routes_extensions.delete_strand_extension("e1")
-
-    assert design.extensions == []
+    monkeypatch.setattr(
+        crud,
+        "_geometry_for_helices",
+        lambda *_a, **_k: pytest.fail("Extension deletion rebuilt real helix geometry"),
+    )
+    response = (
+        routes.delete_strand_extensions_batch(
+            routes.StrandExtensionBatchDeleteRequest(ext_ids=[identity, identity])
+        )
+        if batch
+        else routes.delete_strand_extension(identity)
+    )
+    assert response["partial_geometry"] is True
+    assert response["changed_helix_ids"] == [f"__ext_{identity}"]
+    assert response["nucleotides"] == []
+    current = state.get_or_404()
+    assert not current.extensions
+    assert (
+        current.strands == before.strands
+        and current.cluster_transforms == before.cluster_transforms
+    )
+    assert current.feature_log[-1].op_kind == "extension-delete"
+    assert state.undo_depth() == depth + 1

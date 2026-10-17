@@ -68,6 +68,8 @@ def require_native_command(kind, params):
                 return
         if kind == "deformation":
             return  # Typed named selections resolve separately from placement context.
+        if kind == "extension-delete":
+            return  # Deletion bypasses reconciliation and preserves all owners/membership.
         if kind == "cluster_op" and not set(params) - {
                 "_proof_version", "_generator", "cluster_id", "translation", "rotation", "pivot"}:
             return  # Explicit existing placement, with no organizational writes.

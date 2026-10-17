@@ -7,14 +7,15 @@ import { _resetStapleColorPins, buildStapleColorMap } from './helix_renderer/pal
 import { buildCrossoverConnections, simBeadIndex } from './crossover_connections.js'
 import { createCpdSlabBonds } from './cpd_slab_bonds.js'
 import { initPhotoproductOverlay } from './photoproduct_overlay.js'
-import { initFlexibleArcs } from './flexible_arcs.js'
+import { flexAnchorKey, initFlexibleArcs } from './flexible_arcs.js'
 import { initOverhangLinkArcs, linkerLengthToBases } from './overhang_link_arcs.js'
 import { buildNativeConnectionLines, writeNativeConnectionArc } from './native_connection_lines.js'
 import { createDeformationPreviewCamera } from './deformation_preview_camera.js'
 import { baseKey, xbKey } from './base_ref.js'
 
 const fail = message => { throw new Error(`Transform display incomplete: ${message}`) }
-const pair = (a, b) => JSON.stringify([baseKey(a), baseKey(b)].sort())
+const keyPair = (a, b) => JSON.stringify([a, b].sort())
+const pair = (a, b) => keyPair(baseKey(a), baseKey(b))
 const endNuc = (c, p) => ({ helix_id: c[`${p}_helix_id`], bp_index: c[`${p}_bp`], direction: c[`${p}_direction`] })
 const halfNuc = h => ({ helix_id: h.helix_id, bp_index: h.index, direction: h.strand })
 const junctionPair = c => c.half_a ? pair(halfNuc(c.half_a), halfNuc(c.half_b)) : pair(endNuc(c, 'three_prime'), endNuc(c, 'five_prime'))
@@ -67,9 +68,44 @@ export function buildTransformPreviewLayer(component, scene) {
     if (xovers) root.add(xovers.group)
     const extra = [...design.crossovers, ...design.forced_ligations].filter(c => c.extra_bases?.length)
     if ((xovers?.arcData.length ?? 0) !== extra.length || extra.some(c => !xovers.arcData.some(a => a.xoId === c.id && a.beadCount === c.extra_bases.length))) fail('inserted junction bases were omitted')
+    const flexibleBonds = new Set(), flexiblePairs = new Set(), flexibleKeys = new Set()
+    if (design.flexible_connections.length) {
+      const flexible = initFlexibleArcs(root, { getBackboneEntries: () => native.backboneEntries }, () => axes, { storeRef: privateStore })
+      companions.push(flexible); flexible.rebuild(design)
+      const anchorKey = flexAnchorKey(design)
+      for (const c of design.flexible_connections) {
+        const children = flexible.group.children.filter(n => n.userData.connectionId === c.id)
+        const beads = children.find(n => n.name === 'flexSegmentBeads')
+        const slabs = children.find(n => n.name === 'flexSegmentSlabs')
+        const tube = children.find(n => n.geometry?.type === 'TubeGeometry')
+        if (!tube || !beads || beads.count !== c.n_ss_bases || !slabs || slabs.count !== c.n_ss_bases) fail('flexible segment records were omitted')
+        // Credit only bonds drawn by this verified native companion. Its
+        // ordered interior keys can include an authored cross-helix junction.
+        const keys = [c.anchor_a, ...c.segment_bead_keys, c.anchor_b].map(anchorKey)
+        for (let i = 1; i < keys.length; i++) flexibleBonds.add(keyPair(keys[i - 1], keys[i]))
+        flexiblePairs.add(keyPair(keys[0], keys.at(-1)))
+        for (let i = 1; i < keys.length - 1; i++) flexibleKeys.add(keys[i])
+      }
+    }
+    // Same display ownership as unfold_view: the flexible companion replaces
+    // the rigid anchor chord and any connection touching its interior records.
+    const flexibleConnection = c => flexiblePairs.has(pair(c.fromNuc, c.toNuc))
+      || flexibleKeys.has(baseKey(c.fromNuc)) || flexibleKeys.has(baseKey(c.toNuc))
+    if (flexiblePairs.size) {
+      const matrix = new THREE.Matrix4(), hiddenScale = new THREE.Vector3(0, 0, 0)
+      for (const cone of native.coneEntries) if (flexibleConnection(cone)) {
+        // Hide only this pane's duplicate instance; preserve the native cone
+        // metadata and every nucleotide pose used by the gesture adapter.
+        cone.instMesh.getMatrixAt(cone.id, matrix)
+        cone.instMesh.setMatrixAt(cone.id, matrix.scale(hiddenScale))
+        cone.instMesh.instanceMatrix.needsUpdate = true
+      }
+    }
     const extraPairs = new Set(extra.map(junctionPair))
-    const connections = native.getCrossHelixConnections().filter(c => !extraPairs.has(pair(c.fromNuc, c.toNuc)))
-    const shown = new Set([...native.coneEntries, ...connections].map(c => pair(c.fromNuc, c.toNuc)))
+    const connections = native.getCrossHelixConnections().filter(c => !extraPairs.has(pair(c.fromNuc, c.toNuc)) && !flexibleConnection(c))
+    const shown = new Set([...flexibleBonds,
+      ...native.coneEntries.filter(c => !flexibleConnection(c)).map(c => pair(c.fromNuc, c.toNuc)),
+      ...connections.map(c => pair(c.fromNuc, c.toNuc))])
     for (const c of [...design.crossovers, ...design.forced_ligations])
       if (!c.extra_bases?.length && !shown.has(junctionPair(c))) fail('authored junction connection was omitted')
     const lines = buildNativeConnectionLines(connections, 'transformPreview')
@@ -104,15 +140,6 @@ export function buildTransformPreviewLayer(component, scene) {
       const overlay = initPhotoproductOverlay({ scene: root, THREE, store: privateStore, getBasePosition: k => positions.get(k) })
       companions.push(overlay)
       if (overlay.root.children.length !== design.photoproduct_junctions.length - converted.length) fail('formed photoproduct markers were omitted')
-    }
-    if (design.flexible_connections.length) {
-      const flexible = initFlexibleArcs(root, { getBackboneEntries: () => native.backboneEntries }, () => axes, { storeRef: privateStore })
-      companions.push(flexible); flexible.rebuild(design)
-      for (const c of design.flexible_connections) {
-        const beads = flexible.group.children.find(n => n.name === 'flexSegmentBeads' && n.userData.connectionId === c.id)
-        const slabs = flexible.group.children.find(n => n.name === 'flexSegmentSlabs' && n.userData.connectionId === c.id)
-        if (!beads || beads.count !== c.n_ss_bases || !slabs || slabs.count !== c.n_ss_bases) fail('flexible segment records were omitted')
-      }
     }
     if (design.overhang_connections.length) {
       const links = initOverhangLinkArcs(root, { storeRef: privateStore, staticLookup: true })
