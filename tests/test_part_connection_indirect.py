@@ -198,7 +198,7 @@ def test_isolated_cold_worker_and_upstream_edit(application_prefix, kind):
         worker.close()
 
 
-@pytest.mark.parametrize('bad_version', [True, False, 2.0, '2', 3, None])
+@pytest.mark.parametrize('bad_version', [True, False, 2.0, '2', 4, None])
 @pytest.mark.parametrize('combined', [False, True])
 def test_v2_contract_version_is_an_exact_supported_integer(application_prefix, bad_version, combined):
     source = _pending(application_prefix, INDIRECT[0])

@@ -571,3 +571,91 @@ remains200lines. Task pytest roots1/2/3 contained544empty directories,4symlinks,
 persistent systemd/PAM435/436 remain uninspectable. Removed only those completed
 task directories/links. Pytest root and `/dev/shm` are empty. No user designs,
 managed jobs, historical evidence or caches were removed.
+
+
+## U35 — inverse linker restoration and branch-reference audit
+
+Explicit linker Apply/Connect v3 adds exact binding/Duplex conflict IDs and shares
+the native restoration admission/recorder with direct operations. V1/v2 schemas
+and default routes retain their prior source semantics; tests explicitly retain
+their refusal of direct restoration. Unknown-version controls now use4, with
+separate required-v3-field and exact-integer controls. Typed reads include direct
+owners, while finite/indirect outputs retain their existing footprint. History
+edits preserve v3 and creator output IDs. `NATIVE_LINKER_V3_ENABLED` defaults false.
+
+Restoration validates exact ownership before teardown; the linker output namespace
+is checked against the original prefix as well as its restored candidate. Existing
+source indices are reused for linker selection. V3 skips the duplicated target/
+complement scan in restoration because `_select_inputs` performs that same check
+with bridge work admission. Both paths retain the4096base,10k-node and256k-byte
+bounds. Native algorithms/models/pins/constants/goldens are unchanged. No full
+proof is added to an ordinary Apply or viewport frame. One native materialization,
+recording/reconciliation/retry/undo remains shared; no admitted-failure legacy retry.
+
+The120-case matrix covers both direct types × three length cases × ten finite/
+indirect types × Apply/Connect. Every case compares complete raw authoring output
+and mutation report against the actual native callback, then proves the registered
+recipe with poisoned recovery and unchanged held source. Further cases cover stale
+owner selection, corrupt restoration/ligation/placement/incoming references, strict
+v3 markers/required fields, preserved edit identity, HTTP/undo/redo, publication
+failure and reapplying after direct ownership is gone.
+
+Validation: an initial compound `-k` expression was split by the just recipe and
+ran zero tests; the corrected equal-length selector produced40expected red cases.
+The complete initial implementation passed124cases/8.77s; expanded148passed/9.34s;
+reference repair controls brought this to154passed/11.46s. The19-file run passed
+**562cases/33existing FastAPI warnings/32.81s**:
+
+`just test-affected tests/test_part_connection_inverse.py tests/test_connection_inverse_recording.py tests/test_part_connection_direct_compose.py tests/test_connection_direct_connect_route.py tests/test_part_connection_direct.py tests/test_connection_direct_recording.py tests/test_connection_direct_identity.py tests/test_connection_direct_replacement.py tests/test_direct_connection_unified.py tests/test_duplex_length_preserve.py tests/test_overhang_binder_rotation.py tests/test_connection_composition_contract.py tests/test_connection_versions.py tests/test_part_connection_application_commands.py tests/test_part_connection_indirect.py tests/test_part_connection_compose.py tests/test_native_connection_application_proof.py tests/test_part_pending_connection_versions.py tests/test_connection_version_owned_apply_route.py --tb=short`
+
+After removing the duplicate qualification scan, the inverse/direct core cohort
+passed197cases/13.72s. Expanded HTTP reapplication controls passed8cases/3.34s.
+Changed Python Ruff passes; full lint retains5baseline F401 findings. `main.js`
+7350lines,delta0; no frontend change or frontend rerun.
+
+### Branch-changing upstream edits: ISSUE-141 remains open
+
+A native upstream edit from equal to unequal lengths removes the conditional
+OverhangBinding while retaining the stable Duplex identity. Exact old conflict
+lists then fail at the inverse feature with a typed missing-reference diagnostic
+on `conflict_binding_ids`. The source stays unchanged. A test explicitly corrects
+that recipe selection in an isolated two-edit candidate and verifies the repaired
+recipe in a spawned worker. This is diagnostic/repair evidence, **not a claim
+that users should edit internal IDs or that the user-facing repair flow is done**.
+
+Research rechecked October16: Onshape's [repair documentation](https://cad.onshape.com/help/Content/Document/repairing.htm)
+uses a healthy history state to show missing references and supports reviewed
+replacement/propagation. Its [qCreatedBy query](https://cad.onshape.com/FsDoc/library.html#qCreatedBy-Id-EntityType)
+selects entities by their creating feature/operation instead of a frozen current
+entity list. Our inference: native connection replacement should eventually bind
+to a stable logical creator and validate its current owned output, while preserving
+explicit failure for missing/ambiguous ownership. This research does not justify
+silently dropping missing IDs or reinterpreting saved contracts. Next: qualify a
+versioned logical-owner selector or reviewed prefix-binding repair for both direct
+branches, retaining missing-owner/tamper and original-source protections. Keep the
+current recipe unchanged as a reversible checkpoint before that contract decision.
+This is within the original upstream-edit/source-ownership/repair exit, not new scope.
+Applied metadata lifecycle, organized integration, shared-host/ISSUE-126 correctness,
+user controls and full qualification remain open as before.
+
+`just test-smart --dry-run` selected FAST after deferring the historical
+foundational FULL diff (5766files); **zero broad tests ran**. Literal notice:
+
+```text
+DEFERRED: this change would have needed the FULL suite, but no test-dedicated
+session is open, so only the fast suite ran. Parked in .nadoc-slow-pending.
+This is broad-suite debt, not a block on development. Run relevant slow tests with `just test-focused TARGET` without a session.
+Only request `just test-session` when a broad/full sweep is actually needed.
+```
+
+NOT VERIFIED IN APP: Archive remains absent; no visual/latency qualification or
+bulk artifacts. All gates remain false. Counts21/38complete,17remaining;
++0total,+0completed;35engineering checkpoints since B1. FH-25 remains growth-flagged
+after8. No milestone credit or weakened exit follows from this checkpoint.
+
+Hygiene: memory lint retains6baseline errors/59warnings; current project head
+remains200lines. Task pytest roots4/5/6 contained770empty directories,4symlinks
+and0regular files/bytes. No readable same-user cwd/fd/maps references were found;
+persistent systemd/PAM435/436 remain uninspectable. Removed only those completed
+task directories/links; pytest root and `/dev/shm` are empty. No user designs,
+managed jobs, historical evidence or caches were removed.

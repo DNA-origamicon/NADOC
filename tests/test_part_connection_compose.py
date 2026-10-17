@@ -71,7 +71,7 @@ def test_dependency_contract_creates_version_instead_of_reading_it(application_p
 
 
 @pytest.mark.parametrize('change', [
-    {'connection_composition_version': True}, {'connection_composition_version': 3},
+    {'connection_composition_version': True}, {'connection_composition_version': 4},
     {'applied': True}, {'_generated_scope': {}}, {'unregistered_input': {}},
     {'connection_type': 'root-to-root-indirect'}, {'conflict_version_ids': ['candidate']},
 ])

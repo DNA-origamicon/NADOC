@@ -256,3 +256,14 @@ CPD base-key and dictionary-key round trips with colon-bearing owner IDs;
 incomplete asset closure; independent geometry preservation; existing ordinary
 generated recipes replay without saved outputs; and cold/warm measurements with
 no new full-model scan on unscoped commands.
+
+
+### U35 ownership-selector audit
+
+Inverse finite/indirect replay is implemented privately using shared restoration
+and one recorder. ISSUE-141 exposes a remaining architectural weakness: literal
+conditional binding IDs can make a benign equal/unequal edit fail downstream.
+See [native evidence and Onshape research](ordinary_connection_completion_plan.md#branch-changing-upstream-edits-issue-141-remains-open).
+Prefer a qualified stable logical owner query or reviewed prefix rebinding over
+silently accepting missing child records. This remains unimplemented and within
+the existing FH-25/FH-26 exits; no new milestone or numerical-kernel change.

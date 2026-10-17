@@ -2,7 +2,7 @@
 
 The pure builder and private recording adapter share one admitted selection and
 the unchanged native materializer. V1 stays finite-only; V2 also admits indirect
-links and exact zero-bridge removal. Direct bindings retain their legacy callback.
+links and exact zero-bridge removal. V3 admits validated direct restoration.
 """
 
 from bisect import bisect_left, bisect_right
@@ -37,9 +37,9 @@ INDIRECT_TYPES = frozenset(get_args(_IndirectType))
 
 
 def supported_types(version):
-    if type(version) is not int or version not in {1, 2}:
+    if type(version) is not int or version not in {1, 2, 3}:
         raise ValueError("Unsupported native linker contract version")
-    return frozenset(get_args(_FiniteType)) | (INDIRECT_TYPES if version == 2 else frozenset())
+    return frozenset(get_args(_FiniteType)) | (INDIRECT_TYPES if version >= 2 else frozenset())
 
 
 _SOURCE_FIELDS = frozenset({
@@ -77,11 +77,30 @@ class ApplyRequestV2(ApplyRequest):
     connection_type: _FiniteType | _IndirectType
 
 
+
+class DirectConflicts(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    conflict_binding_ids: list[_Id] = Field(max_length=MAX_CONFLICTS)
+    conflict_duplex_ids: list[_Id] = Field(max_length=MAX_CONFLICTS)
+
+    @field_validator("conflict_binding_ids", "conflict_duplex_ids")
+    @classmethod
+    def unique_direct_conflicts(cls, value):
+        if len(set(value)) != len(value):
+            raise ValueError("Direct conflict selections must be unique")
+        return value
+
+
+class ApplyRequestV3(ApplyRequestV2, DirectConflicts):
+    connection_application_version: Annotated[StrictInt, Field(ge=3, le=3)]
+
+
 def parse_command(params):
     validate_operation_input(params)
     if type(params) is not dict:
         raise ValueError("Native connection inputs require an object")
-    model = ApplyRequestV2 if params.get("connection_application_version") == 2 else ApplyRequest
+    marker = params.get("connection_application_version")
+    model = {2: ApplyRequestV2, 3: ApplyRequestV3}.get(marker, ApplyRequest) if type(marker) is int else ApplyRequest
     return model.model_validate(params)
 
 
@@ -95,6 +114,9 @@ def dependency_contract(params, *, topology):
     reads = {topology, Resource("connection_version", command.version_id),
              Resource("overhang", command.overhang_a_id), Resource("overhang", command.overhang_b_id),
              *versions, *(Resource("overhang_connection", identity) for identity in command.conflict_connection_ids)}
+    if command.connection_application_version == 3:
+        reads.update(Resource("overhang_binding", identity) for identity in command.conflict_binding_ids)
+        reads.update(Resource("duplex", identity) for identity in command.conflict_duplex_ids)
     prefix = f"__lnk__{command.connection_id}"
     suffixes = ("a", "b") if "dsdna" in command.connection_type else ("s",)
     writes = {topology, Resource("overhang_connection", command.connection_id),
@@ -428,18 +450,24 @@ def _select_inputs(design, body, index):
     _work_admission(design, bridge_length, [target[2] for target in targets])
     connections = _conflicts(design, body, index)
     removed = _removed_ownership(design, index, connections, backings, host_owners,
-                                 allow_indirect=body.connection_application_version == 2)
+                                 allow_indirect=body.connection_application_version >= 2)
     _complement_ownership(design, index, targets, removed)
     return _Selected(version, tuple(connections), bridge_length), removed
 
 
-def _check_outputs(design, body, index, removed):
+def _output_slots(body):
     prefix = f"__lnk__{body.connection_id}"
     strands = {f"{prefix}__a", f"{prefix}__b"} if "dsdna" in body.connection_type else {f"{prefix}__s"}
     # Reserve the complete removal namespace even when an indirect output emits
     # no helix. A retained/dangling helix owner must not enter that namespace.
     outputs = {("overhang_connection", body.connection_id), ("helix", prefix),
                *(("strand", identity) for identity in strands)}
+    return outputs
+
+
+def _check_outputs(design, body, index, removed):
+    prefix = f"__lnk__{body.connection_id}"
+    outputs = _output_slots(body)
     collisions = outputs & index.keys()
     if collisions:
         _fail("Linker output identity already exists", *sorted(collisions)[0], "connection_id")
@@ -505,6 +533,9 @@ def _materialize(design, body, selected):
 
 def build(design, params):
     body = parse_command(params)
+    if body.connection_application_version == 3:
+        from backend.api.part_connection_linker_replacement import prepare
+        return _materialize(*prepare(design, body))
     return _materialize(design, body, _select(design, body))
 
 
@@ -538,6 +569,9 @@ def try_record(version_id, *, contract_version=1):
     from backend.api.feature_recording import record_feature
     from backend.api.part_source_bound_route import require_current
 
+    if type(contract_version) is int and contract_version == 3:
+        from backend.api.part_connection_direct_recording import try_record as record_native
+        return record_native(version_id, linker_version=3)
     allowed = supported_types(contract_version)
     try:
         with state._lock:

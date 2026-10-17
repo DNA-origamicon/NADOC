@@ -109,8 +109,13 @@ def _restoration_owners(design, records, index):
 
 
 def prepare(design, body):
-    from backend.api.connection_version_teardown import remove_conflicts
     from backend.api.part_connection_direct_commands import output_slots
+    restored, version, _, _ = prepare_replacement(design, body, slots=output_slots(body), slot_path='history_seed')
+    return restored, version
+
+
+def prepare_replacement(design, body, *, slots, slot_path, qualify_targets=True):
+    from backend.api.connection_version_teardown import remove_conflicts
 
     index = _index(design, body)
     version = common._resolve(index, 'connection_version', body.version_id, 'version_id')
@@ -123,19 +128,18 @@ def prepare(design, body):
         common._fail('Direct application requires two distinct endpoints', 'overhang', body.overhang_b_id, 'overhang_b_id')
     if version.connection_type != body.connection_type:
         common._fail('Selected direct version type changed', 'connection_version', version.id, 'connection_type')
-    slots = output_slots(body)
     collision = slots & index.keys()
     if collision:
-        common._fail('Direct output identity already exists', *sorted(collision)[0], 'history_seed')
+        common._fail('Direct output identity already exists', *sorted(collision)[0], slot_path)
     for record in index.values():
         incoming = referenced_resources(record) & slots
         if incoming:
-            common._fail('Direct output identity already has an incoming reference', *sorted(incoming)[0], 'history_seed')
+            common._fail('Direct output identity already has an incoming reference', *sorted(incoming)[0], slot_path)
         saved = snapshot_for(record)
         if saved is not None:
             historical = {key for key, _ in saved.definitions()} & slots
             if historical:
-                common._fail('Direct output identity collides with saved topology', *sorted(historical)[0], 'history_seed')
+                common._fail('Direct output identity collides with saved topology', *sorted(historical)[0], slot_path)
     conflicts = _conflicts(design, body, index)
     backings, hosts = _backings(design)
     # Existing exact finite/indirect ownership checks prevent prefix-based
@@ -147,10 +151,11 @@ def prepare(design, body):
     for cluster in restored.cluster_transforms:
         if cluster.overhang_duplex_driver_id in {body.overhang_a_id, body.overhang_b_id}:
             common._fail('Retained placement already owns a direct endpoint', 'cluster', cluster.id, 'version_id')
-    backings, hosts = _backings(restored)
-    targets = [common._target(restored, restored_index, backings, hosts, getattr(body, field), field)
-               for field in ('overhang_a_id', 'overhang_b_id')]
-    # Do not co-opt a retained occupant/pose when relocating the driven domain
-    # onto its partner. Existing complement checks are conservative for both ends.
-    common._complement_ownership(restored, restored_index, targets, set())
-    return restored, version
+    if qualify_targets:
+        backings, hosts = _backings(restored)
+        targets = [common._target(restored, restored_index, backings, hosts, getattr(body, field), field)
+                   for field in ('overhang_a_id', 'overhang_b_id')]
+        # Linker v3 performs this qualification together with its bridge budget
+        # in _select_inputs; do not repeat the same domain/occupant scan there.
+        common._complement_ownership(restored, restored_index, targets, set())
+    return restored, version, index, restored_index

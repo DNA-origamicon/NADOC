@@ -18,7 +18,7 @@ class ConnectRoute(SourceBoundRoute):
     def enabled(self):
         from backend.api import routes_connection_versions as routes
         return (routes.OWNED_COMBINED_CONNECTION_APPLY_ENABLED or routes.NATIVE_LINKER_V2_ENABLED
-                or routes.NATIVE_DIRECT_CONNECT_ENABLED)
+                or routes.NATIVE_DIRECT_CONNECT_ENABLED or routes.NATIVE_LINKER_V3_ENABLED)
 
     def get_route_handler(self):
         owned = super().get_route_handler()
@@ -46,5 +46,5 @@ class ApplyRoute(ConnectRoute):
     body_reader = staticmethod(lambda *args, **kwargs: _no_apply_inputs(*args, **kwargs))
 
     def enabled(self):
-        from backend.api.routes_connection_versions import NATIVE_LINKER_V2_ENABLED, NATIVE_DIRECT_APPLY_ENABLED
-        return NATIVE_LINKER_V2_ENABLED or NATIVE_DIRECT_APPLY_ENABLED
+        from backend.api import routes_connection_versions as routes
+        return routes.NATIVE_LINKER_V2_ENABLED or routes.NATIVE_DIRECT_APPLY_ENABLED or routes.NATIVE_LINKER_V3_ENABLED

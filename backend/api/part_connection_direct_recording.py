@@ -1,4 +1,4 @@
-"""Source-owned ordinary direct Apply; one native build and recording pass."""
+"""Source-owned direct and linker-v3 recording; one native build and undo."""
 
 from time import time
 from uuid import uuid4
@@ -24,12 +24,15 @@ def conflict_values(source, a_id, b_id):
         else (item.overhang_a_id, item.overhang_b_id))] for field, collection in fields}
 
 
-def try_record(version_id):
+def try_record(version_id, *, linker_version=None):
     from backend.api import state
     from backend.api.feature_recording import record_feature
     from backend.api.part_connection_direct_ownership import prepare
     from backend.api.part_source_bound_route import require_current
 
+    if linker_version is not None and (type(linker_version) is not int or linker_version != 3):
+        raise ValueError('Only linker v3 uses native restoration recording')
+    allowed = common.supported_types(3) if linker_version else {'root-to-root', 'end-to-root'}
     try:
         with state._lock:
             require_current()
@@ -40,7 +43,7 @@ def try_record(version_id):
                 raise HTTPException(404, detail='No active design.')
             try:
                 version = common._route_version(source, version_id)
-                if version.connection_type not in {'root-to-root', 'end-to-root'}:
+                if version.connection_type not in allowed:
                     return None
                 state._assert_active_loadout_editable(source)
                 if source.feature_log_cursor != -1 or source.feature_log_sub_cursor is not None:
@@ -50,8 +53,20 @@ def try_record(version_id):
                     'overhang_b_id': version.overhang_b_id, 'connection_type': version.connection_type,
                     'history_seed': str(uuid4()), 'created_at': time(),
                     **conflict_values(source, version.overhang_a_id, version.overhang_b_id)}
-                body = command.parse_command(values)
-                restored, selected = prepare(source, body)
+                if linker_version:
+                    from backend.api.part_connection_linker_replacement import prepare as prepare_linker
+                    values.pop('history_seed')
+                    values.pop('created_at')
+                    values.pop('direct_application_version')
+                    values.update(action=common.ACTION, connection_application_version=3, connection_id=str(uuid4()))
+                    body = common.parse_command(values)
+                    prepared = prepare_linker(source, body)
+                    materialize = common._materialize
+                else:
+                    body = command.parse_command(values)
+                    restored, selected = prepare(source, body)
+                    prepared = restored, body, selected
+                    materialize = command.materialize
             except CommandContractError as error:
                 if error.code == 'unsupported_connection_application_source':
                     return None
@@ -61,11 +76,11 @@ def try_record(version_id):
                 require_current()
                 if design is not source or session.design is not source:
                     raise HTTPException(409, detail='Direct application source changed before recording.')
-                result, report = command.materialize(restored, body, selected)
+                result, report = materialize(*prepared)
                 return result.copy_with(feature_log=list(design.feature_log)), report
 
             updated, report, entry = record_feature(session, 'overhang-bulk',
-                f'Apply direct version {version.name or version.id[:8]}', values, native)
+                f'Apply version {version.name or version.id[:8]}', values, native)
             return source, updated, report, entry
     except ReferenceResolutionError as error:
         raise HTTPException(404 if error.code == 'missing_reference' else 422, detail=error.as_issue()) from error
@@ -73,13 +88,18 @@ def try_record(version_id):
         raise HTTPException(422, detail=error.as_issue() if isinstance(error, CommandContractError) else str(error)) from error
 
 
-def try_record_connect(choices):
+def try_record_connect(choices, *, linker_version=None):
     from backend.api import state, part_connection_version_commands as pending
     from backend.api import part_connection_direct_composition as composition
     from backend.api.feature_recording import record_feature
     from backend.api.part_source_bound_route import require_current
 
-    if choices.get('connection_type') not in {'root-to-root', 'end-to-root'}:
+    if linker_version is not None and (type(linker_version) is not int or linker_version != 3):
+        raise ValueError('Only linker v3 uses native restoration recording')
+    if linker_version:
+        from backend.api import part_connection_composition_commands as composition
+    allowed = common.supported_types(3) if linker_version else {'root-to-root', 'end-to-root'}
+    if choices.get('connection_type') not in allowed:
         return None
     try:
         with state._lock:
@@ -108,6 +128,10 @@ def try_record_connect(choices):
                     'action': composition.ACTION, 'direct_composition_version': 1,
                     'version_id': str(uuid4()), 'history_seed': str(uuid4()), 'created_at': time(),
                     **conflict_values(source, provisional.overhang_a_id, provisional.overhang_b_id)}
+                if linker_version:
+                    values.pop('history_seed')
+                    values.pop('direct_composition_version')
+                    values.update(connection_composition_version=3, connection_id=str(uuid4()))
                 prepared = composition.prepare(source, composition.parse_command(values))
             except CommandContractError as error:
                 if error.code == 'unsupported_connection_application_source':
@@ -122,7 +146,7 @@ def try_record_connect(choices):
                 return result.copy_with(feature_log=list(design.feature_log)), report
 
             updated, report, entry = record_feature(session, 'overhang-bulk',
-                'Create and connect direct version', values, native)
+                'Create and connect version', values, native)
             return source, updated, report, entry
     except ReferenceResolutionError as error:
         raise HTTPException(404 if error.code == 'missing_reference' else 422, detail=error.as_issue()) from error

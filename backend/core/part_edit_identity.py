@@ -58,10 +58,10 @@ def preserve_proof_identity(previous, updated, *, kind=None):
             keys += ("action", "connection_version_contract")
             if action == "connection-version-create":
                 keys += ("version_id",)
-    if (kind == "overhang-bulk" and previous.get("connection_application_version") in (1, 2)
+    if (kind == "overhang-bulk" and previous.get("connection_application_version") in (1, 2, 3)
             and previous.get("action") == "connection-version-apply-linker"):
         keys += ("action", "connection_application_version", "connection_id")
-    if (kind == "overhang-bulk" and previous.get("connection_composition_version") in (1, 2)
+    if (kind == "overhang-bulk" and previous.get("connection_composition_version") in (1, 2, 3)
             and previous.get("action") == "connection-version-connect-linker"):
         keys += ("action", "connection_version_contract", "connection_composition_version",
                  "version_id", "created_at", "connection_id")

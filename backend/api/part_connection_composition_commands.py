@@ -43,11 +43,16 @@ class ConnectRequestV2(ConnectRequest):
     connection_type: application._FiniteType | application._IndirectType
 
 
+class ConnectRequestV3(ConnectRequestV2, application.DirectConflicts):
+    connection_composition_version: Annotated[StrictInt, Field(ge=3, le=3)]
+
+
 def parse_command(params):
     validate_operation_input(params)
     if type(params) is not dict:
         raise ValueError("Native connection inputs require an object")
-    model = ConnectRequestV2 if params.get('connection_composition_version') == 2 else ConnectRequest
+    marker = params.get("connection_composition_version")
+    model = {2: ConnectRequestV2, 3: ConnectRequestV3}.get(marker, ConnectRequest) if type(marker) is int else ConnectRequest
     return model.model_validate(params)
 
 
@@ -61,6 +66,9 @@ def dependency_contract(params, *, topology):
     reads = {topology, Resource('overhang', command.overhang_a_id),
              Resource('overhang', command.overhang_b_id), *versions,
              *(Resource('overhang_connection', identity) for identity in command.conflict_connection_ids)}
+    if command.connection_composition_version == 3:
+        reads.update(Resource('overhang_binding', identity) for identity in command.conflict_binding_ids)
+        reads.update(Resource('duplex', identity) for identity in command.conflict_duplex_ids)
     prefix = f'__lnk__{command.connection_id}'
     suffixes = ('a', 'b') if 'dsdna' in command.connection_type else ('s',)
     writes = {topology, Resource('connection_version', command.version_id), *versions,
@@ -80,7 +88,7 @@ def _stage(design, body):
     return pending.build(design, definition)
 
 
-def _bind(staged, body, index):
+def _bind(staged, body, index=None):
     request = application.parse_command({
         '_proof_version': 1, 'connection_application_version': body.connection_composition_version,
         'action': application.ACTION, 'version_id': body.version_id,
@@ -88,7 +96,12 @@ def _bind(staged, body, index):
         'connection_type': body.connection_type, 'connection_id': body.connection_id,
         'conflict_connection_ids': body.conflict_connection_ids,
         'conflict_version_ids': [*body.conflict_version_ids, body.version_id],
+        **({'conflict_binding_ids': body.conflict_binding_ids, 'conflict_duplex_ids': body.conflict_duplex_ids}
+           if body.connection_composition_version == 3 else {}),
     })
+    if body.connection_composition_version == 3:
+        from backend.api.part_connection_linker_replacement import prepare
+        return prepare(staged, request)
     selected, removed = application._select_inputs(staged, request, index)
     application._check_outputs(staged, request, index, removed)
     return staged, request, selected
@@ -96,7 +109,7 @@ def _bind(staged, body, index):
 
 def prepare(design, body):
     staged = _stage(design, body)
-    return _bind(staged, body, application._source_index(staged))
+    return _bind(staged, body, None if body.connection_composition_version == 3 else application._source_index(staged))
 
 
 def materialize(prepared):
@@ -119,6 +132,9 @@ def try_record(choices, *, contract_version=1):
     from backend.api.part_source_bound_route import require_current
     from backend.core.part_command_errors import CommandContractError, ReferenceResolutionError
 
+    if type(contract_version) is int and contract_version == 3:
+        from backend.api.part_connection_direct_recording import try_record_connect
+        return try_record_connect(choices, linker_version=3)
     if choices.get('connection_type') not in application.supported_types(contract_version):
         return None
     try:

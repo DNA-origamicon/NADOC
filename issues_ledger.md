@@ -3039,3 +3039,16 @@ all conflicting direct records. No new molecular placement is introduced.
 Twenty new cases cover explicit/blank sequences, direct type switching, complete
 restoration and source isolation; six-file regression157passed. Full direct
 history contracts remain FH-25 work. App/visual qualification remains unverified.
+
+
+## ISSUE-141 — Conditional direct binding IDs make downstream replacement brittle (2026-10-16, OPEN)
+
+An equal-to-unequal upstream extrusion edit changes native direct ownership from
+binding+display Duplex to a bound Duplex. Exact consumer conflict lists retain the
+conditional binding ID, so downstream replacement fails with a typed missing
+reference. Native regression proves attribution/source isolation and an explicit
+isolated recipe correction followed by independent verification. That does not
+qualify manual internal-ID editing as acceptable UX. Resolve stable logical creator
+selection or reviewed prefix rebinding before FH-25/FH-26 rollout; preserve literal
+saved contracts, strict missing/ambiguous ownership checks and native algorithms.
+Research/evidence: [U35](docs/audits/feature_history_20261014/ordinary_connection_completion_plan.md#branch-changing-upstream-edits-issue-141-remains-open).

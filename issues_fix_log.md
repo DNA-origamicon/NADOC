@@ -958,3 +958,14 @@ full regenerated history for owned edits, preserving ordinary append slimming.
   Initial fixture used non-existent direct type strings; corrected before the
   bug reproduction. No alternate molecular hypothesis or new algorithm proposed.
   Direct replay remains incomplete; desktop/visual validation remains deferred.
+
+
+### U35 — ISSUE-141 observed, not closed
+
+Native upstream length editing exposes a literal conditional binding reference
+in a downstream replacement contract. Failure is correctly attributed and the
+source is preserved; an explicit isolated recipe correction verifies in a child
+process. Root cause is freezing conditional child ownership rather than selecting
+a stable logical creator. Onshape query/repair research informs the next contract
+review; no automatic retargeting or saved-contract reinterpretation implemented.
+This remains within existing FH-25/FH-26 exits, with no milestone credit.

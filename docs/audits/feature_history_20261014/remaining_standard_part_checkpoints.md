@@ -14,8 +14,8 @@ agreed; do not invent historical estimate deltas. This is a milestone estimate,
 not a count of messages/commits or a percentage of time or user-ready features.
 Core estimates have moderate confidence; parked work has lower confidence.
 
-Keep delivery and effort visible separately: **34 engineering checkpoints have
-been delivered since B1 (U1–U34), closing four additional milestones**. Thirteen of
+Keep delivery and effort visible separately: **35 engineering checkpoints have
+been delivered since B1 (U1–U35), closing four additional milestones**. Thirteen of
 those checkpoints were spent on still-open FH-18. The 38 is an estimate of
 deliverable milestones, not a promise of 38 commits or assistant responses;
 the thirteen-checkpoint effort must not disappear behind the unchanged denominator.
@@ -65,7 +65,7 @@ starts now; historical work on an unfinished row is not claimed to be zero.
 | FH-18 | In progress · 13 checkpoints; task growth flagged | Group deletion and membership/pose closure: explicit incoming-reference handling, recorded transaction, pose preservation, undo/reload/cold replay. Owned organization transactions, named deformation preview/repair/comparison, qualified final-topology lineage including extrusion/crossover and resize/domain-shift edits and matching Fine Routing recovery are implemented; Groups/Placements UI, explicit placement Apply and ordinary owned Bend/Twist creation are integrated privately; persistent group visibility follows current identity membership and saves after queued writes; ordinary explicit-placement patterns now copy declared named groups through owned create/edit/replay; generated consumers, new-group movement and qualification stay open. |
 | FH-20 | Remaining | Qualify/enable existing bend/twist editor: desktop and latency acceptance, route/editor enabled together, obsolete mutating preview pruned. |
 | FH-23 | In progress · 9 checkpoints; task growth flagged | Move/rotate history editing: complete parameter controls, guarded commit, downstream edits and undo/persistence parity. Owned transport, native private rendering/controls and explicit complete linked-owner pose recording are integrated. Actual native tether/joint/linker gestures now cross through host Apply and cold replay; bounded ordinary producer-prefix admission is extended. Numerical Prepare/Apply now use the same private host with bounded asynchronous computation, cancellation and receipt recovery; native CPD free-motion and relaxed-duplex root/taut/joint gestures are qualified through the host, organized extension-only v2 upserts now use the bounded ordinary transaction and shared 2D/3D controls. U26 native counterexamples reject ordinary owner insertion and unconditional final-pass shortcuts; arbitrary new-group movement and its complete comparison/qualification remain open. Paired rollout gates stay false. |
-| FH-25 | In progress · 7 checkpoints; task growth flagged | Ordinary DNA connection completion: explicit supported core matrix including required combined/direct/indirect paths, recorded and qualified. [Fixed matrix and implementation order](ordinary_connection_completion_plan.md); finite/indirect Apply and compound Connect have versioned native recipes, exact zero-bridge replacement, guarded ordinary HTTP/recording, input editing and cold replay. Direct Apply/Connect are registered and privately recorded; direct-to-linker replay, applied metadata lifecycle, organized integration and qualification remain open. |
+| FH-25 | In progress · 8 checkpoints; task growth flagged | Ordinary DNA connection completion: explicit supported core matrix including required combined/direct/indirect paths, recorded and qualified. [Fixed matrix and implementation order](ordinary_connection_completion_plan.md); finite/indirect Apply and compound Connect have versioned native recipes, exact zero-bridge replacement, guarded ordinary HTTP/recording, input editing and cold replay. Direct/finite/indirect Apply+Connect and cross-family restoration have private recipes; branch-stable ownership (ISSUE-141), applied metadata lifecycle, organized integration and qualification remain open. |
 | FH-26 | Remaining | Core dependency repair: earliest failure/blocked descendants, reviewed input/reference replacement or explicit cascade, candidate review, Apply/undo/reload. |
 | FH-27 | Remaining | Integrated desktop geometry acceptance: representative full workflows, measured latency/memory and broad regression exits; relevant app debt and proven-unused legacy paths closed. Test reruns alone do not close this. |
 | FH-28 | Remaining | Qualify existing immutable host lifecycle: durable creation/recovery/publication on actual paths, cancellation and retained-state limits accepted. |
@@ -168,6 +168,21 @@ bound their matrices before implementation rather than expanding them indefinite
 
 
 | U34 · 2026-10-16 | FH-25 checkpoint 7: closed first-time direct Connect, shared strict selection/ownership, one recorded transaction, input editing and independent replay; [evidence](ordinary_connection_completion_plan.md#u34--closed-first-time-direct-connect) | None; direct-to-linker replay, applied metadata/organization and qualification remain | 21 | 38 | 8 | 9 | +0 total,+0 completed. Thirty-four engineering checkpoints close four milestones since B1. FH-25 remains growth-flagged after seven; FH-18/FH-23 remain13/9. |
+
+
+| U35 · 2026-10-16 | FH-25 checkpoint 8: explicit linker v3 inverse restoration, shared ordinary recording and complete finite/indirect matrix; branch-change diagnosis/research; [evidence](ordinary_connection_completion_plan.md#u35--inverse-linker-restoration-and-branch-reference-audit) | None; branch-stable ownership/repair, applied metadata/organization and qualification remain | 21 | 38 | 8 | 9 | +0 total,+0 completed. Thirty-five engineering checkpoints close four milestones since B1. FH-25 remains growth-flagged after eight; FH-18/FH-23 remain13/9. |
+
+### U35 inverse replacement and branch-reference audit
+
+**21/38 complete;17 remaining (8 core,9 parked);+0 completed,+0 total.**
+Linker v3 Apply/Connect restores direct owners before generating all ten finite/
+indirect types; saved v1/v2 retain their meaning. Native parity/cold replay spans
+both direct types and all three length cases. The19-file run passes562tests;
+a duplicate ownership scan was removed and197affected tests pass again, followed
+by8 HTTP reapplication controls. ISSUE-141 records conditional binding references
+that become stale after a branch-changing upstream edit. Explicit recipe repair
+verifies, but user-facing repair/safer logical owner selection remains open.
+No exit or estimate is narrowed; all rollout flags stay false.
 
 ### U34 first-time direct Connect recorded privately
 

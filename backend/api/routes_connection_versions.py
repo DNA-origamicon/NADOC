@@ -40,6 +40,7 @@ router = APIRouter()
 OWNED_FINITE_CONNECTION_APPLY_ENABLED = False
 OWNED_COMBINED_CONNECTION_APPLY_ENABLED = False
 NATIVE_LINKER_V2_ENABLED = False
+NATIVE_LINKER_V3_ENABLED = False
 NATIVE_DIRECT_APPLY_ENABLED = False
 NATIVE_DIRECT_CONNECT_ENABLED = False
 
@@ -207,9 +208,9 @@ def _apply_connection_version_impl(
         if recorded is not None:
             source, updated, report, _entry = recorded
             return _connection_apply_response(source, updated, report)
-    if (OWNED_FINITE_CONNECTION_APPLY_ENABLED or NATIVE_LINKER_V2_ENABLED) and new_version is None:
+    if (OWNED_FINITE_CONNECTION_APPLY_ENABLED or NATIVE_LINKER_V2_ENABLED or NATIVE_LINKER_V3_ENABLED) and new_version is None:
         from backend.api.part_connection_application_commands import try_record
-        recorded = try_record(version_id, contract_version=2 if NATIVE_LINKER_V2_ENABLED else 1)
+        recorded = try_record(version_id, contract_version=3 if NATIVE_LINKER_V3_ENABLED else 2 if NATIVE_LINKER_V2_ENABLED else 1)
         if recorded is not None:
             source, updated, report, _entry = recorded
             return _connection_apply_response(source, updated, report)
@@ -393,9 +394,9 @@ def create_and_apply_connection_version(body: ConnectionVersionCreateRequest) ->
         if recorded is not None:
             source, updated, report, _entry = recorded
             return _connection_apply_response(source, updated, report)
-    if OWNED_COMBINED_CONNECTION_APPLY_ENABLED or NATIVE_LINKER_V2_ENABLED:
+    if OWNED_COMBINED_CONNECTION_APPLY_ENABLED or NATIVE_LINKER_V2_ENABLED or NATIVE_LINKER_V3_ENABLED:
         from backend.api.part_connection_composition_commands import try_record
-        recorded = try_record(body.model_dump(), contract_version=2 if NATIVE_LINKER_V2_ENABLED else 1)
+        recorded = try_record(body.model_dump(), contract_version=3 if NATIVE_LINKER_V3_ENABLED else 2 if NATIVE_LINKER_V2_ENABLED else 1)
         if recorded is not None:
             source, updated, report, _entry = recorded
             return _connection_apply_response(source, updated, report)
