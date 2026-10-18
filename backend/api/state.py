@@ -25,12 +25,12 @@ Usage
 from __future__ import annotations
 
 import base64
-import datetime as _dt
 import gzip
 import threading
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable
+from uuid import uuid4
 
 from fastapi import HTTPException
 
@@ -39,7 +39,7 @@ from backend.api.doc_context import (
     current_request_feature_log_entry_id as _doc_current_request_feature_log_entry_id,
     get_current_doc,
     set_request_revision,
-    set_request_feature_log_entry_id,
+    set_request_feature_log_entry_id as set_request_feature_log_entry_id,
 )
 from backend.core.cluster_reconcile import (
     MutationReport,
@@ -50,13 +50,16 @@ from backend.core.models import (
     MinorMutationLogEntry,
     MinorOpSubtype,
     ProteinAsset,
-    RoutingClusterLogEntry,
     SnapshotLogEntry,
     SnapshotOpKind,
 )
 from backend.core.lattice import retry_pending_ligations as _retry_pending_ligations
 from backend.core.validator import ValidationReport, validate_design
-
+from backend.api.part_immutable_revision import StrictPartRevision
+from backend.api.part_immutable_storage import (
+    content_metadata as _content_metadata, is_immutable as _is_immutable,
+    mutable_design as _mutable_design,
+)
 
 def _snapshot_copy(design: Design) -> Design:
     """Independent copy of ``design`` for the undo/redo stack and pre/post-mutation
@@ -76,18 +79,13 @@ def _snapshot_copy(design: Design) -> Design:
     """
     # Frame authoring may hold intermediate references while clusters are replaced.
     # Snapshot those values without rerunning document-load validators.
+    _mutable_design(design)
     if design.lattice_frames:
         return design.model_copy(deep=True)
     return Design.model_validate(design.model_dump())
 
 
 MAX_UNDO_STEPS = 50
-
-# Retained for API/test compatibility. Feature history is intentionally no
-# longer evicted: every visible feature-log entry must remain revertable. Wire
-# responses are slimmed separately in ``backend.api.crud`` so keeping canonical
-# recovery snapshots does not put them back on the click-to-render hot path.
-MAX_SNAPSHOT_BUDGET_BYTES = 5_000_000
 
 
 def current_request_revision() -> int | None:
@@ -107,7 +105,7 @@ def current_request_feature_log_entry_id() -> str | None:
 class _DesignSession:
     """Per-document design state: the active design + its undo/redo + extras."""
 
-    design: Design | None = None
+    design: Design | StrictPartRevision | None = None
     history: deque = field(default_factory=lambda: deque(maxlen=MAX_UNDO_STEPS))
     redo: deque = field(default_factory=lambda: deque(maxlen=MAX_UNDO_STEPS))
     # Optional pre-built atomistic model from PDB import (per document).
@@ -117,10 +115,39 @@ class _DesignSession:
     revision: int = 0
     # Persistence cursors belong to the document session, not undoable content.
     workspace_heads: dict[tuple[str, str], set[str]] = field(default_factory=dict)
+    # Host lifetime only: never persisted on Design, restored from a file or
+    # included in undo. A recreated session cannot revive an old job's permit.
+    identity: str = field(default_factory=lambda: str(uuid4()))
 
 
 _lock = threading.Lock()
 _sessions: dict[str, _DesignSession] = {}
+
+
+def _require_compatibility_write(operation, *, doc_id=None):
+    """Lock-owned guard shared by facades and direct recording primitives."""
+    from backend.api.part_publication_policy import require_compatibility
+    return require_compatibility(get_current_doc() if doc_id is None else doc_id, operation)
+
+
+def configure_part_publication_policy(configuration):
+    from backend.api.part_publication_host import configure
+    return configure(configuration)
+
+
+def part_publication_policy():
+    from backend.api.part_publication_host import current_policy
+    return current_policy()
+
+
+def require_compatibility_write(operation, *, doc_id=None):
+    from backend.api.part_publication_host import require_compatibility
+    return require_compatibility(operation, doc_id=doc_id)
+
+
+def create_empty_part(name="Untitled", lattice_type="HONEYCOMB"):
+    from backend.api.part_publication_host import create_empty_part as create
+    return create(name, lattice_type)
 
 
 def _bump_revision(s: "_DesignSession") -> None:
@@ -157,6 +184,17 @@ def _session() -> _DesignSession:
     return s
 
 
+def _session_for_identity(expected_identity):
+    """A trusted capture/publication guard must not recreate a closed session."""
+    if expected_identity is None:
+        return _session()
+    session = _sessions.get(get_current_doc())
+    if session is None or session.identity != expected_identity:
+        raise HTTPException(409, detail={"code": "source_changed",
+            "detail": "The document session changed before evaluation capture or publication"})
+    return session
+
+
 # ── Document registry helpers (multi-document) ───────────────────────────────
 
 
@@ -170,7 +208,14 @@ def peek_design(doc_id: str) -> Design | None:
     """The design for a specific doc id without touching the ContextVar."""
     with _lock:
         s = _sessions.get(doc_id)
-        return s.design if s else None
+        return _mutable_design(s.design) if s else None
+
+
+def design_metadata_for_doc(doc_id: str) -> dict | None:
+    """Owned scalar metadata; never decode immutable content or expose a model."""
+    with _lock:
+        session = _sessions.get(doc_id)
+        return _content_metadata(None if session is None else session.design)
 
 
 def drop_doc(doc_id: str) -> bool:
@@ -189,6 +234,7 @@ def restore_doc_design(doc_id: str, design: Design) -> None:
     post-processed design.
     """
     with _lock:
+        _require_compatibility_write("restore_doc_design", doc_id=doc_id)
         s = _sessions.get(doc_id)
         if s is None:
             s = _DesignSession()
@@ -217,7 +263,8 @@ def copy_doc_for_persist(doc_id: str) -> tuple[Design | None, int]:
         s = _sessions.get(doc_id)
         if s is None:
             return None, 0
-        snap = _snapshot_copy(s.design) if s.design is not None else None
+        design = _mutable_design(s.design)
+        snap = _snapshot_copy(design) if design is not None else None
         return snap, s.revision
 
 
@@ -226,7 +273,7 @@ def copy_doc_for_persist(doc_id: str) -> tuple[Design | None, int]:
 
 def get_design() -> Design | None:
     with _lock:
-        return _session().design
+        return _mutable_design(_session().design)
 
 
 def get_design_with_revision() -> tuple[Design | None, int]:
@@ -238,7 +285,138 @@ def get_design_with_revision() -> tuple[Design | None, int]:
     """
     with _lock:
         s = _session()
-        return s.design, s.revision
+        return _mutable_design(s.design), s.revision
+
+
+def capture_design_for_verification(*, preserve_entry_types=False):
+    """Explicit audit only: isolate mutable state and capture its revision."""
+    with _lock:
+        s = _session()
+        if s.design is None:
+            raise HTTPException(404, detail="No active design.")
+        _mutable_design(s.design)
+        from backend.core.part_verification_capture import capture
+        return s.design, capture(s.design, preserve_entry_types=preserve_entry_types), s.revision
+
+
+def capture_design_for_evaluation(request, *, include_session_identity=False, include_admission=False,
+                                  expected_source=None, expected_session_identity=None,
+                                  expected_policy_generation=None):
+    """Explicit job capture with optional trusted host guards checked before copy.
+
+    Immutable content is retained under the lock and prepared privately, then
+    rechecked before admission. Mutable content retains its locked capture. The
+    optional identity binds that same session; trusted guards are not client input.
+    """
+    from backend.api.part_evaluation import EvaluationRequest
+    from backend.api.part_evaluation_capture import capture_for_evaluation
+    from backend.api.part_publication_policy import require_evaluation, resolve
+
+    request = request if isinstance(request, EvaluationRequest) else EvaluationRequest.model_validate(request)
+    request_digest = None
+    if include_admission:
+        from backend.core.part_history_proof import digest
+        from backend.core.part_operation_input import validate_operation_input
+        definition = request.model_dump(mode="json")
+        try:
+            validate_operation_input(definition)
+        except ValueError as error:
+            raise HTTPException(422, detail={"code": "invalid_evaluation_input", "detail": str(error)}) from error
+        request_digest = digest(definition)
+
+    with _lock:
+        if expected_policy_generation is not None and (
+                type(expected_policy_generation) is not int
+                or resolve(get_current_doc()).generation != expected_policy_generation):
+            raise HTTPException(409, detail={"code": "policy_changed",
+                "detail": "Host construction policy changed before evaluation admission"})
+        configuration = require_evaluation(get_current_doc(), request.operation)
+        s = _session_for_identity(expected_session_identity)
+        if s.design is None:
+            raise HTTPException(404, detail="No active design.")
+        if expected_source is not None and s.design is not expected_source:
+            raise HTTPException(409, detail={"code": "source_changed",
+                "detail": "The document session or source changed before evaluation capture"})
+        if _is_immutable(s.design):
+            from backend.api.part_immutable_evaluation import check_request
+
+            check_request(s.design, request, s.revision, configuration)
+            source, revision = s.design, s.revision
+            doc_id, generation = get_current_doc(), configuration.generation
+        else:
+            captured = capture_for_evaluation(s.design, request=request, revision=s.revision)
+            result = (s.design, captured, s.revision)
+            if include_admission:
+                from backend.api.part_publication_permit import admit_evaluation
+                admission = admit_evaluation(get_current_doc(), s, operation=request.operation, request_sha256=request_digest)
+                return (*result, s.identity, admission)
+            return (*result, s.identity) if include_session_identity else result
+
+    from backend.api.part_immutable_evaluation import capture_reserved
+
+    return capture_reserved(doc_id, s, source, revision, generation, request, request_digest,
+        include_session_identity=include_session_identity, include_admission=include_admission)
+
+
+def get_repair_draft():
+    """Read the bounded proposal independently of geometry and replay."""
+    from backend.api.part_repair_drafts import inspect_draft
+    return inspect_draft()
+
+
+def mutate_repair_draft(request):
+    """Publish repair metadata without a geometry snapshot or feature row."""
+    require_compatibility_write("repair_draft")
+    from backend.api.part_repair_drafts import mutate_draft
+    return mutate_draft(request)
+
+
+def evaluate_repair_draft(request):
+    """Start the existing repair job for an explicitly selected saved proposal."""
+    require_compatibility_write("repair_draft_evaluation")
+    from backend.api.part_repair_draft_evaluation import start_draft_evaluation
+    return start_draft_evaluation(request)
+
+
+def inspect_repair_draft_source(request):
+    """Read the exact old-byte receipt for a named published/proposed input."""
+    from backend.api.part_repair_source_host import inspect_source
+    return inspect_source(request)
+
+
+async def stage_repair_draft_source(request):
+    """Acquire bounded original bytes and publish one source metadata revision."""
+    require_compatibility_write("repair_source_upload")
+    from backend.api.part_repair_source_transport import upload_source
+    return await upload_source(request)
+
+
+def verification_source_matches(doc_id, source, revision, *, blocking=True, expected_session_identity=None,
+                                expected_policy_generation=None):
+    """Return None for a busy nonblocking probe; never treat it as a match."""
+    if not _lock.acquire(blocking=blocking):
+        return None
+    try:
+        session = _sessions.get(doc_id)
+        from backend.api.part_publication_policy import resolve
+        return (session is not None and session.design is source and session.revision == revision
+                and (expected_session_identity is None or session.identity == expected_session_identity)
+                and (expected_policy_generation is None or resolve(doc_id).generation == expected_policy_generation))
+    finally:
+        _lock.release()
+
+
+def evaluation_session_matches(doc_id, identity, *, blocking=True, expected_policy_generation=None):
+    """Check an old job's session even after its successful source replacement."""
+    if not _lock.acquire(blocking=blocking):
+        return None
+    try:
+        session = _sessions.get(doc_id)
+        from backend.api.part_publication_policy import resolve
+        return (type(identity) is str and bool(identity) and session is not None and session.identity == identity
+                and (expected_policy_generation is None or resolve(doc_id).generation == expected_policy_generation))
+    finally:
+        _lock.release()
 
 
 def has_design_unlocked() -> bool:
@@ -263,13 +441,15 @@ def copy_for_persist() -> tuple[Design | None, int]:
     """``(deep copy of current doc's design or None, revision)`` under the lock."""
     with _lock:
         s = _session()
-        snap = _snapshot_copy(s.design) if s.design is not None else None
+        design = _mutable_design(s.design)
+        snap = _snapshot_copy(design) if design is not None else None
         return snap, s.revision
 
 
 def copy_for_workspace_save() -> tuple[Design, int, dict[str, set[str]]]:
     """Snapshot edits and the branch heads this document has already observed."""
     with _lock:
+        _require_compatibility_write("copy_for_workspace_save")
         s = _session()
         if s.design is None:
             raise HTTPException(404, detail="No active design.")
@@ -292,6 +472,7 @@ def copy_for_workspace_save() -> tuple[Design, int, dict[str, set[str]]]:
 def acknowledge_workspace_save(before: Design, saved: Design, revision: int, *, include_snapshot: bool = True) -> Design | dict | None:
     """Advance save cursors without overwriting edits made during disk I/O."""
     with _lock:
+        _require_compatibility_write("acknowledge_workspace_save")
         s = _session()
         for loadout in saved.loadouts:
             if loadout.head_revision_id:
@@ -341,6 +522,7 @@ def workspace_heads_for_doc(doc_id: str) -> dict[str, dict[str, list[str]]]:
 
 def restore_workspace_heads(doc_id: str, heads: dict[str, dict[str, list[str]]]) -> None:
     with _lock:
+        _require_compatibility_write("restore_workspace_heads", doc_id=doc_id)
         session = _sessions.get(doc_id)
         if session is not None:
             session.workspace_heads = {
@@ -377,10 +559,12 @@ def _assert_active_loadout_editable(
 
 def load_design(d: Design | None) -> None:
     """Establish a file/new-design baseline, or clear it, without an undo entry."""
+    require_compatibility_write("load_design")
     if d is not None and any(p.biotin_dna for p in d.nanoparticles):
         from backend.core.biotin_atomistic import prepare_biotin_display
         prepare_biotin_display(d)
     with _lock:
+        _require_compatibility_write("load_design")
         s = _session()
         s.history.clear()
         s.redo.clear()
@@ -390,23 +574,38 @@ def load_design(d: Design | None) -> None:
         _bump_revision(s)
 
 
-def set_design(d: Design, *, expected_revision: int | None = None) -> None:
+def set_design(d: Design | StrictPartRevision, *, expected_revision: int | None = None,
+               expected_source: Design | StrictPartRevision | None = None,
+               expected_session_identity: str | None = None, expected_policy_generation=None,
+               publication_permit=None) -> int:
     with _lock:
-        s = _session()
+        if publication_permit is None:
+            _require_compatibility_write("set_design")
+        if expected_policy_generation is not None:
+            from backend.api.part_publication_policy import resolve
+            if resolve(get_current_doc()).generation != expected_policy_generation:
+                raise HTTPException(409, detail={"code": "policy_changed", "detail": "Construction policy changed; evaluate again"})
+        if publication_permit is not None and expected_session_identity is None:
+            s = _sessions.get(get_current_doc())
+            if s is None:
+                raise HTTPException(409, detail={"code": "source_changed", "detail": "The publication session was closed"})
+        else:
+            s = _session_for_identity(expected_session_identity)
         if expected_revision is not None and s.revision != expected_revision:
             raise HTTPException(409, detail="Design changed while the feature operations were being prepared. Try again.")
-        _assert_active_loadout_editable(s.design, d)
-        _assert_photoproduct_dependencies(d)
-        if s.design is not None:
-            s.history.append(_snapshot_copy(s.design))
-        s.redo.clear()
-        s.design = d
-        _bump_revision(s)
+        if expected_source is not None and s.design is not expected_source:
+            raise HTTPException(409, detail="Design changed while the feature operations were being prepared. Try again.")
+        if not (_is_immutable(s.design) or _is_immutable(d)):
+            _assert_active_loadout_editable(s.design, d)
+            _assert_photoproduct_dependencies(d)
+        from backend.api.part_replacement_transaction import publish_replacement
+        return publish_replacement(s, d, publication_permit=publication_permit)
 
 
 def set_design_branch(d: Design, *, expected_revision: int | None = None) -> None:
     """Navigate to a branch without undoing back into a different branch."""
     with _lock:
+        _require_compatibility_write("set_design_branch")
         s = _session()
         if expected_revision is not None and s.revision != expected_revision:
             raise HTTPException(409, detail="Design changed during generation. Recalculate before generating.")
@@ -425,7 +624,7 @@ def get_or_404() -> Design:
         s = _session()
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
-        return s.design
+        return _mutable_design(s.design)
 
 
 def undo_depth() -> int:
@@ -467,6 +666,7 @@ def mutate_and_validate(
     Returns (design, report).  Raises HTTP 404 if no active design.
     """
     with _lock:
+        _require_compatibility_write("mutate_and_validate")
         s = _session()
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
@@ -496,6 +696,7 @@ def mutate_display_metadata(fn: Callable[[Design], None]) -> tuple[Design, int]:
     after this mutation and erase the metadata in the browser.
     """
     with _lock:
+        _require_compatibility_write("mutate_display_metadata")
         s = _session()
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
@@ -527,6 +728,7 @@ def mutate_with_reconcile(
     importers).  Those keep :func:`mutate_and_validate`.
     """
     with _lock:
+        _require_compatibility_write("mutate_with_reconcile")
         s = _session()
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
@@ -563,6 +765,7 @@ def replace_with_reconcile(
     Same cluster-reconciler semantics as :func:`mutate_with_reconcile`.
     """
     with _lock:
+        _require_compatibility_write("replace_with_reconcile")
         s = _session()
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
@@ -590,7 +793,8 @@ def encode_design_snapshot(design: Design) -> tuple[str, int]:
 
     The design's own ``feature_log`` and ``feature_log_cursor`` are stripped
     before encoding to prevent recursive nesting (a snapshot must never embed
-    other snapshots).
+    other snapshots). Repair proposals belong to the live branch and are
+    excluded before serialization, so recovery cannot resurrect old proposals.
 
     Returns ``(payload_b64, uncompressed_byte_length)``.
     """
@@ -603,7 +807,7 @@ def encode_design_snapshot(design: Design) -> tuple[str, int]:
             "active_loadout_id": None,
         }
     )
-    raw = stripped.model_dump_json().encode("utf-8")
+    raw = stripped.model_dump_json(exclude={"repair_draft"}).encode("utf-8")
     # Interactive edits write both pre- and post-state snapshots. Level 3 keeps
     # nearly all of gzip's size reduction while taking roughly one third of the
     # CPU time of level 6 on Voltron-scale designs; eviction is governed by the
@@ -620,42 +824,6 @@ def decode_design_snapshot(payload_b64: str) -> Design:
     return Design.model_validate_json(raw)
 
 
-def _payload_total_bytes(entry: SnapshotLogEntry | RoutingClusterLogEntry) -> int:
-    """Combined compressed payload size (pre + post, plus per-child diffs for a
-    cluster) for a payload-bearing entry."""
-    if isinstance(entry, SnapshotLogEntry):
-        return len(entry.design_snapshot_gz_b64) + len(entry.post_state_gz_b64)
-    # RoutingClusterLogEntry — pre/post plus the per-child diff payloads.
-    total = len(entry.pre_state_gz_b64) + len(entry.post_state_gz_b64)
-    if not entry.diffs_evicted:
-        for c in entry.children:
-            total += (
-                len(c.diff_added_b64)
-                + len(c.diff_removed_b64)
-                + len(c.diff_modified_b64)
-            )
-    return total
-
-
-def _clear_payload(entry: SnapshotLogEntry | RoutingClusterLogEntry) -> None:
-    """Drop both pre+post bytes from a snapshot OR cluster entry; flip evicted=True.
-    For a cluster, also drop the per-child diff payloads (diffs_evicted=True) —
-    once pre/post are gone the cluster is non-revertable anyway, so its diffs
-    are useless. Entry + (cluster) children remain visible historically."""
-    if isinstance(entry, SnapshotLogEntry):
-        entry.design_snapshot_gz_b64 = ""
-        entry.post_state_gz_b64 = ""
-    else:
-        entry.pre_state_gz_b64 = ""
-        entry.post_state_gz_b64 = ""
-        for c in entry.children:
-            c.diff_added_b64 = ""
-            c.diff_removed_b64 = ""
-            c.diff_modified_b64 = ""
-        entry.diffs_evicted = True
-    entry.evicted = True
-
-
 def _evict_oldest_payloads_if_over_budget(design: Design) -> None:
     """Compatibility no-op: canonical feature snapshots are never discarded.
 
@@ -668,10 +836,6 @@ def _evict_oldest_payloads_if_over_budget(design: Design) -> None:
     return None
 
 
-# Backward-compat alias; old call site name. Prefer the new name in new code.
-_evict_oldest_snapshots_if_over_budget = _evict_oldest_payloads_if_over_budget
-
-
 def mutate_with_feature_log(
     op_kind: SnapshotOpKind,
     label: str,
@@ -679,6 +843,7 @@ def mutate_with_feature_log(
     fn: Callable[[Design], Design | MutationReport | None],
     *,
     expected_revision: int | None = None,
+    initial_design: Design | None = None,
 ) -> tuple[Design, ValidationReport, SnapshotLogEntry]:
     """Capture a pre-state snapshot, apply ``fn``, append a SnapshotLogEntry,
     reconcile cluster membership, validate, and push undo.
@@ -698,121 +863,40 @@ def mutate_with_feature_log(
     merges its cached copies before persistence.
 
     Returns ``(design, validation_report, snapshot_entry)``.  Raises HTTP 404
-    if no active design.
+    if no active design and no explicit ``initial_design`` was supplied. The
+    optional initial document is used only for an empty session, under the same
+    lock and transaction as its first feature. Failure restores the empty
+    session; success keeps the initial empty model as the undo target. An active
+    document is never replaced by this option.
 
     Use this for the eight major auto-op routes (auto-scaffold variants,
     auto-break, auto-merge, auto-crossover, create-near/far-ends) and bulk
     overhang manager operations.
     """
+    from backend.api.feature_recording import record_feature
+
     with _lock:
+        _require_compatibility_write("mutate_with_feature_log")
         s = _session()
-        if s.design is None:
+        if s.design is None and initial_design is None:
             raise HTTPException(status_code=404, detail="No active design.")
         if expected_revision is not None and s.revision != expected_revision:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "message": "Design changed while this operation was being prepared.",
-                    "expected_revision": expected_revision,
-                    "current_revision": s.revision,
-                },
-            )
-        _assert_active_loadout_editable(s.design)
-        before = _snapshot_copy(s.design)
-        history_before = deque(s.history, maxlen=s.history.maxlen)
-        redo_before = deque(s.redo, maxlen=s.redo.maxlen)
-        s.history.append(before)
-        s.redo.clear()
-
-        payload_b64, uncompressed_size = encode_design_snapshot(before)
+            raise HTTPException(409, detail={
+                "message": "Design changed while this operation was being prepared.",
+                "expected_revision": expected_revision, "current_revision": s.revision,
+            })
+        initialized = s.design is None
+        if initialized:
+            s.design = initial_design
         try:
-            result = fn(s.design)
-        except Exception:
-            # A callback may mutate in place before discovering an invalid or
-            # duplicate operation. Restore all transaction-owned state so a
-            # rejected request changes neither the design nor undo/redo.
-            s.design = before
-            s.history.clear()
-            s.history.extend(history_before)
-            s.redo.extend(redo_before)
+            _assert_active_loadout_editable(s.design)
+            return record_feature(s, op_kind, label, params, fn)
+        except BaseException:
+            if initialized:
+                # record_feature restores its undo/revision/request state;
+                # the outer creation boundary additionally restores no model.
+                s.design = None
             raise
-        # Three return shapes supported:
-        #   - Design                      : pure-functional, no custom report.
-        #   - (Design, MutationReport)    : pure-functional + custom reconcile hint.
-        #   - MutationReport / None       : in-place mutation; report optional.
-        if (
-            isinstance(result, tuple)
-            and len(result) == 2
-            and isinstance(result[0], Design)
-        ):
-            s.design = result[0]
-            report = result[1] if isinstance(result[1], MutationReport) else None
-        elif isinstance(result, Design):
-            s.design = result
-            report: MutationReport | None = None
-        else:
-            report = result if isinstance(result, MutationReport) else None
-
-        reconciled = reconcile_cluster_membership(before, s.design, report)
-        if op_kind in ("auto-break", "full-autostaple", "cluster-join"):
-            # Autobreak / full-autostaple deliberately leave crossovers unligated
-            # so staples stay at or below the length cap.  Retrying pre-existing
-            # unligated crossovers here would re-ligate across those breaks,
-            # busting the 56-nt cap and undoing the routed topology. Join also
-            # preserves existing fine-routing nicks outside its explicit splice.
-            s.design = reconciled
-        else:
-            s.design = _retry_pending_ligations(before, reconciled)
-
-        # A canonical product endpoint may not silently become stale or non-T.
-        # Reject the enclosing edit inside this same undo transaction; the user
-        # can remove the lesion explicitly and retry. Legacy scadnano-only IDs
-        # remain losslessly stored and are handled by the simulation gate.
-        from backend.core.photoproducts import stale_photoproduct_ids
-
-        stale_cpd_ids = stale_photoproduct_ids(s.design)
-        if stale_cpd_ids:
-            s.design = before
-            s.history.clear()
-            s.history.extend(history_before)
-            s.redo.clear()
-            s.redo.extend(redo_before)
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "photoproduct_dependency",
-                    "message": "This edit would delete or change a formed TT-CPD endpoint. Remove the photoproduct first, then retry.",
-                    "photoproduct_ids": stale_cpd_ids,
-                },
-            )
-
-        # Capture POST-state AFTER reconcile + retry so back-and-forth seeking
-        # can restore the live topology even after the slider has been scrubbed
-        # back through this entry.
-        post_b64, post_size = encode_design_snapshot(s.design)
-
-        snap_entry = SnapshotLogEntry(
-            op_kind=op_kind,
-            label=label,
-            timestamp=_dt.datetime.now(_dt.timezone.utc).isoformat(),
-            params=params,
-            design_snapshot_gz_b64=payload_b64,
-            snapshot_size_bytes=uncompressed_size,
-            post_state_gz_b64=post_b64,
-            post_state_size_bytes=post_size,
-        )
-        s.design.feature_log.append(snap_entry)
-        _evict_oldest_payloads_if_over_budget(s.design)
-
-        validation = validate_design(s.design)
-        _bump_revision(s)
-        # So _design_response's default blob-stripping preserves THIS entry's
-        # body even when the calling route forgets to pass
-        # preserve_feature_log_id explicitly — the client has never seen this
-        # id before, so its cache-merge can't backfill a missing body the way
-        # it can for an existing (already-cached) entry.
-        set_request_feature_log_entry_id(snap_entry.id)
-        return s.design, validation, snap_entry
 
 
 def mutate_with_minor_log(
@@ -844,111 +928,15 @@ def mutate_with_minor_log(
 
     Returns ``(design, validation_report, minor_entry)``.
     """
+    from backend.api.feature_recording import record_minor
+
     with _lock:
+        _require_compatibility_write("mutate_with_minor_log")
         s = _session()
         if s.design is None:
             raise HTTPException(status_code=404, detail="No active design.")
         _assert_active_loadout_editable(s.design)
-        before = _snapshot_copy(s.design)
-        redo_before = deque(s.redo, maxlen=s.redo.maxlen)
-        s.history.append(before)
-        s.redo.clear()
-
-        # Detect open cluster: last entry must be a non-evicted RoutingClusterLogEntry.
-        last_entry = s.design.feature_log[-1] if s.design.feature_log else None
-        is_append = (
-            isinstance(last_entry, RoutingClusterLogEntry)
-            and not last_entry.evicted
-            and last_entry.pre_state_gz_b64 != ""
-        )
-
-        # Capture pre-state ONLY for new clusters; append mode reuses the
-        # cluster's existing pre-state.
-        if not is_append:
-            pre_b64, pre_size = encode_design_snapshot(before)
-
-        # Run the user's mutation.
-        result = fn(s.design)
-        if isinstance(result, Design):
-            s.design = result
-            report: MutationReport | None = None
-        else:
-            report = result if isinstance(result, MutationReport) else None
-
-        reconciled = reconcile_cluster_membership(before, s.design, report)
-        s.design = _retry_pending_ligations(before, reconciled)
-
-        from backend.core.photoproducts import stale_photoproduct_ids
-
-        stale_cpd_ids = stale_photoproduct_ids(s.design)
-        if stale_cpd_ids:
-            s.design = before
-            s.history.pop()
-            s.redo.extend(redo_before)
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "photoproduct_dependency",
-                    "message": "This edit would delete or change a formed TT-CPD endpoint. Remove the photoproduct first, then retry.",
-                    "photoproduct_ids": stale_cpd_ids,
-                },
-            )
-
-        # Re-encode post-state after reconcile + retry so back-and-forth
-        # seeking restores the live topology even after the slider has been
-        # scrubbed back through the cluster.
-        post_b64, post_size = encode_design_snapshot(s.design)
-
-        # Per-child topology diff (pre-child boundary → post-reconcile state).
-        # `before` is ALWAYS the pre-child boundary: for a new cluster it equals
-        # the cluster pre_state; for an append it equals the previous child's
-        # resulting state (the live design before this fn ran). Captured AFTER
-        # reconcile + ligation retry, so the diff already includes those effects
-        # and reconstruction never re-reconciles. See backend.core.design_diff.
-        from backend.core.design_diff import encode_child_diff
-
-        d_added, d_removed, d_modified, d_size = encode_child_diff(before, s.design)
-
-        now_iso = _dt.datetime.now(_dt.timezone.utc).isoformat()
-        minor_entry = MinorMutationLogEntry(
-            op_subtype=op_subtype,
-            label=label,
-            timestamp=now_iso,
-            params=params,
-            diff_added_b64=d_added,
-            diff_removed_b64=d_removed,
-            diff_modified_b64=d_modified,
-            diff_size_bytes=d_size,
-        )
-
-        if is_append:
-            cluster = s.design.feature_log[-1]
-            cluster.children.append(minor_entry)
-            cluster.post_state_gz_b64 = post_b64
-            cluster.post_state_size_bytes = post_size
-        else:
-            cluster = RoutingClusterLogEntry(
-                label="Fine Routing",
-                timestamp=now_iso,
-                children=[minor_entry],
-                pre_state_gz_b64=pre_b64,
-                pre_state_size_bytes=pre_size,
-                post_state_gz_b64=post_b64,
-                post_state_size_bytes=post_size,
-            )
-            s.design.feature_log.append(cluster)
-
-        _evict_oldest_payloads_if_over_budget(s.design)
-
-        validation = validate_design(s.design)
-        _bump_revision(s)
-        # Preserve the PARENT cluster entry, not the child: _strip_feature_log_payloads
-        # only matches preserve_entry_ids against top-level entry ids, and a
-        # preserved parent keeps all its children's diff blobs too (see its
-        # docstring). Matters most for a brand-new cluster (is_append is
-        # False) — its id has never reached the client before.
-        set_request_feature_log_entry_id(cluster.id)
-        return s.design, validation, minor_entry
+        return record_minor(s, op_subtype, label, params, fn)
 
 
 def _restore_edit_snapshot(snapshot: Design, current: Design) -> Design:
@@ -956,10 +944,15 @@ def _restore_edit_snapshot(snapshot: Design, current: Design) -> Design:
 
     Annotations are display-only view metadata saved through their own route (no undo
     entry), so undo/redo must neither rewind them to an older list nor resurrect a
-    deleted one — the current annotations always win.
+    deleted one — the current annotations always win. Repair proposals also
+    remain current within the same branch; cross-branch undo restores that
+    branch's own proposal. Source retention may refuse before stacks change.
     """
     if snapshot.id != current.id:
         return snapshot
+    if snapshot.active_loadout_id == current.active_loadout_id:
+        from backend.api.part_repair_document import restore_recovery_metadata
+        snapshot = restore_recovery_metadata(current, snapshot)
     return snapshot.model_copy(update={
         "annotations": current.annotations,
         "annotations_enabled": current.annotations_enabled,
@@ -976,12 +969,15 @@ def undo() -> tuple[Design, ValidationReport]:
     Returns (design, report).  Raises HTTP 404 if nothing to undo.
     """
     with _lock:
+        _require_compatibility_write("undo")
         s = _session()
         _assert_active_loadout_editable(s.design)
         if not s.history:
             raise HTTPException(status_code=404, detail="Nothing to undo.")
+        restored = _restore_edit_snapshot(s.history[-1], s.design)
         s.redo.append(_snapshot_copy(s.design))
-        s.design = _restore_edit_snapshot(s.history.pop(), s.design)
+        s.history.pop()
+        s.design = restored
         report = validate_design(s.design)
         _bump_revision(s)
         return s.design, report
@@ -993,12 +989,15 @@ def redo() -> tuple[Design, ValidationReport]:
     Returns (design, report).  Raises HTTP 404 if nothing to redo.
     """
     with _lock:
+        _require_compatibility_write("redo")
         s = _session()
         _assert_active_loadout_editable(s.design)
         if not s.redo:
             raise HTTPException(status_code=404, detail="Nothing to redo.")
+        restored = _restore_edit_snapshot(s.redo[-1], s.design)
         s.history.append(_snapshot_copy(s.design))
-        s.design = _restore_edit_snapshot(s.redo.pop(), s.design)
+        s.redo.pop()
+        s.design = restored
         report = validate_design(s.design)
         _bump_revision(s)
         return s.design, report
@@ -1008,6 +1007,7 @@ def clear_history() -> None:
     """Discard both undo and redo history for the current doc (e.g. after loading
     a new design from disk)."""
     with _lock:
+        _require_compatibility_write("clear_history")
         s = _session()
         s.history.clear()
         s.redo.clear()
@@ -1024,6 +1024,7 @@ def close_session() -> None:
     intact so other open documents keep their assets.
     """
     with _lock:
+        _require_compatibility_write("close_session")
         s = _session()
         s.design = None
         s.history.clear()
@@ -1046,6 +1047,7 @@ def snapshot() -> None:
     so the entire operation is undoable as a single Ctrl-Z.
     """
     with _lock:
+        _require_compatibility_write("snapshot")
         s = _session()
         _assert_active_loadout_editable(s.design)
         if s.design is not None:
@@ -1062,12 +1064,14 @@ def get_pdb_atomistic() -> object | None:
 def set_pdb_atomistic(model: object | None) -> None:
     """Store a pre-built atomistic model from PDB import for the current doc."""
     with _lock:
+        _require_compatibility_write("set_pdb_atomistic")
         _session().pdb_atomistic = model
 
 
 def add_protein_asset(asset: ProteinAsset) -> None:
     """Add (or replace) a protein asset in the shared session library."""
     with _lock:
+        _require_compatibility_write("add_protein_asset")
         _protein_library[asset.id] = asset
 
 
@@ -1086,6 +1090,7 @@ def list_protein_assets() -> list[ProteinAsset]:
 def remove_protein_asset(asset_id: str) -> bool:
     """Remove a protein asset from the library.  Returns True if it existed."""
     with _lock:
+        _require_compatibility_write("remove_protein_asset")
         return _protein_library.pop(asset_id, None) is not None
 
 
@@ -1096,6 +1101,7 @@ def set_design_silent(d: Design) -> None:
     was already called before the first step.
     """
     with _lock:
+        _require_compatibility_write("set_design_silent")
         s = _session()
         _assert_active_loadout_editable(s.design, d)
         _assert_photoproduct_dependencies(d)
@@ -1116,6 +1122,7 @@ def set_design_silent_reconciled(
     :func:`get_or_404` *before* :func:`snapshot` and passing it here.
     """
     with _lock:
+        _require_compatibility_write("set_design_silent_reconciled")
         s = _session()
         _assert_active_loadout_editable(s.design, new_design)
         reconciled = reconcile_cluster_membership(before, new_design, report)

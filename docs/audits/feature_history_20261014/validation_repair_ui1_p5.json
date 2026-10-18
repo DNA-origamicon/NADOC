@@ -1,0 +1,56 @@
+{
+  "date": "2026-10-15",
+  "scope": "Desktop standard-part repair UI-1; assemblies deferred",
+  "focused": {
+    "files": 12,
+    "passed": 86,
+    "seconds": 4.92
+  },
+  "full_frontend": {
+    "command": "just test-frontend",
+    "files_passed": 708,
+    "passed": 8181,
+    "skipped": 1,
+    "seconds": 309.16
+  },
+  "earlier_evidence": {
+    "full_before_null_guard_fix": {
+      "passed": 8155,
+      "skipped": 1,
+      "failed": 6,
+      "seconds": 308.92
+    },
+    "commit_refresh_red": {
+      "failed": 8,
+      "seconds": 0.789
+    },
+    "full_before_default_document_fix": {
+      "passed": 8177,
+      "skipped": 1,
+      "files": 708,
+      "seconds": 309.76
+    },
+    "default_document_red": {
+      "failed": 3,
+      "passed": 7,
+      "seconds": 0.779
+    }
+  },
+  "verification": [
+    "Actual receipt-shaped commit tests, retained known/unknown publication state and explicit original-job status recovery without recommit.",
+    "Private committed refresh checks design/loadout/revision/original document/session before one geometry synchronization.",
+    "Default document uses exact server __default__ identity; missing/null response identity refuses.",
+    "Metadata-only acknowledgement leaves currentDesign/geometry unchanged; late replies, navigation, cancellation, source and draft guards tested."
+  ],
+  "cleanup": "No browser, downloads, native build or app lifespan. Full Vitest used its normal small result/cache files; temporary cleanup fixtures and bridge credentials own teardown. Existing placement journal preserved. Prepared e2e spec not executed.",
+  "app_status": "NOT VERIFIED IN APP",
+  "manual_validation_debt": "MV-45",
+  "main_js_delta": 0,
+  "limitations": [
+    "Archive not mounted: app/smoke/headset checks pending, no fallback bulk scratch.",
+    "Private visual comparison and native VR repair protocol not implemented yet.",
+    "Numerical contract changes require separate molecular review and are blocked from this UI.",
+    "Backend registered batch and ordinary large free-protein gates remain closed.",
+    "No saved draft or displayed geometry is implicitly verified; checks remain explicit."
+  ]
+}

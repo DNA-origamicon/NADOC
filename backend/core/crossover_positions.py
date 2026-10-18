@@ -270,6 +270,8 @@ def extract_crossovers_from_strands(
                 return True
         return False
 
+    from backend.core.routing_identity import crossover as routing_crossover, forced_ligation as routing_ligation
+
     seen_xo: set[tuple] = set()
     seen_fl: set[tuple] = set()
     crossovers: list[Crossover] = []
@@ -295,7 +297,7 @@ def extract_crossovers_from_strands(
                     continue
                 seen_xo.add(key)
                 crossovers.append(
-                    Crossover(
+                    routing_crossover(
                         half_a=HalfCrossover(
                             helix_id=d0.helix_id, index=idx, strand=d0.direction
                         ),
@@ -320,7 +322,7 @@ def extract_crossovers_from_strands(
                     continue
                 seen_fl.add(key_fl)
                 forced_ligations.append(
-                    ForcedLigation(
+                    routing_ligation(
                         three_prime_helix_id=d0.helix_id,
                         three_prime_bp=d0.end_bp,
                         three_prime_direction=d0.direction,

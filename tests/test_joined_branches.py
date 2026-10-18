@@ -1,6 +1,8 @@
 """Generated Join branches retain native topology, history and fixed cargo."""
 
+from copy import deepcopy
 from pathlib import Path
+from uuid import UUID
 
 import numpy as np
 import pytest
@@ -28,7 +30,9 @@ def _source(aligned_four):
     )
 
 
-def _cluster_axis(design, cluster_id, bp=None):
+def _cluster_axis(design, cluster_id, bp=None, *, section_cluster_ids=None):
+    if section_cluster_ids is not None:
+        cluster_id = section_cluster_ids[cluster_id]
     cluster = next(
         c
         for c in design.cluster_transforms
@@ -177,18 +181,26 @@ def test_generate_join_branches_with_history_without_cando(aligned_four, budget,
             assert mapping["particle_id"] == original.nanoparticles[index].id
     if aligned_four:
         _assert_opposed_t_layout(candidate.summary, centers)
+    planned_summary = deepcopy(candidate.summary)
     design, placement = build_recorded(original, candidate, settings)
     assert original.model_dump_json() == baseline
+    assert candidate.summary == planned_summary
+    section_cluster_ids = placement["join_section_cluster_ids"]
+    assert set(section_cluster_ids) == {section["id"] for section in candidate.summary["join_sections"]}
+    assert set(section_cluster_ids.values()) <= {cluster.id for cluster in design.cluster_transforms}
+    assert len(set(section_cluster_ids.values())) == len(section_cluster_ids)
+    for cluster_id in section_cluster_ids.values():
+        UUID(cluster_id)
     assert len(design.scaffolds()) == 1
     assert validate_design(design).passed
     assert len(placement["connections"]) == len(original.nanoparticles)
     if aligned_four:
         assert all(c["reused"] for c in placement["connections"])
     normal = np.asarray(candidate.summary["base_frame"])[:, 1]
-    _, _, stem_axis = _cluster_axis(design, "branch_cluster_0")
+    _, _, stem_axis = _cluster_axis(design, "branch_cluster_0", section_cluster_ids=section_cluster_ids)
     for index, mapping in enumerate(candidate.summary["join_attachments"]):
         cluster, center, axis = _cluster_axis(
-            design, mapping["cluster_id"], mapping["bp"]
+            design, mapping["cluster_id"], mapping["bp"], section_cluster_ids=section_cluster_ids
         )
         relative = centers[index] - center
         relative -= normal * (relative @ normal)

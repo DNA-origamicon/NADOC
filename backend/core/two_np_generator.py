@@ -65,6 +65,7 @@ def compatible_particle_handle(design, particle_id, *, exclude=()):
             if (
                 strand
                 and strand.id not in exclude
+                and record.bound_overhang_id is None
                 and strand.sequence
                 and 12 <= len(strand.sequence) <= 60
                 and set(strand.sequence.upper()) <= set("ACGT")

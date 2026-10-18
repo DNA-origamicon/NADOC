@@ -1,0 +1,3789 @@
+{
+  "scope": "Actual ordinary free protein HTTP import; original bytes, native suffix, one undo/revision/library publication",
+  "repeats": 30,
+  "suite": "all",
+  "limits_unchanged": {
+    "capture_nodes": 30000,
+    "capture_bytes": 2000000,
+    "capture_seconds_cooperative": 0.025,
+    "recovery_bytes": 8000000
+  },
+  "notes": [
+    "Synthetic sources qualify size/work boundaries, not molecular realism.",
+    "Retained heavy physical/loadout state is outside this initial native ordinary-import slice.",
+    "No full-prefix proof is performed on import; cold proof is measured separately afterward.",
+    "Library remains a cache; no replay source is reconstructed from its atoms.",
+    "Retained recipes are created by real HTTP imports before timing; all preparation failures stop qualification.",
+    "Repeated imports verify unchanged prefix/assets/proposals/source bytes and exact single undo/redo outside timing.",
+    "Aggregate atom-limit refusal preserves the existing design, history, revision and library.",
+    "Publication lock instrumentation includes nested state helpers; only outermost spans are counted.",
+    "Legacy metadata formatting may infer zero bonds again; parser counts distinguish native parse repetition."
+  ],
+  "session_cleanup_verified": true,
+  "completed": false,
+  "run_failure": {
+    "case": "retained-2000-atoms-plus-1000-refusal",
+    "exception": "RuntimeError",
+    "detail": "Retained fixture aggregate-node-refusal import 1 refused: 413 {\"detail\":{\"status\":\"unverified\",\"code\":\"protein_import_limit\",\"detail\":\"Part verification capture budget exceeded\"}}"
+  },
+  "cases": [
+    {
+      "name": "small-original-source",
+      "retained_profile": "empty",
+      "source_bytes": 761,
+      "requested_atom_records": 9,
+      "expected_status": 200,
+      "correct_transactions": 30,
+      "errors": [],
+      "route": {
+        "count": 30,
+        "p50_ms": 9.255953500542091,
+        "p95_ms": 11.673424996843096,
+        "max_ms": 144.6960549983487
+      },
+      "capture_lock": {
+        "count": 30,
+        "p50_ms": 1.1185095008841017,
+        "p95_ms": 1.4337720022012945,
+        "max_ms": 3.8012689983588643
+      },
+      "publication_lock": {
+        "count": 30,
+        "p50_ms": 0.11137300134578254,
+        "p95_ms": 0.246970997977769,
+        "max_ms": 0.5768570008513052
+      },
+      "candidate_admission": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "baseline_light_requests": {
+        "count": 30,
+        "p50_ms": 0.9690760016383138,
+        "p95_ms": 1.4323930008686148,
+        "max_ms": 3.824114999588346
+      },
+      "light_requests": {
+        "count": 91,
+        "p50_ms": 3.7297759990906343,
+        "p95_ms": 9.58854800046538,
+        "max_ms": 56.56033699779073
+      },
+      "publication_overlap_count": 30,
+      "cold": {
+        "input_pickle_bytes": 6544,
+        "elapsed_ms": 1117.7233690032153,
+        "result": {
+          "scope": "part",
+          "contract_version": 1,
+          "status": "reproduced_import",
+          "issues": [],
+          "verification_scope": "authoring_reproducibility",
+          "integrity_checked": false,
+          "excluded_roles": [
+            "presentation",
+            "physical",
+            "document_identity",
+            "repair_draft"
+          ],
+          "checked_commands": 2,
+          "proof_coverage": "versioned_commands",
+          "native_editable": false,
+          "dependencies": {
+            "complete": true,
+            "parents": {
+              "244ae9fe-47d3-55ef-bfc4-4158ed6e6f48": [],
+              "61affa16-a614-5697-ba7d-13f7a7faa63b": [
+                "244ae9fe-47d3-55ef-bfc4-4158ed6e6f48"
+              ]
+            }
+          },
+          "recipe_fingerprint": "e503d1bf98664e10b45b2a8595f615a7fa3eff040622851d2e6df8a1dbad00e9",
+          "authoring_fingerprint": "384f910d00c27b37b2ebd77db612f5df8433ca9c61fbdfaa7a22d82cc62941e7",
+          "imported_sources": [
+            {
+              "kind": "input_source",
+              "identity": "dd29f7942798ff57b81c6a07720a38b1d21fcc367d7c033f4c45291e8f1ee6dc"
+            }
+          ]
+        }
+      },
+      "sample_summary": {
+        "samples": 30,
+        "http_status_counts": {
+          "200": 30
+        },
+        "parser_call_counts": {
+          "1": 30
+        },
+        "undo_redo_exact_counts": {
+          "True": 30
+        },
+        "retention": "All unexpected outcomes and largest route/capture/publication/light samples retained; aggregates above include every original sample."
+      },
+      "retained_samples": [
+        {
+          "sample_index": 0,
+          "status": 200,
+          "correct": true,
+          "route_ms": 144.6960549983487,
+          "baseline_light_ms": 3.824114999588346,
+          "parser_calls": 1,
+          "recovery_bytes": 7868,
+          "atom_count": 9,
+          "bond_count": 0,
+          "retained_rows": 0,
+          "retained_assets": 0,
+          "result_rows": 2,
+          "result_sources": 1,
+          "result_atom_count": 9,
+          "retained_setup": [],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.018,
+            "classify": 1.168,
+            "native_capture": 3.859,
+            "native_import": 8.081,
+            "native_recovery": 1.266,
+            "native_placement": 1.304,
+            "native_candidate_admission": 1.596,
+            "native_response": 3.271,
+            "native_preparation_total": 133.335,
+            "parse_protein": 8.081,
+            "deduplicate": 0.424,
+            "commit": 1.291
+          },
+          "capture_ms": [
+            3.8012689983588643
+          ],
+          "publication_ms": [
+            0.5768570008513052
+          ],
+          "light_ms": [
+            9.58854800046538,
+            2.8135810025560204,
+            3.343760999996448,
+            2.9614880004373845,
+            8.425282001553569,
+            56.56033699779073,
+            15.34057299795677,
+            13.497643998562125,
+            12.873126001068158,
+            3.657299999758834,
+            3.562668000085978,
+            2.9860069989808835,
+            4.088810001121601,
+            3.1546919999527745,
+            2.2006829967722297
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        }
+      ]
+    },
+    {
+      "name": "existing-rootless-DNA",
+      "retained_profile": "empty",
+      "source_bytes": 761,
+      "requested_atom_records": 9,
+      "expected_status": 200,
+      "correct_transactions": 30,
+      "errors": [],
+      "route": {
+        "count": 30,
+        "p50_ms": 9.11045899920282,
+        "p95_ms": 10.783817000628915,
+        "max_ms": 11.563430998648982
+      },
+      "capture_lock": {
+        "count": 30,
+        "p50_ms": 1.0789725001814077,
+        "p95_ms": 1.2039349967380986,
+        "max_ms": 1.3192469996283762
+      },
+      "publication_lock": {
+        "count": 30,
+        "p50_ms": 0.12673499986703973,
+        "p95_ms": 0.16730700008338317,
+        "max_ms": 0.17449500228394754
+      },
+      "candidate_admission": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "baseline_light_requests": {
+        "count": 30,
+        "p50_ms": 0.9364819998154417,
+        "p95_ms": 1.0831079998752102,
+        "max_ms": 1.211615999636706
+      },
+      "light_requests": {
+        "count": 78,
+        "p50_ms": 4.060499499246362,
+        "p95_ms": 5.908006998652127,
+        "max_ms": 6.478660998254782
+      },
+      "publication_overlap_count": 30,
+      "cold": null,
+      "sample_summary": {
+        "samples": 30,
+        "http_status_counts": {
+          "200": 30
+        },
+        "parser_call_counts": {
+          "1": 30
+        },
+        "undo_redo_exact_counts": {
+          "True": 30
+        },
+        "retention": "All unexpected outcomes and largest route/capture/publication/light samples retained; aggregates above include every original sample."
+      },
+      "retained_samples": [
+        {
+          "sample_index": 0,
+          "status": 200,
+          "correct": true,
+          "route_ms": 11.563430998648982,
+          "baseline_light_ms": 1.211615999636706,
+          "parser_calls": 1,
+          "recovery_bytes": 9452,
+          "atom_count": 9,
+          "bond_count": 0,
+          "retained_rows": 0,
+          "retained_assets": 0,
+          "result_rows": 2,
+          "result_sources": 1,
+          "result_atom_count": 9,
+          "retained_setup": [],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.01,
+            "classify": 0.584,
+            "native_capture": 1.359,
+            "native_import": 1.457,
+            "native_recovery": 1.271,
+            "native_placement": 0.17,
+            "native_candidate_admission": 2.196,
+            "native_response": 0.428,
+            "native_preparation_total": 6.209,
+            "parse_protein": 1.457,
+            "deduplicate": 0.691,
+            "commit": 0.561
+          },
+          "capture_ms": [
+            1.3192469996283762
+          ],
+          "publication_ms": [
+            0.17449500228394754
+          ],
+          "light_ms": [
+            1.8598669994389638,
+            4.311557000619359,
+            5.505742999957874
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        },
+        {
+          "sample_index": 28,
+          "status": 200,
+          "correct": true,
+          "route_ms": 10.086921000038274,
+          "baseline_light_ms": 1.0326900010113604,
+          "parser_calls": 1,
+          "recovery_bytes": 9444,
+          "atom_count": 9,
+          "bond_count": 0,
+          "retained_rows": 0,
+          "retained_assets": 0,
+          "result_rows": 2,
+          "result_sources": 1,
+          "result_atom_count": 9,
+          "retained_setup": [],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.006,
+            "classify": 0.501,
+            "native_capture": 1.2,
+            "native_import": 0.996,
+            "native_recovery": 0.954,
+            "native_placement": 0.136,
+            "native_candidate_admission": 2.064,
+            "native_response": 0.305,
+            "native_preparation_total": 5.336,
+            "parse_protein": 0.996,
+            "deduplicate": 0.453,
+            "commit": 0.399
+          },
+          "capture_ms": [
+            1.1683869997796137
+          ],
+          "publication_ms": [
+            0.14219600052456371
+          ],
+          "light_ms": [
+            1.8010780004260596,
+            6.478660998254782,
+            1.987094001378864
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        }
+      ]
+    },
+    {
+      "name": "1000-atom-record-boundary",
+      "retained_profile": "empty",
+      "source_bytes": 79050,
+      "requested_atom_records": 1000,
+      "expected_status": 200,
+      "correct_transactions": 29,
+      "errors": [
+        {
+          "iteration": 13,
+          "status": 413,
+          "detail": "{\"detail\":{\"status\":\"unverified\",\"code\":\"protein_import_limit\",\"detail\":\"Part verification capture budget exceeded\"}}"
+        }
+      ],
+      "route": {
+        "count": 30,
+        "p50_ms": 207.8820739989169,
+        "p95_ms": 246.9914549983514,
+        "max_ms": 253.97865199920489
+      },
+      "capture_lock": {
+        "count": 30,
+        "p50_ms": 1.1849789989355486,
+        "p95_ms": 1.3558800019382033,
+        "max_ms": 1.517376000265358
+      },
+      "publication_lock": {
+        "count": 29,
+        "p50_ms": 0.21156799994059838,
+        "p95_ms": 0.26254099793732166,
+        "max_ms": 0.27484100064611994
+      },
+      "candidate_admission": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "baseline_light_requests": {
+        "count": 30,
+        "p50_ms": 1.1328715008858126,
+        "p95_ms": 1.6333769999619108,
+        "max_ms": 2.0556310009851586
+      },
+      "light_requests": {
+        "count": 1830,
+        "p50_ms": 2.8167324999230914,
+        "p95_ms": 7.439018001605291,
+        "max_ms": 60.30518000261509
+      },
+      "publication_overlap_count": 29,
+      "cold": {
+        "input_pickle_bytes": 221542,
+        "elapsed_ms": 1135.6008590009878,
+        "result": {
+          "scope": "part",
+          "contract_version": 1,
+          "status": "reproduced_import",
+          "issues": [],
+          "verification_scope": "authoring_reproducibility",
+          "integrity_checked": false,
+          "excluded_roles": [
+            "presentation",
+            "physical",
+            "document_identity",
+            "repair_draft"
+          ],
+          "checked_commands": 2,
+          "proof_coverage": "versioned_commands",
+          "native_editable": false,
+          "dependencies": {
+            "complete": true,
+            "parents": {
+              "b280ac88-cd5b-5d21-849d-87e76c85e5f0": [],
+              "f4b0196c-ced0-505d-aee5-0d8c18151508": [
+                "b280ac88-cd5b-5d21-849d-87e76c85e5f0"
+              ]
+            }
+          },
+          "recipe_fingerprint": "e5d642e835e58d8e157f5f1ddc9b2cd19b2bb24f9655279b04f81feb6f6d400c",
+          "authoring_fingerprint": "729b8867106a288d2eaa9f978af27459e0160f6bd50ae3bc1b8c750f391822d7",
+          "imported_sources": [
+            {
+              "kind": "input_source",
+              "identity": "b5cb5f82d3246a7a5a470e2cf2926338eac3cc60709b75a0b455003ba87e706c"
+            }
+          ]
+        }
+      },
+      "sample_summary": {
+        "samples": 30,
+        "http_status_counts": {
+          "200": 29,
+          "413": 1
+        },
+        "parser_call_counts": {
+          "1": 30
+        },
+        "undo_redo_exact_counts": {
+          "True": 29,
+          "None": 1
+        },
+        "retention": "All unexpected outcomes and largest route/capture/publication/light samples retained; aggregates above include every original sample."
+      },
+      "retained_samples": [
+        {
+          "sample_index": 13,
+          "status": 413,
+          "correct": false,
+          "route_ms": 192.9611939995084,
+          "baseline_light_ms": 1.211615999636706,
+          "parser_calls": 1,
+          "recovery_bytes": 0,
+          "atom_count": null,
+          "bond_count": null,
+          "retained_rows": 0,
+          "retained_assets": 0,
+          "result_rows": 0,
+          "result_sources": 0,
+          "result_atom_count": 0,
+          "retained_setup": [],
+          "error_detail": {
+            "status": "unverified",
+            "code": "protein_import_limit",
+            "detail": "Part verification capture budget exceeded"
+          },
+          "stages_ms": {},
+          "capture_ms": [
+            1.2793659989256412
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            3.785610999329947,
+            8.912527999200393,
+            6.714406001265161,
+            8.498644001520006,
+            9.984705000533722,
+            3.173894998326432,
+            3.661533999547828,
+            7.4362150007800665,
+            2.100534999044612,
+            2.49797299693455,
+            4.855720999330515,
+            3.1296800007112324,
+            3.1601080008840654,
+            3.288812997197965,
+            3.4124960002372973,
+            3.8443010016635526,
+            2.8166339980089106,
+            3.428250998695148,
+            3.501613999105757,
+            2.8871399990748614,
+            2.895805999287404,
+            1.819983997847885,
+            3.1549870000162628,
+            3.22135899841669,
+            4.249519002769375,
+            4.114512001251569,
+            4.381964998174226,
+            3.9775359982741065,
+            7.534293999924557,
+            3.272761998232454,
+            3.7409040014608763,
+            60.30518000261509
+          ],
+          "publication_overlaps": 0
+        },
+        {
+          "sample_index": 14,
+          "status": 200,
+          "correct": true,
+          "route_ms": 225.16523000012967,
+          "baseline_light_ms": 2.0556310009851586,
+          "parser_calls": 1,
+          "recovery_bytes": 90644,
+          "atom_count": 1000,
+          "bond_count": 0,
+          "retained_rows": 0,
+          "retained_assets": 0,
+          "result_rows": 2,
+          "result_sources": 1,
+          "result_atom_count": 1000,
+          "retained_setup": [],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.015,
+            "classify": 1.078,
+            "native_capture": 1.764,
+            "native_import": 121.099,
+            "native_recovery": 5.668,
+            "native_placement": 0.175,
+            "native_candidate_admission": 9.484,
+            "native_response": 78.038,
+            "native_preparation_total": 215.477,
+            "parse_protein": 121.099,
+            "deduplicate": 2.012,
+            "commit": 0.379
+          },
+          "capture_ms": [
+            1.517376000265358
+          ],
+          "publication_ms": [
+            0.23614000019733794
+          ],
+          "light_ms": [
+            6.308498999715084,
+            11.431180999352364,
+            3.8015630016161595,
+            4.509095000685193,
+            4.2535569991741795,
+            3.3732049996615387,
+            3.9072259969543666,
+            3.529875000822358,
+            5.500919000041904,
+            3.431795998039888,
+            3.813479001109954,
+            2.530371999455383,
+            2.5528229998599272,
+            2.8984650016354863,
+            3.7302700002328493,
+            3.6198810012137983,
+            3.1172730014077388,
+            2.739331997872796,
+            2.5930000010703225,
+            3.3783250000851694,
+            3.4462719995644875,
+            3.6071770009584725,
+            3.153116998873884,
+            3.315695998026058,
+            2.9013210005359724,
+            3.2346519983548205,
+            2.430026997899404,
+            3.219685000658501,
+            3.2658689997333568,
+            3.424705999350408,
+            3.24587900104234,
+            2.82145800156286,
+            2.030716997978743,
+            5.97388599999249,
+            3.178621998813469,
+            1.7725199977576267,
+            16.89812499898835,
+            3.87522199889645,
+            2.7840389993798453,
+            3.579899999749614,
+            3.7114610022399575,
+            4.557739997835597,
+            3.672661998280091,
+            4.315890000725631,
+            4.220962000545114,
+            5.074134998722002,
+            3.4750259983411524,
+            3.5606979981821496,
+            4.579700002068421,
+            2.7348020012141205,
+            3.52524800109677,
+            4.747400998894591,
+            2.8166329975647386,
+            3.7942769995424896,
+            3.311658998427447,
+            6.68850700094481,
+            1.5535160018771421
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        },
+        {
+          "sample_index": 17,
+          "status": 200,
+          "correct": true,
+          "route_ms": 233.29627799830632,
+          "baseline_light_ms": 1.3486210009432398,
+          "parser_calls": 1,
+          "recovery_bytes": 90652,
+          "atom_count": 1000,
+          "bond_count": 0,
+          "retained_rows": 0,
+          "retained_assets": 0,
+          "result_rows": 2,
+          "result_sources": 1,
+          "result_atom_count": 1000,
+          "retained_setup": [],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.013,
+            "classify": 0.988,
+            "native_capture": 1.549,
+            "native_import": 122.405,
+            "native_recovery": 5.775,
+            "native_placement": 0.18,
+            "native_candidate_admission": 9.683,
+            "native_response": 84.885,
+            "native_preparation_total": 224.444,
+            "parse_protein": 122.405,
+            "deduplicate": 2.237,
+            "commit": 0.532
+          },
+          "capture_ms": [
+            1.2966640024387743
+          ],
+          "publication_ms": [
+            0.27484100064611994
+          ],
+          "light_ms": [
+            4.4077929997001775,
+            10.269892998621799,
+            3.4524910006439313,
+            3.555912997398991,
+            4.4960609993722755,
+            8.818933001748519,
+            6.341522999719018,
+            1.8386709998594597,
+            3.0766870004299562,
+            7.3901120013033506,
+            3.193984000972705,
+            2.9774969989375677,
+            1.8407380011922214,
+            2.1821989976160694,
+            1.9907060013792943,
+            3.1684979985584505,
+            2.2846370011393446,
+            2.5533769985486288,
+            2.7974180011369754,
+            3.0880039994372055,
+            2.8568540001288056,
+            1.7996059978031553,
+            3.233444000215968,
+            3.4802400004991796,
+            4.04566800352768,
+            2.4714070023037493,
+            2.5052579985640477,
+            2.787183999316767,
+            2.9542740012402646,
+            3.322105996630853,
+            2.258166001411155,
+            2.5891959994623903,
+            1.7881909989228006,
+            2.444346002448583,
+            2.099048000673065,
+            1.788092002243502,
+            5.1231879988336,
+            2.5232660009351093,
+            3.6188910016790032,
+            15.574143999401713,
+            3.032208998774877,
+            3.252435999456793,
+            3.120772998954635,
+            3.241218000766821,
+            2.210834001743933,
+            2.834810999047477,
+            2.392684000369627,
+            2.4709150020498782,
+            3.163675999530824,
+            2.49964799877489,
+            2.7501839977048803,
+            2.15543300146237,
+            3.546072999597527,
+            2.342399999179179,
+            3.30281899732654,
+            2.914715001679724,
+            3.2685740006854758,
+            2.687698000954697,
+            3.0036719981580973,
+            3.6933830015186686,
+            1.6657759988447651,
+            1.8801980004354846,
+            2.4836090015014634,
+            2.1340790008252952,
+            2.7319799992255867,
+            2.3045140005706344,
+            2.2634799970546737,
+            2.14579000021331,
+            2.314944998943247,
+            6.097383000451373
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        },
+        {
+          "sample_index": 20,
+          "status": 200,
+          "correct": true,
+          "route_ms": 253.97865199920489,
+          "baseline_light_ms": 1.3798149993817788,
+          "parser_calls": 1,
+          "recovery_bytes": 90640,
+          "atom_count": 1000,
+          "bond_count": 0,
+          "retained_rows": 0,
+          "retained_assets": 0,
+          "result_rows": 2,
+          "result_sources": 1,
+          "result_atom_count": 1000,
+          "retained_setup": [],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.013,
+            "classify": 1.037,
+            "native_capture": 1.459,
+            "native_import": 167.745,
+            "native_recovery": 6.48,
+            "native_placement": 0.344,
+            "native_candidate_admission": 7.012,
+            "native_response": 62.019,
+            "native_preparation_total": 245.175,
+            "parse_protein": 167.745,
+            "deduplicate": 2.315,
+            "commit": 0.369
+          },
+          "capture_ms": [
+            1.2144980028097052
+          ],
+          "publication_ms": [
+            0.2031049989454914
+          ],
+          "light_ms": [
+            4.279967000911711,
+            9.258008998585865,
+            3.107881999312667,
+            2.0984570001019165,
+            7.047961997159291,
+            5.030196000006981,
+            2.9926509996585082,
+            2.81847600126639,
+            2.4578269985795487,
+            1.895352001156425,
+            3.9601549979124684,
+            14.084115999139613,
+            2.8103090007789433,
+            2.398587999778101,
+            2.8768299998773728,
+            2.243405997433001,
+            2.497878002031939,
+            3.5044479991483968,
+            4.372760999103775,
+            2.9419729980872944,
+            2.58368499999051,
+            3.794345000642352,
+            3.8280980006675236,
+            4.314015001000371,
+            3.754196997761028,
+            3.5825800005113706,
+            2.7941709995502606,
+            1.6502290018252097,
+            2.2580670010938775,
+            2.05988300149329,
+            3.56978800118668,
+            4.103234001377132,
+            2.3343309985648375,
+            1.6722709988243878,
+            48.2451290008612,
+            4.123504997551208,
+            1.8886610014305916,
+            11.776355000620242,
+            2.7073790006397758,
+            2.976709001814015,
+            3.0767860007472336,
+            4.1437760010012425,
+            2.9341989975364413,
+            3.8801530026830733,
+            2.870138003345346,
+            2.947090000816388,
+            2.72715800019796,
+            5.67916799991508,
+            1.958920998731628,
+            3.7176890000409912,
+            1.9864739988406654,
+            2.6674270011426415,
+            2.6391850005893502,
+            3.471187003015075,
+            2.453693999996176,
+            1.560878001328092,
+            3.371013001014944,
+            4.329758998210309,
+            1.1348890002409462
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        }
+      ]
+    },
+    {
+      "name": "250KB-source-boundary",
+      "retained_profile": "empty",
+      "source_bytes": 250000,
+      "requested_atom_records": 9,
+      "expected_status": 200,
+      "correct_transactions": 30,
+      "errors": [],
+      "route": {
+        "count": 30,
+        "p50_ms": 16.160777000550297,
+        "p95_ms": 18.558626998128602,
+        "max_ms": 19.111457997496473
+      },
+      "capture_lock": {
+        "count": 30,
+        "p50_ms": 1.1427119989093626,
+        "p95_ms": 1.4447619978454895,
+        "max_ms": 1.4661150016763713
+      },
+      "publication_lock": {
+        "count": 30,
+        "p50_ms": 0.12762950063915923,
+        "p95_ms": 0.18086599811795168,
+        "max_ms": 0.2122570003848523
+      },
+      "candidate_admission": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "baseline_light_requests": {
+        "count": 30,
+        "p50_ms": 1.0047010000562295,
+        "p95_ms": 1.474479999160394,
+        "max_ms": 1.5316520002670586
+      },
+      "light_requests": {
+        "count": 153,
+        "p50_ms": 3.499627000564942,
+        "p95_ms": 4.678108001826331,
+        "max_ms": 5.353845997888129
+      },
+      "publication_overlap_count": 30,
+      "cold": {
+        "input_pickle_bytes": 338875,
+        "elapsed_ms": 1109.4108350007446,
+        "result": {
+          "scope": "part",
+          "contract_version": 1,
+          "status": "reproduced_import",
+          "issues": [],
+          "verification_scope": "authoring_reproducibility",
+          "integrity_checked": false,
+          "excluded_roles": [
+            "presentation",
+            "physical",
+            "document_identity",
+            "repair_draft"
+          ],
+          "checked_commands": 2,
+          "proof_coverage": "versioned_commands",
+          "native_editable": false,
+          "dependencies": {
+            "complete": true,
+            "parents": {
+              "e9d7f3dc-9681-5372-bb16-b96f7e9f435c": [],
+              "2d923d09-0d8f-57c9-a2c2-4d0a86d2b549": [
+                "e9d7f3dc-9681-5372-bb16-b96f7e9f435c"
+              ]
+            }
+          },
+          "recipe_fingerprint": "cde9535c8bc40ba3912635e24128fea428ccf12d97cfe20081d566af0ec0b724",
+          "authoring_fingerprint": "eae734b503527e393ffe968cebeda051382339e78d25f0fad940fd637a0cb0f8",
+          "imported_sources": [
+            {
+              "kind": "input_source",
+              "identity": "be8ee4a6c5598814d60c7359e13c5903fdf74fa109e0a24d631ac74549adddb7"
+            }
+          ]
+        }
+      },
+      "sample_summary": {
+        "samples": 30,
+        "http_status_counts": {
+          "200": 30
+        },
+        "parser_call_counts": {
+          "1": 30
+        },
+        "undo_redo_exact_counts": {
+          "True": 30
+        },
+        "retention": "All unexpected outcomes and largest route/capture/publication/light samples retained; aggregates above include every original sample."
+      },
+      "retained_samples": [
+        {
+          "sample_index": 1,
+          "status": 200,
+          "correct": true,
+          "route_ms": 16.77053499952308,
+          "baseline_light_ms": 1.0547880010562949,
+          "parser_calls": 1,
+          "recovery_bytes": 17832,
+          "atom_count": 9,
+          "bond_count": 0,
+          "retained_rows": 0,
+          "retained_assets": 0,
+          "result_rows": 2,
+          "result_sources": 1,
+          "result_atom_count": 9,
+          "retained_setup": [],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.012,
+            "classify": 0.578,
+            "native_capture": 1.652,
+            "native_import": 2.964,
+            "native_recovery": 3.991,
+            "native_placement": 0.119,
+            "native_candidate_admission": 1.292,
+            "native_response": 0.284,
+            "native_preparation_total": 10.249,
+            "parse_protein": 2.964,
+            "deduplicate": 0.57,
+            "commit": 0.289
+          },
+          "capture_ms": [
+            1.4661150016763713
+          ],
+          "publication_ms": [
+            0.12339800014160573
+          ],
+          "light_ms": [
+            4.297088999010157,
+            4.435050999745727,
+            1.779825997800799,
+            1.289284002268687,
+            4.0294309983437415
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        },
+        {
+          "sample_index": 3,
+          "status": 200,
+          "correct": true,
+          "route_ms": 19.111457997496473,
+          "baseline_light_ms": 1.5316520002670586,
+          "parser_calls": 1,
+          "recovery_bytes": 17828,
+          "atom_count": 9,
+          "bond_count": 0,
+          "retained_rows": 0,
+          "retained_assets": 0,
+          "result_rows": 2,
+          "result_sources": 1,
+          "result_atom_count": 9,
+          "retained_setup": [],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.018,
+            "classify": 0.786,
+            "native_capture": 1.604,
+            "native_import": 2.496,
+            "native_recovery": 4.411,
+            "native_placement": 0.171,
+            "native_candidate_admission": 2.178,
+            "native_response": 0.335,
+            "native_preparation_total": 11.517,
+            "parse_protein": 2.496,
+            "deduplicate": 0.471,
+            "commit": 0.371
+          },
+          "capture_ms": [
+            1.4150440001685638
+          ],
+          "publication_ms": [
+            0.13441899864119478
+          ],
+          "light_ms": [
+            5.111870999826351,
+            4.588167001202237,
+            2.1636989986291155,
+            3.942047998862108,
+            2.4427710013696924
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        },
+        {
+          "sample_index": 17,
+          "status": 200,
+          "correct": true,
+          "route_ms": 16.513308000867255,
+          "baseline_light_ms": 1.1437450011726469,
+          "parser_calls": 1,
+          "recovery_bytes": 17820,
+          "atom_count": 9,
+          "bond_count": 0,
+          "retained_rows": 0,
+          "retained_assets": 0,
+          "result_rows": 2,
+          "result_sources": 1,
+          "result_atom_count": 9,
+          "retained_setup": [],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.013,
+            "classify": 0.62,
+            "native_capture": 1.296,
+            "native_import": 2.192,
+            "native_recovery": 4.455,
+            "native_placement": 0.103,
+            "native_candidate_admission": 1.906,
+            "native_response": 0.313,
+            "native_preparation_total": 10.47,
+            "parse_protein": 2.192,
+            "deduplicate": 0.538,
+            "commit": 0.478
+          },
+          "capture_ms": [
+            1.0986760025843978
+          ],
+          "publication_ms": [
+            0.2122570003848523
+          ],
+          "light_ms": [
+            3.8970789973973297,
+            4.087982000783086,
+            1.4442700012295973,
+            1.5575319994241,
+            4.840079996938584
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        },
+        {
+          "sample_index": 22,
+          "status": 200,
+          "correct": true,
+          "route_ms": 16.271627999230986,
+          "baseline_light_ms": 1.0450469999341294,
+          "parser_calls": 1,
+          "recovery_bytes": 17840,
+          "atom_count": 9,
+          "bond_count": 0,
+          "retained_rows": 0,
+          "retained_assets": 0,
+          "result_rows": 2,
+          "result_sources": 1,
+          "result_atom_count": 9,
+          "retained_setup": [],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.019,
+            "classify": 0.699,
+            "native_capture": 1.495,
+            "native_import": 2.683,
+            "native_recovery": 3.663,
+            "native_placement": 0.111,
+            "native_candidate_admission": 1.816,
+            "native_response": 0.302,
+            "native_preparation_total": 9.762,
+            "parse_protein": 2.683,
+            "deduplicate": 0.671,
+            "commit": 0.285
+          },
+          "capture_ms": [
+            1.270488999580266
+          ],
+          "publication_ms": [
+            0.12221699944348074
+          ],
+          "light_ms": [
+            5.353845997888129,
+            2.8694489992631134,
+            1.7321010018349625,
+            3.818256998783909,
+            1.9865719987137709
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        }
+      ]
+    },
+    {
+      "name": "dense-100-atom-bond-refusal",
+      "retained_profile": "empty",
+      "source_bytes": 7950,
+      "requested_atom_records": 100,
+      "expected_status": 413,
+      "correct_transactions": 30,
+      "errors": [],
+      "route": {
+        "count": 30,
+        "p50_ms": 178.61317849929037,
+        "p95_ms": 206.95648300170433,
+        "max_ms": 218.29759600223042
+      },
+      "capture_lock": {
+        "count": 30,
+        "p50_ms": 1.1687935002555605,
+        "p95_ms": 1.6919100016821176,
+        "max_ms": 1.7806780015234835
+      },
+      "publication_lock": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "candidate_admission": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "baseline_light_requests": {
+        "count": 30,
+        "p50_ms": 0.9280310005124193,
+        "p95_ms": 1.9340050021128263,
+        "max_ms": 2.0935320026183035
+      },
+      "light_requests": {
+        "count": 2460,
+        "p50_ms": 1.994880500205909,
+        "p95_ms": 3.443851997872116,
+        "max_ms": 8.585124000092037
+      },
+      "publication_overlap_count": 0,
+      "cold": null,
+      "sample_summary": {
+        "samples": 30,
+        "http_status_counts": {
+          "413": 30
+        },
+        "parser_call_counts": {
+          "1": 30
+        },
+        "undo_redo_exact_counts": {
+          "None": 30
+        },
+        "retention": "All unexpected outcomes and largest route/capture/publication/light samples retained; aggregates above include every original sample."
+      },
+      "retained_samples": [
+        {
+          "sample_index": 0,
+          "status": 413,
+          "correct": true,
+          "route_ms": 185.81909099884797,
+          "baseline_light_ms": 1.413961002981523,
+          "parser_calls": 1,
+          "recovery_bytes": 0,
+          "atom_count": null,
+          "bond_count": null,
+          "retained_rows": 0,
+          "retained_assets": 0,
+          "result_rows": 0,
+          "result_sources": 0,
+          "result_atom_count": 0,
+          "retained_setup": [],
+          "error_detail": {
+            "status": "unverified",
+            "code": "source_limit",
+            "detail": "Parsed protein exceeds the initial 4,000 bond import contract",
+            "references": [
+              {
+                "kind": "input_source",
+                "identity": "0450664cfe2ef393aa739adc8556682df1b99aaf8becb5aa0aff6f1e4e370032",
+                "parameter_path": [
+                  "source"
+                ]
+              }
+            ]
+          },
+          "stages_ms": {},
+          "capture_ms": [
+            1.297746999625815
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            5.569152999669313,
+            2.6347570019424893,
+            4.099298002984142,
+            2.0789740010513924,
+            2.507717999833403,
+            2.324097000382608,
+            2.7470360000734217,
+            2.408132997516077,
+            2.4847899985616095,
+            2.7305030016577803,
+            2.799484002025565,
+            4.233519997796975,
+            2.859806001652032,
+            3.089283000008436,
+            2.4468060000799596,
+            2.4801649997243658,
+            2.140082000551047,
+            2.3939639977470506,
+            2.186626999900909,
+            3.0746209995413665,
+            2.546193998568924,
+            2.6220620020467322,
+            2.6364299992565066,
+            2.0540769983199425,
+            1.6956910003500525,
+            1.8271579974680208,
+            2.1196140005486086,
+            2.4812470001052134,
+            2.4298809985339176,
+            3.4851609998440836,
+            2.309335999598261,
+            1.98637599896756,
+            1.9423890007601585,
+            2.443361998302862,
+            2.1855439990758896,
+            2.2998890017333906,
+            2.395045998127898,
+            2.328623999346746,
+            2.7887590003956575,
+            2.2212650001165457,
+            2.506437998818001,
+            1.9285150010546204,
+            1.9987740015494637,
+            1.6599700029473752,
+            2.2165410009620246,
+            2.997766998305451,
+            2.3744790014461614,
+            1.3680069969268516,
+            2.3568650030938443,
+            2.1236480024526827,
+            1.5574339995509945,
+            2.3131739981181454,
+            1.9532139995135367,
+            2.2855220013298094,
+            1.6813239999464713,
+            1.692738998826826,
+            1.8715379992499948,
+            1.972991998627549,
+            2.022292999754427,
+            2.5969700000132434,
+            2.1023929984949064,
+            2.628360001835972,
+            1.5305690030800179,
+            1.977027000975795,
+            1.9266449999122415,
+            2.225299998826813,
+            1.9329419992573094,
+            1.8789179994200822,
+            2.0775949997187126,
+            2.546883002651157,
+            2.8873589981230907,
+            1.8435909987601917,
+            2.227660999778891,
+            2.3545039985037874,
+            1.7492229999334086,
+            2.174621000449406,
+            2.879290001146728,
+            3.131105000647949
+          ],
+          "publication_overlaps": 0
+        },
+        {
+          "sample_index": 12,
+          "status": 413,
+          "correct": true,
+          "route_ms": 218.29759600223042,
+          "baseline_light_ms": 1.4604079988203011,
+          "parser_calls": 1,
+          "recovery_bytes": 0,
+          "atom_count": null,
+          "bond_count": null,
+          "retained_rows": 0,
+          "retained_assets": 0,
+          "result_rows": 0,
+          "result_sources": 0,
+          "result_atom_count": 0,
+          "retained_setup": [],
+          "error_detail": {
+            "status": "unverified",
+            "code": "source_limit",
+            "detail": "Parsed protein exceeds the initial 4,000 bond import contract",
+            "references": [
+              {
+                "kind": "input_source",
+                "identity": "0450664cfe2ef393aa739adc8556682df1b99aaf8becb5aa0aff6f1e4e370032",
+                "parameter_path": [
+                  "source"
+                ]
+              }
+            ]
+          },
+          "stages_ms": {},
+          "capture_ms": [
+            1.2779680000676308
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            3.994300997874234,
+            6.740943001204869,
+            2.4620590011181775,
+            2.724992998992093,
+            3.7506539993046317,
+            3.7297920025594067,
+            3.037720001884736,
+            2.5658859995019156,
+            2.4643510005262215,
+            1.6049129990278743,
+            2.7530940024007577,
+            2.7412840026954655,
+            3.262772002926795,
+            2.748271002928959,
+            2.1478560011019,
+            2.779468999506207,
+            1.9349899994267616,
+            2.5043060013558716,
+            2.645134001795668,
+            2.8612490023078863,
+            2.984659000503598,
+            2.8620369994314387,
+            2.474978999089217,
+            2.3917229991639033,
+            2.568963998783147,
+            3.1061980007507373,
+            3.334221000841353,
+            2.9464740000548773,
+            2.1578939995379187,
+            2.171375999751035,
+            2.479505998053355,
+            2.5226110010407865,
+            2.651137998327613,
+            2.886049001972424,
+            3.920365998055786,
+            2.8586910011654254,
+            2.2418399967136793,
+            2.0385190000524744,
+            3.11456299823476,
+            3.0421310002566315,
+            1.871710002887994,
+            2.0842809972236864,
+            1.3524850000976585,
+            1.6310909995809197,
+            1.895624001917895,
+            2.1221699971647467,
+            1.4049390010768548,
+            2.202376999775879,
+            1.916979999805335,
+            1.8805680010700598,
+            1.6119989995786455,
+            1.5547230032098014,
+            1.5889709975454025,
+            1.7205479998665396,
+            1.6907290009839926,
+            1.7040139973687474,
+            1.676263000263134,
+            1.7984910009545274,
+            1.8805670006258879,
+            2.0744390021718573,
+            2.382471997407265,
+            2.1709829998144414,
+            1.7167100013466552,
+            1.692204998107627,
+            1.641523002035683,
+            1.6016650006349664,
+            1.5366150000772905,
+            1.7334399999526795,
+            2.151102999050636,
+            2.448702998663066,
+            1.7054910022125114,
+            2.376172997173853,
+            1.7339320002065506,
+            1.568204999784939,
+            2.5012549995153677,
+            1.8663959999685176,
+            1.8213229996035807,
+            1.7587319998710882,
+            1.9100909994449466,
+            2.669244997377973,
+            1.5368120002676733,
+            3.903733999322867,
+            1.6812809990369715,
+            1.9168819999322295,
+            3.3324490032100584,
+            2.3096460026863497,
+            1.8625569973664824,
+            2.187319001677679,
+            1.6048149991547689,
+            1.767096997355111,
+            1.800262001779629,
+            1.6633699997328222,
+            1.888538998173317,
+            2.1447059989441186
+          ],
+          "publication_overlaps": 0
+        },
+        {
+          "sample_index": 20,
+          "status": 413,
+          "correct": true,
+          "route_ms": 178.9977260013984,
+          "baseline_light_ms": 1.9340050021128263,
+          "parser_calls": 1,
+          "recovery_bytes": 0,
+          "atom_count": null,
+          "bond_count": null,
+          "retained_rows": 0,
+          "retained_assets": 0,
+          "result_rows": 0,
+          "result_sources": 0,
+          "result_atom_count": 0,
+          "retained_setup": [],
+          "error_detail": {
+            "status": "unverified",
+            "code": "source_limit",
+            "detail": "Parsed protein exceeds the initial 4,000 bond import contract",
+            "references": [
+              {
+                "kind": "input_source",
+                "identity": "0450664cfe2ef393aa739adc8556682df1b99aaf8becb5aa0aff6f1e4e370032",
+                "parameter_path": [
+                  "source"
+                ]
+              }
+            ]
+          },
+          "stages_ms": {},
+          "capture_ms": [
+            1.7806780015234835
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            5.256021999230143,
+            6.768919000023743,
+            5.409153000073275,
+            3.443851997872116,
+            4.655803997593466,
+            5.35974900049041,
+            4.830387002584757,
+            4.632183998182882,
+            3.11298900123802,
+            3.245452000555815,
+            2.9047469979559537,
+            3.7074989995744545,
+            2.9450959991663694,
+            4.306144001020584,
+            3.7507020024349913,
+            3.711336998094339,
+            4.099082998436643,
+            2.336710000236053,
+            3.602690001571318,
+            3.2293120020767674,
+            3.173315999447368,
+            2.38178300060099,
+            4.536132997600362,
+            2.9945000023872126,
+            3.596785001718672,
+            4.132444999413565,
+            4.717408999567851,
+            3.2307889996445738,
+            3.4296810008527245,
+            4.661511000449536,
+            3.0169380006555,
+            2.9618269982165657,
+            2.6694420012063347,
+            2.084675001242431,
+            3.4230860001116525,
+            2.2866170002089348,
+            3.0329799992614426,
+            2.1052429983683396,
+            2.9657630002475344,
+            2.4366970028495416,
+            4.37149000208592,
+            1.7257639992749318,
+            2.8302489990892354,
+            1.9485699995129835,
+            1.9219979985791724,
+            2.608722999866586,
+            2.5068649993045256,
+            2.765985998848919,
+            2.385029998549726,
+            4.399733999889577,
+            6.4014470008260105
+          ],
+          "publication_overlaps": 0
+        },
+        {
+          "sample_index": 22,
+          "status": 413,
+          "correct": true,
+          "route_ms": 169.64576900136308,
+          "baseline_light_ms": 0.8970309972937685,
+          "parser_calls": 1,
+          "recovery_bytes": 0,
+          "atom_count": null,
+          "bond_count": null,
+          "retained_rows": 0,
+          "retained_assets": 0,
+          "result_rows": 0,
+          "result_sources": 0,
+          "result_atom_count": 0,
+          "retained_setup": [],
+          "error_detail": {
+            "status": "unverified",
+            "code": "source_limit",
+            "detail": "Parsed protein exceeds the initial 4,000 bond import contract",
+            "references": [
+              {
+                "kind": "input_source",
+                "identity": "0450664cfe2ef393aa739adc8556682df1b99aaf8becb5aa0aff6f1e4e370032",
+                "parameter_path": [
+                  "source"
+                ]
+              }
+            ]
+          },
+          "stages_ms": {},
+          "capture_ms": [
+            1.2192340000183322
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            8.585124000092037,
+            3.7368259982031304,
+            3.0634870017820504,
+            3.68417500067153,
+            3.3622680020926055,
+            1.8601960000523832,
+            1.8759410013444722,
+            2.0515100004558917,
+            2.334052998776315,
+            2.5854960003925953,
+            1.9136330010951497,
+            2.0911699975840747,
+            2.343008000025293,
+            2.29626199870836,
+            3.4940420009661466,
+            2.1445100028358866,
+            4.400423000333831,
+            2.3952650008141063,
+            2.5180839984386694,
+            2.148544997908175,
+            2.309253002749756,
+            2.3947730005602352,
+            2.681744001165498,
+            3.7941019982099533,
+            2.3435980001522694,
+            2.4974170009954832,
+            3.4158050002588425,
+            3.2689729996491224,
+            2.768839996861061,
+            2.8215890015417244,
+            2.690600998903392,
+            2.9815089983458165,
+            1.842777001002105,
+            1.6014689972507767,
+            2.6348999999754597,
+            1.9349889989825897,
+            1.9615609999164008,
+            3.0820870015304536,
+            2.204443000664469,
+            3.3157180005218834,
+            1.8213229996035807,
+            2.452738001011312,
+            1.6749829992477316,
+            1.9026119989575818,
+            2.074538999295328,
+            2.128665000782348,
+            2.542391997849336,
+            1.9651040020107757,
+            2.4666139979672153,
+            2.497319001122378,
+            1.7402310004399624,
+            2.0367480028653517,
+            2.2994119972281624,
+            1.7098220014304388,
+            1.774871998350136,
+            1.8587190024845768,
+            1.5882810002949554,
+            2.215759999671718,
+            2.4028430016187485,
+            2.3630839968973305,
+            1.8767290021060035,
+            1.9634309974208008,
+            1.8253580019518267,
+            2.253550999739673,
+            2.050623999821255,
+            2.0140149972576182,
+            1.9509320009092335,
+            2.7860619993589353
+          ],
+          "publication_overlaps": 0
+        }
+      ]
+    },
+    {
+      "name": "retained-protein-same-source",
+      "retained_profile": "retained-same-source",
+      "source_bytes": 10162,
+      "requested_atom_records": 128,
+      "expected_status": 200,
+      "correct_transactions": 29,
+      "errors": [
+        {
+          "iteration": 12,
+          "status": 413,
+          "detail": "{\"detail\":{\"code\":\"protein_import_capture_limit\",\"detail\":\"Part verification capture budget exceeded\",\"status\":\"unverified\"}}"
+        }
+      ],
+      "route": {
+        "count": 30,
+        "p50_ms": 38.95934899992426,
+        "p95_ms": 50.07156200008467,
+        "max_ms": 59.9150890011515
+      },
+      "capture_lock": {
+        "count": 30,
+        "p50_ms": 2.456280999467708,
+        "p95_ms": 7.443735001288587,
+        "max_ms": 44.383017000654945
+      },
+      "publication_lock": {
+        "count": 29,
+        "p50_ms": 0.8369009992748033,
+        "p95_ms": 1.5721420022600796,
+        "max_ms": 2.131716002622852
+      },
+      "candidate_admission": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "baseline_light_requests": {
+        "count": 30,
+        "p50_ms": 1.005235499178525,
+        "p95_ms": 1.1780969980463851,
+        "max_ms": 1.5899540012469515
+      },
+      "light_requests": {
+        "count": 304,
+        "p50_ms": 3.1687879982200684,
+        "p95_ms": 7.012981997831957,
+        "max_ms": 46.89785300070071
+      },
+      "publication_overlap_count": 29,
+      "cold": {
+        "input_pickle_bytes": 47856,
+        "elapsed_ms": 1138.9361359979375,
+        "result": {
+          "scope": "part",
+          "contract_version": 1,
+          "status": "reproduced_import",
+          "issues": [],
+          "verification_scope": "authoring_reproducibility",
+          "integrity_checked": false,
+          "excluded_roles": [
+            "presentation",
+            "physical",
+            "document_identity",
+            "repair_draft"
+          ],
+          "checked_commands": 4,
+          "proof_coverage": "versioned_commands",
+          "native_editable": false,
+          "dependencies": {
+            "complete": true,
+            "parents": {
+              "7d0f5eae-1639-52f9-9c91-2913e551c7cc": [],
+              "26f4a20c-2586-5f53-9d09-793c596691b7": [
+                "7d0f5eae-1639-52f9-9c91-2913e551c7cc"
+              ],
+              "435eb2e4-8476-519e-afbd-689cd6440ded": [
+                "26f4a20c-2586-5f53-9d09-793c596691b7"
+              ],
+              "ec67f012-e33a-585b-bb12-870c0dcfbbae": [
+                "435eb2e4-8476-519e-afbd-689cd6440ded"
+              ]
+            }
+          },
+          "recipe_fingerprint": "8fd9329176cdfdec503a391a56d0c6069ebc0f3e7089d9713e99202b7befbff3",
+          "authoring_fingerprint": "5cc8629587e90340a028bf2f4770260899357e5758b47162a44bed51d4b03b5c",
+          "imported_sources": [
+            {
+              "kind": "input_source",
+              "identity": "63a07778eb419187514b948993b34d661f8e8d8523ed2c2a21d2ab27506d3e64"
+            }
+          ]
+        }
+      },
+      "sample_summary": {
+        "samples": 30,
+        "http_status_counts": {
+          "200": 29,
+          "413": 1
+        },
+        "parser_call_counts": {
+          "1": 29,
+          "0": 1
+        },
+        "undo_redo_exact_counts": {
+          "True": 29,
+          "None": 1
+        },
+        "retention": "All unexpected outcomes and largest route/capture/publication/light samples retained; aggregates above include every original sample."
+      },
+      "retained_samples": [
+        {
+          "sample_index": 12,
+          "status": 413,
+          "correct": false,
+          "route_ms": 46.776904000580544,
+          "baseline_light_ms": 1.1780969980463851,
+          "parser_calls": 0,
+          "recovery_bytes": 20848,
+          "atom_count": null,
+          "bond_count": null,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 2,
+          "result_sources": 1,
+          "result_atom_count": 128,
+          "retained_setup": [
+            {
+              "source_atom_records": 128,
+              "feature_ids": [
+                "6ca87408-852c-5211-9390-5013aa1d6de7",
+                "840dac74-0bc5-50df-90f1-e36c310c63b0"
+              ]
+            }
+          ],
+          "error_detail": {
+            "code": "protein_import_capture_limit",
+            "detail": "Part verification capture budget exceeded",
+            "status": "unverified"
+          },
+          "stages_ms": {},
+          "capture_ms": [
+            44.383017000654945
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            46.89785300070071
+          ],
+          "publication_overlaps": 0
+        },
+        {
+          "sample_index": 20,
+          "status": 200,
+          "correct": true,
+          "route_ms": 41.68434500024887,
+          "baseline_light_ms": 0.9395449997100513,
+          "parser_calls": 1,
+          "recovery_bytes": 46100,
+          "atom_count": 128,
+          "bond_count": 0,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 4,
+          "result_sources": 1,
+          "result_atom_count": 256,
+          "retained_setup": [
+            {
+              "source_atom_records": 128,
+              "feature_ids": [
+                "cbee4003-9068-54b4-b18f-c327067d826d",
+                "bf3eba48-d8e2-5457-bc1c-e48f324513e5"
+              ]
+            }
+          ],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.005,
+            "classify": 0.562,
+            "native_capture": 2.376,
+            "native_import": 16.281,
+            "native_recovery": 2.881,
+            "native_placement": 0.142,
+            "native_candidate_admission": 3.488,
+            "native_response": 9.046,
+            "native_preparation_total": 32.813,
+            "parse_protein": 16.281,
+            "deduplicate": 0.986,
+            "commit": 2.608
+          },
+          "capture_ms": [
+            2.3236209999595303
+          ],
+          "publication_ms": [
+            2.131716002622852
+          ],
+          "light_ms": [
+            5.879762000404298,
+            5.235060001723468,
+            2.9188210028223693,
+            2.668556997377891,
+            2.2700840017932933,
+            3.688603999762563,
+            7.119070996850496,
+            4.060899002070073,
+            7.6877979990968015
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        },
+        {
+          "sample_index": 21,
+          "status": 200,
+          "correct": true,
+          "route_ms": 59.9150890011515,
+          "baseline_light_ms": 1.5899540012469515,
+          "parser_calls": 1,
+          "recovery_bytes": 46084,
+          "atom_count": 128,
+          "bond_count": 0,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 4,
+          "result_sources": 1,
+          "result_atom_count": 256,
+          "retained_setup": [
+            {
+              "source_atom_records": 128,
+              "feature_ids": [
+                "95417205-5eb5-5c30-8043-96dd2e2d1a83",
+                "125753ac-680a-52c1-916a-7ef301ab5585"
+              ]
+            }
+          ],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.019,
+            "classify": 1.047,
+            "native_capture": 7.555,
+            "native_import": 28.035,
+            "native_recovery": 3.541,
+            "native_placement": 0.196,
+            "native_candidate_admission": 3.93,
+            "native_response": 9.078,
+            "native_preparation_total": 45.773,
+            "parse_protein": 28.035,
+            "deduplicate": 0.572,
+            "commit": 1.608
+          },
+          "capture_ms": [
+            7.443735001288587
+          ],
+          "publication_ms": [
+            1.1956150010519195
+          ],
+          "light_ms": [
+            8.402078001381597,
+            8.131344002322294,
+            4.8120829997060355,
+            5.044729998189723,
+            3.2714330009184778,
+            4.333797001891071,
+            5.78941799903987,
+            8.244517997809453,
+            3.132867001113482,
+            2.4275440009660088,
+            5.954751999524888
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        }
+      ]
+    },
+    {
+      "name": "retained-protein-new-source",
+      "retained_profile": "retained-new-source",
+      "source_bytes": 20274,
+      "requested_atom_records": 256,
+      "expected_status": 200,
+      "correct_transactions": 29,
+      "errors": [
+        {
+          "iteration": 3,
+          "status": 413,
+          "detail": "{\"detail\":{\"status\":\"unverified\",\"code\":\"protein_import_limit\",\"detail\":\"Part verification capture budget exceeded\"}}"
+        }
+      ],
+      "route": {
+        "count": 30,
+        "p50_ms": 61.767461000272306,
+        "p95_ms": 72.48314200114692,
+        "max_ms": 77.3991770001885
+      },
+      "capture_lock": {
+        "count": 30,
+        "p50_ms": 2.555332999691018,
+        "p95_ms": 3.413917002035305,
+        "max_ms": 3.537344000505982
+      },
+      "publication_lock": {
+        "count": 29,
+        "p50_ms": 0.5944119984633289,
+        "p95_ms": 1.07849900086876,
+        "max_ms": 1.0827360019902699
+      },
+      "candidate_admission": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "baseline_light_requests": {
+        "count": 30,
+        "p50_ms": 1.047713500156533,
+        "p95_ms": 1.2840879971918184,
+        "max_ms": 1.3203039998188615
+      },
+      "light_requests": {
+        "count": 514,
+        "p50_ms": 2.9969104998599505,
+        "p95_ms": 7.3469130002195016,
+        "max_ms": 45.93380299775163
+      },
+      "publication_overlap_count": 29,
+      "cold": {
+        "input_pickle_bytes": 89083,
+        "elapsed_ms": 1139.966178998293,
+        "result": {
+          "scope": "part",
+          "contract_version": 1,
+          "status": "reproduced_import",
+          "issues": [],
+          "verification_scope": "authoring_reproducibility",
+          "integrity_checked": false,
+          "excluded_roles": [
+            "presentation",
+            "physical",
+            "document_identity",
+            "repair_draft"
+          ],
+          "checked_commands": 4,
+          "proof_coverage": "versioned_commands",
+          "native_editable": false,
+          "dependencies": {
+            "complete": true,
+            "parents": {
+              "46b793bd-70a1-5031-a5f7-e267c7183a91": [],
+              "2c37f164-97ed-5d84-b6b2-6f32d4548d12": [
+                "46b793bd-70a1-5031-a5f7-e267c7183a91"
+              ],
+              "8df21878-8f8f-512b-938a-f6af21354f7c": [
+                "2c37f164-97ed-5d84-b6b2-6f32d4548d12"
+              ],
+              "b952adb9-3968-556a-af0b-1f72c1ba195a": [
+                "8df21878-8f8f-512b-938a-f6af21354f7c"
+              ]
+            }
+          },
+          "recipe_fingerprint": "e8d77bd2bb94fa371524b4a5c6ce275851e121b0ef49325f9538403f28cef2be",
+          "authoring_fingerprint": "7f6538a02245020c0991438fd8482ca50e0c0681270fbb49146bfffe5162c5bb",
+          "imported_sources": [
+            {
+              "kind": "input_source",
+              "identity": "63a07778eb419187514b948993b34d661f8e8d8523ed2c2a21d2ab27506d3e64"
+            },
+            {
+              "kind": "input_source",
+              "identity": "ec7bc90ddbd70f4fe6a976f4f6cc104e084b2fcacfb69d66241269232f2539d9"
+            }
+          ]
+        }
+      },
+      "sample_summary": {
+        "samples": 30,
+        "http_status_counts": {
+          "200": 29,
+          "413": 1
+        },
+        "parser_call_counts": {
+          "1": 30
+        },
+        "undo_redo_exact_counts": {
+          "True": 29,
+          "None": 1
+        },
+        "retention": "All unexpected outcomes and largest route/capture/publication/light samples retained; aggregates above include every original sample."
+      },
+      "retained_samples": [
+        {
+          "sample_index": 1,
+          "status": 200,
+          "correct": true,
+          "route_ms": 63.40047100093216,
+          "baseline_light_ms": 1.0821460018632933,
+          "parser_calls": 1,
+          "recovery_bytes": 61876,
+          "atom_count": 256,
+          "bond_count": 0,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 4,
+          "result_sources": 2,
+          "result_atom_count": 384,
+          "retained_setup": [
+            {
+              "source_atom_records": 128,
+              "feature_ids": [
+                "bb8f948b-c8c9-566c-9187-cc20f675db0a",
+                "b5c49ed7-083e-51c6-937e-9b8968411484"
+              ]
+            }
+          ],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.005,
+            "classify": 0.655,
+            "native_capture": 2.508,
+            "native_import": 29.752,
+            "native_recovery": 4.184,
+            "native_placement": 0.15,
+            "native_candidate_admission": 5.007,
+            "native_response": 15.655,
+            "native_preparation_total": 56.001,
+            "parse_protein": 29.752,
+            "deduplicate": 0.907,
+            "commit": 1.198
+          },
+          "capture_ms": [
+            2.4336460010090377
+          ],
+          "publication_ms": [
+            1.0827360019902699
+          ],
+          "light_ms": [
+            4.546664000372402,
+            5.150524000782752,
+            3.291902998171281,
+            5.680967999069253,
+            1.9704180012922734,
+            2.0364519987197127,
+            2.5947479989554267,
+            2.7091030024166685,
+            2.9159670011722483,
+            4.319921001297189,
+            2.4296110022987705,
+            8.47431199872517,
+            3.912689000571845,
+            3.790265000134241,
+            2.8011190006509423,
+            6.957772999157896
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        },
+        {
+          "sample_index": 2,
+          "status": 200,
+          "correct": true,
+          "route_ms": 62.90309399992111,
+          "baseline_light_ms": 1.3203039998188615,
+          "parser_calls": 1,
+          "recovery_bytes": 61892,
+          "atom_count": 256,
+          "bond_count": 0,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 4,
+          "result_sources": 2,
+          "result_atom_count": 384,
+          "retained_setup": [
+            {
+              "source_atom_records": 128,
+              "feature_ids": [
+                "e7ab52cf-2c51-53c2-a910-c813725137f7",
+                "21dd1fc2-49e1-5519-b21c-49a15aee55bb"
+              ]
+            }
+          ],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.012,
+            "classify": 0.824,
+            "native_capture": 3.678,
+            "native_import": 26.799,
+            "native_recovery": 3.306,
+            "native_placement": 0.374,
+            "native_candidate_admission": 4.119,
+            "native_response": 18.254,
+            "native_preparation_total": 54.137,
+            "parse_protein": 26.799,
+            "deduplicate": 0.811,
+            "commit": 0.653
+          },
+          "capture_ms": [
+            3.537344000505982
+          ],
+          "publication_ms": [
+            0.5282790007186122
+          ],
+          "light_ms": [
+            6.545030999404844,
+            7.266592001542449,
+            2.305414000147721,
+            4.055387998960214,
+            2.359541002078913,
+            2.3318870007642545,
+            4.467146998649696,
+            5.822387000080198,
+            9.14164899950265,
+            2.369382000324549,
+            2.765591998468153,
+            2.6036050003312994,
+            2.4791119976725895,
+            1.9234749997849576,
+            1.8558660012786277,
+            4.577271000016481
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        },
+        {
+          "sample_index": 3,
+          "status": 413,
+          "correct": false,
+          "route_ms": 77.3991770001885,
+          "baseline_light_ms": 1.1164910029037856,
+          "parser_calls": 1,
+          "recovery_bytes": 20840,
+          "atom_count": null,
+          "bond_count": null,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 2,
+          "result_sources": 1,
+          "result_atom_count": 128,
+          "retained_setup": [
+            {
+              "source_atom_records": 128,
+              "feature_ids": [
+                "d1f10df1-9ba1-517b-9a54-5c5f72c63d24",
+                "643bda0f-f4f9-5d99-be75-98262e10bb34"
+              ]
+            }
+          ],
+          "error_detail": {
+            "status": "unverified",
+            "code": "protein_import_limit",
+            "detail": "Part verification capture budget exceeded"
+          },
+          "stages_ms": {},
+          "capture_ms": [
+            2.586775997770019
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            4.794073000084609,
+            6.5510339991305955,
+            4.031571999803418,
+            3.040162999241147,
+            3.055122000660049,
+            2.2543390005012043,
+            2.521037000406068,
+            3.5841880016960204,
+            2.014015000895597,
+            45.93380299775163
+          ],
+          "publication_overlaps": 0
+        }
+      ]
+    },
+    {
+      "name": "retained-presentation-and-proposal",
+      "retained_profile": "retained-metadata",
+      "source_bytes": 10162,
+      "requested_atom_records": 128,
+      "expected_status": 200,
+      "correct_transactions": 30,
+      "errors": [],
+      "route": {
+        "count": 30,
+        "p50_ms": 39.87468850209552,
+        "p95_ms": 44.84683299961034,
+        "max_ms": 93.04465600143885
+      },
+      "capture_lock": {
+        "count": 30,
+        "p50_ms": 2.8265855016798014,
+        "p95_ms": 3.0769039985898416,
+        "max_ms": 3.6736049987666775
+      },
+      "publication_lock": {
+        "count": 30,
+        "p50_ms": 0.9732140006235568,
+        "p95_ms": 1.675003000855213,
+        "max_ms": 47.63495299994247
+      },
+      "candidate_admission": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "baseline_light_requests": {
+        "count": 30,
+        "p50_ms": 1.039097500324715,
+        "p95_ms": 1.2485340012062807,
+        "max_ms": 1.3129379985912237
+      },
+      "light_requests": {
+        "count": 351,
+        "p50_ms": 2.894737001042813,
+        "p95_ms": 6.82714200229384,
+        "max_ms": 49.67261099955067
+      },
+      "publication_overlap_count": 30,
+      "cold": {
+        "input_pickle_bytes": 53277,
+        "elapsed_ms": 1143.352971997956,
+        "result": {
+          "scope": "part",
+          "contract_version": 1,
+          "status": "reproduced_import",
+          "issues": [],
+          "verification_scope": "authoring_reproducibility",
+          "integrity_checked": false,
+          "excluded_roles": [
+            "presentation",
+            "physical",
+            "document_identity",
+            "repair_draft"
+          ],
+          "checked_commands": 4,
+          "proof_coverage": "versioned_commands",
+          "native_editable": false,
+          "dependencies": {
+            "complete": true,
+            "parents": {
+              "cb5b180d-05fc-5d2b-83c0-dfad6d5af143": [],
+              "923849ef-9d92-580b-a73b-4e0c88b6d395": [
+                "cb5b180d-05fc-5d2b-83c0-dfad6d5af143"
+              ],
+              "90566840-c4d5-537b-82fe-8989e868a7a9": [
+                "923849ef-9d92-580b-a73b-4e0c88b6d395"
+              ],
+              "e4ca5cf8-eade-5585-864c-52338a5e4a8e": [
+                "90566840-c4d5-537b-82fe-8989e868a7a9"
+              ]
+            }
+          },
+          "recipe_fingerprint": "36e286de4ce6a84ac41ef942ef85394939cb3ce8dd8fff72a379e9eb1e6f601c",
+          "authoring_fingerprint": "ae9a307711b514116fc4a22df1e8a6e42ebf42af66c426b87a930eb47eee6984",
+          "imported_sources": [
+            {
+              "kind": "input_source",
+              "identity": "63a07778eb419187514b948993b34d661f8e8d8523ed2c2a21d2ab27506d3e64"
+            }
+          ]
+        }
+      },
+      "sample_summary": {
+        "samples": 30,
+        "http_status_counts": {
+          "200": 30
+        },
+        "parser_call_counts": {
+          "1": 30
+        },
+        "undo_redo_exact_counts": {
+          "True": 30
+        },
+        "retention": "All unexpected outcomes and largest route/capture/publication/light samples retained; aggregates above include every original sample."
+      },
+      "retained_samples": [
+        {
+          "sample_index": 12,
+          "status": 200,
+          "correct": true,
+          "route_ms": 93.04465600143885,
+          "baseline_light_ms": 1.1535560006450396,
+          "parser_calls": 1,
+          "recovery_bytes": 54304,
+          "atom_count": 128,
+          "bond_count": 0,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 4,
+          "result_sources": 2,
+          "result_atom_count": 256,
+          "retained_setup": [
+            {
+              "source_atom_records": 128,
+              "feature_ids": [
+                "1064c1f8-40f9-5919-a58e-d02eac3472c7",
+                "df31a27e-adcb-5a64-80e1-5d44b5c6f38c"
+              ]
+            }
+          ],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.009,
+            "classify": 0.916,
+            "native_capture": 3.75,
+            "native_import": 20.362,
+            "native_recovery": 3.793,
+            "native_placement": 0.247,
+            "native_candidate_admission": 3.787,
+            "native_response": 7.346,
+            "native_preparation_total": 36.771,
+            "parse_protein": 20.362,
+            "deduplicate": 0.619,
+            "commit": 48.176
+          },
+          "capture_ms": [
+            3.6736049987666775
+          ],
+          "publication_ms": [
+            47.63495299994247
+          ],
+          "light_ms": [
+            6.414974999643164,
+            4.390631002024747,
+            2.6609890010149684,
+            3.004018002684461,
+            1.8349780002608895,
+            2.898486000049161,
+            2.537308999308152,
+            2.4188559982576407,
+            3.3734780008671805,
+            7.621593002113514,
+            3.26617099926807,
+            3.333534001285443,
+            49.67261099955067
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        }
+      ]
+    },
+    {
+      "name": "eight-real-imports-then-ninth",
+      "retained_profile": "repeated-imports",
+      "source_bytes": 2578,
+      "requested_atom_records": 32,
+      "expected_status": 200,
+      "correct_transactions": 27,
+      "errors": [
+        {
+          "iteration": 12,
+          "status": 413,
+          "detail": "{\"detail\":{\"status\":\"unverified\",\"code\":\"protein_import_limit\",\"detail\":\"Part verification capture budget exceeded\"}}"
+        },
+        {
+          "iteration": 20,
+          "status": 413,
+          "detail": "{\"detail\":{\"code\":\"protein_import_capture_limit\",\"detail\":\"Part verification capture budget exceeded\",\"status\":\"unverified\"}}"
+        },
+        {
+          "iteration": 28,
+          "status": 413,
+          "detail": "{\"detail\":{\"code\":\"protein_import_capture_limit\",\"detail\":\"Part verification capture budget exceeded\",\"status\":\"unverified\"}}"
+        }
+      ],
+      "route": {
+        "count": 30,
+        "p50_ms": 26.246651501423912,
+        "p95_ms": 75.64925099723041,
+        "max_ms": 76.47216000259505
+      },
+      "capture_lock": {
+        "count": 30,
+        "p50_ms": 6.190990499817417,
+        "p95_ms": 50.71885200231918,
+        "max_ms": 50.855655998020666
+      },
+      "publication_lock": {
+        "count": 27,
+        "p50_ms": 1.1317520002194215,
+        "p95_ms": 1.7956250012503006,
+        "max_ms": 47.20542600261979
+      },
+      "candidate_admission": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "baseline_light_requests": {
+        "count": 30,
+        "p50_ms": 1.0829370003193617,
+        "p95_ms": 1.3723129995923955,
+        "max_ms": 1.485081000282662
+      },
+      "light_requests": {
+        "count": 113,
+        "p50_ms": 7.065230998705374,
+        "p95_ms": 49.29151200121851,
+        "max_ms": 58.19400000109454
+      },
+      "publication_overlap_count": 27,
+      "cold": {
+        "input_pickle_bytes": 51796,
+        "elapsed_ms": 1116.3624379987596,
+        "result": {
+          "scope": "part",
+          "contract_version": 1,
+          "status": "reproduced_import",
+          "issues": [],
+          "verification_scope": "authoring_reproducibility",
+          "integrity_checked": false,
+          "excluded_roles": [
+            "presentation",
+            "physical",
+            "document_identity",
+            "repair_draft"
+          ],
+          "checked_commands": 18,
+          "proof_coverage": "versioned_commands",
+          "native_editable": false,
+          "dependencies": {
+            "complete": true,
+            "parents": {
+              "7a1f2430-a25b-5771-9ba9-63b41cc78b0d": [],
+              "0e0a33ea-69da-50d8-b0b1-d9a3540f89ef": [
+                "7a1f2430-a25b-5771-9ba9-63b41cc78b0d"
+              ],
+              "adfd49b4-a5f4-51c5-a8d8-e9dd5651db12": [
+                "0e0a33ea-69da-50d8-b0b1-d9a3540f89ef"
+              ],
+              "903219e3-f183-5ff5-98f6-28c3af8775b9": [
+                "adfd49b4-a5f4-51c5-a8d8-e9dd5651db12"
+              ],
+              "8e408748-4ba0-5f5a-b540-c937e3853e57": [
+                "903219e3-f183-5ff5-98f6-28c3af8775b9"
+              ],
+              "bba39cee-7227-5d95-9fd6-86a6bbd14756": [
+                "8e408748-4ba0-5f5a-b540-c937e3853e57"
+              ],
+              "0e8ff744-d585-5795-8906-19d7a2328445": [
+                "bba39cee-7227-5d95-9fd6-86a6bbd14756"
+              ],
+              "dd8e436e-a417-52e0-b99a-ec6509f02c7d": [
+                "0e8ff744-d585-5795-8906-19d7a2328445"
+              ],
+              "2d47f2fc-0b22-5656-b951-fe6660f17012": [
+                "dd8e436e-a417-52e0-b99a-ec6509f02c7d"
+              ],
+              "7f430f1a-483f-52fc-ad76-71bfd1dd5f99": [
+                "2d47f2fc-0b22-5656-b951-fe6660f17012"
+              ],
+              "b2f01f09-50d6-56a5-a815-d923f77a4e61": [
+                "7f430f1a-483f-52fc-ad76-71bfd1dd5f99"
+              ],
+              "a12846e7-f03c-57c1-ad2b-affbf1c0234e": [
+                "b2f01f09-50d6-56a5-a815-d923f77a4e61"
+              ],
+              "144342ae-4f74-5c29-bafe-b3d45bdfab56": [
+                "a12846e7-f03c-57c1-ad2b-affbf1c0234e"
+              ],
+              "2cd0e4cd-59fe-5231-9b68-1c653c1d9103": [
+                "144342ae-4f74-5c29-bafe-b3d45bdfab56"
+              ],
+              "f187ee24-4b5a-5e4f-bb90-7493e03a068e": [
+                "2cd0e4cd-59fe-5231-9b68-1c653c1d9103"
+              ],
+              "5c7fd83f-c493-5c89-88e1-8a8e69d802e5": [
+                "f187ee24-4b5a-5e4f-bb90-7493e03a068e"
+              ],
+              "684b9149-018a-58e6-8581-912282eafc46": [
+                "5c7fd83f-c493-5c89-88e1-8a8e69d802e5"
+              ],
+              "a46df168-40cb-598d-85a0-4b2945387be2": [
+                "684b9149-018a-58e6-8581-912282eafc46"
+              ]
+            }
+          },
+          "recipe_fingerprint": "ca2be3a219bf60ba9cfdb4f69ba2a1284c2ec3086ba689375015ba3254759a87",
+          "authoring_fingerprint": "21d977f6f3f04a058edf8c0b3deda0e321d6598649d899fa79042674e7cda457",
+          "imported_sources": [
+            {
+              "kind": "input_source",
+              "identity": "d159c8057eeaf3a7e7f3ad6b92b895151cbe678dce49e7d827fed199aa974cf4"
+            }
+          ]
+        }
+      },
+      "sample_summary": {
+        "samples": 30,
+        "http_status_counts": {
+          "200": 27,
+          "413": 3
+        },
+        "parser_call_counts": {
+          "1": 28,
+          "0": 2
+        },
+        "undo_redo_exact_counts": {
+          "True": 27,
+          "None": 3
+        },
+        "retention": "All unexpected outcomes and largest route/capture/publication/light samples retained; aggregates above include every original sample."
+      },
+      "retained_samples": [
+        {
+          "sample_index": 8,
+          "status": 200,
+          "correct": true,
+          "route_ms": 72.18173499859404,
+          "baseline_light_ms": 1.0492069995962083,
+          "parser_calls": 1,
+          "recovery_bytes": 134328,
+          "atom_count": 32,
+          "bond_count": 0,
+          "retained_rows": 16,
+          "retained_assets": 8,
+          "result_rows": 18,
+          "result_sources": 1,
+          "result_atom_count": 288,
+          "retained_setup": [
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "3c36d4e2-4def-53e6-a5a3-7ed4a5b73f1f",
+                "671e4079-e0de-5ff6-a406-6ae6b4c8be5d"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "05c32233-e2a7-5c86-a19c-e5c91b796c3e",
+                "e4a8b118-b116-5db9-b0ee-a56f4c57628b"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "758a27c2-7e8b-5af3-9386-aeb5bc9f6a66",
+                "23fa0d11-70d9-5f2a-af0e-07a3bac837f4"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "ae699f53-2809-5e18-bf5c-2871937fe14b",
+                "457676d7-74b9-55c3-9e5c-e39e77dc38de"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "e9ad12bf-df32-5e61-a182-a2523c6995e2",
+                "180878f3-d34c-50c1-9390-edba7307afa9"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "516a8356-d302-554d-9310-0c1e07fa32a1",
+                "bfc2fcc7-eee5-5940-b193-e9544284b992"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "b9e97fe9-f574-59fd-8a4c-08c1639e745c",
+                "5543e1ab-764f-594f-a511-bff3e91073f8"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "608196c4-dd04-5e23-806f-54668bdf5e03",
+                "e7be413f-833a-564d-ae56-5830addd6488"
+              ]
+            }
+          ],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.005,
+            "classify": 0.465,
+            "native_capture": 5.792,
+            "native_import": 3.01,
+            "native_recovery": 2.536,
+            "native_placement": 0.102,
+            "native_candidate_admission": 7.34,
+            "native_response": 1.678,
+            "native_preparation_total": 15.434,
+            "parse_protein": 3.01,
+            "deduplicate": 0.782,
+            "commit": 47.373
+          },
+          "capture_ms": [
+            5.7351309988007415
+          ],
+          "publication_ms": [
+            47.20542600261979
+          ],
+          "light_ms": [
+            9.424515999853611,
+            3.7376139989646617,
+            9.924463000061223,
+            49.29151200121851
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        },
+        {
+          "sample_index": 12,
+          "status": 413,
+          "correct": false,
+          "route_ms": 68.13541500014253,
+          "baseline_light_ms": 1.2324580020504072,
+          "parser_calls": 1,
+          "recovery_bytes": 116076,
+          "atom_count": null,
+          "bond_count": null,
+          "retained_rows": 16,
+          "retained_assets": 8,
+          "result_rows": 16,
+          "result_sources": 1,
+          "result_atom_count": 256,
+          "retained_setup": [
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "b207a7a0-4955-5d20-84f5-c8283347ee57",
+                "8456ff86-67be-57ce-b24c-38998a1cb94e"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "89027c53-5e83-54e1-93e6-d74c5a1986d3",
+                "786374b8-83a3-5c7e-853d-ac9029339288"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "dd6d5db6-987a-5acd-8797-3f015dd6a9fa",
+                "abecaade-2fec-591c-af94-553f577218ef"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "fe279fd7-5c19-54be-955c-d9c5ae3befaa",
+                "9f341bc0-e22e-5cfc-a7b2-9559d452f1ec"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "5dda4dfe-55dc-55d6-b20a-c5ac2f33363f",
+                "285871a2-b496-5651-ab6b-f48fa2cfd301"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "3084979e-5246-5326-a78f-c3f4eb5a9de7",
+                "d1e0a932-1f25-57a0-9e4d-50787182278a"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "816e6bce-b2f5-58dc-ac0c-186bf1d0f457",
+                "f2ef5f38-a681-51c5-a598-5f6ffde28dd2"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "34007e23-d5c1-5d69-8bd7-782660466985",
+                "fe149de1-76f2-5b72-8bf4-703a32a3294a"
+              ]
+            }
+          ],
+          "error_detail": {
+            "status": "unverified",
+            "code": "protein_import_limit",
+            "detail": "Part verification capture budget exceeded"
+          },
+          "stages_ms": {},
+          "capture_ms": [
+            6.387063000147464
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            9.19865700052469,
+            3.568763000657782,
+            55.37450400152011
+          ],
+          "publication_overlaps": 0
+        },
+        {
+          "sample_index": 16,
+          "status": 200,
+          "correct": true,
+          "route_ms": 76.47216000259505,
+          "baseline_light_ms": 1.21470500016585,
+          "parser_calls": 1,
+          "recovery_bytes": 134188,
+          "atom_count": 32,
+          "bond_count": 0,
+          "retained_rows": 16,
+          "retained_assets": 8,
+          "result_rows": 18,
+          "result_sources": 1,
+          "result_atom_count": 288,
+          "retained_setup": [
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "9bf7414b-1a14-57c9-aeb7-95f8ef67b343",
+                "6e188df6-2c17-50e1-b348-26b0a08281a0"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "beb4c707-23e3-5139-9f79-566085dbe17a",
+                "d36b53d1-2065-55b5-92af-8a8831fea93e"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "9e6bb0bc-403d-5757-9632-5901770c1b72",
+                "80f63005-5006-5971-8397-22189ba6b4c9"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "29fb7cc6-0e8f-5fe5-b6c9-3207b9d37072",
+                "b225f6b4-c5a8-5cf7-8e40-98dfa85a423d"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "04a56b01-1e1c-5c07-8319-dcc74ed8023d",
+                "66ab765c-df03-5289-a3d7-dbb51e104bf5"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "8796ea27-63ec-5aac-aba8-418614323718",
+                "f2a5a803-18cc-5866-969c-c8157d3f2b25"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "9395e81d-be16-57ee-9a38-7f8fda9dc0b4",
+                "3d4cbdff-fa31-51ae-85dc-380f2eeabf19"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "a62d2f30-d72b-502d-bc5a-c3cb8289861e",
+                "02f97a92-4a6a-58e8-abd6-0ecab8c6fd57"
+              ]
+            }
+          ],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.006,
+            "classify": 0.456,
+            "native_capture": 5.903,
+            "native_import": 2.652,
+            "native_recovery": 2.869,
+            "native_placement": 0.11,
+            "native_candidate_admission": 55.898,
+            "native_response": 3.533,
+            "native_preparation_total": 66.047,
+            "parse_protein": 2.652,
+            "deduplicate": 0.744,
+            "commit": 1.387
+          },
+          "capture_ms": [
+            5.843621998792514
+          ],
+          "publication_ms": [
+            1.2401509993651416
+          ],
+          "light_ms": [
+            9.664576999057317,
+            3.796199001953937,
+            57.892777000233764,
+            2.242114002001472,
+            3.3211069967364892
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        },
+        {
+          "sample_index": 20,
+          "status": 413,
+          "correct": false,
+          "route_ms": 53.146196998568485,
+          "baseline_light_ms": 1.127616000303533,
+          "parser_calls": 0,
+          "recovery_bytes": 116180,
+          "atom_count": null,
+          "bond_count": null,
+          "retained_rows": 16,
+          "retained_assets": 8,
+          "result_rows": 16,
+          "result_sources": 1,
+          "result_atom_count": 256,
+          "retained_setup": [
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "346f0222-d3da-5584-84dd-1584c0c390e0",
+                "3c2fb257-789a-555f-8d77-860713a602d7"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "c0e3b730-fac6-52c9-b01d-effe6d492b7c",
+                "43e48283-3fa4-5259-85fe-d961c02a5933"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "49b456e3-bcdb-599c-986e-c9c7dc048f9b",
+                "c25d0d48-e125-53fe-9b0b-63148e4d1403"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "ce230872-cf05-55b0-b1c2-954d4de4bec6",
+                "892e9105-aeb4-56e1-b4e3-e09d5a3f7159"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "61d94a4b-76af-5577-a68c-e093bcf51fe4",
+                "5da216c3-e6e6-56f3-8579-f921af2b7ba7"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "a7237ed0-0aee-59cd-9591-5b4af126f9d0",
+                "370ba27a-a37c-5942-9895-964d797a99ba"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "9ec22aa5-662f-5803-8b0c-951479cbaafb",
+                "0e892688-11bc-5fca-b03d-9c33ac4e2620"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "39374184-113f-59c0-adcb-856cfa9258cb",
+                "5aa02083-a30e-5758-9afd-a531c750846c"
+              ]
+            }
+          ],
+          "error_detail": {
+            "code": "protein_import_capture_limit",
+            "detail": "Part verification capture budget exceeded",
+            "status": "unverified"
+          },
+          "stages_ms": {},
+          "capture_ms": [
+            50.855655998020666
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            53.28131799979019
+          ],
+          "publication_overlaps": 0
+        },
+        {
+          "sample_index": 24,
+          "status": 200,
+          "correct": true,
+          "route_ms": 75.64925099723041,
+          "baseline_light_ms": 1.485081000282662,
+          "parser_calls": 1,
+          "recovery_bytes": 134332,
+          "atom_count": 32,
+          "bond_count": 0,
+          "retained_rows": 16,
+          "retained_assets": 8,
+          "result_rows": 18,
+          "result_sources": 1,
+          "result_atom_count": 288,
+          "retained_setup": [
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "22ca32d6-6ade-5ae0-87c1-890233d5b536",
+                "0c8b85d3-2c57-56da-bb0d-e30d78b68b0c"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "b6cfa8b9-5b3f-5580-9802-cf648aee443e",
+                "9f684a75-02c9-5445-8f7b-24cd8a1cc3d1"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "d00b40ce-722f-58cd-9bfa-78080622a9ae",
+                "24a0c295-fd7e-5553-a3ae-684dd0155071"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "e8bdad22-d0af-5b92-a3bb-608d614966ec",
+                "b67ef6dd-2e44-5be0-951f-a87841599ce8"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "1a98717a-5482-5d22-9cc5-65050434ab9b",
+                "2ba59e94-fdc7-56cf-8a2b-0a879c488fd7"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "5430672a-c276-5592-ae30-0c135e71cb3b",
+                "bd6efa75-12be-5f1f-9a32-2092dd14d6a5"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "c4a43c07-f595-5078-b7a4-27fb2882b17b",
+                "f5704025-272f-5b7c-ab11-602f2019a8c6"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "c50bb4f7-6ea6-5df8-8320-c4c699ac0923",
+                "6f62fcef-66af-5cea-81cc-18b358d81b7b"
+              ]
+            }
+          ],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.025,
+            "classify": 0.701,
+            "native_capture": 6.655,
+            "native_import": 2.985,
+            "native_recovery": 2.382,
+            "native_placement": 0.171,
+            "native_candidate_admission": 55.609,
+            "native_response": 1.61,
+            "native_preparation_total": 63.595,
+            "parse_protein": 2.985,
+            "deduplicate": 0.957,
+            "commit": 1.572
+          },
+          "capture_ms": [
+            6.616896000195993
+          ],
+          "publication_ms": [
+            1.2808889987354632
+          ],
+          "light_ms": [
+            7.0727620004618075,
+            6.545128999277949,
+            58.19400000109454,
+            4.107221997401211
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        },
+        {
+          "sample_index": 28,
+          "status": 413,
+          "correct": false,
+          "route_ms": 52.925926000170875,
+          "baseline_light_ms": 1.0901669993472751,
+          "parser_calls": 0,
+          "recovery_bytes": 116184,
+          "atom_count": null,
+          "bond_count": null,
+          "retained_rows": 16,
+          "retained_assets": 8,
+          "result_rows": 16,
+          "result_sources": 1,
+          "result_atom_count": 256,
+          "retained_setup": [
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "5bbd1603-bb14-5a68-8d6e-8cbbd500c1c0",
+                "9ff13b72-013f-552e-92fc-34874891bfdd"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "eb26b34e-280b-55e3-8da7-70972481700c",
+                "99f6f335-e57a-5a2a-8059-edf0cf6243b1"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "563152ff-2b62-563c-bf3e-5bc2fcbbe6d9",
+                "57ebf68f-a40e-5efa-89b4-1e699b5192a4"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "d971396d-6dcc-5dc0-8ac5-443356f2951f",
+                "2416d604-c051-5efb-998d-2a32085c4015"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "8dd03042-73a4-54dd-800f-a3ab70c7521a",
+                "4543fe66-faf0-5ea9-934b-eafc03e529fc"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "623ba659-440e-5b5e-bd6a-7d6ca57abbc0",
+                "cf3a1bc1-8e0c-5c99-8e27-6c53107b1587"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "070f5a3f-df54-509a-b39c-e2e47054d582",
+                "e0f79bfb-ea41-59a9-8d79-a1d94f4ed3db"
+              ]
+            },
+            {
+              "source_atom_records": 32,
+              "feature_ids": [
+                "8bca09cc-eab2-5388-9aba-6e6305df1ad1",
+                "63da75ea-c685-5524-bdf5-ac33ac319762"
+              ]
+            }
+          ],
+          "error_detail": {
+            "code": "protein_import_capture_limit",
+            "detail": "Part verification capture budget exceeded",
+            "status": "unverified"
+          },
+          "stages_ms": {},
+          "capture_ms": [
+            50.71885200231918
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            53.07624299894087
+          ],
+          "publication_overlaps": 0
+        }
+      ]
+    },
+    {
+      "name": "retained-1000-atoms-plus-1000",
+      "retained_profile": "retained-1000-atoms",
+      "source_bytes": 79050,
+      "requested_atom_records": 1000,
+      "expected_status": 200,
+      "correct_transactions": 27,
+      "errors": [
+        {
+          "iteration": 7,
+          "status": 413,
+          "detail": "{\"detail\":{\"status\":\"unverified\",\"code\":\"protein_import_limit\",\"detail\":\"Part verification capture budget exceeded\"}}"
+        },
+        {
+          "iteration": 16,
+          "status": 413,
+          "detail": "{\"detail\":{\"status\":\"unverified\",\"code\":\"protein_import_limit\",\"detail\":\"Part verification capture budget exceeded\"}}"
+        },
+        {
+          "iteration": 25,
+          "status": 413,
+          "detail": "{\"detail\":{\"status\":\"unverified\",\"code\":\"protein_import_limit\",\"detail\":\"Part verification capture budget exceeded\"}}"
+        }
+      ],
+      "route": {
+        "count": 30,
+        "p50_ms": 222.95221100102935,
+        "p95_ms": 234.07162399962544,
+        "max_ms": 271.7055379980593
+      },
+      "capture_lock": {
+        "count": 30,
+        "p50_ms": 7.383819000096992,
+        "p95_ms": 8.455600000161212,
+        "max_ms": 8.711926002433756
+      },
+      "publication_lock": {
+        "count": 27,
+        "p50_ms": 2.5907570015988313,
+        "p95_ms": 2.8920559998368844,
+        "max_ms": 2.9879549983888865
+      },
+      "candidate_admission": {
+        "count": 0,
+        "p50_ms": null,
+        "p95_ms": null,
+        "max_ms": null
+      },
+      "baseline_light_requests": {
+        "count": 30,
+        "p50_ms": 1.152839500718983,
+        "p95_ms": 1.5029729984235018,
+        "max_ms": 1.7908269983308855
+      },
+      "light_requests": {
+        "count": 1863,
+        "p50_ms": 2.7916549988731276,
+        "p95_ms": 8.346376002009492,
+        "max_ms": 56.26366999786114
+      },
+      "publication_overlap_count": 27,
+      "cold": {
+        "input_pickle_bytes": 334580,
+        "elapsed_ms": 1172.2378230006143,
+        "result": {
+          "scope": "part",
+          "contract_version": 1,
+          "status": "reproduced_import",
+          "issues": [],
+          "verification_scope": "authoring_reproducibility",
+          "integrity_checked": false,
+          "excluded_roles": [
+            "presentation",
+            "physical",
+            "document_identity",
+            "repair_draft"
+          ],
+          "checked_commands": 4,
+          "proof_coverage": "versioned_commands",
+          "native_editable": false,
+          "dependencies": {
+            "complete": true,
+            "parents": {
+              "0fe853bd-0486-59c9-8d8c-a655b6a61f70": [],
+              "df4ee72e-fa67-515b-9c8e-372e92c01d88": [
+                "0fe853bd-0486-59c9-8d8c-a655b6a61f70"
+              ],
+              "3c55b4cb-b699-59f1-b6fb-906067a1d2f0": [
+                "df4ee72e-fa67-515b-9c8e-372e92c01d88"
+              ],
+              "07fc15db-c5cb-54f7-b636-1fb435870d2e": [
+                "3c55b4cb-b699-59f1-b6fb-906067a1d2f0"
+              ]
+            }
+          },
+          "recipe_fingerprint": "8d34894152a0adb03b5e4703e8d02154e074a2a5af73d74e3103cd55e1365070",
+          "authoring_fingerprint": "5b8164669402395bace1bdba32b08d8eee16e2c248a8f653116fb3cd7c151fc2",
+          "imported_sources": [
+            {
+              "kind": "input_source",
+              "identity": "b5cb5f82d3246a7a5a470e2cf2926338eac3cc60709b75a0b455003ba87e706c"
+            }
+          ]
+        }
+      },
+      "sample_summary": {
+        "samples": 30,
+        "http_status_counts": {
+          "200": 27,
+          "413": 3
+        },
+        "parser_call_counts": {
+          "1": 30
+        },
+        "undo_redo_exact_counts": {
+          "True": 27,
+          "None": 3
+        },
+        "retention": "All unexpected outcomes and largest route/capture/publication/light samples retained; aggregates above include every original sample."
+      },
+      "retained_samples": [
+        {
+          "sample_index": 0,
+          "status": 200,
+          "correct": true,
+          "route_ms": 217.90504100135877,
+          "baseline_light_ms": 1.2032239974359982,
+          "parser_calls": 1,
+          "recovery_bytes": 222860,
+          "atom_count": 1000,
+          "bond_count": 0,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 4,
+          "result_sources": 1,
+          "result_atom_count": 2000,
+          "retained_setup": [
+            {
+              "source_atom_records": 1000,
+              "feature_ids": [
+                "0fe853bd-0486-59c9-8d8c-a655b6a61f70",
+                "df4ee72e-fa67-515b-9c8e-372e92c01d88"
+              ]
+            }
+          ],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.009,
+            "classify": 0.852,
+            "native_capture": 7.517,
+            "native_import": 103.351,
+            "native_recovery": 9.683,
+            "native_placement": 0.176,
+            "native_candidate_admission": 15.379,
+            "native_response": 70.904,
+            "native_preparation_total": 200.615,
+            "parse_protein": 103.351,
+            "deduplicate": 2.074,
+            "commit": 3.11
+          },
+          "capture_ms": [
+            7.257291999849258
+          ],
+          "publication_ms": [
+            2.9879549983888865
+          ],
+          "light_ms": [
+            10.851037000975339,
+            9.654007000790443,
+            3.45925600049668,
+            4.283393998775864,
+            1.6815050003060605,
+            5.128668999532238,
+            5.425567000202136,
+            2.0486959983827546,
+            4.868637999607017,
+            4.046269001264591,
+            2.4665150012879167,
+            2.251412002806319,
+            1.5434779998031445,
+            2.4069399987638462,
+            1.8763570005830843,
+            2.530712001316715,
+            3.015383997990284,
+            2.016843001911184,
+            2.624107997689862,
+            3.189491999364691,
+            3.01046800086624,
+            4.753614000946982,
+            2.057838999462547,
+            1.736165999318473,
+            3.207778001524275,
+            2.9092090007907245,
+            2.750534997176146,
+            3.282789002696518,
+            2.8760769964719657,
+            2.673657003469998,
+            4.796379998879274,
+            6.131733000074746,
+            2.565120998042403,
+            2.816304000589298,
+            2.3489359991799574,
+            21.155860002181726,
+            2.104732997395331,
+            2.1039460007159505,
+            2.8259390019229613,
+            1.7027399990183767,
+            2.324654000403825,
+            2.782485997158801,
+            2.5916650010913145,
+            3.1439740014320705,
+            3.224293999664951,
+            2.676112999324687,
+            1.8887439982790966,
+            1.7838460007624235,
+            2.9141240011085756,
+            1.7749990001902916,
+            1.9682780002767686,
+            3.8743240002077073,
+            2.1834789986314718,
+            2.9036039995844476,
+            3.8753070002712775,
+            1.93318099991302,
+            2.262619000248378,
+            1.4140019993647002,
+            3.1220509990816936,
+            3.725285001564771,
+            2.560008997534169,
+            9.589515000698157
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        },
+        {
+          "sample_index": 1,
+          "status": 200,
+          "correct": true,
+          "route_ms": 271.7055379980593,
+          "baseline_light_ms": 1.023708999127848,
+          "parser_calls": 1,
+          "recovery_bytes": 222840,
+          "atom_count": 1000,
+          "bond_count": 0,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 4,
+          "result_sources": 1,
+          "result_atom_count": 2000,
+          "retained_setup": [
+            {
+              "source_atom_records": 1000,
+              "feature_ids": [
+                "58304820-27b2-5726-965c-d11759b53d09",
+                "e63c0a89-dc72-56df-96ad-e5646d3f70ef"
+              ]
+            }
+          ],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.009,
+            "classify": 0.897,
+            "native_capture": 6.958,
+            "native_import": 108.862,
+            "native_recovery": 9.571,
+            "native_placement": 0.168,
+            "native_candidate_admission": 13.584,
+            "native_response": 122.032,
+            "native_preparation_total": 255.829,
+            "parse_protein": 108.862,
+            "deduplicate": 1.63,
+            "commit": 2.66
+          },
+          "capture_ms": [
+            6.727004001731984
+          ],
+          "publication_ms": [
+            2.441642998746829
+          ],
+          "light_ms": [
+            9.413832998689031,
+            8.488337000017054,
+            5.823233997944044,
+            7.0098440010042395,
+            3.102586000750307,
+            2.784353000606643,
+            10.275918997649569,
+            1.8003629993472714,
+            4.516586999670835,
+            2.604446002806071,
+            2.8587749984581023,
+            2.7529930011951365,
+            3.015088997926796,
+            2.974093000375433,
+            3.188803999364609,
+            2.4998430017149076,
+            1.9625749991973862,
+            3.2516239989490714,
+            3.3138549988507293,
+            3.2971420005196705,
+            2.6963660020555835,
+            2.6935149980999995,
+            3.2698120012355503,
+            2.9505969978345092,
+            1.9780100010393653,
+            2.8066710001439787,
+            2.1387480010162108,
+            2.2724509981344454,
+            2.7354930025467183,
+            1.8309369988855906,
+            3.3810989989433438,
+            2.164702000300167,
+            5.089049998787232,
+            2.616046000184724,
+            2.914910000981763,
+            2.430927997920662,
+            19.629685000836616,
+            2.6897790012299083,
+            3.3353849976265337,
+            3.2230159995378926,
+            2.103356000588974,
+            2.9928709991509095,
+            3.101602000242565,
+            2.930050002760254,
+            4.384163003123831,
+            3.2509359989489894,
+            4.977566000889055,
+            3.7908579979557544,
+            2.897213998949155,
+            4.544998999335803,
+            54.25223500060383,
+            1.8457820006005932,
+            3.0620809993706644,
+            2.8140440008428413,
+            3.3992870012298226,
+            2.1049290007795207,
+            2.643277999595739,
+            8.447833002719563
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        },
+        {
+          "sample_index": 7,
+          "status": 413,
+          "correct": false,
+          "route_ms": 196.52837600006023,
+          "baseline_light_ms": 1.1136630018881988,
+          "parser_calls": 1,
+          "recovery_bytes": 90620,
+          "atom_count": null,
+          "bond_count": null,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 2,
+          "result_sources": 1,
+          "result_atom_count": 1000,
+          "retained_setup": [
+            {
+              "source_atom_records": 1000,
+              "feature_ids": [
+                "03f623c4-29e0-5796-889b-5ac5dfbf0b56",
+                "00e09bd0-e815-53a0-a5ac-825a578ae8b1"
+              ]
+            }
+          ],
+          "error_detail": {
+            "status": "unverified",
+            "code": "protein_import_limit",
+            "detail": "Part verification capture budget exceeded"
+          },
+          "stages_ms": {},
+          "capture_ms": [
+            7.241168998007197
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            2.2654710010101553,
+            16.32703799987212,
+            5.146660998434527,
+            2.775014996586833,
+            2.440267002384644,
+            2.4032039982557762,
+            1.780012000381248,
+            1.8950359990412835,
+            1.7395080030837562,
+            1.8210080015705898,
+            2.530025001760805,
+            1.702346999081783,
+            1.458045000617858,
+            2.261636000184808,
+            4.999685999791836,
+            2.17089599755127,
+            1.6708870025468059,
+            1.8561050019343384,
+            2.0796639983018395,
+            1.639428002818022,
+            1.947140997799579,
+            4.37649500236148,
+            3.375593998498516,
+            2.2382390015991405,
+            3.2726629979151767,
+            2.7171100009582005,
+            3.708276999532245,
+            3.5785079999186564,
+            1.3718270020035561,
+            2.95354599802522,
+            3.934882999601541,
+            2.004063000640599,
+            2.8539580016513355,
+            5.265321997285355,
+            2.119184002367547,
+            1.5108379993762355,
+            2.7219269977649674,
+            1.7546489980304614,
+            3.1336520005424973,
+            2.7056069993705023,
+            2.5487029997748323,
+            4.613619999872753,
+            4.364992000773782,
+            3.9962289993127342,
+            1.1261479994573165,
+            2.703934998862678,
+            2.641704999405192,
+            56.114434999471996
+          ],
+          "publication_overlaps": 0
+        },
+        {
+          "sample_index": 16,
+          "status": 413,
+          "correct": false,
+          "route_ms": 183.80009700194933,
+          "baseline_light_ms": 1.2519859992607962,
+          "parser_calls": 1,
+          "recovery_bytes": 90616,
+          "atom_count": null,
+          "bond_count": null,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 2,
+          "result_sources": 1,
+          "result_atom_count": 1000,
+          "retained_setup": [
+            {
+              "source_atom_records": 1000,
+              "feature_ids": [
+                "6da603a9-f924-5515-993c-0c67c193e0ed",
+                "8dcb43df-2f01-5771-bcf9-a1b4eb1e4879"
+              ]
+            }
+          ],
+          "error_detail": {
+            "status": "unverified",
+            "code": "protein_import_limit",
+            "detail": "Part verification capture budget exceeded"
+          },
+          "stages_ms": {},
+          "capture_ms": [
+            7.746878000034485
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            11.318306998873595,
+            8.536608002032153,
+            6.281656998908147,
+            5.7772250002017245,
+            4.566726001939969,
+            4.119804998481413,
+            3.9980969995667692,
+            4.162373999861302,
+            1.9310169991513249,
+            5.728462998376926,
+            2.949614001408918,
+            1.9687690000864677,
+            1.8601349984237459,
+            1.806555999792181,
+            3.774736000195844,
+            3.3761840022634715,
+            4.73355899885064,
+            3.013811001437716,
+            3.091377999226097,
+            1.889529998152284,
+            1.7741139999998268,
+            2.057248002529377,
+            2.867327999410918,
+            2.5909759970090818,
+            4.8976390025927685,
+            3.208859001460951,
+            2.5329740019515157,
+            2.3762669989082497,
+            3.994262999185594,
+            2.6321689983888064,
+            5.44660600280622,
+            2.7298899985908065,
+            2.732838998781517,
+            2.5321880020783283,
+            56.26366999786114
+          ],
+          "publication_overlaps": 0
+        },
+        {
+          "sample_index": 22,
+          "status": 200,
+          "correct": true,
+          "route_ms": 225.14543900251738,
+          "baseline_light_ms": 1.1604969986365177,
+          "parser_calls": 1,
+          "recovery_bytes": 222860,
+          "atom_count": 1000,
+          "bond_count": 0,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 4,
+          "result_sources": 1,
+          "result_atom_count": 2000,
+          "retained_setup": [
+            {
+              "source_atom_records": 1000,
+              "feature_ids": [
+                "57157bfb-25e3-5aa6-92c5-76d9f98d837b",
+                "6079d45f-5c09-5f56-95e5-4081626e3f26"
+              ]
+            }
+          ],
+          "error_detail": null,
+          "stages_ms": {
+            "acquire": 0.011,
+            "classify": 1.18,
+            "native_capture": 8.976,
+            "native_import": 117.38,
+            "native_recovery": 9.596,
+            "native_placement": 0.182,
+            "native_candidate_admission": 13.731,
+            "native_response": 64.009,
+            "native_preparation_total": 206.17,
+            "parse_protein": 117.38,
+            "deduplicate": 2.17,
+            "commit": 2.686
+          },
+          "capture_ms": [
+            8.711926002433756
+          ],
+          "publication_ms": [
+            2.5343679990328383
+          ],
+          "light_ms": [
+            7.841136000934057,
+            15.572735999739962,
+            2.7216109992878046,
+            2.5745470011315774,
+            2.538101001846371,
+            2.492026997060748,
+            2.475424000294879,
+            2.581423999799881,
+            2.3105799991753884,
+            2.93645999772707,
+            2.185029999964172,
+            2.851973997167079,
+            2.1543800030485727,
+            1.8782299994200002,
+            4.0964639993035235,
+            3.2696859998395666,
+            3.513023999403231,
+            2.559419001045171,
+            6.613345998630393,
+            3.113879000011366,
+            2.9397990001598373,
+            2.934396001364803,
+            2.0404220013006125,
+            2.868968997063348,
+            1.9171320018358529,
+            2.418838997982675,
+            2.8871439972135704,
+            3.726006001670612,
+            5.512774998351233,
+            3.742510001757182,
+            2.2885739999765065,
+            3.031062999070855,
+            3.8685510007780977,
+            4.143619000387844,
+            3.5978039995825384,
+            6.723472000885522,
+            2.6870309993682895,
+            2.8025600004184525,
+            2.4492929987900425,
+            18.608712001878303,
+            2.1526119999180082,
+            2.804327999911038,
+            2.817492000758648,
+            2.3114629984775092,
+            3.0404940007429104,
+            2.189450999139808,
+            7.962167001096532,
+            2.2226549990591593,
+            1.9184090015187394,
+            3.1719379985588603,
+            3.1589709979016334,
+            3.758719001780264,
+            2.5802449999901,
+            3.31939500028966,
+            4.2449039974599145,
+            1.9365840016689617,
+            2.143967001757119,
+            2.836747000401374,
+            2.385829997365363,
+            3.3137950013042428,
+            7.522251999034779
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        },
+        {
+          "sample_index": 25,
+          "status": 413,
+          "correct": false,
+          "route_ms": 184.07773799845017,
+          "baseline_light_ms": 1.0640260006766766,
+          "parser_calls": 1,
+          "recovery_bytes": 90604,
+          "atom_count": null,
+          "bond_count": null,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 2,
+          "result_sources": 1,
+          "result_atom_count": 1000,
+          "retained_setup": [
+            {
+              "source_atom_records": 1000,
+              "feature_ids": [
+                "cbaf09b3-8f95-5192-b65a-132b79f1002f",
+                "eb8c12c0-596c-52eb-a862-addafc9b4014"
+              ]
+            }
+          ],
+          "error_detail": {
+            "status": "unverified",
+            "code": "protein_import_limit",
+            "detail": "Part verification capture budget exceeded"
+          },
+          "stages_ms": {},
+          "capture_ms": [
+            7.21083499956876
+          ],
+          "publication_ms": [],
+          "light_ms": [
+            10.467161002452485,
+            7.935445999464719,
+            2.522677998058498,
+            2.1776629982923623,
+            3.6030110022693407,
+            2.2648989979643375,
+            1.8132940022042021,
+            2.4172669982363004,
+            1.8298970026080497,
+            2.723083998716902,
+            2.142394001566572,
+            1.7925650026882067,
+            2.7040259992645588,
+            2.811008998833131,
+            2.072841001790948,
+            2.9060060005576815,
+            2.4474259989801794,
+            4.609468000126071,
+            2.232086000731215,
+            4.384010000649141,
+            2.6049039988720324,
+            2.9672079981537536,
+            3.006504000950372,
+            3.186773003108101,
+            1.923124997119885,
+            3.4663600017665885,
+            3.8418299991462845,
+            2.110368997819023,
+            2.739293999184156,
+            4.612218999682227,
+            2.16302400076529,
+            3.09275799736497,
+            2.9945189999125432,
+            2.6805480010807514,
+            2.8536450008687098,
+            3.9352550011244603,
+            6.213414999365341,
+            2.542718000768218,
+            2.6842799998121336,
+            2.846669998689322,
+            55.957578002562514
+          ],
+          "publication_overlaps": 0
+        }
+      ]
+    }
+  ],
+  "sample_retention": "Successful repetitive sample rows pruned after aggregate validation. Failed outcomes and timing maxima retained; no outcome or percentile recomputed."
+}

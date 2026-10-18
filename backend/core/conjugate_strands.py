@@ -36,6 +36,7 @@ def assign_conjugate_group(
     *,
     prefix: str,
     fallback: str,
+    group_id: str | None = None,
 ) -> tuple[list[Strand], StapleGroup]:
     """Return consistently colored/named strands and their persisted group."""
     group_name = next_group_name(design, prefix, fallback=fallback)
@@ -47,7 +48,7 @@ def assign_conjugate_group(
         for index, strand in enumerate(strands, start=1)
     ]
     group = StapleGroup(
-        id=f"conjugate-{uuid.uuid4()}",
+        id=group_id if group_id is not None else f"conjugate-{uuid.uuid4()}",
         name=group_name,
         color=CONJUGATE_SSDNA_COLOR,
         strand_ids=[strand.id for strand in assigned],

@@ -893,7 +893,7 @@ No timing thresholds or motion presets were relaxed. Re-run this profile under a
 quiet host condition before claiming complete four-profile coverage.
 
 - **MV-44 — IMPROVED, OPEN — Timing-related physical double vision (2026-10-13).**
-  **October 15 Ball+Stick update:** ISSUE-79 groups exact exported sphere meshes
+  **October 15 Ball+Stick update:** ISSUE-97 groups exact exported sphere meshes
   in batches of eight. The same restored Flex scene improved from about 45 to
   87.343 application Hz, with occasional missed refreshes still present. Native
   exact rendering checks pass; this does not close the physical symptom. A fresh
@@ -936,5 +936,63 @@ quiet host condition before claiming complete four-profile coverage.
 2026-10-16 compact sweep preview: direct enlarged-node dragging and guest preview lifecycle passed steady_fast, steady_deliberate (avatar hidden), and variable_deliberate (mobile-sized guest). variable_fast was blocked by the overlapping Feature Log Close control; a Menu-button dismissal diagnostic also failed and was reverted. Existing noisy numeric-button reach debt is not resolved by enlarging 3D nodes. No motion preset, retry count or acceptance threshold was relaxed. Evidence: `.development-artifacts/sweep-preview-20261016/results.json`.
 
 2026-10-16 — OPEN, deferred by user: eight simultaneous guests worked while the presenter shared headset perspective and edited a sweep, but VR became very laggy and maintaining good framerate was difficult. No measured FPS or bottleneck attribution is available. This is functional evidence, not a performance/capacity sign-off. See docs/vr_sharing.md.
+
+- **MV-45 — PENDING — Standard-part recipe repair panel (2026-10-15).**
+  Exercise Check / repair recipe from the desktop Feature Log using an isolated
+  `__e2e__` native part. Inspect a missing reference, choose a valid prefix target,
+  change a scalar/pose input, save/reload/rebase the proposal, evaluate privately,
+  cancel, Apply once, and Undo while retaining proposal metadata. Confirm source
+  replacement uses the selected original file and preserves upload limits.
+  Switch document/loadout during requests and confirm no stale result reaches
+  the scene. Simulate display-refresh failure after successful Apply: publication
+  must remain acknowledged and Refresh must only read, never recommit. Verify
+  keyboard focus, narrow-window layout, readable diagnostics, and cleanup after
+  both successful and interrupted runs. Unit tests and HTTP/Node transport tests
+  do not establish this app/visual behavior. App and smoke runs remain unexecuted:
+  Archive is unavailable for the browser runtime/capture output policy. The
+  dedicated Playwright scenario is `frontend/e2e/part_repair.spec.js`; its output
+  inventory and isolation prerequisites are in the feature-history repair UI
+  plan. Candidate visual comparison and native VR repair are separate unfinished
+  phase work, not features certified by this entry.
+
+MV-45 automated update (2026-10-15):86 focused and full8,181 passed/one skipped
+across708 frontend files. Receipt/unknown-publication/default-document integration
+passes. App/smoke/headset remains PENDING; no browser was launched without Archive.
+
+- **MV-46 — PENDING — Physical input freshness labels (2026-10-15).**
+  Inspect oxDNA, NAMD and unified simulation job rows with matching legacy,
+  changed and unavailable inputs. Confirm `Inputs unverified` is readable at
+  narrow panel widths and beside run/health/storage status; matching partial
+  evidence must not read as a complete current result. Confirm the existing
+  stale warning still opens its normal protected-loadout action and an evidence
+  label triggers no run, repair or model mutation. Check unchanged polling does
+  not restart row spinners and changed evidence updates its label/tooltip.
+  Automated DOM/model checks pass; app/smoke remains unexecuted because Archive
+  is unavailable for browser runtime/capture output. No native/headset behavior
+  changed in this increment.
+
+MV-46 automated update: 39 focused cases and the full frontend suite (8,192
+passed, one skipped, 709 files, 310.21s) pass. App validation remains PENDING.
+
+- **MV-47 — PENDING — Private authored repair comparison (2026-10-15).**
+  On the isolated native gold fixture in `frontend/e2e/part_repair.spec.js`, save
+  and evaluate the proposal, then Compare authored geometry. Confirm the two
+  panes visibly differ at the expected particle, share one camera/frame, and
+  remain labeled published authored/unverified versus evaluated proposal.
+  Exercise orbit, keyboard rotation/F fit, narrow windows, close/reopen, and
+  cancellation or expiry while visible. Check that ordinary scene, export and
+  simulation inputs remain unchanged before Apply. Repeat with a small free
+  protein (including a no-C-alpha ovoid) and quantum dot. Unsupported DNA,
+  coatings or anchored proteins must report unavailable without showing a
+  partial model. Confirm document/loadout/proposal changes dispose both panes,
+  and one Apply still uses the normal guarded publication/refresh path.
+  The 115 unique focused frontend cases cover lifecycle, bounds, native nm/pose
+  adaptation and GPU cleanup, following one caught/fixed pose-wrapper mismatch;
+  they do not establish visual correctness, device responsiveness or near-limit
+  display cost. Full frontend validation passed 8,263 cases with one skipped
+  across 714 files in 311.62 seconds. **NOT VERIFIED IN APP**:
+  Archive remains unavailable, and no browser or native/headset run was made.
+  Assemblies and molecular-engine comparison authorization remain outside this
+  display scope. The existing dedicated e2e isolation/output cleanup rules apply.
 
 2026-10-16 VR clipboard, updated after minimum-domain scope clarification: the registered tour validates clusters, overlapping base/bond/extension selections, and proteins/nanoparticles in rendered stereo and document history across all four motion profiles (12 cases). All canonical part-editor selection kinds are resolved; small picks copy the minimum owning domain(s), while explicit strand/cluster picks retain their scope. Native rigid-element export and post-paste visibility are now covered. Physical controller comfort and through-lens preview legibility remain manual coverage. Final evidence: `.development-artifacts/vr-clipboard-all-20261016/app-visible/`. Diagnostic capture settling is outside timed human-motion intervals; the earlier 289 ms variable-fast input-delivery failure remains retained in `.development-artifacts/vr-clipboard-20261016/app-isolated/`.

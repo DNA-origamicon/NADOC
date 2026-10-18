@@ -3,16 +3,20 @@
  * centers from the surrounding live geometry, including consecutive skips.
  */
 export function withSkippedColumnPoints(points, helices = []) {
+  const skippedHelices = helices.filter(helix => helix.loop_skips?.some(skip => skip.delta < 0))
+  if (!skippedHelices.length) return points
+  const neededHelices = new Set(skippedHelices.map(helix => helix.id))
   const byHelix = new Map()
   for (const point of points) {
     const split = point.key.lastIndexOf(':'), id = point.key.slice(0, split), bp = Number(point.key.slice(split + 1))
+    if (!neededHelices.has(id)) continue
     if (!byHelix.has(id)) byHelix.set(id, new Map())
     const columns = byHelix.get(id), column = columns.get(bp) ?? { bp, sum: [0, 0, 0], count: 0 }
     point.position.forEach((x, i) => { column.sum[i] += x })
     column.count++; columns.set(bp, column)
   }
   const result = [...points]
-  for (const helix of helices) {
+  for (const helix of skippedHelices) {
     const columns = byHelix.get(helix.id)
     if (!columns) continue
     const sorted = [...columns.values()].sort((a, b) => a.bp - b.bp)

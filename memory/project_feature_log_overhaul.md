@@ -6,6 +6,201 @@ originSessionId: 9f1bf930-958e-498b-bcf5-3b65f7fbdd52
 ---
 # Feature Log Overhaul + Tabbed Sidebar (commit 873f3e6, branch feature-log-update, 2026-05-02)
 
+## Current delivery status (2026-10-15)
+
+The sections below retain earlier implementation context; use the latest
+[implementation checkpoint](../docs/audits/feature_history_20261014/implementation.md)
+for current availability and measured limits. P3's native DNA execution foundation
+is implemented. P4 asset/attachment coverage, P5 repair UI and P6 trusted automation
+enforcement remain incomplete; assembly work is explicitly deferred.
+
+Portable `Design.repair_draft` proposals now persist across document/session,
+loadout, project and package boundaries. Explicit metadata APIs support
+create/update/rebase/discard, and ordinary responses expose a compact unchecked
+summary. Draft metadata is excluded from replay and numerical authoring. A saved
+proposal is never proof or publication authority. Canonical serialized-form
+budgets prevent optional defaults from making a previously admitted draft
+unloadable (ISSUE-84).
+
+Explicit single-particle coating jobs are enabled within their measured bounded
+scope; ordinary mixed-part coating routes are not covered. Registered batch
+evaluation uses the existing isolated lifecycle, but its public availability gate
+is still closed. Its first benchmark confirms that full-source undo cost cannot
+be inferred from authoring-only capture: large excluded physical state and long
+history need separate admission. Do not raise global capture limits, add proof
+to render/scrub paths, or reuse a cached baseline while mutable aliases and
+unclassified write paths remain. Private host policy/admission, exact-candidate
+batch permits and a closed strict HTTP route table are implemented. Strict HTTP
+refuses unknown routes before body acquisition and exposes only reviewed scalar
+reads, empty creation and existing batch/verify jobs. Public batch stays gated.
+Internal immutable revision ownership and outside-lock batch/verify capture and
+publication are implemented. Typed durable recovery and durable initial creation now pass focused
+lifecycle checks. Strict byte transport moves source decode/projection into the
+admitted child; request preparation retains the exact sealed source reference.
+Public gates remain false pending actual HTTP responsiveness, retained-memory
+and complete lifecycle qualification. This is
+not authentication or a sandbox for unrestricted local Python.
+
+An experimental ordinary free-protein importer records pinned original bytes and
+separate import/placement inputs, but its server-owned gate remains false after
+retained-history capture refusals. Existing ordinary import behavior remains
+available. Its scalar-atom copy optimization preserves exact admission accounting;
+no source deadline or GC policy was relaxed. Allocation-light private candidate
+admission removes a redundant copy; a retained-protein refusal now has measured
+45 ms generation-2 GC overlap during locked source isolation. Internal immutable
+strict revisions now retain sealed bytes and scalar metadata under the state
+lock; private decoding and candidate sealing run outside it. Saved source
+restoration has a real HTTP-to-cold-replay regression requiring explicit rebase.
+Reviewed repair input metadata preserves canonical `expected_old_json` text
+through JavaScript so integral floats do not falsely conflict (ISSUE-86). Actual
+Node/HTTP draft save, reload, rebase and native preparation pass. Desktop UI-1
+automated integration passed 8,181 frontend tests (one skipped); live app checks
+remain pending. Recognized invalid gold diameter/pose values can now be repaired
+without weakening final schema, protected identity or full regeneration. Its
+393 focused regressions include the inert-generator execution fix (ISSUE-89).
+Private desktop comparison now covers complete uncoated gold/QD and free-protein
+parts, bound to the existing repair job, draft, revision and expiry. One isolated
+renderer shares a camera across published and evaluated views; no candidate is
+installed in ordinary display, export or simulation state. Full frontend checks
+passed 8,263 tests (one skipped). App/E2E review is MV-47 pending. Complete DNA comparison now has a bounded lossless DTO and private native
+renderer. Focused/frontend full checks passed 195/8,291 cases (one full-suite
+skip), and real Python-to-Node/HTTP parity passed. Route-local explicit JSON
+serialization reduced measured concurrent scalar latency from 165.58 to 16.46 ms
+in nine actual HTTP comparisons. The version-two public gate remains false;
+natural-GC resource qualification, browser/GPU and native VR remain outstanding.
+No molecular geometry upgrade was made.
+
+oxDNA/NAMD job APIs now expose additive physical `input_freshness`: equal legacy
+partial hashes remain unknown, while known comparable changes are stale. This
+adds no model hashing or job writes. Existing booleans/guards remain compatible;
+complete consumed-input/solver/source/restart receipts are pending. Shared job
+rows now display unknown/changed evidence independently from run status; full
+frontend validation passed 8,192 tests (one skipped). App review is MV-46 pending.
+The 59 focused regressions preserve both legacy migration and native recipe
+snapshots without silently adding an unlogged cluster.
+
+Focused tests and small in-memory qualification run serially. The Archive
+filesystem is unavailable in this environment; broader suite, app, visual and
+headset validation debt is recorded separately and must not be described as a
+pass. The persistent goal remains active.
+
+## Architecture review and hardening (2026-10-15)
+
+See [architecture review](../docs/audits/feature_history_20261014/architecture_review.md)
+for the persistent P3–P6 completion sequence and primary Onshape/SOLIDWORKS
+precedents. The input-replay foundation remains sound, but the review found that
+permissive native builders could skip missing targets and falsely verify a no-op.
+Targeted batch/selection preconditions now reject those missing references with
+typed parameter paths. Background proof uses one spawned process with bounded
+shared-memory transport, terminating and reaping before releasing admission;
+sync proof and edits retain cooperative deadlines. Join records reference-only
+preview orientation choices and explicit precursor identities, preserving the
+displayed native tether without relying on process set order. Reproducibility, reference
+integrity, scientific validation and useful editability are distinct claims.
+Opaque legacy `connectivity-core` receipts remain unverified; new generation now
+emits native path/routing commands. Keep broken
+definitions repairable, reserve full proof for explicit/background work, and
+keep assemblies deferred. Consult the implementation ledger for subsequent fixes.
+
+## Native recipe continuation (2026-10-15)
+
+P3 plus current P4 input/attachment slices now has 115 versioned kinds (with method/action restrictions), pure native
+builders shared by routes and proof, source-based continuation references,
+thread-local deterministic routing IDs, actual-failure cascade analysis, and one
+independently rebuilt prefix retained per edit. No saved outputs are proof inputs.
+Generated ordinary DNA steps use the same builders with versioned typed part
+scopes. Sparse planar/curved branches now separate seed, numeric path, crossover
+constraints, section routing, curvature encoding and optional budget fitting.
+Native semantic no-ops remain in the recipe. Seeds author their stable default
+cluster before publication; response-time legacy normalization must not add an
+unrecorded cluster. Independent-section seed/bounded-route contracts are the
+foundation for the now implemented joined and connectivity compilers. Their
+numeric inputs regenerate paths, routing and explicit Joins; budget fitting
+checks that all retained Join sites, bonds and owners survive unchanged. CPD
+conversion/relaxation uses explicit native source and pinned template/engine
+contracts in separate 180-second evaluation jobs. Ordinary proof still rejects
+expensive execution after cheap reference checks. The real CPD fixture has an
+explicit imported topology and correctly remains `reproduced_import`. Preflight
+photoproduct authoring remains supported. P3 is the DNA execution foundation;
+full generated asset/attachment histories remain unverified. Asset/NP/duplex work is P4, UI repair is
+P5, strict agent enforcement is P6; assemblies remain deferred.
+
+P4a adds strict uncoated gold particle create/patch/delete using existing native
+builders. Diameter/pose/gizmo inputs and stable particle identity are retained;
+owned DNA/decorations/connections are outside this slice. Legacy same-kind rows
+without `nanoparticle_version` remain unverified. Cold proof, early parameter
+editing, cascade/undo and existing particle workflows pass focused checks.
+
+P4b adds portable SHA/length-verified `input_sources`, a revision-checked pinned
+PDB import endpoint, unowned free/overhang placement commands, and explicit
+duplex lifecycle/sync plus bounded native relaxation. Whole-part import provenance
+stays `reproduced_import`; unavailable bytes are unverified repair targets, never
+cascade reasons. Scoped replay preserves source tables and uses typed historical
+relocation definitions without treating them as live geometry. Native roots skip
+legacy load/response inference; builders must author default clusters explicitly.
+Project blobs are optional derived caches; portable inline inputs remain authority.
+P4c adds small native protein conjugation plus explicitly owned constrained
+move/visibility/delete, unbound thiol graft create/replace/delete, and pinned
+quantum-dot catalog inputs with native diameter/pose edits. Existing operation
+kinds use strict discriminators without adding model fields. The shared identity
+module is in duplex numerical pins; prior pins are not silently upgraded.
+Document reads/decompression are bounded separately from proof capture, and
+explicit inactive-loadout source audits retain broken drafts with typed warnings.
+Ordinary edits do not run those audits. Further import/decoration families,
+large-asset capture qualification and physical provenance remain P4 work.
+P4d adds exact-ownership unbound thiol particle motion/resize and bounded pinned
+single-chain aptamer import. The unchanged importer reconstructs deposited sites
+from captured PDB bytes; provenance remains imported. New-session imports use
+the shared atomic initial-design boundary, including legacy imports. Admission
+is 150 KB/1000 first-model atom records; whole-document capture can still refuse
+on its independent cooperative time/node/byte bounds. Benchmarks retain those
+refusals; no proof is added to ordinary edits. Typed rigid copy and larger coating
+capture are separate increments. Existing sulfur-local resize behavior is
+reproduced unchanged, without claiming chemical validity of that behavior.
+P4e adds strict same-part rigid copy of unowned free proteins and undecorated
+gold/QD particles, using typed source/output identities and native placement
+formulas. The host-owned API requires expected document/revision; 16 elements
+and 4000 selected protein atoms bound work. No DNA calculation or unselected
+asset clone occurs in the pure copy builder. Frozen clipboard remains legacy.
+Coating experiments justify only a prospective explicit single-coating job;
+ordinary capture budgets are unchanged. P5 pure repair/explicit engine-upgrade
+foundation is starting in parallel with remaining P4 contracts; UI/jobs are not
+yet wired. New copy identity protection changes duplex pins conservatively.
+
+`part_recipe_capabilities.py` exposes API/editor limitations explicitly. No new
+frontend controls were added. Long jobs evaluate privately, omit candidates from
+polling and commit once with document/revision/cancel/expiry checks. Input,
+recovery and candidate retention limits are not hard process heap caps. See the latest continuation in
+`docs/audits/feature_history_20261014/implementation.md` and its validation JSON.
+Native regeneration must re-encode recovery data; cluster membership setters
+before a later payload must not erase that payload's new inherited helices.
+`part_overlay_recovery.py` handles this without executing proof on scrub paths.
+
+## Standard part history foundation (2026-10-14)
+
+The user explicitly deferred assembly history implementation until needed; it
+must not block standard-part validation work. The current sequence and deferred
+ledger are in `docs/audits/feature_history_20261014/implementation.md` and
+`assembly_deferred.md`.
+
+`api/feature_recording.py` now owns failure-atomic snapshot/minor recording,
+including restore of full bounded undo/redo, revision and request markers on
+callback, reconcile, encode/diff, validation or publication failure/cancellation.
+Undo/revision publish only after validation. This preserves editable drafts and
+the existing single design copy; legacy callbacks still run under the state lock.
+It is not a pure isolated evaluator or a history certification gate.
+
+`core/feature_registry.py` declares six snapshot and 14 minor executors;
+`api/part_feature_commands.py` resolves their existing schemas/builders. Crud
+entry points remain compatibility adapters, and dependency replayability derives
+from the registry. `/design/features/capabilities` exposes executor availability,
+explicitly not reproducibility certification. Frontend edit schemas are unchanged.
+
+Unused payload clearing/accounting, the old eviction alias, obsolete budget
+constant and unused delta-type set were removed. Part recording no longer calls
+the no-op eviction hook; the hook remains for the deferred assembly adapter.
+Tests assert retention directly instead of monkeypatching an inert budget.
+
 ## Sweep edits after downstream work (2026-10-09)
 
 Sweep Edit is available after snapshots and Fine Routing. `sweep_history.py`
@@ -324,7 +519,7 @@ geometry baked into a later snapshot's POST-state).
 - **Don't use `design_state.snapshot()` + `set_design_silent_reconciled()` for new auto-op endpoints.** Use `mutate_with_feature_log` instead. The two patterns coexist (older non-snapshot routes still use the former) but new endpoints should standardize on the wrapper.
 - **`_DESIGN_PANEL_IDS` at [main.js:3288](frontend/src/main.js#L3288)** still includes the four moved sections (`#physics-section`, etc.). Lookup is by `getElementById`, so the move is transparent — keep them in the list so they remain hidden during assembly mode.
 - **`_recenter_design` is for caDNAno / scadnano imports only.** Native `.nadoc` loads (`/design/load`, `/design/import`) do NOT recenter — see `feedback_native_files_preserve_positions.md`.
-- **`mutate_with_feature_log` pushes to undo on entry**, then runs `fn`. If `fn` raises, it restores the design, undo stack, and redo stack atomically. Invalid pattern requests must preserve redo.
+- **Feature/minor recording publishes undo only after recording and validation succeed.** Exceptions or cancellation anywhere in that transaction restore design, full undo/redo, revision and request markers. Invalid pattern requests must preserve redo. Existing invalid-draft validation reports remain permitted; strict agent enforcement is separate future work.
 - **The `body` param in `params` is `body.model_dump(mode='json')`** — must be JSON-serializable. Pydantic Direction enums become strings, etc. Edit endpoint validates by reconstructing `BundleSegmentRequest.model_validate(params)` etc.
 - **Snapshot decode without recursion guarantee:** `encode_design_snapshot` strips `feature_log` and `feature_log_cursor` before encoding. If you ever want to embed the log itself in a snapshot, you'd need a different mechanism — currently the recursion check is enforced by the encode side, not the schema.
 - **Tests must not introduce flakiness.** The `test_seamless_router::test_teeth_closing_zig` is a known pre-existing flake (UUID ordering). Five other tests are pre-existing failures on master, deselected in the standard test command. New tests should NOT depend on UUID ordering.
@@ -364,3 +559,39 @@ fixes the `workspace/2x2_strutted_corner.nadoc` F2 case: deleting the independen
 flexible mark/relax, and cluster move entries survive. Non-additive rollback cases such as
 auto-break still use the older pre-state/replay path so removed or modified existing strands can
 be restored correctly.
+
+### P2 proof infrastructure / P3 native bundle (2026-10-14)
+
+P2 implementation exit criteria are now met: optional versioned `Design.recipe_root` (empty or explicit content-pinned import); complete authoring comparison and recipe/source fingerprints; typed append-incremental dependencies; isolated native command replay; bounded capture; one cancellable verification worker with eight retained results; revision/document invalidation during and after work. Import replay returns `reproduced_import` with native editability false. Unsupported commands remain unverified. Proof is distinct from integrity/scientific validity.
+
+`POST /api/design/features/verification` remains an explicit, bounded synchronous check. `/verification/jobs` POST/GET/DELETE exposes bounded asynchronous work. No checks run automatically during edits, frames or scrubbing. Oversized capture is rejected with 413 rather than blocking on an unlimited clone. Cancellation/deadlines are cooperative, not hard Python preemption.
+
+P3 now has 30 audited native command contracts and root-based producer/consumer regeneration for fully covered histories (`part_recipe_edit.py`). Supported edits preserve IDs, rebuild recovery data, reject source mismatches/stale revisions, and support routing-child parameter edits and explicit cascade deletion. Rootless/mixed unsupported histories retain recovery editors and remain unverified. Dependencies are conservative; full P3 coverage, generated construction, pose/grouping/join/auto-routing and frontend editor integration remain open. Pattern seeds and crossover IDs are recorded before construction. No assembly work or frontend enforcement was added. See `docs/audits/feature_history_20261014/implementation.md` for the exact coverage, remaining exit work and validation. P2/first-family P3 was pushed as `6336d1fe`; this continuation is not phase completion.
+
+P4f/P5a adds bounded pinned caDNAno import into a fresh empty part via
+`/design/features/import/cadnano`, explicit repair through the existing evaluation
+job lifecycle, and pure pinned coating contracts. Repair rebuilds broken inputs
+from their declared root; it never uses the old materialized model as proof.
+Stable targets and exact expected inputs protect against stale replacement.
+Explicit CPD/duplex engine upgrades retain provenance and undo; a real duplex
+upgrade/commit/reload/cold-proof regression passes. Source audits now report both
+coating inputs with exact repair paths. Coating live capture/publication remains
+disabled pending live capture/publication qualification. The script-spawn pool
+initialization failure is fixed with child-only runtime thread limits; all 24
+cold coating stages now reproduce. The initial failure remains recorded. Explicit
+coating numerical upgrades are supported alongside CPD/duplex. The pure P5b
+selection adapter replays the exact prefix and returns bounded typed candidates,
+without geometry or a whole-command validity claim; job integration is next.
+Ordinary capture budgets remain unchanged. P5 drafts/UI and P6 enforcement remain
+open. See the implementation ledger for measured capture and HTTP overhead.
+
+P5b now exposes selection through the existing isolated jobs, with independent
+host nonpublication and stale-choice invalidation. P5c shared action/draft schemas
+and durable root/command/source fingerprints are implemented but not persisted
+on Design yet. Exact transported recipe/authoring hashes protect every candidate
+commit from decoder alias changes. Prepared replacement publication rolls back
+source identity, full bounded stacks and request/revision state on cancellation
+or exception (ISSUE-83), retaining one undo copy. Single-coating explicit jobs
+use a fixed scoped capture profile; ordinary budgets are unchanged. Live-lock
+qualification and public coating append remain pending. No draft UI or strict
+automation policy is enabled; see current ledger rather than earlier phase notes.

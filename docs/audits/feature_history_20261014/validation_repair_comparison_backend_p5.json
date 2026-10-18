@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-15",
+  "executor": "root, serialized focused validation",
+  "scope": "Private compatibility-only comparison of complete uncoated gold/QD and free protein placements",
+  "tests": [
+    {"target": "tests/test_part_comparison_projection.py", "passed": 31, "seconds": 2.73},
+    {"target": "tests/test_part_comparison_worker.py", "passed": 3, "seconds": 3.17},
+    {"target": "tests/test_part_evaluation_comparison.py", "passed": 31, "seconds": 2.90},
+    {"target": "tests/test_part_comparison_routes.py", "passed": 13, "seconds": 3.06},
+    {"target": "tests/test_part_evaluation_jobs.py", "passed": 10, "seconds": 2.90},
+    {"target": "tests/test_part_repair_draft_jobs.py", "passed": 17, "seconds": 6.65},
+    {"target": "tests/test_part_verification_jobs.py", "passed": 14, "seconds": 3.25},
+    {"target": "tests/test_part_strict_http.py", "passed": 61, "seconds": 3.22}
+  ],
+  "total_passed": 180,
+  "failed": 0,
+  "static": {"changed_python_ruff": "passed", "git_diff_check": "passed"},
+  "properties": [
+    "Existing job catalog/admission slot and exact saved-request identity; no publication or second catalog",
+    "Independent bounded source capture and exact candidate decode, with final source/session/draft/catalog guards",
+    "Spawned shared-memory projection and terminate/join cleanup using unchanged supervisor limits",
+    "Explicit unsupported complete-scope refusal, native nm transforms and no-CA ovoid fallback",
+    "Remaining job lifetime returned without renewal; final expiry refusal",
+    "Original evaluated repair remains available for its ordinary guarded commit; strict HTTP refuses comparison"
+  ],
+  "limitations": [
+    "Frontend comparison not yet implemented or qualified in this checkpoint",
+    "NOT VERIFIED IN APP; Archive unavailable and MV-45 remains pending",
+    "No molecular upgrade authorization, physical-state projection or assemblies",
+    "No responsiveness or near-budget display qualification claim from focused tests"
+  ]
+}

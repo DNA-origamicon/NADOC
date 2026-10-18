@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-15",
+  "issue": "ISSUE-91",
+  "scope": "Additive legacy physical-input freshness API; complete receipts remain pending",
+  "red": {
+    "failed": 29,
+    "seconds": 2.88
+  },
+  "focused": {
+    "test_physical_input_freshness.py": 29,
+    "test_oxdna_staleness.py": 18,
+    "test_md_staleness.py": 12
+  },
+  "total_passed": 59,
+  "fixture_correction": {
+    "first_md": {
+      "passed": 10,
+      "failed": 1,
+      "seconds": 4
+    },
+    "baseline": {
+      "revision": "7886cd42",
+      "failed": 1,
+      "seconds": 3.36,
+      "method": "Loaded unchanged routes_md, routes_oxdna and oxdna_staleness modules in memory under guarded focused pytest; no checkout reversion."
+    },
+    "resolution": "Pre-recipe fixture retained native recipe_root. Parameterized actual legacy root=None and native preservation; no production restoration change."
+  },
+  "checks": {
+    "ruff": "passed",
+    "diff_check": "passed"
+  },
+  "artifacts": "New API tests use in-memory jobs and empty pytest-owned directories; existing regression tests use tiny temporary snapshots/job sentinels. No simulation, trajectory, native output or user job changed.",
+  "limits": [
+    "Legacy boolean and run guards retained; status is advisory.",
+    "No complete engine-specific receipt/projection/solver/source/restart qualification.",
+    "No frontend change or app/browser/headset run; broad suite debt unchanged."
+  ]
+}

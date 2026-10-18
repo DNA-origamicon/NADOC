@@ -23,19 +23,19 @@ def _finite_vector(value, size):
     return list(value)
 
 
-def _canonical_bundle(design, cells, length_bp, plane, frame_id, name):
+def _canonical_bundle(design, cells, length_bp, plane, frame_id, name, identity_seed=None):
     footprint = validate_painted_footprint({'lattice_type': design.lattice_type.value,
                                            'cells': cells})
     if not footprint['cells'] or type(length_bp) is not int or not 1 <= abs(length_bp) <= 1_000_000:
         raise ValueError('nonempty cells and bounded nonzero length required')
     bundle = make_bundle_design([tuple(c) for c in cells], length_bp, name=name,
-        plane=plane, id_suffix='_'+str(uuid.uuid4()), lattice_type=design.lattice_type)
+        plane=plane, id_suffix='_'+str(identity_seed or uuid.uuid4()), lattice_type=design.lattice_type)
     helices = [h.model_copy(update={'lattice_frame_id': frame_id, 'grid_pos': tuple(cell)})
                for h, cell in zip(bundle.helices, cells, strict=True)]
     return bundle, helices
 
 
-def append_frame_bundle(design, frame_id, cells, length_bp, *, plane, name='Extrude'):
+def append_frame_bundle(design, frame_id, cells, length_bp, *, plane, name='Extrude', identity_seed=None):
     """Extrude vacant cells from an existing canonical plane, retaining its placement.
 
     This is default-plane authoring, not continuation from a blunt end. New axes
@@ -48,7 +48,7 @@ def append_frame_bundle(design, frame_id, cells, length_bp, *, plane, name='Extr
     if plane != frame.plane:
         raise ValueError('source plane does not match lattice frame')
     occupied = {h.grid_pos for h in design.helices if h.lattice_frame_id == frame_id}
-    bundle, helices = _canonical_bundle(design, cells, length_bp, plane, frame_id, name)
+    bundle, helices = _canonical_bundle(design, cells, length_bp, plane, frame_id, name, identity_seed)
     if any(h.grid_pos in occupied for h in helices):
         raise ValueError('cell already occupied in this lattice frame')
     clusters = [c.model_copy(update={'helix_ids': [*c.helix_ids, *(h.id for h in helices)]})
@@ -61,7 +61,7 @@ def append_frame_bundle(design, frame_id, cells, length_bp, *, plane, name='Extr
 
 def append_independent_bundle(design: Design, cells, length_bp, *, plane='XY',
                               translation_nm=(0, 0, 0), rotation_xyzw=(0, 0, 0, 1),
-                              name='Extrude') -> Design:
+                              name='Extrude', identity_seed=None) -> Design:
     """Build canonical topology plus one explicit persistent placement, without mutation.
 
     Native tracking metres/tablet orientation must already have been converted by
@@ -72,10 +72,12 @@ def append_independent_bundle(design: Design, cells, length_bp, *, plane='XY',
     rotation = _finite_vector(rotation_xyzw, 4)
     if abs(sum(v*v for v in rotation)-1) > 1e-6:
         raise ValueError('placement quaternion must be unit length')
-    identifier = str(uuid.uuid4())
-    cluster_id = str(uuid.uuid4())
+    from backend.core.feature_identity import identity_factory
+    factory = identity_factory(identity_seed) if identity_seed else None
+    identifier = factory("frame", []) if factory else str(uuid.uuid4())
+    cluster_id = factory("cluster", []) if factory else str(uuid.uuid4())
     frame = LatticeFrame(id=identifier, plane=plane, placement_cluster_id=cluster_id)
-    bundle, helices = _canonical_bundle(design, cells, length_bp, plane, identifier, name)
+    bundle, helices = _canonical_bundle(design, cells, length_bp, plane, identifier, name, identity_seed)
     placement = ClusterRigidTransform(id=cluster_id, name=name,
         helix_ids=[h.id for h in helices], translation=translation, rotation=rotation,
         pivot=[0, 0, 0], auto_created=False)
@@ -85,7 +87,7 @@ def append_independent_bundle(design: Design, cells, length_bp, *, plane='XY',
         cluster_transforms=[*design.cluster_transforms, placement])
 
 
-def append_frame_cell(design, frame_id, row, col, *, length_bp=42, populate_strands=False):
+def append_frame_cell(design, frame_id, row, col, *, length_bp=42, populate_strands=False, identity_seed=None):
     """Add a canonical local cell to one existing frame and its placement cluster."""
     from backend.core.constants import BDNA_RISE_PER_BP
     frames = [f for f in design.lattice_frames if f.id == frame_id]
@@ -102,7 +104,7 @@ def append_frame_cell(design, frame_id, row, col, *, length_bp=42, populate_stra
     if type(length) is not int or not 1 <= length <= 1_000_000:
         raise ValueError('invalid helix length')
     bundle = make_bundle_design([(row,col)],length,plane=frame.plane,
-        offset_nm=offset,id_suffix='_'+str(uuid.uuid4()),lattice_type=design.lattice_type)
+        offset_nm=offset,id_suffix='_'+str(identity_seed or uuid.uuid4()),lattice_type=design.lattice_type)
     helix = bundle.helices[0].model_copy(update={'lattice_frame_id':frame_id,'grid_pos':(row,col)})
     clusters = [c.model_copy(update={'helix_ids':[*c.helix_ids,helix.id]})
                 if c.id == frame.placement_cluster_id else c for c in design.cluster_transforms]
@@ -111,7 +113,7 @@ def append_frame_cell(design, frame_id, row, col, *, length_bp=42, populate_stra
         cluster_transforms=clusters), helix
 
 
-def register_created_bundle_frames(design, plane, cells, *, single_cluster=False):
+def register_created_bundle_frames(design, plane, cells, *, single_cluster=False, identity_seed=None):
     """Attach canonical cells, placement clusters and identities to a fresh bundle.
 
     Source plane comes from the authoring request, never inferred from the view.
@@ -121,19 +123,24 @@ def register_created_bundle_frames(design, plane, cells, *, single_cluster=False
     if design.lattice_frames or any(h.lattice_frame_id for h in design.helices):
         raise ValueError('fresh bundle already has lattice frame identities')
     from backend.core.cluster_autodetect import _cluster_bundle_regions, with_default_cluster
+    from backend.core.feature_identity import identity_factory
+    factory = identity_factory(identity_seed) if identity_seed is not None else None
     validate_painted_footprint({'lattice_type':design.lattice_type.value, 'cells':[list(c) for c in cells]})
     design = design.copy_with(helices=[h.model_copy(update={'grid_pos':tuple(cell)})
         for h, cell in zip(design.helices, cells, strict=True)])
     if single_cluster:
         design = design.copy_with(cluster_transforms=[ClusterRigidTransform(
-            id=str(uuid.uuid4()), name='Cluster 1',
+            id=factory("cluster", [h.id for h in design.helices]) if factory else str(uuid.uuid4()), name='Cluster 1',
             helix_ids=[h.id for h in design.helices], auto_created=True, is_default=True)])
     else:
-        design = with_default_cluster(_cluster_bundle_regions(design))
+        design = with_default_cluster(_cluster_bundle_regions(design, identity_factory=factory), identity_factory=factory)
     membership = {}
     frames = []
     for cluster in design.cluster_transforms:
-        frame = LatticeFrame(id=str(uuid.uuid4()), plane=plane, placement_cluster_id=cluster.id)
+        # Fresh bundles have exactly one frame per placement cluster. A typed
+        # prefix retains that identity without hashing the same ownership twice.
+        frame = LatticeFrame(id=f"frame:{cluster.id}" if factory else str(uuid.uuid4()),
+                             plane=plane, placement_cluster_id=cluster.id)
         for identifier in cluster.helix_ids:
             if identifier in membership:
                 raise ValueError('fresh bundle has ambiguous placement membership')

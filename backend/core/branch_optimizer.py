@@ -168,6 +168,8 @@ def reinforce_stem(summary, cells, lattice):
     s["cells"] += [list(c) for c in moved]
     s["fork_faces"].append([list(c) for c in moved])
     s["fork_paths"].append(deepcopy(s["fork_paths"][0]))
+    if "fork_path_recipes" in s:
+        s["fork_path_recipes"].append(deepcopy(s["fork_path_recipes"][0]))
     s["branch_tracks"] += [dict(cell=list(c), intervals=[interval]) for c in moved]
     s["branch_windows"].append([dict(cell=list(c), interval=interval) for c in moved])
     s["branch_junction_intervals"].append([lo + 7, hi - 7])
@@ -357,6 +359,7 @@ def plan_optimized_branches(source, settings):
         "branch_trunk",
         "branch_windows",
         "fork_paths",
+        "fork_path_recipes",
         "fork_faces",
         "fork_stations",
         "cells",

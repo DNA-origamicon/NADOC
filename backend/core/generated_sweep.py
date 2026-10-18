@@ -55,13 +55,14 @@ def routed_sweep(lattice, request):
     return encode_sweep(design)
 
 
-def encode_sweep(design):
-    """Recompute safe marks after routing changes the forbidden crossover sites."""
+def encode_sweep(design, *, operation_ids=None):
+    """Recompute selected sweep marks using the complete routed geometry context."""
     from backend.core.sweep_loop_skips import generated_sweep_loop_skips
 
+    selected = None if operation_ids is None else set(operation_ids)
     helices = list(design.helices)
     for op in design.deformations:
-        if op.type != "sweep":
+        if op.type != "sweep" or (selected is not None and op.id not in selected):
             continue
         marks, warnings = generated_sweep_loop_skips(design, op)
         if warnings:

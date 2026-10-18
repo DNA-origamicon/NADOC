@@ -503,6 +503,7 @@ def extrude_valid_overhang(design: Design, length_bp: int = 12) -> tuple[Design,
 # Whole modules where every test is a heavy real-sim / trajectory test.
 _SLOW_MODULES = {
     "test_generated_commands",  # shared real origami build + fixed-center attachment fitting
+    "test_generated_fork_proof",  # two cold workers + real fork routing/curvature and edited suffix (5.85 s)
     # Every HMC check launches the real CUDA Chudoba oxDNA engine; the harmonic
     # distribution samples 5,000 trajectories (185,000 integration steps).
     "test_chudoba_hmc",
@@ -568,6 +569,12 @@ _SLOW_CLASSES = {
 
 # Individual heavy tests (>=~2s call time) living in otherwise-fast modules.
 _SLOW_TESTS = {
+    # Actual pinned CPD conversion/relaxation and independent spawned replay.
+    "test_native_cpd_append_and_independent_cold_proof_ignore_recovery_and_physics",
+    # Native routing + Join search / independent cold replay are intentional
+    # integration checks (9.86 s and 16.33 s isolated); path/schema cases stay fast.
+    "test_joined_routing_records_each_native_section_and_join",
+    "test_generated_joined_route_cold_replay_and_upstream_path_edit",
     # Six real input-package preparations for a 1,008-nt assembly: 5.90 s in
     # the October 16 sweep and 5.34 s alone. No simulation runs, but the shared
     # lifecycle integration belongs in the assembly/CanDo slow area; siblings stay fast.
@@ -1013,6 +1020,7 @@ def _slow_area_for(module: str) -> str:
         "atomistic" in module
         or module == "test_native_placement_review_gate"
         or module == "test_cpd_design"
+        or module == "test_native_cpd_proof"
         or module == "test_vr_representation_loading"
         or module == "test_vr_extra_representations"
         or "pdb_export" in module
@@ -1023,7 +1031,9 @@ def _slow_area_for(module: str) -> str:
         return "atomistic"
     if module.startswith("test_md") or "openmm" in module or "benchmark" in module:
         return "md"
-    if "headless" in module or "spec_build" in module or module == "test_generated_commands":
+    if "headless" in module or "spec_build" in module or module in {
+        "test_generated_commands", "test_generated_fork_proof", "test_generated_joined_steps", "test_generated_joined_proof",
+    }:
         return "headless"
     # cluster autodetect's heavy test is heavy because it builds a fully ROUTED 18hb
     # through the headless build API — so a headless/routing change is what should

@@ -1,0 +1,6 @@
+{
+  "baseline": "dfa63eeb",
+  "result": "Geometry mismatch: compact-one",
+  "status": "reproduced_on_unchanged_baseline",
+  "cause": "Frozen reference geometry response lacks current cluster_transforms and display_design fields; not evidence of geometry regression."
+}

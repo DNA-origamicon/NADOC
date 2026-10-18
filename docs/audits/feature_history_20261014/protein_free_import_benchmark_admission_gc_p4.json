@@ -1,0 +1,771 @@
+{
+  "scope": "Actual ordinary free protein HTTP import; original bytes, native suffix, one undo/revision/library publication",
+  "repeats": 9,
+  "suite": "retained",
+  "case": "retained-protein-new-source",
+  "experimental_host_gate_enabled_for_run": true,
+  "gc_observation": {
+    "policy": {
+      "enabled": true,
+      "thresholds": [
+        700,
+        10,
+        10
+      ]
+    },
+    "dropped_events": 0,
+    "policy_unchanged": true,
+    "event_count": 75,
+    "phase_generation_summary": [
+      {
+        "phase": "other",
+        "generation": 0,
+        "count": 19,
+        "total_ms": 2.109339005983202,
+        "max_ms": 0.25162200108752586
+      },
+      {
+        "phase": "source_capture",
+        "generation": 0,
+        "count": 10,
+        "total_ms": 1.5211699937935919,
+        "max_ms": 0.21078599820611998
+      },
+      {
+        "phase": "native_preparation",
+        "generation": 0,
+        "count": 19,
+        "total_ms": 1.872317003289936,
+        "max_ms": 0.1711350014375057
+      },
+      {
+        "phase": "native_preparation",
+        "generation": 1,
+        "count": 1,
+        "total_ms": 1.093681999918772,
+        "max_ms": 1.093681999918772
+      },
+      {
+        "phase": "native_preparation",
+        "generation": 2,
+        "count": 1,
+        "total_ms": 40.879126001527766,
+        "max_ms": 40.879126001527766
+      },
+      {
+        "phase": "native_parse",
+        "generation": 0,
+        "count": 19,
+        "total_ms": 3.8836169987916946,
+        "max_ms": 0.3166230017086491
+      },
+      {
+        "phase": "native_parse",
+        "generation": 1,
+        "count": 1,
+        "total_ms": 1.155526999355061,
+        "max_ms": 1.155526999355061
+      },
+      {
+        "phase": "other",
+        "generation": 1,
+        "count": 4,
+        "total_ms": 1.9346570043126121,
+        "max_ms": 0.5793910022475757
+      },
+      {
+        "phase": "publication",
+        "generation": 0,
+        "count": 1,
+        "total_ms": 0.08827900092001073,
+        "max_ms": 0.08827900092001073
+      }
+    ],
+    "retained_events": [
+      {
+        "thread": 127209852901056,
+        "generation": 0,
+        "phase": "native_preparation",
+        "start": 23197.68151536,
+        "end": 23197.681686495,
+        "elapsed_ms": 0.1711350014375057,
+        "collected": 98,
+        "uncollectable": 0
+      },
+      {
+        "thread": 127209852901056,
+        "generation": 1,
+        "phase": "native_preparation",
+        "start": 23197.686434858,
+        "end": 23197.68752854,
+        "elapsed_ms": 1.093681999918772,
+        "collected": 0,
+        "uncollectable": 0
+      },
+      {
+        "thread": 127209852901056,
+        "generation": 2,
+        "phase": "native_preparation",
+        "start": 23197.691973596,
+        "end": 23197.732852722,
+        "elapsed_ms": 40.879126001527766,
+        "collected": 10,
+        "uncollectable": 0
+      },
+      {
+        "thread": 127209616438976,
+        "generation": 1,
+        "phase": "native_parse",
+        "start": 23197.804452398,
+        "end": 23197.805607925,
+        "elapsed_ms": 1.155526999355061,
+        "collected": 234,
+        "uncollectable": 0
+      },
+      {
+        "thread": 127209616438976,
+        "generation": 0,
+        "phase": "native_parse",
+        "start": 23197.873581229,
+        "end": 23197.873897852,
+        "elapsed_ms": 0.3166230017086491,
+        "collected": 190,
+        "uncollectable": 0
+      },
+      {
+        "thread": 127209861293760,
+        "generation": 0,
+        "phase": "source_capture",
+        "start": 23198.125018899,
+        "end": 23198.125229685,
+        "elapsed_ms": 0.21078599820611998,
+        "collected": 43,
+        "uncollectable": 0
+      },
+      {
+        "thread": 127209861293760,
+        "generation": 0,
+        "phase": "other",
+        "start": 23198.227638979,
+        "end": 23198.227890601,
+        "elapsed_ms": 0.25162200108752586,
+        "collected": 141,
+        "uncollectable": 0
+      },
+      {
+        "thread": 127211055476864,
+        "generation": 1,
+        "phase": "other",
+        "start": 23198.265933138,
+        "end": 23198.266512529,
+        "elapsed_ms": 0.5793910022475757,
+        "collected": 290,
+        "uncollectable": 0
+      },
+      {
+        "thread": 127209861293760,
+        "generation": 0,
+        "phase": "publication",
+        "start": 23198.331705071,
+        "end": 23198.33179335,
+        "elapsed_ms": 0.08827900092001073,
+        "collected": 31,
+        "uncollectable": 0
+      }
+    ]
+  },
+  "limits_unchanged": {
+    "capture_nodes": 30000,
+    "capture_bytes": 2000000,
+    "capture_seconds_cooperative": 0.025,
+    "recovery_bytes": 8000000
+  },
+  "candidate_admission": {
+    "isolated_copy": false,
+    "same_node_byte_accounting": true,
+    "separate_deadline": false,
+    "private_input_only": true
+  },
+  "notes": [
+    "Synthetic sources qualify size/work boundaries, not molecular realism.",
+    "Retained heavy physical/loadout state is outside this initial native ordinary-import slice.",
+    "No full-prefix proof is performed on import; cold proof is measured separately afterward.",
+    "Experimental native import is explicitly enabled only in this harness and restored on exit.",
+    "GC callbacks observe intervals only; no collect(), disable(), threshold changes or retries are used.",
+    "Private candidate resource admission has no second isolation copy/deadline; source capture keeps its 25 ms allowance.",
+    "Library remains a cache; no replay source is reconstructed from its atoms.",
+    "Retained recipes are created by real HTTP imports before timing; all preparation failures stop qualification.",
+    "Repeated imports verify unchanged prefix/assets/proposals/source bytes and exact single undo/redo outside timing.",
+    "Aggregate atom-limit refusal preserves the existing design, history, revision and library.",
+    "Publication lock instrumentation includes nested state helpers; only outermost spans are counted.",
+    "Legacy metadata formatting may infer zero bonds again; parser counts distinguish native parse repetition."
+  ],
+  "session_cleanup_verified": true,
+  "completed": true,
+  "run_failure": null,
+  "cases": [
+    {
+      "name": "retained-protein-new-source",
+      "retained_profile": "retained-new-source",
+      "source_bytes": 20274,
+      "requested_atom_records": 256,
+      "expected_status": 200,
+      "correct_transactions": 9,
+      "errors": [],
+      "route": {
+        "count": 9,
+        "p50_ms": 63.462653997703455,
+        "p95_ms": 66.95635999858496,
+        "max_ms": 66.95635999858496
+      },
+      "capture_lock": {
+        "count": 18,
+        "p50_ms": 1.078294499166077,
+        "p95_ms": 2.6104170028702356,
+        "max_ms": 2.6104170028702356
+      },
+      "publication_lock": {
+        "count": 9,
+        "p50_ms": 0.5454600031953305,
+        "p95_ms": 0.6638240010943264,
+        "max_ms": 0.6638240010943264
+      },
+      "candidate_admission": {
+        "count": 9,
+        "p50_ms": 1.092,
+        "p95_ms": 1.214,
+        "max_ms": 1.214
+      },
+      "candidate_admission_all_attempts": {
+        "count": 9,
+        "p50_ms": 1.087764001567848,
+        "p95_ms": 1.2052399979438633,
+        "max_ms": 1.2052399979438633
+      },
+      "gc_during_requests": {
+        "count": 37,
+        "p50_ms": 0.11382600132492371,
+        "p95_ms": 0.26839000202016905,
+        "max_ms": 1.155526999355061
+      },
+      "baseline_light_requests": {
+        "count": 9,
+        "p50_ms": 1.0398269987490494,
+        "p95_ms": 1.8699520005611703,
+        "max_ms": 1.8699520005611703
+      },
+      "light_requests": {
+        "count": 182,
+        "p50_ms": 2.683012000488816,
+        "p95_ms": 5.343437998817535,
+        "max_ms": 9.631265998905292
+      },
+      "publication_overlap_count": 9,
+      "cold": {
+        "input_pickle_bytes": 89083,
+        "elapsed_ms": 1105.3790830010257,
+        "result": {
+          "scope": "part",
+          "contract_version": 1,
+          "status": "reproduced_import",
+          "issues": [],
+          "verification_scope": "authoring_reproducibility",
+          "integrity_checked": false,
+          "excluded_roles": [
+            "presentation",
+            "physical",
+            "document_identity",
+            "repair_draft"
+          ],
+          "checked_commands": 4,
+          "proof_coverage": "versioned_commands",
+          "native_editable": false,
+          "dependencies": {
+            "complete": true,
+            "parents": {
+              "b2702e4a-d190-5b77-b24d-835099e41f5a": [],
+              "32da41fb-8b28-50e3-8e57-15a12bcbddd0": [
+                "b2702e4a-d190-5b77-b24d-835099e41f5a"
+              ],
+              "1958a770-4917-5148-9a6a-e1a3201cbeed": [
+                "32da41fb-8b28-50e3-8e57-15a12bcbddd0"
+              ],
+              "455ea119-216c-5ac9-91ae-151015788404": [
+                "1958a770-4917-5148-9a6a-e1a3201cbeed"
+              ]
+            }
+          },
+          "recipe_fingerprint": "d77b06fde0c96916e89dadb7ecbab7d564547ef59d0b53f4660b4a3f4be79b31",
+          "authoring_fingerprint": "83b55ba94e69bd1db03be2757240fa9db1864934983a12993e0d32a0e708cdc2",
+          "imported_sources": [
+            {
+              "kind": "input_source",
+              "identity": "63a07778eb419187514b948993b34d661f8e8d8523ed2c2a21d2ab27506d3e64"
+            },
+            {
+              "kind": "input_source",
+              "identity": "ec7bc90ddbd70f4fe6a976f4f6cc104e084b2fcacfb69d66241269232f2539d9"
+            }
+          ]
+        }
+      },
+      "sample_summary": {
+        "samples": 9,
+        "http_status_counts": {
+          "200": 9
+        },
+        "parser_call_counts": {
+          "1": 9
+        },
+        "retention": "All unexpected outcomes and timing maxima retained; distributions include every original sample."
+      },
+      "retained_samples": [
+        {
+          "sample_index": 0,
+          "status": 200,
+          "correct": true,
+          "route_ms": 65.5195220024325,
+          "baseline_light_ms": 1.8699520005611703,
+          "parser_calls": 1,
+          "recovery_bytes": 61880,
+          "atom_count": 256,
+          "bond_count": 0,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 4,
+          "result_sources": 2,
+          "result_atom_count": 384,
+          "retained_setup": [
+            {
+              "source_atom_records": 128,
+              "feature_ids": [
+                "b2702e4a-d190-5b77-b24d-835099e41f5a",
+                "32da41fb-8b28-50e3-8e57-15a12bcbddd0"
+              ]
+            }
+          ],
+          "error_detail": null,
+          "candidate_admission_spans": [
+            {
+              "phase": "candidate_admission",
+              "start": 23197.841157522,
+              "end": 23197.842362762,
+              "elapsed_ms": 1.2052399979438633,
+              "completed": true
+            }
+          ],
+          "gc_collections": [
+            {
+              "thread": 127209861293760,
+              "generation": 0,
+              "phase": "source_capture",
+              "start": 23197.800821883,
+              "end": 23197.800955437,
+              "elapsed_ms": 0.1335540000582114,
+              "collected": 17,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": true,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 127209616438976,
+              "generation": 1,
+              "phase": "native_parse",
+              "start": 23197.804452398,
+              "end": 23197.805607925,
+              "elapsed_ms": 1.155526999355061,
+              "collected": 234,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 127209616438976,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23197.806544677,
+              "end": 23197.806575254,
+              "elapsed_ms": 0.03057699723285623,
+              "collected": 0,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 127209616438976,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23197.816889677,
+              "end": 23197.816942645,
+              "elapsed_ms": 0.05296800009091385,
+              "collected": 9,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 127209616438976,
+              "generation": 0,
+              "phase": "native_preparation",
+              "start": 23197.843133706,
+              "end": 23197.84321005,
+              "elapsed_ms": 0.07634400026290677,
+              "collected": 185,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            }
+          ],
+          "stages_ms": {
+            "acquire": 0.007,
+            "classify": 0.611,
+            "native_capture": 2.703,
+            "native_import": 33.84,
+            "native_recovery": 4.076,
+            "native_placement": 0.148,
+            "native_candidate_admission": 1.214,
+            "native_response": 18.222,
+            "native_preparation_total": 58.34,
+            "parse_protein": 33.84,
+            "deduplicate": 0.861,
+            "commit": 0.794
+          },
+          "capture_ms": [
+            0.004833000275539234,
+            2.6104170028702356
+          ],
+          "publication_ms": [
+            0.6638240010943264
+          ],
+          "light_ms": [
+            5.26127400007681,
+            7.655181998416083,
+            2.2701199995935895,
+            4.346912999608321,
+            1.5646719984943047,
+            2.1715820003009867,
+            2.2462500019173604,
+            1.9652349983516615,
+            3.673915001854766,
+            2.8232740005478263,
+            2.13774999792804,
+            3.7265880018821917,
+            2.0590379972418305,
+            4.550301000563195,
+            2.9013940002187155,
+            2.6137700006074738,
+            2.5907880008162465,
+            2.495209002518095,
+            2.4158060004992876,
+            2.1410049994301517,
+            3.7592359985865187
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        },
+        {
+          "sample_index": 7,
+          "status": 200,
+          "correct": true,
+          "route_ms": 66.95635999858496,
+          "baseline_light_ms": 1.0398269987490494,
+          "parser_calls": 1,
+          "recovery_bytes": 61876,
+          "atom_count": 256,
+          "bond_count": 0,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 4,
+          "result_sources": 2,
+          "result_atom_count": 384,
+          "retained_setup": [
+            {
+              "source_atom_records": 128,
+              "feature_ids": [
+                "7ead65d3-c2fe-57a9-88ad-8e260eaecdff",
+                "302e8c2e-eb93-5622-b1e3-ab587a2b3f9b"
+              ]
+            }
+          ],
+          "error_detail": null,
+          "candidate_admission_spans": [
+            {
+              "phase": "candidate_admission",
+              "start": 23198.390817064,
+              "end": 23198.391891709,
+              "elapsed_ms": 1.074645002518082,
+              "completed": true
+            }
+          ],
+          "gc_collections": [
+            {
+              "thread": 127209861293760,
+              "generation": 0,
+              "phase": "source_capture",
+              "start": 23198.351236981,
+              "end": 23198.351346566,
+              "elapsed_ms": 0.10958499842672609,
+              "collected": 17,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": true,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 127209616438976,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23198.354930722,
+              "end": 23198.355199112,
+              "elapsed_ms": 0.26839000202016905,
+              "collected": 234,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 127209861293760,
+              "generation": 0,
+              "phase": "other",
+              "start": 23198.378876815,
+              "end": 23198.378982553,
+              "elapsed_ms": 0.10573799954727292,
+              "collected": 119,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 127209616438976,
+              "generation": 0,
+              "phase": "native_preparation",
+              "start": 23198.392571019,
+              "end": 23198.392643024,
+              "elapsed_ms": 0.07200499749160372,
+              "collected": 75,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            }
+          ],
+          "stages_ms": {
+            "acquire": 0.004,
+            "classify": 0.62,
+            "native_capture": 2.381,
+            "native_import": 34.094,
+            "native_recovery": 3.178,
+            "native_placement": 0.136,
+            "native_candidate_admission": 1.079,
+            "native_response": 20.998,
+            "native_preparation_total": 60.532,
+            "parse_protein": 34.094,
+            "deduplicate": 0.741,
+            "commit": 0.754
+          },
+          "capture_ms": [
+            0.0048340007197111845,
+            2.2944829979678616
+          ],
+          "publication_ms": [
+            0.4926900001009926
+          ],
+          "light_ms": [
+            4.905787001916906,
+            4.003065001597861,
+            2.7660640007525217,
+            2.0664350013248622,
+            4.5100569986971095,
+            3.6523140006465837,
+            2.4931370026024524,
+            3.6646439984906465,
+            2.864997000870062,
+            2.284817001054762,
+            2.0426640003279317,
+            3.8263090027612634,
+            1.8944140028906986,
+            3.739015002793167,
+            2.3026700000627898,
+            1.6537400006200187,
+            2.9018879977229517,
+            3.2160449991351925,
+            2.8675620014837477,
+            1.7231810015800875,
+            1.9098009979643393,
+            2.262820999021642,
+            3.444190999289276
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        },
+        {
+          "sample_index": 8,
+          "status": 200,
+          "correct": true,
+          "route_ms": 62.15137999970466,
+          "baseline_light_ms": 0.8617870007583406,
+          "parser_calls": 1,
+          "recovery_bytes": 61876,
+          "atom_count": 256,
+          "bond_count": 0,
+          "retained_rows": 2,
+          "retained_assets": 1,
+          "result_rows": 4,
+          "result_sources": 2,
+          "result_atom_count": 384,
+          "retained_setup": [
+            {
+              "source_atom_records": 128,
+              "feature_ids": [
+                "c438fab8-e790-51a1-9c1a-6516730a04b3",
+                "5962fc27-0d37-5e9e-a502-5f21951bf15b"
+              ]
+            }
+          ],
+          "error_detail": null,
+          "candidate_admission_spans": [
+            {
+              "phase": "candidate_admission",
+              "start": 23198.467176249,
+              "end": 23198.468300804,
+              "elapsed_ms": 1.1245550012972672,
+              "completed": true
+            }
+          ],
+          "gc_collections": [
+            {
+              "thread": 127209861293760,
+              "generation": 0,
+              "phase": "source_capture",
+              "start": 23198.434130048,
+              "end": 23198.434266955,
+              "elapsed_ms": 0.13690699779544957,
+              "collected": 17,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": true,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 127209616438976,
+              "generation": 0,
+              "phase": "native_parse",
+              "start": 23198.436963974,
+              "end": 23198.437185216,
+              "elapsed_ms": 0.22124200040707365,
+              "collected": 208,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 127209861293760,
+              "generation": 0,
+              "phase": "other",
+              "start": 23198.461182205,
+              "end": 23198.461273049,
+              "elapsed_ms": 0.09084400153369643,
+              "collected": 119,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            },
+            {
+              "thread": 127209616438976,
+              "generation": 0,
+              "phase": "native_preparation",
+              "start": 23198.469018089,
+              "end": 23198.469092757,
+              "elapsed_ms": 0.07466800161637366,
+              "collected": 9,
+              "uncollectable": 0,
+              "overlaps": {
+                "source_capture": false,
+                "publication": false,
+                "candidate_admission": false
+              }
+            }
+          ],
+          "stages_ms": {
+            "acquire": 0.036,
+            "classify": 0.417,
+            "native_capture": 2.262,
+            "native_import": 28.194,
+            "native_recovery": 2.887,
+            "native_placement": 0.15,
+            "native_candidate_admission": 1.129,
+            "native_response": 21.9,
+            "native_preparation_total": 55.368,
+            "parse_protein": 28.194,
+            "deduplicate": 0.91,
+            "commit": 0.761
+          },
+          "capture_ms": [
+            0.005130001227371395,
+            2.1784870004921686
+          ],
+          "publication_ms": [
+            0.6273280014283955
+          ],
+          "light_ms": [
+            6.454283000493888,
+            9.631265998905292,
+            2.627381996717304,
+            2.5047759991139174,
+            2.5342690023535397,
+            1.8332590007048566,
+            2.6072590007970575,
+            2.836293999280315,
+            2.859079002519138,
+            3.9657810011703987,
+            1.7737809976097196,
+            2.352382998651592,
+            3.143645000818651,
+            2.228494999144459,
+            1.7746679986885283,
+            4.083947998879012,
+            1.9490589984343387,
+            1.571674998558592,
+            4.8977980004565325
+          ],
+          "publication_overlaps": 1,
+          "undo_redo_exact": true
+        }
+      ]
+    }
+  ],
+  "sample_retention": "Repetitive successes and small GC event details pruned; every major collection, phase/generation maximum, unexpected outcome and timing maximum retained; existing outcome aggregates unchanged."
+}

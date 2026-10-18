@@ -11,6 +11,11 @@ from pathlib import Path, PurePosixPath
 
 from backend.core.job_cleanup import _job_classes, _norm
 from backend.core.models import Design
+from backend.core.part_input_sources import portable_sources
+from backend.core.part_document_io import (
+    MAX_METADATA_BYTES, DocumentLimit, check_text, open_archive, read_file, read_member,
+)
+from backend.core.part_source_audit import audit_loadout_sources
 
 FORMAT = "nadoc.native-part-package"
 VERSION = 1
@@ -45,7 +50,10 @@ def create_package(
         raise ValueError("part path escapes the workspace") from exc
     if not part.is_file() or part.suffix.lower() != ".nadoc":
         raise ValueError("package source must be an existing .nadoc part")
-    Design.from_json(part.read_text(encoding="utf-8"))
+    part_bytes = read_file(part)
+    design = Design.from_json(part_bytes.decode("utf-8"))
+    sources = portable_sources(design)
+    loadout_audit = audit_loadout_sources(design)
 
     jobs = list(associated_job_dirs(workspace, source_path))
     selected_job_ids = set(selected_job_ids or ())
@@ -74,6 +82,8 @@ def create_package(
         "version": VERSION,
         "mode": mode,
         "part": {"archive_path": f"part/{part.name}", "source_path": _norm(source_path)},
+        "authoring_inputs": [source.model_dump(mode="json") for source in sources.values()],
+        "authoring_loadouts": loadout_audit,
         "simulations": [
             {
                 "tree": tree,
@@ -95,10 +105,12 @@ def create_package(
             for tree, job, _directory in jobs
         ],
     }
+    manifest_json = check_text(json.dumps(manifest, indent=2), limit=MAX_METADATA_BYTES,
+                               label="Package manifest")
     output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output, "w", allowZip64=True) as archive:
-        archive.writestr("manifest.json", json.dumps(manifest, indent=2), compress_type=zipfile.ZIP_DEFLATED)
-        archive.write(part, manifest["part"]["archive_path"], compress_type=zipfile.ZIP_DEFLATED)
+        archive.writestr("manifest.json", manifest_json, compress_type=zipfile.ZIP_DEFLATED)
+        archive.writestr(manifest["part"]["archive_path"], part_bytes, compress_type=zipfile.ZIP_DEFLATED)
         for tree, job, directory in included_jobs:
             prefix = PurePosixPath("simulations", tree, job.job_id)
             for file in sorted(directory.rglob("*")):
@@ -110,7 +122,11 @@ def create_package(
 
 
 def _safe_members(archive: zipfile.ZipFile) -> None:
+    names = set()
     for info in archive.infolist():
+        if info.filename in names:
+            raise ValueError(f"duplicate archive member: {info.filename}")
+        names.add(info.filename)
         path = PurePosixPath(info.filename)
         if path.is_absolute() or ".." in path.parts or path.parts[:1] == ("",):
             raise ValueError(f"unsafe archive path: {info.filename}")
@@ -133,20 +149,30 @@ def import_package(workspace: Path, package: Path, dest_path: str, *, overwrite_
     if destination.exists() and not overwrite_part:
         raise FileExistsError(f"part already exists: {dest_path}")
 
-    with zipfile.ZipFile(package) as archive:
+    with open_archive(package) as archive:
         _safe_members(archive)
         try:
-            manifest = json.loads(archive.read("manifest.json"))
+            manifest = json.loads(read_member(archive, "manifest.json", limit=MAX_METADATA_BYTES,
+                                              label="Package manifest"))
         except (KeyError, json.JSONDecodeError) as exc:
             raise ValueError("missing or invalid package manifest") from exc
-        if manifest.get("format") != FORMAT or manifest.get("version") != VERSION:
+        if not isinstance(manifest, dict) or manifest.get("format") != FORMAT or manifest.get("version") != VERSION:
             raise ValueError("unsupported NADOC part package format")
         part_member = manifest.get("part", {}).get("archive_path")
         if not isinstance(part_member, str):
             raise ValueError("manifest does not identify a part file")
         try:
-            design_text = archive.read(part_member).decode("utf-8")
-            Design.from_json(design_text)
+            design_text = read_member(archive, part_member).decode("utf-8")
+            design = Design.from_json(design_text)
+            sources = portable_sources(design)
+            declared = manifest.get("authoring_inputs")
+            if declared is not None and declared != [source.model_dump(mode="json") for source in sources.values()]:
+                raise ValueError("Package authoring input manifest does not match the portable part")
+            loadout_audit = audit_loadout_sources(design)
+            if manifest.get("authoring_loadouts") is not None and manifest["authoring_loadouts"] != loadout_audit:
+                raise ValueError("Package loadout source manifest does not match the portable part")
+        except DocumentLimit:
+            raise
         except (KeyError, UnicodeDecodeError, ValueError) as exc:
             raise ValueError("package contains an invalid NADOC part") from exc
 
@@ -163,13 +189,20 @@ def import_package(workspace: Path, package: Path, dest_path: str, *, overwrite_
             target = workspace / tree / job_id
             if target.exists():
                 raise FileExistsError(f"simulation job already exists: {tree}/{job_id}")
-            targets.append((tree, job_id, str(PurePosixPath(prefix)), target))
+            try:
+                metadata = json.loads(read_member(archive, str(PurePosixPath(prefix) / "job.json"),
+                    limit=MAX_METADATA_BYTES, label="Simulation job metadata"))
+            except KeyError as exc:
+                raise ValueError(f"simulation {tree}/{job_id} has no job.json") from exc
+            if not isinstance(metadata, dict):
+                raise ValueError("Simulation job metadata must be an object")
+            targets.append((tree, job_id, str(PurePosixPath(prefix)), target, metadata))
 
         workspace.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix=".nadoc-import-", dir=workspace) as temporary:
             staging = Path(temporary)
             staged_jobs = []
-            for tree, job_id, prefix, target in targets:
+            for tree, job_id, prefix, target, data in targets:
                 staged = staging / tree / job_id
                 for info in archive.infolist():
                     member = PurePosixPath(info.filename)
@@ -187,7 +220,6 @@ def import_package(workspace: Path, package: Path, dest_path: str, *, overwrite_
                 job_json = staged / "job.json"
                 if not job_json.is_file():
                     raise ValueError(f"simulation {tree}/{job_id} has no job.json")
-                data = json.loads(job_json.read_text(encoding="utf-8"))
                 data["design_source_path"] = _norm(dest_path)
                 if "archived" in data or "archive_path" in data:
                     data["archived"] = False
@@ -195,6 +227,8 @@ def import_package(workspace: Path, package: Path, dest_path: str, *, overwrite_
                 job_json.write_text(json.dumps(data, indent=2), encoding="utf-8")
                 staged_jobs.append((staged, target))
 
+            from backend.core.project_revisions import ProjectRevisionStore
+            ProjectRevisionStore(workspace).stage_design_inputs(design)
             staged_part = staging / destination.name
             staged_part.write_text(design_text, encoding="utf-8")
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -226,4 +260,6 @@ def import_package(workspace: Path, package: Path, dest_path: str, *, overwrite_
         "simulations": installed,
         "referenced_simulations": referenced,
         "mode": manifest.get("mode", "full"),
+        "source_warnings": [*loadout_audit["issues"],
+                            *(issue for branch in loadout_audit["loadouts"] for issue in branch["issues"])],
     }

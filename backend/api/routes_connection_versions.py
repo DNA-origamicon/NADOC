@@ -34,6 +34,11 @@ router = APIRouter()
 
 @router.post("/design/connection-versions", status_code=201)
 def create_connection_version(body: ConnectionVersionCreateRequest) -> dict:
+    from backend.api.part_connection_version_commands import CREATE, try_record
+    recorded = try_record(CREATE, body.model_dump())
+    if recorded is not None:
+        updated, report, _entry = recorded
+        return _design_response(updated, report)
     design = design_state.get_or_404()
     overhang_ids = {overhang.id for overhang in design.overhangs}
     for overhang_id in (body.overhang_a_id, body.overhang_b_id):
@@ -68,6 +73,11 @@ def create_connection_version(body: ConnectionVersionCreateRequest) -> dict:
 def patch_connection_version(
     version_id: str, body: ConnectionVersionPatchRequest
 ) -> dict:
+    from backend.api.part_connection_version_commands import PATCH, try_record
+    recorded = try_record(PATCH, body.model_dump(exclude_unset=True), version_id=version_id)
+    if recorded is not None:
+        updated, report, _entry = recorded
+        return _design_response(updated, report)
     design = design_state.get_or_404()
     if not any(version.id == version_id for version in design.connection_versions):
         raise HTTPException(404, detail=f"Connection version {version_id!r} not found.")
@@ -103,6 +113,11 @@ def patch_connection_version(
 
 @router.delete("/design/connection-versions/{version_id}", status_code=200)
 def delete_connection_version(version_id: str) -> dict:
+    from backend.api.part_connection_version_commands import DELETE, try_record
+    recorded = try_record(DELETE, {}, version_id=version_id)
+    if recorded is not None:
+        updated, report, _entry = recorded
+        return _design_response(updated, report)
     design = design_state.get_or_404()
     if not any(version.id == version_id for version in design.connection_versions):
         raise HTTPException(404, detail=f"Connection version {version_id!r} not found.")

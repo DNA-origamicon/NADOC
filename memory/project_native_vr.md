@@ -27,7 +27,7 @@ maximum 22.447 ms. Three complete 120-result GPU windows have medians
 8.497/8.473/8.577 ms, p95 9.027/9.168/9.139 ms, maximum 9.567 ms, zero query
 skips. Occasional missed refreshes remain: this is not stable 90 Hz or proof that
 the monocular temporal splitting is gone. User was asked for a new two-second
-gripped-model torso recording; retain MV-44 and ISSUE-79 until that is evaluated.
+gripped-model torso recording; retain MV-44 and ISSUE-97 until that is evaluated.
 
 Current normal physical-inspect PID 2374833 / session 2374833-144926698728966,
 binary SHA256 af4e887c0591a0f9f452ecfca593a9557d6fecebd057bdad24089fa4153065f2,

@@ -157,8 +157,10 @@ def plan_connectivity(source, settings):
 
 
 def materialize_connectivity(source, candidate, settings, history=None):
-    core = candidate.design.model_copy(deep=True)
-    if history:
+    if history is not None and not history.standard:
+        # Existing v1 histories retain their explicitly unverified recovery
+        # semantics. New construction derives every output from native inputs.
+        core = candidate.design.model_copy(deep=True)
         history.record(
             Design(lattice_type=source.lattice_type),
             core,
@@ -170,6 +172,10 @@ def materialize_connectivity(source, candidate, settings, history=None):
             },
             "connectivity-core",
         )
+    else:
+        from backend.api.generated_connectivity_steps import build_connectivity_steps
+
+        core = build_connectivity_steps(source, candidate.summary, history)
     ports = []
     for terminal in candidate.summary["connectivity_terminals"]:
         cells = {

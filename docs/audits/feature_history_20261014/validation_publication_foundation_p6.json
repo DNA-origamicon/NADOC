@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-15",
+  "focused_tests": {
+    "test_part_publication_permit.py": 34,
+    "test_part_publication_state.py": 39,
+    "test_part_publication_jobs.py": 24,
+    "test_part_publication_routes.py": 14,
+    "test_part_evaluation_admission.py": 24,
+    "test_part_evaluation_session.py": 21,
+    "test_part_batch_jobs.py": 17,
+    "test_part_evaluation_jobs.py": 10,
+    "test_part_verification_jobs.py": 14,
+    "test_part_repair_jobs.py": 15,
+    "test_part_selection_jobs.py": 16,
+    "test_part_repair_draft_jobs.py": 17,
+    "test_part_repair_draft_transaction.py": 35,
+    "test_part_repair_source_host.py": 18,
+    "test_part_evaluation_capture.py": 65,
+    "test_part_evaluation_capture_jobs.py": 23,
+    "test_part_coating_evaluation.py": 27,
+    "test_part_retained_recovery.py": 5,
+    "test_part_batch_publication_scope.py": 14,
+    "test_part_capture_admission.py": 31,
+    "test_part_capture_copy.py": 26,
+    "test_native_protein_free_import.py": 38
+  },
+  "focused_total": 527,
+  "focused_files": 22,
+  "state_note": "Original38 cases plus added no-session-recreation node; final39 unique cases. All root-run serially.",
+  "ruff": "Changed Python passed",
+  "diff_check": "passed",
+  "batch_benchmark": "Final private-permit run:120prepared correct,4spawned complete/cold verified,1/120capture refusals retained,cleanuptrue; publicgatefalse.",
+  "protein_diagnostics": "9/9small diagnostic; retained1000+1000:29/30success,1sourcecapture refusal with45.08ms gen2GC overlap, finalcoldcapture refused,cleanuptrue; gatefalse.",
+  "limitations": [
+    "No complete HTTP/read-alias enforcement claim; strict closed dispatch is next and unmounted.",
+    "Compatibility source/undo still mutable; no baseline cache.",
+    "No global limits, GC policy, scientific algorithms or numerical pins changed.",
+    "FAST/deferred FULL selector was a dry-run only; broad-suite debt remains. Archive unavailable.",
+    "Frontend/app/visual/headset checks not part of this checkpoint; main.js delta0."
+  ]
+}

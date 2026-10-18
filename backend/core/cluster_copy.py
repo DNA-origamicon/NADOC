@@ -124,7 +124,7 @@ def cluster_closure(
 
 
 def extract_cluster_subdesign(
-    design: Design, cluster_ids: Sequence[str]
+    design: Design, cluster_ids: Sequence[str], *, identity_factory=None
 ) -> tuple[Design, ClusterCopyReport]:
     """Carve a self-contained sub-``Design`` out of ``design`` for ``cluster_ids``.
 
@@ -161,7 +161,7 @@ def extract_cluster_subdesign(
 
     helices = [h.model_copy(deep=True) for h in design.helices if h.id in copied]
 
-    strands, split_map, truncated = _truncate_strands(design, copied)
+    strands, split_map, truncated = _truncate_strands(design, copied, identity_factory=identity_factory)
 
     crossovers = [
         x.model_copy(deep=True)
@@ -185,6 +185,7 @@ def extract_cluster_subdesign(
         forced_ligations=fls,
         deformations=deformations,
         cluster_transforms=clusters,
+        lattice_frames=[f.model_copy(deep=True) for f in design.lattice_frames if f.id in {h.lattice_frame_id for h in helices}],
     )
     report = ClusterCopyReport(
         requested_cluster_ids=list(cluster_ids),
@@ -235,7 +236,7 @@ def _refuse_unsupported(design: Design, copied: set[str]) -> None:
 
 
 def _truncate_strands(
-    design: Design, copied: set[str]
+    design: Design, copied: set[str], *, identity_factory=None
 ) -> tuple[list[Strand], dict[tuple[str, int], tuple[str, int]], int]:
     """Split each strand into its maximal runs of copied-helix domains.
 
@@ -271,7 +272,7 @@ def _truncate_strands(
             truncated += 1
 
         for run in runs:
-            frag_id = str(uuid.uuid4())
+            frag_id = identity_factory("paste-fragment", [strand.id, str(run[0])]) if identity_factory else str(uuid.uuid4())
             domains: list[Domain] = []
             for new_idx, orig_idx in enumerate(run):
                 split_map[(strand.id, orig_idx)] = (frag_id, new_idx)
@@ -360,7 +361,7 @@ def _rebuild_clusters(
 
 
 def graft_cluster_subdesign(
-    host: Design, sub: Design, *, grid_delta: tuple[int, int]
+    host: Design, sub: Design, *, grid_delta: tuple[int, int], identity_factory=None
 ) -> tuple[Design, list[str]]:
     """Return ``host`` + a rigidly-translated, id-remapped copy of ``sub``.
 
@@ -452,10 +453,13 @@ def graft_cluster_subdesign(
         used_c.add(nid)
         cmap[c.id] = nid
 
+    fmap = {f.id: (identity_factory("paste-frame", [f.id]) if identity_factory else str(uuid.uuid4())) for f in sub.lattice_frames}
+    frames = [f.model_copy(update={"id": fmap[f.id], "placement_cluster_id": cmap[f.placement_cluster_id]}) for f in sub.lattice_frames]
+
     # ── translate + remap ─────────────────────────────────────────────────────
     translated = translate_design(sub, grid_delta, world_delta, plane)
     placed_helices = [
-        h.model_copy(update={"id": hmap[orig.id]})
+        h.model_copy(update={"id": hmap[orig.id], "lattice_frame_id": fmap.get(orig.lattice_frame_id)})
         for orig, h in zip(sub.helices, translated.helices)
     ]
 
@@ -475,7 +479,7 @@ def graft_cluster_subdesign(
     placed_crossovers = [
         x.model_copy(
             update={
-                "id": str(uuid.uuid4()),
+                "id": identity_factory("paste-crossover", [x.id]) if identity_factory else str(uuid.uuid4()),
                 "half_a": x.half_a.model_copy(
                     update={"helix_id": hmap[x.half_a.helix_id]}
                 ),
@@ -490,7 +494,7 @@ def graft_cluster_subdesign(
     placed_fls = [
         fl.model_copy(
             update={
-                "id": str(uuid.uuid4()),
+                "id": identity_factory("paste-ligation", [fl.id]) if identity_factory else str(uuid.uuid4()),
                 "three_prime_helix_id": hmap[fl.three_prime_helix_id],
                 "five_prime_helix_id": hmap[fl.five_prime_helix_id],
             }
@@ -501,7 +505,7 @@ def graft_cluster_subdesign(
     placed_deformations = [
         op.model_copy(
             update={
-                "id": str(uuid.uuid4()),
+                "id": identity_factory("paste-deformation", [op.id]) if identity_factory else str(uuid.uuid4()),
                 "affected_helix_ids": [hmap[h] for h in op.affected_helix_ids],
                 "cluster_ids": [cmap[c] for c in op.cluster_ids if c in cmap],
             }
@@ -534,6 +538,7 @@ def graft_cluster_subdesign(
         )
 
     result = host.model_copy(deep=True)
+    result.lattice_frames = [*result.lattice_frames, *frames]
     result.helices = list(result.helices) + placed_helices
     result.strands = list(result.strands) + placed_strands
     result.crossovers = list(result.crossovers) + placed_crossovers
@@ -565,11 +570,13 @@ def _shift_pivot(
 
 
 def paste_clusters(
-    design: Design, cluster_ids: Sequence[str], grid_delta: tuple[int, int]
+    design: Design, cluster_ids: Sequence[str], grid_delta: tuple[int, int], *, identity_seed=None
 ) -> tuple[Design, list[str], ClusterCopyReport]:
     """Extract + graft in one call.  Returns ``(design, pasted_helix_ids, report)``."""
-    sub, report = extract_cluster_subdesign(design, cluster_ids)
+    from backend.core.feature_identity import identity_factory
+    factory = identity_factory(identity_seed) if identity_seed else None
+    sub, report = extract_cluster_subdesign(design, cluster_ids, identity_factory=factory)
     grafted, pasted_helix_ids = graft_cluster_subdesign(
-        design, sub, grid_delta=grid_delta
+        design, sub, grid_delta=grid_delta, identity_factory=factory
     )
     return grafted, pasted_helix_ids, report

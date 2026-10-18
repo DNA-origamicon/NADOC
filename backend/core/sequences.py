@@ -154,7 +154,10 @@ def _domain_seq_span(domain, ls_map: dict[tuple[str, int], int]) -> int:
     return _domain_nt_count(domain, ls_map)
 
 
-def strand_sequence_length(design: "Design", strand: Strand) -> int:
+def strand_sequence_length(
+    design: "Design", strand: Strand, *,
+    loop_skip_map: dict[tuple[str, int], int] | None = None,
+) -> int:
     """Length ``strand.sequence`` must have for *strand*.
 
     Equals :func:`strand_nucleotide_count` for every ordinary strand; they differ
@@ -162,12 +165,16 @@ def strand_sequence_length(design: "Design", strand: Strand) -> int:
     derivation uses the raw bp span (see :func:`_domain_seq_span`).  Sequence
     *editors* must validate against THIS, or a hand-typed sequence could be
     rejected at exactly the length the derivation itself produces.
+
+    Bulk read-only assessments may pass the map built from this same Design
+    once, avoiding a full helix scan for every strand. Do not retain it across
+    design edits.
     """
-    ls_map = _build_loop_skip_map(design)
+    ls_map = _build_loop_skip_map(design) if loop_skip_map is None else loop_skip_map
     return sum(_domain_seq_span(d, ls_map) for d in strand.domains)
 
 
-def strand_nucleotide_count(strand: Strand, design: "Design") -> int:
+def strand_nucleotide_count(strand: Strand, design: "Design", *, loop_skip_map=None) -> int:
     """Actual nucleotide count of *strand*, accounting for loop/skips.
 
     Loops (+1) add a base and skips (-1) remove one, so this differs from the raw
@@ -176,7 +183,9 @@ def strand_nucleotide_count(strand: Strand, design: "Design") -> int:
     or deleted (skip) positions get padded with spurious ``?`` (which breaks CanDo
     and other downstream tools). See ``backend/api/routes_sequences.py``.
     """
-    return _strand_nt_with_skips(strand, _build_loop_skip_map(design))
+    if loop_skip_map is None:
+        loop_skip_map = _build_loop_skip_map(design)
+    return _strand_nt_with_skips(strand, loop_skip_map)
 
 
 # ── Scaffold sequence assignment ───────────────────────────────────────────────

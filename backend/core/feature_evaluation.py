@@ -37,7 +37,8 @@ def feature_effects(entry) -> Effects:
     if entry.feature_type == "cluster_op":
         return Effects(
             frozenset({("cluster", entry.cluster_id, "exists")}),
-            frozenset({("cluster", entry.cluster_id, "pose")}),
+            frozenset({("cluster", entry.cluster_id, "pose"),
+                       *(("cluster", entry.cluster_id, field) for field in entry.authored_fields)}),
         )
     if entry.feature_type == "overhang_rotation":
         reads, writes = set(), set()

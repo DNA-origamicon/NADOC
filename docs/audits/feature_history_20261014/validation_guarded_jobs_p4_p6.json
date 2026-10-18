@@ -1,0 +1,25 @@
+{
+  "date": "2026-10-15",
+  "focused_passed": 306,
+  "focused_files": {
+    "tests/test_part_evaluation_admission.py": 24,
+    "tests/test_part_batch_evaluation.py": 20,
+    "tests/test_part_batch_jobs.py": 17,
+    "tests/test_part_evaluation_jobs.py": 10,
+    "tests/test_part_selection_jobs.py": 16,
+    "tests/test_part_repair_jobs.py": 15,
+    "tests/test_part_evaluation_capture_jobs.py": 23,
+    "tests/test_part_evaluation_capture.py": 63,
+    "tests/test_part_coating_evaluation.py": 27,
+    "tests/test_part_repair_evaluation.py": 22,
+    "tests/test_part_repair_draft.py": 35,
+    "tests/test_part_repair_drafts_api.py": 18,
+    "tests/test_part_repair_persistence.py": 16
+  },
+  "execution": "All files ran serially through just test-focused. Real spawned batch/coating/repair/cold regressions are included. Draft maximum-size regression first had 3 failures/1 control; after canonical-form admission, all 35 schema,18 API,16 persistence cases passed.",
+  "benchmark": "coating_jobs_benchmark_drafts_p4.json: exit0;90 prepared publications/3 complete real jobs pass;90 captures with1 refusal;p95 capture93.6..98.3ms;publication11.6..18.4ms. Cancel/stale workers reaped about53ms and commit409; session cleanup true. Unchanged8MB recovery bound refuses15th coating row without candidate/source mutation.",
+  "failed_benchmark": "coating_jobs_draft_boundary_failure_p4.json retains the first aborted run that exposed ISSUE-84. No completed measurement report existed for that attempt.",
+  "static": "Changed checkpoint Python Ruff and git diff --check pass. Prior unrelated global lint and broad-suite debt remain. The latest test-smart invocation was dry-run only, FAST/deferred FULL; neither broad suite ran with Archive unavailable.",
+  "scope": "Coating public append enabled only for the qualified existing explicit single-particle job scope. Registered batch job integration remains behind False public availability gate, pending its own full-state publication/latency qualification. Host operation admission blocks forged read-operation candidates. No server strict policy, baseline cache or OS sandbox is claimed.",
+  "limits": "No scientific algorithms/constants, ordinary capture/recovery/transport limits or GC policy changed. Draft budgets also cover serialization defaults. No frontend/main.js changes, app/visual/headset validation or production physical simulation. P4/P5/P6 remain incomplete; assemblies deferred."
+}

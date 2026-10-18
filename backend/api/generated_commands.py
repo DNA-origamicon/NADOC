@@ -16,14 +16,15 @@ from backend.core.models import (
     OverhangRotationLogEntry,
 )
 from backend.core.design_diff import encode_child_diff
-from backend.core.loop_skip_calculator import apply_loop_skips, clear_loop_skips
 
 
 def fine_routing(before, after, commands):
     current = before
     children = []
-    for kind, label, params, operation in commands:
-        updated = operation(current)
+    from backend.api.part_proof_commands import execute
+    for kind, label, params in commands:
+        params = {**params, "_proof_version": 1}
+        updated = execute(kind, current, params)
         a, r, m, size = encode_child_diff(current, updated)
         children.append(
             MinorMutationLogEntry(
@@ -38,7 +39,10 @@ def fine_routing(before, after, commands):
         )
         current = updated
     # Do not mask differences between the selected manual operations and planning.
-    assert current.helices == after.helices and current.strands == after.strands
+    from backend.core.part_history_proof import AUTHORING_FIELDS
+    mismatches = sorted(f for f in AUTHORING_FIELDS if getattr(current, f) != getattr(after, f))
+    if mismatches:
+        raise ValueError(f"Generated native commands disagree with planning: {mismatches}")
     pre, pre_size = state.encode_design_snapshot(before)
     post, post_size = state.encode_design_snapshot(after)
     return RoutingClusterLogEntry(
@@ -52,11 +56,18 @@ def fine_routing(before, after, commands):
 
 def ordinary_entries(before, after, entry, key):
     """Replace compound generator labels with native, fully specified operations."""
+    if entry.params.get("_proof_version") == 1:
+        from backend.api.part_proof_commands import PROOF_MINOR_KINDS
+        if entry.op_kind in PROOF_MINOR_KINDS:
+            params = {k: v for k, v in entry.params.items() if k != "_generator"}
+            return [fine_routing(before, after, [(entry.op_kind, entry.label, params)])]
+        # Already executed against the composed input in GeneratedHistory.
+        # Keep provenance outside the parameters understood by strict schemas.
+        params = {k: v for k, v in entry.params.items() if k != "_generator"}
+        return [entry.model_copy(update={"params": params})]
     if key == "section-profile":
-        from backend.core.lattice import resize_strand_ends
         params = {"entries": entry.params["entries"]}
-        return [fine_routing(before, after, [("strand-end-resize", "Size reinforcement spans", params,
-            lambda d: resize_strand_ends(d, params["entries"]))])]
+        return [fine_routing(before, after, [("strand-end-resize", "Size reinforcement spans", params)])]
     if key == "sweep":
         # SweepRequest forbids extra keys; this is a native authoring command.
         return [
@@ -144,7 +155,7 @@ def ordinary_entries(before, after, entry, key):
         params["bp_index"] = entry.params.get("cut_bp_index", entry.params["bp_index"])
         return [
             fine_routing(
-                before, after, [("nick", "Nick strand", params, lambda d: after)]
+                before, after, [("nick", "Nick strand", params)]
             )
         ]
     if entry.op_kind == "cluster-pose":
@@ -171,6 +182,8 @@ def ordinary_entries(before, after, entry, key):
                     translation=cluster.translation,
                     rotation=cluster.rotation,
                     pivot=cluster.pivot,
+                    authored_fields={k: cluster.model_dump(mode="json")[k]
+                        for k in ("name", "helix_ids", "domain_ids", "color", "opacity")},
                 )
             )
         return result
@@ -187,9 +200,6 @@ def ordinary_entries(before, after, entry, key):
                         "loop-skip-insert",
                         f"Remove loop/skip · helix {helix.id} bp {bp}",
                         dict(helix_id=helix.id, bp_index=bp, delta=0),
-                        lambda d, hid=helix.id, bp=bp: clear_loop_skips(
-                            d, [hid], bp, bp + 1
-                        ),
                     )
                 )
             for mark in helix.loop_skips:
@@ -203,9 +213,6 @@ def ordinary_entries(before, after, entry, key):
                         "loop-skip-insert",
                         f"{'Loop' if mark.delta > 0 else 'Skip'} · helix {helix.id} bp {mark.bp_index}",
                         params,
-                        lambda d, hid=helix.id, mark=mark: apply_loop_skips(
-                            d, {hid: [mark]}
-                        ),
                     )
                 )
         return [fine_routing(before, after, commands)]
@@ -261,3 +268,43 @@ def ordinary_entries(before, after, entry, key):
         else labels.get(key, entry.label)
     )
     return [entry.model_copy(update={"label": label, "params": params})]
+
+
+def certify_entries(before, after, entries):
+    """Promote compiled native rows only after complete independent comparison.
+
+    Legacy asset/compound construction remains usable recovery data and is
+    reported explicitly. Its snapshots never become native command inputs.
+    """
+    from backend.api.part_proof_commands import dependencies, execute
+    from backend.core.part_overlay_commands import command_input, KINDS
+    from backend.core.part_history_proof import AUTHORING_FIELDS
+    from fastapi import HTTPException
+    candidates = []
+    for entry in entries:
+        if entry.feature_type in KINDS:
+            candidate = entry.model_copy(update={"proof_version": 1})
+        elif entry.feature_type == "snapshot":
+            candidate = entry.model_copy(update={"params": {
+                **{k: v for k, v in entry.params.items() if k != "_generator"}, "_proof_version": 1}})
+        elif entry.feature_type == "routing-cluster":
+            candidate = entry
+        else:
+            return entries, "Legacy compound routing has no complete native inputs"
+        for child in (candidate.children if candidate.feature_type == "routing-cluster" else [candidate]):
+            kind, params = command_input(child)
+            if not dependencies(kind, params).known:
+                return entries, f"No complete native contract for {kind}"
+        candidates.append(candidate)
+    current = before.model_copy(deep=True)
+    try:
+        for candidate in candidates:
+            for child in (candidate.children if candidate.feature_type == "routing-cluster" else [candidate]):
+                kind, params = command_input(child)
+                current = execute(kind, current, params)
+    except (ValueError, HTTPException) as exc:
+        return entries, f"Native command rejected planned inputs: {exc}"
+    mismatches = sorted(f for f in AUTHORING_FIELDS if getattr(current, f) != getattr(after, f))
+    if mismatches:
+        return entries, f"Native effects differ in {', '.join(mismatches)}"
+    return candidates, None

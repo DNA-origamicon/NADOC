@@ -1,0 +1,24 @@
+{
+  "date": "2026-10-15",
+  "checkpoint": "3b3a6452",
+  "test_smart": {
+    "decision": "FAST (full suite deferred)",
+    "passed": 0,
+    "collection_errors": 7,
+    "seconds": 21.26,
+    "baseline_errors": "Four workers report the previously recorded missing cpd-anti-gpu-longbox-v3/assembly.json experimental fixture.",
+    "new_errors": "Three xdist collection mismatches from two uuid4-generated parameter IDs in test_session_cache_identity.py.",
+    "deferred_verbatim": "DEFERRED: this change would have needed the FULL suite, but no test-dedicated\nsession is open, so only the fast suite ran. Parked in .nadoc-slow-pending."
+  },
+  "fix": "Use deterministic UUID examples in both accepted spellings; no production behavior or test selection changes.",
+  "focused_parallel": {
+    "command": "just validate-safe scripts/test_guard.sh test-focused 0 focused -- uv run pytest tests/test_session_cache_identity.py -n 4 --dist loadfile --durations=10",
+    "passed": 50,
+    "seconds": 4.70,
+    "collection_errors": 0
+  },
+  "limitations": [
+    "This focused pass does not clear broad-suite debt or baseline scientific fixture failures.",
+    "No further broad run attempted while Archive is unavailable; the broad attempt stopped before test execution."
+  ]
+}

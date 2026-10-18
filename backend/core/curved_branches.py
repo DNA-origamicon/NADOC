@@ -276,6 +276,9 @@ def _candidate(
         fork_faces=[[list(c) for c in f] for f in faces],
         fork_crossover_intervals=crossover_intervals,
         fork_paths=paths,
+        fork_path_recipes=[dict(radius_nm=radius, stem_bp=stem_bp, arc_bp=arc_bp,
+                                tail_bp=tail_bp, double=double, mirror=mirror)
+                           for mirror in (1, -1)],
         fork_stations=stations,
         radius_nm=radius,
         center_local=[
@@ -380,6 +383,7 @@ def plan_curved_branches(source, settings):
             "branch_trunk",
             "branch_windows",
             "fork_paths",
+            "fork_path_recipes",
             "fork_faces",
             "fork_stations",
             "cells",

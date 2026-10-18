@@ -904,27 +904,43 @@ def test_delete_attachment_clears_render(_clean_state):
     assert len(client.get("/api/design/protein/atomistic").json()["atoms"]) == 0
 
 
-def test_delete_protein_import_feature_clears_render(_clean_state):
-    # Deleting the protein-import feature-log row must remove the imported
-    # protein from the view (it's a root op: the asset/attachment it created
-    # have no other creating entry in the log).
+@pytest.mark.parametrize("native", [False, True])
+def test_delete_protein_import_feature_clears_render(_clean_state, monkeypatch, native):
+    from backend.api import routes_design_interchange
+    from backend.core.part_history_contract import create_empty_part
+
+    monkeypatch.setattr(routes_design_interchange, "NATIVE_FREE_IMPORT_ENABLED", native)
+    if native:
+        design_state.load_design(create_empty_part("Protein lifecycle", "HONEYCOMB"))
+    # The explicit placement depends on the source import. Preview that
+    # dependency first, then remove both through the ordinary cascade flow.
     client.post(
         "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth"}
     )
     d = design_state.get_design()
-    assert d.feature_log[-1].op_kind == "protein-import"
-    idx = len(d.feature_log) - 1
+    assert d.feature_log[-1].op_kind == ("protein-attach" if native else "protein-import")
+    idx = len(d.feature_log) - (2 if native else 1)
     r = client.delete(f"/api/design/features/{idx}")
     assert r.status_code == 200, r.text
+    if native:
+        assert r.json()["needs_cascade_decision"]
+        r = client.delete(f"/api/design/features/{idx}?cascade=true")
+        assert r.status_code == 200, r.text
+    else:
+        assert not r.json().get("needs_cascade_decision")
     after = design_state.get_design()
     assert len(after.protein_attachments) == 0
     assert len(after.protein_assets) == 0
     assert len(client.get("/api/design/protein/atomistic").json()["atoms"]) == 0
 
 
-def test_delete_last_protein_import_keeps_earlier(_clean_state):
-    # Two imports; deleting the LAST import row surgically removes just it and
-    # keeps the earlier protein (it has no later dependents).
+@pytest.mark.parametrize("native", [False, True])
+def test_delete_last_protein_feature_keeps_earlier_placement(_clean_state, monkeypatch, native):
+    from backend.api import routes_design_interchange
+
+    monkeypatch.setattr(routes_design_interchange, "NATIVE_FREE_IMPORT_ENABLED", native)
+    # Placement is independently editable/deletable; its imported asset is
+    # still available for later explicit placement.
     client.post(
         "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth1"}
     )
@@ -939,21 +955,27 @@ def test_delete_last_protein_import_keeps_earlier(_clean_state):
     assert not j.get("needs_cascade_decision")
     after = design_state.get_design()
     assert len(after.protein_attachments) == 1
-    assert len(after.protein_assets) == 1
+    assert len(after.protein_assets) == (2 if native else 1)
     assert len(client.get("/api/design/protein/atomistic").json()["atoms"]) == 9
 
 
-def test_delete_earlier_protein_import_keeps_independent_later_import(_clean_state):
-    # Reference-based delete: a later protein import that does not reference the
-    # first import's ids survives. Non-reconstructable alone is not a dependency.
+@pytest.mark.parametrize("native", [False, True])
+def test_delete_earlier_protein_import_keeps_independent_later_import(_clean_state, monkeypatch, native):
+    from backend.api import routes_design_interchange
+    from backend.core.part_history_contract import create_empty_part
+
+    monkeypatch.setattr(routes_design_interchange, "NATIVE_FREE_IMPORT_ENABLED", native)
+    if native:
+        design_state.load_design(create_empty_part("Independent proteins", "HONEYCOMB"))
     client.post(
         "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth1"}
     )
-    first_idx = len(design_state.get_design().feature_log) - 1
+    first_idx = len(design_state.get_design().feature_log) - (2 if native else 1)
     client.post(
         "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth2"}
     )
-    r = client.delete(f"/api/design/features/{first_idx}")
+    suffix = "?cascade=true" if native else ""
+    r = client.delete(f"/api/design/features/{first_idx}{suffix}")
     assert r.status_code == 200, r.text
     j = r.json()
     assert not j.get("needs_cascade_decision")
@@ -1244,7 +1266,11 @@ def test_pdb_auto_complex_keep_dna(_clean_state):
     assert r.json()["protein"]["atom_count"] == 12  # DNA kept in the protein object
 
 
-def test_import_places_free_protein_and_logs(_clean_state):
+@pytest.mark.parametrize("native", [False, True])
+def test_import_places_free_protein_and_logs(_clean_state, monkeypatch, native):
+    from backend.api import routes_design_interchange
+
+    monkeypatch.setattr(routes_design_interchange, "NATIVE_FREE_IMPORT_ENABLED", native)
     r = client.post(
         "/api/design/import/pdb-auto", json={"content": _SYNTH_PDB, "name": "synth"}
     )
@@ -1254,7 +1280,10 @@ def test_import_places_free_protein_and_logs(_clean_state):
     assert len(d.protein_attachments) == 1
     assert d.protein_attachments[0].target.kind == "free"
     # Import is recorded in the feature log.
-    assert d.feature_log[-1].op_kind == "protein-import"
+    if native:
+        assert [row.op_kind for row in d.feature_log[-2:]] == ["protein-import", "protein-attach"]
+    else:
+        assert d.feature_log[-1].op_kind == "protein-import"
     payload = r.json()["protein"]
     assert payload["atom_count"] == 9
     assert payload["bond_count"] > 0

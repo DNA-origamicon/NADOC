@@ -1,0 +1,3396 @@
+{
+  "scope": "Actual HTTP evaluation capture and prepared-candidate publication with lock/snapshot probes; separate real spawned lifecycle/cancellation/race observations",
+  "repeats_per_boundary": 30,
+  "fixed_coating_profile": {
+    "max_nodes": 100000,
+    "max_bytes": 4000000,
+    "seconds": 0.1
+  },
+  "ordinary_verification_and_edit_limits_unchanged": true,
+  "session_cleanup_verified": true,
+  "public_append_enabled": false,
+  "source_files": {
+    "pdb_source": {
+      "raw_bytes": 329994,
+      "sha256": "892478b3fbec8bb38fe9a2c5de12ad2b923b42327a43b61d2884d6c3fc59f3f9",
+      "base64_characters": 439992
+    },
+    "coverage_source": {
+      "raw_bytes": 846,
+      "sha256": "c1f82e7a1b32049dbc66ccfec907a772e2df79b9ee2b3c1d27f48d1f982fb59a",
+      "base64_characters": 1128
+    }
+  },
+  "long_history_boundary": {
+    "flat_row_limit": 32,
+    "cumulative_recovery_limit_bytes": 8000000,
+    "last_admitted_append_rows": 14,
+    "attempts": [
+      {
+        "proposed_rows": 4,
+        "append_ms": 721.2452919993666,
+        "append_status": "ready",
+        "append_issues": [],
+        "source_unchanged": true,
+        "retained_recovery_encoded_bytes": 1863788,
+        "edit_status": "ready",
+        "edit_issues": [],
+        "edit_ms": 821.9093159968907,
+        "edit_source_unchanged": true
+      },
+      {
+        "proposed_rows": 5,
+        "append_ms": 781.8007890018634,
+        "append_status": "ready",
+        "append_issues": [],
+        "source_unchanged": true,
+        "retained_recovery_encoded_bytes": 2435044,
+        "edit_status": "ready",
+        "edit_issues": [],
+        "edit_ms": 806.8684880017827,
+        "edit_source_unchanged": true
+      },
+      {
+        "proposed_rows": 6,
+        "append_ms": 812.8472419994068,
+        "append_status": "ready",
+        "append_issues": [],
+        "source_unchanged": true,
+        "retained_recovery_encoded_bytes": 3006380,
+        "edit_status": "ready",
+        "edit_issues": [],
+        "edit_ms": 882.5177549988439,
+        "edit_source_unchanged": true
+      },
+      {
+        "proposed_rows": 7,
+        "append_ms": 779.3288610009768,
+        "append_status": "ready",
+        "append_issues": [],
+        "source_unchanged": true,
+        "retained_recovery_encoded_bytes": 3577716,
+        "edit_status": "ready",
+        "edit_issues": [],
+        "edit_ms": 892.7363210023032,
+        "edit_source_unchanged": true
+      },
+      {
+        "proposed_rows": 8,
+        "append_ms": 815.5675479974889,
+        "append_status": "ready",
+        "append_issues": [],
+        "source_unchanged": true,
+        "retained_recovery_encoded_bytes": 4149052,
+        "edit_status": "ready",
+        "edit_issues": [],
+        "edit_ms": 924.8557319988322,
+        "edit_source_unchanged": true
+      },
+      {
+        "proposed_rows": 9,
+        "append_ms": 890.2370809992135,
+        "append_status": "ready",
+        "append_issues": [],
+        "source_unchanged": true,
+        "retained_recovery_encoded_bytes": 4720388,
+        "edit_status": "ready",
+        "edit_issues": [],
+        "edit_ms": 888.0612460015982,
+        "edit_source_unchanged": true
+      },
+      {
+        "proposed_rows": 10,
+        "append_ms": 909.144668999943,
+        "append_status": "ready",
+        "append_issues": [],
+        "source_unchanged": true,
+        "retained_recovery_encoded_bytes": 5291724,
+        "edit_status": "ready",
+        "edit_issues": [],
+        "edit_ms": 959.3669099995168,
+        "edit_source_unchanged": true
+      },
+      {
+        "proposed_rows": 11,
+        "append_ms": 895.6950280007732,
+        "append_status": "ready",
+        "append_issues": [],
+        "source_unchanged": true,
+        "retained_recovery_encoded_bytes": 5863060,
+        "edit_status": "ready",
+        "edit_issues": [],
+        "edit_ms": 1013.5813339984452,
+        "edit_source_unchanged": true
+      },
+      {
+        "proposed_rows": 12,
+        "append_ms": 919.6380409994163,
+        "append_status": "ready",
+        "append_issues": [],
+        "source_unchanged": true,
+        "retained_recovery_encoded_bytes": 6434392,
+        "edit_status": "ready",
+        "edit_issues": [],
+        "edit_ms": 1028.8806649987237,
+        "edit_source_unchanged": true
+      },
+      {
+        "proposed_rows": 13,
+        "append_ms": 993.1813839975803,
+        "append_status": "ready",
+        "append_issues": [],
+        "source_unchanged": true,
+        "retained_recovery_encoded_bytes": 7005728,
+        "edit_status": "ready",
+        "edit_issues": [],
+        "edit_ms": 1005.8134009996138,
+        "edit_source_unchanged": true
+      },
+      {
+        "proposed_rows": 14,
+        "append_ms": 1011.7706829987583,
+        "append_status": "ready",
+        "append_issues": [],
+        "source_unchanged": true,
+        "retained_recovery_encoded_bytes": 7576988,
+        "edit_status": "ready",
+        "edit_issues": [],
+        "edit_ms": 1097.8096830003778,
+        "edit_source_unchanged": true
+      },
+      {
+        "proposed_rows": 15,
+        "append_ms": 1045.084064000548,
+        "append_status": "unverified",
+        "append_issues": [
+          {
+            "code": "command_limit",
+            "detail": "Regenerated recovery exceeds the cumulative encoding budget"
+          }
+        ],
+        "source_unchanged": true
+      }
+    ],
+    "first_refusal": {
+      "operation": "append",
+      "proposed_rows": 15,
+      "status": "unverified",
+      "issues": [
+        {
+          "code": "command_limit",
+          "detail": "Regenerated recovery exceeds the cumulative encoding budget"
+        }
+      ],
+      "candidate_returned": false,
+      "source_unchanged": true
+    },
+    "longest_editable_rows": 14,
+    "expected_atomic_refusal": true
+  },
+  "measurement_notes": [
+    "Repeated start samples intercept submission after real capture; they exclude process startup, replay and solver work.",
+    "Repeated commit samples use one separately natively evaluated candidate and measure decode, independent transport digests, source snapshot and publication.",
+    "Commit samples are independent of capture refusals; they must not be reported as successful end-to-end jobs.",
+    "Representative live jobs use real spawned workers and unchanged admission/deadline/transport policies.",
+    "The long-history fixture is grown through actual native append and edit evaluation until the first unchanged-budget refusal; no output geometry or recovery bytes are fabricated.",
+    "The empty-root worker baseline includes child imports and trivial proof, with no native molecular build. Parent constructor/start-call timings are also reported separately.",
+    "Lock probes add Python overhead; no forced sleeps create contention. HTTP includes ASGI scheduling.",
+    "Zero observed overlap is not evidence of zero contention. A 100 ms cooperative allowance is not a wall-time ceiling.",
+    "Capture refusals remain evidence; no fallback, retry or claim of public latency qualification is made."
+  ],
+  "empty_root_worker_startup_baseline": {
+    "mode": "complete",
+    "start_http_status": 202,
+    "poll": {
+      "job_id": "d9e8a3f1-de71-415f-8e79-1b4703526c7a",
+      "status": "complete",
+      "stale": false,
+      "source_busy": false,
+      "result": {
+        "scope": "part",
+        "contract_version": 1,
+        "status": "verified",
+        "issues": [],
+        "verification_scope": "authoring_reproducibility",
+        "integrity_checked": false,
+        "excluded_roles": [
+          "presentation",
+          "physical",
+          "document_identity"
+        ],
+        "checked_commands": 0,
+        "proof_coverage": "versioned_commands",
+        "native_editable": true,
+        "dependencies": {
+          "complete": true,
+          "parents": {}
+        },
+        "recipe_fingerprint": "af59bfe1b4b1d9d0f031d18c71ee53d059a26ef5f3c1bf5ecaf29a4009ff893f",
+        "authoring_fingerprint": "8542143cf47cd3394a0346305d59f8a9c6c15a322b61c19d0dd9cc3ac14625c0",
+        "imported_sources": [],
+        "source_revision": 1,
+        "design_id": "26699b3e-9b4f-4f27-86e1-c92ba54ceeb0"
+      }
+    },
+    "commit_http_status": 409,
+    "commit": {
+      "detail": "Part evaluation has no publishable candidate"
+    },
+    "initial_revision": 1,
+    "final_revision": 1,
+    "undo_depth": 0,
+    "source_guard_correct": true,
+    "shared_admission_released_after_reaping": true,
+    "start_http_ms": 4.40667300063069,
+    "parent_worker_constructor_ms": 1.1300630030746106,
+    "process_start_call_ms": 0.7196689984994009,
+    "parent_result_decode_ms": 0.06656700134044513,
+    "start_to_supervisor_reaped_ms": 1219.1712249987177,
+    "commit_http_ms": 0.9814730001380667
+  },
+  "cases": [
+    {
+      "name": "adsorption:64:longest-editable-history",
+      "mode": "adsorption",
+      "requested_sites": 64,
+      "actual_sites_before_removal": 39,
+      "removed": false,
+      "separate_native_candidate_evaluation_ms": 1097.8096830003778,
+      "repeats": 30,
+      "source_json_bytes": 8577778,
+      "candidate_json_bytes": 8651805,
+      "retained_sources": 2,
+      "history_rows": 14,
+      "retained_recovery_encoded_bytes": 7576988,
+      "capture_refusals": 0,
+      "correct_publications": 30,
+      "publication_snapshot": {
+        "count": 30,
+        "p50_ms": 9.749526498126215,
+        "p95_ms": 11.46363400039263,
+        "max_ms": 11.742645998310763
+      },
+      "capture_without_worker": {
+        "http": {
+          "count": 30,
+          "p50_ms": 42.987787499441765,
+          "p95_ms": 98.41827300260775,
+          "max_ms": 99.30009500021697
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 1.4560470026481198,
+          "p95_ms": 1.8906440018326975,
+          "max_ms": 1.942445000167936
+        },
+        "revision_http": {
+          "count": 54,
+          "p50_ms": 23.35697750095278,
+          "p95_ms": 91.90716100056306,
+          "max_ms": 98.35717800160637
+        },
+        "capture_lock_hold": {
+          "count": 30,
+          "p50_ms": 39.734863999910885,
+          "p95_ms": 95.10500599935767,
+          "max_ms": 95.50557400143589
+        },
+        "capture_lock_wait": {
+          "count": 30,
+          "p50_ms": 0.0006110003596404567,
+          "p95_ms": 0.0007160015229601413,
+          "max_ms": 0.000814998202258721
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "revision_lock_wait": {
+          "count": 54,
+          "p50_ms": 0.001026999598252587,
+          "p95_ms": 33.76479199869209,
+          "max_ms": 91.10265200069989
+        },
+        "revision_lock_hold": {
+          "count": 54,
+          "p50_ms": 0.003917999492841773,
+          "p95_ms": 0.012468000932130963,
+          "max_ms": 0.016529000276932493
+        },
+        "overlapping_revision_requests": 49,
+        "samples": [
+          {
+            "http_ms": 41.56126099769608,
+            "baseline_revision_http_ms": 1.2628080003196374,
+            "revision_http_ms": [
+              41.58823800025857
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [
+              38.22408199994243
+            ],
+            "capture_lock_wait_ms": [
+              0.0006189984560478479
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              28.595234001841163
+            ],
+            "revision_lock_hold_ms": [
+              0.016529000276932493
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "d49c0d7d-3e4f-4f8e-92b3-8f6f33072c1c",
+              "status": "running",
+              "source_revision": 2,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 98.21868600192829,
+            "baseline_revision_http_ms": 1.3828219998686109,
+            "revision_http_ms": [
+              1.8077620006806683,
+              96.41759700025432
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [
+              94.40316800100845
+            ],
+            "capture_lock_wait_ms": [
+              0.0006159971235319972
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0008210008672904223,
+              14.577488000213634
+            ],
+            "revision_lock_hold_ms": [
+              0.0028750000637955964,
+              0.007185997674241662
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "548e268c-dd11-4c33-9c95-ce3047bb3ed6",
+              "status": "running",
+              "source_revision": 5,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 42.624994999641785,
+            "baseline_revision_http_ms": 1.5276849990186747,
+            "revision_http_ms": [
+              24.312891000590753,
+              18.58396599709522
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              39.23770099936519
+            ],
+            "capture_lock_wait_ms": [
+              0.0006160007615108043
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0009239993232768029,
+              0.0010269977792631835
+            ],
+            "revision_lock_hold_ms": [
+              0.0036960009310860187,
+              0.0036960009310860187
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "a2510482-e4d8-4acc-9ea4-cf78f34ba4d4",
+              "status": "running",
+              "source_revision": 8,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 44.52197399950819,
+            "baseline_revision_http_ms": 1.3662929995916784,
+            "revision_http_ms": [
+              13.506260998838115,
+              31.003805001091678
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              41.33816600005957
+            ],
+            "capture_lock_wait_ms": [
+              0.0006159971235319972
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0009239993232768029,
+              3.152186000079382
+            ],
+            "revision_lock_hold_ms": [
+              0.003798002580879256,
+              0.005955000233370811
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "7ca39370-d96b-4b67-bf11-a539b9420509",
+              "status": "running",
+              "source_revision": 11,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 41.62358000030508,
+            "baseline_revision_http_ms": 1.3774830003967509,
+            "revision_http_ms": [
+              41.11835599906044,
+              1.2216350005473942
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [
+              38.069862999691395
+            ],
+            "capture_lock_wait_ms": [
+              0.0006159971235319972
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              32.865568002307555,
+              0.0010270014172419906
+            ],
+            "revision_lock_hold_ms": [
+              0.0078029988799244165,
+              0.0029769980756100267
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "b2a24f8e-48f5-408b-869f-2d15de72bb2a",
+              "status": "running",
+              "source_revision": 14,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 43.06020000149147,
+            "baseline_revision_http_ms": 1.5186509990599006,
+            "revision_http_ms": [
+              17.22301200061338,
+              25.827434998063836
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              39.95093000048655
+            ],
+            "capture_lock_wait_ms": [
+              0.0006160007615108043
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0009239993232768029,
+              13.582848998339614
+            ],
+            "revision_lock_hold_ms": [
+              0.003387998731341213,
+              0.006878999556647614
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "c9416069-506b-4bf8-b379-a353317365e1",
+              "status": "running",
+              "source_revision": 17,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 41.679075999127235,
+            "baseline_revision_http_ms": 1.495754000643501,
+            "revision_http_ms": [
+              17.26719299767865,
+              24.562214999605203
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              38.63871700013988
+            ],
+            "capture_lock_wait_ms": [
+              0.0006139998731669039
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0010219991963822395,
+              0.0009200011845678091
+            ],
+            "revision_lock_hold_ms": [
+              0.00275899947155267,
+              0.003984998329542577
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "654090eb-1223-4654-9ea9-8248498af588",
+              "status": "running",
+              "source_revision": 20,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 43.987195000227075,
+            "baseline_revision_http_ms": 1.4555910020135343,
+            "revision_http_ms": [
+              12.031951002427377,
+              31.93654099959531
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              41.03155700067873
+            ],
+            "capture_lock_wait_ms": [
+              0.0006129994289949536
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0010220028343610466,
+              14.456369000981795
+            ],
+            "revision_lock_hold_ms": [
+              0.0026569978217594326,
+              0.005826001142850146
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "9e34b7b0-123a-4b3c-862a-b809d5cf257a",
+              "status": "running",
+              "source_revision": 23,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 44.67221999948379,
+            "baseline_revision_http_ms": 1.8906440018326975,
+            "revision_http_ms": [
+              22.795025000959868,
+              21.92042399838101
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              40.07448199990904
+            ],
+            "capture_lock_wait_ms": [
+              0.0007160015229601413
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0012269993021618575,
+              0.0021460000425577164
+            ],
+            "revision_lock_hold_ms": [
+              0.0030660012271255255,
+              0.006643000233452767
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "3b1efb1a-447e-4a82-b286-a5310935f383",
+              "status": "running",
+              "source_revision": 26,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 40.352867003093706,
+            "baseline_revision_http_ms": 1.5617739991284907,
+            "revision_http_ms": [
+              12.030418001813814,
+              28.467874999478227
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              36.9570670009125
+            ],
+            "capture_lock_wait_ms": [
+              0.0006129994289949536
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0010209987522102892,
+              0.003167999238939956
+            ],
+            "revision_lock_hold_ms": [
+              0.0026579982659313828,
+              0.012468000932130963
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "39d24cbf-3ede-4353-a52b-a1cb93172fd1",
+              "status": "running",
+              "source_revision": 29,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 43.61575200164225,
+            "baseline_revision_http_ms": 1.3518329978978727,
+            "revision_http_ms": [
+              22.502848998556146,
+              21.274857001117198
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              40.162805998988915
+            ],
+            "capture_lock_wait_ms": [
+              0.0005110014171805233
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0009190007403958589,
+              0.0009190007403958589
+            ],
+            "revision_lock_hold_ms": [
+              0.003474000550340861,
+              0.004086999979335815
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "081b55ce-c200-49c6-886e-7d60355b44c0",
+              "status": "running",
+              "source_revision": 32,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 42.09184199862648,
+            "baseline_revision_http_ms": 1.4085709990467876,
+            "revision_http_ms": [
+              42.07790000145906
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [
+              38.89439399790717
+            ],
+            "capture_lock_wait_ms": [
+              0.0006110021786298603
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              34.84036499867216
+            ],
+            "revision_lock_hold_ms": [
+              0.009057999704964459
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "54ec391a-8055-435e-a432-2a2e500a631c",
+              "status": "running",
+              "source_revision": 35,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 40.61539300164441,
+            "baseline_revision_http_ms": 1.443476001441013,
+            "revision_http_ms": [
+              1.6461990016978234,
+              39.10047400131589
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [
+              36.8493669993768
+            ],
+            "capture_lock_wait_ms": [
+              0.0006110021786298603
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0009159994078800082,
+              0.0009159994078800082
+            ],
+            "revision_lock_hold_ms": [
+              0.002849999873433262,
+              0.004273999365977943
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "daba2339-8426-453f-a80a-7d4c7e977fb1",
+              "status": "running",
+              "source_revision": 38,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 43.1369990001258,
+            "baseline_revision_http_ms": 1.4565030032827053,
+            "revision_http_ms": [
+              22.28586199998972,
+              21.114716000738554
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              39.99796599964611
+            ],
+            "capture_lock_wait_ms": [
+              0.0006109985406510532
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0009159994078800082,
+              0.0010170006135012954
+            ],
+            "revision_lock_hold_ms": [
+              0.0027470014174468815,
+              0.0037659992813132703
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "508740b9-8e3c-4928-a676-45ec36e06b7b",
+              "status": "running",
+              "source_revision": 41,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 99.30009500021697,
+            "baseline_revision_http_ms": 1.942445000167936,
+            "revision_http_ms": [
+              7.354872999712825,
+              91.90716100056306
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              95.50557400143589
+            ],
+            "capture_lock_wait_ms": [
+              0.000814998202258721
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0015269979485310614,
+              0.0011200027074664831
+            ],
+            "revision_lock_hold_ms": [
+              0.004477999027585611,
+              0.003968998498748988
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "285ed653-2a2a-4701-a3c9-90003a6b2cbc",
+              "status": "running",
+              "source_revision": 44,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 39.644730000873096,
+            "baseline_revision_http_ms": 1.3861810002708808,
+            "revision_http_ms": [
+              32.74913499990362,
+              7.468343999789795
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              36.466923000261886
+            ],
+            "capture_lock_wait_ms": [
+              0.0006100017344579101
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0010179974196944386,
+              0.001119999069487676
+            ],
+            "revision_lock_hold_ms": [
+              0.003460001607891172,
+              0.0038670004869345576
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "e3225a50-af98-45a9-be6d-ee3a9fd4a84f",
+              "status": "running",
+              "source_revision": 47,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 41.8427820004581,
+            "baseline_revision_http_ms": 1.44851300137816,
+            "revision_http_ms": [
+              41.33716200158233,
+              1.1799839994637296
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [
+              38.28680800143047
+            ],
+            "capture_lock_wait_ms": [
+              0.00070999885792844
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              33.15343200301868,
+              0.0009129980753641576
+            ],
+            "revision_lock_hold_ms": [
+              0.009430998034076765,
+              0.003245000698370859
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "836ad345-f02f-4c86-98a5-1f034c03c5f9",
+              "status": "running",
+              "source_revision": 50,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 43.193536999751814,
+            "baseline_revision_http_ms": 1.474370998039376,
+            "revision_http_ms": [
+              12.057010000717128,
+              31.287828001950402
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              39.72852600054466
+            ],
+            "capture_lock_wait_ms": [
+              0.0006080008461140096
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0009130017133429646,
+              0.0013179997040424496
+            ],
+            "revision_lock_hold_ms": [
+              0.003549001121427864,
+              0.0038530015444848686
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "782951ff-f3e1-4802-a146-83e2fb157f3a",
+              "status": "running",
+              "source_revision": 53,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 40.273695998621406,
+            "baseline_revision_http_ms": 1.6002189986465964,
+            "revision_http_ms": [
+              22.16810200116015,
+              18.57359299901873
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              37.06625999984681
+            ],
+            "capture_lock_wait_ms": [
+              0.0006090012902859598
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0010139992809854448,
+              0.001114996848627925
+            ],
+            "revision_lock_hold_ms": [
+              0.01460300336475484,
+              0.004868001269642264
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "3d252c14-8784-4afd-a120-6ed22522afb3",
+              "status": "running",
+              "source_revision": 56,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 42.915374997392064,
+            "baseline_revision_http_ms": 1.32783699882566,
+            "revision_http_ms": [
+              27.576394997595344,
+              15.670787000999553
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              39.74120199927711
+            ],
+            "capture_lock_wait_ms": [
+              0.0006089976523071527
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0009130017133429646,
+              0.0010139992809854448
+            ],
+            "revision_lock_hold_ms": [
+              0.002534998202463612,
+              0.0036510027712211013
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "273adbb0-6057-4a5a-9201-88ed7fde4f81",
+              "status": "running",
+              "source_revision": 59,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 44.20944299999974,
+            "baseline_revision_http_ms": 1.4067320007598028,
+            "revision_http_ms": [
+              17.17071399980341,
+              27.25462800299283
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              40.83742200236884
+            ],
+            "capture_lock_wait_ms": [
+              0.0006089976523071527
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0009120012691710144,
+              0.0009120012691710144
+            ],
+            "revision_lock_hold_ms": [
+              0.003650999133242294,
+              0.004259996785549447
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "1d97e31e-794b-431b-93b4-21ea4a1a1a67",
+              "status": "running",
+              "source_revision": 62,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 94.02183199927094,
+            "baseline_revision_http_ms": 1.557830000820104,
+            "revision_http_ms": [
+              62.510551997547736,
+              31.566581998049514
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              91.09202000036021
+            ],
+            "capture_lock_wait_ms": [
+              0.0006080008461140096
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0010139992809854448,
+              0.0012130003597121686
+            ],
+            "revision_lock_hold_ms": [
+              0.003143999492749572,
+              0.004145000275457278
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "5aacaf44-c225-4126-a721-253920741639",
+              "status": "running",
+              "source_revision": 65,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 42.33940799895208,
+            "baseline_revision_http_ms": 1.6365960000257473,
+            "revision_http_ms": [
+              42.28967000017292
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [
+              38.971288999164244
+            ],
+            "capture_lock_wait_ms": [
+              0.0006059999577701092
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              33.76479199869209
+            ],
+            "revision_lock_hold_ms": [
+              0.009097999281948432
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "e13028ca-1cda-4a38-b8b2-41ab4187b87f",
+              "status": "running",
+              "source_revision": 68,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 41.09232300106669,
+            "baseline_revision_http_ms": 1.3490870005625766,
+            "revision_http_ms": [
+              41.10324200155446
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [
+              37.89485000015702
+            ],
+            "capture_lock_wait_ms": [
+              0.0006069967639632523
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              32.70584199708537
+            ],
+            "revision_lock_hold_ms": [
+              0.008997001714305952
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "010882ae-af1d-4d62-a82c-e12c5f0639bf",
+              "status": "running",
+              "source_revision": 71,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 40.15428099955898,
+            "baseline_revision_http_ms": 1.6510519999428652,
+            "revision_http_ms": [
+              39.59169800145901,
+              1.3720360002480447
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [
+              36.33579099914641
+            ],
+            "capture_lock_wait_ms": [
+              0.0006070004019420594
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              31.16164500170271,
+              0.001315002009505406
+            ],
+            "revision_lock_hold_ms": [
+              0.009097999281948432,
+              0.003739998646778986
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "bd236137-188a-4dde-a4d9-e673aacebd95",
+              "status": "running",
+              "source_revision": 74,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 43.718318000173895,
+            "baseline_revision_http_ms": 1.3624309976876248,
+            "revision_http_ms": [
+              19.923328000004403,
+              23.918930000945693
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              40.31693999786512
+            ],
+            "capture_lock_wait_ms": [
+              0.0007070011633913964
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.000910000380827114,
+              0.0011119991540908813
+            ],
+            "revision_lock_hold_ms": [
+              0.0029319999157451093,
+              0.004246001481078565
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "60c3f2e0-cbbf-46c7-942a-19d2161d4f2b",
+              "status": "running",
+              "source_revision": 77,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 41.277829001046484,
+            "baseline_revision_http_ms": 1.7482029979873914,
+            "revision_http_ms": [
+              41.24568200131762
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [
+              37.804775001859525
+            ],
+            "capture_lock_wait_ms": [
+              0.0006069967639632523
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              32.584530003077816
+            ],
+            "revision_lock_hold_ms": [
+              0.007278998964466155
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "8d125070-901b-4a54-9439-62c2e96ea81e",
+              "status": "running",
+              "source_revision": 80,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 98.41827300260775,
+            "baseline_revision_http_ms": 1.4339270019263495,
+            "revision_http_ms": [
+              98.35717800160637
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [
+              95.10500599935767
+            ],
+            "capture_lock_wait_ms": [
+              0.000604999513598159
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              91.10265200069989
+            ],
+            "revision_lock_hold_ms": [
+              0.0073590017564129084
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "0384cf61-c603-4d05-932b-90a260d20ad3",
+              "status": "running",
+              "source_revision": 83,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 44.1478949978773,
+            "baseline_revision_http_ms": 1.4631650010414887,
+            "revision_http_ms": [
+              17.014470002322923,
+              27.109531001769938
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              40.86457099765539
+            ],
+            "capture_lock_wait_ms": [
+              0.0006040027074050158
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0010080002539325505,
+              4.521161998127354
+            ],
+            "revision_lock_hold_ms": [
+              0.0033270007406827062,
+              0.007762999302940443
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "1c203d93-b90c-4859-95f8-e5f02fe0cdf1",
+              "status": "running",
+              "source_revision": 86,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          },
+          {
+            "http_ms": 44.22461699869018,
+            "baseline_revision_http_ms": 1.5378699972643517,
+            "revision_http_ms": [
+              17.312386000412516,
+              26.99117100200965
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [
+              40.853984999557724
+            ],
+            "capture_lock_wait_ms": [
+              0.000604999513598159
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "revision_lock_wait_ms": [
+              0.0009069990483112633,
+              0.001209999027196318
+            ],
+            "revision_lock_hold_ms": [
+              0.0027220012270845473,
+              0.004737998096970841
+            ],
+            "errors": [],
+            "http_status": 202,
+            "response": {
+              "job_id": "e1e6792e-6161-457f-a1b0-411f58931689",
+              "status": "running",
+              "source_revision": 89,
+              "time_budget_seconds": 180.0
+            },
+            "intercepted_cancel_status": 200
+          }
+        ]
+      },
+      "commit_prepared_candidate": {
+        "http": {
+          "count": 30,
+          "p50_ms": 81.75263099838048,
+          "p95_ms": 87.7364830012084,
+          "max_ms": 137.67377700060024
+        },
+        "baseline_revision_http": {
+          "count": 30,
+          "p50_ms": 0.9132425002462696,
+          "p95_ms": 1.1013100011041388,
+          "max_ms": 1.1281520019110758
+        },
+        "revision_http": {
+          "count": 311,
+          "p50_ms": 1.2463780003599823,
+          "p95_ms": 34.5260230023996,
+          "max_ms": 92.88300900152535
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 30,
+          "p50_ms": 9.83297450147802,
+          "p95_ms": 11.499096999614267,
+          "max_ms": 11.782172998209717
+        },
+        "publication_lock_wait": {
+          "count": 30,
+          "p50_ms": 0.0007129983714548871,
+          "p95_ms": 0.0012160016922280192,
+          "max_ms": 0.0018399987311568111
+        },
+        "revision_lock_wait": {
+          "count": 311,
+          "p50_ms": 0.0010219991963822395,
+          "p95_ms": 0.0029510010790545493,
+          "max_ms": 0.8801210024103057
+        },
+        "revision_lock_hold": {
+          "count": 311,
+          "p50_ms": 0.0032849966373760253,
+          "p95_ms": 0.008686998626217246,
+          "max_ms": 0.010882999049499631
+        },
+        "overlapping_revision_requests": 35,
+        "samples": [
+          {
+            "http_ms": 87.7364830012084,
+            "baseline_revision_http_ms": 0.9590130030119326,
+            "revision_http_ms": [
+              21.191195999563206,
+              1.2560280010802671,
+              0.9507989998382982,
+              0.9753369995451067,
+              33.421100000850856,
+              15.692964996560477,
+              1.2463780003599823,
+              0.8958719990914688,
+              0.8727719978196546,
+              11.408465001295554
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.936321999703068
+            ],
+            "publication_lock_wait_ms": [
+              0.0006160007615108043
+            ],
+            "revision_lock_wait_ms": [
+              0.003182998625561595,
+              0.0017460006347391754,
+              0.0009239993232768029,
+              0.001334003172814846,
+              0.002258999302284792,
+              0.002052998752333224,
+              0.00092400296125561,
+              0.0008210008672904223,
+              0.0009239993232768029,
+              0.0009239993232768029
+            ],
+            "revision_lock_hold_ms": [
+              0.010061001376016065,
+              0.006160000339150429,
+              0.0028740032576024532,
+              0.004620000254362822,
+              0.007700000423938036,
+              0.008111001079669222,
+              0.0034899967431556433,
+              0.0026699999580159783,
+              0.002668999513844028,
+              0.003593002475099638
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "c969e513-d198-489e-96d5-cd7c969828a1",
+              "status": "committed",
+              "revision": 4,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.21385400215513
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 87.1453260006092,
+            "baseline_revision_http_ms": 1.1013100011041388,
+            "revision_http_ms": [
+              20.099640998523682,
+              1.2784099999407772,
+              1.0349869990022853,
+              1.0016199994424824,
+              32.78548800153658,
+              15.124498000659514,
+              0.9104519995162264,
+              0.9868359993561171,
+              1.0312909980711993,
+              13.410368999757338
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              11.782172998209717
+            ],
+            "publication_lock_wait_ms": [
+              0.0007180024113040417
+            ],
+            "revision_lock_wait_ms": [
+              0.0030800001695752144,
+              0.002257998858112842,
+              0.0009239993232768029,
+              0.00092400296125561,
+              0.00092400296125561,
+              0.002053002390312031,
+              0.0009239993232768029,
+              0.0009239993232768029,
+              0.0009239993232768029,
+              0.0010269977792631835
+            ],
+            "revision_lock_hold_ms": [
+              0.008522001735400409,
+              0.005955000233370811,
+              0.002978002157760784,
+              0.0028750000637955964,
+              0.0037989993870723993,
+              0.007186998118413612,
+              0.002668999513844028,
+              0.0027719979698304087,
+              0.002978002157760784,
+              0.00338800236932002
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "6ef42bcc-2e3d-46bf-bb6c-1031cb80b7b5",
+              "status": "committed",
+              "revision": 7,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              11.742645998310763
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 85.22945599906961,
+            "baseline_revision_http_ms": 0.9057290008058771,
+            "revision_http_ms": [
+              14.040025998838246,
+              2.6998350003850646,
+              0.9515190031379461,
+              0.8758519979892299,
+              1.1291320006421302,
+              34.65536300063832,
+              15.565145000437042,
+              1.179130998934852,
+              0.877597998623969,
+              0.9964870005205739,
+              12.36953099942184
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              10.36238999950001
+            ],
+            "publication_lock_wait_ms": [
+              0.0010260009730700403
+            ],
+            "revision_lock_wait_ms": [
+              0.0011299998732283711,
+              0.0018480022845324129,
+              0.0008220013114623725,
+              0.0007189992174971849,
+              0.0010259973350912333,
+              0.0018479986465536058,
+              0.0027719979698304087,
+              0.0009239993232768029,
+              0.0009239993232768029,
+              0.0009239993232768029,
+              0.0009239993232768029
+            ],
+            "revision_lock_hold_ms": [
+              0.003183002263540402,
+              0.007083999662427232,
+              0.002873999619623646,
+              0.002668999513844028,
+              0.0028750000637955964,
+              0.006467998900916427,
+              0.008521001291228458,
+              0.0030800001695752144,
+              0.0029769980756100267,
+              0.0028750000637955964,
+              0.004620000254362822
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "eaa779f3-1be7-4a94-825b-c19de3482db0",
+              "status": "committed",
+              "revision": 10,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              10.325019000447355
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 80.95768600105657,
+            "baseline_revision_http_ms": 0.9274939984607045,
+            "revision_http_ms": [
+              15.01474700125982,
+              1.237240998307243,
+              0.8581940019212198,
+              0.8503910030412953,
+              12.225180998939322,
+              35.51160600181902,
+              1.475017998018302,
+              1.0189700005867053,
+              0.9753370031830855,
+              11.795622001955053
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              10.44175100105349
+            ],
+            "publication_lock_wait_ms": [
+              0.0007189992174971849
+            ],
+            "revision_lock_wait_ms": [
+              0.0010269977792631835,
+              0.0018480022845324129,
+              0.0008220013114623725,
+              0.0008220013114623725,
+              0.00092400296125561,
+              0.0019500002963468432,
+              0.00246399940806441,
+              0.0009239993232768029,
+              0.0008210008672904223,
+              0.4832539998460561
+            ],
+            "revision_lock_hold_ms": [
+              0.002772001607809216,
+              0.005851998139405623,
+              0.0027719979698304087,
+              0.002668999513844028,
+              0.002977998519781977,
+              0.0053389994718600065,
+              0.007083999662427232,
+              0.0028750000637955964,
+              0.0028750000637955964,
+              0.0064680025388952345
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "68f9aae4-c818-44c8-b2e0-3a4743b27e51",
+              "status": "committed",
+              "revision": 13,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              10.409718997834716
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 81.53313400180195,
+            "baseline_revision_http_ms": 1.041249000991229,
+            "revision_http_ms": [
+              15.299647999199806,
+              1.3596200005849823,
+              0.9379660004924517,
+              0.9571650007274002,
+              12.589341000420973,
+              35.85697800008347,
+              1.333439999143593,
+              1.038886999594979,
+              0.8983359984995332,
+              11.55640700017102
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.636636001232546
+            ],
+            "publication_lock_wait_ms": [
+              0.0007189992174971849
+            ],
+            "revision_lock_wait_ms": [
+              0.00092400296125561,
+              0.0019500002963468432,
+              0.00092400296125561,
+              0.0009239993232768029,
+              0.0009239993232768029,
+              0.0015399964468088,
+              0.003183002263540402,
+              0.0017450001905672252,
+              0.0008210008672904223,
+              0.002258999302284792
+            ],
+            "revision_lock_hold_ms": [
+              0.0032849966373760253,
+              0.006262998795136809,
+              0.0027719979698304087,
+              0.0028750000637955964,
+              0.003592998837120831,
+              0.00585200177738443,
+              0.010882999049499631,
+              0.006160000339150429,
+              0.002772001607809216,
+              0.007905000529717654
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "e8e3a132-3794-4cbe-8a98-ed99a19b6129",
+              "status": "committed",
+              "revision": 16,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.59443999818177
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 82.47424499859335,
+            "baseline_revision_http_ms": 0.8849900004861411,
+            "revision_http_ms": [
+              15.199240002402803,
+              1.4152219991956372,
+              0.969032000284642,
+              1.0197209994657896,
+              32.64026900069439,
+              15.672614998038625,
+              1.0075600002892315,
+              0.9394959997734986,
+              0.8861499991326127,
+              12.612735998118296
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              11.039618999348022
+            ],
+            "publication_lock_wait_ms": [
+              0.0007159978849813342
+            ],
+            "revision_lock_wait_ms": [
+              0.002772001607809216,
+              0.001838998286984861,
+              0.0009190007403958589,
+              0.0008169990906026214,
+              0.0012269993021618575,
+              0.0018399987311568111,
+              0.0008179995347745717,
+              0.0009190007403958589,
+              0.0008169990906026214,
+              0.0011239972081966698
+            ],
+            "revision_lock_hold_ms": [
+              0.009240000508725643,
+              0.0060300008044578135,
+              0.0026569978217594326,
+              0.002963999577332288,
+              0.004292000085115433,
+              0.006745001883246005,
+              0.002553999365773052,
+              0.00265800190391019,
+              0.0026569978217594326,
+              0.0034750009945128113
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "8132366d-5422-47e4-98f9-8828c7d67ae8",
+              "status": "committed",
+              "revision": 19,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              11.005076001310954
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 81.29244600058882,
+            "baseline_revision_http_ms": 0.8901350011001341,
+            "revision_http_ms": [
+              15.44154799921671,
+              1.1895729985553771,
+              1.0717389995988924,
+              0.8926900009100791,
+              12.116058998799417,
+              36.25599599763518,
+              1.1171149999427143,
+              0.87633899966022,
+              0.9143560018856078,
+              10.133234998647822,
+              1.8084760013152845
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.843915002420545
+            ],
+            "publication_lock_wait_ms": [
+              0.0007159978849813342
+            ],
+            "revision_lock_wait_ms": [
+              0.002554999809945002,
+              0.0017370002751704305,
+              0.0008169990906026214,
+              0.000919997546589002,
+              0.001124000846175477,
+              0.002043998392764479,
+              0.0021460000425577164,
+              0.0010219991963822395,
+              0.000919997546589002,
+              0.0009200011845678091,
+              0.0009200011845678091
+            ],
+            "revision_lock_hold_ms": [
+              0.008073999197222292,
+              0.005722999048884958,
+              0.002759003109531477,
+              0.0028620015655178577,
+              0.003168999683111906,
+              0.00541700137546286,
+              0.005723002686863765,
+              0.0030659975891467184,
+              0.002554999809945002,
+              0.002553999365773052,
+              0.0035769990063272417
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "d8ace6a2-d2f0-49bc-ae4d-ec9a26dda6d2",
+              "status": "committed",
+              "revision": 22,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.80794099814375
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 137.67377700060024,
+            "baseline_revision_http_ms": 0.8995369971671607,
+            "revision_http_ms": [
+              14.96633200076758,
+              1.0398539998277556,
+              1.0208450003119651,
+              1.004493999062106,
+              12.247279999428429,
+              92.88300900152535,
+              1.112821999413427,
+              1.0247290010738652,
+              1.006129001325462,
+              10.809777999384096,
+              1.2120559986215085
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.364100002130726
+            ],
+            "publication_lock_wait_ms": [
+              0.0018399987311568111
+            ],
+            "revision_lock_wait_ms": [
+              0.00275899947155267,
+              0.0021460000425577164,
+              0.0008170027285814285,
+              0.002554999809945002,
+              0.001634998625377193,
+              0.0018399987311568111,
+              0.0017370002751704305,
+              0.0008179995347745717,
+              0.0009200011845678091,
+              0.42146000123466365,
+              0.0009190007403958589
+            ],
+            "revision_lock_hold_ms": [
+              0.009096002031583339,
+              0.0060300008044578135,
+              0.002963999577332288,
+              0.008686998626217246,
+              0.004700999852502719,
+              0.0058250006986781955,
+              0.0060300008044578135,
+              0.00275899947155267,
+              0.0028609974833671004,
+              0.005722999048884958,
+              0.0028620015655178577
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "fa96490e-0b7d-42be-9e45-fa746ae5a0a8",
+              "status": "committed",
+              "revision": 25,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.32148399806465
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 85.66095599962864,
+            "baseline_revision_http_ms": 1.1281520019110758,
+            "revision_http_ms": [
+              15.494586998102022,
+              1.1932519992114976,
+              1.1701540024660062,
+              1.1770019991672598,
+              34.817166000721045,
+              15.52698400337249,
+              1.1708700003509875,
+              1.0620299981383141,
+              0.9752650003065355,
+              13.180645000829827
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              11.499096999614267
+            ],
+            "publication_lock_wait_ms": [
+              0.0007150010787881911
+            ],
+            "revision_lock_wait_ms": [
+              0.0012259988579899073,
+              0.0009200011845678091,
+              0.0017380007193423808,
+              0.0010219991963822395,
+              0.0023510001483373344,
+              0.0028619979275390506,
+              0.0009200011845678091,
+              0.0008179995347745717,
+              0.0009200011845678091,
+              0.0013289973139762878
+            ],
+            "revision_lock_hold_ms": [
+              0.004293000529287383,
+              0.003269997250754386,
+              0.006438000127673149,
+              0.0030650007829535753,
+              0.00919800004339777,
+              0.009401999705005437,
+              0.002962999133160338,
+              0.0030660012271255255,
+              0.0030660012271255255,
+              0.005109999619890004
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "9d84b89e-8b93-4405-844b-20db49c8bfb2",
+              "status": "committed",
+              "revision": 28,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              11.46363400039263
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 81.71356399907381,
+            "baseline_revision_http_ms": 0.9530880015518051,
+            "revision_http_ms": [
+              15.009663002274465,
+              1.2689789982687216,
+              1.0054140002466738,
+              0.8970849994511809,
+              11.872319999383762,
+              36.85129400037113,
+              1.335918001132086,
+              0.9512489996268414,
+              1.0125679982593283,
+              11.501891000079922
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.867603999737184
+            ],
+            "publication_lock_wait_ms": [
+              0.0008169990906026214
+            ],
+            "revision_lock_wait_ms": [
+              0.0009200011845678091,
+              0.0017370002751704305,
+              0.0009200011845678091,
+              0.0008169990906026214,
+              0.0013280005077831447,
+              0.0021460000425577164,
+              0.002248001692350954,
+              0.0008180031727533787,
+              0.0008179995347745717,
+              0.4659369988075923
+            ],
+            "revision_lock_hold_ms": [
+              0.0028609974833671004,
+              0.006438000127673149,
+              0.0026569978217594326,
+              0.0028620015655178577,
+              0.0028620015655178577,
+              0.005722999048884958,
+              0.006437996489694342,
+              0.0028609974833671004,
+              0.0026569978217594326,
+              0.006233000021893531
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "077c3755-24ca-445e-86fe-b2380201523d",
+              "status": "committed",
+              "revision": 31,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.835413002292626
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 83.19657500032918,
+            "baseline_revision_http_ms": 1.0038100008387119,
+            "revision_http_ms": [
+              13.958511997770984,
+              2.3891570017440245,
+              1.2267650017747656,
+              1.0135169977729674,
+              11.929127998882905,
+              37.99427800186095,
+              1.7908110021380708,
+              1.4325869997264817,
+              11.634419999609236
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.716703003505245
+            ],
+            "publication_lock_wait_ms": [
+              0.0007129965524654835
+            ],
+            "revision_lock_wait_ms": [
+              0.0010209987522102892,
+              0.0019419967429712415,
+              0.0008179995347745717,
+              0.000919997546589002,
+              0.001124000846175477,
+              0.0015330006135627627,
+              0.002544002200011164,
+              0.0013230019249022007,
+              0.0012210002751089633
+            ],
+            "revision_lock_hold_ms": [
+              0.0030660012271255255,
+              0.00715200076228939,
+              0.0030650007829535753,
+              0.002963002771139145,
+              0.0030660012271255255,
+              0.006130998372100294,
+              0.008954997610999271,
+              0.004986999556422234,
+              0.003968998498748988
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "5666b2ee-90a3-480c-815a-b4b65584aaa3",
+              "status": "committed",
+              "revision": 34,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.673350999946706
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 82.83006900092005,
+            "baseline_revision_http_ms": 0.9270039990951773,
+            "revision_http_ms": [
+              15.294606000679778,
+              1.0413919990241993,
+              1.0410860013507772,
+              0.8760189994063694,
+              18.96100000158185,
+              29.763771999569144,
+              1.1703320014930796,
+              0.8802929987723473,
+              0.9172350000881124,
+              12.158117999206297,
+              1.2988640010007657
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              11.127819001558237
+            ],
+            "publication_lock_wait_ms": [
+              0.0007119997462723404
+            ],
+            "revision_lock_wait_ms": [
+              0.0029510010790545493,
+              0.001730000803945586,
+              0.0008139977580867708,
+              0.0008140013960655779,
+              0.0029510010790545493,
+              0.0019340004655532539,
+              0.0016280027921311557,
+              0.0008139977580867708,
+              0.0009159994078800082,
+              0.0013230019249022007,
+              0.0009159994078800082
+            ],
+            "revision_lock_hold_ms": [
+              0.009159000910585746,
+              0.005292000423651189,
+              0.002849999873433262,
+              0.0027479982236400247,
+              0.008344999514520168,
+              0.0067159999161958694,
+              0.005495996447280049,
+              0.0026460002118255943,
+              0.0026460002118255943,
+              0.004273999365977943,
+              0.003460001607891172
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "f283e1ae-5b02-49b1-bea9-65fe29a9eec0",
+              "status": "committed",
+              "revision": 37,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              11.093929002527148
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 82.42828899892629,
+            "baseline_revision_http_ms": 0.888841001142282,
+            "revision_http_ms": [
+              15.3632990004553,
+              1.1990309976681601,
+              0.858615996548906,
+              0.938910998229403,
+              0.862687000335427,
+              47.3918159987079,
+              2.4132239996106364,
+              0.9201859975291882,
+              0.8552580002287868,
+              0.9136730004684068,
+              10.872787999687716
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.393488999194233
+            ],
+            "publication_lock_wait_ms": [
+              0.0007119997462723404
+            ],
+            "revision_lock_wait_ms": [
+              0.0009159994078800082,
+              0.0021369996829889715,
+              0.0009159994078800082,
+              0.0008139977580867708,
+              0.0008139977580867708,
+              0.0012210002751089633,
+              0.0021369996829889715,
+              0.0009159994078800082,
+              0.0009159994078800082,
+              0.0009159994078800082,
+              0.0009159994078800082
+            ],
+            "revision_lock_hold_ms": [
+              0.0027479982236400247,
+              0.006919999577803537,
+              0.0026460002118255943,
+              0.0026460002118255943,
+              0.0027480018616188318,
+              0.0033579999580979347,
+              0.006207999831531197,
+              0.0029510010790545493,
+              0.0026460002118255943,
+              0.0027479982236400247,
+              0.0032560019462835044
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "cd85f087-5a0a-4d10-afb8-4ff5d9e842c5",
+              "status": "committed",
+              "revision": 40,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.360922998894239
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 80.63554500040482,
+            "baseline_revision_http_ms": 0.892809999641031,
+            "revision_http_ms": [
+              14.880308997817338,
+              1.0537050002312753,
+              0.8687930021551438,
+              1.011471998936031,
+              0.9115350003412459,
+              33.064005998312496,
+              15.131676002056338,
+              0.9364689976791851,
+              1.155371999630006,
+              10.360080999817,
+              1.727205999486614
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.822034000535496
+            ],
+            "publication_lock_wait_ms": [
+              0.0008139977580867708
+            ],
+            "revision_lock_wait_ms": [
+              0.0009160030458588153,
+              0.0018320024537388235,
+              0.0008140013960655779,
+              0.002849999873433262,
+              0.0011189986253157258,
+              0.002238997694803402,
+              0.001730000803945586,
+              0.0008150018402375281,
+              0.000914998963708058,
+              0.0010169969755224884,
+              0.0009159994078800082
+            ],
+            "revision_lock_hold_ms": [
+              0.002849999873433262,
+              0.006206999387359247,
+              0.0026460002118255943,
+              0.009973002306651324,
+              0.0029520015232264996,
+              0.006309001037152484,
+              0.006615002348553389,
+              0.0027469977794680744,
+              0.002849999873433262,
+              0.003053002728847787,
+              0.0030529990908689797
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "478b1997-007f-464b-afe7-dc91e2453540",
+              "status": "committed",
+              "revision": 43,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.78906099771848
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 83.32629000142333,
+            "baseline_revision_http_ms": 0.8542400028090924,
+            "revision_http_ms": [
+              15.241076001984766,
+              1.1463139999250416,
+              1.0681569983717054,
+              0.8998320008686278,
+              11.81668600111152,
+              22.14583000022685,
+              14.96976300040842,
+              1.1116109999420587,
+              0.887621001311345,
+              0.8655370002088603,
+              12.610271998710232,
+              1.303851000557188
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              11.351605997333536
+            ],
+            "publication_lock_wait_ms": [
+              0.0007119997462723404
+            ],
+            "revision_lock_wait_ms": [
+              0.0008139977580867708,
+              0.0018319988157600164,
+              0.0008150018402375281,
+              0.0008140013960655779,
+              0.0008140013960655779,
+              0.0021369996829889715,
+              0.002848999429261312,
+              0.0021380001271609217,
+              0.0009159994078800082,
+              0.0008150018402375281,
+              0.0009159994078800082,
+              0.0008139977580867708
+            ],
+            "revision_lock_hold_ms": [
+              0.003155000740662217,
+              0.0067159999161958694,
+              0.0026460002118255943,
+              0.0026460002118255943,
+              0.002645996573846787,
+              0.006310001481324434,
+              0.008854000043356791,
+              0.006105998181737959,
+              0.002848999429261312,
+              0.002644999767653644,
+              0.0026460002118255943,
+              0.0032570023904554546
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "825568d8-49c0-4eda-94de-aad5c31df5db",
+              "status": "committed",
+              "revision": 46,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              11.318225999275455
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 81.38974699977553,
+            "baseline_revision_http_ms": 0.95153000074788,
+            "revision_http_ms": [
+              15.080994999152608,
+              1.0738550008682068,
+              0.8631960008642636,
+              1.008418999845162,
+              12.366639999527251,
+              36.76103299949318,
+              1.226303997100331,
+              0.842333996843081,
+              1.118124997447012,
+              11.056581002776511
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.469000000535743
+            ],
+            "publication_lock_wait_ms": [
+              0.0007130001904442906
+            ],
+            "revision_lock_wait_ms": [
+              0.0029510010790545493,
+              0.0019340004655532539,
+              0.0008140013960655779,
+              0.0008140013960655779,
+              0.0016280027921311557,
+              0.002035001671174541,
+              0.0021380001271609217,
+              0.0009159994078800082,
+              0.0011200027074664831,
+              0.40859799992176704
+            ],
+            "revision_lock_hold_ms": [
+              0.010685998859116808,
+              0.006004000169923529,
+              0.002849999873433262,
+              0.002849999873433262,
+              0.006614998710574582,
+              0.005494999641086906,
+              0.0067159999161958694,
+              0.0029510010790545493,
+              0.003459997969912365,
+              0.0072260008892044425
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "8b5b3eee-4b60-4df2-8226-f1059a685489",
+              "status": "committed",
+              "revision": 49,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.437451997655444
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 80.94987899676198,
+            "baseline_revision_http_ms": 0.9027340020111296,
+            "revision_http_ms": [
+              14.93213099820423,
+              1.5523539987043478,
+              1.0771559973363765,
+              0.9196690007229336,
+              34.29538799900911,
+              15.196906999335624,
+              0.9447170014027506,
+              0.8485830003337469,
+              0.8627800016256515,
+              10.79113400192
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.233201999450102
+            ],
+            "publication_lock_wait_ms": [
+              0.0011160009307786822
+            ],
+            "revision_lock_wait_ms": [
+              0.0028389986255206168,
+              0.0019270009943284094,
+              0.0009129980753641576,
+              0.0009130017133429646,
+              0.0024330001906491816,
+              0.0024330001906491816,
+              0.0009130017133429646,
+              0.0008120005077216774,
+              0.0008110000635497272,
+              0.0009130017133429646
+            ],
+            "revision_lock_hold_ms": [
+              0.009330000466434285,
+              0.005881000106455758,
+              0.0029410002753138542,
+              0.0028389986255206168,
+              0.007605998689541593,
+              0.006998001481406391,
+              0.0028389986255206168,
+              0.0027380010578781366,
+              0.002534998202463612,
+              0.003245000698370859
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "0a1714d3-1e17-4811-906e-df9c771cb9d3",
+              "status": "committed",
+              "revision": 52,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.199432999594137
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 81.18261100025848,
+            "baseline_revision_http_ms": 1.0058670013677329,
+            "revision_http_ms": [
+              14.830926000286127,
+              1.0417640005471185,
+              0.8545660020899959,
+              0.9819339975365438,
+              11.866160999488784,
+              35.990422999020666,
+              1.1112300016975496,
+              0.9595230003469624,
+              0.9543509986542631,
+              12.523486999270972
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              10.798030001751613
+            ],
+            "publication_lock_wait_ms": [
+              0.0007089984137564898
+            ],
+            "revision_lock_wait_ms": [
+              0.0027380010578781366,
+              0.0017230013327207416,
+              0.0009130017133429646,
+              0.0010139992809854448,
+              0.0009120012691710144,
+              0.003345998266013339,
+              0.002130000211764127,
+              0.0009129980753641576,
+              0.0009130017133429646,
+              0.5279310025798623
+            ],
+            "revision_lock_hold_ms": [
+              0.00973499845713377,
+              0.0058820005506277084,
+              0.0028389986255206168,
+              0.0033469987101852894,
+              0.002839999069692567,
+              0.010445000953041017,
+              0.005982998118270189,
+              0.0027380010578781366,
+              0.0029410002753138542,
+              0.006793998181819916
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "42b1c2ea-aa12-411d-bb23-aeabd1548e33",
+              "status": "committed",
+              "revision": 55,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              10.765679999167332
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 80.6836839983589,
+            "baseline_revision_http_ms": 0.9606380008335691,
+            "revision_http_ms": [
+              15.116085000045132,
+              1.0789819971250836,
+              0.8270840007753577,
+              0.8474669994029682,
+              0.8500020012434106,
+              33.14298700206564,
+              15.272964003088418,
+              1.010937001410639,
+              0.8715010008017998,
+              0.8420919984928332,
+              11.015143998520216
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.181078003166476
+            ],
+            "publication_lock_wait_ms": [
+              0.0006089976523071527
+            ],
+            "revision_lock_wait_ms": [
+              0.0022310014173854142,
+              0.0014190009096637368,
+              0.0008110000635497272,
+              0.0008110000635497272,
+              0.0008110000635497272,
+              0.0010139992809854448,
+              0.0017240017768926919,
+              0.0009130017133429646,
+              0.0008110000635497272,
+              0.0009129980753641576,
+              0.0009130017133429646
+            ],
+            "revision_lock_hold_ms": [
+              0.007909999112598598,
+              0.005578000127570704,
+              0.002635999408084899,
+              0.002534998202463612,
+              0.002434000634821132,
+              0.003245000698370859,
+              0.007300997822312638,
+              0.0028389986255206168,
+              0.0027380010578781366,
+              0.002535001840442419,
+              0.0037520003388635814
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "59f72b09-da47-4216-8998-b71ee567d8c5",
+              "status": "committed",
+              "revision": 58,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.147816999757197
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 85.36903899948811,
+            "baseline_revision_http_ms": 1.0514999994484242,
+            "revision_http_ms": [
+              15.101483000762528,
+              1.4223500002117362,
+              1.5008390000730287,
+              13.106786998832831,
+              36.59075800169376,
+              2.5480799995420966,
+              1.2633409969566856,
+              0.9783850000530947,
+              12.817975999496412
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              11.000743998010876
+            ],
+            "publication_lock_wait_ms": [
+              0.0012160016922280192
+            ],
+            "revision_lock_wait_ms": [
+              0.0009129980753641576,
+              0.0019270009943284094,
+              0.0019270009943284094,
+              0.002434000634821132,
+              0.002130000211764127,
+              0.0020279985619708896,
+              0.0009129980753641576,
+              0.0010139992809854448,
+              0.8801210024103057
+            ],
+            "revision_lock_hold_ms": [
+              0.0026369998522568494,
+              0.006996997399255633,
+              0.006389000191120431,
+              0.00770699989516288,
+              0.005983001756248996,
+              0.008113001968013123,
+              0.003245000698370859,
+              0.0030420014809351414,
+              0.00770699989516288
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "a1baf04a-5c88-4f45-88fb-ba4ecab260e2",
+              "status": "committed",
+              "revision": 61,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              10.95896400147467
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 83.35091800108785,
+            "baseline_revision_http_ms": 1.0359849984524772,
+            "revision_http_ms": [
+              13.814410998747917,
+              2.2451740005635656,
+              0.8481769982608967,
+              1.0926719987764955,
+              1.0459229997650255,
+              33.48026999810827,
+              14.909617999364855,
+              0.9963339980458841,
+              1.0205710023001302,
+              0.9404579977854155,
+              13.148972000635695
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              11.486995001178002
+            ],
+            "publication_lock_wait_ms": [
+              0.00070999885792844
+            ],
+            "revision_lock_wait_ms": [
+              0.001114996848627925,
+              0.001825002982513979,
+              0.0009119976311922073,
+              0.001115000486606732,
+              0.0008110000635497272,
+              0.0016220001270994544,
+              0.0017239981389138848,
+              0.0009130017133429646,
+              0.0009129980753641576,
+              0.0008120005077216774,
+              0.0011160009307786822
+            ],
+            "revision_lock_hold_ms": [
+              0.003854001988656819,
+              0.006996997399255633,
+              0.0027380010578781366,
+              0.0030429982871282846,
+              0.0030420014809351414,
+              0.005272999260341749,
+              0.0069970010372344404,
+              0.0031429990485776216,
+              0.002839002263499424,
+              0.0029410002753138542,
+              0.0034479999158065766
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "cf6a7d14-e101-4bba-9218-b88a2d7e39ba",
+              "status": "committed",
+              "revision": 64,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              11.45251700290828
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 80.1703670003917,
+            "baseline_revision_http_ms": 0.8741520032344852,
+            "revision_http_ms": [
+              14.16455900107394,
+              2.3833710001781583,
+              1.072900999133708,
+              1.0068869996757712,
+              0.9248999995179474,
+              32.63426800185698,
+              14.857753998512635,
+              1.2043220012856182,
+              1.120213000831427,
+              10.816557001817273
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.22161099879304
+            ],
+            "publication_lock_wait_ms": [
+              0.0007080016075633466
+            ],
+            "revision_lock_wait_ms": [
+              0.0010110015864484012,
+              0.001920998329296708,
+              0.0010109979484695941,
+              0.0008089991752058268,
+              0.0008089991752058268,
+              0.0015170007827691734,
+              0.001820000761654228,
+              0.0008090028131846339,
+              0.0009089999366551638,
+              0.3947690020140726
+            ],
+            "revision_lock_hold_ms": [
+              0.0029319999157451093,
+              0.006975002179387957,
+              0.0026279994926881045,
+              0.002426000719424337,
+              0.0026279994926881045,
+              0.005761998181696981,
+              0.007177000952651724,
+              0.0030329974833875895,
+              0.0026289999368600547,
+              0.0053580006351694465
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "f7eef00e-c69a-481f-9234-fcb9608d6721",
+              "status": "committed",
+              "revision": 67,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.19047400020645
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 81.18321899746661,
+            "baseline_revision_http_ms": 0.8557530018151738,
+            "revision_http_ms": [
+              15.327937999245478,
+              1.077551998605486,
+              0.8548430014343467,
+              1.592418000655016,
+              32.6276970008621,
+              15.346034000685904,
+              1.0241740019409917,
+              0.8582800001022406,
+              0.8704110005055554,
+              10.328783002478303,
+              1.8755800010694657
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.743959999468643
+            ],
+            "publication_lock_wait_ms": [
+              0.0007079979695845395
+            ],
+            "revision_lock_wait_ms": [
+              0.00222400194616057,
+              0.0013140015653334558,
+              0.0012129967217333615,
+              0.001414999132975936,
+              0.0021229971025604755,
+              0.0022239983081817627,
+              0.0013140015653334558,
+              0.0010110015864484012,
+              0.000910000380827114,
+              0.000910000380827114,
+              0.0010110015864484012
+            ],
+            "revision_lock_hold_ms": [
+              0.008087998139671981,
+              0.005762998625868931,
+              0.0026280031306669116,
+              0.0038420002965722233,
+              0.007077000191202387,
+              0.008390001312363893,
+              0.004751000233227387,
+              0.002729997504502535,
+              0.002730001142481342,
+              0.0030330011213663965,
+              0.003234999894630164
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "32d0dae8-1531-4bc1-8e8f-1f6a275555df",
+              "status": "committed",
+              "revision": 70,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.709991998533951
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 82.47326700075064,
+            "baseline_revision_http_ms": 0.9207559996866621,
+            "revision_http_ms": [
+              14.918004999344703,
+              1.2736720018438064,
+              0.987678999081254,
+              0.9566440021444578,
+              33.66147500128136,
+              15.440252002008492,
+              1.2024009993183427,
+              0.953206999838585,
+              0.9163070026261266,
+              12.304648000281304
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              10.9584919991903
+            ],
+            "publication_lock_wait_ms": [
+              0.0007080016075633466
+            ],
+            "revision_lock_wait_ms": [
+              0.0026289999368600547,
+              0.001820000761654228,
+              0.000910000380827114,
+              0.0008079987310338765,
+              0.001820000761654228,
+              0.0021230007405392826,
+              0.0026279994926881045,
+              0.001315002009505406,
+              0.0009089999366551638,
+              0.0009089999366551638
+            ],
+            "revision_lock_hold_ms": [
+              0.00849200296215713,
+              0.0053580006351694465,
+              0.0027290006983093917,
+              0.002730001142481342,
+              0.005964000592939556,
+              0.00687400097376667,
+              0.007077000191202387,
+              0.003941997420042753,
+              0.002730001142481342,
+              0.0039430015021935105
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "c3362192-bd79-4543-b640-91f6d9ea959c",
+              "status": "committed",
+              "revision": 73,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              10.603655002341839
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 80.07746200019028,
+            "baseline_revision_http_ms": 0.8321989989781287,
+            "revision_http_ms": [
+              15.187822998996126,
+              1.4872809988446534,
+              1.0394390010333154,
+              0.8472609988530166,
+              45.31114100245759,
+              2.482441999745788,
+              0.9295509989897255,
+              0.9379410003020894,
+              0.8766789978835732,
+              11.11892599874409
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.460393001063494
+            ],
+            "publication_lock_wait_ms": [
+              0.0007080016075633466
+            ],
+            "revision_lock_wait_ms": [
+              0.0026279994926881045,
+              0.001920998329296708,
+              0.0008090028131846339,
+              0.0008089991752058268,
+              0.001414999132975936,
+              0.0019210019672755152,
+              0.0008089991752058268,
+              0.0009099967428483069,
+              0.0008079987310338765,
+              0.000910000380827114
+            ],
+            "revision_lock_hold_ms": [
+              0.007683000148972496,
+              0.005255998985376209,
+              0.0030319970392156392,
+              0.0027290006983093917,
+              0.005156001861905679,
+              0.005964000592939556,
+              0.0027290006983093917,
+              0.0026280031306669116,
+              0.0025280023692175746,
+              0.0034370023058727384
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "49bcb8e1-851f-4c80-96a6-4020bfbb11fc",
+              "status": "committed",
+              "revision": 76,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.426020998944296
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 79.68410900139133,
+            "baseline_revision_http_ms": 0.8554499981983099,
+            "revision_http_ms": [
+              14.981390999309951,
+              1.0747209998953622,
+              1.0686550012906082,
+              0.9544200001982972,
+              11.90381400010665,
+              35.11701399838785,
+              1.4925379982742015,
+              1.2429400012479164,
+              0.8974039992608596,
+              11.4752800000133
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.741633999510668
+            ],
+            "publication_lock_wait_ms": [
+              0.0007080016075633466
+            ],
+            "revision_lock_wait_ms": [
+              0.0012130003597121686,
+              0.0017189995560329407,
+              0.001010001142276451,
+              0.0008089991752058268,
+              0.0010110015864484012,
+              0.001820000761654228,
+              0.0021230007405392826,
+              0.0008089991752058268,
+              0.0008080023690126836,
+              0.0011119991540908813
+            ],
+            "revision_lock_hold_ms": [
+              0.002729997504502535,
+              0.005661000614054501,
+              0.002730001142481342,
+              0.0029319999157451093,
+              0.002930999471573159,
+              0.005458998202811927,
+              0.006064998160582036,
+              0.0030329974833875895,
+              0.002729997504502535,
+              0.0036389974411576986
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "c9a5b1a3-62f0-47e6-a365-9aa7bea74acc",
+              "status": "committed",
+              "revision": 79,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.709688998555066
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 81.79169799768715,
+            "baseline_revision_http_ms": 0.8725349980522878,
+            "revision_http_ms": [
+              14.999991999502527,
+              1.0316560001228936,
+              0.8730400004424155,
+              0.8167310006683692,
+              0.8072290002019145,
+              34.5260230023996,
+              15.313179002987454,
+              1.3058190015726723,
+              1.06339800186106,
+              9.985774999222485,
+              1.6255769987765234
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.670161998656113
+            ],
+            "publication_lock_wait_ms": [
+              0.0008080023690126836
+            ],
+            "revision_lock_wait_ms": [
+              0.003234999894630164,
+              0.0016170015442185104,
+              0.000910000380827114,
+              0.0010110015864484012,
+              0.0008089991752058268,
+              0.0021229971025604755,
+              0.001920998329296708,
+              0.0020220031728968024,
+              0.0014159995771478862,
+              0.000910000380827114,
+              0.000910000380827114
+            ],
+            "revision_lock_hold_ms": [
+              0.009805997251532972,
+              0.005761998181696981,
+              0.0026289999368600547,
+              0.0026279994926881045,
+              0.0030330011213663965,
+              0.006369002221617848,
+              0.006571000994881615,
+              0.007480997737729922,
+              0.004245001036906615,
+              0.0029319999157451093,
+              0.0029319999157451093
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "cbbce420-f02b-4d3c-8c0f-176dcee8265b",
+              "status": "committed",
+              "revision": 82,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.638722000090638
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 81.32325000042329,
+            "baseline_revision_http_ms": 0.8796330002951436,
+            "revision_http_ms": [
+              14.729239999724086,
+              1.1537559985299595,
+              1.1821859989140648,
+              0.8498919996782206,
+              34.003837001364445,
+              15.698701001383597,
+              1.0803609984577633,
+              1.0354969999752939,
+              10.351338998589199,
+              1.704824000626104
+            ],
+            "revision_requests_overlapping_capture_or_publication": 2,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.953109998605214
+            ],
+            "publication_lock_wait_ms": [
+              0.0009079994924832135
+            ],
+            "revision_lock_wait_ms": [
+              0.002519998815841973,
+              0.0015120021998882294,
+              0.0011089978215750307,
+              0.0009069990483112633,
+              0.0024190012481994927,
+              0.0019149993022438139,
+              0.001309999788645655,
+              0.0008069982868619263,
+              0.001915999746415764,
+              0.0008059978426899761
+            ],
+            "revision_lock_hold_ms": [
+              0.007460999768227339,
+              0.005746998795075342,
+              0.0028220019885338843,
+              0.0028229987947270274,
+              0.00695699782227166,
+              0.006251000741031021,
+              0.0034280019463039935,
+              0.0028229987947270274,
+              0.00796499807620421,
+              0.0029240000003483146
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "99915bc2-1e23-4e15-8a5a-9dc085549ed4",
+              "status": "committed",
+              "revision": 85,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.919940999679966
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 79.2433849965164,
+            "baseline_revision_http_ms": 0.883968998095952,
+            "revision_http_ms": [
+              14.708874998177635,
+              1.2549759994726628,
+              1.0634229984134436,
+              1.0444699983054306,
+              32.807940002385294,
+              14.999732997239335,
+              1.0881230009545106,
+              0.9865000029094517,
+              0.8692490009707399,
+              10.92761200197856
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.342055000161054
+            ],
+            "publication_lock_wait_ms": [
+              0.000604999513598159
+            ],
+            "revision_lock_wait_ms": [
+              0.002520999260013923,
+              0.0015119985619094223,
+              0.0009069990483112633,
+              0.0008060014806687832,
+              0.001915999746415764,
+              0.0017130005289800465,
+              0.0009070026862900704,
+              0.0009070026862900704,
+              0.0009069990483112633,
+              0.0013110002328176051
+            ],
+            "revision_lock_hold_ms": [
+              0.008367998816538602,
+              0.005746998795075342,
+              0.0028229987947270274,
+              0.00262100002146326,
+              0.005747002433054149,
+              0.005948997568339109,
+              0.0029240000003483146,
+              0.0030249975679907948,
+              0.0028230024327058345,
+              0.0034279983083251864
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "24220f56-aeea-4c66-a2ed-4a41732403ba",
+              "status": "committed",
+              "revision": 88,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.308380998845678
+            ],
+            "correct_publication": true
+          },
+          {
+            "http_ms": 82.62823200129787,
+            "baseline_revision_http_ms": 0.9396189998369664,
+            "revision_http_ms": [
+              15.735802000563126,
+              1.356701999611687,
+              0.8821529991109855,
+              0.8442460020887665,
+              12.160409001808148,
+              37.60534200046095,
+              1.040033999743173,
+              0.8672320000187028,
+              0.8691479997651186,
+              10.807033999299165,
+              1.3781759989797138
+            ],
+            "revision_requests_overlapping_capture_or_publication": 1,
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              9.227828002622118
+            ],
+            "publication_lock_wait_ms": [
+              0.000604999513598159
+            ],
+            "revision_lock_wait_ms": [
+              0.0009069990483112633,
+              0.002016000507865101,
+              0.0009069990483112633,
+              0.0009069990483112633,
+              0.0016129997675307095,
+              0.0033270007406827062,
+              0.0016129997675307095,
+              0.0008059978426899761,
+              0.0008059978426899761,
+              0.0013110002328176051,
+              0.0009079994924832135
+            ],
+            "revision_lock_hold_ms": [
+              0.0028229987947270274,
+              0.005948000762145966,
+              0.0028229987947270274,
+              0.0028229987947270274,
+              0.003731001925189048,
+              0.008266997610917315,
+              0.005545000021811575,
+              0.0028230024327058345,
+              0.0027230016712564975,
+              0.00433499735663645,
+              0.0029229995561763644
+            ],
+            "errors": [],
+            "http_status": 200,
+            "response": {
+              "job_id": "068b4180-8c86-4ecb-b9c7-c52909e54acc",
+              "status": "committed",
+              "revision": 91,
+              "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+            },
+            "snapshot_ms": [
+              9.194659996865084
+            ],
+            "correct_publication": true
+          }
+        ]
+      }
+    }
+  ],
+  "real_spawned_jobs": [
+    {
+      "case": "adsorption:64:longest-editable-history",
+      "mode": "complete",
+      "start_http_status": 202,
+      "poll": {
+        "job_id": "65d306a1-f649-4a6a-bf3c-495206f2fdac",
+        "status": "complete",
+        "stale": false,
+        "source_busy": false,
+        "result": {
+          "status": "ready",
+          "issues": [],
+          "validation": {
+            "passed": false,
+            "results": [
+              {
+                "ok": true,
+                "message": "Helix IDs are unique."
+              },
+              {
+                "ok": true,
+                "message": "Strand IDs are unique."
+              },
+              {
+                "ok": true,
+                "message": "All domain helix references are valid."
+              },
+              {
+                "ok": false,
+                "message": "No scaffold strand defined."
+              }
+            ]
+          },
+          "source_revision": 92,
+          "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+        }
+      },
+      "commit_http_status": 200,
+      "commit": {
+        "job_id": "65d306a1-f649-4a6a-bf3c-495206f2fdac",
+        "status": "committed",
+        "revision": 93,
+        "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+      },
+      "initial_revision": 92,
+      "final_revision": 93,
+      "undo_depth": 1,
+      "source_guard_correct": true,
+      "shared_admission_released_after_reaping": true,
+      "start_http_ms": 52.43469200286199,
+      "parent_worker_constructor_ms": 15.202476999547798,
+      "process_start_call_ms": 0.5223350017331541,
+      "parent_result_decode_ms": 22.373380001226906,
+      "start_to_supervisor_reaped_ms": 2463.9612460014177,
+      "commit_http_ms": 77.20514199900208
+    }
+  ],
+  "real_worker_races": [
+    {
+      "mode": "cancel",
+      "start_http_status": 202,
+      "poll": {
+        "job_id": "8e07af4f-2069-44e4-bfc2-5e2b3e28993a",
+        "status": "complete",
+        "stale": false,
+        "source_busy": false,
+        "result": {
+          "status": "unverified",
+          "native_editable": false,
+          "issues": [
+            {
+              "code": "cancelled"
+            },
+            {
+              "code": "cancelled"
+            }
+          ],
+          "source_revision": 94,
+          "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+        }
+      },
+      "commit_http_status": 409,
+      "commit": {
+        "detail": "Part evaluation has no publishable candidate"
+      },
+      "initial_revision": 94,
+      "final_revision": 94,
+      "undo_depth": 0,
+      "source_guard_correct": true,
+      "shared_admission_released_after_reaping": true,
+      "start_http_ms": 47.307781998824794,
+      "parent_worker_constructor_ms": 11.706327997671906,
+      "process_start_call_ms": 0.48427399815409444,
+      "stop_to_supervisor_reaped_ms": 53.16304999723798,
+      "start_to_supervisor_reaped_ms": 102.01021099783247,
+      "commit_http_ms": 0.902228999621002
+    },
+    {
+      "mode": "source_changed",
+      "start_http_status": 202,
+      "poll": {
+        "job_id": "f21afc31-28b3-495a-b05c-2541a0f3bb0f",
+        "status": "complete",
+        "stale": true,
+        "source_busy": false,
+        "result": {
+          "status": "unverified",
+          "native_editable": false,
+          "issues": [
+            {
+              "code": "source_changed"
+            },
+            {
+              "code": "source_changed"
+            }
+          ],
+          "source_revision": 95,
+          "design_id": "5912c9f9-0795-4f2a-ac86-9329cdc6dd08"
+        }
+      },
+      "commit_http_status": 409,
+      "commit": {
+        "detail": "Part evaluation has no publishable candidate"
+      },
+      "initial_revision": 95,
+      "final_revision": 96,
+      "undo_depth": 1,
+      "source_guard_correct": true,
+      "shared_admission_released_after_reaping": true,
+      "start_http_ms": 47.689470997283934,
+      "parent_worker_constructor_ms": 11.899976998392958,
+      "process_start_call_ms": 0.48808100109454244,
+      "stop_to_supervisor_reaped_ms": 136.9846339985088,
+      "start_to_supervisor_reaped_ms": 186.14846600030432,
+      "commit_http_ms": 1.0303600029146764
+    }
+  ]
+}

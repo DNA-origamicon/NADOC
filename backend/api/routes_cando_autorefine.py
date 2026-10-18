@@ -202,6 +202,7 @@ def apply_cando_autorefine(run_id: str) -> dict:
     label = f"CanDo autorefine ({n_skip} skips, {n_loop} loops)"
     params = {
         "source": "cando-autorefine",
+        "marks": marks,
         "run_id": run_id,
         "mode": result.get("mode"),
         "edits_kept": n_kept,

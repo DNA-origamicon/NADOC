@@ -32,7 +32,8 @@ def restore_join_history_poses(
     joins = {}
     for index, entry in enumerate(log):
         if (
-            getattr(entry, "op_kind", None) != "cluster-join"
+            entry.feature_type != "snapshot"
+            or entry.op_kind != "cluster-join"
             or entry.evicted
             or not entry.design_snapshot_gz_b64
             or not entry.post_state_gz_b64
@@ -94,7 +95,8 @@ def rebase_join_snapshots_after_move_delete(
         if entry.feature_type == "cluster_op" and entry.cluster_id == cluster_id:
             pose = entry
         if (
-            getattr(entry, "op_kind", None) != "cluster-join"
+            entry.feature_type != "snapshot"
+            or entry.op_kind != "cluster-join"
             or entry.evicted
             or not entry.design_snapshot_gz_b64
             or not entry.post_state_gz_b64

@@ -26,6 +26,17 @@ class SweepRequest(BaseModel):
     expected_design_id: str | None = None
     expected_revision: int | None = Field(default=None, ge=0, strict=True)
 
+    @model_validator(mode='before')
+    @classmethod
+    def accept_history_version(cls, value):
+        # History metadata is not an authoring request option. Keep all other
+        # extra fields forbidden, including unknown contract versions.
+        if isinstance(value, dict) and '_proof_version' in value:
+            if type(value['_proof_version']) is not int or value['_proof_version'] != 1:
+                raise ValueError('Unsupported sweep history version')
+            return {k: v for k, v in value.items() if k != '_proof_version'}
+        return value
+
     @model_validator(mode='after')
     def validate_path(self):
         if any(abs(v) > 10000 for cell in self.cells for v in cell):

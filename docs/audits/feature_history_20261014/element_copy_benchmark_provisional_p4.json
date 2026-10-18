@@ -1,0 +1,173 @@
+{
+  "scope": "warm copy, atomic in-memory recording and bounded capture; excludes HTTP, rendering, proof and scientific validity",
+  "repeats": 5,
+  "capture_limits_unchanged": true,
+  "candidate_admission_provisional": true,
+  "cases": [
+    {
+      "name": "small_mixed",
+      "fixture": {},
+      "selected_elements": 3,
+      "protein_atoms_transformed": 12,
+      "complete_authoring_equal": true,
+      "legacy_copy": {
+        "median_ms": 0.24640700030431617,
+        "max_ms": 0.2969570014101919
+      },
+      "native_copy": {
+        "median_ms": 0.24214500081143342,
+        "max_ms": 0.38913700154807884
+      },
+      "atomic_native_recording": {
+        "median_ms": 0.667559999783407,
+        "max_ms": 49.230414000703604
+      },
+      "capture": {
+        "median_ms": 1.5002500003902242,
+        "max_ms": 1.6041260005295044
+      },
+      "capture_results": [
+        "captured",
+        "captured",
+        "captured",
+        "captured",
+        "captured"
+      ]
+    },
+    {
+      "name": "small_mixed_large_unrelated",
+      "fixture": {
+        "unrelated_helices": 64,
+        "history_entries": 100
+      },
+      "selected_elements": 3,
+      "protein_atoms_transformed": 12,
+      "complete_authoring_equal": true,
+      "legacy_copy": {
+        "median_ms": 0.25532800100336317,
+        "max_ms": 0.26424899988342077
+      },
+      "native_copy": {
+        "median_ms": 0.24174899954232387,
+        "max_ms": 0.25304799964942504
+      },
+      "atomic_native_recording": {
+        "median_ms": 3.5388100004638545,
+        "max_ms": 3.6976949995732866
+      },
+      "capture": {
+        "median_ms": 5.98890599940205,
+        "max_ms": 6.886221999593545
+      },
+      "capture_results": [
+        "captured",
+        "captured",
+        "captured",
+        "captured",
+        "captured"
+      ]
+    },
+    {
+      "name": "particle_batch_boundary",
+      "fixture": {
+        "protein_count": 0,
+        "particle_count": 16
+      },
+      "selected_elements": 16,
+      "protein_atoms_transformed": 0,
+      "complete_authoring_equal": true,
+      "legacy_copy": {
+        "median_ms": 0.5762719993072096,
+        "max_ms": 0.7205880010587862
+      },
+      "native_copy": {
+        "median_ms": 0.634156998785329,
+        "max_ms": 1.0281510003551375
+      },
+      "atomic_native_recording": {
+        "median_ms": 1.2058689990226412,
+        "max_ms": 43.50208899995778
+      },
+      "capture": {
+        "median_ms": 1.8599489994812757,
+        "max_ms": 2.6560650003375486
+      },
+      "capture_results": [
+        "captured",
+        "captured",
+        "captured",
+        "captured",
+        "captured"
+      ]
+    },
+    {
+      "name": "shared_asset_boundary",
+      "fixture": {
+        "protein_count": 16,
+        "atom_count": 1000,
+        "particle_count": 0
+      },
+      "selected_elements": 16,
+      "protein_atoms_transformed": 16000,
+      "complete_authoring_equal": true,
+      "legacy_copy": {
+        "median_ms": 36.93541400025424,
+        "max_ms": 37.86168100123177
+      },
+      "native_copy": {
+        "median_ms": 40.25455999908445,
+        "max_ms": 43.67207700124709
+      },
+      "atomic_native_recording": {
+        "median_ms": 44.624854999710806,
+        "max_ms": 46.596849999332335
+      },
+      "capture": {
+        "median_ms": 15.192113000011886,
+        "max_ms": 16.2407779989735
+      },
+      "capture_results": [
+        "captured",
+        "captured",
+        "captured",
+        "captured",
+        "captured"
+      ]
+    },
+    {
+      "name": "distinct_asset_boundary",
+      "fixture": {
+        "protein_count": 16,
+        "atom_count": 1000,
+        "particle_count": 0,
+        "unique_assets": true
+      },
+      "selected_elements": 16,
+      "protein_atoms_transformed": 16000,
+      "complete_authoring_equal": true,
+      "legacy_copy": {
+        "median_ms": 37.71793899977638,
+        "max_ms": 38.12558500067098
+      },
+      "native_copy": {
+        "median_ms": 40.498786000171094,
+        "max_ms": 41.03310099890223
+      },
+      "atomic_native_recording": {
+        "median_ms": 118.56054099916946,
+        "max_ms": 131.96677499945508
+      },
+      "capture": {
+        "median_ms": 11.543143000380951,
+        "max_ms": 11.665232999803266
+      },
+      "capture_results": [
+        "Part verification capture node budget exceeded",
+        "Part verification capture node budget exceeded",
+        "Part verification capture node budget exceeded",
+        "Part verification capture node budget exceeded",
+        "Part verification capture node budget exceeded"
+      ]
+    }
+  ]
+}

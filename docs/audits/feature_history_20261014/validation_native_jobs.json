@@ -1,0 +1,164 @@
+{
+  "date": "2026-10-15",
+  "checkpoint_base": "87a5b3f5",
+  "scope": "P3 native joined/connectivity construction and explicit native-source CPD jobs; standard parts only",
+  "focused": [
+    {
+      "target": "tests/test_part_connectivity_commands.py",
+      "passed": 14,
+      "seconds": 3.97
+    },
+    {
+      "target": "tests/test_native_connectivity_proof.py",
+      "passed": 2,
+      "seconds": 8.67
+    },
+    {
+      "target": "tests/test_part_cpd_contract.py",
+      "passed": 61,
+      "seconds": 3.01
+    },
+    {
+      "target": "tests/test_native_cpd_proof.py",
+      "passed": 3,
+      "seconds": 67.06
+    },
+    {
+      "target": "tests/test_part_photoproduct_commands.py",
+      "passed": 1,
+      "seconds": 2.45
+    },
+    {
+      "target": "tests/test_part_joined_path_commands.py",
+      "passed": 6,
+      "seconds": 2.55
+    },
+    {
+      "target": "tests/test_generated_joined_steps.py",
+      "passed": 4,
+      "seconds": 12.61
+    },
+    {
+      "target": "tests/test_generated_joined_proof.py",
+      "passed": 2,
+      "seconds": 26.33
+    },
+    {
+      "target": "tests/test_part_path_commands.py",
+      "passed": 41,
+      "seconds": 3.48
+    },
+    {
+      "target": "tests/test_part_evaluation.py",
+      "passed": 14,
+      "seconds": 3.31
+    },
+    {
+      "target": "tests/test_part_evaluation_jobs.py",
+      "passed": 10,
+      "seconds": 2.74
+    },
+    {
+      "target": "tests/test_part_recipe_edit.py",
+      "passed": 8,
+      "seconds": 2.67
+    },
+    {
+      "target": "tests/test_part_verification_jobs.py",
+      "passed": 14,
+      "seconds": 3.16
+    },
+    {
+      "target": "tests/test_part_verification_worker.py",
+      "passed": 12,
+      "seconds": 3.43
+    },
+    {
+      "target": "tests/test_part_history_verification.py",
+      "passed": 26,
+      "seconds": 2.56
+    },
+    {
+      "target": "tests/test_part_feature_registry.py",
+      "passed": 24,
+      "seconds": 2.53
+    },
+    {
+      "target": "tests/test_join_crossbars.py",
+      "passed": 5,
+      "seconds": 2.46
+    },
+    {
+      "target": "tests/test_part_section_commands.py",
+      "passed": 9,
+      "seconds": 2.47
+    },
+    {
+      "target": "tests/test_generated_native_proof.py",
+      "passed": 4,
+      "seconds": 2.63
+    },
+    {
+      "target": "tests/test_generated_commands.py",
+      "passed": 2,
+      "seconds": 21.39
+    },
+    {
+      "target": "tests/test_connectivity_generator.py::test_reviewed_psi_routes_staples_and_preserves_source",
+      "passed": 1,
+      "seconds": 5.45
+    },
+    {
+      "target": "tests/test_joined_branches.py::test_generate_join_branches_with_history_without_cando[triangle]",
+      "passed": 1,
+      "seconds": 187.66
+    }
+  ],
+  "focused_total_passed": 264,
+  "broad": {
+    "selector_dry_run": "FULL  (FULL suite)  [test-dedicated session OPEN]",
+    "executed": false,
+    "reason": "Required Archive mount unavailable; known broad suites generate bulk scratch. Earlier FAST baseline comparison is not validation of this increment."
+  },
+  "lint": {
+    "new_findings": 0,
+    "repository_baseline_unused_imports": 5,
+    "memory_baseline_errors": 6,
+    "memory_baseline_warnings": 60
+  },
+  "slow_classification": [
+    {
+      "target": "tests/test_generated_joined_steps.py::test_joined_routing_records_each_native_section_and_join",
+      "area": "headless",
+      "reason": "Real native section routing and Join evaluation"
+    },
+    {
+      "target": "tests/test_generated_joined_proof.py::test_generated_joined_route_cold_replay_and_upstream_path_edit",
+      "area": "headless",
+      "reason": "Native routing, upstream producer edit through both Joins and cold spawned proof"
+    },
+    {
+      "target": "tests/test_native_cpd_proof.py::test_native_cpd_append_and_independent_cold_proof_ignore_recovery_and_physics",
+      "area": "atomistic",
+      "reason": "Real native CPD conversion and relaxation plus independent cold replay"
+    }
+  ],
+  "frontend_changes": false,
+  "main_js_loc_delta": 0,
+  "visual_check": false,
+  "molecular_algorithms_changed": false,
+  "physical_simulation": false,
+  "limits": [
+    "CPD real fixture has an explicit imported topology root: reproduced_import, never wholly native editable",
+    "CPD source, template, audited implementation and numerical runtime pinned; old runtimes are not bundled",
+    "Candidate and input byte limits are admission/retention limits, not hard process heap caps",
+    "Station-count-changing path edits require corresponding producer extent changes",
+    "Full generated NP/attachment histories remain P4 coverage, despite native DNA construction"
+  ],
+  "remaining": [
+    "P4 standard-part assets/imports/attachments",
+    "P5 broken recipe repair, drafts and UI",
+    "P6 strict registered automation transactions and bypass closure",
+    "Assemblies deferred"
+  ]
+}

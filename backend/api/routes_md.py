@@ -232,12 +232,6 @@ def _md_job_fingerprint(job: MdJob) -> "str | None":
     return fp
 
 
-def _md_job_out_of_date(job: MdJob, current_fp: "str | None") -> bool:
-    from backend.core.oxdna_staleness import job_out_of_date
-
-    return job_out_of_date(_md_job_fingerprint(job), current_fp)
-
-
 def _assert_md_job_current(job: MdJob) -> None:
     """Refuse (409) running production/start on a job whose design has changed since
     it was prepared (mirrors the oxDNA guard); the frontend turns it into the roll
@@ -4610,13 +4604,16 @@ def _md_job_list_rows(jobs, ws, runpod_connected, runpod_ids):
     """Read manifests, fingerprints, logs and download state in a worker thread."""
     from backend.core.oxdna_staleness import current_active_design_fingerprint
     from backend.core.design_disk_usage import dir_size_bytes_cached_only
+    from backend.core.physical_input_freshness import legacy_job_status
 
     current_fp = current_active_design_fingerprint()
     out: list[dict] = []
     to_warm: list = []
     for j in jobs:
         if j.archived and not (j.job_dir(ws) / "job.json").is_file():
-            out.append(j.to_dict())
+            archived = j.to_dict()
+            archived.update(legacy_job_status(None, current_fp, engine="namd"))
+            out.append(archived)
             continue
         _backfill_failure_kind(j)
         if (
@@ -4641,7 +4638,7 @@ def _md_job_list_rows(jobs, ws, runpod_connected, runpod_ids):
             d["health_samples_total"] = full_health_count
         d["failure_details"] = _failure_diagnostics(j)
         _decorate_terminal_segment_progress(j, d, ws)
-        d["out_of_date"] = _md_job_out_of_date(j, current_fp)
+        d.update(legacy_job_status(_md_job_fingerprint(j), current_fp, engine="namd"))
         # Cache-only: never block the poll on a multi-GB archived-run stat-walk.  An
         # uncached size comes back None (frontend renders it blank) and is filled in by
         # the background warm below, appearing on the next poll.
@@ -4722,6 +4719,7 @@ def _md_job_list_rows(jobs, ws, runpod_connected, runpod_ids):
 @router.get("/md/jobs/{job_id}")
 async def get_md_job(job_id: str) -> dict:
     from backend.core.oxdna_staleness import current_active_design_fingerprint
+    from backend.core.physical_input_freshness import legacy_job_status
 
     job = _load_job(job_id)
     d = job.to_dict()
@@ -4737,7 +4735,7 @@ async def get_md_job(job_id: str) -> dict:
         row = _minimization_from_package(job.package_dir(_workspace()))
         if row is not None:
             d["minimization"] = asdict(row)
-    d["out_of_date"] = _md_job_out_of_date(job, current_active_design_fingerprint())
+    d.update(legacy_job_status(_md_job_fingerprint(job), current_active_design_fingerprint(), engine="namd"))
     d["early_stop_pending"] = pending_early_stop(job_id, _workspace())
     return d
 

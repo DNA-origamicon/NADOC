@@ -97,6 +97,19 @@ def measure_pair(name, run, repeats, iterations):
             "baseline_samples_ms": samples[False], "optimized_samples_ms": samples[True]}
 
 
+def render_with_evaluator(routes, method, body, optimized):
+    """Compare independent replay engines through today's response contract.
+
+    The frozen oracle owns reconstruction, not a stale copy of API serializers.
+    Both timings include the same current renderer and response fields.
+    """
+    engine = _seek_feature_log if optimized else reference_evaluator._seek_feature_log
+    with patch.object(routes, "_seek_feature_log", engine), patch.dict(
+        os.environ, {"NADOC_FEATURE_EVALUATION": "optimized" if optimized else "baseline"},
+    ):
+        return getattr(routes, method)(body)
+
+
 def geometry_comparisons(repeats, iterations, renderers=("compact",)):
     from backend.api import routes_feature_log as routes
 
@@ -119,8 +132,7 @@ def geometry_comparisons(repeats, iterations, renderers=("compact",)):
                             if renderer == "surface" else routes.GeometryBatchBody(positions=positions))
 
                     def run(mode):
-                        os.environ["NADOC_FEATURE_EVALUATION"] = "optimized" if mode else "baseline"
-                        return getattr(routes if mode else reference_evaluator, method)(body)
+                        return render_with_evaluator(routes, method, body, mode)
 
                     assert run(False) == run(True), f"Geometry mismatch: {name}"
                     yield measure_pair(name, run, repeats, iterations)

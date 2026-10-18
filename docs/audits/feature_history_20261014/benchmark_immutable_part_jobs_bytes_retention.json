@@ -1,0 +1,537 @@
+{
+  "scope": "Staged immutable actual strict HTTP batch/verify/commit; persistence excluded",
+  "repeats": 3,
+  "completed": true,
+  "failure": null,
+  "diagnostics": true,
+  "allocation_tracing": false,
+  "rss_sampling": true,
+  "retention_stress": true,
+  "result_retention_scope": "Two occupied native result slots report actual sizes; this does not qualify two maximum-size 16 MB results.",
+  "latency_qualified": false,
+  "memory_scope": "Traced parent Python allocations exclude native/worker allocations. Linux RSS high-water includes fixture creation and all prior cases; not an incremental or hard memory bound.",
+  "lifecycle_rss_scope": "Optional Linux /proc sampling starts after retained source/undo installation and ends after commit, before cold proof. Stress includes preparation of a retained ready result and streaming result-size measurement. Only explicitly hooked direct worker PIDs with matching birth ticks count; unrelated descendants and multiprocessing resource trackers are excluded. The baseline includes all already retained benchmark fixtures. Sequential parent+child RSS reads double-count shared pages and may miss short peaks or GIL-blocked intervals; actual maximum gaps are reported. The +256 MiB allowance is an observed engineering target, not a heap guarantee.",
+  "rss_high_water_kib": {
+    "parent": 204844,
+    "children": 204844
+  },
+  "sample_retention": "All aggregate metrics plus refusals, incomplete publications, gen-2 GC samples and phase HTTP/lock/light maxima; other successful per-request arrays are omitted.",
+  "session_cleanup_verified": true,
+  "cleanup_errors": [],
+  "cases": [
+    {
+      "name": "opaque-recovery-near-8MB-session-near-32MB-two-ready-results",
+      "completed": true,
+      "samples": [
+        {
+          "iteration": 0,
+          "capture": {
+            "http_ms": 6.4491880002606194,
+            "baseline_revision_http_ms": 1.4825400030531455,
+            "revision_http_ms": [
+              3.0613120034104213,
+              3.6565640002663713
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.02884099740185775,
+              0.021482999727595598
+            ],
+            "capture_lock_wait_ms": [
+              0.0012750024325214326,
+              0.0004899993655271828
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.005984002200420946,
+              0.012360000255284831,
+              0.006179998308653012,
+              0.009614002919988707
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008829993021208793,
+              0.0008829993021208793,
+              0.0007849994290154427,
+              0.0006869995559100062
+            ],
+            "gc": {
+              "overlap_ms": 0.599176997639006,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 0,
+                "1": 1,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1334.3916320009157,
+          "ready_result_count": 2,
+          "ready_result_json_bytes": [
+            321517,
+            321517
+          ],
+          "publication": {
+            "http_ms": 61.935620000440395,
+            "baseline_revision_http_ms": 1.6240930017374922,
+            "revision_http_ms": [
+              5.033452998759458,
+              54.532178000954445,
+              2.7804919991467614
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.0039240003388840705,
+              0.8238890004577115
+            ],
+            "publication_lock_wait_ms": [
+              0.0010790026863105595,
+              0.0012740019883494824
+            ],
+            "light_request_lock_hold_ms": [
+              0.005983998562442139,
+              0.011478001397335902,
+              0.008044000423979014,
+              0.030177001463016495,
+              0.006564998329849914,
+              0.009993000276153907
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008819988579489291,
+              0.0008829993021208793,
+              0.0017659986042417586,
+              0.0014689976524095982,
+              0.0007840026228222996,
+              0.0007840026228222996
+            ],
+            "gc": {
+              "overlap_ms": 0.3323639975860715,
+              "events": 3,
+              "dropped_events": 0,
+              "generations": {
+                "0": 3,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 24309186,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        },
+        {
+          "iteration": 2,
+          "capture": {
+            "http_ms": 4.940102000546176,
+            "baseline_revision_http_ms": 1.2215780006954446,
+            "revision_http_ms": [
+              4.2097810000996105,
+              1.9227999982831534
+            ],
+            "overlapping_revision_requests": 1,
+            "errors": [],
+            "capture_lock_hold_ms": [
+              0.025278000975959003,
+              0.01734200122882612
+            ],
+            "capture_lock_wait_ms": [
+              0.0013719982234761119,
+              0.00039199949242174625
+            ],
+            "publication_lock_hold_ms": [],
+            "publication_lock_wait_ms": [],
+            "light_request_lock_hold_ms": [
+              0.006171998393256217,
+              0.01018900002236478,
+              0.007347996870521456,
+              0.010384999768575653
+            ],
+            "light_request_lock_wait_ms": [
+              0.0008820024959277362,
+              0.0008820024959277362,
+              0.0010780022421386093,
+              0.0008820024959277362
+            ],
+            "gc": {
+              "overlap_ms": 0.2565040012996178,
+              "events": 1,
+              "dropped_events": 0,
+              "generations": {
+                "0": 0,
+                "1": 1,
+                "2": 0
+              }
+            }
+          },
+          "capture_status": 202,
+          "job_complete_ms": 1289.4821869995212,
+          "ready_result_count": 2,
+          "ready_result_json_bytes": [
+            321517,
+            321517
+          ],
+          "publication": {
+            "http_ms": 56.44978200143669,
+            "baseline_revision_http_ms": 1.8312890024390072,
+            "revision_http_ms": [
+              5.2427530026761815,
+              51.488419998349855
+            ],
+            "overlapping_revision_requests": 2,
+            "errors": [],
+            "capture_lock_hold_ms": [],
+            "capture_lock_wait_ms": [],
+            "publication_lock_hold_ms": [
+              0.004310997610446066,
+              0.05957000030321069
+            ],
+            "publication_lock_wait_ms": [
+              0.0010780022421386093,
+              0.0012739983503706753
+            ],
+            "light_request_lock_hold_ms": [
+              0.007839000318199396,
+              0.01322699972661212,
+              0.007839000318199396,
+              0.012149001122452319
+            ],
+            "light_request_lock_wait_ms": [
+              0.0011750016710720956,
+              0.0009799987310543656,
+              0.0016650010365992785,
+              0.0010780022421386093
+            ],
+            "gc": {
+              "overlap_ms": 0.42776700502145104,
+              "events": 3,
+              "dropped_events": 0,
+              "generations": {
+                "0": 3,
+                "1": 0,
+                "2": 0
+              }
+            }
+          },
+          "publication_status": 200,
+          "published_session_retained_bytes": 24309186,
+          "publication_checks": {
+            "immutable_revision_and_undo": true,
+            "authoring_sha256_equal": true,
+            "history_rows_equal": true,
+            "source_payload_identity_preserved": true
+          },
+          "exact_immutable_publication": true
+        }
+      ],
+      "errors": [],
+      "source_sealing_ms": 86.84621800057357,
+      "source_bytes": 7998976,
+      "source_rows": 32,
+      "source_recovery_bytes": 7971254,
+      "retained_source_and_undo_bytes": 31995904,
+      "retention_stress": {
+        "history_copies": 3,
+        "recovery_bytes": 7971254,
+        "target_source_bytes": 7998976,
+        "hold_ready_result": true,
+        "scope": "Storage-only opaque recovery; native geometry and recipe inputs unchanged"
+      },
+      "expected_candidate_rows": 64,
+      "lifecycle_rss": [
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 57.407514002989046,
+          "max_sample_duration_ms": 54.14125199968112,
+          "sample_count": 511,
+          "samples_with_children": 500,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 167710720,
+          "peak_parent_bytes": 178696192,
+          "peak_owned_children_bytes": 169324544,
+          "peak_combined_bytes": 345948160,
+          "increase_over_idle_bytes": 178237440,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 167710720
+            },
+            "retained_ready_result": {
+              "samples": 254,
+              "peak_combined_bytes": 343560192
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 168628224
+            },
+            "worker": {
+              "samples": 252,
+              "peak_combined_bytes": 345948160
+            },
+            "commit": {
+              "samples": 3,
+              "peak_combined_bytes": 178696192
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 43.11275199870579,
+          "max_sample_duration_ms": 37.58184799880837,
+          "sample_count": 504,
+          "samples_with_children": 491,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 178696192,
+          "peak_parent_bytes": 193769472,
+          "peak_owned_children_bytes": 169562112,
+          "peak_combined_bytes": 356196352,
+          "increase_over_idle_bytes": 177500160,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 178696192
+            },
+            "retained_ready_result": {
+              "samples": 250,
+              "peak_combined_bytes": 356196352
+            },
+            "start": {
+              "samples": 2,
+              "peak_combined_bytes": 178696192
+            },
+            "worker": {
+              "samples": 246,
+              "peak_combined_bytes": 354246656
+            },
+            "commit": {
+              "samples": 5,
+              "peak_combined_bytes": 193769472
+            }
+          }
+        },
+        {
+          "requested_interval_ms": 5.0,
+          "max_sample_gap_ms": 36.35497999857762,
+          "max_sample_duration_ms": 29.72242199757602,
+          "sample_count": 498,
+          "samples_with_children": 487,
+          "sample_limit": 100000,
+          "sample_limit_reached": false,
+          "owned_child_count": 2,
+          "errors": {},
+          "baseline_parent_bytes": 185999360,
+          "peak_parent_bytes": 193925120,
+          "peak_owned_children_bytes": 169721856,
+          "peak_combined_bytes": 363626496,
+          "increase_over_idle_bytes": 177627136,
+          "allowance_bytes": 268435456,
+          "observed_within_allowance": true,
+          "measurement_complete": true,
+          "sampler_stopped": true,
+          "phases": {
+            "retained_idle": {
+              "samples": 1,
+              "peak_combined_bytes": 185999360
+            },
+            "retained_ready_result": {
+              "samples": 249,
+              "peak_combined_bytes": 362438656
+            },
+            "start": {
+              "samples": 1,
+              "peak_combined_bytes": 185999360
+            },
+            "worker": {
+              "samples": 243,
+              "peak_combined_bytes": 363626496
+            },
+            "commit": {
+              "samples": 4,
+              "peak_combined_bytes": 186130432
+            }
+          }
+        }
+      ],
+      "candidate_bytes": 312258,
+      "candidate_rows": 64,
+      "cold_verification": {
+        "status": "verified",
+        "native_editable": true,
+        "issues": []
+      },
+      "capture": {
+        "http": {
+          "count": 3,
+          "p50_ms": 5.074525997770252,
+          "p95_ms": 6.4491880002606194,
+          "max_ms": 6.4491880002606194
+        },
+        "baseline_revision_http": {
+          "count": 3,
+          "p50_ms": 1.4669129996036645,
+          "p95_ms": 1.4825400030531455,
+          "max_ms": 1.4825400030531455
+        },
+        "revision_http": {
+          "count": 6,
+          "p50_ms": 3.3589380018383963,
+          "p95_ms": 4.2097810000996105,
+          "max_ms": 4.2097810000996105
+        },
+        "capture_lock_hold": {
+          "count": 6,
+          "p50_ms": 0.023380498532787897,
+          "p95_ms": 0.02884099740185775,
+          "max_ms": 0.02884099740185775
+        },
+        "capture_lock_wait": {
+          "count": 6,
+          "p50_ms": 0.0008825008990243077,
+          "p95_ms": 0.001372001861454919,
+          "max_ms": 0.001372001861454919
+        },
+        "publication_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "light_request_lock_hold": {
+          "count": 12,
+          "p50_ms": 0.008480999895255081,
+          "p95_ms": 0.012360000255284831,
+          "max_ms": 0.012360000255284831
+        },
+        "light_request_lock_wait": {
+          "count": 12,
+          "p50_ms": 0.0008820024959277362,
+          "p95_ms": 0.0010780022421386093,
+          "max_ms": 0.0010780022421386093
+        },
+        "overlapping_revision_requests": 3,
+        "gc_overlap": {
+          "count": 3,
+          "p50_ms": 0.2565040012996178,
+          "p95_ms": 0.599176997639006,
+          "max_ms": 0.599176997639006
+        },
+        "dropped_gc_events": 0
+      },
+      "publication": {
+        "http": {
+          "count": 3,
+          "p50_ms": 56.82082199928118,
+          "p95_ms": 61.935620000440395,
+          "max_ms": 61.935620000440395
+        },
+        "baseline_revision_http": {
+          "count": 3,
+          "p50_ms": 1.6240930017374922,
+          "p95_ms": 1.8312890024390072,
+          "max_ms": 1.8312890024390072
+        },
+        "revision_http": {
+          "count": 8,
+          "p50_ms": 6.179904001328396,
+          "p95_ms": 54.532178000954445,
+          "max_ms": 54.532178000954445
+        },
+        "capture_lock_hold": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "capture_lock_wait": {
+          "count": 0,
+          "p50_ms": null,
+          "p95_ms": null,
+          "max_ms": null
+        },
+        "publication_lock_hold": {
+          "count": 6,
+          "p50_ms": 0.03194049895682838,
+          "p95_ms": 0.8238890004577115,
+          "max_ms": 0.8238890004577115
+        },
+        "publication_lock_wait": {
+          "count": 6,
+          "p50_ms": 0.0011275005817878991,
+          "p95_ms": 0.0012740019883494824,
+          "max_ms": 0.0012740019883494824
+        },
+        "light_request_lock_hold": {
+          "count": 16,
+          "p50_ms": 0.010287500117556192,
+          "p95_ms": 0.030470997444353998,
+          "max_ms": 0.030470997444353998
+        },
+        "light_request_lock_wait": {
+          "count": 16,
+          "p50_ms": 0.0009799987310543656,
+          "p95_ms": 0.0021560008462984115,
+          "max_ms": 0.0021560008462984115
+        },
+        "overlapping_revision_requests": 6,
+        "gc_overlap": {
+          "count": 3,
+          "p50_ms": 0.3323639975860715,
+          "p95_ms": 0.42776700502145104,
+          "max_ms": 0.42776700502145104
+        },
+        "dropped_gc_events": 0
+      },
+      "private_materialization": {
+        "count": 3,
+        "p50_ms": 37.23608699874603,
+        "p95_ms": 39.154717000201344,
+        "max_ms": 39.154717000201344
+      },
+      "private_sealing": {
+        "count": 3,
+        "p50_ms": 12.500795997766545,
+        "p95_ms": 13.313417999597732,
+        "max_ms": 13.313417999597732
+      },
+      "job_completion": {
+        "count": 3,
+        "p50_ms": 1301.2539359988295,
+        "p95_ms": 1334.3916320009157,
+        "max_ms": 1334.3916320009157
+      },
+      "sample_count": 3,
+      "successful_publications": 3
+    }
+  ]
+}

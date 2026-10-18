@@ -118,6 +118,8 @@ def post_photoproduct_preflight(body: PhotoproductPreflightBody) -> dict:
 
 @router.post("/design/photoproducts")
 def post_photoproduct(body: PhotoproductCreateBody) -> dict:
+    from uuid import uuid4
+    identity = str(uuid4())
     lesion_holder = {}
     report_holder = {}
 
@@ -128,7 +130,7 @@ def post_photoproduct(body: PhotoproductCreateBody) -> dict:
         report_holder["report"] = report
         if not report["eligible"]:
             raise HTTPException(status_code=422, detail=report)
-        updated, lesion = create_photoproduct_from_preflight(current, report)
+        updated, lesion = create_photoproduct_from_preflight(current, report, identity=identity)
         lesion_holder["lesion"] = lesion
         return updated
 
@@ -138,6 +140,8 @@ def post_photoproduct(body: PhotoproductCreateBody) -> dict:
         {
             "base_keys": sorted(body.base_keys),
             "product": "TT-CPD",
+            "history_seed": identity,
+            "method": "preflight",
             "stereochemistry": body.stereochemistry,
         },
         apply,
@@ -188,15 +192,17 @@ def get_design_template(stereochemistry: str) -> dict:
 
 @router.post("/design/photoproducts/convert")
 def convert_design_photoproduct(body: PhotoproductCreateBody) -> dict:
+    from uuid import uuid4
+    identity = str(uuid4())
     from backend.core.cpd_design import convert_extra_pair
     def apply(current):
         try:
-            return convert_extra_pair(current, body.base_keys, body.stereochemistry)[0]
+            return convert_extra_pair(current, body.base_keys, body.stereochemistry, identity_seed=identity)[0]
         except (ValueError, KeyError) as exc:
             raise HTTPException(422, detail=str(exc)) from exc
     updated, validation, entry = design_state.mutate_with_feature_log(
         "photoproduct-create", f"Convert extra thymines to {body.stereochemistry} CPD",
-        {"base_keys": body.base_keys, "stereochemistry": body.stereochemistry}, apply,
+        {"base_keys": body.base_keys, "stereochemistry": body.stereochemistry, "history_seed": identity, "method": "convert"}, apply,
         expected_revision=body.expected_revision,
     )
     payload = _design_response(updated, validation, preserve_feature_log_id=entry.id)

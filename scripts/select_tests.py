@@ -149,6 +149,8 @@ LEAF_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("vr_representation", ("atomistic",)),
     # CPD conversion exercises the atomistic multi-start attachment relaxation.
     ("cpd_design", ("atomistic",)),
+    ("part_cpd", ("atomistic",)),
+    ("part_evaluation", ("atomistic", "headless")),
     # pdb_export.py builds on the atomistic model — its heavy export test lives in the
     # atomistic heavy group, so a change here must re-run that group.
     ("pdb_export", ("atomistic",)),
@@ -157,6 +159,14 @@ LEAF_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("dcd_", ("md",)),
     ("trajectory", ("md",)),
     # headless routing / build pipeline
+    ("generated_", ("headless",)),
+    ("part_branch_commands", ("headless",)),
+    ("part_path_commands", ("headless",)),
+    ("part_joined_path_commands", ("headless",)),
+    ("part_connectivity_commands", ("headless",)),
+    ("part_section_commands", ("headless",)),
+    ("curved_branches", ("headless",)),
+    ("branch_optimizer", ("headless",)),
     ("hinge_router", ("headless",)),
     ("hinge_weave", ("headless",)),
     ("hinge_ladder", ("headless",)),

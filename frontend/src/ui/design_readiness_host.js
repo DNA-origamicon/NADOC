@@ -8,7 +8,7 @@ import { nadocBroadcast } from '../shared/broadcast.js'
 import './design_readiness.css'
 
 /** Thin DOM/document adapters; readiness itself is always assessed by the backend. */
-export function initDesignReadinessHost({ store, mode = '3d', onSimulate, api, onRestored } = {}) {
+export function initDesignReadinessHost({ store, mode = '3d', onSimulate, api, onRestored, waitForAssemblyReady } = {}) {
   const host = document.getElementById(mode === 'cadnano' ? 'pathview-container' : 'canvas-area')
   if (!host) return null
   const actions = createDesignReadinessActions({
@@ -63,6 +63,8 @@ export function initDesignReadinessHost({ store, mode = '3d', onSimulate, api, o
   const controller = initDesignReadinessController({
     store, widget, mode, decorate: report => actions.decorate(report),
     async fetchReport(target, { signal }) {
+      if (target.assembly) await waitForAssemblyReady?.(target.document, { signal })
+      if (signal.aborted) throw signal.reason ?? new DOMException('Readiness check superseded.', 'AbortError')
       const response = await fetch(`/api/design/readiness${target.assembly ? '?assembly=true' : ''}`, {
         headers: docHeaders(), signal,
       })

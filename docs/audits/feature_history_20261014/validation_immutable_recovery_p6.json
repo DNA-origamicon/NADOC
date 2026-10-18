@@ -1,0 +1,65 @@
+{
+  "date": "2026-10-15",
+  "executor": "root, serialized focused validation",
+  "runs": [
+    {
+      "target": "tests/test_part_immutable_recovery.py",
+      "executed": 0,
+      "collection_errors": 1,
+      "seconds": 1.00,
+      "cause": "pytest reserves the parameter name request",
+      "correction": "Renamed the DTO test parameter and argument to body; no production change"
+    },
+    {
+      "target": "tests/test_part_immutable_recovery.py",
+      "passed": 33,
+      "failed": 0,
+      "seconds": 5.02,
+      "includes": "Real spawned cold native restore followed by a separate cold verification worker"
+    },
+    {
+      "targets": [
+        "tests/test_part_immutable_recovery.py",
+        "tests/test_part_publication_permit.py",
+        "tests/test_part_publication_jobs.py",
+        "tests/test_part_evaluation_jobs.py",
+        "tests/test_part_immutable_evaluation.py",
+        "tests/test_part_strict_http.py",
+        "tests/test_part_immutable_cache.py",
+        "tests/test_part_immutable_persistence.py",
+        "tests/test_part_batch_jobs.py",
+        "tests/test_part_repair_jobs.py",
+        "tests/test_part_selection_jobs.py"
+      ],
+      "passed": 315,
+      "failed": 3,
+      "seconds": 12.96,
+      "cause": "The three new owner-replacement tests constructed StrictPersistence with a nonexistent workspace directory",
+      "correction": "Create each pytest-owned replacement workspace before constructing its storage owner; no production change"
+    },
+    {
+      "target": "tests/test_part_immutable_recovery.py",
+      "passed": 36,
+      "failed": 0,
+      "seconds": 4.89
+    }
+  ],
+  "distinct_cases_green": 318,
+  "static": {"changed_python_ruff": "passed", "git_diff_check": "passed"},
+  "scope": "Explicit cold restore through the existing evaluation catalog and worker slot; public immutable creation and registered batch gates remain false",
+  "properties": [
+    "Saved JSON, file leases and immutable scope seals confer no proof or publication authority",
+    "Actual host-observed independent native replay binds a private qualification to one candidate and admission",
+    "Pending bytes survive stale context, cancellation, changed files, failed proof and failed publication",
+    "Restoration retains sealed bytes only; the existing two-result catalog and sixteen-megabyte per-candidate ceiling apply",
+    "File checks run before the short state transaction; checked writer lease spans publication with binding rollback",
+    "Recovery uses the ordinary proof capture envelope and ignores poisoned recovery snapshots",
+    "Strict HTTP recovery has an explicit DTO; the generic evaluation operation selector cannot request restore"
+  ],
+  "remaining": [
+    "Durable first creation serialized against previously admitted compatibility autosave",
+    "Full create, batch, flush, restart, cold restore, edit and flush lifecycle qualification",
+    "Performance qualification remains separate; no claim that outside-lock decode avoids Python/GIL or garbage-collection latency"
+  ],
+  "artifacts": "Only pytest-owned temporary storage and small sentinel files; no application lifespan or user workspace"
+}

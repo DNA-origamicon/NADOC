@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-15",
+  "scope": "Internal immutable evaluation/commit adapter; public storage and batch gates remain false",
+  "tests": [
+    {"target": "tests/test_part_immutable_evaluation.py", "passed": 25, "seconds": 4.83},
+    {"target": "tests/test_part_immutable_state.py", "passed": 31, "seconds": 2.84},
+    {"target": "tests/test_part_batch_jobs.py", "passed": 17, "seconds": 4.65},
+    {"target": "tests/test_part_publication_jobs.py", "passed": 24, "seconds": 2.66},
+    {"target": "tests/test_part_evaluation_jobs.py", "passed": 10, "seconds": 2.73},
+    {"target": "tests/test_part_strict_http.py", "passed": 61, "seconds": 3.07}
+  ],
+  "total_passed": 168,
+  "initial_development_run": {
+    "passed": 20, "failed": 2, "seconds": 4.79,
+    "reason": "Two fixtures were rejected by existing request validation before reaching the intended host guard; corrected matching stale revision fields and used an admitted append kind."
+  },
+  "properties": [
+    "Source handle retained under lock; materialization/capture outside it",
+    "Exact session/source/revision/policy revalidation before admission",
+    "Sealed source remains job and permit identity",
+    "Private candidate materialization/sealing outside shared lock",
+    "Exact transport digests and existing one-use publication permit retained",
+    "Cancellation, expiry, policy/source/session races leave publication unchanged",
+    "Capture/scope refusals return actionable 413/422 without consuming the candidate",
+    "One revision, exact source handle undo, idempotent commit, no exposed mutable source",
+    "Real fresh worker batch and independent cold verification pass"
+  ],
+  "pruned": "Superseded blanket evaluation-refusal case; legacy mutable verification getter refusal remains tested.",
+  "limitations": [
+    "This is not public immutable creation or durable restart qualification.",
+    "Whole private materialization and sealing still require latency/GIL/retained-memory measurements.",
+    "All existing bounds and public gates are unchanged.",
+    "Broad-suite collection status is recorded separately in validation_collection_identity_fix.json; no broad pass is claimed."
+  ]
+}

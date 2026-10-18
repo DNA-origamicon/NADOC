@@ -52,7 +52,6 @@ from backend.core.constants import (
     SQUARE_TWIST_PER_BP_RAD,
 )
 from backend.core.models import (
-    Crossover,
     Design,
     DesignMetadata,
     Direction,
@@ -3683,7 +3682,8 @@ def make_overhang_extrude(
     # ── Register crossover between parent and overhang helix ────────────────
     # The junction is at global bp_index on both helices.  For +Z overhangs
     # that's local bp 0; for −Z (axis-flipped) it's local bp L-1.
-    ovhg_xover = Crossover(
+    from backend.core.routing_identity import crossover
+    ovhg_xover = crossover(
         half_a=HalfCrossover(helix_id=helix_id, index=bp_index, strand=direction),
         half_b=HalfCrossover(helix_id=new_helix_id, index=bp_index, strand=new_dir),
     )
@@ -4404,7 +4404,7 @@ def _binder_domain_for_overhang(
     return comp, seq
 
 
-def make_binder_for_overhang(design: Design, overhang_id: str) -> Design:
+def make_binder_for_overhang(design: Design, overhang_id: str, *, strand_id=None) -> Design:
     """Create a new OH-binder strand antiparallel to *overhang_id*.
 
     The new strand is a single domain on the overhang's helix at the same bp
@@ -4420,7 +4420,7 @@ def make_binder_for_overhang(design: Design, overhang_id: str) -> Design:
     import uuid as _uuid_local
 
     new_strand = Strand(
-        id=f"ohbind_{overhang_id}_{_uuid_local.uuid4().hex[:8]}",
+        id=strand_id or f"ohbind_{overhang_id}_{_uuid_local.uuid4().hex[:8]}",
         domains=[comp],
         strand_type=StrandType.OH_BINDER,
         color=_OH_BINDER_DEFAULT_COLOR,

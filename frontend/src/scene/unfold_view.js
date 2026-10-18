@@ -21,6 +21,7 @@
  */
 
 import * as THREE from 'three'
+import { ARC_SEGS, buildNativeConnectionLines, writeNativeConnectionArc } from './native_connection_lines.js'
 import { store } from '../state/store.js'
 import { createGlowLayer } from './glow_layer.js'
 import { crossoverControlPoint as arcControlPoint } from './crossover_extra_placement.js'
@@ -33,7 +34,6 @@ import { sameConnectionTopology } from './connection_topology.js'
 import { setNativePoseMap } from '../viewer/native_placement.js'
 
 const ANIM_DURATION_MS = 500   // linear lerp duration
-const ARC_SEGS         = 20    // bezier sample count per arc line
 const MAX_BOW_FRAC     = 0.15  // control point bows dist × frac at full unfold
 
 const _ZERO_VEC = new THREE.Vector3(0, 0, 0)
@@ -171,52 +171,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
    * Returns null when arcs is empty.
    */
   function _buildMerged(arcs, arcType = 'unknown') {
-    if (!arcs.length) return null
-    const N         = arcs.length
-    const vertCount = N * (ARC_SEGS + 1)
-    const positions = new Float32Array(vertCount * 3)
-    // RGBA, not RGB. A 4-component colour attribute makes three define
-    // USE_COLOR_ALPHA, so `diffuseColor *= vColor` fades per VERTEX — the only
-    // per-arc alpha channel available here, since all arcs of a strand type share
-    // one merged LineSegments and therefore one material. Per-cluster opacity
-    // rides this.
-    const colors    = new Float32Array(vertCount * 4)
-    // LineSegments uses pairs: each of the ARC_SEGS segments has 2 index entries.
-    const idxCount  = N * ARC_SEGS * 2
-    const idx       = vertCount > 65535
-      ? new Uint32Array(idxCount)
-      : new Uint16Array(idxCount)
-    const tc = new THREE.Color()
-    for (let a = 0; a < N; a++) {
-      const base = a * (ARC_SEGS + 1)
-      arcs[a].vertIdx = base   // mutate the _arcMeta entry in place
-      for (let s = 0; s < ARC_SEGS; s++) {
-        idx[(a * ARC_SEGS + s) * 2]     = base + s
-        idx[(a * ARC_SEGS + s) * 2 + 1] = base + s + 1
-      }
-      tc.setHex(_arcModeColor(arcs[a]))
-      const alpha = _arcAlpha(arcs[a])
-      for (let v = 0; v <= ARC_SEGS; v++) {
-        const ci = (base + v) * 4
-        colors[ci] = tc.r; colors[ci + 1] = tc.g; colors[ci + 2] = tc.b; colors[ci + 3] = alpha
-      }
-    }
-    const geo  = new THREE.BufferGeometry()
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-    geo.setAttribute('color',    new THREE.BufferAttribute(colors,    4))
-    geo.setIndex(new THREE.BufferAttribute(idx, 1))
-    const mat  = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85 })
-    const line = new THREE.LineSegments(geo, mat)
-    line.frustumCulled = false
-    // DEBUG IDs — searchable via scene.traverse() or window.__nadocDebugXovers()
-    line.name     = `xoverArcMerged_${arcType}`
-    line.userData = {
-      debugType:   'xoverArcMerged',
-      arcType,
-      arcCount:    N,
-      arcXoverIds: arcs.map(a => a.crossover_id).filter(Boolean),
-    }
-    return { geo, line, positions, colors }
+    return buildNativeConnectionLines(arcs, arcType, _arcModeColor, _arcAlpha)
   }
 
   // ── Per-cluster display (colour + opacity) ──────────────────────────────────
@@ -801,16 +756,7 @@ export function initUnfoldView(scene, designRenderer, getBluntEnds, getLoopSkipH
         (_sv0.z + _sv1.z) * 0.5 + bow,
       )
 
-      // Sample quadratic bezier into the merged position buffer.
-      for (let j = 0; j <= ARC_SEGS; j++) {
-        const u  = j / ARC_SEGS
-        const u2 = 1 - u
-        const w0 = u2 * u2, w1 = 2 * u2 * u, w2 = u * u
-        const bi = (base + j) * 3
-        buf[bi]     = w0 * _sv0.x + w1 * _sCtrl.x + w2 * _sv1.x
-        buf[bi + 1] = w0 * _sv0.y + w1 * _sCtrl.y + w2 * _sv1.y
-        buf[bi + 2] = w0 * _sv0.z + w1 * _sCtrl.z + w2 * _sv1.z
-      }
+      writeNativeConnectionArc(buf, base, _sv0, _sCtrl, _sv1)
 
       // Extra-base beads+slabs ride the same arc.
       if (e.crossover_id && !e.hidden) {

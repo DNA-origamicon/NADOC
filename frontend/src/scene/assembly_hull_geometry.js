@@ -98,32 +98,21 @@ export function _bboxSolidFromNucs(nucleotides) {
 export function _hullGeoForSource(design, nucleotides, helixAxes, { forceLegacy = false } = {}) {
   if (!design) return null
 
-  // Shared inputs for every hull branch AND the markers (mirror _rebuildHullRepr):
-  // dsDNA-trimmed axes, per-helix dsDNA bp, and the render-cluster set with the
-  // whole-part cluster (is_default OR >=90% of helices) dropped.
-  const scanAxes = dsTrimmedAxes(nucleotides, helixAxes ?? null)
-  const { helixBp, totalBp } = dsBpByHelix(nucleotides)
+  // Occupancy hulls already derive their own occupied ranges. Only scan fallbacks
+  // and overhang markers need this second set of dsDNA indexes.
+  let scanInputs
+  const getScanInputs = () => scanInputs ??= {
+    scanAxes: dsTrimmedAxes(nucleotides, helixAxes ?? null),
+    ...dsBpByHelix(nucleotides),
+  }
+  // Drop the whole-part cluster (is_default OR >=90% of helices), matching the
+  // design view's scan and marker cluster selection.
   const totalHelices = (design.helices ?? []).length
   const isWholePart = c => c.is_default
     || (totalHelices > 0 && (c.helix_ids?.length ?? 0) >= 0.9 * totalHelices)
   const allClusters = design.cluster_transforms ?? []
   const finer = allClusters.filter(c => !isWholePart(c))
   const renderClusters = finer.length ? finer : allClusters
-  const dsHelices = new Set(helixBp.keys())
-  const clusteredHelices = new Set()
-  for (const cluster of renderClusters) {
-    for (const hid of cluster.helix_ids ?? []) if (dsHelices.has(hid)) clusteredHelices.add(hid)
-  }
-  const clustersComplete = dsHelices.size === 0 || clusteredHelices.size / dsHelices.size >= 0.9
-  const clustersToRender = allClusters.length && clustersComplete
-    ? renderClusters
-    : [{ id: '__current_geometry__', name: design.metadata?.name || 'Part', helix_ids: [...dsHelices] }]
-  const fractionOf = (c) => {
-    if (totalBp <= 0) return 1
-    let bp = 0
-    for (const hid of (c.helix_ids ?? [])) bp += (helixBp.get(hid) ?? 0)
-    return bp / totalBp
-  }
 
   const disposables = []   // builder geom+mat to dispose after baking
   const solids = []        // { geometry, m } to bake + merge
@@ -157,14 +146,14 @@ export function _hullGeoForSource(design, nucleotides, helixAxes, { forceLegacy 
     return Math.abs(T[0]) > 1e-9 || Math.abs(T[1]) > 1e-9 || Math.abs(T[2]) > 1e-9 ||
            Math.abs(R[0]) > 1e-9 || Math.abs(R[1]) > 1e-9 || Math.abs(R[2]) > 1e-9 || Math.abs(R[3] - 1) > 1e-9
   }
-  const hullOpts = {
-    clusters: allClusters.some(clusterMoved) ? allClusters : [],
-    dsBpRange: dsBpRangeByHelix(nucleotides),
-  }
   let grp = !forceLegacy && usesOccupancyHull(design)
     ? buildClusteredOccupancyHull(design, nucleotides, helixAxes, HULL_CURVE_TOL_NM)
-    : buildExtrusionBoxes(design, helixAxes ?? null, HULL_CURVE_TOL_NM, hullOpts)  // 1. native extrusion boxes
+    : buildExtrusionBoxes(design, helixAxes ?? null, HULL_CURVE_TOL_NM, {
+      clusters: allClusters.some(clusterMoved) ? allClusters : [],
+      dsBpRange: dsBpRangeByHelix(nucleotides),
+    })  // 1. native extrusion boxes
   if (!grp && !allClusters.length) {                          // 2. scan (no clusters)
+    const { scanAxes, helixBp } = getScanInputs()
     grp = scanExtrusionGroup(
       (design.helices ?? []).map(h => h.id),
       scanAxes, helixBp, design.lattice_type, design.metadata?.name, null,
@@ -176,6 +165,22 @@ export function _hullGeoForSource(design, nucleotides, helixAxes, { forceLegacy 
     // 3. Per-cluster dsDNA cross-section scan — mirror _rebuildHullRepr (NOT
     //    convex prisms): drop clusters under HULL_MIN_SIZE_FRACTION of dsDNA bp,
     //    scan each remaining cluster on its own axis.
+    const { scanAxes, helixBp, totalBp } = getScanInputs()
+    const dsHelices = new Set(helixBp.keys())
+    const clusteredHelices = new Set()
+    for (const cluster of renderClusters) {
+      for (const hid of cluster.helix_ids ?? []) if (dsHelices.has(hid)) clusteredHelices.add(hid)
+    }
+    const clustersComplete = dsHelices.size === 0 || clusteredHelices.size / dsHelices.size >= 0.9
+    const clustersToRender = allClusters.length && clustersComplete
+      ? renderClusters
+      : [{ id: '__current_geometry__', name: design.metadata?.name || 'Part', helix_ids: [...dsHelices] }]
+    const fractionOf = (c) => {
+      if (totalBp <= 0) return 1
+      let bp = 0
+      for (const hid of (c.helix_ids ?? [])) bp += (helixBp.get(hid) ?? 0)
+      return bp / totalBp
+    }
     const tmp = new THREE.Group()
     for (const cluster of clustersToRender) {
       if (fractionOf(cluster) < HULL_MIN_SIZE_FRACTION) continue
@@ -224,6 +229,7 @@ export function _hullGeoForSource(design, nucleotides, helixAxes, { forceLegacy 
   // source-local and _buildMarkerLodMesh can instance it across every copy.
   let markers = null
   if (hullMeshObjs.length && design.overhangs?.length) {
+    const { scanAxes, helixBp } = getScanInputs()
     const markerClusters = renderClusters.length
       ? renderClusters
       : [{ helix_ids: (design.helices ?? []).map(h => h.id) }]

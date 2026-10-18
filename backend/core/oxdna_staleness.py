@@ -7,15 +7,14 @@ against the job's frozen topology crashes (particle indices fall out of range). 
 guard that, we compare a content **fingerprint** of the design at job-creation time
 against the current design; a mismatch means the job is out of date.
 
-The fingerprint covers exactly the fields an oxDNA build consumes — topology
+The legacy v4 fingerprint covers a partial set of build inputs — topology
 (strands + crossovers + ligations + extensions + overhangs), sequences (carried on
 the strands), and geometry SOURCES (helices + deformations; loop/skips live inside
-the strands).  It deliberately EXCLUDES display-only layers — cluster transforms /
-joints, camera poses, animations, metadata, the feature log, proteins, plate
-layout, representation overrides — so repositioning a cluster or moving the camera
-does NOT mark jobs stale; only a structural / sequence / geometry edit does.
-(Cluster transforms are the Three-Layer *display* layer and never feed
-``_geometry_for_design``, so they are correctly out of the build fingerprint.)
+the strands). It omits cluster/nucleotide transforms and ordinary attached
+proteins, although preparation can consume them. Preserve this version for old
+guards and snapshots, but never treat matching v4 hashes as complete physical
+freshness. ``physical_input_freshness`` exposes that limited evidence explicitly;
+engine-specific consumed-input receipts require separate qualification.
 Editor-only reference geometry is projected out for the same reason: every
 simulation preparer removes it before writing its frozen design snapshot.
 """
@@ -29,9 +28,8 @@ import weakref
 
 from backend.core.models import Design
 
-# Design fields that determine the oxDNA build (topology.top + the relaxation seed
-# geometry).  An edit to any of these can change particle count / order / position /
-# sequence and so invalidates a job; everything else is display/metadata.
+# Legacy partial projection; fields absent here are not necessarily nonphysical.
+# Do not expand v4 in place or infer a complete current verdict from equality.
 _FINGERPRINT_FIELDS = {
     "helices",
     "strands",
@@ -58,8 +56,7 @@ _CURRENT_FP_CACHE_LOCK = threading.Lock()
 
 
 def oxdna_design_fingerprint(design: Design) -> str:
-    """Stable content hash of the oxDNA-build-relevant design fields (see module
-    docstring).  Deterministic for a given design state, display-layer agnostic."""
+    """Stable legacy partial-input hash (see the coverage limits above)."""
     # Jobs are built from this exact projection.  Hashing the unprojected editor
     # design made a job created from a design with reference backdrop geometry
     # appear stale immediately: the job snapshot contained only active DNA while
@@ -234,9 +231,8 @@ def describe_staleness(
     )
 
 
-# The fingerprint is generic over DNA designs — both oxDNA and NAMD/MD jobs build
-# from the same topology/sequence/geometry fields — so MD code imports it under this
-# neutral name (the ``oxdna_`` alias is kept for the existing oxDNA call sites).
+# Existing MD guards also consume this legacy DNA projection. That alias does not
+# cover all NAMD inputs, in particular ordinary protein assets and placements.
 design_build_fingerprint = oxdna_design_fingerprint
 
 
