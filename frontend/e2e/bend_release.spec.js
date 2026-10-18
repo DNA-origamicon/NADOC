@@ -793,3 +793,44 @@ test('history edit that breaks a downstream fixed-endpoint bend names it and pub
     return { expectedConsoleErrors: ['Failed to load resource: the server responded with a status of 409 (Conflict)'] }
   }, 'bend-fixed')
 })
+
+test('legacy part converts to verified history as a new file and its bend edits in the isolated editor', async ({ page, request }) => {
+  const fs = await import('node:fs'), path = await import('node:path')
+  await withHistoryFixture({ page, request }, 'bend', async f => {
+    const before = await f.checkpoint()
+    expect(before.design.recipe_root).toBeNull()
+    const originalBytes = fs.readFileSync(f.file)
+    await page.getByRole('button', { name: 'File', exact: true }).hover()
+    await page.locator('#menu-file-convert-history').click()
+    await page.getByRole('button', { name: 'Choose new file…' }).click()
+    const filename = page.getByPlaceholder('filename')
+    await expect(filename).toHaveValue(/\(verified\)$/)
+    const applied = page.waitForResponse(r => new URL(r.url()).pathname === '/api/design/history/convert'
+      && r.request().postDataJSON().apply === true)
+    const saved = page.waitForResponse(r => new URL(r.url()).pathname === '/api/design/save-workspace')
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    expect((await applied).ok()).toBe(true)
+    const save = await saved
+    expect(save.ok()).toBe(true)
+    expect(save.request().postDataJSON().overwrite).toBe(false)
+    const converted = await f.checkpoint()
+    expect(converted.design.recipe_root.kind).toBe('import')
+    expect(converted.design.feature_log.map(row => row.feature_type)).toEqual(['deformation'])
+    expect(converted.design.helices).toEqual(before.design.helices)
+    expect(converted.design.strands).toEqual(before.design.strands)
+    expect(fs.readFileSync(f.file)).toEqual(originalBytes)  // original file never written
+    const workspace = path.dirname(f.file)
+    expect(fs.readdirSync(workspace).filter(name => name.endsWith('(verified).nadoc'))).toHaveLength(1)
+    // The converted legacy bend now edits through the verified isolated editor.
+    await f.open()
+    await f.change('#def-bend-angle', 14)
+    await page.locator('#def-apply-btn').click()
+    await expect(f.popup).not.toBeVisible()
+    const after = await f.checkpoint()
+    expect(after.revision).toBeGreaterThan(converted.revision)
+    expect(f.writes.filter(r => r.path === `${previewPath}/apply`)).toHaveLength(1)
+    expect(after.design.deformations[0].params).not.toEqual(converted.design.deformations[0].params)
+    expect(after.design.recipe_root.kind).toBe('import')
+    expect((await readFixture(f, 'proof')).status).toBe('reproduced_import')
+  }, 'bend-legacy-snapshots')
+})

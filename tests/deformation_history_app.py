@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException
 
 from tests.extrude_matrix_fixture import FAMILIES
 
-FIXTURES = {"bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-fixed", *FAMILIES}
+FIXTURES = {"bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-legacy-snapshots", "bend-fixed", *FAMILIES}
 
 
 def fixture(kind):
@@ -40,6 +40,21 @@ def fixture(kind):
         # Same native rows without an explicit recipe root, like pre-overhaul saved
         # files: the isolated editor refuses it and the legacy editor takes over.
         return fixture("bend").copy_with(recipe_root=None)
+    if kind == "bend-legacy-snapshots":
+        # Pre-overhaul shape with recovery snapshots: unseeded bundle row, bend
+        # without a proof version, no recipe root. Convertible (bend stays editable).
+        from backend.api.state import encode_design_snapshot
+        from backend.core.part_history_proof import root_design
+        native = fixture("bend")
+        bundle_row, bend_row = native.feature_log
+        empty = root_design(native.recipe_root)
+        after_bundle = part_proof_commands_execute(bundle_row, empty)
+        pre, _ = encode_design_snapshot(empty)
+        post, _ = encode_design_snapshot(after_bundle)
+        legacy_bundle = bundle_row.model_copy(update={
+            "params": {k: v for k, v in bundle_row.params.items() if k not in {"_proof_version", "history_seed"}},
+            "design_snapshot_gz_b64": pre, "post_state_gz_b64": post, "evicted": False})
+        return native.copy_with(recipe_root=None, feature_log=[legacy_bundle, bend_row.model_copy(update={"proof_version": None})])
     if kind == "bend-fixed":
         # A downstream fixed-endpoint bend overlapping the edited bend: changing
         # the upstream curvature makes it unregenerable (contract C4).
@@ -106,6 +121,13 @@ def fixture(kind):
         source.feature_log[0].design_snapshot_gz_b64 = "poisoned-before"
         source.feature_log[0].post_state_gz_b64 = "poisoned-after"
     return source
+
+
+def part_proof_commands_execute(entry, design):
+    from backend.api.part_proof_commands import execute
+    from backend.core.part_overlay_commands import command_input
+    kind, params = command_input(entry)
+    return execute(kind, design, params)
 
 
 def cold_replay(source):

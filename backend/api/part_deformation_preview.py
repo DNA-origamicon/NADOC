@@ -481,8 +481,9 @@ def _prefix_rows(captured, check, *, reserved=0, future_feature=None, future_ope
     _admit(captured, check)
     if captured.recipe_root is None:
         _reject("Preview requires an explicit recipe root", "missing_recipe_root")
-    if captured.recipe_root.version != 1 or captured.recipe_root.kind != "empty":
-        _reject("This private preview supports version-one empty native roots only")
+    # Import roots (e.g. converted legacy parts) are digest-verified by root_design.
+    if captured.recipe_root.version != 1 or captured.recipe_root.kind not in {"empty", "import"}:
+        _reject("This private preview supports version-one empty or import roots only")
     if captured.feature_log_cursor != -1 or captured.feature_log_sub_cursor is not None:
         _reject("Return to the latest history position before previewing an edit", "historical_cursor")
     seen, by_id, count = set(), {}, 0

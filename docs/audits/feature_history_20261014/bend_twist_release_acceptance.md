@@ -890,3 +890,9 @@ See [S53 evidence](sweep_source_matrix_20261018.md). Source inventory/plane stat
 - Invariants and cold-replay equality: `tests/test_part_replay_cache.py` 8 passed (HC/SQ, bend/twist, 7 routing kinds).
 - 18hb×504: Apply after routed bend 3.5 s → 0.25 s; bend before autostaple, repeat Apply 0.16 s (first after load ~3.2 s). Open/evaluate now display-bound (S61).
 - Browser history suite 38 passed; `test-smart` FAST 14 failed/18964 passed (1 mine, fixed; 13 pre-existing).
+
+## S62 — R2 legacy conversion (October 18, 2026)
+- Option B with frozen deformation-independent routing rows; exact `reproduced_import` proof gate; new-file save, original untouched (browser case asserts bytes).
+- Survey: 78/89 convert exactly; 34 keep editable features; 3/8 legacy bends/twists editable. Limits: 1 MB import root (manifest-hashed), unseeded extrusions, stale legacy rows.
+- Fixed workspace-save identity stamp breaking every native proof (Apply 409 after first save).
+- Browser history suite 39 passed; test-frontend 9310 passed; test-smart FAST 13 pre-existing failures only.

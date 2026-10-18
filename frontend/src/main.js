@@ -193,6 +193,7 @@ import { initAssemblyContextMenu }  from './ui/assembly_context_menu.js'
 import { initLibraryPanel }         from './ui/library_panel.js'
 import { pickLattice }              from './ui/lattice_picker.js'
 import { openFileBrowser }          from './ui/file_browser.js'
+import { initHistoryConversion }    from './ui/history_conversion.js'
 import { initFileIo, initFileOpen, initFileSave } from './ui/file_io.js'
 import { initSyncBadge } from './ui/sync_badge.js'
 import { createAssemblyRenderer }   from './scene/assembly_renderer.js'
@@ -5279,6 +5280,9 @@ async function main() {
     onOpenPart:     (path, name) => _fileOpen.openPartFromServer(path, name),
     onOpenAssembly: (path) => _fileOpen.openAssemblyFromServer(path),
   })
+  initHistoryConversion({ api, store, showToast, openFileBrowser, showConfirm,
+    getWorkspacePath: () => _workspacePath, setWorkspacePath: _setWorkspacePath,
+    setFileName: name => { _setFileName(name); libraryPanel?.refresh() } })
 
   // Deferred welcome refresh — called here because libraryPanel wasn't available
   // at the session-restore block (lines ~2477) where restoration failure is detected.

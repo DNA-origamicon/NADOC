@@ -12,6 +12,18 @@ from backend.core.part_history_contract import FIELD_ROLES, create_empty_part
 
 
 AUTHORING_FIELDS = frozenset(k for k, role in FIELD_ROLES.items() if role == "authoring")
+# Workspace file identity stamped into metadata on save (design_identity._stamp).
+# It records where the document lives, not what it is, so a saved part must not
+# stop reproducing its own recipe. Every other metadata field is still compared.
+IDENTITY_METADATA_FIELDS = frozenset({"identity_last_known_path", "identity_confirmed_at"})
+
+
+def authoring_value(design, name):
+    value = getattr(design, name)
+    if name == "metadata" and value is not None:
+        return value.model_dump(mode="json", exclude=set(IDENTITY_METADATA_FIELDS))
+    return value
+
 
 
 class ProofBudgetExceeded(Exception):
@@ -146,6 +158,8 @@ def _assess_recipe(design, *, max_entries, execute, dependencies, checkpoint):
     result["recipe_fingerprint"] = digest({"contract": 1, "root": root.model_dump(mode="json") if root else None,
         "commands": [(fid, kind, params) for fid, kind, params, _ in rows],
         "cursor": [design.feature_log_cursor, design.feature_log_sub_cursor]})
+    # Exact content binding (immutable recovery compares it byte-for-byte), so it
+    # keeps identity stamps; only the reproducibility comparison below ignores them.
     result["authoring_fingerprint"] = digest(design.model_dump(mode="json", include=AUTHORING_FIELDS))
     if issues:
         return result
@@ -187,7 +201,8 @@ def _assess_recipe(design, *, max_entries, execute, dependencies, checkpoint):
                     "structure": after_structure,
                     "possible_dependents": sorted(index.affected([feature_id]) - {feature_id})}
     check()
-    mismatches = sorted(name for name in AUTHORING_FIELDS if getattr(design, name) != getattr(rebuilt, name))
+    mismatches = sorted(name for name in AUTHORING_FIELDS
+                        if authoring_value(design, name) != authoring_value(rebuilt, name))
     if mismatches:
         result["status"] = "mismatch"
         issues.append({"code": "authoring_state_mismatch", "fields": mismatches})

@@ -63,27 +63,53 @@ this change (service-read budget test retargeted; 28 pass); 13 pre-existing as b
 
 ## Single next bounded task
 
-**ID:** S61 — Partial display projection for Bend/Twist preview (R1 follow-on, C8).
+**ID:** S61 (still next) — Partial display projection for Bend/Twist preview (R1 follow-on, C8).
 **Objective:** Evaluate returns candidate geometry only for helices whose geometry the edit can
 change (the deformation's affected helices plus anything downstream that reads deformation
 geometry), with the unchanged prefix display reused client-side; Open reuses one projection.
 **Acceptance:** 18hb × 504 evaluate ≤ 1.0 s; display equals full projection on fixtures (exact);
 browser suite passes. **Exclusions:** geometry/constants changes, new lifecycle layers.
 
+## R2 legacy conversion — delivered (S62, October 18, 2026; user chose option B)
+
+File → **Convert history to verified…** (`ui/history_conversion.js`, `POST /design/history/convert`,
+`core/part_legacy_conversion.py`). Rows are upgraded to version-1 contracts where saved inputs are
+complete; unseeded deformation-independent routing rows (auto-scaffold, autostaple, auto-crossover,
+...) become **frozen** rows (`core/part_frozen_topology.py`: saved output topology, replayed only
+when input topology matches the saved pre-state, deformations passed through). The boundary sits
+after the last row that is neither; the saved state there becomes an explicit import root, with the
+saved file's final document metadata and lazily created default clusters. Accepted only on exact
+proof (`reproduced_import`). The open design is replaced as one undoable step and saved under a NEW
+name (`overwrite=false`); autosave is pointed at the new file first, so the original is never written.
+
+Workspace survey (in memory, nothing written): 89 files with history; **78 convert exactly**;
+34 keep ≥1 editable feature; 94/565 rows (17%) stay editable; **3/8 bends/twists** editable.
+Not convertible: 4 files whose baseline exceeds the 1 MB import-root limit (raising it changes
+numerical-engine manifests, see below), 1 with a mid-log cursor, 2 >12 MB not surveyed.
+Bends stay absorbed when a later row cannot replay: unseeded extrusions (incl. deformed
+continuations, which genuinely depend on the bend) or legacy rows the legacy editor left stale
+(6hb_curved: loop skips were never recomputed after a later legacy bend edit).
+
+Also fixed: the history proof compared `metadata` wholesale, so any workspace save (identity stamp)
+made every native part fail its proof and Apply 409 — `IDENTITY_METADATA_FIELDS` are now excluded
+from the reproducibility comparison only (fingerprint unchanged).
+
+Checks: `test_part_legacy_conversion.py` 7, conversion UI vitest 4, browser conversion case
+(menu → confirm → file browser → new file; original bytes unchanged; converted bend edits through
+the isolated editor) pass; history browser suite 39 passed (9.3 m); `just test-frontend` 774 files /
+9310 passed; `just test-smart` FAST 13 failed / 18972 passed (same 13 pre-existing), DEFERRED full.
+
 ## User decisions pending
 
-1. **R2 legacy migration approach** (every pre-overhaul saved file lacks a recipe root):
-   (A) re-root the whole current state as an explicit import baseline — exact and cheap, but old
-   features stop being editable as features; (B) re-root at the earliest non-replayable row,
-   using that row's saved pre-state as an explicit, user-visible import baseline, and replay the
-   later rows natively (old bends/twists stay editable) — accepted only if the replay equals the
-   saved design exactly; (C) synthesize versioned commands for every legacy row (most coverage,
-   highest risk). Recommended: B. Writing converted files needs explicit approval.
-2. C9: keep the legacy editor as the fallback for files that cannot be converted.
-3. Whether to triage the 13 pre-existing `test-smart` failures (sealed path, junction balance).
+1. Raise the 1 MB import-root limit (`PartRecipeRoot.source_json`): it is in
+   `part_history_contract.py`, which the CPD/duplex/streptavidin numerical manifests hash, so it
+   needs a recorded schema-compatibility transition. Approve doing that ceremony, or keep the limit.
+2. Stale legacy rows (e.g. 6hb_curved loop skips): offer an explicit "re-derive from current bend"
+   repair? It would change topology and needs review per file.
+3. C9: keep the legacy editor as the fallback for unconvertible files.
+4. Whether to triage the 13 pre-existing `test-smart` failures (sealed path, junction balance).
 
 ## Session discipline and Git
 
 One task per session; ≤15 appended plan evidence lines; no new reports. Handoff ≤150 lines.
-Ledger only for milestone changes; memory only for gate flips or milestone closure.
-Commits: explicit overhaul-only paths; mixed/untracked Codex harness and sealed files excluded.
+Commits: explicit overhaul-only paths and hunks; mixed/untracked Codex harness and sealed files excluded.

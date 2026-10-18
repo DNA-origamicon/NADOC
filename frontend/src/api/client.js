@@ -4889,6 +4889,14 @@ export async function saveDesignToWorkspace(path) {
   return _syncFromDesignResponse(json, { skipGeometry: true })
 }
 
+/** Convert the open part's legacy history to a verified recipe (dry run unless apply). */
+export async function convertHistory({ apply = false, expectedRevision = null } = {}) {
+  const json = await _request('POST', '/design/history/convert', { apply, expected_revision: expectedRevision })
+  if (!json || !apply || !json.design) return json
+  await _syncFromDesignResponse(json)
+  return json
+}
+
 /** Save current in-memory design to an explicit workspace path.
  *  Pass overwrite:false to get a 409 if the file already exists (for Save As confirm flow). */
 export async function saveDesignAs(path, overwrite = true) {

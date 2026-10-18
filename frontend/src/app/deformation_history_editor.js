@@ -15,6 +15,9 @@ import { getDocId } from '../shared/doc_id.js'
 export const UNSUPPORTED_PART_CODES = Object.freeze(new Set([
   'missing_recipe_root', 'missing_proof_contract', 'unsupported_preview_scope',
   'preview_limit', 'recipe_not_reproducible',
+  // Stale legacy data the isolated display refuses (for example a forced
+  // ligation whose endpoint is no longer a strand terminus).
+  'invalid_preview_reference',
 ]))
 
 function featureLabel(entry, index) {

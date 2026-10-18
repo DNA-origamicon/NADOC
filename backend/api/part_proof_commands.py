@@ -117,6 +117,11 @@ def capabilities():
 
 
 def dependencies(kind, params):
+    from backend.core import part_frozen_topology as frozen
+    if frozen.is_frozen(params):
+        from backend.core.part_replay_cache import DEFORMATION_INDEPENDENT
+        return (Dependencies(frozenset({PART_TOPOLOGY}), frozenset({PART_TOPOLOGY}), barrier=True)
+                if kind in DEFORMATION_INDEPENDENT and frozen.valid_params(params) else Dependencies(known=False))
     if type(params) is dict and "_connection_organization" in params:
         from backend.api.part_connection_organization import split
         from backend.core.part_group_organization import ORGANIZATION
@@ -413,6 +418,9 @@ def _execute(kind, design, params, *, expensive):
         # Match dependency/scoped admission: preserve the recorded annotation,
         # but never pass it into reference resolution or native command inputs.
         params = {key: value for key, value in params.items() if key != "_generator"}
+    if "_frozen_legacy" in params:
+        from backend.core.part_frozen_topology import build
+        return build(kind, design, params)
     if kind == "placement-poses":
         from backend.api.part_placement_pose_commands import build
         # Like cluster_op, complete absolute overlays perform no topology retry
