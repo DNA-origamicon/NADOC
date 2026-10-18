@@ -8,6 +8,7 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 from backend.core.cpd_preview import attach_isomer_previews  # noqa: E402
+from scripts.update_cpd_progress_summary import attach_progress_summary  # noqa: E402
 ART = REPO / ".development-artifacts"
 ARCHIVE = Path("/media/jojo/Archive/NADOC_archive/photoproduct_evidence")
 sources = {}
@@ -758,5 +759,6 @@ path = REPO / "frontend/public/cpd-progress.json"
 payload = attach_isomer_previews(payload)
 anti_preview = next(m for m in payload["isomers"] if m["id"] == "tt-cpd-cis-anti-i")
 anti_preview["checks"].extend(next(m for m in models if m["id"] == "anti-additive-core")["checks"][:-1])
+payload = attach_progress_summary(payload)
 path.write_text(json.dumps(payload, indent=2) + "\n")
 print(path, len(models), "structures")

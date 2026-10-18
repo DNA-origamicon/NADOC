@@ -1,0 +1,84 @@
+{
+  "alternate_minus_original302_kcal_mol": -0.047194038143031455,
+  "at": "2026-10-17T07:15:11+00:00",
+  "passed": true,
+  "script": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_pyscf_alternate_v1.py",
+    "sha256": "77b3377f926eadb6f54e3d85e82e8c9622dfa87215815be9cd75fa0fffcbd9f0"
+  },
+  "assessment": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-alternate-v1/assessment.json",
+    "sha256": "a4b9e044826c6a43294af4309dacfe484f068d57c9a823898951e2986232f267"
+  },
+  "native": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-alternate-v1/output.dat",
+    "sha256": "9c15b302810d037eb863f1f2eceaee3d5370ec382dcb588e116d075ca3a0bd5d"
+  },
+  "checkpoint": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-alternate-v1/scf.chk",
+    "sha256": "b5190ad748fa8cfd657619031376daad4d152d73f01a41ef3c523da6cb001043"
+  },
+  "density": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-alternate-v1/density.npy",
+    "sha256": "229defe66ea766ed8a575d0599cbca717d216a8195684bcbeeb408ee20fcadba"
+  },
+  "energy_hartree": -1963.9735789985798,
+  "gap_hartree": 0.4820195787648336,
+  "wall_seconds": 3043.9548750369577,
+  "decision": "Alternate302 SCF passes execution audit. Near-degenerate proxy energy difference at302 remains resolution-sensitive until paired350 complete. Next alternate350 then original350 sequentially. No robust conformer ranking, fit or minimum certificate.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "launch": {
+    "at": "2026-10-17T07:15:26.561677+00:00",
+    "plan": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-alternate350-v1/plan.json",
+      "sha256": "7590930becdc88d414687c7b9be7a1511670e6dfd4469316e311f61fdb6817dd"
+    },
+    "command": [
+      "systemd-run",
+      "--user",
+      "--unit=cpd-corrected-endpoint-pyscf-pcm-alternate350-v1",
+      "-p",
+      "MemoryMax=12G",
+      "-p",
+      "MemorySwapMax=0",
+      "-p",
+      "CPUQuota=400%",
+      "-p",
+      "RuntimeMaxSec=3885",
+      "-p",
+      "TimeoutStopSec=15",
+      "--setenv=PYTHONPATH=/home/jojo/Work/NADOC",
+      "--setenv=NADOC_REPO_ROOT=/home/jojo/Work/NADOC",
+      "--setenv=OPENBLAS_NUM_THREADS=1",
+      "--setenv=MKL_NUM_THREADS=1",
+      "--setenv=OMP_NUM_THREADS=4",
+      "--setenv=PYTHONDONTWRITEBYTECODE=1",
+      "--setenv=TMPDIR=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-alternate350-v1/tmp",
+      "--setenv=PSI_SCRATCH=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-alternate350-v1/scratch",
+      "/usr/bin/python3",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-alternate350-v1-service/supervisor.py",
+      "--supervise",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-pyscf-pcm-alternate350-v1-service"
+    ],
+    "watcher": {
+      "token": "121ce2f5-baf3-4616-a18b-cd30707f2875",
+      "thread": "01a11042-d818-7843-9d63-585e85346578",
+      "deliveries": [],
+      "armed_at": 1792221326.553883,
+      "expected_seconds": 900,
+      "supervisor_pid": 1890277,
+      "supervisor_identity": "27642185",
+      "state": "armed",
+      "watcher_pid": 1890279,
+      "codex_executable": "/home/jojo/.vscode/extensions/openai.chatgpt-26.1007.21434-linux-x64/bin/linux-x86_64/codex",
+      "overdue_seconds": 1350.0,
+      "active_deadline_id": "endpoint-pyscf-pcm-alternate350-v1-review",
+      "active_deadline_epoch": 1792224926.4798715
+    },
+    "limits": "RuntimeMaxUSec=1h 4min 45s\nCPUQuotaPerSecUSec=4s\nMemoryMax=12884901888\nMemorySwapMax=0\nActiveState=active\n",
+    "hard_stop_epoch": 1792225226.4798715,
+    "review_epoch": 1792224926.4798715,
+    "cloud_spending_usd": 0
+  }
+}

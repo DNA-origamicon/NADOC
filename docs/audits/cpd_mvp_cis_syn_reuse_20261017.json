@@ -1,0 +1,46 @@
+{
+  "schema": "nadoc.cpd.mvp-cis-syn-reuse.v1",
+  "product_id": "tt-cpd-cis-syn",
+  "candidate": "cis-syn-joint-v6",
+  "decision": "RETAIN_EXISTING_PRELIMINARY_MODEL_FOR_LEGACY_TESTED_SCOPE; NO_NEW_REFINEMENT_TRIGGER",
+  "historical_review": {
+    "path": "/home/jojo/Work/NADOC/backend/data/forcefield/photoproducts/tt-cpd-cis-syn/preliminary-v6/preliminary_review.json",
+    "sha256": "99c01674db30cecdd9503b7bef57a5dbef252afb4427853b14e21c8c85270d3d"
+  },
+  "historical_asset_integrity": {
+    "topology.rtf": true,
+    "parameters.prm": true,
+    "template.json": true,
+    "topology_audit.json": true,
+    "final_audit.json": true,
+    "completion_review.md": true,
+    "overnight_review_audit.json": true,
+    "native_check.json": true
+  },
+  "canonical_start_endpoint_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cis-syn-reuse-audit-v1/audit.json",
+    "sha256": "9700084cc1a68b9ccf95f320a57c90304c3d8d1da161fe933df97989f2c0f477"
+  },
+  "canonical_all_saved_frame_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cis-syn-reuse-audit-v1/trajectory_audit.json",
+    "sha256": "6606a91706342a8d88357b521a507ed6de016cf11b1899549acce1e8523c2ec5"
+  },
+  "frames": 17000,
+  "blocks": 68,
+  "configuration_checks": 1054000,
+  "minimum_configuration_margin_A3": 0.7923075222207383,
+  "numerical_stability": "Historical replicated NAMD stability evidence retained; fresh canonical sugar and mapped CPD ring audit passes all saved frames. No newly launched MD.",
+  "practical_equivalence": "NOT ESTABLISHED; no prespecified independent solution-observable equivalence comparison in this re-audit.",
+  "sampling": "Lesion-opening occupancy/kinetics remain insufficiently sampled; one CPD replica opens, controls derive from damaged crystal, second starting basin absent.",
+  "refinement_trigger": "Not demonstrated: an opening event alone is not a substantial departure from an established applicable observable.",
+  "scope": [
+    "Adjacent internal intrastrand cis-syn-I TT",
+    "Historical 1T4I-derived duplex setup at300K and150mM NaCl withCHARMM TIP3P/CUFIX",
+    "2fs ordinary masses; noHMR",
+    "No termini/interstrand/other-isomer qualification"
+  ],
+  "external_workflow_status": "Legacy model is published-parameter-derived with local equilibrium-term fitting; not relabeled as independently executed external ffTK output. This evidence does not finish the external-workflow requirement for all-isomer goal.",
+  "new_candidate_production_promotion": false,
+  "native_jobs": 0,
+  "next": "Use existing canonical fixtures/trajectory evidence as cis-syn baseline. Complete external candidate provenance and ordered formation admission for other isomers; do not repeat cis-syn stability MD solely to recreate evidence."
+}

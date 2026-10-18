@@ -1,0 +1,33 @@
+{
+  "at": "2026-10-15T20:20:00.829364+00:00",
+  "state": "resumed",
+  "checkpoint_step": 2575000,
+  "completed_validation_ns": 4,
+  "remaining_validation_ns": 6,
+  "target_step": 5575000,
+  "job": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-replica2-validation-anti-resume-v2",
+  "launch_receipt": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-replica2-validation-anti-resume-v2/launch_receipt.json",
+    "sha256": "2e8618bdb415f583a51ba04695d3eadae7ed250efcea2c76056e2644ae5f933b"
+  },
+  "all_input_pins_verified": true,
+  "original_partial_segment_preserved": true,
+  "watcher": {
+    "token": "1f62f294-c6ff-4672-9508-990d8273383d",
+    "thread": "01a11042-d818-7843-9d63-585e85346578",
+    "deliveries": [],
+    "armed_at": 1792095600.826179,
+    "expected_seconds": 20000,
+    "supervisor_pid": 2704595,
+    "supervisor_identity": "15069613",
+    "state": "armed",
+    "watcher_pid": 2704599,
+    "codex_executable": "/home/jojo/.vscode/extensions/openai.chatgpt-26.1007.21434-linux-x64/bin/linux-x86_64/codex",
+    "overdue_seconds": 30000.0,
+    "active_deadline_id": "formation-replica2-validation-anti-resume-v2-review",
+    "active_deadline_epoch": 1792148700.760729
+  },
+  "limits": "RuntimeMaxUSec=14h 59min 45s\nCPUQuotaPerSecUSec=4s\nMemoryMax=8589934592\nMemorySwapMax=0\nActiveState=active\n",
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

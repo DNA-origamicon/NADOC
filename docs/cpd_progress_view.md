@@ -1,5 +1,13 @@
 # CPD progress view
 
+The reviewed overview is maintained in `docs/cpd_progress_summary.json` and refreshed
+with `python scripts/update_cpd_progress_summary.py`. It distinguishes corrected
+cis-anti-I from historical anti models that fail the corrected identity. The
+overview records the latest reviewed checkpoint, not live simulation telemetry.
+Superseded completion notifications and obsolete pause/DNA-pending notices are
+pruned from historical model check lists; archived evidence and failed checks remain.
+
+
 Open **Help → CPD progress…** to compare all **eight ordered DNA TT-CPD isomers**
 and inspect the current CPD evidence snapshot. The gallery shows every isomer
 at the same scale and in the same ordered cyclobutane frame. Select a card for

@@ -1,0 +1,46 @@
+{
+  "at": "2026-10-17T02:48:19+00:00",
+  "script": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_ddx_pilot_v1_review2.py",
+    "sha256": "fe8d3a94b85f5a46fec027c7d82515f6b0c49b29642a786f7f6daf5437314021"
+  },
+  "passed": true,
+  "records": [
+    {
+      "point": "original_qm",
+      "result": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-pilot-v1/original_qm/result.json",
+        "sha256": "9c806be0f017cd809dbc07406710e8a29fe34229e1ddf9d88f680d4b14bc42b4"
+      },
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-pilot-v1/original_qm/output.dat",
+        "sha256": "cca8c8e6ac9a01e87d6b6d4188886ab94bd1e6afd40c031564c87817a04f983c"
+      },
+      "energy_hartree": -1963.9974411398239,
+      "solvation_energy_hartree": -0.182532595292167,
+      "geometry_error_A": 8.881784197001252e-16,
+      "native_radii_verified": true,
+      "wall_seconds": 412.54408664201037
+    },
+    {
+      "point": "alternate_qm",
+      "result": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-pilot-v1/alternate_qm/result.json",
+        "sha256": "acce4673e66495cae54432d6505e46ace3bf85f5df3944864081bf32b6691da8"
+      },
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-pilot-v1/alternate_qm/output.dat",
+        "sha256": "dae38838ef16c5d98333ad6a0ca6ba8280e647036b8aa67478bbc4977b1158e7"
+      },
+      "energy_hartree": -1964.003589107412,
+      "solvation_energy_hartree": -0.1951807036958895,
+      "geometry_error_A": 4.440892098500626e-16,
+      "native_radii_verified": true,
+      "wall_seconds": 425.5720501509786
+    }
+  ],
+  "alternate_minus_original_hf_pcm_kcal_mol": -3.8579079077337024,
+  "decision": "DDX numerical feasibility passed without observed native failure warnings. Next paired tighter-grid check at identical chemistry/method/radii/geometry; no parameter fitting or minimum certification. Independently selected cap conformers and HF method preclude comparison to previous MP2 neutral-fragment discrepancy.",
+  "minimum_certified": false,
+  "simulation_ready": false
+}

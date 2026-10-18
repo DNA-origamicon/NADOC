@@ -1,0 +1,60 @@
+{
+  "at": "2026-10-17T03:17:12+00:00",
+  "passed": true,
+  "script": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_standard_cavity_v1.py",
+    "sha256": "67fbbafcf0ca0d3e35b3863eaf61cf54c0fbdb50b0e07f085157ccb85451b372"
+  },
+  "assessment": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-cavity-v1/assessment.json",
+    "sha256": "aa6182ea42d4f6283567b288b3efc28667eb6f828ae8c1cfab8f3a3c5ec26069"
+  },
+  "native": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-cavity-v1/output.dat",
+    "sha256": "e52032043bdb17b5320d733a915e5b72d0fba578b12bcd2dcb01d3e2ec213dbc"
+  },
+  "wavefunction": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-density-diagnostic-v1/coarse_wavefunction.npy",
+    "sha256": "19dbcd3443b106fb2527a3eafe3e308d956df0df6bd473effaa4990c954d9c07"
+  },
+  "density": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-density-diagnostic-v1/density.npy",
+    "sha256": "95379252c13fe61b72f2e2b30f49ad13438e396bfa8b81f4b62d47827f85dd2f"
+  },
+  "records": [
+    {
+      "name": "standard_surface9",
+      "solvation_energy_hartree": -0.15997476912409017,
+      "homo": -0.3975447071030686,
+      "lumo": 0.06730597694086007,
+      "gap_hartree": 0.4648506840439287,
+      "occupied_subspace_loss": 0.0003831691143147964,
+      "forward_iterations": 42,
+      "adjoint_iterations": 37,
+      "fock": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-cavity-v1/standard_surface9_fock.npy",
+        "sha256": "e7c17fdfd65cb2d82b44f74b750e066a24ad0de4344333e0d171f3db4dc46861"
+      },
+      "density_unchanged": true
+    },
+    {
+      "name": "standard_surface12",
+      "solvation_energy_hartree": -0.1606641290498463,
+      "homo": -0.39777787663427533,
+      "lumo": -0.1622133129836339,
+      "gap_hartree": 0.23556456365064143,
+      "occupied_subspace_loss": 0.0008336874742980172,
+      "forward_iterations": 42,
+      "adjoint_iterations": 36,
+      "fock": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-standard-cavity-v1/standard_surface12_fock.npy",
+        "sha256": "5d8fc7e70971c48ef1dd0184ba7b12ff524b59642c79447afbd075e8c8b56a26"
+      },
+      "density_unchanged": true
+    }
+  ],
+  "surface_solvent_shift_kcal_mol": -0.4325798844514124,
+  "decision": "StandardUFF1.1 avoids occupied-space collapse at tested frozen density; positive gap remains0.236Eh at fine surface, but numerical sensitivity is not certified. One same-fine-grid SCF from saved orbitals with standard cavity is justified as distinct model feasibility. No radius sweep or fitting; stop/review on failure.",
+  "minimum_certified": false,
+  "simulation_ready": false
+}

@@ -1,0 +1,30 @@
+{
+  "wake_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-release-control-v1-service/completion_wake_ack.json",
+    "sha256": "4426af0b62c672751b101d0739803f8bdeab139c2607be224a880752679f04ee"
+  },
+  "failure_replay": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-release-control-v1/failure_audit.json",
+    "sha256": "174686fdb16f238f587ceb5408c0248abe683be2d78b22d267c080013557183b"
+  },
+  "attribution": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-release-control-v1/displacement_diagnostic.json",
+    "sha256": "f1c4bac4f0e6e69db65b9549cacca9e421adfb47e3ac2e0ebce7f427e06bed0e"
+  },
+  "versioned_review": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/release-dynamics-review-v2/assessment.json",
+    "sha256": "30c9de75e5d6e2dc68b200098586090c4e049dfa6bc3382a9939da349687c630"
+  },
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-release-control-finish-v2/launch_receipt.json",
+    "sha256": "faac8695fd74de8c140b43af384effd0fbf67f60d23b6da05ab117907230e1d0"
+  },
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-release-control-finish-v2/handoff.json",
+    "sha256": "0f26c548bf7f81e3d9f7cf436ace712193cd2162944d850171f6fe2f705a6d2f"
+  },
+  "policy_change": "Static initial placement retains3.5A acceptance; corrected28-base absolute displacement becomes diagnostic during dynamics. Structural integrity thresholds unchanged. Both original failed services preserved. No claim that original gate passed.",
+  "minimum_certified": false,
+  "simulation_ready": false,
+  "cloud_spending_usd": 0
+}

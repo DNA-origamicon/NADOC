@@ -1,0 +1,51 @@
+{
+  "at": "2026-10-14T17:05:05.740172+00:00",
+  "ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v6-service/completion_wake_ack.json",
+    "sha256": "26a0057d7e1849c99189b274b3c5e211d972b5dae57a0c876df69810e376867c"
+  },
+  "constrained_construction_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v6/completion_audit.json",
+    "sha256": "f94a2bef2778a849a0ebcb8f72f10220c4dd85a4764ff663deed0ecb44c16846"
+  },
+  "decision": "Do not promote the stationary1xT placement:15.007A base displacement fails existing3.5A application screen. No more vacuum relaxation of that branch. Use existing corrected-isomer-compatible2xT precursor as an isolated conditional engineering context.",
+  "selection": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-context-v2/assessment.json",
+    "sha256": "25a47ce69ecc44b6160e8641b7341645dedd16e60e82f3d7efb3947ceb60b9b5"
+  },
+  "source_format_repair": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-context-v2/source_psf_format_repair.json",
+    "sha256": "63adc977e5bed4492967946d023ba9e7701e13c266b15a101b93b02911a5ca2b"
+  },
+  "solvation": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-solvent-v1/assembly.json",
+    "sha256": "1212a5565d87116f57944767055ed96602e6d68510993eb2d962b4c5fd718444"
+  },
+  "shared_solvent": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-solvent-v1/shared_solvent_audit.json",
+    "sha256": "b73c0c6fc41e1d63b2cb26484b5a102f2966d8dc68b9337532effd137246d997"
+  },
+  "active_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-solvent-minimize-anti-v1/plan.json",
+    "sha256": "b1eab54fbf0d358dff872ca34d74f69be6fc5ae52a6cdd852b9c1e793696e283"
+  },
+  "launch": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-solvent-minimize-anti-v1/launch_receipt.json",
+    "sha256": "da0de18c282cca114eb2a7ca689217216c9611dd50848f6baca7d1f6cf183ca7"
+  },
+  "verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/formation-solvent-minimize-anti-v1/launch_verification.json",
+    "sha256": "44275fe4d99b8f9ebd664d0314dbee00e5f957a6e587f20472736275ff393988"
+  },
+  "times_denver": {
+    "start_epoch": "2026-10-14T11:04:03.859391-06:00",
+    "hard_deadline_epoch": "2026-10-14T12:04:03.859391-06:00",
+    "review_deadline_epoch": "2026-10-14T11:59:03.859391-06:00"
+  },
+  "wake_token": "bae35099-9d0d-4c95-a9f7-246c10e8d01c",
+  "remaining": "Audit native solvation/minimization checkpoints and frame geometry before admitting matched control pilot, conditioned native CPU/GPU/PME qualification and short restart/startup MD. Preserve all parameter accuracy and source-ensemble limitations. No melting or population inference.",
+  "simulation_ready": false,
+  "minimum_certified": false,
+  "cloud_spending_usd": 0,
+  "periodic_polling": false
+}

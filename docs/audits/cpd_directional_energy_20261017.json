@@ -1,0 +1,942 @@
+{
+  "at": "2026-10-17T22:39:18+00:00",
+  "passed": true,
+  "auditor": {
+    "path": "/home/jojo/Work/NADOC/experiments/cpd_anti_additive/audit_directional_energy_v2.py",
+    "sha256": "8bd4bd6b3037e97e189e6fe5f2b1ffd6ca0e96b7d966f24ff0006f12f2687b88"
+  },
+  "plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/plan.json",
+    "sha256": "355fa31f418a9e9726c84dff529e8cc425e917dd02e99907492171641a27d9fc"
+  },
+  "expectations": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/expectations.json",
+    "sha256": "faace1f2a857fc1a7003a17065a313bc4c1478f9484f12c7b8bc83e72a46fe71"
+  },
+  "assessment": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/assessment.json",
+    "sha256": "5a11e97ce33b761adf31565941fba26924de08e86ebc2552483591da3879b4d2"
+  },
+  "rows": [
+    {
+      "point": "A_center",
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/A_center/output.dat",
+        "sha256": "c6746cfa79e84d5dbc8ec393a68734c44e981dc41f192879c49ff0e366118ecc"
+      },
+      "energy_hartree": -1366.1026733591043,
+      "mm_kcal_mol": -13.203460639125657,
+      "bond_error_A": 0.0,
+      "angle_error_radians": 0.0,
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.2722432615087182,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.6919355327377363,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.245440884499653,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.681901015511474,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.8617718690897944,
+          1.0398568100525385
+        ],
+        "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      },
+      "max_force_kcal_mol_A": 40.23008283094544
+    },
+    {
+      "point": "A_minus2",
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/A_minus2/output.dat",
+        "sha256": "8ec98c49d1d3bedf33f1a493f48f02788e8506c1e07f4b40a5073d01fefe252f"
+      },
+      "energy_hartree": -1366.1024937419347,
+      "mm_kcal_mol": -13.201305201095533,
+      "bond_error_A": 7.771561172376096e-16,
+      "angle_error_radians": 4.440892098500626e-16,
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.2722432615087182,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.6919355327377363,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.245440884499653,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.681901015511474,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.8617718690897944,
+          1.039856810052538
+        ],
+        "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      },
+      "max_force_kcal_mol_A": 40.20828083947558
+    },
+    {
+      "point": "A_plus2",
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/A_plus2/output.dat",
+        "sha256": "d079078a556adb1d587f022cb8275c746ad297cb3d0a22545e0002e778b54321"
+      },
+      "energy_hartree": -1366.1026867265325,
+      "mm_kcal_mol": -13.142163968953126,
+      "bond_error_A": 8.881784197001252e-16,
+      "angle_error_radians": 6.661338147750939e-16,
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.2722432615087182,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.6919355327377363,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.245440884499653,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.681901015511474,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.8617718690897944,
+          1.0398568100525376
+        ],
+        "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      },
+      "max_force_kcal_mol_A": 40.25104147275292
+    },
+    {
+      "point": "A_minus4",
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/A_minus4/output.dat",
+        "sha256": "a242800ade6bc8158ae4105f7d8eebd65b67fbafff268b3e213e6df111dfe4ad"
+      },
+      "energy_hartree": -1366.102119452373,
+      "mm_kcal_mol": -13.118458064967932,
+      "bond_error_A": 4.440892098500626e-16,
+      "angle_error_radians": 4.440892098500626e-16,
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.2722432615087182,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.6919355327377363,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.245440884499653,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.681901015511474,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.8617718690897944,
+          1.0398568100525387
+        ],
+        "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      },
+      "max_force_kcal_mol_A": 40.185532201081664
+    },
+    {
+      "point": "A_plus4",
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/A_plus4/output.dat",
+        "sha256": "45d310faaceedde53e30bdad03a8d877065a1ea8ad4a513cfa32d5466e7f7fcb"
+      },
+      "energy_hartree": -1366.1025581763492,
+      "mm_kcal_mol": -13.029446885954147,
+      "bond_error_A": 6.661338147750939e-16,
+      "angle_error_radians": 1.1102230246251565e-15,
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.2722432615087182,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.6919355327377363,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.245440884499653,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.681901015511474,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.8617718690897944,
+          1.0398568100525392
+        ],
+        "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      },
+      "max_force_kcal_mol_A": 40.27123181163423
+    },
+    {
+      "point": "B_center",
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/B_center/output.dat",
+        "sha256": "ee98e87946e37b2b9155f98b5037fbe98d9d1a5e672a92e7bfe11bd77e7df745"
+      },
+      "energy_hartree": -1366.1055182524944,
+      "mm_kcal_mol": -23.13049262093638,
+      "bond_error_A": 0.0,
+      "angle_error_radians": 2.220446049250313e-16,
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.258070617870612,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.6984493604065996,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.288333728677519,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.6882611825507399,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.8620267640281999,
+          1.0401561970423212
+        ],
+        "minimum_nonbonded_covalent_ratio": 1.3996725497179916,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      },
+      "max_force_kcal_mol_A": 38.60916277371229
+    },
+    {
+      "point": "B_minus2",
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/B_minus2/output.dat",
+        "sha256": "99e25489abea49a4691ecb0142cae4809933fcff0c4260b975a71095829179f7"
+      },
+      "energy_hartree": -1366.1052739805643,
+      "mm_kcal_mol": -23.098528320758135,
+      "bond_error_A": 4.440892098500626e-16,
+      "angle_error_radians": 6.661338147750939e-16,
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.258070617870612,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.6984493604065996,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.288333728677519,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.6882611825507399,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.8620267640281999,
+          1.040156197042321
+        ],
+        "minimum_nonbonded_covalent_ratio": 1.3996725497179916,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      },
+      "max_force_kcal_mol_A": 38.5651579414934
+    },
+    {
+      "point": "B_plus2",
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/B_plus2/output.dat",
+        "sha256": "2e7fd57c44c142e82ec0b39786c69b4a3941bc767771a1d7af1a7c7f56395c4c"
+      },
+      "energy_hartree": -1366.105645649922,
+      "mm_kcal_mol": -23.096943343923233,
+      "bond_error_A": 2.220446049250313e-16,
+      "angle_error_radians": 4.440892098500626e-16,
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.258070617870612,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.6984493604065996,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.288333728677519,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.6882611825507399,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.8620267640281999,
+          1.0401561970423212
+        ],
+        "minimum_nonbonded_covalent_ratio": 1.3996725497179916,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      },
+      "max_force_kcal_mol_A": 38.65366785234399
+    },
+    {
+      "point": "B_minus4",
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/B_minus4/output.dat",
+        "sha256": "77ccaacdfa16bd4fcd17aacf958b2e6a1e24c3668f76c57baba1f6db86138ee7"
+      },
+      "energy_hartree": -1366.1049231654872,
+      "mm_kcal_mol": -23.007738647967372,
+      "bond_error_A": 4.440892098500626e-16,
+      "angle_error_radians": 4.440892098500626e-16,
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.258070617870612,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.6984493604065996,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.288333728677519,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.6882611825507399,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.8620267640281999,
+          1.040156197042321
+        ],
+        "minimum_nonbonded_covalent_ratio": 1.3996725497179916,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      },
+      "max_force_kcal_mol_A": 38.522044504056
+    },
+    {
+      "point": "B_plus4",
+      "native": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/directional-energy-v1/B_plus4/output.dat",
+        "sha256": "235993ada24d563546065c73fdb1db1c80c12ad241ec7e7115f04f68287d89ed"
+      },
+      "energy_hartree": -1366.1056461202006,
+      "mm_kcal_mol": -22.99199783463626,
+      "bond_error_A": 9.992007221626409e-16,
+      "angle_error_radians": 4.440892098500626e-16,
+      "identity": {
+        "passed": true,
+        "signed_centers": [
+          {
+            "atom": "1:C5",
+            "volume_A3": 2.258070617870612,
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "volume_A3": -1.6984493604065996,
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "volume_A3": 2.288333728677519,
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "volume_A3": -1.6882611825507399,
+            "passed": true
+          }
+        ],
+        "coordinate_chiral_tags_match": true,
+        "covalent_ratio_range": [
+          0.8620267640281999,
+          1.0401561970423214
+        ],
+        "minimum_nonbonded_covalent_ratio": 1.3996725497179916,
+        "sugar_centers": [
+          {
+            "atom": "1:C1'",
+            "expected_tag": "CHI_TETRAHEDRAL_CCW",
+            "actual_tag": "CHI_TETRAHEDRAL_CCW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C3'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          },
+          {
+            "atom": "1:C4'",
+            "expected_tag": "CHI_TETRAHEDRAL_CW",
+            "actual_tag": "CHI_TETRAHEDRAL_CW",
+            "preserved": true
+          }
+        ]
+      },
+      "max_force_kcal_mol_A": 38.69824904510287
+    }
+  ],
+  "derivatives": [
+    {
+      "background": "A",
+      "step_degrees": 2,
+      "qm_slope": -1.7346249041848354,
+      "qm_curvature": 85.61828788604106,
+      "mm_slope": 0.8471357492408417,
+      "mm_curvature": 52.07524593232749
+    },
+    {
+      "background": "A",
+      "step_degrees": 4,
+      "qm_slope": -1.9717157326400323,
+      "qm_curvature": 86.14494042361986,
+      "mm_slope": 0.6374956108716614,
+      "mm_curvature": 53.143777757070765
+    },
+    {
+      "background": "B",
+      "step_degrees": 2,
+      "qm_slope": -3.3407169867959823,
+      "qm_curvature": 60.19013756060697,
+      "mm_slope": 0.02270312081647356,
+      "mm_curvature": 53.76709680397206
+    },
+    {
+      "background": "B",
+      "step_degrees": 4,
+      "qm_slope": -3.249107091578148,
+      "qm_curvature": 60.154253918957465,
+      "mm_slope": 0.1127352712470094,
+      "mm_curvature": 53.60181786633674
+    }
+  ],
+  "expectation_passed": {
+    "E1": false,
+    "E2": false,
+    "E3": true,
+    "E4": false,
+    "E5": false
+  },
+  "expectation_details": [
+    {
+      "id": "E1",
+      "background": "A",
+      "value": 1.0345378756339245e-05,
+      "passed": false
+    },
+    {
+      "id": "E4",
+      "background": "A",
+      "offset": -4,
+      "value": -0.2625791474702205,
+      "passed": false
+    },
+    {
+      "id": "E4",
+      "background": "A",
+      "offset": -2,
+      "value": -0.11055603758491166,
+      "passed": true
+    },
+    {
+      "id": "E4",
+      "background": "A",
+      "offset": 2,
+      "value": 0.06968485801796148,
+      "passed": true
+    },
+    {
+      "id": "E4",
+      "background": "A",
+      "offset": 4,
+      "value": 0.10173548312709024,
+      "passed": true
+    },
+    {
+      "id": "E3",
+      "background": "A",
+      "step": 2,
+      "passed": true
+    },
+    {
+      "id": "E5",
+      "background": "A",
+      "step": 2,
+      "value": -33.54304195371357,
+      "threshold": 17.123657577208213,
+      "passed": false
+    },
+    {
+      "id": "E3",
+      "background": "A",
+      "step": 4,
+      "passed": true
+    },
+    {
+      "id": "E5",
+      "background": "A",
+      "step": 4,
+      "value": -33.00116266654909,
+      "threshold": 17.228988084723973,
+      "passed": false
+    },
+    {
+      "id": "E2",
+      "background": "A",
+      "quantity": "qm_slope",
+      "value": -0.2370908284551969,
+      "threshold": 0.2,
+      "passed": false
+    },
+    {
+      "id": "E2",
+      "background": "A",
+      "quantity": "qm_curvature",
+      "value": 0.5266525375787978,
+      "threshold": 8.561828788604107,
+      "passed": true
+    },
+    {
+      "id": "E2",
+      "background": "A",
+      "quantity": "mm_slope",
+      "value": -0.20964013836918027,
+      "threshold": 0.2,
+      "passed": false
+    },
+    {
+      "id": "E2",
+      "background": "A",
+      "quantity": "mm_curvature",
+      "value": 1.0685318247432747,
+      "threshold": 5.207524593232749,
+      "passed": true
+    },
+    {
+      "id": "E1",
+      "background": "B",
+      "value": -8.062797946719406e-07,
+      "passed": true
+    },
+    {
+      "id": "E4",
+      "background": "B",
+      "offset": -4,
+      "value": -0.2506687619666331,
+      "passed": false
+    },
+    {
+      "id": "E4",
+      "background": "B",
+      "offset": -2,
+      "value": -0.12131865021618068,
+      "passed": true
+    },
+    {
+      "id": "E4",
+      "background": "B",
+      "offset": 2,
+      "value": 0.1134923698062967,
+      "passed": true
+    },
+    {
+      "id": "E4",
+      "background": "B",
+      "offset": 4,
+      "value": 0.21873298334796543,
+      "passed": true
+    },
+    {
+      "id": "E3",
+      "background": "B",
+      "step": 2,
+      "passed": true
+    },
+    {
+      "id": "E5",
+      "background": "B",
+      "step": 2,
+      "value": -6.4230407566349115,
+      "threshold": 12.038027512121396,
+      "passed": true
+    },
+    {
+      "id": "E3",
+      "background": "B",
+      "step": 4,
+      "passed": true
+    },
+    {
+      "id": "E5",
+      "background": "B",
+      "step": 4,
+      "value": -6.5524360526207275,
+      "threshold": 12.030850783791493,
+      "passed": true
+    },
+    {
+      "id": "E2",
+      "background": "B",
+      "quantity": "qm_slope",
+      "value": 0.09160989521783414,
+      "threshold": 0.33407169867959824,
+      "passed": true
+    },
+    {
+      "id": "E2",
+      "background": "B",
+      "quantity": "qm_curvature",
+      "value": -0.035883641649505194,
+      "threshold": 6.019013756060698,
+      "passed": true
+    },
+    {
+      "id": "E2",
+      "background": "B",
+      "quantity": "mm_slope",
+      "value": 0.09003215043053583,
+      "threshold": 0.2,
+      "passed": true
+    },
+    {
+      "id": "E2",
+      "background": "B",
+      "quantity": "mm_curvature",
+      "value": -0.1652789376353212,
+      "threshold": 5.376709680397206,
+      "passed": true
+    }
+  ],
+  "budget": {
+    "at": "2026-10-17T22:38:49+00:00",
+    "native_calls": 10,
+    "native_seconds": 1857.8038121419959,
+    "timings": [
+      {
+        "point": "A_center",
+        "seconds": 188.79571125400253,
+        "returncode": 0
+      },
+      {
+        "point": "A_minus2",
+        "seconds": 182.8751256010146,
+        "returncode": 0
+      },
+      {
+        "point": "A_plus2",
+        "seconds": 186.24092048296006,
+        "returncode": 0
+      },
+      {
+        "point": "A_minus4",
+        "seconds": 184.98777787503786,
+        "returncode": 0
+      },
+      {
+        "point": "A_plus4",
+        "seconds": 185.4901789149735,
+        "returncode": 0
+      },
+      {
+        "point": "B_center",
+        "seconds": 186.43261939298827,
+        "returncode": 0
+      },
+      {
+        "point": "B_minus2",
+        "seconds": 190.80937390698818,
+        "returncode": 0
+      },
+      {
+        "point": "B_plus2",
+        "seconds": 185.38391277799383,
+        "returncode": 0
+      },
+      {
+        "point": "B_minus4",
+        "seconds": 183.77860490005696,
+        "returncode": 0
+      },
+      {
+        "point": "B_plus4",
+        "seconds": 183.00958703598008,
+        "returncode": 0
+      }
+    ]
+  },
+  "scope": "Neutral49atom free-OH/N1-methyl fragment, both canonical local backgrounds, fixed internal geometry except exocyclic torsion +/-4deg. No MD, fit, minimum certification or production promotion.",
+  "interpretation": "Compare each registered expectation explicitly. Local energy-response agreement alone cannot establish NAMD stability, DNA behavioral equivalence, equilibrium populations, or a transferable parameter family."
+}

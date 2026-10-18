@@ -1,0 +1,285 @@
+{
+  "at": "2026-10-17T20:17:29+00:00",
+  "passed": true,
+  "script": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_cross_preflight_v2.py",
+    "sha256": "c11fada2cded6323f9b0966c61af99c0bff627bf2279689679d5b21ac033f718"
+  },
+  "checks": [
+    {
+      "name": "original_background_alternate_exo",
+      "projected_gradient_max": 1.4187585055367979e-05,
+      "bond_ratio_range": [
+        0.994958833197281,
+        1.0171035317490158
+      ],
+      "fixed_atoms_unchanged": true
+    },
+    {
+      "name": "alternate_background_original_exo",
+      "projected_gradient_max": 2.353201850013864e-05,
+      "bond_ratio_range": [
+        0.9852341356987194,
+        1.016667166433854
+      ],
+      "fixed_atoms_unchanged": true
+    }
+  ],
+  "limitation": "Fixed endpoint background includes more than ring pucker; cap orientation and branch relaxation may couple. Diagnostic conditional contrasts only; not globally minimized surfaces or a fit dataset.",
+  "relaxation": {
+    "at": "2026-10-17T20:17:03+00:00",
+    "rows": [
+      {
+        "name": "original_background_alternate_exo",
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v2/original_qm_bohr.npy",
+          "sha256": "86ed1878086e2634bbf6778102a45cbbdfa3db82515c34bc72e91dcf69967959"
+        },
+        "success": true,
+        "message": "Optimization terminated successfully",
+        "iterations": 50,
+        "target_degrees": 46.404883021905775,
+        "torsion_error": 2.3021584638627246e-12,
+        "moving_atoms": [
+          "1:O5'",
+          "1:C5'",
+          "1:HO5'",
+          "1:H5'",
+          "1:H5''"
+        ],
+        "max_displacement_component": 1.5185543386936304,
+        "projected_gradient_max": 1.4187585055367979e-05,
+        "minimum_bond_margin_A": 0.09250077871922702,
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.2722432615087182,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6919355327377363,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.245440884499653,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.681901015511474,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.8617718690897944,
+            1.0399237784869424
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.3959959443573027,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "before_energy": 8.970143357076113,
+        "after_energy": -11.993929566454172,
+        "before_parts": {
+          "0:HarmonicBondForce": 2.8349744446760843,
+          "1:HarmonicAngleForce": 40.69447406487549,
+          "2:HarmonicBondForce": 0.747692652621204,
+          "3:PeriodicTorsionForce": 82.68890744206692,
+          "4:CustomTorsionForce": 0.1573837836784025,
+          "5:CMAPTorsionForce": 0.0,
+          "6:NonbondedForce": -118.15328903084198
+        },
+        "after_parts": {
+          "0:HarmonicBondForce": 2.8864760396895774,
+          "1:HarmonicAngleForce": 43.7403408277717,
+          "2:HarmonicBondForce": 0.9340895911033573,
+          "3:PeriodicTorsionForce": 83.76262405125007,
+          "4:CustomTorsionForce": 0.1573837836784025,
+          "5:CMAPTorsionForce": 0.0,
+          "6:NonbondedForce": -143.4748438599473
+        },
+        "before_O5_O4": 2.458596277102658,
+        "after_O5_O4": 2.6440403975371303
+      },
+      {
+        "name": "alternate_background_original_exo",
+        "source": {
+          "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-basis-check-v2/alternate_qm_bohr.npy",
+          "sha256": "c00d80f5000a49f06a1eaf2d09380761c776608559b3a427dc1921749fd1a1c1"
+        },
+        "success": true,
+        "message": "Optimization terminated successfully",
+        "iterations": 43,
+        "target_degrees": 175.7117093182877,
+        "torsion_error": 1.1084466677857563e-12,
+        "moving_atoms": [
+          "1:O5'",
+          "1:C5'",
+          "1:HO5'",
+          "1:H5'",
+          "1:H5''"
+        ],
+        "max_displacement_component": 1.0641638101703315,
+        "projected_gradient_max": 2.353201850013864e-05,
+        "minimum_bond_margin_A": 0.08339731587075594,
+        "identity": {
+          "passed": true,
+          "signed_centers": [
+            {
+              "atom": "1:C5",
+              "volume_A3": 2.258070617870612,
+              "passed": true
+            },
+            {
+              "atom": "1:C6",
+              "volume_A3": -1.6984493604065996,
+              "passed": true
+            },
+            {
+              "atom": "2:C5",
+              "volume_A3": 2.288333728677519,
+              "passed": true
+            },
+            {
+              "atom": "2:C6",
+              "volume_A3": -1.6882611825507399,
+              "passed": true
+            }
+          ],
+          "coordinate_chiral_tags_match": true,
+          "covalent_ratio_range": [
+            0.8620267640281999,
+            1.0411818234821206
+          ],
+          "minimum_nonbonded_covalent_ratio": 1.3996725497179916,
+          "sugar_centers": [
+            {
+              "atom": "1:C1'",
+              "expected_tag": "CHI_TETRAHEDRAL_CCW",
+              "actual_tag": "CHI_TETRAHEDRAL_CCW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C3'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            },
+            {
+              "atom": "1:C4'",
+              "expected_tag": "CHI_TETRAHEDRAL_CW",
+              "actual_tag": "CHI_TETRAHEDRAL_CW",
+              "preserved": true
+            }
+          ]
+        },
+        "before_energy": -12.16069480284622,
+        "after_energy": -16.387662392309,
+        "before_parts": {
+          "0:HarmonicBondForce": 2.8628707093864234,
+          "1:HarmonicAngleForce": 39.6693658534272,
+          "2:HarmonicBondForce": 0.842950936806735,
+          "3:PeriodicTorsionForce": 85.30114528032182,
+          "4:CustomTorsionForce": 0.14776283110764316,
+          "5:CMAPTorsionForce": 0.0,
+          "6:NonbondedForce": -140.98479041389604
+        },
+        "after_parts": {
+          "0:HarmonicBondForce": 2.65910667226406,
+          "1:HarmonicAngleForce": 39.08036166317723,
+          "2:HarmonicBondForce": 0.74651713683346,
+          "3:PeriodicTorsionForce": 85.822783328735,
+          "4:CustomTorsionForce": 0.14776283110764316,
+          "5:CMAPTorsionForce": 0.0,
+          "6:NonbondedForce": -144.84419402442643
+        },
+        "before_O5_O4": 4.1442287367328285,
+        "after_O5_O4": 4.139329321280854
+      }
+    ],
+    "passed": true,
+    "method": "Independent SLSQP exact torsion equality with covalent bond inequalities90-110percent of starting lengths; accepted only with inactive inequalities and low projected force. Core/sugar ring fixed, graph-defined exocyclic branch free. Analytic OpenMM Reference gradient; finite-difference constraint normal. No parameter change.",
+    "script": {
+      "path": "/home/jojo/Work/NADOC/experiments/cpd_anti_additive/endpoint_ring_exocyclic_cross_v2.py",
+      "sha256": "43ef898b31f06e648812b4f96382000d1e26559dc21364427968253c49dd66c5"
+    },
+    "minimum_certified": false
+  },
+  "launch": {
+    "at": "2026-10-17T20:17:29.714088+00:00",
+    "plan": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-cross-v2/plan.json",
+      "sha256": "32c20a09900e8d146b7422331361552395767ec10474f2a58cebce1a515b5705"
+    },
+    "command": [
+      "systemd-run",
+      "--user",
+      "--unit=cpd-corrected-endpoint-ring-exocyclic-cross-v2",
+      "-p",
+      "MemoryMax=12G",
+      "-p",
+      "MemorySwapMax=0",
+      "-p",
+      "CPUQuota=400%",
+      "-p",
+      "RuntimeMaxSec=7485",
+      "-p",
+      "TimeoutStopSec=15",
+      "--setenv=PYTHONPATH=/home/jojo/Work/NADOC",
+      "--setenv=NADOC_REPO_ROOT=/home/jojo/Work/NADOC",
+      "--setenv=OPENBLAS_NUM_THREADS=1",
+      "--setenv=MKL_NUM_THREADS=1",
+      "--setenv=OMP_NUM_THREADS=4",
+      "--setenv=PYTHONDONTWRITEBYTECODE=1",
+      "--setenv=TMPDIR=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-cross-v2/tmp",
+      "--setenv=PSI_SCRATCH=/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-cross-v2/scratch",
+      "/usr/bin/python3",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-cross-v2-service/supervisor.py",
+      "--supervise",
+      "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-cross-v2-service"
+    ],
+    "watcher": {
+      "token": "e6da73ce-14a7-4b74-9ac6-465f27e9d068",
+      "thread": "01a11042-d818-7843-9d63-585e85346578",
+      "deliveries": [],
+      "armed_at": 1792268249.7071543,
+      "expected_seconds": 900,
+      "supervisor_pid": 3128457,
+      "supervisor_identity": "32334501",
+      "state": "armed",
+      "watcher_pid": 3128459,
+      "codex_executable": "/home/jojo/.vscode/extensions/openai.chatgpt-26.1007.21434-linux-x64/bin/linux-x86_64/codex",
+      "overdue_seconds": 1350.0,
+      "active_deadline_id": "endpoint-ring-exocyclic-cross-v2-review",
+      "active_deadline_epoch": 1792275149.6388323
+    },
+    "limits": "RuntimeMaxUSec=2h 4min 45s\nCPUQuotaPerSecUSec=4s\nMemoryMax=12884901888\nMemorySwapMax=0\nActiveState=active\n",
+    "hard_stop_epoch": 1792275749.6388323,
+    "review_epoch": 1792275149.6388323,
+    "cloud_spending_usd": 0
+  },
+  "preserved_failure": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ring-exocyclic-cross-v1/original_background_alternate_exo_relaxation.json"
+}

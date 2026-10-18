@@ -2,6 +2,7 @@ import { createModal } from './primitives/modal.js'
 import { el } from './primitives/dom.js'
 import { attachmentMetrics, elementStatus, STATUS, validateSnapshot } from './cpd_progress_model.js'
 import { drawStructure, svgElement } from './cpd_progress_diagram.js'
+import { renderProgressOverview } from './cpd_progress_overview.js'
 import './cpd_progress.css'
 
 export function showCpdProgress({ load = () => fetch('/cpd-progress.json', { cache: 'no-store' }).then(r => {
@@ -12,6 +13,7 @@ export function showCpdProgress({ load = () => fetch('/cpd-progress.json', { cac
   let torsions = [0, 0]
   const body = el('div', { className: 'cpd-progress' })
   const status = el('p', { text: 'Loading CPD evidence…', attrs: { role: 'status' } })
+  const overview = el('section', { className: 'cpd-progress__overview', attrs: { 'aria-label': 'Current CPD progress' } })
   const select = el('select', { attrs: { 'aria-label': 'Photoproduct structure' } })
   const scope = el('select', { attrs: { 'aria-label': 'Validation scope' }, children: [
     el('option', { text: 'Overall readiness', attrs: { value: 'overall' } }),
@@ -44,7 +46,7 @@ export function showCpdProgress({ load = () => fetch('/cpd-progress.json', { cac
   const hint = el('p', { text: 'Drag to rotate · scroll to zoom · hover or Tab for details · click or Enter to pin.' })
   const legend = el('div', { className: 'cpd-progress__legend', children: Object.entries(STATUS).map(([, s]) => el('span', { text: `● ${s.label}`, attrs: { style: `color:${s.color}` } })) })
   const validationHint = el('p', { text: 'Green means all available local checks pass only when that scope is selected. Overall readiness stays incomplete until DNA validation is complete.' })
-  body.append(status, gallery, el('div', { className: 'cpd-progress__toolbar', children: [select, scope, refresh, reset, unpin] }), legend,
+  body.append(status, overview, gallery, el('div', { className: 'cpd-progress__toolbar', children: [select, scope, refresh, reset, unpin] }), legend,
     validationHint,
     description, contextControls, contextLegend, metrics, el('div', { className: 'cpd-progress__layout', children: [svg, details] }), hint)
   const modal = createModal({ title: 'CPD progress', size: 'xl', body, className: 'cpd-progress-modal', onClose: () => { generation++; drag = null } })
@@ -59,7 +61,7 @@ export function showCpdProgress({ load = () => fetch('/cpd-progress.json', { cac
     details.replaceChildren(heading, summary)
     if (model.stereochemistry) details.append(el('p', { text: `${model.qualification}. Ordered C5 configurations: ${model.orderedC5.join(' / ')}. Endpoints 1 and 2 keep their identities; this preview does not assume that they belong to the same strand.` }))
     if (!local.length) details.append(el('p', { text: 'No atom-specific or bond-specific check has been recorded. This is not a pass.' }))
-    const render = checks => {
+    const render = (checks, target = details) => {
       for (const c of checks) {
         const card = el('div', { className: `cpd-progress__check cpd-progress__check--${c.state}`, children: [
           el('strong', { text: `${c.state.toUpperCase()} · ${c.label}` }),
@@ -70,12 +72,18 @@ export function showCpdProgress({ load = () => fetch('/cpd-progress.json', { cac
           const src = data.sources[c.evidence]
           card.append(el('details', { children: [el('summary', { text: 'Evidence source' }), el('code', { text: src.file }), el('code', { text: `SHA-256 ${src.sha256}` })] }))
         }
-        details.append(card)
+        target.append(card)
       }
     }
     render(local)
-    details.append(el('h4', { text: 'Shared model checks and remaining work' }))
-    render(model.checks)
+    const archived = data.progress?.historicalModelIds.includes(model.id) || data.progress?.historicalPreviewIds.includes(model.id)
+    const shared = el('details', { className: 'cpd-progress__study-checks', children: [
+      el('summary', { text: `Structure checks and earlier studies (${model.checks.length})` }),
+      el('p', { text: `Saved study evidence: ${data.generatedAt.slice(0, 10)}. Current campaign status is summarized above.` }),
+      ...(archived && data.progress ? [el('p', { className: 'cpd-progress__historical-warning', text: data.progress.historicalWarning })] : []),
+    ] })
+    render(model.checks, shared)
+    details.append(shared)
   }
 
   function interactive(node, item, kind) {
@@ -108,7 +116,8 @@ export function showCpdProgress({ load = () => fetch('/cpd-progress.json', { cac
     for (const node of [contextControls, contextLegend, metrics]) node.hidden = !isomer
     legend.hidden = validationHint.hidden = isomer; scope.disabled = isomer
     for (const card of gallery.children) card.setAttribute('aria-pressed', String(card.dataset.isomer === model.id))
-    description.textContent = model.geometry
+    const historical = data.progress?.historicalModelIds.includes(model.id) || data.progress?.historicalPreviewIds.includes(model.id)
+    description.textContent = historical ? `${data.progress.historicalWarning} ${model.geometry}` : model.geometry
     draw(); showDetails(model.atoms[0], 'Atom')
   }
   select.addEventListener('change', choose)
@@ -136,13 +145,16 @@ export function showCpdProgress({ load = () => fetch('/cpd-progress.json', { cac
         const thumbnail = svgElement('svg', { viewBox: '0 0 660 480', 'aria-hidden': 'true' })
         drawStructure(thumbnail, m, { radius, zoom: 1.35, miniature: true })
         return el('button', { className: 'cpd-progress__isomer', dataset: { isomer: m.id }, attrs: { 'aria-label': `Inspect ${m.label}`, 'aria-pressed': false }, children: [
-          thumbnail, el('strong', { text: m.label.replace(' TT-CPD', '') }), el('small', { text: m.qualification }),
+          thumbnail, el('strong', { text: m.label.replace(' TT-CPD', '') }), el('small', { text: data.progress?.historicalPreviewIds.includes(m.id) ? 'Historical illustration · prior identity' : m.qualification }),
         ], on: { click: () => { select.value = m.id; choose() } } })
       }))
-      status.textContent = `Evidence snapshot: ${new Date(data.generatedAt).toLocaleString()}. ${data.summary} This is a saved evidence report, not live job monitoring.`
+      renderProgressOverview(overview, data)
+      status.textContent = data.progress
+        ? `Progress reviewed ${data.progress.reviewedAt} · saved report, not live job monitoring.`
+        : `Evidence snapshot: ${new Date(data.generatedAt).toLocaleString()}. ${data.summary} This is a saved evidence report, not live job monitoring.`
       choose()
     } catch (e) {
-      if (modal.isOpen() && token === generation) { model = null; gallery.replaceChildren(); svg.replaceChildren(); details.replaceChildren(); status.textContent = `Could not load CPD progress: ${e.message}. Reload to retry.` }
+      if (modal.isOpen() && token === generation) { model = null; overview.replaceChildren(); gallery.replaceChildren(); svg.replaceChildren(); details.replaceChildren(); status.textContent = `Could not load CPD progress: ${e.message}. Reload to retry.` }
     } finally { if (token === generation) refresh.disabled = false }
   }
   reload()

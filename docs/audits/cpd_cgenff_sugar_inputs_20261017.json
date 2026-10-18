@@ -1,0 +1,349 @@
+{
+  "source": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-sugar-inputs-v1/prepare_v3.py",
+    "sha256": "ea437176a5db7e47f90c021eaaa3d24f00c1ca69e26d46e5e87d4996e7e00875"
+  },
+  "sugar_template": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-seeds-v2/endpoint-1/seed-1/seed.sdf",
+    "sha256": "80da43955d5413d2d9ca2b2609e64b9712d0f008cb823ef4094b13d434734150"
+  },
+  "records": [
+    {
+      "product": "tt-cpd-cis-anti-i",
+      "atoms": 62,
+      "formal_charge": 0,
+      "stereocenters": [
+        {
+          "atom": "1:C5",
+          "volume": 2.2848456305720166,
+          "expected_sign": 1
+        },
+        {
+          "atom": "1:C6",
+          "volume": -1.4592948186694494,
+          "expected_sign": -1
+        },
+        {
+          "atom": "2:C5",
+          "volume": 2.0794978118291185,
+          "expected_sign": 1
+        },
+        {
+          "atom": "2:C6",
+          "volume": -1.563427086597783,
+          "expected_sign": -1
+        },
+        {
+          "atom": "1:C1'",
+          "volume": 2.416902726069551,
+          "expected_sign": 1
+        },
+        {
+          "atom": "1:C3'",
+          "volume": -2.4738188359982614,
+          "expected_sign": -1
+        },
+        {
+          "atom": "1:C4'",
+          "volume": 2.5817436029742837,
+          "expected_sign": 1
+        },
+        {
+          "atom": "2:C1'",
+          "volume": 2.4354992018471378,
+          "expected_sign": 1
+        },
+        {
+          "atom": "2:C3'",
+          "volume": -2.691906815043096,
+          "expected_sign": -1
+        },
+        {
+          "atom": "2:C4'",
+          "volume": 2.593454270639524,
+          "expected_sign": 1
+        }
+      ],
+      "embedding_history": [
+        {
+          "attempt": 0,
+          "incorrect_centers": [
+            "1:C6",
+            "2:C6",
+            "1:C1'",
+            "2:C1'"
+          ]
+        },
+        {
+          "attempt": 1,
+          "incorrect_centers": []
+        }
+      ],
+      "bond_lengths": [
+        0.9903606923209326,
+        1.5324858944425757
+      ],
+      "mol2_roundtrip_passed": true,
+      "mol2": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-sugar-inputs-v1/tt-cpd-cis-anti-i/input.mol2",
+        "sha256": "8356257e4905701acf4bb6b1dc773bea9b27ea64e953713d1fba37d136a171ae"
+      },
+      "sdf": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-sugar-inputs-v1/tt-cpd-cis-anti-i/input.sdf",
+        "sha256": "44c099adeb6a3c636694034fdaa9bed5335cad9ae68a571b9eaddb90f67ecc7b"
+      },
+      "mapping": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-sugar-inputs-v1/tt-cpd-cis-anti-i/atom_mapping.json",
+        "sha256": "e6c098d8fe01381ba719b4db9b55492f3e79e713c1c09343d899fc9c5c894dd8"
+      }
+    },
+    {
+      "product": "tt-cpd-trans-syn-i",
+      "atoms": 62,
+      "formal_charge": 0,
+      "stereocenters": [
+        {
+          "atom": "1:C5",
+          "volume": -1.9638990121636712,
+          "expected_sign": -1
+        },
+        {
+          "atom": "1:C6",
+          "volume": 1.642845163477315,
+          "expected_sign": 1
+        },
+        {
+          "atom": "2:C5",
+          "volume": -1.937958229394795,
+          "expected_sign": -1
+        },
+        {
+          "atom": "2:C6",
+          "volume": 1.508718865986449,
+          "expected_sign": 1
+        },
+        {
+          "atom": "1:C1'",
+          "volume": 2.4532509672594913,
+          "expected_sign": 1
+        },
+        {
+          "atom": "1:C3'",
+          "volume": -2.7539149861009946,
+          "expected_sign": -1
+        },
+        {
+          "atom": "1:C4'",
+          "volume": 2.475588692275498,
+          "expected_sign": 1
+        },
+        {
+          "atom": "2:C1'",
+          "volume": 2.381011773917054,
+          "expected_sign": 1
+        },
+        {
+          "atom": "2:C3'",
+          "volume": -2.6091862947716744,
+          "expected_sign": -1
+        },
+        {
+          "atom": "2:C4'",
+          "volume": 2.5575420103860225,
+          "expected_sign": 1
+        }
+      ],
+      "embedding_history": [
+        {
+          "attempt": 0,
+          "incorrect_centers": [
+            "1:C5",
+            "1:C1'",
+            "2:C1'"
+          ]
+        },
+        {
+          "attempt": 1,
+          "incorrect_centers": []
+        }
+      ],
+      "bond_lengths": [
+        0.9821229605999217,
+        1.5350623740644527
+      ],
+      "mol2_roundtrip_passed": true,
+      "mol2": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-sugar-inputs-v1/tt-cpd-trans-syn-i/input.mol2",
+        "sha256": "983b0cf1eef59b6c4407723708346066983789ea572dbe76bdefce26f5b5ea3a"
+      },
+      "sdf": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-sugar-inputs-v1/tt-cpd-trans-syn-i/input.sdf",
+        "sha256": "555394d33221f9c90338e0f4a550fc7882998c65c21113ceda39f5a7658f02f8"
+      },
+      "mapping": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-sugar-inputs-v1/tt-cpd-trans-syn-i/atom_mapping.json",
+        "sha256": "e6c098d8fe01381ba719b4db9b55492f3e79e713c1c09343d899fc9c5c894dd8"
+      }
+    },
+    {
+      "product": "tt-cpd-trans-syn-ii",
+      "atoms": 62,
+      "formal_charge": 0,
+      "stereocenters": [
+        {
+          "atom": "1:C5",
+          "volume": 1.9003131051836286,
+          "expected_sign": 1
+        },
+        {
+          "atom": "1:C6",
+          "volume": -1.5882393129518415,
+          "expected_sign": -1
+        },
+        {
+          "atom": "2:C5",
+          "volume": 1.7772135619106324,
+          "expected_sign": 1
+        },
+        {
+          "atom": "2:C6",
+          "volume": -1.4904608891258606,
+          "expected_sign": -1
+        },
+        {
+          "atom": "1:C1'",
+          "volume": 2.2424832991286934,
+          "expected_sign": 1
+        },
+        {
+          "atom": "1:C3'",
+          "volume": -2.5694823107921816,
+          "expected_sign": -1
+        },
+        {
+          "atom": "1:C4'",
+          "volume": 2.403089855655696,
+          "expected_sign": 1
+        },
+        {
+          "atom": "2:C1'",
+          "volume": 1.9967586011479472,
+          "expected_sign": 1
+        },
+        {
+          "atom": "2:C3'",
+          "volume": -2.647439371613428,
+          "expected_sign": -1
+        },
+        {
+          "atom": "2:C4'",
+          "volume": 2.492729427206197,
+          "expected_sign": 1
+        }
+      ],
+      "embedding_history": [
+        {
+          "attempt": 0,
+          "incorrect_centers": [
+            "1:C6",
+            "2:C5",
+            "2:C6",
+            "1:C1'",
+            "2:C1'"
+          ]
+        },
+        {
+          "attempt": 1,
+          "incorrect_centers": []
+        }
+      ],
+      "bond_lengths": [
+        0.9818095850848719,
+        1.5388384359428249
+      ],
+      "mol2_roundtrip_passed": true,
+      "mol2": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-sugar-inputs-v1/tt-cpd-trans-syn-ii/input.mol2",
+        "sha256": "f6756f7ce12a501ba18df286349238839e091687cc89cd246bc2fb4112453e2e"
+      },
+      "sdf": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-sugar-inputs-v1/tt-cpd-trans-syn-ii/input.sdf",
+        "sha256": "886593213e7ce00a637f20e4aacd23d5307c13c770621ec532d99f3e9b40e225"
+      },
+      "mapping": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-sugar-inputs-v1/tt-cpd-trans-syn-ii/atom_mapping.json",
+        "sha256": "e6c098d8fe01381ba719b4db9b55492f3e79e713c1c09343d899fc9c5c894dd8"
+      }
+    },
+    {
+      "product": "thymidine-reference",
+      "atoms": 31,
+      "formal_charge": 0,
+      "stereocenters": [
+        {
+          "atom": "1:C1'",
+          "volume": 1.9120289571522886,
+          "expected_sign": 1
+        },
+        {
+          "atom": "1:C3'",
+          "volume": -2.6096097402591494,
+          "expected_sign": -1
+        },
+        {
+          "atom": "1:C4'",
+          "volume": 2.5963684010661927,
+          "expected_sign": 1
+        }
+      ],
+      "embedding_history": [
+        {
+          "attempt": 0,
+          "incorrect_centers": [
+            "1:C1'"
+          ]
+        },
+        {
+          "attempt": 1,
+          "incorrect_centers": []
+        }
+      ],
+      "bond_lengths": [
+        0.9977615647478836,
+        1.5346155150254848
+      ],
+      "mol2_roundtrip_passed": true,
+      "mol2": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-sugar-inputs-v1/thymidine-reference/input.mol2",
+        "sha256": "a54604f74c36406c2833805d1eee699b8a94ea32d4ec8f91d42c62b10da5d032"
+      },
+      "sdf": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-sugar-inputs-v1/thymidine-reference/input.sdf",
+        "sha256": "5c99d21172bea4f6b005dffa5cb22035f73ed8c9de443eb8174de0904e4e7a80"
+      },
+      "mapping": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-sugar-inputs-v1/thymidine-reference/atom_mapping.json",
+        "sha256": "d9a7af6f3d112a75d9598d321da8dd162290189dbfaf834ceb787c1b420223b0"
+      }
+    }
+  ],
+  "scope": "Three neutral dinucleosides with 3prime/5prime OH ends and thymidine reference; no phosphodiester. Assignment inputs only, not optimized minima or NAMD candidates.",
+  "geometry_method": "RDKit ETKDG, stereo tags chosen to match predefined mapped CPD signs and independently CCD-referenced canonical sugar signs. No isomer search or geometry optimization.",
+  "new_qm": 0,
+  "next": "External CGenFF assignment, followed by matched charge-difference/cap and sugar-junction term audits before any boundary transfer.",
+  "canonical_sugar_sign_authority": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/sugar-stereo-reference-audit-v1/ccd_reference_comparison.json",
+    "sha256": "abf40debfd434f4449ea1a4dee136075b2a29e83a8054af678a85269aade7b39"
+  },
+  "expected_observations": [
+    "All three CPD inputs contain62atoms and preserve four registered ring centers plus six canonical sugar centers.",
+    "Thymidine reference contains31atoms and three canonical sugar centers.",
+    "All inputs are formally neutral and preserve graph/stereo through SDF-to-MOL2 roundtrip.",
+    "Returned assignments must include all sugar-glycosidic terms; this is pending external evaluation, not presumed.",
+    "Matched lesion-minus-reference charge differences will be inspected at every retained atom and OH cap before considering transfer. Nonzero cap differences or missing mixed terms require an explicit repair decision; no automatic redistribution."
+  ],
+  "assignment_zip": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/cgenff-sugar-assignment-inputs-v1.zip",
+    "sha256": "beb445b8ec4a50636a7bc86a666f8d9202aa0d4eedf373bc9e2dd6e2197f8202"
+  }
+}

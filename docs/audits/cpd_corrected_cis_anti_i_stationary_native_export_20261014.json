@@ -1,0 +1,126 @@
+{
+  "at": "2026-10-14T07:12:12.065788+00:00",
+  "schema": "nadoc.corrected-cis-anti-i-stationary-native-export.v1",
+  "archive_root": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1",
+  "completion_ack": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v3-service/completion_wake_ack.json",
+    "sha256": "ca7c423da45679303f80f9f05d637fbc19b1f0731682168cce46c75138168557"
+  },
+  "qm_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v3/completion_audit.json",
+    "sha256": "6c34eea37a17f18d96412fc615d2e8f9d642d96dd4737ddcf1886993ed9dd239"
+  },
+  "candidate_review": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/alternate-sugar-qm-release-v3/stationary_candidate_review.json",
+    "sha256": "6587e85da47e5b40a5246d36633e7a06fd254409a2fe749843db706e39acb591"
+  },
+  "export_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-export-v2/completion_audit.json",
+    "sha256": "aba9d19f6fb2953b657c5d47778134faa6620a29ed59296e53b98e558dd2d1c8"
+  },
+  "qm_stationarity_verified": true,
+  "native_optimizer_converged": true,
+  "new_gradients": 4,
+  "accepted_states": 5,
+  "service_minutes": 12.535279313723246,
+  "max_projected_gradient_au": 1.4184265268447926e-05,
+  "rms_projected_gradient_au": 4.871002846853103e-06,
+  "qm_alternate_minus_original_kcal_mol": -2.724717928212115,
+  "mm_alternate_minus_original_kcal_mol": -9.880874199669474,
+  "mm_minus_qm_relative_error_kcal_mol": -7.156156271457359,
+  "stop_qm_optimization": true,
+  "additional_qm_admitted": false,
+  "second_fit_admitted": false,
+  "native_static_cases": [
+    {
+      "case": "core-reference",
+      "energy_error_kcal": 3.182251692379623e-05,
+      "force_error_kcal_A": 0.0002830402318085845,
+      "coordinates": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-export-v2/core/reference/coordinates.coor",
+        "sha256": "ce5971ee5fa7d8c9b7081f6c6852e4e21e84257ebb26910770f86aac9d319220"
+      },
+      "config": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-export-v2/core/reference/run.conf",
+        "sha256": "0378de76ec3e675e6b92da87fee498c10d43fa95699a8e4c404f2ff8acb00fdf"
+      },
+      "log": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-export-v2/core/reference/run.log",
+        "sha256": "aa95d87e102f9c5bfa755fc8731ebc40fc3c48932fce4ccd3ed27d344915a456"
+      },
+      "forces": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-export-v2/core/reference/static.force",
+        "sha256": "286ff87dd3ad2660ba0cb002f10955d7bbde7d185206f8d4cf026680a884efce"
+      }
+    },
+    {
+      "case": "endpoint-original",
+      "energy_error_kcal": 0.0003258671256425316,
+      "force_error_kcal_A": 0.0006685820577914114,
+      "coordinates": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-export-v2/endpoint/original/coordinates.coor",
+        "sha256": "782d1adc235d9a327ecc196d9b007467012dc4e820bc202a0deec69ce906fc5b"
+      },
+      "config": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-export-v2/endpoint/original/run.conf",
+        "sha256": "07b2c029166cd1d23ffcc9787ed7e270b3cff3acf092739195bc89a0e45cce2a"
+      },
+      "log": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-export-v2/endpoint/original/run.log",
+        "sha256": "832b374945fdf44e9580f2c7718b219f57ba450d0ecfafd49545f06f6001f0e7"
+      },
+      "forces": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-export-v2/endpoint/original/static.force",
+        "sha256": "9cf1a5ddf61edb0bb55260062800af8ca3b2ecee01578cbee761a1e8d0427788"
+      }
+    },
+    {
+      "case": "endpoint-alternate",
+      "energy_error_kcal": 0.0007000667951153616,
+      "force_error_kcal_A": 0.00043527205341309383,
+      "coordinates": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-export-v2/endpoint/alternate/coordinates.coor",
+        "sha256": "fd0013ac25872945be7755e206bb2200158964c6ea5c06b94cee8630b4dcc35a"
+      },
+      "config": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-export-v2/endpoint/alternate/run.conf",
+        "sha256": "e8bc48f2008cb1029dcd7a8231e8274e76fb90bc953332e5482e83d3260fd290"
+      },
+      "log": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-export-v2/endpoint/alternate/run.log",
+        "sha256": "c90ba7502df5344fe068573e16ac462369e409b570efcdf51fadece2b31b31c2"
+      },
+      "forces": {
+        "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-export-v2/endpoint/alternate/static.force",
+        "sha256": "1235d347ef3bce815fda62e629c239610418f2f8f400ce1a0d4b2de9bed88369"
+      }
+    }
+  ],
+  "native_energy_max_error_kcal": 0.0007000667951153616,
+  "native_force_max_error_kcal_A": 0.0006685820577914114,
+  "first_export_failure": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-export-v1/assessment.json",
+    "sha256": "e8e14e6a1d39beb0e3ef129a70e026721c05507b7e8a08f20960067829164eb3"
+  },
+  "active_stage": "Two5ps isolated-endpoint NAMD integration/restart engineering chunks",
+  "active_plan": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-restart-smoke-v1/plan.json",
+    "sha256": "64ed58dee09fa705b66f2504cf81f9fbe7a823e169bd3996a14e2875f6efd4ff"
+  },
+  "launch_verification": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-restart-smoke-v1/launch_verification.json",
+    "sha256": "396624b83907b631c16f3caee220b2d5c9766205ea2c416eaffcd097ade3a9ad"
+  },
+  "current_handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/provisional-native-restart-smoke-v1/handoff.json",
+    "sha256": "078e73cc5085e29ec99901dd86548ab6506fe27c2fed94d70a36c481a20dfd49"
+  },
+  "launch_local": "2026-10-14T01:09:54.444466-06:00",
+  "review_local": "2026-10-14T01:18:54.444466-06:00",
+  "hard_stop_local": "2026-10-14T01:19:54.444466-06:00",
+  "wake_token": "2926a2a7-c4df-4019-94b7-823fb7d9ba08",
+  "simulation_ready": false,
+  "endpoint_minimum_certified": false,
+  "heldout_accessed": false,
+  "cloud_spending_usd": 0
+}

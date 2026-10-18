@@ -1,0 +1,60 @@
+{
+  "reviewedAt": "2026-10-17",
+  "summary": "Finite MVP campaign closed: four admitted TT-CPD isomers have separately qualified provisional numerical models. Physical accuracy and parameter equivalence remain insufficient; no jobs active.",
+  "completed": [
+    {
+      "label": "Four external provisional NAMD models",
+      "detail": "cis-syn-I, cis-anti-I, trans-syn-I and trans-syn-II passed separate canonical two-start, two-seed numerical admission and short timestep diagnostics. Internal six-T engineering scope only; production unchanged.",
+      "sources": [
+        "docs/audits/cpd_mvp_final_scope_audit_20261017.json",
+        "docs/audits/cpd_cis_syn_external_numerical_20261017.json"
+      ]
+    }
+  ],
+  "remaining": [
+    {
+      "label": "Physical validation remains insufficient",
+      "detail": "Experimental accuracy, equilibrium populations and practical equivalence are not established. No calibrated parameter-uncertainty family was tested. No automatic refinement or simulation extension; melting is user-owned.",
+      "sources": [
+        "docs/audits/cpd_mvp_final_scope_audit_20261017.json"
+      ]
+    },
+    {
+      "label": "Unqualified contexts and ordered isomers",
+      "detail": "Terminal and mixed-isomer systems remain unqualified. Trans-anti I/II require resolved attachment-order evidence; cis-anti-II provenance remains unresolved.",
+      "sources": [
+        "docs/audits/cpd_mvp_formation_roster_20261017.json"
+      ]
+    }
+  ],
+  "history": [
+    {
+      "label": "Earlier anti campaign \u00b7 historical model only",
+      "detail": "Six 10 ns runs and a research restart package were completed. The three archived anti endpoints fail the corrected stereochemical identity; these results do not validate corrected cis-anti-I.",
+      "sources": [
+        "docs/cpd_anti_validation_closeout_20261010.md",
+        "docs/audits/cpd_anti_detection_correction_20261010.json",
+        "docs/cpd_anti_additive_campaign.md"
+      ]
+    },
+    {
+      "label": "Corrected CPD core, archived DNA-context runs \u00b7 chemistry hold",
+      "detail": "Two welded/control10ns pairs completed engineering audits. Later canonical sugar-reference checks failed at the weld sites. Raw outputs and failed preflights retained; execution completion is not chemical qualification.",
+      "sources": [
+        "docs/audits/cpd_corrected_cis_anti_i_two_pairs_20261016.json",
+        "docs/audits/cpd_stabilization_sugar_reference_20261016.json"
+      ]
+    }
+  ],
+  "historicalModelIds": [
+    "anti-boundary-1",
+    "anti-boundary-2",
+    "anti-additive-core",
+    "anti-additive-endpoint-1",
+    "anti-additive-endpoint-2",
+    "anti-ordered-core",
+    "anti-ordered-endpoint-1",
+    "anti-ordered-endpoint-2"
+  ],
+  "historicalWarning": "Historical anti model evidence predating the stereochemistry correction. These checks do not qualify corrected cis-anti-I."
+}

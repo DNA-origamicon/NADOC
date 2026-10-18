@@ -1,0 +1,30 @@
+{
+  "schema": "nadoc.cpd.external-native-example.v1",
+  "native_result": {
+    "state": "completed",
+    "returncode": 0,
+    "started_at": 1792281302.352817,
+    "finished_at": 1792281307.1245928,
+    "elapsed_seconds": 4.771775722503662
+  },
+  "expectations": {
+    "optimization_exit_zero_within_120s": true,
+    "external_reader_adds_one_finite_14atom_frame": false
+  },
+  "reader_frames_before": 1,
+  "reader_frames_after": 1,
+  "diagnosis": "Unmodified ffTK2.2 reader matches OPTKING Finished Execution. Psi4 1.11 output lacks this marker and instead contains Final optimized geometry and variables. Reader returns without importing a frame.",
+  "verdict": "EXTERNAL_READER_INTEROPERABILITY_FAILED",
+  "minimum_certified": false,
+  "cpd_qualified": false,
+  "shared_native_seconds_used": 1862.5755877225038,
+  "next": "Use an isolated upstream-supported runtime or upstream reader implementation; do not repeat the same calculation or silently patch outputs.",
+  "archive": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-cis-anti-i-bounded-sensitivity-v1/external-fftk-v1",
+  "evidence_sha256": {
+    "output.out": "bdc3033e61d0fe0bfc52d41b7043ec8d7084553fd01933a4dd78d7982e677ba3",
+    "read_example.log": "a45a2c405a476b681005bb2d41596fea4e11d9deffe17fb0578e5e1e1885f899",
+    "read_example.tcl": "59ab5e6801f6ce885f885058071cad9d289ecf0a0990a73779f90dcf0f6299e5",
+    "native_example_registration.json": "2ef47ccff562df8527632209fe52ca43f17f41d0ab736b027045b32a1f813e54",
+    "pyrrolidine_geomopt.py": "d654cfc3c22e2b6159bb847842b96cfe3e74cd43419a8e0d224be9bedc79757d"
+  }
+}

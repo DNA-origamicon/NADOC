@@ -1,0 +1,75 @@
+{
+  "at": "2026-10-14T16:21:36.638431+00:00",
+  "authorization": "Good, continue the campaign until this isomer is as NAMD-ready as our other developed isomers.",
+  "target": "Parity with the developed preliminary-research NAMD workflow: complete isolated DNA patch, bounded geometry conditioning, numerical native equivalence, restartable solvated matched-context validation and explicit parameter limitations. No automatic production/registry promotion.",
+  "completed": {
+    "two_sugar": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/two-sugar-transfer-v2/assessment.json",
+      "sha256": "0bacebf25efe1e042ca717245d3fb623bb52b076ddaa2ea5d21089758d367341"
+    },
+    "full_dna_topology": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-topology-transfer-v1/assessment.json",
+      "sha256": "2090e17e1e76f18a9d09a00a9b5a8b538ee10add1dcd688c82ee29b5b613b852"
+    },
+    "full_dna_static": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-static-v3/assessment.json",
+      "sha256": "5c0710a0882af4ac5a75244f6e4719126f7d27f0db85e3b98d3ed026dcf35fc0"
+    },
+    "construction_seed": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v4/seed_review.json",
+      "sha256": "ae52cc47400f535f25972fba3580be207c71ddec5312acda0c953637ab35c5dd"
+    }
+  },
+  "active": {
+    "stage": "Local stereo-preserving DNA coordinate construction",
+    "service": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v4-service",
+    "plan": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v4/plan.json",
+      "sha256": "bf4e574f214bcdea35861f5262b5b9377c18b37cf9403e26d69110f11349f3e7"
+    },
+    "launch": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v4/launch_receipt.json",
+      "sha256": "53c461633a26b581800bd5a1827d528e57992769d64bef225e663c610642bf0d"
+    },
+    "verification": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/dna-placement-v4/launch_verification.json",
+      "sha256": "d3a35919477c3d25b5f786dcda1b911d11d0247cbba92e8c1af7017d1878889a"
+    },
+    "wake_token": "b4885ed6-a80c-4ea2-9234-dfb8c310fa37",
+    "times_denver": {
+      "start_epoch": "2026-10-14T10:20:34.151235-06:00",
+      "review_deadline_epoch": "2026-10-14T12:15:34.151235-06:00",
+      "hard_deadline_epoch": "2026-10-14T12:20:34.151235-06:00"
+    }
+  },
+  "tests": {
+    "chiral_constraints": "2 passed in1.10s",
+    "native_log": "6 passed in1.10s",
+    "scope": "Focused tests; not a broad suite"
+  },
+  "preserved_failures": [
+    "two-sugar-transfer-v1: CCD includes phosphate; explicitly prune nonfragment atoms as in prior endpoint builder, then versioned retry passed",
+    "DNA topology import-only failure: unused ParmEd import removed before topology construction; journal retained",
+    "dna-placement-v1: base-only graft changes local sugar stereo and yields six clashes",
+    "dna-placement-v2/v3: whole-nucleoside graft preserves stereo but has one heavy clash and a hidden short hydrogen contact",
+    "dna-static-v1/v2: native numerical equivalence rejected at extreme overlap geometries; no tolerance relaxed"
+  ],
+  "new_qm_evaluations": 0,
+  "new_fit_rounds": 0,
+  "remaining_parameter_limitations": [
+    "7.15616 kcal/mol excess alternate-conformer preference versus QM",
+    "Partial core bonded fit and provisional charge transfer",
+    "No new endpoint minimum certificate",
+    "Prospective full candidate and solvent/context validation incomplete"
+  ],
+  "next_steps": [
+    "Audit terminal construction outputs: independent force, all292 stereo sentinels, bond ratios, clashes/piercings and fixed atoms; optimizer success alone is insufficient.",
+    "If construction passes, rerun static parity at conditioned coordinates and prepare paired solvated corrected/control systems with same parent DNA and solvent conditions.",
+    "Use short restart/startup qualification before matched validation replicas comparable to prior developed campaign; sequential jobs below16h and checkpoint audits.",
+    "Expose prospective qualification gaps and parameter-sensitivity limitations before any readiness classification; do not reuse legacy anti trajectories as corrected-isomer evidence."
+  ],
+  "periodic_polling": false,
+  "cloud_spending_usd": 0,
+  "simulation_ready": false,
+  "minimum_certified": false
+}

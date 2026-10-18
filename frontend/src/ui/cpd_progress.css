@@ -25,5 +25,17 @@
 .cpd-progress__context input[type=range] { width:100px; }
 .cpd-progress__context output { min-width:36px; }
 .cpd-progress__metrics { color:#b8c4d6; }
+.cpd-progress__overview { background:#151e2b; padding:10px 14px; border-radius:8px; }
+.cpd-progress__overview:empty { display:none; }
+.cpd-progress__overview-columns { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.cpd-progress__overview h3 { margin:8px 0; }
+.cpd-progress__overview ul { margin:0; padding-left:20px; }
+.cpd-progress__overview li { margin:8px 0 12px; }
+.cpd-progress__overview li p { margin:4px 0; }
+.cpd-progress summary { cursor:pointer; line-height:1.5; }
+.cpd-progress__sources { color:#b8c4d6; font-size:11px; }
+.cpd-progress__study-checks { margin-top:14px; }
+.cpd-progress__historical-warning { color:#e5c34d; }
+.cpd-progress__history { margin-top:6px; }
 @media(max-width:760px) { .cpd-progress__gallery { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
-@media(max-width:760px) { .cpd-progress__layout { grid-template-columns:1fr; } .cpd-progress__details { max-height:280px; } }
+@media(max-width:760px) { .cpd-progress__layout, .cpd-progress__overview-columns { grid-template-columns:1fr; } .cpd-progress__details { max-height:280px; } }

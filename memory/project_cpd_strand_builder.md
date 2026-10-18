@@ -1,3 +1,33 @@
+# Current CPD priority — 2026-10-17
+
+2026-10-17 finite MVP campaign CLOSED: fouradmitted externalCGenFF models (cis-syn-I,cis-anti-I,trans-syn-I/II) separately pass canonical numericaladmission in internal six-T scope. Cis-syn return blocker resolved. Archive cpd-provisional-mvp-models-v4.zip; docs/audits/cpd_mvp_final_scope_audit_20261017.json. Physicalvalidation/equivalence/parameter-sensitivity remain explicitly insufficient under existing finitepolicy. No activejob, native3131.489166s/48h, no automaticrefit/extension orproductionpromotion. Earlier pending/blocker entries historical.
+
+2026-10-17 completion gap: cis-syn-I independent external input now prepared and requested through user CGenFF account, Archive cgenff-cis-syn-assignment-input-v1.zip. Quantitative applicable NMR reference comparison remains unregistered; no automatic MD/fit. Trans-syn-II formation includes sensitized unmodified TpT (PMID8374057), correcting earlier modified-only restriction. Goal incomplete; see latest current_handoff.json and docs/audits/cpd_cis_syn_external_input_20261017.json.
+
+2026-10-17 CGenFF v4 finite numerical panel CLOSED: all3new isomers,2starts each,2velocity seeds,1fs admission pass; all12paired1fs/2fs1ps NVE diagnostics pass. No active jobs. Native ledger2947.396s/48h. Provisional numerical scope only; physical validation/parameter-sensitivity equivalence remain insufficient. No automatic refit or extension. Archive minimum-viable-candidates-v4 and docs/audits/cpd_cgenff_numerical_panel_20261017.json are current. Earlier entries below retain historical stage states.
+
+2026-10-17 next native candidate is isolated cgenff-dna-transfer-v4 (v3improper order failed strict NAMD matching). Six canonical191atom six-T starts pass GPU energy/force loading; all22center signs pass. Source/basin relevance and dynamics remain unqualified. Audit docs/audits/cpd_cgenff_dna_geometry_20261017.json. No further identical embedding/native-static retries needed.
+
+2026-10-17 sugar-bearing CGenFF returns pass identity/coverage. Isolated DNA transfer-v3 uses native charges plus matched CGenFF lesion-reference increments (base−0.138e/sugar+0.138e; OH caps0). Three191atom topology harnesses pass full coverage/netcharge−5e and independent unchanged-backbone checks. Audit docs/audits/cpd_cgenff_sugar_return_20261017.json. Historical v2/production untouched. Coordinates/dynamics remain unqualified.
+
+2026-10-17 CGenFF returns received: all3cores pass mapped identity, neutral charge, external coverage and6NAMD run-zero checks. Audit docs/audits/cpd_cgenff_return_intake_20261017.json. Use short relative NAMD outputName in Archive cwd: long absolute outputName caused output-writing crashes. Preserve failures. DNA boundary/dynamics remain unqualified; external-assignment blocker resolved.
+
+
+2026-10-17 archived capped-core QM reuse: cis-anti-I/trans-syn-I/II pass current identity and source-integrity checks; see docs/audits/cpd_qm_target_reuse_20261017.json. Do not repeat core optimization/Hessian acquisition. Cis-anti-I retains exact-core minimum certification; trans-syn positive-frequency evidence remains historical. No new native use.
+User requests minimum viable NAMD models for experimentally established TT
+photoproduct isomers only, with separate stereochemical qualification and assumed
+noninterconversion in ordinary MD. Use external parameterization implementations.
+No indefinite fragment-driven refinement: further energetic refinement requires
+substantial NAMD departure from a prespecified applicable established observable.
+Chemical/numerical admission remains mandatory; insufficient evidence stays explicit.
+See docs/cpd_minimum_viable_namd_policy_20261017.json and the latest campaign head.
+Historical bad-sugar DNA results do not qualify canonical DNA. Retain historical
+failures; no automatic expansion to all eight registry entries or budget reset.
+
+User requires resolved experimental attachment-order evidence before trans-antiI/II admission; no provisional dual embedding from class-level evidence. See docs/audits/cpd_mvp_formation_roster_20261017.json.
+
+Earlier state below is historical and superseded where inconsistent.
+
 ---
 
 **Cube qualification audited; final inputs ready, replacement-budget decision pending — 2026-10-05.**

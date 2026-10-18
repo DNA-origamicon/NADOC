@@ -1,0 +1,63 @@
+{
+  "at": "2026-10-17T03:09:13+00:00",
+  "script": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/audit_ddx_density_diagnostic_v1.py",
+    "sha256": "8eaf53d608f3a8e5a38730a755bccee3e899bd8a01f649e5f1a75bc55ac74524"
+  },
+  "passed": true,
+  "assessment": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-density-diagnostic-v1/assessment.json",
+    "sha256": "29cde167f77ae8ab423ea1b701a42da2af5950cef3a9f48a515d62fe9b74092c"
+  },
+  "native": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-density-diagnostic-v1/output.dat",
+    "sha256": "83bd6830a87f3c5bde4c5f21be2ddbb58a5cc6094a7f2100a4182ca2f9eb2dc2"
+  },
+  "wavefunction": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-density-diagnostic-v1/coarse_wavefunction.npy",
+    "sha256": "19dbcd3443b106fb2527a3eafe3e308d956df0df6bd473effaa4990c954d9c07"
+  },
+  "density": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/endpoint-ddx-density-diagnostic-v1/density.npy",
+    "sha256": "95379252c13fe61b72f2e2b30f49ad13438e396bfa8b81f4b62d47827f85dd2f"
+  },
+  "electron_count": 250.00000000000085,
+  "coarse_reproduction_error_hartree": -1.2732925824820995e-11,
+  "records": [
+    {
+      "name": "baseline",
+      "solvent_shift_kcal_mol": -1.7617059980242647e-06,
+      "fock_difference_norm": 0.0,
+      "fock_difference_max": 0.0,
+      "forward_iterations": 37,
+      "adjoint_iterations": 35
+    },
+    {
+      "name": "integration_only",
+      "solvent_shift_kcal_mol": -0.8711578246161913,
+      "fock_difference_norm": 0.10318431677268695,
+      "fock_difference_max": 0.0071493168262984075,
+      "forward_iterations": 37,
+      "adjoint_iterations": 35
+    },
+    {
+      "name": "surface_only",
+      "solvent_shift_kcal_mol": 0.3510203615904137,
+      "fock_difference_norm": 0.19423933299809104,
+      "fock_difference_max": 0.035444255828506376,
+      "forward_iterations": 39,
+      "adjoint_iterations": 33
+    },
+    {
+      "name": "combined",
+      "solvent_shift_kcal_mol": -0.7272472813100546,
+      "fock_difference_norm": 0.2016782624835335,
+      "fock_difference_max": 0.029516860966483947,
+      "forward_iterations": 44,
+      "adjoint_iterations": 37
+    }
+  ],
+  "decision": "All frozen-density solvent evaluations stable with modest shifts; no isolated setting reproduces runaway at this density. Does not prove globally stable SCF. One fine-grid original-conformer SCF from exact saved coarse orbitals is justified, with native READ/no-projection verification and unchanged convergence/grid criteria. Preserve density and reuse restart, no new coarse replay.",
+  "minimum_certified": false,
+  "simulation_ready": false
+}

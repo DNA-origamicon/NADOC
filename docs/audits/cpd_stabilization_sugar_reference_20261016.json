@@ -1,0 +1,47 @@
+{
+  "at": "2026-10-16T15:52:59.791606+00:00",
+  "scientific_hold": true,
+  "native_jobs_launched": 0,
+  "scope": "Stabilization estimates from archived formation context require canonical-sugar correction; execution success is not chemical qualification.",
+  "sugar_audit": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/sugar-stereo-reference-audit-v1/assessment.json",
+    "sha256": "8ff7de23f9067cda4e88ed40bd14cf64e1b8250ec5b54521402bf0c7f6826160"
+  },
+  "independent_reference": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/sugar-stereo-reference-audit-v1/ccd_reference_comparison.json",
+    "sha256": "abf40debfd434f4449ea1a4dee136075b2a29e83a8054af678a85269aade7b39"
+  },
+  "failed_rigid_preflight": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/attachment-energy-relevance-v1/admission.json",
+    "sha256": "b2ce6e001a6d2fa88992f6e25dcc6f417a3df6c92d82c941b67620e502e370aa"
+  },
+  "failed_extraction_preflight": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/attachment-energy-relevance-v2/anti1_preflight.json",
+    "sha256": "9509cef6fb7dfb49524b39acb1015af4ae9e9c613fb583e2c7229b73e0ddc983"
+  },
+  "study_plan": {
+    "path": "docs/cpd_stabilization_uncertainty_plan.md",
+    "sha256": "df1445ed3b7bb902bdf75c434e7402303cbaae64c7a84dfe202e14d314ba3452"
+  },
+  "simulation_ready": false,
+  "cloud_spending_usd": 0,
+  "source_wide_audits": [
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/sugar-stereo-reference-audit-v1/source_residue_audit.json",
+      "sha256": "c95a67392807cf38acc167f7252bd1c1f620e95480e73885850f5fd93e44a501"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/sugar-stereo-reference-audit-v1/source_pdb_residue_audit.json",
+      "sha256": "7afbf4f574681ccc2ab55be3dfc884a85c54aac6777bbf0706a17b7a126cfaf8"
+    },
+    {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/sugar-stereo-reference-audit-v1/source_equilibrated_residue_audit.json",
+      "sha256": "0d23fe1c119da991a7c0f4a683cc02f7008203297a8aa7d1ab10f79a86ed099f"
+    }
+  ],
+  "source_finding": "98DNA residues audited:6 C3 and2 C4 mismatches in retained precursor frame, source package PDB and equilibrated checkpoint. Discrepancy predates corrected CPD placement; earliest authoring/preparation origin remains unresolved.",
+  "handoff": {
+    "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-corrected-cis-anti-i-refinement-v1/sugar-stereo-reference-audit-v1/handoff.json",
+    "sha256": "a368f8fe755a0003c6b6ac58e23c7838ae394fe808830f8d728a9c89b61f7eb5"
+  }
+}
