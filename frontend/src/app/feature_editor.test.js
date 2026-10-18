@@ -35,14 +35,28 @@ it('qualified history dispatch uses the stable private editor and never peels or
   const owner = initFeatureEditor({ isolatedHistoryEnabled: true, showToast: vi.fn() })
   const entry = { id: 'feature', feature_type: 'deformation', op_snapshot: { id: 'bend', type: 'bend' } }
   await owner.onEditFeature(entry, 3)
-  expect(f.history.open).toHaveBeenCalledWith(entry, 3)
+  expect(f.history.open).toHaveBeenCalledWith(entry, 3, { onUnsupported: expect.any(Function) })
   expect(f.deleteDeformation).not.toHaveBeenCalled(); expect(f.seekFeatures).not.toHaveBeenCalled(); expect(f.start).not.toHaveBeenCalled()
   owner.dispose(); expect(f.listeners.size).toBe(0)
 })
 
-it('keeps ordinary rollout gated pending desktop and latency qualification', () => {
+it('continues an unsupported part (e.g. legacy saved history) in the legacy editor', async () => {
+  document.body.innerHTML = '<div id="mode-indicator"></div>'
+  f.deleteDeformation.mockResolvedValue({})
+  f.history.open.mockImplementation((_entry, _index, { onUnsupported }) => onUnsupported())
+  const owner = initFeatureEditor({ isolatedHistoryEnabled: true, showToast: vi.fn() })
+  const op = { id: 'bend', type: 'bend', plane_a_bp: 2, plane_b_bp: 9, params: { kind: 'bend' }, cluster_ids: [] }
+  await owner.onEditFeature({ id: 'feature', feature_type: 'deformation', op_snapshot: op }, 3)
+  expect(f.deleteDeformation).toHaveBeenCalledWith('bend', true)
+  expect(f.start).toHaveBeenCalledWith('bend', 2, 9, null, op.params, op)
+  expect(owner.getEditContext()).toMatchObject({ featureIndex: 3, editingFeatureType: 'deformation', origOpId: 'bend' })
+  owner.dispose(); expect(f.listeners.size).toBe(0)
+})
+
+it('enables isolated Bend/Twist history and creation by default; transforms stay gated', () => {
   const owner = initFeatureEditor({ showToast: vi.fn() })
-  expect(f.create).not.toHaveBeenCalled()
+  expect(f.create).toHaveBeenCalledOnce()
+  expect(owner.creationEditor).toBe(f.history)
   expect(f.createTransform).not.toHaveBeenCalled()
   owner.dispose(); expect(f.listeners.size).toBe(0)
 })
@@ -76,8 +90,8 @@ it('wires server-selected private guide scope without a canonical update path', 
 
 it('creation wiring remains independently gated and cannot enable history editing', async () => {
   document.body.innerHTML = '<div id="mode-indicator"></div>'
-  expect(ISOLATED_DEFORMATION_CREATION_ENABLED).toBe(false)
-  expect(ISOLATED_DEFORMATION_HISTORY_ENABLED).toBe(false)
+  expect(ISOLATED_DEFORMATION_CREATION_ENABLED).toBe(true)
+  expect(ISOLATED_DEFORMATION_HISTORY_ENABLED).toBe(true)
   f.design = { id: 'part', group_organization: { version: 1, groups: [] }, feature_log: [] }
   const owner = initFeatureEditor({ isolatedCreationEnabled: true, isolatedHistoryEnabled: false, showToast: vi.fn() })
   expect(owner.creationEditor).toBe(f.history)

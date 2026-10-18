@@ -14,6 +14,12 @@ from backend.core.validator import validate_design
 from tests.test_part_deformation_preview import native_source, owned_capture, patch
 from tests.test_part_dna_comparison import small
 
+from tests.preview_test_limits import preview_test_scale_limits  # noqa: F401  (fixture)
+
+# Bounding-mechanism tests use tiny fixtures at the original test-scale allowances.
+pytestmark = pytest.mark.usefixtures("preview_test_scale_limits")
+
+
 
 def _service():
     from backend.api import part_deformation_preview_dto

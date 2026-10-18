@@ -1,0 +1,23 @@
+Continue the NADOC feature-history overhaul for exactly one bounded session task.
+
+Start by reading applicable repository instructions, then the CURRENT contents of, in order:
+1. docs/audits/feature_history_20261014/operating_contract.md   (binding; overrides older documents)
+2. docs/audits/feature_history_20261014/session_handoff.md
+
+The goal is SolidWorks/Onshape-style parametric editing. Progress means Bend, Twist, Extrude and Sweep reaching "done": production gate ON and per-tool contract items C1–C9 passing in the running app. Internal proofs, private routes and test matrices are means, not exits.
+
+Check the handoff's "Sessions since last gate flip or milestone close" counter first (only a gate flip resets it). If it is 3 or more, do not start a task: write a short blocker report in the handoff and ask me. Otherwise execute the handoff's next task, after confirming it is the task that most directly closes the nearest tool's remaining contract items (replace it with a better one if not, and say why in one line).
+
+Rules that are easy to violate:
+- One lifecycle: no new host, queue, session/lease, sealed/admission/observation layer, storage format or capability endpoint. If one seems needed, stop and ask.
+- Unrelated requests that break a test harness (simulation, jobs, library, VR, and so on) are stubbed in the harness, never fixed in production code.
+- A prerequisite outside the four tools: stop and ask; do not build it.
+- Preserve scientific authorization rules, test guards, artifact policy and other sessions' worktree changes. Do not weaken assertions. Do not spawn sub-agents unless I authorize it.
+
+Closeout (keep it short):
+- Append ≤ 15 lines of evidence to the tool's existing plan file; no new report files; no U-numbers.
+- Replace the handoff's current state and its single next task (ID, tool and contract items, objective, deliverables, files, acceptance, exclusions, stop condition). Update the counter per contract §5 (reset to 0 only if a gate flipped, otherwise +1). Keep the handoff ≤ 150 lines.
+- Touch the ledger only when a milestone status changes, and project memory only when a gate flips or a milestone closes.
+- Commit your task's files locally per contract §7 (explicit paths, overhaul-only files, no push).
+
+Finish with: what was delivered, checks actually run with results, measured latencies if any, "Tools done: N/4", the counter value and the next task.

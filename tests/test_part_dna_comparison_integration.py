@@ -7,6 +7,8 @@ from multiprocessing.shared_memory import SharedMemory
 from fastapi.testclient import TestClient
 import pytest
 
+from tests.preview_test_limits import preview_test_scale_limits  # noqa: F401  (fixture)
+
 from backend.api import part_evaluation_comparison as owner, part_evaluation_jobs as jobs, state
 from backend.api.part_comparison_worker import ComparisonWorker
 from backend.api.part_verification_worker import _result_bytes, MAX_RESULT_BYTES
@@ -186,7 +188,9 @@ def test_real_uuid_recipe_boundary_fits_existing_transport_without_coordinate_lo
     assert len(json.dumps(expanded, separators=(",", ":"), allow_nan=False).encode()) > MAX_RESULT_BYTES
 
 
+@pytest.mark.usefixtures("preview_test_scale_limits")
 @pytest.mark.parametrize("rows", [None, {}, [[]], [[None] * 22], [[None] * 21] * 1025])
 def test_fixed_row_codec_refuses_unknown_shape_or_unbounded_records(rows):
+    # 1025 rows exceeds the test-scale 1024-slot allowance (tests/preview_test_limits.py).
     with pytest.raises(CommandContractError, match="fixed-row"):
         unpack_records(rows)

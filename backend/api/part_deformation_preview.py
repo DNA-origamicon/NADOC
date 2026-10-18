@@ -24,16 +24,21 @@ from backend.core.part_verification_capture import CaptureLimit, admit
 from backend.core.validator import ValidationReport, validate_design
 
 
-MAX_COMMANDS = 128
-MAX_HELICES = 16
-MAX_SLOTS = 1024
-MAX_OPERATIONS = 64
-MAX_BP_SPAN = 1024
+# Resource guards sized for ordinary origami parts, consistent with the shared
+# native executor's own 512-cell / 50k-bp bundle guard (user-authorized
+# October 18, 2026; the original 16-helix/1024-slot allowances admitted only
+# test-sized parts). They bound runaway work; they are not scientific limits.
+MAX_COMMANDS = 10_000
+MAX_HELICES = 512
+MAX_SLOTS = 2_000_000
+MAX_OPERATIONS = 2_048
+MAX_BP_SPAN = 100_000
 # Native spline transport uses a much finer grid than one station per base.
-# Keep that additional one-time prefix work independently bounded; this is not
-# a claim that all sweeps fitting MAX_SLOTS also fit the preview path allowance.
-MAX_PATH_SAMPLES = 1024
-SECONDS = 1.0
+MAX_PATH_SAMPLES = 200_000
+SECONDS = 120.0
+# Capture/admission graph bounds for the same part sizes.
+MAX_CAPTURE_NODES = 20_000_000
+MAX_CAPTURE_BYTES = 512_000_000
 EXTRUSIONS = frozenset({"extrude-segment", "extrude-continuation", "extrude-deformed-continuation",
                        "circle-segment", "extrude-frame"})
 ROUTING = frozenset({
@@ -50,6 +55,23 @@ CONSTRAINTS = frozenset({"joint-place", "joint-update", "joint-delete",
                          "flexible-segment-mark", "flexible-segment-unmark"})
 PREFIX_KINDS = EXTRUSIONS | ROUTING | ORGANIZATION_KINDS | TRANSFORMS | EXTRA_BASES | CONSTRAINTS | frozenset({
     "bundle-create", "sweep", "deformation", "cluster_create", "cluster_op", "placement-poses",
+})
+# Deterministic ordinary routing/sequence commands that have no dedicated
+# prospective-growth estimate. They replay through the same native executor the
+# Apply-time proof uses, bounded by the cooperative deadline and post-command
+# _work admission. Imports, nanoparticles, proteins, photoproducts, relaxation,
+# autorefinement and other numerical or scientific families stay excluded; parts
+# containing them use the legacy editor.
+ORDINARY_UNESTIMATED = frozenset({
+    "assign-scaffold-sequence", "assign-staple-sequences", "auto-break", "auto-merge",
+    "auto-scaffold-bounded-section", "auto-scaffold-connectivity-section", "auto-scaffold-matched",
+    "auto-scaffold-seamed", "auto-scaffold-seamless", "auto-scaffold-sections", "full-autostaple",
+    "strand-sequence", "crossover-constraint-create", "crossover-constraint-delete",
+    "branch-seed", "connectivity-path", "fork-path", "independent-section-seed", "joined-crossbar-path",
+    "linear-pattern", "circular-pattern", "cluster-dissolve",
+    "domain-add", "domain-delete", "helix-add", "helix-add-at-cell", "helix-delete", "helix-extend",
+    "helix-reorder", "helix-update", "scaffold-domain-paint", "strand-add", "strand-delete",
+    "strand-delete-batch", "strand-patch", "strand-update", "strands-color-bulk", "strands-reference",
 })
 PATCH_FIELDS = frozenset({"type", "plane_a_bp", "plane_b_bp", "params", "cluster_ids", "targets"})
 
@@ -71,7 +93,8 @@ def _checkpoint():
 def _admit(design, check):
     check()
     try:
-        admit(design, preserve_entry_types=True)
+        admit(design, max_nodes=MAX_CAPTURE_NODES, max_bytes=MAX_CAPTURE_BYTES,
+              preserve_entry_types=True)
     except CaptureLimit as error:
         _reject(str(error), "preview_limit")
     check()
@@ -285,6 +308,8 @@ def _before_command(kind, params, design):
     if kind not in PREFIX_KINDS:
         from backend.api.part_transform_prefix_admission import admit as admit_producer
         if admit_producer(kind, design, {key: value for key, value in params.items() if key != "_generator"}):
+            return
+        if kind in ORDINARY_UNESTIMATED:
             return
         _reject(f"Private deformation preview does not yet replay prefix command {kind!r}")
     # Match the shared dispatcher: provenance annotation is not builder input.

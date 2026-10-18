@@ -10,6 +10,7 @@
  * startToolAtBp + showToast are module imports → mocked so the Bend/Twist guard
  * branches are observable.
  */
+import { readFileSync } from 'node:fs'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createMockStore } from '../test-helpers/mock_store.js'
 import { mountIds, clearDom } from '../test-helpers/factory_dom.js'
@@ -239,6 +240,57 @@ it.each(['blunt-bend-btn', 'blunt-twist-btn', 'blunt-bend-btn-ctx', 'blunt-twist
     if (id.endsWith('-ctx')) menus.showCtx(10, 20, info); else menus.showPanel(info)
     click(id); await flush()
     expect(openDeformationCreation).toHaveBeenCalledWith({ type: id.includes('twist') ? 'twist' : 'bend',
-      targets: null, clusterIds: ['placement'], placementHint: { kind: 'end', ...info } })
+      targets: null, clusterIds: ['placement'], placementHint: { kind: 'end', ...info },
+      onUnsupported: expect.any(Function) })
     expect(startToolAtBp).not.toHaveBeenCalled()
   })
+
+it('continues an unsupported part (e.g. legacy saved history) with the legacy end tool', async () => {
+  const deps = makeDeps({ currentDesign: { id: 'part' } })
+  const openDeformationCreation = vi.fn(async ({ onUnsupported }) => onUnsupported())
+  const menus = initBluntEndMenus({ ...deps, openDeformationCreation })
+  const info = { helixId: 'h', bp: 42, openSide: 1 }
+  menus.showPanel(info)
+  click('blunt-twist-btn'); await flush()
+  expect(startToolAtBp).toHaveBeenCalledWith('twist', 'h', 42, 1)
+})
+
+
+it('mounts the real sidebar action markup and opens it for a picked end', () => {
+  const source = new DOMParser().parseFromString(readFileSync('index.html', 'utf8'), 'text/html')
+  clearDom()
+  const panel = source.getElementById('blunt-panel-actions')
+  expect(panel).not.toBeNull()
+  document.body.append(document.importNode(panel, true))
+  const menus = initBluntEndMenus(makeDeps())
+  menus.showPanel({ helixId: 3, bp: 41 })
+  expect(document.getElementById('blunt-panel-info').textContent).toBe('helix 3  bp 41')
+  expect(document.getElementById('blunt-bend-btn')).not.toBeNull()
+  expect(panel.querySelector('#blunt-twist-btn')).not.toBeNull()
+  expect(document.getElementById('blunt-panel-actions').style.display).toBe('block')
+})
+
+it.each(['blunt-bend-btn', 'blunt-bend-btn-ctx'])(
+  '%s preserves explicit strand scope independently of end placement', async id => {
+    const targets = [{ kind: 'strand', id: 'selected' }]
+    const deps = makeDeps({ selection: { items: targets }, currentDesign: {
+      strands: [{ id: 'selected', domains: [{ helix_id: 'h', start_bp: 0, end_bp: 41 }] }],
+    } })
+    const openDeformationCreation = vi.fn(async () => true)
+    const menus = initBluntEndMenus({ ...deps, openDeformationCreation })
+    const info = { helixId: 'other', bp: 21, openSide: 1 }
+    if (id.endsWith('-ctx')) menus.showCtx(10, 20, info); else menus.showPanel(info)
+    click(id); await flush()
+    expect(openDeformationCreation).toHaveBeenCalledWith({ type: 'bend', targets,
+      clusterIds: [], placementHint: { kind: 'end', ...info }, onUnsupported: expect.any(Function) })
+  })
+
+it('refuses stale explicit selection rather than broadening to whole-part scope', async () => {
+  const deps = makeDeps({ selection: { items: [{ kind: 'strand', id: 'missing' }] }, currentDesign: { strands: [] } })
+  const openDeformationCreation = vi.fn()
+  const menus = initBluntEndMenus({ ...deps, openDeformationCreation })
+  menus.showPanel({ helixId: 'h', bp: 41, openSide: 1 })
+  click('blunt-bend-btn'); await flush()
+  expect(openDeformationCreation).not.toHaveBeenCalled()
+  expect(showToast).toHaveBeenCalledWith('Selected strand no longer exists', { severity: 'error' })
+})

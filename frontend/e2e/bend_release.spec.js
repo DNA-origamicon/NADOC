@@ -223,15 +223,17 @@ test('bend fixed limit repeated sessions release resources and publish once', as
   }, 'bend-limit')
 })
 
-test('bend over fixed helix limit refuses without canonical mutation', async ({ page, request }) => {
+test('bend beyond the former 16-helix allowance opens and cancels without canonical mutation', async ({ page, request }) => {
   await withHistoryFixture({ page, request }, 'bend', async f => {
     const before = await f.checkpoint()
     expect(before.design.helices).toHaveLength(17)
-    const response = await request.post(`http://127.0.0.1:8004${previewPath}`, { headers: f.headers,
-      data: { preview_id: crypto.randomUUID(), expected_design_id: before.design.id,
-        expected_revision: before.revision, feature_id: 'edited-feature' } })
-    expect(response.status()).toBe(413)
-    expect(JSON.stringify(await response.json())).toContain('preview_limit')
+    const origin = { preview_id: crypto.randomUUID(), expected_design_id: before.design.id,
+      expected_revision: before.revision, feature_id: 'edited-feature' }
+    const response = await request.post(`http://127.0.0.1:8004${previewPath}`, { headers: f.headers, data: origin })
+    expect(response.status()).toBe(200)
+    const cancelled = await request.post(`http://127.0.0.1:8004${previewPath}/cancel`, { headers: f.headers,
+      data: { ...origin, lease_id: (await response.json()).lease_id } })
+    expect(cancelled.status()).toBe(200)
     expect(await f.checkpoint()).toEqual(before)
     expect((await readFixture(f, 'resources')).document_sessions).toBe(0)
   }, 'bend-over-limit')
@@ -745,4 +747,49 @@ for (const kind of ['bend', 'twist']) test(`${kind} upstream deletion dependents
     expect((await f.browser()).geometry).toEqual(stored.geometry)
     expect((await readFixture(f, 'proof')).status).toBe('verified')
   }, `${kind}-nick`)
+})
+
+test('legacy saved history (no recipe root) edits through the legacy editor', async ({ page, request }) => {
+  await withHistoryFixture({ page, request }, 'bend', async f => {
+    const before = await f.checkpoint()
+    expect(before.design.recipe_root).toBeNull()
+    await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+    const refused = page.waitForResponse(r => new URL(r.url()).pathname === previewPath)
+    await page.locator('[title="Edit this feature"]').last().click()
+    const refusal = await refused
+    expect(refusal.status()).toBe(422)
+    expect((await refusal.json()).detail.code).toBe('missing_recipe_root')
+    // The same gesture continues in the legacy editor: popup and legacy mode text.
+    await expect(f.popup).toBeVisible()
+    await expect(page.locator('#mode-indicator')).toContainText('adjust params')
+    await expect(page.locator('.toast', { hasText: 'unavailable' })).toHaveCount(0)
+    await page.locator('#def-cancel-btn').click()
+    await expect(f.popup).not.toBeVisible()
+    await expect.poll(async () => (await f.checkpoint()).design.deformations).toEqual(before.design.deformations)
+    expect((await f.checkpoint()).design.feature_log.length).toBe(before.design.feature_log.length)
+    return { expectedConsoleErrors: ['Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)'] }
+  }, 'bend-legacy')
+})
+
+test('history edit that breaks a downstream fixed-endpoint bend names it and publishes nothing', async ({ page, request }) => {
+  await withHistoryFixture({ page, request }, 'bend', async f => {
+    const before = await f.checkpoint(), stored = await f.browser()
+    const edits = page.locator('[title="Edit this feature"]')
+    await page.locator('.left-tab-btn[data-tab="feature-log"]').click()
+    const rows = await edits.count()
+    await f.open(rows - 2)  // the upstream bend, followed by the fixed-endpoint bend
+    await f.change('#def-bend-angle', 20)
+    const applied = page.waitForResponse(r => new URL(r.url()).pathname === `${previewPath}/apply`)
+    await page.locator('#def-apply-btn').click()
+    expect((await applied).status()).toBe(409)
+    await expect(f.popup).toBeVisible()
+    await expect(f.popup).toContainText(`F${before.design.feature_log.length} Bend cannot regenerate after this edit`)
+    await expect(f.popup).toContainText('fixed-length bend')
+    expect(await f.checkpoint()).toEqual(before)
+    await page.locator('#def-cancel-btn').click()
+    await expect(f.popup).not.toBeVisible()
+    expect(await f.checkpoint()).toEqual(before)
+    expect((await f.browser()).design).toEqual(stored.design)
+    return { expectedConsoleErrors: ['Failed to load resource: the server responded with a status of 409 (Conflict)'] }
+  }, 'bend-fixed')
 })

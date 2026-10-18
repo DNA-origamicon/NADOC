@@ -16,6 +16,12 @@ from tests.test_part_duplex_commands import source as duplex_source
 from tests.test_part_pending_connection_versions import native_prefix, creation, command
 from tests.test_part_connection_application_commands import application_prefix, _params
 
+from tests.preview_test_limits import preview_test_scale_limits  # noqa: F401  (fixture)
+
+# Bounding-mechanism tests use tiny fixtures at the original test-scale allowances.
+pytestmark = pytest.mark.usefixtures("preview_test_scale_limits")
+
+
 
 def _trap(*_args, **_kwargs):
     raise AssertionError("Native allocation ran before preview admission")

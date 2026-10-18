@@ -106,6 +106,39 @@ describe('deformation history editor integration', () => {
     expect(f.owner.active()).toBe(false)
   })
 
+  it.each(['missing_recipe_root', 'missing_proof_contract', 'preview_limit'])(
+    'continues an unsupported part (%s) through the caller fallback without an error toast', async code => {
+      const f = setup()
+      f.previewAPI.prepare.mockRejectedValue(Object.assign(new Error('Unsupported part'), { status: 422, code }))
+      const onUnsupported = vi.fn(() => true)
+      expect(await f.owner.open(f.design.feature_log[0], 0, { onUnsupported })).toBe(true)
+      expect(onUnsupported).toHaveBeenCalledOnce()
+      expect(f.showToast).not.toHaveBeenCalled(); expect(f.editor.startToolForHistory).not.toHaveBeenCalled()
+      expect(f.owner.active()).toBe(false); expect(f.owner.watchToolState()).toBe(false)
+    })
+
+  it('keeps user-correctable refusals (historical cursor) visible instead of falling back', async () => {
+    const f = setup()
+    f.previewAPI.prepare.mockRejectedValue(Object.assign(new Error('Return to the latest history position'), { status: 422, code: 'historical_cursor' }))
+    const onUnsupported = vi.fn()
+    expect(await f.owner.open(f.design.feature_log[0], 0, { onUnsupported })).toBe(false)
+    expect(onUnsupported).not.toHaveBeenCalled()
+    expect(f.showToast).toHaveBeenCalledWith(expect.stringContaining('latest history position'), expect.any(Number))
+  })
+
+  it('names the earliest downstream feature that cannot regenerate when Apply refuses (C4)', async () => {
+    const f = setup()
+    const later = { id: 'fixed-feature', feature_type: 'deformation', op_snapshot: { ...op, id: 'fixed' } }
+    f.store.setState({ currentDesign: { ...f.design, feature_log: [...f.design.feature_log, later] } })
+    await f.owner.open(f.design.feature_log[0], 0)
+    f.previewAPI.apply.mockRejectedValueOnce(Object.assign(new Error('Existing deformations conflict with this fixed-length bend'),
+      { status: 409, code: 'command_failed', detail: { code: 'command_failed', detail: 'conflict', feature_id: 'fixed-feature' } }))
+    expect(await f.session().onApply({})).toBe(false)
+    expect(f.owner.active()).toBe(true); expect(f.api.syncDesignResponse).not.toHaveBeenCalled()
+    expect(f.popup.setHistoryPopupStatus).toHaveBeenLastCalledWith(expect.objectContaining({ error: expect.objectContaining({
+      message: 'F2 Bend cannot regenerate after this edit: Existing deformations conflict with this fixed-length bend' }) }))
+  })
+
   it('preserves the editor while publication is unresolved and resolves without repeating Apply', async () => {
     const f = setup(); await f.owner.open(f.design.feature_log[0], 0)
     f.previewAPI.apply.mockRejectedValueOnce(new Error('Connection lost'))

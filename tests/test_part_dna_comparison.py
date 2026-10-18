@@ -17,6 +17,12 @@ from backend.core.part_dna_comparison_codec import unpack_records
 from backend.core.part_dna_comparison_contract import MAX_SLOTS, check_scope, inventory
 from tests.conftest import make_minimal_design
 
+from tests.preview_test_limits import preview_test_scale_limits  # noqa: F401  (fixture)
+
+# Bounding-mechanism tests use tiny fixtures at the original test-scale allowances.
+pytestmark = pytest.mark.usefixtures("preview_test_scale_limits")
+
+
 
 def small(kind="straight"):
     design = make_minimal_design(helix_length_bp=12)

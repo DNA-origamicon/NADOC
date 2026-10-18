@@ -10,6 +10,12 @@ from backend.core.part_command_errors import CommandContractError
 from backend.core.part_dna_comparison_codec import unpack_records
 from tests.test_part_sweep_preview import prepared, service
 
+from tests.preview_test_limits import preview_test_scale_limits  # noqa: F401  (fixture)
+
+# Bounding-mechanism tests use tiny fixtures at the original test-scale allowances.
+pytestmark = pytest.mark.usefixtures("preview_test_scale_limits")
+
+
 
 def dto():
     from backend.api import part_sweep_preview_dto

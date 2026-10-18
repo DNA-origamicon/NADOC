@@ -15,6 +15,12 @@ from backend.api.part_proof_commands import dependencies, execute
 from backend.core.part_history_contract import assess_part_history
 from tests.test_part_deformation_preview import native_source, patch
 
+from tests.preview_test_limits import preview_test_scale_limits  # noqa: F401  (fixture)
+
+# Bounding-mechanism tests use tiny fixtures at the original test-scale allowances.
+pytestmark = pytest.mark.usefixtures("preview_test_scale_limits")
+
+
 
 def service():
     from backend.api import part_deformation_preview_sessions
@@ -502,17 +508,19 @@ def test_complete_envelope_budget_and_projection_are_outside_locks(document, mon
     from backend.api import part_deformation_preview_dto as dto
 
     host, _ = document
-    original = dto.GraphBudget
+    original = dto._bounded
     bounded = []
 
-    class ObservedBudget(original):
-        def charge(self, value, *args, **kwargs):
-            assert not state._lock.locked() and not host._lock.locked()
-            assert {"preview_id", "lease_id", "feature_id", "expected_revision"} <= value.keys()
-            bounded.append(value)
-            return super().charge(value, *args, **kwargs)
+    # The whole response, including the host envelope, is bounded once and
+    # outside both locks (byte/finite encoding; the node walk runs only when the
+    # encoded size could exceed the node allowance).
+    def observed(value):
+        assert not state._lock.locked() and not host._lock.locked()
+        assert {"preview_id", "lease_id", "feature_id", "expected_revision"} <= value.keys()
+        bounded.append(value)
+        return original(value)
 
-    monkeypatch.setattr(dto, "GraphBudget", ObservedBudget)
+    monkeypatch.setattr(dto, "_bounded", observed)
     opened = host.prepare(opening())
     assert bounded == [opened]
     evaluated = host.evaluate(update(opened))

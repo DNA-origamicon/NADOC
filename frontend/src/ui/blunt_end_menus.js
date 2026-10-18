@@ -3,6 +3,7 @@
 // share the same three actions (Extrude continuation / Bend / Twist) over a
 // captured domain-end info object. Extracted verbatim from main.js (#88).
 import { startToolAtBp, getDeformDefaultClusterIds } from '../scene/deformation_editor.js'
+import { deformationTargets } from '../scene/deformation_targets.js'
 import { showToast } from './toast.js'
 import { helixDisplayLabel } from './design_display_labels.js'
 
@@ -14,13 +15,26 @@ import { helixDisplayLabel } from './design_display_labels.js'
 export function initBluntEndMenus({ store, api, slicePlane, expandedSpacing, deformView, clusterDeformGuard: _clusterDeformGuard, extrudePanel, sweepPanel, openDeformationCreation = null }) {
   function beginDeformation(type, info) {
     if (openDeformationCreation) {
-      // The clicked end selects planes, not a narrower domain scope.
-      Promise.resolve(openDeformationCreation({ type, targets: null,
-        clusterIds: getDeformDefaultClusterIds(),
-        placementHint: { kind: 'end', helixId: info.helixId, bp: info.bp, openSide: info.openSide } }))
+      // The clicked end selects planes; explicit selection still owns scope.
+      const selected = deformationTargets(store.getState())
+      if (selected.targets.length && selected.error) {
+        showToast(selected.error, { severity: 'error' })
+        return
+      }
+      const targets = selected.targets.length ? selected.targets : null
+      const clusterIds = targets
+        ? [...new Set(targets.filter(ref => ref.kind === 'cluster').map(ref => ref.id))]
+        : getDeformDefaultClusterIds()
+      Promise.resolve(openDeformationCreation({ type, targets, clusterIds,
+        placementHint: { kind: 'end', helixId: info.helixId, bp: info.bp, openSide: info.openSide },
+        // Parts outside isolated scope (e.g. legacy saved history) keep the legacy tool.
+        onUnsupported: () => { startLegacy(type, info); return true } }))
         .catch(error => showToast(error.message, { severity: 'error' }))
       return
     }
+    startLegacy(type, info)
+  }
+  function startLegacy(type, info) {
     startToolAtBp(type, info.helixId, info.bp, info.openSide)
     document.getElementById('mode-indicator').textContent =
       `${type.toUpperCase()} — drag planes to adjust segment · apply in popup · Esc to cancel`

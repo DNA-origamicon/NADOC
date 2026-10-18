@@ -36,13 +36,23 @@ from backend.core.models import Design
 from backend.core.part_command_errors import CommandContractError
 from backend.core.part_operation_input import validate_operation_input
 from backend.core.part_recipe_publication import preserve_document_state
-from backend.core.part_verification_capture import CaptureLimit, capture
+from backend.core.part_verification_capture import CaptureLimit, capture as _bounded_capture
 
 
 MAX_SESSIONS = 2
 MAX_TOMBSTONES = 16
 TTL_SECONDS = 60.0
-APPLY_SECONDS = 5.0
+# Apply replays the full recipe for its fresh proof; size for ordinary parts.
+APPLY_SECONDS = 120.0
+# Lock-held input capture, sized for ordinary origami parts (user-authorized
+# October 18, 2026; the 30k-node/25 ms defaults admitted only test-sized parts).
+CAPTURE_SECONDS = 2.0
+
+
+def capture(design, *, preserve_entry_types=False):
+    from backend.api.part_deformation_preview import MAX_CAPTURE_BYTES, MAX_CAPTURE_NODES
+    return _bounded_capture(design, max_nodes=MAX_CAPTURE_NODES, max_bytes=MAX_CAPTURE_BYTES,
+                            seconds=CAPTURE_SECONDS, preserve_entry_types=preserve_entry_types)
 _lock = Lock()
 _work_slot = BoundedSemaphore(1)
 _entries = {}

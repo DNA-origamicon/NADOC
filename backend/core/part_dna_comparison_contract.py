@@ -13,14 +13,15 @@ from backend.core.part_history_contract import FIELD_ROLES
 
 
 COMPONENT_VERSION = 3
-MAX_HELICES = 16
-MAX_STRANDS = 128
-MAX_DOMAINS = 256
-MAX_OPERATIONS = 64
-MAX_SLOTS = 1024
-MAX_SELECTORS = 512
-MAX_PATH_STATIONS = 1024
-MAX_AXIS_POINTS = 2048
+# Sized for ordinary origami parts (see part_deformation_preview); runaway guards.
+MAX_HELICES = 512
+MAX_STRANDS = 50_000
+MAX_DOMAINS = 200_000
+MAX_OPERATIONS = 2_048
+MAX_SLOTS = 2_000_000
+MAX_SELECTORS = 50_000
+MAX_PATH_STATIONS = 200_000
+MAX_AXIS_POINTS = 2_000_000
 DNA_FIELDS = frozenset({"lattice_frames", "helices", "strands", "deformations",
     "cluster_transforms", "nucleotide_transforms", "overhangs", "crossovers",
     "crossover_constraints", "forced_ligations"})

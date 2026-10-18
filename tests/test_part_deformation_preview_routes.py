@@ -40,8 +40,8 @@ def client(document, monkeypatch):
         yield http, {"X-NADOC-Doc": identity}, host
 
 
-def test_private_route_defaults_disabled():
-    assert routes().DEFORMATION_PREVIEW_ENABLED is False
+def test_route_is_enabled_in_production():
+    assert routes().DEFORMATION_PREVIEW_ENABLED is True
 
 
 def test_actual_http_preview_apply_status_cold_proof_and_undo(client):
@@ -148,8 +148,8 @@ def test_disabled_or_strict_route_refuses_before_body_and_host(client, monkeypat
             monkeypatch.setattr(routes(), "DEFORMATION_PREVIEW_ENABLED", False)
         monkeypatch.setattr(host, "prepare", lambda *_a: pytest.fail("Disabled route reached host"))
         response = http.post(PATH, headers={**headers, "Content-Type": "application/json"}, content=b"not JSON")
-        assert response.status_code == 403, response.text
-        assert response.json()["detail"]["code"] == ("construction_policy" if strict else "preview_disabled")
+        assert response.status_code == (409 if strict else 403), response.text
+        assert response.json()["detail"]["code"] == ("immutable_geometry_unavailable" if strict else "preview_disabled")
     finally:
         state.configure_part_publication_policy(previous)
 

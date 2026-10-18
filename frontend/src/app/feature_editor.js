@@ -19,9 +19,11 @@ import {
   setHistoryPopupStatus,
 } from '../ui/bend_twist_popup.js'
 
-// Enable only after desktop and request/geometry latency qualification (MV-48).
-export const ISOLATED_DEFORMATION_HISTORY_ENABLED = false
-export const ISOLATED_DEFORMATION_CREATION_ENABLED = false
+// Enabled October 18, 2026 with the backend deformation-preview route. Parts the
+// isolated editor does not support (for example legacy saved history) fall back
+// to the legacy mutating-preview editor through onUnsupported.
+export const ISOLATED_DEFORMATION_HISTORY_ENABLED = true
+export const ISOLATED_DEFORMATION_CREATION_ENABLED = true
 
 /** Owns deformation feature creation/editing and popup synchronization. */
 export function initFeatureEditor({
@@ -180,7 +182,9 @@ export function initFeatureEditor({
       if (getDeformState() !== DEFORM_STATES.IDLE || _editContext) {
         showToast('Finish the current tool before editing feature history', 4000); return
       }
-      return history.open(entry, featureIndex)
+      return history.open(entry, featureIndex, {
+        onUnsupported: () => _legacyDeformationEdit(entry, featureIndex),
+      })
     }
     // ── Overhang orientation edit — open orientation panel for this overhang ─
     if (entry.feature_type === 'overhang_rotation') {
@@ -226,6 +230,11 @@ export function initFeatureEditor({
       return
     }
 
+    return _legacyDeformationEdit(entry, featureIndex)
+  }
+
+  /** Legacy mutating-preview edit; used when the isolated editor does not support the part. */
+  async function _legacyDeformationEdit(entry, featureIndex) {
     const op = entry.op_snapshot
     if (!op) return
 

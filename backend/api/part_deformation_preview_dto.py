@@ -11,6 +11,7 @@ import json
 from math import isfinite
 from time import monotonic
 
+from backend.api import part_deformation_preview as _limits
 from backend.api.part_deformation_preview import EvaluatedPreview, PreparedCreation, _work, creation_scope
 from backend.core.models import Design
 from backend.core.part_capture_graph import CaptureLimit, GraphBudget
@@ -21,8 +22,9 @@ from backend.core.part_verification_capture import admit
 
 
 PROJECTION_VERSION = 2
-MAX_OUTPUT_NODES = 200_000
-MAX_OUTPUT_BYTES = 2_000_000
+# Sized for ordinary origami parts (an 18-helix x 504-bp part is ~16 MB).
+MAX_OUTPUT_NODES = 50_000_000
+MAX_OUTPUT_BYTES = 256_000_000
 _NON_GEOMETRY = frozenset({"dimensions", "lattice_type", "metadata", "tm_settings", "group_organization"})
 _CONTROL_FIELDS = {
     "helices": {"id", "bp_start", "length_bp", "axis_start", "axis_end"},
@@ -65,7 +67,8 @@ def _admit(design):
         if role == "authoring" and name not in DNA_FIELDS | _NON_GEOMETRY and getattr(design, name):
             _reject(f"Deformation preview does not yet display {name}")
     try:
-        admit(design, preserve_entry_types=True)
+        admit(design, max_nodes=_limits.MAX_CAPTURE_NODES, max_bytes=_limits.MAX_CAPTURE_BYTES,
+              preserve_entry_types=True)
     except CaptureLimit as error:
         _reject(str(error), "preview_limit")
     _work(design, lambda: None)
@@ -140,19 +143,23 @@ def _controls(prefix, op):
     return result
 
 
-def _bounded(result):
-    # Count the entire response, not each pane separately. GraphBudget supplies
-    # the shared structural/string accounting; finite JSON encoding additionally
-    # enforces actual wire bytes without retaining another encoded copy.
+def _bounded(result, *, max_nodes=None, max_bytes=None):
+    # Count the entire response, not each pane separately. One finite JSON
+    # encoding enforces actual wire bytes and refuses NaN/inf (the orjson response
+    # would otherwise emit null). json.dumps uses the C encoder; the former chunked
+    # iterencode ran the pure-Python encoder and dominated evaluation on real parts.
+    # Every JSON node occupies at least one byte, so when the encoded size is
+    # within the node allowance the structural walk cannot refuse and is skipped.
+    # Other strict reads reuse this contract with their own (smaller) allowances.
+    max_nodes = MAX_OUTPUT_NODES if max_nodes is None else max_nodes
+    max_bytes = MAX_OUTPUT_BYTES if max_bytes is None else max_bytes
     try:
-        budget = GraphBudget(max_nodes=MAX_OUTPUT_NODES, max_bytes=MAX_OUTPUT_BYTES,
-                             seconds=None, clock=monotonic)
-        budget.charge(result)
-        size = 0
-        for chunk in json.JSONEncoder(allow_nan=False, separators=(",", ":")).iterencode(result):
-            size += len(chunk.encode("utf-8"))
-            if size > MAX_OUTPUT_BYTES:
-                raise CaptureLimit("Deformation preview exceeds its combined display byte allowance")
+        size = len(json.dumps(result, allow_nan=False, separators=(",", ":")).encode("utf-8"))
+        if size > max_bytes:
+            raise CaptureLimit("Deformation preview exceeds its combined display byte allowance")
+        if size > max_nodes:
+            GraphBudget(max_nodes=max_nodes, max_bytes=max_bytes,
+                        seconds=None, clock=monotonic).charge(result)
     except CaptureLimit as error:
         _reject(str(error), "preview_limit")
     except (TypeError, ValueError) as error:

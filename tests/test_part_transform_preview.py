@@ -15,6 +15,12 @@ from backend.core.part_overlay_commands import command_input
 from tests.test_part_deformation_preview import _append, authoring, owned_capture
 from tests.test_part_transform_inputs import SEED, pose
 
+from tests.preview_test_limits import preview_test_scale_limits  # noqa: F401  (fixture)
+
+# Bounding-mechanism tests use tiny fixtures at the original test-scale allowances.
+pytestmark = pytest.mark.usefixtures("preview_test_scale_limits")
+
+
 
 FEATURE = "selected-transform"
 

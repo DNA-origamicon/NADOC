@@ -18,7 +18,8 @@ from backend.api.part_bounded_json import read_operation_json
 
 
 router = APIRouter()
-DEFORMATION_PREVIEW_ENABLED = False
+# Enabled with the paired frontend gates (user-authorized October 18, 2026).
+DEFORMATION_PREVIEW_ENABLED = True
 READ_SECONDS = 5.0
 _input_slot = Lock()  # one nonqueued body acquisition; never held during host work
 _PATH = "/design/features/deformation-preview"

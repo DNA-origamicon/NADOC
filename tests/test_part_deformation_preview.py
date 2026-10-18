@@ -27,6 +27,12 @@ from backend.core.part_history_proof import AUTHORING_FIELDS
 from backend.core.part_overlay_commands import command_input, edit_entry
 from backend.core.part_verification_capture import capture
 
+from tests.preview_test_limits import preview_test_scale_limits  # noqa: F401  (fixture)
+
+# Bounding-mechanism tests use tiny fixtures at the original test-scale allowances.
+pytestmark = pytest.mark.usefixtures("preview_test_scale_limits")
+
+
 
 def _service():
     from backend.api import part_deformation_preview

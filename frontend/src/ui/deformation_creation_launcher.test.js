@@ -47,7 +47,8 @@ it.each(['bend', 'twist'])('the ordinary %s menu opens the owned creation workfl
   const original = JSON.stringify(f.design)
   document.getElementById(`menu-tools-${type}`).click(); await tick()
   expect(f.ownedEditor.openCreation).toHaveBeenCalledExactlyOnceWith({ type, targets: refs,
-    clusterIds: [], placementHint: { kind: 'selection' } })
+    clusterIds: [], placementHint: { kind: 'selection' },
+    onUnsupported: expect.any(Function) })
   expect(f.start).not.toHaveBeenCalled(); expect(f.setScope).not.toHaveBeenCalled(); expect(f.exit).not.toHaveBeenCalled()
   expect(JSON.stringify(f.store.getState().currentDesign)).toBe(original)
   expect(f.store.getState().selection.items).toEqual(refs)
@@ -57,7 +58,8 @@ it('uses the same owned entry for unorganized parts instead of manufacturing a c
   const f = setup({ organized: false }), refs = [{ kind: 'strand', id: 's' }, { kind: 'domain', strandId: 's', domainIndex: 0 }]
   f.selection.replace(refs); f.launcher.open('bend'); await tick()
   expect(f.ownedEditor.openCreation).toHaveBeenCalledWith({ type: 'bend', targets: refs,
-    clusterIds: [], placementHint: { kind: 'selection' } })
+    clusterIds: [], placementHint: { kind: 'selection' },
+    onUnsupported: expect.any(Function) })
   expect(f.start).not.toHaveBeenCalled(); expect(f.setScope).not.toHaveBeenCalled()
 })
 
@@ -65,8 +67,29 @@ it('preserves explicit placement context separately from a same-text named group
   const f = setup(), refs = [{ kind: 'part_group', id: 'same' }, { kind: 'cluster', id: 'same' }]
   f.selection.replace(refs); f.launcher.open('bend'); await tick()
   expect(f.ownedEditor.openCreation).toHaveBeenCalledExactlyOnceWith({ type: 'bend', targets: refs,
-    clusterIds: ['same'], placementHint: { kind: 'selection' } })
+    clusterIds: ['same'], placementHint: { kind: 'selection' },
+    onUnsupported: expect.any(Function) })
   expect(f.setScope).not.toHaveBeenCalled(); expect(f.start).not.toHaveBeenCalled()
+})
+
+it('continues an unsupported part (e.g. legacy saved history) in the legacy tool session', async () => {
+  const f = setup({ organized: false }), refs = [{ kind: 'strand', id: 's' }]
+  f.ownedEditor.openCreation.mockImplementation(async ({ onUnsupported }) => onUnsupported())
+  f.selection.replace(refs); f.launcher.open('bend'); await tick()
+  expect(f.setScope).toHaveBeenCalledWith(refs); expect(f.start).toHaveBeenCalledWith('bend')
+  expect(f.watchDeformState).toHaveBeenCalled()
+  // Legacy previews mutate the canonical design; that must not reset this tool session.
+  f.store.setState({ currentDesign: { ...f.store.getState().currentDesign, deformations: [{ id: 'preview' }] } }); await tick()
+  expect(f.exit).not.toHaveBeenCalled()
+  await f.launcher.cancel(); expect(f.exit).toHaveBeenCalledOnce()
+})
+
+it('refuses legacy fallback for organized parts with the organization message', async () => {
+  const f = setup(), refs = [{ kind: 'part_group', id: 'same' }]
+  f.ownedEditor.openCreation.mockImplementation(async ({ onUnsupported }) => onUnsupported())
+  f.selection.replace(refs); f.launcher.open('bend'); await tick()
+  expect(f.start).not.toHaveBeenCalled()
+  expect(f.showToast).toHaveBeenCalledWith(expect.stringMatching(/organized parts/), { severity: 'error' })
 })
 
 it('waits for a valid complete selection before preparing, and rejects unsupported selections', async () => {

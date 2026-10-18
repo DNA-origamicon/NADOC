@@ -21,13 +21,26 @@ def test_fixture_has_native_helices_and_independent_proof(kind, count):
     assert assess_part_history(source, execute=execute, dependencies=dependencies)["status"] == "verified"
 
 
+def test_legacy_and_downstream_failure_fixtures():
+    from backend.api.part_proof_commands import dependencies, execute
+    from backend.core.part_history_contract import assess_part_history
+
+    legacy = fixture("bend-legacy")
+    assert legacy.recipe_root is None and legacy.metadata.name.startswith("__e2e__")
+    assert assess_part_history(legacy, execute=execute, dependencies=dependencies)["status"] != "verified"
+    fixed = fixture("bend-fixed")
+    assert [row.id for row in fixed.feature_log][-2:] == ["edited-feature", "fixed-feature"]
+    assert fixed.deformations[-1].params.endpoints is not None
+    assert assess_part_history(fixed, execute=execute, dependencies=dependencies)["status"] == "verified"
+
+
 def test_test_app_restores_gate_and_preserves_production_app():
     from backend.api import main, state, routes_part_deformation_preview as routes
     from backend.api import routes_part_sweep_preview as sweep_routes
 
     production_routes = tuple(main.app.routes)
     production_lifespan = main.app.router.lifespan_context
-    assert routes.DEFORMATION_PREVIEW_ENABLED is False
+    assert routes.DEFORMATION_PREVIEW_ENABLED is True  # production default
     assert sweep_routes.SWEEP_PREVIEW_ENABLED is False
     headers = {"X-NADOC-Doc": "__e2e__history-bend"}
     with TestClient(create_app()) as client:
@@ -53,7 +66,7 @@ def test_test_app_restores_gate_and_preserves_production_app():
         assert client.get("/api/__e2e__/history/checkpoint", headers=headers).json() == before
         assert client.post("/api/__e2e__/history/seed/bend",
                            headers={"X-NADOC-Doc": "ordinary"}).status_code == 403
-    assert routes.DEFORMATION_PREVIEW_ENABLED is False
+    assert routes.DEFORMATION_PREVIEW_ENABLED is True
     assert sweep_routes.SWEEP_PREVIEW_ENABLED is False
     assert headers["X-NADOC-Doc"] not in state._sessions
     assert tuple(main.app.routes) == production_routes
@@ -67,7 +80,7 @@ def test_test_app_restores_gate_after_failure():
     with pytest.raises(RuntimeError, match="fixture failure"):
         with TestClient(create_app()):
             raise RuntimeError("fixture failure")
-    assert routes.DEFORMATION_PREVIEW_ENABLED is False
+    assert routes.DEFORMATION_PREVIEW_ENABLED is True
 
     assert sweep_routes.SWEEP_PREVIEW_ENABLED is False
 
@@ -102,7 +115,7 @@ def test_sealed_mode_restores_policy_gates_and_preserves_dispatch(monkeypatch, f
         with pytest.raises(RuntimeError, match='sealed test failure'): run()
     else:
         run()
-    assert not gate.ENABLED and not preview.DEFORMATION_PREVIEW_ENABLED
+    assert not gate.ENABLED and preview.DEFORMATION_PREVIEW_ENABLED
     assert policy.current_configuration() == before_policy and doc not in state._sessions
 
 

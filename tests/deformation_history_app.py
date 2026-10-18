@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException
 
 from tests.extrude_matrix_fixture import FAMILIES
 
-FIXTURES = {"bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "extrude-chain", "bend-limit", "bend-over-limit", *FAMILIES}
+FIXTURES = {"bend", "twist", "bend-nick", "twist-nick", "bend-chain", "bend-sweep", "twist-sweep", "sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached", "extrude-chain", "bend-limit", "bend-over-limit", "bend-legacy", "bend-fixed", *FAMILIES}
 
 
 def fixture(kind):
@@ -35,6 +35,25 @@ def fixture(kind):
         row.evicted = True
         row.design_snapshot_gz_b64 = "poisoned-before"
         row.post_state_gz_b64 = "poisoned-after"
+        return source
+    if kind == "bend-legacy":
+        # Same native rows without an explicit recipe root, like pre-overhaul saved
+        # files: the isolated editor refuses it and the legacy editor takes over.
+        return fixture("bend").copy_with(recipe_root=None)
+    if kind == "bend-fixed":
+        # A downstream fixed-endpoint bend overlapping the edited bend: changing
+        # the upstream curvature makes it unregenerable (contract C4).
+        from backend.core import deformation
+        source = fixture("bend")
+        helices = [deformation.effective_helix_for_geometry(h, source) for h in source.helices]
+        start = min(h.bp_start for h in helices)
+        ends = [tuple(float(x) for x in deformation._frame_at_bp(source, bp - start, helices)[0]) for bp in (10, 20)]
+        fixed = DeformationOp(id="fixed-bend", type="bend", plane_a_bp=10, plane_b_bp=20,
+                              affected_helix_ids=[h.id for h in source.helices], cluster_ids=[],
+                              params={"kind": "bend", "curvature_deg_per_bp": .25, "direction_deg": 0, "endpoints": ends})
+        later = DeformationLogEntry(id="fixed-feature", deformation_id=fixed.id, op_snapshot=fixed, proof_version=1)
+        source = _append(source, later)
+        source.feature_log[-1] = later.model_copy(update={"op_snapshot": source.deformations[-1]})
         return source
     if kind in {"sweep-extrude", "sweep-independent", "sweep-start", "sweep-detached"}:
         from tests.sweep_history_fixture import fixture as sweep_fixture

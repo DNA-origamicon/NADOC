@@ -6,6 +6,8 @@ import { showSelectionPopup, setDeformationSelectionUI, closePopup } from './ben
 import { armToolClusterSelection } from './tool_cluster_selection.js'
 import { hasOrganization } from '../scene/part_group_display.js'
 
+const ORGANIZATION_UNAVAILABLE = 'Creating Bend / Twist on organized parts requires the owned preview workflow, which is not available yet. Existing deformations can be edited through isolated history editing when enabled.'
+
 /** Persistent selection → planes → parameters workflow, sharing canonical selection. */
 export function initDeformationToolLauncher({
   store, selectionManager, showToast, deformView, watchDeformState, ownedEditor = null,
@@ -15,8 +17,12 @@ export function initDeformationToolLauncher({
   let type = null, phase = 'selection', unsubscribe = null, resetting = false
   let finishClusterPick = null
   let selectionEpoch = 0, startError = null
+  // Set when the isolated editor refuses this part as unsupported (for example
+  // legacy saved history); the rest of this tool session uses the legacy editor.
+  let legacyFallback = false
+  const owned = () => ownedEditor && !legacyFallback
   function clearLocal() {
-    selectionEpoch++; resetting = false; type = null
+    selectionEpoch++; resetting = false; type = null; legacyFallback = false
     unsubscribe?.(); unsubscribe = null
     finishClusterPick?.(); finishClusterPick = null
     document.removeEventListener('keydown', escape, true)
@@ -32,8 +38,9 @@ export function initDeformationToolLauncher({
         return true
       })
     }
+    const legacyTool = !owned()  // read before clearLocal resets the fallback
     clearLocal()
-    if (!localOnly && !ownedEditor) exit()
+    if (!localOnly && legacyTool) exit()
     return true
   }
   function reset() {
@@ -49,7 +56,7 @@ export function initDeformationToolLauncher({
     resetting = true
     const epoch = ++selectionEpoch
     startError = null
-    if (ownedEditor) {
+    if (owned()) {
       const closed = await ownedEditor.cancel()
       if (epoch !== selectionEpoch || !type) return
       if (closed !== true) { resetting = false; refresh(); return }
@@ -76,10 +83,13 @@ export function initDeformationToolLauncher({
         finishClusterPick?.(); finishClusterPick = null
         selectionManager.setSelectionLevel('default')
         phase = 'planes'; refresh()
-        if (ownedEditor) {
+        if (owned()) {
           const opened = await ownedEditor.openCreation({ type, targets: current.targets,
             clusterIds: [...new Set(current.targets.filter(ref => ref.kind === 'cluster').map(ref => ref.id))],
-            placementHint: { kind: 'selection' } })
+            placementHint: { kind: 'selection' }, onUnsupported: () => {
+              if (hasOrganization(store.getState().currentDesign)) throw new Error(ORGANIZATION_UNAVAILABLE)
+              legacyFallback = true; setScope(current.targets); start(type); return true
+            } })
           if (epoch !== selectionEpoch || !type) return
           if (!opened) throw new Error('The isolated deformation preview is unavailable. Review the source and selection.')
         } else { setScope(current.targets); start(type) }
@@ -87,7 +97,7 @@ export function initDeformationToolLauncher({
       } catch (error) {
         if (epoch !== selectionEpoch || !type) return
         phase = 'selection'
-        if (!ownedEditor) exit()
+        if (!owned()) exit()
         showSelectionPopup(type)
         startError = error.message
         showToast(startError, { severity: 'error' }); refresh()
@@ -114,7 +124,7 @@ export function initDeformationToolLauncher({
     const designId = state.currentDesign.id
     unsubscribe = store.subscribe((next, previous) => {
       if (next.currentDesign?.id !== designId
-          || (ownedEditor && next.currentDesign !== previous.currentDesign)) { reset(); return }
+          || (owned() && next.currentDesign !== previous.currentDesign)) { reset(); return }
       if (resetting) return
       if (previous.deformToolActive && !next.deformToolActive && phase === 'planes') { void cancel(); return }
       if (JSON.stringify(canonicalSelection(next).items) !== JSON.stringify(canonicalSelection(previous).items)) {
@@ -134,7 +144,7 @@ export function initDeformationToolLauncher({
     begin(nextType)
   }
   function organizationUnavailable() {
-    showToast('Creating Bend / Twist on organized parts requires the owned preview workflow, which is not available yet. Existing deformations can be edited through isolated history editing when enabled.', { severity: 'error' })
+    showToast(ORGANIZATION_UNAVAILABLE, { severity: 'error' })
   }
   for (const kind of ['bend', 'twist']) document.getElementById(`menu-tools-${kind}`)?.addEventListener('click', () => open(kind))
   return { open, cancel }
