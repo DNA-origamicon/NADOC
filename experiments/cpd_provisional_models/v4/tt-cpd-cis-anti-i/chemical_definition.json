@@ -1,0 +1,543 @@
+{
+  "schema": "nadoc.photoproduct-chemical-definition.v1",
+  "id": "tt-cpd-cis-anti-i",
+  "product": "TT-CPD",
+  "stereochemistry": "cis-anti-I",
+  "state": "electronic-ground-state-product",
+  "ordered_endpoints": [
+    {
+      "index": 1,
+      "precursor": "DNA thymine",
+      "ccd_atom_aliases": {
+        "N1": "N1",
+        "C2": "C2",
+        "O2": "O2",
+        "N3": "N3",
+        "C4": "C4",
+        "O4": "O4",
+        "C5": "C5",
+        "C7": "C5A",
+        "C6": "C6",
+        "H6": "H6"
+      }
+    },
+    {
+      "index": 2,
+      "precursor": "DNA thymine",
+      "ccd_atom_aliases": {
+        "N1": "N1T",
+        "C2": "C2T",
+        "O2": "O2T",
+        "N3": "N3T",
+        "C4": "C4T",
+        "O4": "O4T",
+        "C5": "C5T",
+        "C7": "C5M",
+        "C6": "C6T",
+        "H6": "H6T"
+      }
+    }
+  ],
+  "graph_delta": {
+    "atoms_added": [],
+    "atoms_removed": [],
+    "formal_charge_change": 0,
+    "bonds_added": [
+      {
+        "atom_1": "1:C5",
+        "atom_2": "2:C6",
+        "order": "single"
+      },
+      {
+        "atom_1": "1:C6",
+        "atom_2": "2:C5",
+        "order": "single"
+      }
+    ],
+    "bonds_retained": [
+      {
+        "atom_1": "1:C5",
+        "atom_2": "1:C6",
+        "precursor_order": "double",
+        "product_order": "single"
+      },
+      {
+        "atom_1": "2:C5",
+        "atom_2": "2:C6",
+        "precursor_order": "double",
+        "product_order": "single"
+      }
+    ],
+    "backbone_and_glycosidic_connectivity": "preserved"
+  },
+  "precursor_local_connectivity": {
+    "scope": "complete thymine base plus glycosidic boundary atom for both ordered endpoints",
+    "bonds": [
+      [
+        "1:C1'",
+        "1:N1"
+      ],
+      [
+        "1:N1",
+        "1:C2"
+      ],
+      [
+        "1:N1",
+        "1:C6"
+      ],
+      [
+        "1:C2",
+        "1:O2"
+      ],
+      [
+        "1:C2",
+        "1:N3"
+      ],
+      [
+        "1:N3",
+        "1:H3"
+      ],
+      [
+        "1:N3",
+        "1:C4"
+      ],
+      [
+        "1:C4",
+        "1:O4"
+      ],
+      [
+        "1:C4",
+        "1:C5"
+      ],
+      [
+        "1:C5",
+        "1:C6"
+      ],
+      [
+        "1:C5",
+        "1:C7"
+      ],
+      [
+        "1:C6",
+        "1:H6"
+      ],
+      [
+        "1:C7",
+        "1:H51"
+      ],
+      [
+        "1:C7",
+        "1:H52"
+      ],
+      [
+        "1:C7",
+        "1:H53"
+      ],
+      [
+        "2:C1'",
+        "2:N1"
+      ],
+      [
+        "2:N1",
+        "2:C2"
+      ],
+      [
+        "2:N1",
+        "2:C6"
+      ],
+      [
+        "2:C2",
+        "2:O2"
+      ],
+      [
+        "2:C2",
+        "2:N3"
+      ],
+      [
+        "2:N3",
+        "2:H3"
+      ],
+      [
+        "2:N3",
+        "2:C4"
+      ],
+      [
+        "2:C4",
+        "2:O4"
+      ],
+      [
+        "2:C4",
+        "2:C5"
+      ],
+      [
+        "2:C5",
+        "2:C6"
+      ],
+      [
+        "2:C5",
+        "2:C7"
+      ],
+      [
+        "2:C6",
+        "2:H6"
+      ],
+      [
+        "2:C7",
+        "2:H51"
+      ],
+      [
+        "2:C7",
+        "2:H52"
+      ],
+      [
+        "2:C7",
+        "2:H53"
+      ]
+    ],
+    "source": "CHARMM36 THY residue connectivity; no parameter transfer implied"
+  },
+  "product_stereocenters": [
+    {
+      "atom": "1:C5",
+      "ccd_configuration": "S",
+      "signed_volume_reference_atoms": [
+        "1:C4",
+        "1:C6",
+        "1:C7"
+      ],
+      "expected_signed_volume": "positive",
+      "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+    },
+    {
+      "atom": "1:C6",
+      "ccd_configuration": "R",
+      "signed_volume_reference_atoms": [
+        "1:N1",
+        "1:C5",
+        "1:H6"
+      ],
+      "expected_signed_volume": "negative",
+      "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+    },
+    {
+      "atom": "2:C5",
+      "ccd_configuration": "S",
+      "signed_volume_reference_atoms": [
+        "2:C4",
+        "2:C6",
+        "2:C7"
+      ],
+      "expected_signed_volume": "positive",
+      "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+    },
+    {
+      "atom": "2:C6",
+      "ccd_configuration": "R",
+      "signed_volume_reference_atoms": [
+        "2:N1",
+        "2:C5",
+        "2:H6"
+      ],
+      "expected_signed_volume": "negative",
+      "authority": "Taylor 2023 ordered C5 identity; accurate CIP and suprafacial neighbor-parity reconstruction 2026-10-10; no minimum claim"
+    }
+  ],
+  "source_ring_coordinates_angstrom": {
+    "1:C4": [
+      -0.8324291908869396,
+      -0.525611513135513,
+      -2.246516552096055
+    ],
+    "1:C5": [
+      -0.33912774880112717,
+      0.42339846243096685,
+      -1.250170322058985
+    ],
+    "1:C6": [
+      -1.2287433753374968,
+      0.6598996928425428,
+      -0.09337295101653335
+    ],
+    "1:C7": [
+      -0.005263365809420865,
+      1.7472462687523438,
+      -1.9514523762587048
+    ],
+    "1:H6": [
+      -1.3678819386685581,
+      1.730334695161471,
+      0.18279643693332223
+    ],
+    "1:N1": [
+      -2.4821814697503917,
+      -0.026947173587159486,
+      -0.09978577909141782
+    ],
+    "2:C4": [
+      -0.6554402810400123,
+      -1.2353061535829584,
+      1.327094659598324
+    ],
+    "2:C5": [
+      -0.15617942291265033,
+      0.04619917872476566,
+      0.7980997302706117
+    ],
+    "2:C6": [
+      0.7698246361508343,
+      -0.04656478172299338,
+      -0.3421501395348938
+    ],
+    "2:C7": [
+      0.2794896595268249,
+      0.9415974636919915,
+      1.9397224784722986
+    ],
+    "2:H6": [
+      1.5651282986560329,
+      0.749241559800862,
+      -0.24032352165670048
+    ],
+    "2:N1": [
+      1.3428928021302933,
+      -1.3214120802876155,
+      -0.6024048278010141
+    ]
+  },
+  "model_compounds": {
+    "charge_model": {
+      "id": "n1-methyl-tt-cpd-cis-anti-i",
+      "purpose": "joint product charge, water-interaction, and base-ring bonded targets",
+      "construction": "retain both complete TTD bases and replace each deoxyribose at N1 by a methyl group",
+      "source_asset": "Static stereochemical construction only; corrected model has no certified QM minimum",
+      "source_atom_table": "PDB-CCD-TTD-CIF",
+      "charge": 0,
+      "multiplicity": 1,
+      "endpoint_caps": [
+        {
+          "endpoint": 1,
+          "ccd_atom": "C1'",
+          "model_atom": "1:CM"
+        },
+        {
+          "endpoint": 2,
+          "ccd_atom": "C1R",
+          "model_atom": "2:CM"
+        }
+      ],
+      "endpoint_hydrogen_aliases": [
+        {
+          "endpoint": 1,
+          "aliases": {
+            "HN3": "H3",
+            "H5A1": "H51",
+            "H5A2": "H52",
+            "H5A3": "H53"
+          }
+        },
+        {
+          "endpoint": 2,
+          "aliases": {
+            "HT": "H3",
+            "H71": "H51",
+            "H72": "H52",
+            "H73": "H53"
+          }
+        }
+      ],
+      "charge_constraints": [
+        "sum of all model charges is exactly 0",
+        "each N1 methyl cap has net charge 0 after charge fitting",
+        "symmetry-equivalent methyl hydrogens share a charge"
+      ],
+      "limitations": [
+        "not a DNA topology residue",
+        "does not determine sugar, phosphate, or glycosidic torsion parameters",
+        "does not by itself pass the qm_reference_data gate"
+      ]
+    },
+    "dna_boundary_model": {
+      "id": "tt-cpd-cis-anti-i-dinucleotide-boundary",
+      "status": "definition-pending",
+      "required_scope": [
+        "both deoxyriboses",
+        "inter-residue phosphate",
+        "capped 5-prime and 3-prime boundaries",
+        "glycosidic and sugar-coupled torsion targets"
+      ],
+      "release_rule": "construct and review a product-specific ordered DNA boundary model; the cis-syn 1N4E fragment is not a coordinate template for this isomer"
+    }
+  },
+  "source_assets": [
+    {
+      "id": "PDB-CCD-TTD-CIF",
+      "url": "https://files.rcsb.org/ligands/download/TTD.cif",
+      "filename": "TTD.cif",
+      "sha256": "4f81c5c192683b3381596f599e89504419d54a473f9765cec458157c86811f5a",
+      "license": "CC0 1.0 Universal",
+      "license_url": "https://www.rcsb.org/pages/usage-policy"
+    },
+    {
+      "id": "PDB-CCD-TTD-IDEAL-SDF",
+      "url": "https://files.rcsb.org/ligands/download/TTD_ideal.sdf",
+      "filename": "TTD_ideal.sdf",
+      "sha256": "e9402af214dc99e5c477d8f11f1e9942fa54b78dd0167b65b69a03f713acb4d2",
+      "license": "CC0 1.0 Universal",
+      "license_url": "https://www.rcsb.org/pages/usage-policy"
+    },
+    {
+      "id": "RCSB-1N4E-CIF",
+      "url": "https://files.rcsb.org/download/1N4E.cif",
+      "filename": "1N4E.cif",
+      "sha256": "3d28d06bdfe61e520edc4d51f366d9c457a3c6bd134b6c3f99d76b7f1d2e2b79",
+      "license": "CC0 1.0 Universal",
+      "license_url": "https://www.rcsb.org/pages/usage-policy"
+    },
+    {
+      "id": "Taylor-2023-CPD-stereochemistry",
+      "url": "https://onlinelibrary.wiley.com/doi/10.1111/php.13694",
+      "filename": "Taylor-2023-CPD-stereochemistry.citation.json",
+      "sha256": "0c9b0b63de7ffef11c1e9e418ad247e6ef0aaa67d4212837192db040ed6b3408",
+      "license": "NADOC citation metadata only; underlying publisher article is not redistributed and remains subject to publisher terms",
+      "hash_scope": "embedded_citation_record_not_publisher_article",
+      "citation_record": {
+        "id": "Taylor-2023-CPD-stereochemistry",
+        "citation": "Taylor, Adjacent and Nonadjacent Dipyrimidine Photoproducts as Intrinsic Probes of DNA Secondary and Tertiary Structure, Photochem. Photobiol. 99 (2023) 277-295",
+        "doi": "10.1111/php.13694",
+        "url": "https://onlinelibrary.wiley.com/doi/10.1111/php.13694",
+        "authority": [
+          "eight ordered DNA-level TT-CPD stereoisomer classes",
+          "ordered endpoint C5 absolute configurations",
+          "distinction between eight DNA-attached products and six hydrolyzed aglycone products",
+          "syn head-to-head and anti head-to-tail connectivity"
+        ],
+        "ordered_c5_configurations": {
+          "cis-syn-I": [
+            "R",
+            "S"
+          ],
+          "cis-syn-II": [
+            "S",
+            "R"
+          ],
+          "trans-syn-I": [
+            "S",
+            "S"
+          ],
+          "trans-syn-II": [
+            "R",
+            "R"
+          ],
+          "cis-anti-I": [
+            "S",
+            "S"
+          ],
+          "cis-anti-II": [
+            "R",
+            "R"
+          ],
+          "trans-anti-I": [
+            "R",
+            "S"
+          ],
+          "trans-anti-II": [
+            "S",
+            "R"
+          ]
+        },
+        "supporting_information": {
+          "url": "https://onlinelibrary.wiley.com/action/downloadSupplement?doi=10.1111%2Fphp.13694&file=php13694-sup-0001-Supinfo.pdf",
+          "figures_used": [
+            "S1",
+            "S2"
+          ],
+          "local_download_status": "publisher HTTP 403 from command-line client; reviewed through publisher-rendered PDF",
+          "redistributed": false
+        },
+        "not_authority": [
+          "C6 absolute configurations without an atom-mapped structure",
+          "CHARMM charges, types, or bonded parameters",
+          "optimized coordinates"
+        ]
+      }
+    }
+  ],
+  "superseded_minimum_geometry_evidence": {
+    "applies_to": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/before/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-i/chemical_definition.json",
+      "sha256": "2ad8acdded5633ea84bf33c48cd7decbd3a1b6fab46f97bc54f0e9ca54a6e1c4"
+    },
+    "reason": "Pre-correction stereochemistry only; not evidence for this definition",
+    "evidence": {
+      "kind": "direct_candidate_harmonic_minimum",
+      "frequency_audit": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-i/frequency_audit.json",
+        "sha256": "1f8d114105e901d1d349bcb3a0bd2b62c22e39fa28717a1022103a295aa8a122"
+      },
+      "optimized_xyz": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-i/provenance/source_geometry.xyz",
+        "sha256": "2ce70cb77e4a3ca77e17eae2312fdb1e1f49069f64d7dfa1f091074c49b0689f"
+      },
+      "optimized_model_audit": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-i/provenance/optimized_model_parent.json",
+        "sha256": "67653399f5ee3b4be6c8b4c3c404b157034f78deb97b50e0ea449a3c19a723d7"
+      },
+      "frequency_job_manifest": {
+        "path": "/media/jojo/Archive/NADOC_archive/photoproduct_evidence/tt-cpd-work-v1-completions/qm/stereo-frequencies/tt-cpd-cis-anti-i/job_manifest.json",
+        "sha256": "e433d0426fde608d87b0ea615068e1d8ecf4401198f4624fcc3a07dd2d4cab8b"
+      },
+      "model_id": "n1-methyl-tt-cpd-cis-anti-i",
+      "imaginary_mode_count": 0,
+      "lowest_frequency_cm_inverse": 56.4732,
+      "chirality_audit": {
+        "schema": "nadoc.photoproduct-chirality-audit.v1",
+        "product_id": "tt-cpd-cis-anti-i",
+        "passed": true,
+        "centers": [
+          {
+            "atom": "1:C5",
+            "ccd_configuration": "S",
+            "signed_volume": -2.6443488867991665,
+            "expected_sign": "negative",
+            "passed": true
+          },
+          {
+            "atom": "1:C6",
+            "ccd_configuration": "S",
+            "signed_volume": -1.8766685440450543,
+            "expected_sign": "negative",
+            "passed": true
+          },
+          {
+            "atom": "2:C5",
+            "ccd_configuration": "S",
+            "signed_volume": 2.4177962156324937,
+            "expected_sign": "positive",
+            "passed": true
+          },
+          {
+            "atom": "2:C6",
+            "ccd_configuration": "R",
+            "signed_volume": -1.6738243376521524,
+            "expected_sign": "negative",
+            "passed": true
+          }
+        ]
+      }
+    }
+  },
+  "stereochemistry_correction": {
+    "date": "2026-10-10",
+    "status": "automated_identity_checks_passed_release_review_pending",
+    "previous_definition": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/before/backend/data/forcefield/photoproducts/tt-cpd-cis-anti-i/chemical_definition.json",
+      "sha256": "2ad8acdded5633ea84bf33c48cd7decbd3a1b6fab46f97bc54f0e9ca54a6e1c4"
+    },
+    "construction_audit": {
+      "path": "/media/jojo/Archive/NADOC_archive/runtime/development-artifacts/cpd-anti-definition-correction-v1/constructed/tt-cpd-cis-anti-i/construction_audit.json",
+      "sha256": "f62933e698b4147c7e4d971394284b69811db99cba3705d2ef32184e52aca1e0"
+    },
+    "scope": "Setup and geometric detection only; old anti QM/MM/MD evidence is not transferred",
+    "minimum_certified": false
+  }
+}
